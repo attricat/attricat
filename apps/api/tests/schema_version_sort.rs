@@ -9,7 +9,7 @@ async fn schema_version_sort_paginates_all_revisions_in_both_directions(pool: Pg
     let definition = r#"format_version = 1
 code = "schema_sort_product"
 name = "Schema sort product"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["title"]
@@ -20,8 +20,8 @@ fields = ["title"]
 code = "title"
 value_type = "string""#;
     let first = create_blueprint(&client, &base_url, definition).await;
-    let old_a = create_entity(&client, &base_url, &first).await;
-    let old_b = create_entity(&client, &base_url, &first).await;
+    let old_a = create_record(&client, &base_url, &first).await;
+    let old_b = create_record(&client, &base_url, &first).await;
     let id = first["blueprint"]["id"].as_str().unwrap();
     let revision: Value = client
         .post(format!("{base_url}/blueprints/{id}/versions"))
@@ -40,15 +40,15 @@ value_type = "string""#;
         .json()
         .await
         .unwrap();
-    let new_a = create_entity(&client, &base_url, &second).await;
-    let new_b = create_entity(&client, &base_url, &second).await;
+    let new_a = create_record(&client, &base_url, &second).await;
+    let new_b = create_record(&client, &base_url, &second).await;
 
     for direction in ["asc", "desc"] {
         let mut cursor: Option<String> = None;
         let mut found = Vec::new();
         loop {
             let response: Value = client
-                .post(format!("{base_url}/v1/entities/search"))
+                .post(format!("{base_url}/v1/records/search"))
                 .json(&json!({
                     "blueprint": {"code": "schema_sort_product"},
                     "sort": {"field": "blueprint_version", "direction": direction},
@@ -68,7 +68,7 @@ value_type = "string""#;
                 break;
             }
         }
-        // Entity ID is the deterministic tie breaker within each revision.
+        // Record ID is the deterministic tie breaker within each revision.
         let mut older = vec![old_a["id"].clone(), old_b["id"].clone()];
         older.sort_by(|a, b| a.as_str().cmp(&b.as_str()));
         let mut newer = vec![new_a["id"].clone(), new_b["id"].clone()];
@@ -83,7 +83,7 @@ value_type = "string""#;
     }
 
     let single_version: Value = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({
             "blueprint": {"code": "schema_sort_product", "version": 1},
             "sort": {"field": "blueprint_version", "direction": "asc"},

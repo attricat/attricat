@@ -23,7 +23,7 @@ Uploaded archives get the same checks as registry installs: size limits, safe fi
 
 A new installation starts **disabled**. Before enabling it:
 
-1. **Read the requested permissions.** Each one names a capability, such as `catalog.write` (change records), `events.subscribe` (react to changes), `network.request` (call external services), or `client.entity_action` (add a button to record pages). Permission names call records entities. The [manifest reference](/extensions/manifest/#capabilities) lists them all.
+1. **Read the requested permissions.** Each one names a capability, such as `catalog.write` (change records), `events.subscribe` (react to changes), `network.request` (call external services), or `client.record_action` (add a button to record pages). The [manifest reference](/extensions/manifest/#capabilities) lists them all.
 2. **Check network access.** `network.request` only allows calls to the URL patterns listed as host permissions. Each pattern shows its hosts, methods, size limits, and timeout.
 3. **Configure** the extension if it has settings.
 4. **Grant** the required permissions. Optional permissions can be left out; the extension must work without them.

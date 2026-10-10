@@ -9,11 +9,11 @@ describe('pageTitle', () => {
     expect(pageTitle('/manage/workflows/new', i18n.t)).toBe(
       'New workflow · Attricat',
     );
-    expect(pageTitle('/entities/abcdef12-1234/changes', i18n.t)).toBe(
+    expect(pageTitle('/records/abcdef12-1234/changes', i18n.t)).toBe(
       'Changes · Record abcdef12 · Attricat',
     );
-    expect(pageTitle('/entities/87654321-1234/changes', i18n.t)).not.toBe(
-      pageTitle('/entities/abcdef12-1234/changes', i18n.t),
+    expect(pageTitle('/records/87654321-1234/changes', i18n.t)).not.toBe(
+      pageTitle('/records/abcdef12-1234/changes', i18n.t),
     );
     expect(pageTitle('/manage/workspace/members', i18n.t)).toBe(
       'Members · Workspace management · Attricat',

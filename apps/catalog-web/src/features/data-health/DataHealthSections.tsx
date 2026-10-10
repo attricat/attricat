@@ -73,7 +73,7 @@ export const BlueprintHealthSection = ({
         <TableHead>
           <TableRow>
             <TableCell>{t('dataHealth.blueprint')}</TableCell>
-            <TableCell>{t('dataHealth.entities')}</TableCell>
+            <TableCell>{t('dataHealth.records')}</TableCell>
             <TableCell>{t('dataHealth.outdated')}</TableCell>
             <TableCell>{t('dataHealth.stale')}</TableCell>
             <TableCell>{t('dataHealth.oldestUpdate')}</TableCell>
@@ -87,12 +87,12 @@ export const BlueprintHealthSection = ({
                   code={blueprint.code}
                   currentVersion={blueprint.current_version}
                   name={blueprint.name}
-                  outdatedEntities={blueprint.outdated_entities}
+                  outdatedRecords={blueprint.outdated_records}
                 />
               </TableCell>
-              <TableCell>{blueprint.active_entities}</TableCell>
-              <TableCell>{blueprint.outdated_entities}</TableCell>
-              <TableCell>{blueprint.stale_entities}</TableCell>
+              <TableCell>{blueprint.active_records}</TableCell>
+              <TableCell>{blueprint.outdated_records}</TableCell>
+              <TableCell>{blueprint.stale_records}</TableCell>
               <TableCell>
                 <Timestamp
                   fallback={t('dataHealth.never')}
@@ -120,7 +120,7 @@ export const FreshnessSection = ({ query }: SectionProps<FreshnessBand>) => {
       <Stack direction="row" spacing={3} sx={{ mt: 2 }}>
         {(query.data ?? []).map((band) => (
           <Box key={band.label}>
-            <Typography variant="h5">{band.entities}</Typography>
+            <Typography variant="h5">{band.records}</Typography>
             <Typography color="text.secondary" variant="body2">
               {band.label}
             </Typography>
@@ -174,7 +174,7 @@ export const CompletenessSection = ({
         <TableHead>
           <TableRow>
             <TableCell>{t('dataHealth.blueprint')}</TableCell>
-            <TableCell>{t('dataHealth.activeEntities')}</TableCell>
+            <TableCell>{t('dataHealth.activeRecords')}</TableCell>
             <TableCell>{t('dataHealth.defaultComplete')}</TableCell>
           </TableRow>
         </TableHead>
@@ -186,11 +186,11 @@ export const CompletenessSection = ({
                   code={item.code}
                   currentVersion={item.current_version}
                   name={item.name}
-                  outdatedEntities={item.outdated_entities}
+                  outdatedRecords={item.outdated_records}
                 />
               </TableCell>
-              <TableCell>{item.active_entities}</TableCell>
-              <TableCell>{item.default_complete_entities}</TableCell>
+              <TableCell>{item.active_records}</TableCell>
+              <TableCell>{item.default_complete_records}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -215,7 +215,7 @@ export const ContextCoverageSection = ({
         <TableHead>
           <TableRow>
             <TableCell>{t('dataHealth.context')}</TableCell>
-            <TableCell>{t('dataHealth.entitiesWithDirectValues')}</TableCell>
+            <TableCell>{t('dataHealth.recordsWithDirectValues')}</TableCell>
             <TableCell>{t('dataHealth.currentDirectValues')}</TableCell>
           </TableRow>
         </TableHead>
@@ -223,7 +223,7 @@ export const ContextCoverageSection = ({
           {(query.data ?? []).map((item) => (
             <TableRow key={item.code}>
               <TableCell>{item.code}</TableCell>
-              <TableCell>{item.direct_entities}</TableCell>
+              <TableCell>{item.direct_records}</TableCell>
               <TableCell>{item.direct_values}</TableCell>
             </TableRow>
           ))}

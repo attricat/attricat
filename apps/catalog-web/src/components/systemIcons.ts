@@ -5,7 +5,7 @@ export { ClipboardClockIcon as BackgroundProcessingIcon } from 'lucide-react';
 export { BotIcon as AgentIcon } from 'lucide-react';
 export { LayoutGridIcon as AppsIcon } from 'lucide-react';
 export { ClipboardCheckIcon as AuditLogIcon } from 'lucide-react';
-export { BoxIcon as EntityIcon } from 'lucide-react';
+export { BoxIcon as RecordIcon } from 'lucide-react';
 export { MessageSquareIcon as CommentIcon } from 'lucide-react';
 export { ShapesIcon as BlueprintIcon } from 'lucide-react';
 export { FolderIcon as ContextIcon } from 'lucide-react';

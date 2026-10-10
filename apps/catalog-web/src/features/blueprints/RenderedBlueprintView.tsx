@@ -12,14 +12,14 @@ import type {
   Attribute,
   ComponentReference,
   ViewDefinition,
-} from '../entities/api';
-import { attributeLabel } from '../entities/entityDisplay';
-import { viewBlockTypes } from '../entities/schemas';
-import { EntityView } from '../views/components/EntityView';
+} from '../records/api';
+import { attributeLabel } from '../records/recordDisplay';
+import { viewBlockTypes } from '../records/schemas';
+import { RecordView } from '../views/components/RecordView';
 import {
-  entityHeadingComponentId,
-  findEntityHeading,
-} from '../views/components/blocks/EntityHeadingDefinition';
+  recordHeadingComponentId,
+  findRecordHeading,
+} from '../views/components/blocks/RecordHeadingDefinition';
 import {
   resolveHeadingRenderer,
   resolveValueRenderer,
@@ -114,20 +114,20 @@ export const RenderedBlueprintView = ({
         values={values}
       />
     );
-  const heading = findEntityHeading(view);
+  const heading = findRecordHeading(view);
   const HeadingRenderer = resolveHeadingRenderer(heading?.component);
   return (
     <>
       {HeadingRenderer &&
         createElement(HeadingRenderer, {
           attributes,
-          entityId: t('blueprints.sandboxEntity'),
+          recordId: t('blueprints.sandboxRecord'),
           values,
           view,
         })}
-      <EntityView
+      <RecordView
         attributes={attributes}
-        skipComponentId={entityHeadingComponentId}
+        skipComponentId={recordHeadingComponentId}
         values={values}
         view={view}
       />

@@ -7,11 +7,11 @@ import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import {
   getBlueprintByCode,
-  searchEntities,
+  searchRecords,
   type BlueprintWithAttributes,
-  type EntitySearchResponse,
-} from '../entities/api';
-import { relationshipPickerMessageType } from '../entities/components/useRecentlyPreviewedEntities';
+  type RecordSearchResponse,
+} from '../records/api';
+import { relationshipPickerMessageType } from '../records/components/useRecentlyPreviewedRecords';
 import type { AttributeFilterRequest } from './attributeFilterValues';
 import { maximumAttributeFilters } from './constants';
 import { ExplorerFilterBar } from './ExplorerFilterBar';
@@ -21,12 +21,12 @@ import type {
 } from './relationshipFilterTypes';
 import type { AttributeFilter } from './search';
 
-vi.mock('../entities/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../entities/api')>();
-  return { ...actual, getBlueprintByCode: vi.fn(), searchEntities: vi.fn() };
+vi.mock('../records/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../records/api')>();
+  return { ...actual, getBlueprintByCode: vi.fn(), searchRecords: vi.fn() };
 });
 
-vi.mock('../entities/components/useRelationshipSelectionLabels', () => ({
+vi.mock('../records/components/useRelationshipSelectionLabels', () => ({
   useRelationshipSelectionLabels: () => new Map([[targetId, 'Acme']]),
 }));
 
@@ -46,7 +46,7 @@ const brandBlueprint: BlueprintWithAttributes = {
   table_path_attributes: [],
 };
 
-const targetPage: EntitySearchResponse = {
+const targetPage: RecordSearchResponse = {
   blueprint: brandBlueprint,
   hidden_outdated_count: null,
   hidden_outdated_count_capped: false,
@@ -138,7 +138,7 @@ const blueprint = (
 
 describe('ExplorerFilterBar', () => {
   it('discovers relationship paths up to three hops and returns the terminal target', async () => {
-    vi.mocked(searchEntities).mockResolvedValue(targetPage);
+    vi.mocked(searchRecords).mockResolvedValue(targetPage);
     vi.mocked(getBlueprintByCode).mockImplementation((code) => {
       if (code === 'family')
         return Promise.resolve(
@@ -272,7 +272,7 @@ describe('ExplorerFilterBar', () => {
 
   it('opens a relationship picker immediately and shows the selection as a chip', async () => {
     vi.mocked(getBlueprintByCode).mockResolvedValue(brandBlueprint);
-    vi.mocked(searchEntities).mockResolvedValue(targetPage);
+    vi.mocked(searchRecords).mockResolvedValue(targetPage);
     Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
       configurable: true,
       value: vi.fn(),
@@ -293,10 +293,10 @@ describe('ExplorerFilterBar', () => {
     await user.click(await screen.findByRole('option', { name: /brand/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /^Select brand/ });
-    const entityLink = await screen.findByRole('link', { name: 'Acme' });
-    expect(entityLink.getAttribute('target')).toBe('_blank');
-    const href = entityLink.getAttribute('href');
-    if (!href) throw new Error('Entity link is missing its href');
+    const recordLink = await screen.findByRole('link', { name: 'Acme' });
+    expect(recordLink.getAttribute('target')).toBe('_blank');
+    const href = recordLink.getAttribute('href');
+    if (!href) throw new Error('Record link is missing its href');
     const pickerToken = new URL(href, location.href).searchParams.get(
       'relationshipPicker',
     );
@@ -304,7 +304,7 @@ describe('ExplorerFilterBar', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         data: {
-          entityId: targetId,
+          recordId: targetId,
           token: pickerToken,
           type: relationshipPickerMessageType,
         },

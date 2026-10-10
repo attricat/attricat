@@ -32,7 +32,7 @@ pub const CONTEXT_EDITABLE_SCOPES: &[&str] = &["all", "default"];
 /// Longest blueprint or attribute description, in characters.
 pub const MAX_DESCRIPTION_CHARS: usize = 500;
 
-/// An Attricat blueprint: a versioned entity type or an includable mixin.
+/// An Attricat blueprint: a versioned record type or an includable mixin.
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[schemars(title = "Attricat blueprint definition v1")]
@@ -61,13 +61,13 @@ struct RawBlueprintDefinition {
     #[serde(default)]
     #[schemars(extend("x-attricat-key-suggestions" = KNOWN_VIEW_NAMES))]
     views: HashMap<String, ViewDefinition>,
-    /// JSON Schema (Draft 2020-12) source for cross-field entity validation.
-    /// Entity blueprints only.
-    entity_schema: Option<String>,
-    /// Channel publication behavior when entities are edited.
+    /// JSON Schema (Draft 2020-12) source for cross-field record validation.
+    /// Record blueprints only.
+    record_schema: Option<String>,
+    /// Channel publication behavior when records are edited.
     #[serde(default)]
     publication: PublicationPolicy,
-    /// Scheduled extension imports and exports. Entity blueprints only.
+    /// Scheduled extension imports and exports. Record blueprints only.
     #[serde(default)]
     connector_jobs: Vec<ConnectorJobDefinition>,
     /// Namespaced extension metadata is preserved in the immutable source
@@ -75,12 +75,12 @@ struct RawBlueprintDefinition {
     #[serde(default)]
     #[schemars(with = "HashMap<String, serde_json::Value>")]
     extensions: HashMap<String, toml::Value>,
-    /// Data-health rules evaluated for this blueprint's entities.
+    /// Data-health rules evaluated for this blueprint's records.
     #[serde(default)]
     #[schemars(schema_with = "catalog_rules::embedded_rules_schema")]
     rules: Vec<toml::Value>,
     /// Business keys whose normalized values must be unique across the
-    /// blueprint family. Entity blueprints only.
+    /// blueprint family. Record blueprints only.
     #[serde(default)]
     unique_keys: Vec<UniqueKeyDefinition>,
     /// Attributes in display order. Each declares exactly one of `value_type`,
@@ -117,7 +117,7 @@ struct RawAttributeDeclaration {
     value_schema: Option<String>,
     /// JSON configuration passed to the extension type.
     extension_configuration: Option<String>,
-    /// Value stored in the default context when an entity is created.
+    /// Value stored in the default context when a record is created.
     /// Not supported for relationships and files.
     default_value: Option<serde_json::Value>,
     /// Relationships: `one`, `many` (default), or `one_to_one`.
@@ -178,7 +178,7 @@ struct RawAttributeDeclaration {
     /// self-referencing attribute. Requires `context_editable = "default"`.
     #[schemars(extend("x-attricat-value-types" = ["relationship"]))]
     acyclic: Option<bool>,
-    /// An acyclic hierarchy in which every entity has at most one target
+    /// An acyclic hierarchy in which every record has at most one target
     /// (parent). Implies `acyclic` and `cardinality = "one"`.
     #[schemars(extend("x-attricat-value-types" = ["relationship"]))]
     tree: Option<bool>,
@@ -247,9 +247,9 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     if raw.attributes.is_empty() {
         return Err(BlueprintError::EmptyAttributes);
     }
-    let entity_schema = parse_json_schema(raw.entity_schema, "entity_schema")?;
-    if entity_schema.is_some() && raw.kind != BlueprintKind::Entity {
-        return Err(BlueprintError::EntitySchemaOnMixin);
+    let record_schema = parse_json_schema(raw.record_schema, "record_schema")?;
+    if record_schema.is_some() && raw.kind != BlueprintKind::Record {
+        return Err(BlueprintError::RecordSchemaOnMixin);
     }
 
     let mut aliases = HashSet::new();
@@ -273,9 +273,9 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     }
 
     let mut job_codes = HashSet::new();
-    if !raw.connector_jobs.is_empty() && raw.kind != BlueprintKind::Entity {
+    if !raw.connector_jobs.is_empty() && raw.kind != BlueprintKind::Record {
         return Err(BlueprintError::InvalidConnectorJob(
-            "only entity blueprints can define connector jobs".into(),
+            "only record blueprints can define connector jobs".into(),
         ));
     }
     for job in &raw.connector_jobs {
@@ -367,7 +367,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                     }
                     let (cardinality, target_cardinality) = if value_type == "relationship" {
-                        // A tree gives every entity at most one parent.
+                        // A tree gives every record at most one parent.
                         let cardinality = attribute.cardinality.clone().unwrap_or_else(|| {
                             if hierarchy.as_deref() == Some("tree") {
                                 "one".to_owned()
@@ -401,7 +401,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         if hierarchy.as_deref() == Some("tree") && cardinality != "one" {
                             return Err(BlueprintError::InvalidRelationshipHierarchy {
                                 code: attribute.code,
-                                message: "a tree allows at most one target per entity; use cardinality = \"one\"".into(),
+                                message: "a tree allows at most one target per record; use cardinality = \"one\"".into(),
                             });
                         }
                         (Some(cardinality), Some(target_cardinality))
@@ -617,7 +617,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         kind: raw.kind,
         includes: raw.includes,
         views: raw.views,
-        entity_schema,
+        record_schema,
         publication: raw.publication,
         connector_jobs: raw.connector_jobs,
         rules,
@@ -696,7 +696,7 @@ fn parse_relationship_hierarchy(
             "hierarchies are shared by every context; set context_editable = \"default\"",
         ));
     }
-    if *kind == BlueprintKind::Entity
+    if *kind == BlueprintKind::Record
         && !targets.is_empty()
         && !targets.iter().any(|target| target == blueprint_code)
     {
@@ -719,9 +719,9 @@ fn validate_unique_keys(
             message,
         };
         validate_code(&key.code, "unique key code")?;
-        if *kind != BlueprintKind::Entity {
+        if *kind != BlueprintKind::Record {
             return Err(invalid(
-                "only entity blueprints can define unique keys".into(),
+                "only record blueprints can define unique keys".into(),
             ));
         }
         if !key_codes.insert(key.code.as_str()) {

@@ -4,10 +4,10 @@ import type { BlueprintWithAttributes } from './schemas';
 
 const revision = (
   attributes: Record<string, unknown>[],
-  entitySchema: unknown = {},
+  recordSchema: unknown = {},
 ) =>
   ({
-    blueprint: { entity_schema: entitySchema },
+    blueprint: { record_schema: recordSchema },
     attributes: attributes.map((attribute) => ({
       value_type: 'string',
       value_schema: null,
@@ -26,7 +26,7 @@ describe('isSafeAutomaticMigration', () => {
     ).toBe(true);
   });
 
-  it('rejects changed attribute contracts and entity schemas', () => {
+  it('rejects changed attribute contracts and record schemas', () => {
     expect(
       isSafeAutomaticMigration(
         revision([{ code: 'name' }]),

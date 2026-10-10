@@ -83,8 +83,8 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
     onSuccess: refresh,
   });
   const runNow = useMutation({
-    mutationFn: (entityId: string) =>
-      runWorkflowNow(workflowId, entityId, crypto.randomUUID()),
+    mutationFn: (recordId: string) =>
+      runWorkflowNow(workflowId, recordId, crypto.randomUUID()),
     onSuccess: refresh,
   });
   const disable = useMutation({

@@ -26,10 +26,10 @@ export const createRule = (input: {
   });
 export const listRuleRuns = () =>
   request('/api/rule-runs', z.array(ruleRunSchema));
-export const listFindings = (entityId?: string) =>
+export const listFindings = (recordId?: string) =>
   request(
-    entityId
-      ? `/api/rule-findings?entity_id=${id(entityId)}`
+    recordId
+      ? `/api/rule-findings?record_id=${id(recordId)}`
       : '/api/rule-findings',
     z.array(findingSchema),
   );
@@ -43,7 +43,7 @@ export const runRuleNow = (ruleId: string, version: number, dryRun: boolean) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       dry_run: dryRun,
-      entity_id: null,
+      record_id: null,
       idempotency_key: crypto.randomUUID(),
       version: z.number().int().positive().parse(version),
     }),

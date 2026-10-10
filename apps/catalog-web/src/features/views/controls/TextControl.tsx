@@ -7,7 +7,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { ComponentProps, ReactNode } from 'react';
-import { attributeLabel } from '../../entities/entityDisplay';
+import { attributeLabel } from '../../records/recordDisplay';
 import type { ValueEditorProps } from '../components/componentTypes';
 import { EachValue } from './EachValue';
 

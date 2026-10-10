@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ApiRequestError } from '../../api/request';
 import { currentSession } from '../auth/api';
-import { getEntityLabels } from '../entities/api';
+import { getRecordLabels } from '../records/api';
 import {
   acknowledgeFinding,
   disableRule,
@@ -28,10 +28,10 @@ vi.mock('@tanstack/react-router', () => ({
     to,
     ...props
   }: ComponentPropsWithoutRef<'a'> & {
-    params: { entityId: string };
+    params: { recordId: string };
     to: string;
   }) => (
-    <a {...props} href={to.replace('$entityId', params.entityId)}>
+    <a {...props} href={to.replace('$recordId', params.recordId)}>
       {children}
     </a>
   ),
@@ -45,8 +45,8 @@ vi.mock('@tanstack/react-router', () => ({
     ),
 }));
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
-vi.mock('../entities/api', () => ({
-  getEntityLabels: vi.fn(() => Promise.resolve({ items: [] })),
+vi.mock('../records/api', () => ({
+  getRecordLabels: vi.fn(() => Promise.resolve({ items: [] })),
 }));
 vi.mock('./api', () => ({
   acknowledgeFinding: vi.fn(),
@@ -82,7 +82,7 @@ const finding: Finding = {
   id,
   rule_id: id,
   rule_version: 1,
-  entity_id: id,
+  record_id: id,
   context_id: null,
   severity: 'warning',
   message: 'Check failed',
@@ -154,7 +154,7 @@ describe('RuleInspectionPage', () => {
         id,
         rule_id: id,
         rule_version: 1,
-        entity_id: id,
+        record_id: id,
         context_id: null,
         severity: 'warning',
         message: 'Check failed',
@@ -282,16 +282,16 @@ describe('RuleInspectionPage', () => {
     expect(enableRuleRevision).toHaveBeenLastCalledWith(id, 1, true);
   });
 
-  it('names the rule revision and links the entity of each finding', async () => {
-    const entityId = '223e4567-e89b-42d3-a456-426614174000';
+  it('names the rule revision and links the record of each finding', async () => {
+    const recordId = '223e4567-e89b-42d3-a456-426614174000';
     vi.mocked(currentSession).mockResolvedValue(manager);
     vi.mocked(listFindings).mockResolvedValue([
-      { ...finding, entity_id: entityId },
+      { ...finding, record_id: recordId },
     ]);
-    vi.mocked(getEntityLabels).mockResolvedValue({
+    vi.mocked(getRecordLabels).mockResolvedValue({
       items: [
         {
-          id: entityId,
+          id: recordId,
           blueprint_code: 'product',
           display: { default: 'Laptop' },
         },
@@ -301,9 +301,9 @@ describe('RuleInspectionPage', () => {
     const row = (await screen.findByText('Check failed')).closest('tr')!;
     expect(await within(row).findByText('Check v1')).toBeTruthy();
     const link = await within(row).findByRole('link', { name: 'Laptop' });
-    expect(link.getAttribute('href')).toBe(`/entities/${entityId}`);
-    expect(getEntityLabels).toHaveBeenCalledWith(
-      [entityId],
+    expect(link.getAttribute('href')).toBe(`/records/${recordId}`);
+    expect(getRecordLabels).toHaveBeenCalledWith(
+      [recordId],
       expect.any(AbortSignal),
     );
   });
@@ -317,7 +317,7 @@ describe('RuleInspectionPage', () => {
         rule_version: 1,
         source: 'manual',
         dry_run: false,
-        scope_entity_id: null,
+        scope_record_id: null,
         status: 'completed',
         candidate_cursor: null,
         candidates_evaluated: 2,
@@ -334,7 +334,7 @@ describe('RuleInspectionPage', () => {
         rule_version: 4,
         source: 'event',
         dry_run: false,
-        scope_entity_id: id,
+        scope_record_id: id,
         status: 'completed',
         candidate_cursor: null,
         candidates_evaluated: 1,

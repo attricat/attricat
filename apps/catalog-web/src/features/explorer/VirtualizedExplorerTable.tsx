@@ -16,8 +16,8 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
-import type { EntityItem } from '../entities/api';
-import { displayLabel } from '../entities/entityDisplay';
+import type { RecordItem } from '../records/api';
+import { displayLabel } from '../records/recordDisplay';
 import {
   displayColumnMinWidth,
   explorerColumnIds,
@@ -49,7 +49,7 @@ const resultColumnCellSx = (
         : {};
 
 type Props = {
-  table: ReturnType<typeof useLegacyTable<EntityItem>>;
+  table: ReturnType<typeof useLegacyTable<RecordItem>>;
   columnsLength: number;
   virtualRows: VirtualItem[];
   paddingTop: number;
@@ -57,11 +57,11 @@ type Props = {
   measureElement: (element: HTMLTableRowElement | null) => void;
   tableContainerRef: React.Ref<HTMLDivElement>;
   selection: ExplorerSelection;
-  items: EntityItem[];
+  items: RecordItem[];
   isFetching: boolean;
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
-  panelEntityId?: string;
+  panelRecordId?: string;
 };
 
 export const VirtualizedExplorerTable = ({
@@ -77,7 +77,7 @@ export const VirtualizedExplorerTable = ({
   isFetching,
   isFetchingNextPage,
   onLoadMore,
-  panelEntityId,
+  panelRecordId,
 }: Props) => {
   const { t } = useTranslation();
   const rows = table.getRowModel().rows;
@@ -89,25 +89,25 @@ export const VirtualizedExplorerTable = ({
       onChange={selection.toggleLoaded}
       slotProps={{
         input: {
-          'aria-label': t('explorer.selectLoadedEntities', {
+          'aria-label': t('explorer.selectLoadedRecords', {
             limit: maximumAgentSelection,
           }),
         },
       }}
     />
   );
-  const selectionCheckbox = (entity: EntityItem) => (
+  const selectionCheckbox = (record: RecordItem) => (
     <Checkbox
-      checked={selection.isSelected(entity.id)}
+      checked={selection.isSelected(record.id)}
       disabled={
-        !selection.isSelected(entity.id) &&
+        !selection.isSelected(record.id) &&
         selection.selectedItems.length >= maximumAgentSelection
       }
-      onChange={() => selection.toggleEntity(entity)}
+      onChange={() => selection.toggleRecord(record)}
       slotProps={{
         input: {
-          'aria-label': t('explorer.selectEntity', {
-            entity: displayLabel(entity.display, entity.id),
+          'aria-label': t('explorer.selectRecord', {
+            record: displayLabel(record.display, record.id),
           }),
         },
       }}
@@ -186,11 +186,11 @@ export const VirtualizedExplorerTable = ({
             const row = rows[virtualRow.index];
             return (
               <TableRow
-                aria-current={row.id === panelEntityId || undefined}
+                aria-current={row.id === panelRecordId || undefined}
                 data-index={virtualRow.index}
                 key={row.id}
                 ref={measureElement}
-                selected={row.id === panelEntityId}
+                selected={row.id === panelRecordId}
               >
                 {row.getVisibleCells().map((cell) => (
                   <TableCell

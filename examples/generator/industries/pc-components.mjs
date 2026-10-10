@@ -21,7 +21,7 @@ const blueprint = (
 ) => `format_version = 1
 code = "${code}"
 name = "${name}"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"

@@ -1,0 +1,113 @@
+import { MenuItem, TextField } from '@mui/material';
+import { useTranslation } from 'react-i18next';
+import type {
+  Attribute,
+  ComponentReference,
+  StatusTransitionAccess,
+} from '../api';
+import { resolveValueEditor } from '../../views/components/registry';
+import type { ValueEditorProps } from '../../views/components/componentTypes';
+import { StatusEditor } from '../../views/controls/editors';
+import { attributeLabel } from '../recordDisplay';
+import { attributeValueTypes } from '../valueTypes';
+import {
+  booleanFieldValues,
+  JSON_EDITOR_MIN_ROWS,
+  scalarValuePlaceholders,
+} from '../constants';
+import { statusConfiguration } from '../status';
+import { principalConfiguration } from '../../principals/principal';
+import { PrincipalEditor } from '../../principals/PrincipalEditor';
+
+const numeric = (attribute: Attribute) =>
+  attribute.value_type === attributeValueTypes.number ||
+  attribute.value_type === attributeValueTypes.integer;
+
+/** The built-in input for a scalar value type. */
+const BuiltInEditor = ({
+  attribute,
+  value,
+  disabled,
+  required,
+  error,
+  helperText,
+  onChange,
+}: ValueEditorProps) => {
+  const { t } = useTranslation();
+  const common = {
+    fullWidth: true,
+    disabled,
+    required,
+    error: Boolean(error),
+    helperText: error ?? helperText,
+    label: attributeLabel(attribute),
+    value,
+    onChange: (event: { target: { value: string } }) =>
+      onChange(event.target.value),
+  };
+  if (attribute.value_type === attributeValueTypes.boolean)
+    return (
+      <TextField {...common} select>
+        <MenuItem value="">{t('records.notSet')}</MenuItem>
+        <MenuItem value={booleanFieldValues.true}>{t('records.true')}</MenuItem>
+        <MenuItem value={booleanFieldValues.false}>
+          {t('records.false')}
+        </MenuItem>
+      </TextField>
+    );
+  const json = attribute.value_type === attributeValueTypes.json;
+  const date = attribute.value_type === attributeValueTypes.date;
+  return (
+    <TextField
+      {...common}
+      multiline={json}
+      minRows={json ? JSON_EDITOR_MIN_ROWS : undefined}
+      placeholder={scalarValuePlaceholders[attribute.value_type]}
+      slotProps={{
+        // Native date inputs show date segments even while empty.
+        inputLabel: date ? { shrink: true } : undefined,
+        htmlInput: { inputMode: numeric(attribute) ? 'decimal' : undefined },
+      }}
+      type={date ? 'date' : numeric(attribute) ? 'number' : undefined}
+    />
+  );
+};
+
+/**
+ * Editor for one scalar attribute value, shared by the record form and the
+ * blueprint preview sandbox. A status or user-or-team annotation takes
+ * precedence, then the view's configured edit component, then the built-in
+ * input for the type.
+ */
+export const ScalarAttributeEditor = ({
+  component,
+  statusBaseline = null,
+  inheritedStatus = null,
+  statusTransitions,
+  ...props
+}: ValueEditorProps & {
+  component?: ComponentReference | null;
+  /** Saved status that transitions start from; `null` for a new value. */
+  statusBaseline?: string | null;
+  inheritedStatus?: string | null;
+  /** The caller's access to each declared edge, when the server provided it. */
+  statusTransitions?: readonly StatusTransitionAccess[];
+}) => {
+  const status = statusConfiguration(props.attribute);
+  if (status)
+    return (
+      <StatusEditor
+        {...props}
+        config={status}
+        baseline={statusBaseline}
+        inheritedValue={inheritedStatus}
+        transitions={statusTransitions}
+      />
+    );
+  const principal = principalConfiguration(props.attribute);
+  if (principal) return <PrincipalEditor {...props} config={principal} />;
+  const Editor =
+    resolveValueEditor(component, props.attribute)?.valueEditor ??
+    BuiltInEditor;
+  return <Editor {...props} />;
+};

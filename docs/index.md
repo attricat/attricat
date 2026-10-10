@@ -46,11 +46,11 @@ runs the ignored RustFS compatibility test.
 - [Caching](caching.md): the query cache, workspace generations, the optional
   Redis tier, and the rules a new write path must follow.
 - [Tags, labels, and classifications](classifications.md): model controlled
-  vocabularies with entities, relationships, contexts, and hierarchies.
+  vocabularies with records, relationships, contexts, and hierarchies.
 - [Domain eventing](eventing.md): transactional outbox and delivery semantics.
 - [Notifications](notifications.md): per-member workspace inboxes, the system
   events that notify people, and how to add a producer.
-- [Workflows](workflows.md): versioned triggers and bounded entity actions.
+- [Workflows](workflows.md): versioned triggers and bounded record actions.
 - [Rules](rules.md): blueprint checks and finding lifecycles.
 - [Extensions](extensions.md): manifest, permissions, runtime, and lifecycle contracts;
   webhook delivery is not implemented.
@@ -59,7 +59,7 @@ runs the ignored RustFS compatibility test.
 - [Field-level read restrictions](field-level-read-restrictions.md): audit of
   every read surface (attributes cannot be hidden today) and the design for
   restricted attributes.
-- [JSON Schema validation](json-schema-validation.md): attribute and entity
+- [JSON Schema validation](json-schema-validation.md): attribute and record
   validation contracts.
 
 ## Use Catalog
@@ -75,7 +75,7 @@ runs the ignored RustFS compatibility test.
 - [Relationship-aware Explore search](relationship-aware-search.md): explicit
   graph traversal and structured query-language semantics.
 - [Relationships walkthrough](../examples/relationships/README.md): create
-  blueprints, entities, contextual values, and relationships end to end.
+  blueprints, records, contextual values, and relationships end to end.
 - [Demo catalog generator](../examples/generate.md): create deterministic,
   industry-scoped demo and local performance data sets.
 

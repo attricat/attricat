@@ -171,7 +171,7 @@ async fn evaluate_page(
     let remaining =
         (catalog_rules::MAX_CANDIDATES_PER_RUN as i64 - run.candidates_evaluated).max(0);
     if remaining == 0 {
-        let truncated = run.scope_entity_id.is_none()
+        let truncated = run.scope_record_id.is_none()
             && candidates_remain(repo, run, run.candidate_cursor).await?;
         return Ok(EvaluatedPage {
             results: Vec::new(),
@@ -182,13 +182,13 @@ async fn evaluate_page(
     }
     let pool = repo.pool_for_runtime();
     let candidates: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM entities WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL AND ($4::uuid IS NULL OR id>$4) AND ($5::uuid IS NULL OR id=$5) ORDER BY id LIMIT $6",
+        "SELECT id FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL AND ($4::uuid IS NULL OR id>$4) AND ($5::uuid IS NULL OR id=$5) ORDER BY id LIMIT $6",
     )
     .bind(repo.workspace_id_for_runtime())
     .bind(run.blueprint_id)
     .bind(run.blueprint_version)
     .bind(run.candidate_cursor)
-    .bind(run.scope_entity_id)
+    .bind(run.scope_record_id)
     .bind(PAGE_SIZE.min(remaining))
     .fetch_all(&pool)
     .await?;
@@ -196,7 +196,7 @@ async fn evaluate_page(
         .evaluate_rule_candidates(run.context_id, &compiled, &candidates)
         .await?;
     let page_size = PAGE_SIZE.min(remaining) as usize;
-    let exhausted = candidates.len() < page_size || run.scope_entity_id.is_some();
+    let exhausted = candidates.len() < page_size || run.scope_record_id.is_some();
     let capped = run.candidates_evaluated + candidates.len() as i64
         >= catalog_rules::MAX_CANDIDATES_PER_RUN as i64;
     let next_cursor = candidates.last().copied();
@@ -218,7 +218,7 @@ async fn candidates_remain(
     cursor: Option<Uuid>,
 ) -> Result<bool, RepositoryError> {
     Ok(sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM entities WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL AND ($4::uuid IS NULL OR id>$4))",
+        "SELECT EXISTS(SELECT 1 FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL AND ($4::uuid IS NULL OR id>$4))",
     )
     .bind(repo.workspace_id_for_runtime())
     .bind(run.blueprint_id)

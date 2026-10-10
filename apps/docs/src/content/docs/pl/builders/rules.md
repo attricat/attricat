@@ -3,7 +3,7 @@ title: Reguły jakości danych
 description: Definiuj wersjonowane kontrole, które oznaczają rekordy z brakującymi, nieaktualnymi lub błędnie otagowanymi danymi, i zarządzaj ustaleniami.
 ---
 
-Reguła sprawdza rekordy jednego Schematu pod kątem prostego warunku i zapisuje **ustalenie** dla każdego rekordu, który go nie spełnia. Ustalenia rozwiązują się same, gdy rekord zostanie poprawiony. Reguły tylko odczytują dane; nigdy nie zmieniają rekordów. W API, CLI i zdarzeniach rekordy występują pod nazwą `entity`.
+Reguła sprawdza rekordy jednego Schematu pod kątem prostego warunku i zapisuje **ustalenie** dla każdego rekordu, który go nie spełnia. Ustalenia rozwiązują się same, gdy rekord zostanie poprawiony. Reguły tylko odczytują dane; nigdy nie zmieniają rekordów.
 
 Używaj reguł do pytań w rodzaju „które opublikowane produkty nie mają tytułu?” albo „których cen nikt nie zmieniał od roku?”. Aby zmieniać dane automatycznie, użyj [przepływu pracy](/pl/builders/workflows/).
 
@@ -24,7 +24,7 @@ timezone = "UTC"
 
 [[triggers]]
 type = "event"
-event_type = "entity.updated.v1"
+event_type = "record.updated.v1"
 
 [[triggers]]
 type = "manual"
@@ -49,7 +49,7 @@ attribute_code = "title"
 | --- | --- | --- |
 | `manual` | | Gdy ktoś wybierze **Uruchom teraz**. |
 | `schedule` | `cron`, `timezone = "UTC"` | Według sześciopolowego harmonogramu cron (sekundy na początku), w UTC. `0 0 6 * * *` oznacza codziennie o 06:00. |
-| `event` | `event_type` | Dla zmienionego rekordu, po jednym z: `entity.created.v1`, `entity.updated.v1`, `entity.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
+| `event` | `event_type` | Dla zmienionego rekordu, po jednym z: `record.created.v1`, `record.updated.v1`, `record.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
 | `post_import` | | Zarezerwowany dla przyszłej integracji z importem. |
 
 ### Predykaty
@@ -123,7 +123,7 @@ Reguła powiązana z kontekstem sprawdza rozstrzygnięte wartości rekordu w tym
 
 ### Zmiany w powiązanych rekordach
 
-`linked` i `referenced_by` zależą od innych rekordów. Gdy zmieni się rekord powiązany lub wskazujący, reguły z wyzwalaczem zdarzenia uruchamiają się też ponownie dla maksymalnie 100 zależnych od niego rekordów, dzięki czemu ich ustalenia pozostają aktualne. Dotyczy to też rekordu, który rekord wskazujący przestaje wskazywać, na przykład gdy działanie korygujące zostanie przeniesione do innej niezgodności, zgodnie z [faktami](/pl/reference/events/#które-zmiany-tworzą-fakty) zdarzenia. Migracja Schematu, która usuwa relację lub zmienia jej cele, nie zapisuje faktów, ale jej zdarzenie `entity.migrated.v1` wymienia zwolnione rekordy, więc dla nich reguły również uruchamiają się ponownie. Reguły wyzwalane tylko harmonogramem lub ręcznie zauważą zmianę przy następnym przebiegu.
+`linked` i `referenced_by` zależą od innych rekordów. Gdy zmieni się rekord powiązany lub wskazujący, reguły z wyzwalaczem zdarzenia uruchamiają się też ponownie dla maksymalnie 100 zależnych od niego rekordów, dzięki czemu ich ustalenia pozostają aktualne. Dotyczy to też rekordu, który rekord wskazujący przestaje wskazywać, na przykład gdy działanie korygujące zostanie przeniesione do innej niezgodności, zgodnie z [faktami](/pl/reference/events/#które-zmiany-tworzą-fakty) zdarzenia. Migracja Schematu, która usuwa relację lub zmienia jej cele, nie zapisuje faktów, ale jej zdarzenie `record.migrated.v1` wymienia zwolnione rekordy, więc dla nich reguły również uruchamiają się ponownie. Reguły wyzwalane tylko harmonogramem lub ręcznie zauważą zmianę przy następnym przebiegu.
 
 Zasady porównywania dla każdego typu oraz limity zagnieżdżania i powiązanych rekordów opisuje [dokumentacja Schematu](/pl/reference/blueprint/#predykaty).
 
@@ -158,7 +158,7 @@ Włączone reguły uruchamiają się według swoich wyzwalaczy. Możesz też uru
 
 ```sh
 acli rule run-now <rule-id> --idempotency-key 2026-03-01-audit
-acli rule run-now <rule-id> --idempotency-key check-one --entity-id <uuid>
+acli rule run-now <rule-id> --idempotency-key check-one --record-id <uuid>
 acli rule run-now <rule-id> --idempotency-key preview --dry-run
 ```
 
@@ -178,7 +178,7 @@ severity = "error"
 
 [[triggers]]
 type = "event"
-event_type = "entity.updated.v1"
+event_type = "record.updated.v1"
 
 [predicate]
 type = "required"
@@ -206,7 +206,7 @@ Zapis naruszający egzekwowaną regułę zostaje odrzucony z `422 rule_violation
 Egzekwowanie reguły na istniejących danych może zablokować osoby, które nic złego nie zrobiły. Dlatego gdy wersja Schematu reguły ma już rekordy, Attricat wymaga ukończonego **pełnego przebiegu próbnego** dokładnie tej wersji reguły, którą włączasz. W przeciwnym razie włączenie kończy się błędem `409 rule_dry_run_required`.
 
 1. Opublikuj wersję.
-2. Uruchom przebieg próbny dla wszystkich rekordów, bez `--entity-id`, i poczekaj, aż zakończy się na karcie **Historia przebiegów**. Przebieg próbny może dotyczyć opublikowanej wersji, która nie jest jeszcze włączona.
+2. Uruchom przebieg próbny dla wszystkich rekordów, bez `--record-id`, i poczekaj, aż zakończy się na karcie **Historia przebiegów**. Przebieg próbny może dotyczyć opublikowanej wersji, która nie jest jeszcze włączona.
 
    ```sh
    acli rule run-now <rule-id> --idempotency-key enforce-preview --dry-run
@@ -233,7 +233,7 @@ Rekordu, który już narusza egzekwowaną regułę, nie można zapisać, dopóki
 **Potwierdź** ustalenie, aby zapisać, że ktoś je widział. Pozostaje ono, dopóki rekord nie spełni reguły.
 
 ```sh
-acli rule findings --entity-id <uuid>
+acli rule findings --record-id <uuid>
 acli rule acknowledge <finding-id>
 ```
 

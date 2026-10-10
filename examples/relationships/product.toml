@@ -1,7 +1,7 @@
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 attributes = [
   { code = "title", value_type = "string" },
@@ -25,7 +25,7 @@ type = "stack"
 children = [
   {
     type = "stack",
-    component = { id = "catalog.entity_heading", version = 1 },
+    component = { id = "catalog.record_heading", version = 1 },
     children = [
       { type = "field", field = "title" },
       { type = "text", text = "Product details" },

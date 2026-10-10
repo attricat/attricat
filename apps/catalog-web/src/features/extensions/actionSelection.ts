@@ -13,7 +13,7 @@ export type SelectionSource =
   (typeof selectionSources)[keyof typeof selectionSources];
 
 /**
- * Saved entities an action applies to, in display order. One blueprint
+ * Saved records an action applies to, in display order. One blueprint
  * revision only; the host never widens it to hidden rows or search results.
  */
 export type ActionSelection = {
@@ -22,7 +22,7 @@ export type ActionSelection = {
   blueprintVersion: number;
   /** The effective value-resolution context, when the surface has one. */
   contextId: string | null;
-  entityIds: readonly string[];
+  recordIds: readonly string[];
 };
 
 /** The strict, versioned context a selection-aware contribution receives. */
@@ -30,14 +30,14 @@ export const selectionContextSchema = z
   .object({
     context_version: z.literal(selectionContextVersion),
     selection_source: z.enum([
-      selectionSources.entityPreview,
+      selectionSources.recordPreview,
       selectionSources.explorerRow,
       selectionSources.explorerSelection,
     ]),
     blueprint_id: z.uuid(),
     blueprint_version: z.number().int().positive(),
     context_id: z.uuid().nullable(),
-    entity_ids: z
+    record_ids: z
       .array(z.uuid())
       .min(1)
       .max(maximumActionSelection)
@@ -54,7 +54,7 @@ export const selectionContext = (
   blueprint_id: selection.blueprintId,
   blueprint_version: selection.blueprintVersion,
   context_id: selection.contextId,
-  entity_ids: [...selection.entityIds],
+  record_ids: [...selection.recordIds],
 });
 
 /** Parses a frame context, returning the selection only for version 2. */

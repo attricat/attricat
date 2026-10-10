@@ -32,8 +32,8 @@ where
 }
 
 /// Makes `channel` an enabled publication channel of the bootstrap workspace
-/// and records `entity_id` as published in it by a fresh user.
-pub async fn publish_in_channel(pool: &PgPool, entity_id: Uuid, channel: Uuid) {
+/// and records `record_id` as published in it by a fresh user.
+pub async fn publish_in_channel(pool: &PgPool, record_id: Uuid, channel: Uuid) {
     let workspace = bootstrap_workspace_id();
     sqlx::query(
         "INSERT INTO publication_channels(workspace_id,context_id,enabled) VALUES($1,$2,true)",
@@ -50,9 +50,9 @@ pub async fn publish_in_channel(pool: &PgPool, entity_id: Uuid, channel: Uuid) {
         .execute(pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO entity_channel_publications(workspace_id,entity_id,context_id,published_at,published_by_user_id) VALUES($1,$2,$3,now(),$4)")
+    sqlx::query("INSERT INTO record_channel_publications(workspace_id,record_id,context_id,published_at,published_by_user_id) VALUES($1,$2,$3,now(),$4)")
         .bind(workspace)
-        .bind(entity_id)
+        .bind(record_id)
         .bind(channel)
         .bind(publisher)
         .execute(pool)
@@ -60,12 +60,12 @@ pub async fn publish_in_channel(pool: &PgPool, entity_id: Uuid, channel: Uuid) {
         .unwrap();
 }
 
-/// Whether the entity is currently published in any channel.
-pub async fn is_published(pool: &PgPool, entity_id: Uuid) -> bool {
+/// Whether the record is currently published in any channel.
+pub async fn is_published(pool: &PgPool, record_id: Uuid) -> bool {
     sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM entity_channel_publications WHERE entity_id=$1 AND published_at IS NOT NULL)",
+        "SELECT EXISTS (SELECT 1 FROM record_channel_publications WHERE record_id=$1 AND published_at IS NOT NULL)",
     )
-    .bind(entity_id)
+    .bind(record_id)
     .fetch_one(pool)
     .await
     .unwrap()

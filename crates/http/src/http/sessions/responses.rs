@@ -48,8 +48,8 @@ pub(super) struct SessionCapabilities {
     workflows_manage: bool,
     rules_read: bool,
     rules_manage: bool,
-    entities_publish: bool,
-    entities_delete: bool,
+    records_publish: bool,
+    records_delete: bool,
     blueprints_write: bool,
 }
 
@@ -70,8 +70,8 @@ impl SessionResponse {
         c.workflows_manage &= permits("workflows.manage");
         c.rules_read &= permits("rules.read");
         c.rules_manage &= permits("rules.manage");
-        c.entities_publish &= permits("entities.publish");
-        c.entities_delete &= permits("entities.delete");
+        c.records_publish &= permits("records.publish");
+        c.records_delete &= permits("records.delete");
         c.blueprints_write &= permits("blueprints.write");
     }
 }
@@ -187,8 +187,8 @@ const CAPABILITY_PERMISSIONS: [&str; 16] = [
     "workflows.manage",
     "rules.read",
     "rules.manage",
-    "entities.publish",
-    "entities.delete",
+    "records.publish",
+    "records.delete",
     "blueprints.write",
 ];
 
@@ -218,8 +218,8 @@ async fn session_capabilities(
         workflows_manage: has("workflows.manage"),
         rules_read: has("rules.read"),
         rules_manage: has("rules.manage"),
-        entities_publish: has("entities.publish"),
-        entities_delete: has("entities.delete"),
+        records_publish: has("records.publish"),
+        records_delete: has("records.delete"),
         blueprints_write: has("blueprints.write"),
     })
 }

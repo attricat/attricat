@@ -89,9 +89,9 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 
 ### Client placement
 
-Each placement capability allows a contribution at one outlet. See [Client contributions](/extensions/client/#outlets). In capability, outlet, and event names, records are called entities.
+Each placement capability allows a contribution at one outlet. See [Client contributions](/extensions/client/#outlets).
 
-`client.blueprint_configuration`, `client.entity_decoration`, `client.entity_action`, `client.entity_header_action`, `client.entity_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`.
+`client.blueprint_configuration`, `client.record_decoration`, `client.record_action`, `client.record_header_action`, `client.record_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`.
 
 ## Host permissions
 
@@ -173,7 +173,7 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 ```json
 "server": {
   "event_handlers": [
-    { "id": "on-update", "event_types": ["entity.updated.v1"], "handler": "handle-event" }
+    { "id": "on-update", "event_types": ["record.updated.v1"], "handler": "handle-event" }
   ],
   "commands": [
     { "id": "recalculate", "handler": "recalculate",
@@ -198,7 +198,7 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 "ui": [
   { "id": "workbench", "version": 1, "kind": "route", "artifact": "app", "title": "Formula workbench" },
   { "id": "workbench-nav", "version": 1, "kind": "navigation", "route": "workbench", "title": "Formula workbench" },
-  { "id": "stock", "version": 1, "kind": "embedded", "artifact": "panel", "outlet": "entity_preview_panel" },
+  { "id": "stock", "version": 1, "kind": "embedded", "artifact": "panel", "outlet": "record_preview_panel" },
   { "id": "recalc", "version": 1, "kind": "action", "artifact": "row", "outlet": "explorer_row_action" }
 ]
 ```
@@ -207,12 +207,12 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 | --- | --- | --- |
 | `route` | `artifact`, `title` | A full page at `/extensions/<extension-id>/<contribution-id>`. |
 | `navigation` | `route`, `title` | A sidebar link to one of this extension's routes. |
-| `embedded` | `artifact`, `outlet` | A frame at `navigation`, `entity_preview_panel`, `blueprint_attribute_configuration`, `entity_attribute_decoration`, `entity_action`, or `explorer_table_cell`. |
-| `action` | `artifact`, `outlet` | A host-laid-out action at `explorer_row_action`, `explorer_action`, `explorer_bulk_action`, or `entity_header_action`. |
-| `panel` | `artifact`, `outlet` | A read-only host-laid-out panel at `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `entity_attribute_panel`, `file_panel`, `audit_event_panel`, or `data_health_card`. |
+| `embedded` | `artifact`, `outlet` | A frame at `navigation`, `record_preview_panel`, `blueprint_attribute_configuration`, `record_attribute_decoration`, `record_action`, or `explorer_table_cell`. |
+| `action` | `artifact`, `outlet` | A host-laid-out action at `explorer_row_action`, `explorer_action`, `explorer_bulk_action`, or `record_header_action`. |
+| `panel` | `artifact`, `outlet` | A read-only host-laid-out panel at `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `record_attribute_panel`, `file_panel`, `audit_event_panel`, or `data_health_card`. |
 | `dialog` | `artifact`, `outlet`, `title` | The host-managed `action_dialog` opened by this extension's selection actions. |
 
-Each extension can use each outlet once. `entity_action`, `explorer_row_action`, and `explorer_bulk_action` accept `version` 1 or 2; version 2 receives the [selection context](/extensions/client/#selection-context).
+Each extension can use each outlet once. `record_action`, `explorer_row_action`, and `explorer_bulk_action` accept `version` 1 or 2; version 2 receives the [selection context](/extensions/client/#selection-context).
 
 ## Cell renderers
 

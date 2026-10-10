@@ -111,7 +111,7 @@ async fn personal_api_tokens_are_one_time_secrets_and_enforce_permission_subsets
     assert_eq!(
         token
             .post(format!("{base_url}/blueprints"))
-            .json(&json!({"definition":"kind = \"entity\"\ncode = \"nope\""}))
+            .json(&json!({"definition":"kind = \"record\"\ncode = \"nope\""}))
             .send()
             .await
             .unwrap()

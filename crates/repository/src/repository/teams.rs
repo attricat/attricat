@@ -12,9 +12,9 @@ use serde_json::Value;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
-use super::entity_commands::Revalidation;
+use super::record_commands::Revalidation;
 use super::{CatalogRepository, RepositoryError};
-use catalog_domain::model::Entity;
+use catalog_domain::model::Record;
 
 pub const MAX_TEAMS: i64 = 1000;
 pub const MAX_TEAM_MEMBERS: usize = 1000;
@@ -355,7 +355,7 @@ impl CatalogRepository {
     pub(super) async fn validate_principal_values(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         write: &super::write_context::WriteContext,
         mode: Revalidation,
     ) -> Result<Vec<(String, PrincipalRef)>, RepositoryError> {
@@ -363,8 +363,8 @@ impl CatalogRepository {
         if attributes.is_empty() {
             return Ok(Vec::new());
         }
-        let after = write.preview(transaction, entity.id).await?;
-        let before = entity.projections.get("preview").unwrap_or(&Value::Null);
+        let after = write.preview(transaction, record.id).await?;
+        let before = record.projections.get("preview").unwrap_or(&Value::Null);
         let Some(contexts) = after.as_object() else {
             return Ok(Vec::new());
         };

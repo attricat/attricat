@@ -15,7 +15,7 @@ Open **Manage → Blueprints → New blueprint** and paste:
 format_version = 1
 code = "category"
 name = "Category"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "name"
@@ -34,7 +34,7 @@ fields = ["name"]
 
 Save it, then **Publish** revision 1.
 
-`parent` points at another category, so categories can form a tree. `kind = "entity"` makes this a record blueprint: blueprint files, the API, and the CLI call records entities.
+`parent` points at another category, so categories can form a tree. `kind = "record"` makes this a record blueprint.
 
 ## 2. Create a product blueprint
 
@@ -44,8 +44,8 @@ Create a second blueprint:
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
-entity_schema = '{"type":"object","required":["sku","title"]}'
+kind = "record"
+record_schema = '{"type":"object","required":["sku","title"]}'
 
 [[attributes]]
 code = "sku"
@@ -82,7 +82,7 @@ columns = [
 
 Publish it.
 
-`entity_schema` holds the record schema. It sits above the first `[[attributes]]` on purpose. In TOML, every key after a `[table]` header belongs to that table, so a top-level key placed further down would become part of the last attribute.
+`record_schema` holds the record schema. It sits above the first `[[attributes]]` on purpose. In TOML, every key after a `[table]` header belongs to that table, so a top-level key placed further down would become part of the last attribute.
 
 ## 3. Add categories
 

@@ -75,16 +75,16 @@ describe('agent API client', () => {
     });
   });
 
-  it('binds a new conversation to the entity and selected context', async () => {
+  it('binds a new conversation to the record and selected context', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 201,
-      json: () => Promise.resolve({ id, title: 'Entity' }),
+      json: () => Promise.resolve({ id, title: 'Record' }),
     });
-    await createConversation('Entity', { entity_id: id, context_id: id });
+    await createConversation('Record', { record_id: id, context_id: id });
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
-      title: 'Entity',
-      entity_id: id,
+      title: 'Record',
+      record_id: id,
       context_id: id,
     });
   });
@@ -96,7 +96,7 @@ describe('agent API client', () => {
       created_by_user_id: null,
       title: 'Pricing review',
       title_source: 'manual',
-      entity_id: null,
+      record_id: null,
       context_id: null,
       created_at: '2026-09-28T00:00:00Z',
       updated_at: '2026-09-28T00:00:00Z',

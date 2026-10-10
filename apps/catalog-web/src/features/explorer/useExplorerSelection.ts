@@ -1,37 +1,37 @@
 import { useState } from 'react';
-import type { EntityItem } from '../entities/api';
+import type { RecordItem } from '../records/api';
 import { maximumAgentSelection } from './agentSelection';
 
 type SelectionState = {
   scope: string | undefined;
   selectionMode: boolean;
-  entities: EntityItem[];
+  records: RecordItem[];
 };
 
 const emptySelection = (scope: string | undefined): SelectionState => ({
   scope,
   selectionMode: false,
-  entities: [],
+  records: [],
 });
 
 /**
- * Tracks bulk selection for one blueprint. Selected entities are kept as
+ * Tracks bulk selection for one blueprint. Selected records are kept as
  * snapshots so the selection survives query, sort, and filter changes that
  * replace the loaded rows; switching to another blueprint starts afresh.
  */
 export const useExplorerSelection = (
   scope: string | undefined,
-  items: EntityItem[],
+  items: RecordItem[],
 ) => {
   const [state, setState] = useState(() => emptySelection(scope));
   if (state.scope !== scope) setState(emptySelection(scope));
   const current = state.scope === scope ? state : emptySelection(scope);
 
-  const selectedIds = new Set(current.entities.map((entity) => entity.id));
+  const selectedIds = new Set(current.records.map((record) => record.id));
   const loadedById = new Map(items.map((item) => [item.id, item]));
   // Prefer loaded rows so labels and versions reflect the latest results.
-  const selectedItems = current.entities.map(
-    (entity) => loadedById.get(entity.id) ?? entity,
+  const selectedItems = current.records.map(
+    (record) => loadedById.get(record.id) ?? record,
   );
   const loadedSelectedCount = items.filter((item) =>
     selectedIds.has(item.id),
@@ -42,39 +42,39 @@ export const useExplorerSelection = (
   const allLoadedSelected = loadedSelectedCount > 0 && !canAddLoaded;
   const someLoadedSelected = loadedSelectedCount > 0 && canAddLoaded;
 
-  const updateEntities = (change: (entities: EntityItem[]) => EntityItem[]) =>
+  const updateRecords = (change: (records: RecordItem[]) => RecordItem[]) =>
     setState((previous) => ({
       ...previous,
-      entities: change(previous.entities),
+      records: change(previous.records),
     }));
-  const clearSelection = () => updateEntities(() => []);
+  const clearSelection = () => updateRecords(() => []);
   const exitSelectionMode = () => setState(emptySelection(scope));
   const toggleSelectionMode = () =>
     current.selectionMode
       ? exitSelectionMode()
       : setState({ ...current, selectionMode: true });
   const toggleLoaded = () =>
-    updateEntities((entities) => {
-      const ids = new Set(entities.map((entity) => entity.id));
+    updateRecords((records) => {
+      const ids = new Set(records.map((record) => record.id));
       const room = maximumAgentSelection - ids.size;
       const addable = items.filter((item) => !ids.has(item.id));
       if (room > 0 && addable.length > 0) {
-        return [...entities, ...addable.slice(0, room)];
+        return [...records, ...addable.slice(0, room)];
       }
-      return entities.filter((entity) => !loadedById.has(entity.id));
+      return records.filter((record) => !loadedById.has(record.id));
     });
-  const toggleEntity = (entity: EntityItem) =>
-    updateEntities((entities) => {
-      if (entities.some((selected) => selected.id === entity.id)) {
-        return entities.filter((selected) => selected.id !== entity.id);
+  const toggleRecord = (record: RecordItem) =>
+    updateRecords((records) => {
+      if (records.some((selected) => selected.id === record.id)) {
+        return records.filter((selected) => selected.id !== record.id);
       }
-      return entities.length < maximumAgentSelection
-        ? [...entities, entity]
-        : entities;
+      return records.length < maximumAgentSelection
+        ? [...records, record]
+        : records;
     });
-  const removeEntity = (entityId: string) =>
-    updateEntities((entities) =>
-      entities.filter((entity) => entity.id !== entityId),
+  const removeRecord = (recordId: string) =>
+    updateRecords((records) =>
+      records.filter((record) => record.id !== recordId),
     );
 
   return {
@@ -82,13 +82,13 @@ export const useExplorerSelection = (
     selectedItems,
     allLoadedSelected,
     someLoadedSelected,
-    isSelected: (entityId: string) => selectedIds.has(entityId),
+    isSelected: (recordId: string) => selectedIds.has(recordId),
     clearSelection,
     exitSelectionMode,
     toggleSelectionMode,
     toggleLoaded,
-    toggleEntity,
-    removeEntity,
+    toggleRecord,
+    removeRecord,
   };
 };
 

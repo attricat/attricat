@@ -69,7 +69,7 @@ installs the listed official release), `blocked`, or `skipped`.
 
 | Action | Meaning |
 | --- | --- |
-| `create` | Create a new blueprint, context, publication channel, rule, workflow, saved search, asset, or selected sample entity. |
+| `create` | Create a new blueprint, context, publication channel, rule, workflow, saved search, asset, or selected sample record. |
 | `map` | Reuse an explicitly selected compatible resource, a selected context, or a resource a prerequisite pack installed. |
 | `append` | Add navigation, extension-layout, or translation entries. |
 | `satisfied` | The requested setting or publication channel is already present exactly. |
@@ -127,9 +127,9 @@ acli solution-pack plan --file pack.tar.zst --prefix example \
   --map-context contexts/poland=PL
 ```
 
-A channel can also require pack rules and a valid entity before publication.
+A channel can also require pack rules and a valid record before publication.
 The plan shows them as `required_rule_codes` (the rules' physical codes) and
-`require_valid_entity`, and orders channel actions after rule actions. A
+`require_valid_record`, and orders channel actions after rule actions. A
 channel whose required rule cannot be created or found is
 `dependency_not_creatable`. Apply writes the channel through the same
 validated path as an ordinary channel update. A required rule that is
@@ -153,15 +153,15 @@ created or mapped workspace context.
   rule for a newly created blueprint is `blueprint_not_published`. New rule
   codes are `<prefix>_<code>` and conflict with an existing rule code.
 - **Enforcing rules** on a mapped or reused blueprint, which may already have
-  entities, are created disabled even when the pack enables them. The rule
+  records, are created disabled even when the pack enables them. The rule
   action's summary keeps `requested_enabled: true` and reports
   `enable_deferred_reason: enforcing_rule_requires_dry_run`. Enable it through
   the ordinary rule lifecycle after a full dry run. Apply also enforces the
   ordinary enable gate, so an enforcing rule on a blueprint that gained
-  entities since planning fails its step instead of being enabled unchecked.
+  records since planning fails its step instead of being enabled unchecked.
 - **Workflows** are created with code `<prefix>_<code>` and always published;
   they are enabled only if the pack declares so. Packs cannot seed schedule triggers, because a
-  schedule targets one workspace entity.
+  schedule targets one workspace record.
 - **Saved searches** are created as named Explore searches with **Workspace**
   visibility, so they appear in every authorized member's saved searches. The
   person who applies the plan owns them. Their blueprint, relationship and
@@ -171,7 +171,7 @@ created or mapped workspace context.
   its summary gives `invalid_state_reason`.
 
 Enabled rules and workflows react to later workspace activity, including sample
-entities created by the same application. Review them before applying. Once
+records created by the same application. Review them before applying. Once
 installed they are ordinary resources: disable, revise, or delete them through
 normal administration.
 

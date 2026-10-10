@@ -31,7 +31,7 @@ pub(super) struct CreateConversation {
     #[serde(default)]
     title: String,
     #[serde(default)]
-    entity_id: Option<Uuid>,
+    record_id: Option<Uuid>,
     #[serde(default)]
     context_id: Option<Uuid>,
 }
@@ -80,18 +80,18 @@ pub(super) async fn create_conversation(
             "title must be at most 512 bytes".into(),
         ));
     }
-    if input.context_id.is_some() && input.entity_id.is_none() {
+    if input.context_id.is_some() && input.record_id.is_none() {
         return Err(ApiError::invalid_input(
-            "context_id requires entity_id".into(),
+            "context_id requires record_id".into(),
         ));
     }
-    let conversation = if let Some(entity_id) = input.entity_id {
+    let conversation = if let Some(record_id) = input.record_id {
         if !repository
             .principal_may(
                 request_actor(&repository, user),
                 workspace,
-                "entities.read",
-                Some(entity_id),
+                "records.read",
+                Some(record_id),
                 None,
             )
             .await?
@@ -99,9 +99,9 @@ pub(super) async fn create_conversation(
             return Err(ApiError::forbidden());
         }
         repository
-            .get_entity(entity_id)
+            .get_record(record_id)
             .await?
-            .ok_or_else(|| ApiError::not_found("entity"))?;
+            .ok_or_else(|| ApiError::not_found("record"))?;
         if let Some(context_id) = input.context_id {
             repository
                 .get_context_by_id(context_id)
@@ -109,7 +109,7 @@ pub(super) async fn create_conversation(
                 .ok_or_else(|| ApiError::invalid_input("unknown context".into()))?;
         }
         repository
-            .create_entity_conversation(user, &input.title, entity_id, input.context_id)
+            .create_record_conversation(user, &input.title, record_id, input.context_id)
             .await?
     } else {
         repository
@@ -144,13 +144,13 @@ pub(super) async fn readable_conversation(
     id: Uuid,
 ) -> Result<crate::repository::Conversation, ApiError> {
     let conversation = repository.get_conversation(id).await?;
-    if let Some(entity_id) = conversation.entity_id
+    if let Some(record_id) = conversation.record_id
         && !repository
             .principal_may(
                 request_actor(repository, user),
                 workspace,
-                "entities.read",
-                Some(entity_id),
+                "records.read",
+                Some(record_id),
                 None,
             )
             .await?
@@ -160,31 +160,31 @@ pub(super) async fn readable_conversation(
     Ok(conversation)
 }
 
-/// Keeps items that are either not entity-bound or bound to an entity the
-/// user may read, authorizing every entity in one query.
+/// Keeps items that are either not record-bound or bound to a record the
+/// user may read, authorizing every record in one query.
 async fn retain_readable<T>(
     repository: &crate::repository::CatalogRepository,
     user: Uuid,
     workspace: Uuid,
     items: Vec<T>,
-    entity_of: impl Fn(&T) -> Option<Uuid>,
+    record_of: impl Fn(&T) -> Option<Uuid>,
 ) -> Result<Vec<T>, ApiError> {
-    let mut entity_ids = items.iter().filter_map(&entity_of).collect::<Vec<_>>();
-    entity_ids.sort_unstable();
-    entity_ids.dedup();
+    let mut record_ids = items.iter().filter_map(&record_of).collect::<Vec<_>>();
+    record_ids.sort_unstable();
+    record_ids.dedup();
     let readable = if repository
-        .principal_token_permits(request_actor(repository, user), workspace, "entities.read")
+        .principal_token_permits(request_actor(repository, user), workspace, "records.read")
         .await?
     {
         repository
-            .authorized_entity_ids(user, workspace, "entities.read", &entity_ids)
+            .authorized_record_ids(user, workspace, "records.read", &record_ids)
             .await?
     } else {
         Default::default()
     };
     Ok(items
         .into_iter()
-        .filter(|item| entity_of(item).is_none_or(|entity_id| readable.contains(&entity_id)))
+        .filter(|item| record_of(item).is_none_or(|record_id| readable.contains(&record_id)))
         .collect())
 }
 
@@ -195,7 +195,7 @@ pub(super) async fn list_conversations(
 ) -> Result<Json<Vec<crate::repository::Conversation>>, ApiError> {
     let conversations = repository.list_conversations().await?;
     Ok(Json(
-        retain_readable(&repository, user, workspace, conversations, |c| c.entity_id).await?,
+        retain_readable(&repository, user, workspace, conversations, |c| c.record_id).await?,
     ))
 }
 
@@ -258,7 +258,7 @@ pub(super) async fn search_conversations(
     } else {
         None
     };
-    let items = retain_readable(&repository, user, workspace, rows, |c| c.entity_id).await?;
+    let items = retain_readable(&repository, user, workspace, rows, |c| c.record_id).await?;
     Ok(Json(ConversationSearchPage { items, next_cursor }))
 }
 
@@ -411,15 +411,15 @@ pub(super) async fn list_pending_approvals(
     let mut run_ids = calls.iter().map(|call| call.run_id).collect::<Vec<_>>();
     run_ids.sort_unstable();
     run_ids.dedup();
-    let run_entities = repository.run_conversation_entities(&run_ids).await?;
+    let run_records = repository.run_conversation_records(&run_ids).await?;
     // Calls whose conversation is gone or archived are not shown.
     let calls = calls
         .into_iter()
-        .filter(|call| run_entities.contains_key(&call.run_id))
+        .filter(|call| run_records.contains_key(&call.run_id))
         .collect();
     Ok(Json(
         retain_readable(&repository, user, workspace, calls, |call| {
-            run_entities.get(&call.run_id).copied().flatten()
+            run_records.get(&call.run_id).copied().flatten()
         })
         .await?,
     ))

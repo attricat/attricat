@@ -26,7 +26,7 @@ export type CheckViolation = z.infer<typeof checkViolationSchema>;
 
 /** API error codes whose `details.violations` list failed declarative checks. */
 export const checkViolationErrorCodes = {
-  entityCheckFailed: 'entity_check_failed',
+  recordCheckFailed: 'record_check_failed',
   transitionConditionsUnmet: 'transition_conditions_unmet',
   ruleViolation: 'rule_violation',
   publicationChecksFailed: 'publication_checks_failed',

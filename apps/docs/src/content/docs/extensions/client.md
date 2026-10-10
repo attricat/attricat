@@ -5,8 +5,6 @@ description: Add pages, panels, actions, and table cells to the web app from san
 
 A client contribution is a JavaScript module that Attricat loads into a sandboxed frame at a fixed place in the web app. The host owns everything around the frame: layout, loading and error states, focus, and accessibility landmarks. Your module owns what is inside it.
 
-In outlet names, capabilities, context fields, and API paths, records are called entities.
-
 ## The sandbox
 
 Every contribution gets its own `<iframe sandbox="allow-scripts">` with an opaque origin and a Content Security Policy that blocks network access. The frame has no access to Attricat's page, cookies, storage, or other extensions' frames. It cannot call `fetch` against the API.
@@ -21,7 +19,7 @@ A client artifact must export `mount(root, catalog)`. It may return a cleanup fu
 export const mount = (root, catalog) => {
   const render = () => {
     root.dataset.mode = catalog.theme.color_mode;
-    root.textContent = `Entity: ${catalog.context.entity_id}`;
+    root.textContent = `Record: ${catalog.context.record_id}`;
   };
   root.addEventListener('catalog:context-changed.v1', render);
   root.addEventListener('catalog:theme-changed.v1', render);
@@ -36,15 +34,15 @@ The frame stays mounted when the user switches context or theme. Listen for the 
 
 | Member | Needs | Description |
 | --- | --- | --- |
-| `catalog.context` | | Identifiers for the outlet, such as `entity_id` and `context_id`. Only the fields documented for the outlet are present. |
+| `catalog.context` | | Identifiers for the outlet, such as `record_id` and `context_id`. Only the fields documented for the outlet are present. |
 | `catalog.theme` | | `{ color_mode: 'light' \| 'dark' }`. The frame's `color-scheme` is set to match before `mount`, so system colors like `Canvas` and `CanvasText` follow it. |
 | `catalog.configuration` | `configuration.read` | The installation configuration. |
-| `catalog.request(path)` | `catalog.read` | `GET` one of `/api/entities`, `/api/v1/entities/<uuid>`, or `/api/blueprints/<uuid>/versions/<n>`. Responses are limited to 1 MiB. Revision reads in `blueprint_attribute_configuration` are limited to that outlet's blueprint revision. |
+| `catalog.request(path)` | `catalog.read` | `GET` one of `/api/records`, `/api/v1/records/<uuid>`, or `/api/blueprints/<uuid>/versions/<n>`. Responses are limited to 1 MiB. Revision reads in `blueprint_attribute_configuration` are limited to that outlet's blueprint revision. |
 | `catalog.command({ command_id, payload })` | `client.commands` | Calls one of the extension's declared server commands. |
 | `catalog.storage.get/set/delete/list(…)` | `storage.extension` | The extension's key-value storage. `set` and `delete` accept `expected_revision`. |
-| `catalog.navigate({ entity_id })` | `client.navigation` | Opens a record page. |
+| `catalog.navigate({ record_id })` | `client.navigation` | Opens a record page. |
 | `catalog.notify({ message, severity })` | `client.notification` | Shows a host notification. Messages are trimmed to 512 characters. |
-| `catalog.refresh({ target: 'current_entity' })` | `client.refresh` | Reloads the current record's views after your command changed it. Available in record page outlets. |
+| `catalog.refresh({ target: 'current_record' })` | `client.refresh` | Reloads the current record's views after your command changed it. Available in record page outlets. |
 | `catalog.dialog.open()` / `catalog.dialog.close()` | `client.action_dialog` | Opens the extension's `action_dialog` from a version 2 selection action, with that action's selection; `close` works inside the dialog. |
 | `catalog.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Starts an [interactive operation](/extensions/operations/#interactive-operations) for the frame's selection and resolves to `{ run_id }`. Available in version 2 selection actions and the action dialog. |
 | `catalog.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Only runs of this extension that the signed-in user started, even when that user is an operator. The host performs downloads. |
@@ -71,42 +69,42 @@ Add a `navigation` contribution to link to it from the sidebar. Workspace admini
 
 | Outlet | Kind | Capability | Context |
 | --- | --- | --- | --- |
-| `entity_preview_panel` | `embedded` | | `entity_id`, optional `context_id` |
-| `entity_action` | `embedded` | `client.entity_action` | record, attribute, context |
-| `entity_attribute_decoration` | `embedded` | `client.entity_decoration` | record, attribute, blueprint and revision, optional context |
-| `entity_header_action` | `action` | `client.entity_header_action` | `entity_id`, `blueprint_id`, `blueprint_version` |
-| `entity_attribute_panel` | `panel` | `client.entity_attribute_panel` | `entity_id`, `attribute_id`, `blueprint_id`, `blueprint_version`, `context_id` |
-| `file_panel` | `panel` | `client.file_panel` | `file_id`, `entity_id`, `attribute_id`, `blueprint_id`, `blueprint_version` |
+| `record_preview_panel` | `embedded` | | `record_id`, optional `context_id` |
+| `record_action` | `embedded` | `client.record_action` | record, attribute, context |
+| `record_attribute_decoration` | `embedded` | `client.record_decoration` | record, attribute, blueprint and revision, optional context |
+| `record_header_action` | `action` | `client.record_header_action` | `record_id`, `blueprint_id`, `blueprint_version` |
+| `record_attribute_panel` | `panel` | `client.record_attribute_panel` | `record_id`, `attribute_id`, `blueprint_id`, `blueprint_version`, `context_id` |
+| `file_panel` | `panel` | `client.file_panel` | `file_id`, `record_id`, `attribute_id`, `blueprint_id`, `blueprint_version` |
 
-`entity_preview_panel` appears in the record's extension drawer. A version 2 `entity_action` receives the [selection context](#selection-context) instead. Action bars show one primary and three secondary actions before an overflow menu. Panels show up to three contributions before overflow.
+`record_preview_panel` appears in the record's extension drawer. A version 2 `record_action` receives the [selection context](#selection-context) instead. Action bars show one primary and three secondary actions before an overflow menu. Panels show up to three contributions before overflow.
 
 ### Explorer
 
 | Outlet | Kind | Capability | Context |
 | --- | --- | --- | --- |
-| `explorer_row_action` | `action` | `client.explorer_row_action` | `entity_id`, `blueprint_id`, `blueprint_version` |
+| `explorer_row_action` | `action` | `client.explorer_row_action` | `record_id`, `blueprint_id`, `blueprint_version` |
 | `explorer_action` | `action` | `client.explorer_action` | `blueprint_id`, `blueprint_version` |
-| `explorer_bulk_action` | `action` | `client.explorer_bulk_action` | `blueprint_id`, `blueprint_version`, selected `entity_ids` (1 to 50) |
+| `explorer_bulk_action` | `action` | `client.explorer_bulk_action` | `blueprint_id`, `blueprint_version`, selected `record_ids` (1 to 50) |
 | `explorer_table_cell` | `embedded` | `client.explorer_table_cell` | The cell value, for a column using your [cell renderer](/extensions/manifest/#cell-renderers). |
 
 Explorer contexts never include the search query, filters, or row values. A selection is a hint about what the user is looking at, not an authorization: commands still check permissions on the server. Version 2 row and bulk actions receive the [selection context](#selection-context).
 
 ### Selection context
 
-Contributions to `entity_action`, `explorer_row_action`, and `explorer_bulk_action` can declare `"version": 2`. They then receive one shape for every surface:
+Contributions to `record_action`, `explorer_row_action`, and `explorer_bulk_action` can declare `"version": 2`. They then receive one shape for every surface:
 
 ```json
 {
   "context_version": 2,
-  "selection_source": "entity_preview",
+  "selection_source": "record_preview",
   "blueprint_id": "…",
   "blueprint_version": 3,
   "context_id": null,
-  "entity_ids": ["…"]
+  "record_ids": ["…"]
 }
 ```
 
-`selection_source` is `entity_preview`, `explorer_row`, or `explorer_selection`. `entity_ids` lists 1 to 50 saved records of one blueprint revision in display order. `context_id` is the surface's value-resolution context, or `null` for the default. Version 1 contributions keep the contexts above.
+`selection_source` is `record_preview`, `explorer_row`, or `explorer_selection`. `record_ids` lists 1 to 50 saved records of one blueprint revision in display order. `context_id` is the surface's value-resolution context, or `null` for the default. Version 1 contributions keep the contexts above.
 
 ### Action dialog
 

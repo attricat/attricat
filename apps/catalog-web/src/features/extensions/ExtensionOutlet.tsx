@@ -31,7 +31,7 @@ type Props = {
   onBrowseExtensions?: () => void;
   onNavigate?: () => void;
   runtimeScope?: ExtensionRuntimeScope;
-  /** Saved entities this action surface applies to (selection-aware outlets). */
+  /** Saved records this action surface applies to (selection-aware outlets). */
   selection?: ActionSelection;
 };
 

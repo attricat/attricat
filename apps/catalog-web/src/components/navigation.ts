@@ -61,7 +61,7 @@ export const publicRoutes = {
 export const primaryNavigationItems = [
   {
     icon: ExplorerIcon,
-    labelKey: 'navigation.entityExplorer',
+    labelKey: 'navigation.recordExplorer',
     to: navigationRoutes.explore,
   },
   {

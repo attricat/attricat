@@ -12,7 +12,7 @@ const scanAtCursor = (source: string) => {
 
 const definition = `format_version = 1
 code = "product"
-kind = "entity"
+kind = "record"
 
 [views.detail]
 type = "stack"

@@ -142,10 +142,10 @@ export const useExtensionFrame = ({
                 contribution,
                 initialContext: frameContext,
                 currentContext: readContext,
-                navigateToEntity: (entityId) =>
+                navigateToRecord: (recordId) =>
                   navigate({
-                    to: '/entities/$entityId',
-                    params: { entityId },
+                    to: '/records/$recordId',
+                    params: { recordId },
                   }),
                 queryClient,
                 openActionDialog: useActionDialogStore.getState().open,

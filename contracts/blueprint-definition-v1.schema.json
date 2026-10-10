@@ -3,8 +3,8 @@
     "BlueprintKind": {
       "oneOf": [
         {
-          "const": "entity",
-          "description": "Creates entities.",
+          "const": "record",
+          "description": "Creates records.",
           "type": "string"
         },
         {
@@ -129,7 +129,7 @@
       "properties": {
         "on_save": {
           "default": false,
-          "description": "Reject every write that leaves the entity violating the rule.",
+          "description": "Reject every write that leaves the record violating the rule.",
           "type": "boolean"
         },
         "transitions": {
@@ -203,7 +203,7 @@
           "type": "string"
         },
         "source_blueprint": {
-          "description": "Blueprint whose entities reference this entity.",
+          "description": "Blueprint whose records reference this record.",
           "type": "string",
           "x-attricat-reference": "blueprint"
         }
@@ -267,7 +267,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "The entity has the system tag.",
+          "description": "The record has the system tag.",
           "properties": {
             "tag": {
               "maxLength": 128,
@@ -287,7 +287,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "The entity does not have the system tag.",
+          "description": "The record does not have the system tag.",
           "properties": {
             "tag": {
               "maxLength": 128,
@@ -410,7 +410,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "No other live entity of the blueprint revision has the same values. Rules only.",
+          "description": "No other live record of the blueprint revision has the same values. Rules only.",
           "properties": {
             "attribute_codes": {
               "items": {
@@ -585,7 +585,7 @@
       "properties": {
         "retain_on_edit_roles": {
           "default": [],
-          "description": "Workspace roles whose edits keep entities published on their channels.",
+          "description": "Workspace roles whose edits keep records published on their channels.",
           "items": {
             "type": "string"
           },
@@ -691,7 +691,7 @@
           "type": "string"
         },
         "default_value": {
-          "description": "Value stored in the default context when an entity is created.\nNot supported for relationships and files."
+          "description": "Value stored in the default context when a record is created.\nNot supported for relationships and files."
         },
         "description": {
           "description": "What the attribute holds, for people and agents. Attributes selected\nwith `from` use the mixin's description and cannot set their own.\n`{{…}}` references resolve from the workspace lexicon.",
@@ -835,7 +835,7 @@
           ]
         },
         "tree": {
-          "description": "An acyclic hierarchy in which every entity has at most one target\n(parent). Implies `acyclic` and `cardinality = \"one\"`.",
+          "description": "An acyclic hierarchy in which every record has at most one target\n(parent). Implies `acyclic` and `cardinality = \"one\"`.",
           "type": [
             "boolean",
             "null"
@@ -922,14 +922,14 @@
         },
         {
           "additionalProperties": false,
-          "description": "Evaluated when an entity event occurs.",
+          "description": "Evaluated when a record event occurs.",
           "properties": {
             "event_type": {
-              "description": "Entity event that evaluates the rule.",
+              "description": "Record event that evaluates the rule.",
               "enum": [
-                "entity.created.v1",
-                "entity.updated.v1",
-                "entity.migrated.v1",
+                "record.created.v1",
+                "record.updated.v1",
+                "record.migrated.v1",
                 "attribute_value.changed.v1",
                 "attribute_value.restored.v1",
                 "relationship.changed.v1"
@@ -1039,7 +1039,7 @@
     },
     "UniqueKeyDefinition": {
       "additionalProperties": false,
-      "description": "A business key: no two entities of the blueprint family may share the\nnormalized values of these attributes.",
+      "description": "A business key: no two records of the blueprint family may share the\nnormalized values of these attributes.",
       "properties": {
         "attributes": {
           "description": "One to eight scalar attributes, or single-target relationships, whose\ncombined values must be unique.",
@@ -1082,7 +1082,7 @@
       "oneOf": [
         {
           "additionalProperties": false,
-          "description": "Label shown for the entity in relationship dropdowns.",
+          "description": "Label shown for the record in relationship dropdowns.",
           "properties": {
             "fields": {
               "description": "Attributes joined into the label.",
@@ -1329,18 +1329,18 @@
         },
         {
           "additionalProperties": false,
-          "description": "A versioned layout override for entity-owned extension surfaces.",
+          "description": "A versioned layout override for record-owned extension surfaces.",
           "properties": {
             "outlets": {
               "additionalProperties": {
                 "$ref": "#/$defs/ExtensionOutletLayout"
               },
-              "description": "Layouts keyed by entity outlet: `entity_preview_panel`,\n`entity_attribute_decoration`, or `entity_action`.",
+              "description": "Layouts keyed by record outlet: `record_preview_panel`,\n`record_attribute_decoration`, or `record_action`.",
               "type": "object",
               "x-attricat-key-suggestions": [
-                "entity_preview_panel",
-                "entity_attribute_decoration",
-                "entity_action"
+                "record_preview_panel",
+                "record_attribute_decoration",
+                "record_action"
               ]
             },
             "type": {
@@ -1659,7 +1659,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "A relationship attribute's linked entities.",
+          "description": "A relationship attribute's linked records.",
           "properties": {
             "component": {
               "anyOf": [
@@ -1691,7 +1691,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "Entities that reference this entity, opened in a paginated dialog.",
+          "description": "Records that reference this record, opened in a paginated dialog.",
           "properties": {
             "component": {
               "anyOf": [
@@ -1710,13 +1710,13 @@
               "type": "string"
             },
             "page_size": {
-              "description": "Entities requested per page.",
+              "description": "Records requested per page.",
               "format": "uint32",
               "minimum": 1,
               "type": "integer"
             },
             "relationships": {
-              "description": "Source blueprint relationship fields that point at this entity.",
+              "description": "Source blueprint relationship fields that point at this record.",
               "items": {
                 "$ref": "#/$defs/IncomingRelationship"
               },
@@ -1782,7 +1782,7 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "An Attricat blueprint: a versioned entity type or an includable mixin.",
+  "description": "An Attricat blueprint: a versioned record type or an includable mixin.",
   "properties": {
     "attributes": {
       "description": "Attributes in display order. Each declares exactly one of `value_type`,\n`extension_type`, or `from`.",
@@ -1799,7 +1799,7 @@
     },
     "connector_jobs": {
       "default": [],
-      "description": "Scheduled extension imports and exports. Entity blueprints only.",
+      "description": "Scheduled extension imports and exports. Record blueprints only.",
       "items": {
         "$ref": "#/$defs/ConnectorJobDefinition"
       },
@@ -1809,13 +1809,6 @@
       "description": "What the blueprint's records are, for people and agents, such as\n\"Product groupings, such as Basic tools\". `{{…}}` references resolve\nfrom the workspace lexicon.",
       "maxLength": 500,
       "minLength": 1,
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "entity_schema": {
-      "description": "JSON Schema (Draft 2020-12) source for cross-field entity validation.\nEntity blueprints only.",
       "type": [
         "string",
         "null"
@@ -1855,14 +1848,21 @@
       "default": {
         "retain_on_edit_roles": []
       },
-      "description": "Channel publication behavior when entities are edited."
+      "description": "Channel publication behavior when records are edited."
+    },
+    "record_schema": {
+      "description": "JSON Schema (Draft 2020-12) source for cross-field record validation.\nRecord blueprints only.",
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "rules": {
       "default": [],
-      "description": "Data-health rules evaluated for this blueprint's entities.",
+      "description": "Data-health rules evaluated for this blueprint's records.",
       "items": {
         "additionalProperties": false,
-        "description": "A data-health rule that reports findings for entities matching its predicate.",
+        "description": "A data-health rule that reports findings for records matching its predicate.",
         "properties": {
           "code": {
             "description": "Stable rule identifier, unique within its owner.",
@@ -1913,7 +1913,7 @@
     },
     "unique_keys": {
       "default": [],
-      "description": "Business keys whose normalized values must be unique across the\nblueprint family. Entity blueprints only.",
+      "description": "Business keys whose normalized values must be unique across the\nblueprint family. Record blueprints only.",
       "items": {
         "$ref": "#/$defs/UniqueKeyDefinition"
       },

@@ -93,7 +93,7 @@ pub(super) fn validate_content(
 }
 
 /// Visits the blueprint codes named by predicates embedded in a blueprint
-/// definition: its `[[rules]]`, entity checks (`x-attricat-checks`) and status
+/// definition: its `[[rules]]`, record checks (`x-attricat-checks`) and status
 /// transition conditions. Packs name these blueprints by pack-local code.
 pub(super) fn visit_embedded_predicate_blueprint_codes(
     table: &mut toml::Table,
@@ -124,7 +124,7 @@ pub(super) fn visit_embedded_predicate_blueprint_codes(
             }
         }
     }
-    if let Some(schema) = table.get_mut("entity_schema") {
+    if let Some(schema) = table.get_mut("record_schema") {
         json_string(schema, visit)?;
     }
     if let Some(attributes) = table

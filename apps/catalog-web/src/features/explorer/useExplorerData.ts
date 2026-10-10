@@ -14,12 +14,12 @@ import { defaultContextCode } from '../contexts/constants';
 import { contextQueryKeys } from '../contexts/queryKeys';
 import {
   getBlueprintByCode,
-  listEntityBlueprints,
-  searchEntities,
-} from '../entities/api';
-import { isHiddenByDefault } from '../entities/attributeVisibility';
-import { contextAncestorCodes } from '../entities/previewContext';
-import { entityQueryKeys } from '../entities/queryKeys';
+  listRecordBlueprints,
+  searchRecords,
+} from '../records/api';
+import { isHiddenByDefault } from '../records/attributeVisibility';
+import { contextAncestorCodes } from '../records/previewContext';
+import { recordQueryKeys } from '../records/queryKeys';
 import { listPublicationChannels } from '../exports/api';
 import { exportQueryKeys } from '../exports/queryKeys';
 import {
@@ -43,8 +43,8 @@ import type { ExplorerSearch } from './search';
 export const useExplorerData = (search: ExplorerSearch) => {
   const navigate = useNavigate({ from: '/' });
   const blueprints = useQuery({
-    queryKey: entityQueryKeys.blueprints(),
-    queryFn: ({ signal }) => listEntityBlueprints(signal),
+    queryKey: recordQueryKeys.blueprints(),
+    queryFn: ({ signal }) => listRecordBlueprints(signal),
   });
   const currentBlueprint = blueprints.data?.find(
     (blueprint) => blueprint.code === search.blueprint,
@@ -64,7 +64,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
     queryFn: ({ signal }) => listContexts(signal),
   });
   const selectedBlueprint = useQuery({
-    queryKey: entityQueryKeys.blueprintByCode(
+    queryKey: recordQueryKeys.blueprintByCode(
       search.blueprint,
       effectiveVersion,
     ),
@@ -73,7 +73,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
     enabled: Boolean(search.blueprint && versionResolved),
   });
   const revisions = useQuery({
-    queryKey: entityQueryKeys.blueprintRevisions(currentBlueprint?.id),
+    queryKey: recordQueryKeys.blueprintRevisions(currentBlueprint?.id),
     queryFn: async ({ signal }) =>
       (await listBlueprintRevisions(currentBlueprint?.id ?? '', signal)).filter(
         (revision) => revision.status === publishedRevisionStatus,
@@ -95,16 +95,16 @@ export const useExplorerData = (search: ExplorerSearch) => {
       revisions.data &&
       !revisions.data.some((revision) => revision.version === search.version)
     ) {
-      // Corrections keep the entity panel open, like other search changes.
+      // Corrections keep the record panel open, like other search changes.
       void navigate({
         to: '/',
-        search: ({ entity }) => ({
+        search: ({ record }) => ({
           ...search,
           version: undefined,
           relationshipFacets: undefined,
           attributeFilters: undefined,
           sort: undefined,
-          entity,
+          record,
         }),
         replace: true,
       });
@@ -136,7 +136,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
       contextCode,
     ),
     queryFn: ({ pageParam, signal }) =>
-      searchEntities({
+      searchRecords({
         blueprint: search.blueprint ?? '',
         contextCode,
         cursor: pageParam,
@@ -163,7 +163,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
     ) {
       void navigate({
         to: '/',
-        search: ({ entity }) => ({ ...search, sort: undefined, entity }),
+        search: ({ record }) => ({ ...search, sort: undefined, record }),
         replace: true,
       });
     }

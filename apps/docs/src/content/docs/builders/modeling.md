@@ -12,8 +12,6 @@ Most modeling questions in Attricat come down to four building blocks. Pick the 
 | A **relationship** | A link between records | Product → categories, product → brand |
 | A **context** | A scope in which values differ | Market, language, sales channel, store |
 
-Blueprint TOML and permission names call records entities, as in `kind = "entity"`.
-
 ## Classifications are records
 
 Tags, labels, categories, colors, materials, and certifications should be records linked by relationships. Do not model them as strings or lists of strings.
@@ -24,7 +22,7 @@ A classification usually needs things a string cannot give it: a stable identity
 format_version = 1
 code = "material"
 name = "Material"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "name"
@@ -155,7 +153,7 @@ searchable = true
 
 It accepts the same attribute keys as a blueprint (`value_type`, `value_schema`, `default_value`, `tags`, `context_fallback`, `context_editable`, `readonly`, and the relationship keys with `target_blueprint_code`), plus `searchable`, which includes its values in Explorer search and filters. Each change creates a new revision; publish a revision before it can be attached. The workspace supplies the namespace, so a reusable attribute's full code is `<namespace>:<code>`.
 
-Creating and publishing reusable attributes needs `blueprints.write`. Attaching one to a record needs `entities.write` on that record.
+Creating and publishing reusable attributes needs `blueprints.write`. Attaching one to a record needs `records.write` on that record.
 
 ## Assign responsibility
 

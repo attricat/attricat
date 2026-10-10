@@ -6,12 +6,12 @@ export const BlueprintLabel = ({
   code,
   currentVersion,
   name,
-  outdatedEntities,
+  outdatedRecords,
 }: {
   code: string;
   currentVersion: number | string;
   name: string;
-  outdatedEntities: number;
+  outdatedRecords: number;
 }) => {
   const { t } = useTranslation();
 
@@ -20,10 +20,10 @@ export const BlueprintLabel = ({
       <Typography variant="body2">
         {lexiconText(name)} ({code}) v{currentVersion}
       </Typography>
-      {outdatedEntities > 0 && (
+      {outdatedRecords > 0 && (
         <Chip
           color="warning"
-          label={t('dataHealth.outdatedCount', { count: outdatedEntities })}
+          label={t('dataHealth.outdatedCount', { count: outdatedRecords })}
           size="small"
         />
       )}

@@ -33,10 +33,10 @@ export const SafeMigrationDialog = ({
   const { t } = useTranslation();
   return (
     <Dialog onClose={() => !isPending && onClose()} open={open}>
-      <DialogTitle>{t('blueprints.migrateCompatibleEntities')}</DialogTitle>
+      <DialogTitle>{t('blueprints.migrateCompatibleRecords')}</DialogTitle>
       <DialogContent>
         <DialogContentText>
-          {t('blueprints.migrateCompatibleEntitiesDescription', {
+          {t('blueprints.migrateCompatibleRecordsDescription', {
             source: sourceVersion,
             target: targetVersion,
           })}
@@ -44,9 +44,9 @@ export const SafeMigrationDialog = ({
         {impact && (
           <DialogContentText sx={{ mt: 2 }}>
             {t('blueprints.migrationImpact', {
-              entities: impact.eligible_entities,
+              records: impact.eligible_records,
               values: impact.removed_values,
-              affectedEntities: impact.entities_with_removed_values,
+              affectedRecords: impact.records_with_removed_values,
               attributes: impact.removed_attribute_codes.join(', '),
             })}
           </DialogContentText>

@@ -5,7 +5,7 @@ description: Klient wiersza poleceń acli, jego konfiguracja, uwierzytelnianie, 
 
 `acli` to klient wiersza poleceń dla API Attricat, przeznaczony dla skryptów, zadań CI i agentów. Po powodzeniu wypisuje odpowiedź JSON z API bez zmian na standardowe wyjście. Błędy trafiają na standardowe wyjście błędów jako JSON. Każde polecenie ma wbudowaną pomoc: `acli --help` i `acli <group> --help`.
 
-W poleceniach, opcjach i odpowiedziach API rekordy występują pod nazwą `entity`, np. `acli entity create`.
+`acli record create`.
 
 `acli` jest dołączony do obrazu kontenera:
 
@@ -74,7 +74,7 @@ Polecenia schematów, przepływów pracy i reguł przyjmują `--file <path>` lub
 
 ## Pliki wartości
 
-`entity create --values`, `entity update --values` i `value append --file` odczytują TOML:
+`record create --values`, `record update --values` i `value append --file` odczytują TOML:
 
 ```toml
 [[values]]
@@ -90,22 +90,22 @@ value = { time = "09:30:00", time_zone = "Europe/Warsaw" }
 [[values]]
 kind = "relationship"
 attribute_code = "categories"
-target_entity_id = "00000000-0000-0000-0000-000000000004"
+target_record_id = "00000000-0000-0000-0000-000000000004"
 ```
 
 Każdy wpis wskazuje atrybut przez `attribute_code` lub `attribute_id`. Wartości skalarne używają natywnych typów TOML: ciągów znaków, liczb dziesiętnych, liczb całkowitych, wartości logicznych, dat i dat z godziną w formacie RFC 3339. Każda wartość potrzebuje kontekstu: przekaż `--context-id` dla całego pliku lub ustaw `context_id` we wpisie.
 
-Pliki zastępowania i usuwania relacji (`value replace`, `value remove`, `entity update --relationships`):
+Pliki zastępowania i usuwania relacji (`value replace`, `value remove`, `record update --relationships`):
 
 ```toml
 [[relationships]]
 attribute_code = "categories"
-target_entity_ids = ["00000000-0000-0000-0000-000000000004"]
+target_record_ids = ["00000000-0000-0000-0000-000000000004"]
 ```
 
 `replace` ustawia listę jako pełny zbiór; `remove` odłącza tylko wymienione cele.
 
-Usuwanie nadpisań w kontekstach (`entity update --remove-values`):
+Usuwanie nadpisań w kontekstach (`record update --remove-values`):
 
 ```toml
 [[remove_values]]
@@ -151,8 +151,8 @@ acli blueprint get <blueprint-id>
 acli blueprint get-version <blueprint-id> <version>
 acli blueprint resolve <code> [--version <version>] [--include-drafts]
 acli blueprint safe-migration-batch <blueprint-id> <version>
-acli blueprint publish-entities <blueprint-id> <version> --context-id <channel>
-acli blueprint publish-entities-all <blueprint-id> <version>
+acli blueprint publish-records <blueprint-id> <version> --context-id <channel>
+acli blueprint publish-records-all <blueprint-id> <version>
 ```
 
 ### Konteksty
@@ -169,36 +169,36 @@ acli context delete <context-id>
 ### Rekordy i wartości
 
 ```sh
-acli entity create --blueprint <code> --values values.toml [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]
-acli entity get | form | delete <entity-id>
-acli entity update <entity-id> [--values f.toml] [--relationships f.toml] [--remove-values f.toml] [--context-id <id>]
-acli entity batch --operations <json-or-file>
-acli entity preview <entity-id> [--relationship-depth <n>] [--relationship-limit <n>]
-acli entity resolved-preview <entity-id> --context-id <id>
-acli entity search --blueprint <code> [--query <text>] [--filters <json>] [--version <n>] [--sort-field <f> --sort-direction asc|desc] [--size <n>] [--cursor <c>] [--include-total] [--outdated] [--system-tags <json>] [--relationship-tree-facets <json>]
-acli entity facet-children --blueprint <code> --source-relationship-field <f> --context-id <id> [--hierarchy-field <f>] [--parent-id <id>]
-acli entity list --blueprint <code> --related-from <entity-id> --relationship <attribute>
-acli entity incoming-relationships <entity-id> --relationships <json>
-acli entity hierarchy <entity-id> --context-id <id> --field <relationship>
-acli entity changes | value-history <entity-id>
-acli entity restore-value <entity-id> <history-id>
-acli entity migrate <entity-id>
-acli entity migrate-bulk --blueprint <code> --from-version <n> [--dry-run]
-acli entity publication list <entity-id>
-acli entity publication publish | unpublish <entity-id> --context-id <channel>
-acli entity publication publish-all <entity-id>
+acli record create --blueprint <code> --values values.toml [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]
+acli record get | form | delete <record-id>
+acli record update <record-id> [--values f.toml] [--relationships f.toml] [--remove-values f.toml] [--context-id <id>]
+acli record batch --operations <json-or-file>
+acli record preview <record-id> [--relationship-depth <n>] [--relationship-limit <n>]
+acli record resolved-preview <record-id> --context-id <id>
+acli record search --blueprint <code> [--query <text>] [--filters <json>] [--version <n>] [--sort-field <f> --sort-direction asc|desc] [--size <n>] [--cursor <c>] [--include-total] [--outdated] [--system-tags <json>] [--relationship-tree-facets <json>]
+acli record facet-children --blueprint <code> --source-relationship-field <f> --context-id <id> [--hierarchy-field <f>] [--parent-id <id>]
+acli record list --blueprint <code> --related-from <record-id> --relationship <attribute>
+acli record incoming-relationships <record-id> --relationships <json>
+acli record hierarchy <record-id> --context-id <id> --field <relationship>
+acli record changes | value-history <record-id>
+acli record restore-value <record-id> <history-id>
+acli record migrate <record-id>
+acli record migrate-bulk --blueprint <code> --from-version <n> [--dry-run]
+acli record publication list <record-id>
+acli record publication publish | unpublish <record-id> --context-id <channel>
+acli record publication publish-all <record-id>
 
-acli value current <entity-id>
-acli value append <entity-id> --file values.toml --context-id <id>
-acli value replace | remove <entity-id> --file relationships.toml --context-id <id>
+acli value current <record-id>
+acli value append <record-id> --file values.toml --context-id <id>
+acli value replace | remove <record-id> --file relationships.toml --context-id <id>
 ```
 
-`entity batch` przyjmuje tablicę JSON z operacjami tworzenia, aktualizacji i usuwania, podaną bezpośrednio lub w pliku, i zapisuje wszystkie albo żadną. Format operacji opisuje sekcja [Zmiany wsadowe](/pl/reference/api/#zmiany-wsadowe).
+`record batch` przyjmuje tablicę JSON z operacjami tworzenia, aktualizacji i usuwania, podaną bezpośrednio lub w pliku, i zapisuje wszystkie albo żadną. Format operacji opisuje sekcja [Zmiany wsadowe](/pl/reference/api/#zmiany-wsadowe).
 
 ### Pliki
 
 ```sh
-acli file upload <entity-id> <attribute-code> --file a.png [--file b.png] [--context-id <id>]
+acli file upload <record-id> <attribute-code> --file a.png [--file b.png] [--context-id <id>]
 acli file metadata <file-id>
 acli file download-original <file-id> --output original.bin [--range 'bytes=0-1023']
 acli file download-variant <file-id> thumbnail|display --output preview.webp
@@ -255,10 +255,10 @@ acli rule revision <rule-id> --blueprint-id <id> --blueprint-version <n> --file 
 acli rule publish <rule-id> <version>
 acli rule enable <rule-id> <version> [--accept-existing-violations]
 acli rule disable <rule-id>
-acli rule run-now <rule-id> --idempotency-key <key> [--entity-id <id>] [--dry-run]
+acli rule run-now <rule-id> --idempotency-key <key> [--record-id <id>] [--dry-run]
 acli rule run-list
 acli rule run-replay <run-id>
-acli rule findings [--entity-id <id>]
+acli rule findings [--record-id <id>]
 acli rule acknowledge <finding-id>
 
 acli workflow validate | create --file workflow.toml
@@ -266,7 +266,7 @@ acli workflow list | get <workflow-id> | revision-list <workflow-id>
 acli workflow revision <workflow-id> --file workflow.toml
 acli workflow publish | enable <workflow-id> <version>
 acli workflow disable <workflow-id>
-acli workflow run-now <workflow-id> --entity-id <id> --idempotency-key <key>
+acli workflow run-now <workflow-id> --record-id <id> --idempotency-key <key>
 acli workflow run-list
 acli workflow run-targets <run-id>
 acli workflow run-replay <run-id>
@@ -329,7 +329,7 @@ acli extension-run list [--extension-id <id>]
 acli extension-run show | cancel <run-id>
 acli extension-run download <run-id> <artifact-id> --output <path>
 acli extension annotation-namespace <extension-id> [--adopt]
-acli extension repair-annotations <extension-id> <entity-id> --patch <json>
+acli extension repair-annotations <extension-id> <record-id> --patch <json>
 acli extension-schedule list
 acli extension-schedule create <extension-id> --operation-id <id> --input <json> --interval-seconds <60-2592000>
 acli extension-schedule update <schedule-id> --enabled true|false --interval-seconds <n>

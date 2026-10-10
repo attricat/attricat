@@ -2,7 +2,7 @@ import { Box, Tab, Tabs } from '@mui/material';
 import { CircleAlertIcon } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ViewNode } from '../../entities/api';
+import type { ViewNode } from '../../records/api';
 import { lexiconText } from '../../lexicon/lexicon';
 import { nodesPlacedFields } from '../viewFieldComponents';
 import { compactIconSize } from '../../../components/iconSizes';

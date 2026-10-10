@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import {
   commitField,
-  createEntityBlueprint,
-  entitySave,
+  createRecordBlueprint,
+  recordSave,
   suffix,
 } from './helpers';
 
@@ -15,7 +15,7 @@ for (const mode of ['light', 'dark'] as const) {
       mode,
     );
     const code = `color_${suffix()}`;
-    await createEntityBlueprint(
+    await createRecordBlueprint(
       code,
       'Color samples',
       `
@@ -37,7 +37,7 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "catalog.colo
 `,
       },
     );
-    await page.goto('/entities/new');
+    await page.goto('/records/new');
     await page
       .getByRole('combobox', { name: 'Blueprint', exact: true })
       .click();
@@ -64,10 +64,10 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "catalog.colo
     await page
       .getByRole('button', { name: 'Create record', exact: true })
       .click();
-    await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
-    const entityUrl = page.url();
-    const entityId = entityUrl.split('/').at(-1)!;
-    // The entity page edits the value in place; the table displays it.
+    await expect(page).toHaveURL(/\/records\/[0-9a-f-]{36}$/);
+    const recordUrl = page.url();
+    const recordId = recordUrl.split('/').at(-1)!;
+    // The record page edits the value in place; the table displays it.
     const hex = page.getByRole('textbox', { name: 'hex', exact: true });
     await expect(hex).toHaveValue('#aBcDeF');
     await page.goto(`/?blueprint=${code}`);
@@ -79,16 +79,16 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "catalog.colo
     await page.screenshot({
       path: testInfo.outputPath(`color-display-${mode}.png`),
     });
-    await page.goto(entityUrl);
+    await page.goto(recordUrl);
     await expect(hex).toHaveValue('#aBcDeF');
     // Picking a color is a final choice and saves at once.
-    const picked = entitySave(page, entityId);
+    const picked = recordSave(page, recordId);
     await page.getByLabel('Pick color for hex').fill('#ffffff');
     expect((await picked).ok()).toBe(true);
     await expect(hex).toHaveValue('#ffffff');
     await page.goto(`/?blueprint=${code}`);
     await expect(page.getByText('#ffffff', { exact: true })).toBeVisible();
-    await page.goto(entityUrl);
+    await page.goto(recordUrl);
     const saves: string[] = [];
     page.on('request', (request) => {
       if (request.method() === 'PUT') saves.push(request.url());
@@ -103,7 +103,7 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "catalog.colo
     expect(saves).toEqual([]);
     await hex.fill('');
     // Tab would move to the picker inside the same field, so commit with Enter.
-    await commitField(page, entityId, hex, 'Enter');
+    await commitField(page, recordId, hex, 'Enter');
     await page.reload();
     await expect(hex).toHaveValue('');
     await page.goto(`/?blueprint=${code}`);

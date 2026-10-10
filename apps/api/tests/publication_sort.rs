@@ -12,7 +12,7 @@ async fn publication_sort_uses_selected_channel_and_keyset_pages(pool: PgPool) {
         r#"format_version = 1
 code = "publication_sort_product"
 name = "Publication sort product"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["title"]
@@ -21,9 +21,9 @@ code = "title"
 value_type = "string""#,
     )
     .await;
-    let first = create_entity(&client, &base_url, &blueprint).await;
-    let second = create_entity(&client, &base_url, &blueprint).await;
-    let third = create_entity(&client, &base_url, &blueprint).await;
+    let first = create_record(&client, &base_url, &blueprint).await;
+    let second = create_record(&client, &base_url, &blueprint).await;
+    let third = create_record(&client, &base_url, &blueprint).await;
     let web: Value = client
         .post(format!("{base_url}/contexts"))
         .json(&json!({"code":"pub_sort_web","data":{}}))
@@ -59,11 +59,11 @@ value_type = "string""#,
             .error_for_status()
             .unwrap();
     }
-    for entity in [&first, &third] {
+    for record in [&first, &third] {
         client
             .post(format!(
-                "{base_url}/v1/entities/{}/publications",
-                entity["id"].as_str().unwrap()
+                "{base_url}/v1/records/{}/publications",
+                record["id"].as_str().unwrap()
             ))
             .json(&json!({"context_id":web["id"]}))
             .send()
@@ -74,7 +74,7 @@ value_type = "string""#,
     }
     client
         .post(format!(
-            "{base_url}/v1/entities/{}/publications",
+            "{base_url}/v1/records/{}/publications",
             second["id"].as_str().unwrap()
         ))
         .json(&json!({"context_id":app["id"]}))
@@ -92,7 +92,7 @@ value_type = "string""#,
         let mut cursor: Option<String> = None;
         let mut found = Vec::new();
         loop {
-            let response: Value = client.post(format!("{base_url}/v1/entities/search"))
+            let response: Value = client.post(format!("{base_url}/v1/records/search"))
                 .json(&json!({"blueprint":{"code":"publication_sort_product"},
                     "sort":{"field":"publication_status","direction":direction,"context_code":channel},
                     "page":{"size":1,"cursor":cursor}}))
@@ -113,7 +113,7 @@ value_type = "string""#,
         }
     }
     let first_page: Value = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({"blueprint":{"code":"publication_sort_product"},
             "sort":{"field":"publication_status","direction":"asc","context_code":"pub_sort_web"},
             "page":{"size":1}}))
@@ -126,7 +126,7 @@ value_type = "string""#,
         .await
         .unwrap();
     let mismatch = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({"blueprint":{"code":"publication_sort_product"},
             "sort":{"field":"publication_status","direction":"asc","context_code":"pub_sort_app"},
             "page":{"size":1,"cursor":first_page["next_cursor"]}}))
@@ -135,7 +135,7 @@ value_type = "string""#,
         .unwrap();
     assert_eq!(mismatch.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let missing = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({"blueprint":{"code":"publication_sort_product"},
             "sort":{"field":"publication_status","direction":"asc"}}))
         .send()
@@ -154,7 +154,7 @@ value_type = "string""#,
         .error_for_status()
         .unwrap();
     let disabled = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({"blueprint":{"code":"publication_sort_product"},
             "sort":{"field":"publication_status","direction":"asc","context_code":"pub_sort_app"}}))
         .send()

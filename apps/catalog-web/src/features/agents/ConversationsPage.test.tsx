@@ -43,7 +43,7 @@ const conversation = (id: string, title: string) => ({
   id,
   title,
   title_source: 'generated',
-  entity_id: null,
+  record_id: null,
   context_id: null,
   created_at: '2026-09-28T00:00:00Z',
   updated_at: '2026-09-28T00:00:00Z',

@@ -35,7 +35,7 @@ done < <(jq -r '.permissions[]' "$manifest")
 "${cli[@]}" extension artifact "$extension_id" formula-workbench --output "$work/workbench.js" >/dev/null
 test -s "$work/workbench.js"
 
-# Trigger the real v1.1 event handler with a fresh blueprint and entity, not an
+# Trigger the real v1.1 event handler with a fresh blueprint and record, not an
 # existing development fixture. The extension must write the computed value in
 # the same default context after an ordinary Catalog mutation.
 code="reference_formula_$(date +%s)_$$"
@@ -43,7 +43,7 @@ cat > "$work/blueprint.toml" <<TOML
 format_version = 1
 code = "$code"
 name = "Reference formula E2E"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "price_net"
@@ -69,19 +69,19 @@ attribute_code = "price_net"
 value = 10.0
 TOML
 context_id=00000000-0000-4000-8000-000000000001
-entity_id=$("${cli[@]}" entity create --blueprint "$code" --values "$work/values.toml" --context-id "$context_id" | jq -er '.id')
+record_id=$("${cli[@]}" record create --blueprint "$code" --values "$work/values.toml" --context-id "$context_id" | jq -er '.id')
 cat > "$work/updated.toml" <<'TOML'
 [[values]]
 kind = "scalar"
 attribute_code = "price_net"
 value = 17.0
 TOML
-"${cli[@]}" entity update "$entity_id" --values "$work/updated.toml" --context-id "$context_id" >/dev/null
+"${cli[@]}" record update "$record_id" --values "$work/updated.toml" --context-id "$context_id" >/dev/null
 for _ in $(seq 1 60); do
-  preview=$("${cli[@]}" entity resolved-preview "$entity_id" --context-id "$context_id")
+  preview=$("${cli[@]}" record resolved-preview "$record_id" --context-id "$context_id")
   if echo "$preview" | jq -e --arg context "$context_id" '.values.price_gross.value == 34 and .values.price_gross.source_context.id == $context' >/dev/null; then
     "${cli[@]}" audit list --limit 100 | jq -e '.events | map(.target.type) | any(. == "extension")' >/dev/null
-    printf 'reference extension E2E passed: extension=%s blueprint=%s entity=%s\n' "$extension_id" "$blueprint_id" "$entity_id"
+    printf 'reference extension E2E passed: extension=%s blueprint=%s record=%s\n' "$extension_id" "$blueprint_id" "$record_id"
     exit 0
   fi
   sleep 1

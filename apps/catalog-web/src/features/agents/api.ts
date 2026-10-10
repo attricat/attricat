@@ -43,12 +43,12 @@ export const updateConversationTitle = (id: string, title: string) =>
   );
 export const createConversation = (
   title = '',
-  entity?: { entity_id: string; context_id?: string | null },
+  record?: { record_id: string; context_id?: string | null },
 ) =>
   request(
     '/api/agent/conversations',
     conversationCreateResponseSchema,
-    json('POST', { title, ...entity }),
+    json('POST', { title, ...record }),
   );
 export const listMessages = (id: string, signal?: AbortSignal) =>
   request(

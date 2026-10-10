@@ -580,7 +580,7 @@ mod tests {
     #[test]
     fn rejects_oversized_fragmented_tool_arguments() {
         tokio::runtime::Runtime::new().unwrap().block_on(async {
-            let mut body = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"get_entity\",\"arguments\":\"\"}}]}}]}\n\n".to_owned();
+            let mut body = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"get_record\",\"arguments\":\"\"}}]}}]}\n\n".to_owned();
             let fragment = "x".repeat(1024);
             let frame = format!(
                 "data: {{\"choices\":[{{\"delta\":{{\"tool_calls\":[{{\"index\":0,\"function\":{{\"arguments\":\"{fragment}\"}}}}]}}}}]}}\n\n"
@@ -627,12 +627,12 @@ mod tests {
         let calls = finish_calls(vec![PartialToolCall {
             id: "call_1".into(),
             kind: String::new(),
-            name: "get_entity".into(),
-            arguments: r#"{"entity_id":"abc"}"#.into(),
+            name: "get_record".into(),
+            arguments: r#"{"record_id":"abc"}"#.into(),
         }])
         .unwrap();
         assert_eq!(calls[0].kind, "function");
-        assert_eq!(calls[0].function.name, "get_entity");
+        assert_eq!(calls[0].function.name, "get_record");
         assert!(matches!(
             finish_calls(vec![PartialToolCall::default()]),
             Err(ProviderError::Malformed)

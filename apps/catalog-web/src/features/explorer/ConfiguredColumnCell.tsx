@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { Typography } from '@mui/material';
-import type { Attribute, EntityItem } from '../entities/api';
+import type { Attribute, RecordItem } from '../records/api';
 import type { ExtensionContribution } from '../extensions/api';
 import { resolveValueRenderer } from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
@@ -40,7 +40,7 @@ const RelatedPathValue = ({ value }: { value: unknown }) =>
 type Props = {
   attribute: Attribute;
   column: ExplorerTableColumn;
-  entity: EntityItem;
+  record: RecordItem;
   extension: ExtensionContribution | undefined;
   frameAllowed: boolean;
 };
@@ -48,15 +48,15 @@ type Props = {
 export const ConfiguredColumnCell = ({
   attribute,
   column,
-  entity,
+  record,
   extension,
   frameAllowed,
 }: Props) => {
   const [relationship] = column.field.split(relationshipPathSeparator);
   const relatedPath = isRelationshipPath(column.field);
   const { renderer } = column;
-  const related = relatedPath ? entity.related?.[relationship]?.[0] : undefined;
-  const pathValues = entity.table_values[column.field] ?? [];
+  const related = relatedPath ? record.related?.[relationship]?.[0] : undefined;
+  const pathValues = record.table_values[column.field] ?? [];
   const primaryValue = pathValues.length > 1 ? pathValues : pathValues[0];
   const fallback = relatedPath ? (
     <RelatedPathValue value={primaryValue} />
@@ -79,7 +79,7 @@ export const ConfiguredColumnCell = ({
       renderer,
     },
     primary_value: primaryValue ?? null,
-    related_entity: related
+    related_record: related
       ? {
           id: related.id,
           blueprint_id: related.blueprint_id,
@@ -90,9 +90,9 @@ export const ConfiguredColumnCell = ({
       : null,
     related_preview: related?.preview ?? null,
     source_row: {
-      entity_id: entity.id,
-      blueprint_version: entity.blueprint_version,
-      preview: entity.preview,
+      record_id: record.id,
+      blueprint_version: record.blueprint_version,
+      preview: record.preview,
     },
   });
   return (

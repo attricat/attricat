@@ -635,44 +635,44 @@ impl HostState {
         request: wit::api::ReadRequest,
     ) -> Result<wit::api::ReadResponse, String> {
         self.require_active("catalog.read").await?;
-        let (entity_id, context_id) = match request {
+        let (record_id, context_id) = match request {
             wit::api::ReadRequest::Entity(input) | wit::api::ReadRequest::Values(input) => {
-                (parse_uuid(&input.entity_id, "entity ID")?, None)
+                (parse_uuid(&input.entity_id, "record ID")?, None)
             }
             wit::api::ReadRequest::Resolved(input) => (
-                parse_uuid(&input.entity_id, "entity ID")?,
+                parse_uuid(&input.entity_id, "record ID")?,
                 Some(parse_uuid(&input.context_id, "context ID")?),
             ),
         };
-        let entity = self
+        let record = self
             .repository
-            .get_entity(entity_id)
+            .get_record(record_id)
             .await
             .map_err(|error| error.to_string())?
-            .ok_or_else(|| "entity not found".to_owned())?;
+            .ok_or_else(|| "record not found".to_owned())?;
         let blueprint = self
             .repository
-            .get_blueprint_revision(entity.blueprint_id, entity.blueprint_version)
+            .get_blueprint_revision(record.blueprint_id, record.blueprint_version)
             .await
             .map_err(|error| error.to_string())?
             .ok_or_else(|| "blueprint revision not found".to_owned())?;
         let direct_values = self
             .repository
-            .current_values(entity_id)
+            .current_values(record_id)
             .await
             .map_err(|error| error.to_string())?;
         let resolved_values = match context_id {
             Some(context_id) => Some(
                 self.repository
-                    .resolved_preview(entity_id, context_id, 0)
+                    .resolved_preview(record_id, context_id, 0)
                     .await
                     .map_err(|error| error.to_string())?
-                    .ok_or_else(|| "entity not found".to_owned())?,
+                    .ok_or_else(|| "record not found".to_owned())?,
             ),
             None => None,
         };
         Ok(wit::api::ReadResponse {
-            entity: bounded_serialize(&entity)?,
+            entity: bounded_serialize(&record)?,
             blueprint: bounded_serialize(&blueprint)?,
             direct_values: bounded_serialize(&direct_values)?,
             resolved_values: resolved_values
@@ -690,7 +690,7 @@ impl HostState {
         if request.values.is_empty() || request.values.len() > MAX_WRITE_VALUES {
             return Err("writes require 1-100 scalar values".into());
         }
-        let entity_id = parse_uuid(&request.entity_id, "entity ID")?;
+        let record_id = parse_uuid(&request.entity_id, "record ID")?;
         let values = request
             .values
             .into_iter()
@@ -716,7 +716,7 @@ impl HostState {
             .for_extension(&self.installation.extension_id);
         let values = CatalogMutationService::new(&repository)
             .append_values(
-                entity_id,
+                record_id,
                 AppendAttributeValues {
                     values,
                     expected_updated_at: None,
@@ -862,7 +862,7 @@ impl HostState {
                 attribute_id,
                 value,
             } => {
-                let entity = self
+                let record = self
                     .repository
                     .extension_catalog_lookup(
                         parse_uuid(&blueprint_id, "blueprint ID")?,
@@ -872,7 +872,7 @@ impl HostState {
                     )
                     .await
                     .map_err(|error| error.to_string())?;
-                bounded_serialize(&entity)
+                bounded_serialize(&record)
             }
         }
     }
@@ -2415,12 +2415,12 @@ impl OperationState {
             .list_attributes(blueprint, version)
             .await
             .map_err(|error| error.to_string())?;
-        let mut rows = Vec::with_capacity(page.entities.len());
-        for entity in page.entities {
+        let mut rows = Vec::with_capacity(page.records.len());
+        for record in page.records {
             let mut row = serde_json::Map::new();
             for value in host
                 .repository
-                .extension_catalog_values_at(entity.id, page.snapshot_at)
+                .extension_catalog_values_at(record.id, page.snapshot_at)
                 .await
                 .map_err(|error| error.to_string())?
             {

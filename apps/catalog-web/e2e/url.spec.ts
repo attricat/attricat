@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import {
   commitField,
-  createEntity,
-  createEntityBlueprint,
+  createRecord,
+  createRecordBlueprint,
   scalar,
   suffix,
 } from './helpers';
@@ -16,7 +16,7 @@ for (const mode of ['light', 'dark'] as const) {
       mode,
     );
     const code = `url_${suffix()}`;
-    const blueprint = await createEntityBlueprint(
+    const blueprint = await createRecordBlueprint(
       code,
       'URL controls',
       `
@@ -38,17 +38,17 @@ columns = [{ field = "website", renderer = { id = "catalog.url_display", version
 `,
       },
     );
-    const entity = await createEntity(blueprint, [
+    const record = await createRecord(blueprint, [
       scalar('title', 'URL example'),
       scalar('website', 'javascript:alert(1)'),
     ]);
-    // The entity page edits the value in place; the table displays it.
+    // The record page edits the value in place; the table displays it.
     await page.goto(`/?blueprint=${code}`);
     await expect(
       page.getByText('javascript:alert(1)', { exact: true }),
     ).toBeVisible();
     await expect(page.locator('a[href^="javascript:"]')).toHaveCount(0);
-    await page.goto(`/entities/${entity.id}`);
+    await page.goto(`/records/${record.id}`);
     const input = page.getByRole('textbox', { name: 'website' });
     await expect(input).toHaveAttribute('type', 'url');
     await expect(input).toHaveValue('javascript:alert(1)');
@@ -64,7 +64,7 @@ columns = [{ field = "website", renderer = { id = "catalog.url_display", version
     await expect(input).toHaveValue('ftp://example.com/file');
     expect(saves).toEqual([]);
     await input.fill('https://example.com/a?query=1#section');
-    await commitField(page, entity.id, input, 'Enter');
+    await commitField(page, record.id, input, 'Enter');
     await page.reload();
     await expect(input).toHaveValue('https://example.com/a?query=1#section');
     await page.goto(`/?blueprint=${code}`);
@@ -76,9 +76,9 @@ columns = [{ field = "website", renderer = { id = "catalog.url_display", version
       await link.focus();
       await expect(link).toBeFocused({ timeout: 1_000 });
     }).toPass();
-    await page.goto(`/entities/${entity.id}`);
+    await page.goto(`/records/${record.id}`);
     await input.clear();
-    await commitField(page, entity.id, input);
+    await commitField(page, record.id, input);
     await page.reload();
     await expect(input).toHaveValue('');
     await page.goto(`/?blueprint=${code}`);

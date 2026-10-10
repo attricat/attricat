@@ -16,8 +16,8 @@ use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 
 pub const MAX_SAMPLE_DATA_BYTES: usize = 1024 * 1024;
-pub const MAX_SAMPLE_ENTITIES: usize = 256;
-pub const MAX_SAMPLE_FACTS_PER_ENTITY: usize = 128;
+pub const MAX_SAMPLE_RECORDS: usize = 256;
+pub const MAX_SAMPLE_FACTS_PER_RECORD: usize = 128;
 pub const MAX_SAMPLE_TOTAL_FACTS: usize = 4096;
 pub const MAX_SAMPLE_FILES: usize = 64;
 pub const MAX_SAMPLE_FILES_PER_VALUE: usize = 16;
@@ -31,7 +31,7 @@ pub const SAMPLE_FILE_MEDIA_TYPES: &[(&str, &[&str])] = &[
     ("application/pdf", &["pdf"]),
     ("text/plain", &["txt"]),
 ];
-pub const SAMPLE_AUTOMATION_WARNING: &str = "Sample entities are ordinary workspace entities. Creating them emits ordinary audit records and entity.created.v1 events, may run enabled automation or extensions, and may cause external effects. Staging cleanup does not remove values retained by ordinary audit or event storage.";
+pub const SAMPLE_AUTOMATION_WARNING: &str = "Sample records are ordinary workspace records. Creating them emits ordinary audit records and record.created.v1 events, may run enabled automation or extensions, and may cause external effects. Staging cleanup does not remove values retained by ordinary audit or event storage.";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -39,12 +39,12 @@ pub struct SampleDataDeclaration {
     pub format_version: u32,
     pub kind: String,
     pub classification: String,
-    pub entities: Vec<SampleEntity>,
+    pub records: Vec<SampleRecord>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct SampleEntity {
+pub struct SampleRecord {
     pub key: String,
     pub blueprint: String,
     pub facts: Vec<SampleFact>,
@@ -175,7 +175,7 @@ pub struct ValidatedSampleData {
     /// same filename and media type, so it becomes one ordinary file.
     pub files: BTreeMap<String, SampleFile>,
     pub canonical_sha256: String,
-    /// Entity indices in deterministic target-before-source order.
+    /// Record indices in deterministic target-before-source order.
     pub target_first_order: Vec<usize>,
     pub scalar_fact_count: usize,
     pub relationship_fact_count: usize,
@@ -198,63 +198,63 @@ pub fn validate_sample_data(
     if declaration.classification != "synthetic" {
         return Err("sample-data classification must be synthetic".into());
     }
-    if declaration.entities.is_empty() || declaration.entities.len() > MAX_SAMPLE_ENTITIES {
+    if declaration.records.is_empty() || declaration.records.len() > MAX_SAMPLE_RECORDS {
         return Err(format!(
-            "sample-data entities must contain 1-{MAX_SAMPLE_ENTITIES} entries"
+            "sample-data records must contain 1-{MAX_SAMPLE_RECORDS} entries"
         ));
     }
 
     let mut keys = BTreeMap::new();
     let mut files = BTreeMap::<String, SampleFile>::new();
-    for (index, entity) in declaration.entities.iter().enumerate() {
-        if !valid_sample_entity_key(&entity.key) {
-            return Err(format!("sample entity key '{}' is invalid", entity.key));
+    for (index, record) in declaration.records.iter().enumerate() {
+        if !valid_sample_record_key(&record.key) {
+            return Err(format!("sample record key '{}' is invalid", record.key));
         }
-        if keys.insert(entity.key.as_str(), index).is_some() {
-            return Err(format!("duplicate sample entity key '{}'", entity.key));
+        if keys.insert(record.key.as_str(), index).is_some() {
+            return Err(format!("duplicate sample record key '{}'", record.key));
         }
-        if !declared_blueprints.contains(entity.blueprint.as_str()) {
+        if !declared_blueprints.contains(record.blueprint.as_str()) {
             return Err(format!(
-                "sample entity '{}' references an undeclared blueprint",
-                entity.key
+                "sample record '{}' references an undeclared blueprint",
+                record.key
             ));
         }
-        if entity.facts.len() + entity.relationships.len() + entity.files.len()
-            > MAX_SAMPLE_FACTS_PER_ENTITY
+        if record.facts.len() + record.relationships.len() + record.files.len()
+            > MAX_SAMPLE_FACTS_PER_RECORD
         {
             return Err(format!(
-                "sample entity '{}' exceeds the fact limit",
-                entity.key
+                "sample record '{}' exceeds the fact limit",
+                record.key
             ));
         }
         let valid_context = |context: Option<&String>| {
             context.is_none_or(|context| declared_contexts.contains(context.as_str()))
         };
-        if !entity
+        if !record
             .facts
             .iter()
             .all(|fact| valid_context(fact.context.as_ref()))
-            || !entity
+            || !record
                 .relationships
                 .iter()
                 .all(|relationship| valid_context(relationship.context.as_ref()))
-            || !entity
+            || !record
                 .files
                 .iter()
                 .all(|value| valid_context(value.context.as_ref()))
         {
             return Err(format!(
-                "sample entity '{}' references an undeclared context",
-                entity.key
+                "sample record '{}' references an undeclared context",
+                record.key
             ));
         }
         let mut attributes = BTreeSet::new();
-        for fact in &entity.facts {
-            validate_attribute_reference(&entity.blueprint, &fact.attribute)?;
+        for fact in &record.facts {
+            validate_attribute_reference(&record.blueprint, &fact.attribute)?;
             if !attributes.insert((fact.attribute.as_str(), fact.context.as_deref())) {
                 return Err(format!(
-                    "sample entity '{}' has duplicate attribute facts",
-                    entity.key
+                    "sample record '{}' has duplicate attribute facts",
+                    record.key
                 ));
             }
             if !matches!(
@@ -263,8 +263,8 @@ pub fn validate_sample_data(
             ) && !is_exact_time_object(&fact.value)
             {
                 return Err(format!(
-                    "sample entity '{}' has an unsupported fact value",
-                    entity.key
+                    "sample record '{}' has an unsupported fact value",
+                    record.key
                 ));
             }
             // Value matching is type-aware and runs after the referenced
@@ -274,51 +274,51 @@ pub fn validate_sample_data(
                 fact.attribute.rsplit('/').next().unwrap_or(&fact.attribute),
             )?;
         }
-        for relationship in &entity.relationships {
-            validate_attribute_reference(&entity.blueprint, &relationship.attribute)?;
+        for relationship in &record.relationships {
+            validate_attribute_reference(&record.blueprint, &relationship.attribute)?;
             if !attributes.insert((
                 relationship.attribute.as_str(),
                 relationship.context.as_deref(),
             )) {
                 return Err(format!(
-                    "sample entity '{}' has duplicate attribute facts",
-                    entity.key
+                    "sample record '{}' has duplicate attribute facts",
+                    record.key
                 ));
             }
             if relationship.targets.is_empty() {
                 return Err(format!(
-                    "sample entity '{}' has an empty relationship target list",
-                    entity.key
+                    "sample record '{}' has an empty relationship target list",
+                    record.key
                 ));
             }
             let mut targets = BTreeSet::new();
             for target in &relationship.targets {
                 if !targets.insert(target.as_str()) {
                     return Err(format!(
-                        "sample entity '{}' has duplicate relationship targets",
-                        entity.key
+                        "sample record '{}' has duplicate relationship targets",
+                        record.key
                     ));
                 }
-                if target == &entity.key {
+                if target == &record.key {
                     return Err(format!(
-                        "sample entity '{}' has a self relationship",
-                        entity.key
+                        "sample record '{}' has a self relationship",
+                        record.key
                     ));
                 }
             }
         }
-        for value in &entity.files {
-            validate_attribute_reference(&entity.blueprint, &value.attribute)?;
+        for value in &record.files {
+            validate_attribute_reference(&record.blueprint, &value.attribute)?;
             if !attributes.insert((value.attribute.as_str(), value.context.as_deref())) {
                 return Err(format!(
-                    "sample entity '{}' has duplicate attribute facts",
-                    entity.key
+                    "sample record '{}' has duplicate attribute facts",
+                    record.key
                 ));
             }
             if value.files.is_empty() || value.files.len() > MAX_SAMPLE_FILES_PER_VALUE {
                 return Err(format!(
-                    "sample entity '{}' file values must list 1-{MAX_SAMPLE_FILES_PER_VALUE} files",
-                    entity.key
+                    "sample record '{}' file values must list 1-{MAX_SAMPLE_FILES_PER_VALUE} files",
+                    record.key
                 ));
             }
             let mut paths = BTreeSet::new();
@@ -326,8 +326,8 @@ pub fn validate_sample_data(
                 validate_sample_file(file, declared_files)?;
                 if !paths.insert(file.path.as_str()) {
                     return Err(format!(
-                        "sample entity '{}' attaches a file twice to one value",
-                        entity.key
+                        "sample record '{}' attaches a file twice to one value",
+                        record.key
                     ));
                 }
                 match files.get(file.path.as_str()) {
@@ -352,19 +352,19 @@ pub fn validate_sample_data(
         .find(|path| !files.contains_key(**path))
     {
         return Err(format!(
-            "sample file '{unused}' is not attached by any sample entity"
+            "sample file '{unused}' is not attached by any sample record"
         ));
     }
 
     let scalar_fact_count = declaration
-        .entities
+        .records
         .iter()
-        .map(|entity| entity.facts.len())
+        .map(|record| record.facts.len())
         .sum::<usize>();
     let relationship_fact_count = declaration
-        .entities
+        .records
         .iter()
-        .flat_map(|entity| &entity.relationships)
+        .flat_map(|record| &record.relationships)
         .map(|relationship| relationship.targets.len())
         .sum::<usize>();
     if scalar_fact_count + relationship_fact_count > MAX_SAMPLE_TOTAL_FACTS {
@@ -373,14 +373,14 @@ pub fn validate_sample_data(
         ));
     }
 
-    let mut dependencies = vec![BTreeSet::new(); declaration.entities.len()];
-    for (source, entity) in declaration.entities.iter().enumerate() {
-        for relationship in &entity.relationships {
+    let mut dependencies = vec![BTreeSet::new(); declaration.records.len()];
+    for (source, record) in declaration.records.iter().enumerate() {
+        for relationship in &record.relationships {
             for target in &relationship.targets {
                 let target_index = keys.get(target.as_str()).copied().ok_or_else(|| {
                     format!(
-                        "sample entity '{}' references unknown same-file target '{target}'",
-                        entity.key
+                        "sample record '{}' references unknown same-file target '{target}'",
+                        record.key
                     )
                 })?;
                 dependencies[source].insert(target_index);
@@ -388,14 +388,14 @@ pub fn validate_sample_data(
         }
     }
     let remaining = dependencies;
-    let mut target_first_order = Vec::with_capacity(declaration.entities.len());
-    while target_first_order.len() < declaration.entities.len() {
+    let mut target_first_order = Vec::with_capacity(declaration.records.len());
+    while target_first_order.len() < declaration.records.len() {
         let next = remaining
             .iter()
             .enumerate()
             .filter(|(index, _)| !target_first_order.contains(index))
             .filter(|(_, deps)| deps.iter().all(|dep| target_first_order.contains(dep)))
-            .min_by_key(|(index, _)| declaration.entities[*index].key.as_str())
+            .min_by_key(|(index, _)| declaration.records[*index].key.as_str())
             .map(|(index, _)| index)
             .ok_or_else(|| "sample-data relationships must be acyclic".to_owned())?;
         target_first_order.push(next);
@@ -421,16 +421,16 @@ fn is_exact_time_object(value: &Value) -> bool {
         && object.get("time_zone").and_then(Value::as_str).is_some()
 }
 
-pub fn explicit_fact_attribute_codes(entity: &SampleEntity) -> BTreeSet<&str> {
-    entity
+pub fn explicit_fact_attribute_codes(record: &SampleRecord) -> BTreeSet<&str> {
+    record
         .facts
         .iter()
         .map(|fact| fact.attribute.rsplit('/').next().unwrap_or_default())
         .collect()
 }
 
-fn valid_sample_entity_key(value: &str) -> bool {
-    let Some(code) = value.strip_prefix("sample-entities/") else {
+fn valid_sample_record_key(value: &str) -> bool {
+    let Some(code) = value.strip_prefix("sample-records/") else {
         return false;
     };
     !code.is_empty()
@@ -795,7 +795,7 @@ type SampleContextPath<'a> = (Option<&'a str>, Vec<Option<&'a str>>);
 
 /// Rejects samples that would collide on one of their blueprint's unique
 /// keys, so the dataset cannot fail part-way through an application. Keys
-/// are compared like the workspace does; existing workspace entities of a
+/// are compared like the workspace does; existing workspace records of a
 /// mapped or reused blueprint can still collide when the plan is applied.
 pub(crate) fn validate_sample_unique_keys(
     sample: &ValidatedSampleData,
@@ -816,8 +816,8 @@ pub(crate) fn validate_sample_unique_keys(
         paths.push((Some(key.as_str()), path));
     }
     let mut seen = HashMap::<(&str, &str, Option<&str>, Vec<Value>), &str>::new();
-    for entity in &sample.declaration.entities {
-        let Some(blueprint) = blueprints.get(&entity.blueprint) else {
+    for record in &sample.declaration.records {
+        let Some(blueprint) = blueprints.get(&record.blueprint) else {
             continue;
         };
         let attributes = blueprint
@@ -826,11 +826,11 @@ pub(crate) fn validate_sample_unique_keys(
             .map(|attribute| (attribute.code.as_str(), attribute))
             .collect::<HashMap<_, _>>();
         let mut values = HashMap::<(&str, Option<&str>), Value>::new();
-        for fact in &entity.facts {
+        for fact in &record.facts {
             let code = fact.attribute.rsplit('/').next().unwrap_or_default();
             values.insert((code, fact.context.as_deref()), fact.value.clone());
         }
-        for relationship in &entity.relationships {
+        for relationship in &record.relationships {
             let code = relationship
                 .attribute
                 .rsplit('/')
@@ -857,11 +857,11 @@ pub(crate) fn validate_sample_unique_keys(
                 let family = blueprint.key();
                 if let Some(other) = seen.insert(
                     (family, key.code.as_str(), *context, components),
-                    entity.key.as_str(),
+                    record.key.as_str(),
                 ) {
                     return Err(format!(
-                        "sample entities '{other}' and '{}' share unique key '{}' of '{family}'{}",
-                        entity.key,
+                        "sample records '{other}' and '{}' share unique key '{}' of '{family}'{}",
+                        record.key,
                         key.code,
                         context.map_or_else(String::new, |context| format!(" in '{context}'"))
                     ));
@@ -1069,9 +1069,9 @@ mod tests {
             "format_version": 1,
             "kind": "solution_pack_sample_data",
             "classification": "synthetic",
-            "entities": [
-                {"key":"sample-entities/source","blueprint":"blueprints/product","facts":[],"relationships":[{"attribute":"blueprints/product/attributes/related","targets":["sample-entities/target"]}]},
-                {"key":"sample-entities/target","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":"Sample target"}],"relationships":[]}
+            "records": [
+                {"key":"sample-records/source","blueprint":"blueprints/product","facts":[],"relationships":[{"attribute":"blueprints/product/attributes/related","targets":["sample-records/target"]}]},
+                {"key":"sample-records/target","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":"Sample target"}],"relationships":[]}
             ]
         });
         let validated = validate_sample_data(
@@ -1084,9 +1084,9 @@ mod tests {
         assert_eq!(validated.target_first_order, vec![1, 0]);
 
         let mut cyclic = valid;
-        cyclic["entities"][1]["relationships"] = serde_json::json!([{
+        cyclic["records"][1]["relationships"] = serde_json::json!([{
             "attribute":"blueprints/product/attributes/related",
-            "targets":["sample-entities/source"]
+            "targets":["sample-records/source"]
         }]);
         assert!(
             validate_sample_data(
@@ -1107,7 +1107,7 @@ mod tests {
             "format_version":1,
             "kind":"solution_pack_sample_data",
             "classification":"synthetic",
-            "entities":[{"key":"sample-entities/a","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/available_at","value":{"time":"12:34:56","time_zone":"UTC"}}],"relationships":[]}]
+            "records":[{"key":"sample-records/a","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/available_at","value":{"time":"12:34:56","time_zone":"UTC"}}],"relationships":[]}]
         });
         validate_sample_data(
             &serde_json::to_vec(&native_time).unwrap(),
@@ -1116,12 +1116,12 @@ mod tests {
             &BTreeSet::new(),
         )
         .unwrap();
-        for entity in [
-            serde_json::json!({"key":"sample-entities/a","blueprint":"blueprints/product","facts":[],"relationships":[],"context":"default"}),
-            serde_json::json!({"key":"sample-entities/a","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":{"copied":true}}],"relationships":[]}),
-            serde_json::json!({"key":"sample-entities/a","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":{"time":"12:00:00","time_zone":"UTC","extra":true}}],"relationships":[]}),
+        for record in [
+            serde_json::json!({"key":"sample-records/a","blueprint":"blueprints/product","facts":[],"relationships":[],"context":"default"}),
+            serde_json::json!({"key":"sample-records/a","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":{"copied":true}}],"relationships":[]}),
+            serde_json::json!({"key":"sample-records/a","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":{"time":"12:00:00","time_zone":"UTC","extra":true}}],"relationships":[]}),
         ] {
-            let input = serde_json::json!({"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[entity]});
+            let input = serde_json::json!({"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[record]});
             assert!(
                 validate_sample_data(
                     &serde_json::to_vec(&input).unwrap(),

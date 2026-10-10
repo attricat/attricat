@@ -28,7 +28,7 @@ const BLUEPRINT: &str = r#"
 format_version = 1
 code = "connector_test"
 name = "Connector Test"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["external_id"]
@@ -251,11 +251,11 @@ input = {{profile = {{version = 1, blueprint_id = "00000000-0000-4000-8000-00000
         .handle(task)
         .await
         .unwrap();
-    let imported: i64 = sqlx::query_scalar("SELECT count(*) FROM entities WHERE workspace_id=$1 AND blueprint_id=$2 AND deleted_at IS NULL")
+    let imported: i64 = sqlx::query_scalar("SELECT count(*) FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND deleted_at IS NULL")
         .bind(workspace).bind(blueprint.blueprint.id).fetch_one(&pool).await.unwrap();
     assert_eq!(imported, 1);
-    let entity: Uuid =
-        sqlx::query_scalar("SELECT id FROM entities WHERE workspace_id=$1 AND blueprint_id=$2")
+    let record: Uuid =
+        sqlx::query_scalar("SELECT id FROM records WHERE workspace_id=$1 AND blueprint_id=$2")
             .bind(workspace)
             .bind(blueprint.blueprint.id)
             .fetch_one(&pool)
@@ -268,8 +268,8 @@ input = {{profile = {{version = 1, blueprint_id = "00000000-0000-4000-8000-00000
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO entity_channel_publications(workspace_id,entity_id,context_id,published_at,published_by_user_id) VALUES($1,$2,$3,now(),$4)")
-        .bind(workspace).bind(entity).bind(channel_ids[0]).bind(publisher).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO record_channel_publications(workspace_id,record_id,context_id,published_at,published_by_user_id) VALUES($1,$2,$3,now(),$4)")
+        .bind(workspace).bind(record).bind(channel_ids[0]).bind(publisher).execute(&pool).await.unwrap();
     repository
         .set_publication_channel(channel_ids[1], false)
         .await

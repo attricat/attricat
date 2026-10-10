@@ -2,7 +2,7 @@ import { z } from 'zod';
 import {
   catalogEventNames,
   defaultNotificationSeverity,
-  entityChangeHints,
+  recordChangeHints,
   maximumNotificationMessageLength,
   notificationSeverities,
 } from './constants';
@@ -10,15 +10,15 @@ import {
 export { catalogEventNames } from './constants';
 
 const correlationIdSchema = z.uuid().optional();
-const changeHintSchema = z.enum(entityChangeHints);
+const changeHintSchema = z.enum(recordChangeHints);
 const changeHintsSchema = z
   .array(changeHintSchema)
-  .max(entityChangeHints.length);
+  .max(recordChangeHints.length);
 
 /** Host-to-component details. They deliberately exclude outbox envelopes and payloads. */
-export const entityUpdatedDetailSchema = z
+export const recordUpdatedDetailSchema = z
   .object({
-    entity_id: z.uuid(),
+    record_id: z.uuid(),
     change_hints: changeHintsSchema,
     correlation_id: correlationIdSchema,
   })
@@ -32,10 +32,10 @@ export const contextChangedDetailSchema = z
   })
   .strict();
 
-/** Component-to-host request to re-fetch an entity's authorized current data. */
-export const refreshEntityDetailSchema = z
+/** Component-to-host request to re-fetch a record's authorized current data. */
+export const refreshRecordDetailSchema = z
   .object({
-    entity_id: z.uuid(),
+    record_id: z.uuid(),
     change_hints: changeHintsSchema.optional(),
     correlation_id: correlationIdSchema,
   })
@@ -44,7 +44,7 @@ export const refreshEntityDetailSchema = z
 /** Component-to-host navigation request. The host owns the actual route. */
 export const navigateDetailSchema = z
   .object({
-    entity_id: z.uuid(),
+    record_id: z.uuid(),
     correlation_id: correlationIdSchema,
   })
   .strict();
@@ -60,9 +60,9 @@ export const notifyDetailSchema = z
   })
   .strict();
 
-export type EntityUpdatedDetail = z.infer<typeof entityUpdatedDetailSchema>;
+export type RecordUpdatedDetail = z.infer<typeof recordUpdatedDetailSchema>;
 export type ContextChangedDetail = z.infer<typeof contextChangedDetailSchema>;
-export type RefreshEntityDetail = z.infer<typeof refreshEntityDetailSchema>;
+export type RefreshRecordDetail = z.infer<typeof refreshRecordDetailSchema>;
 export type NavigateDetail = z.infer<typeof navigateDetailSchema>;
 export type NotifyDetail = z.infer<typeof notifyDetailSchema>;
 
@@ -79,14 +79,14 @@ const dispatch = <T>(
     new CustomEvent(type, { bubbles, composed: bubbles, detail }),
   );
 
-export const dispatchEntityUpdated = (
+export const dispatchRecordUpdated = (
   target: EventTarget,
-  detail: EntityUpdatedDetail,
+  detail: RecordUpdatedDetail,
 ) =>
   dispatch(
     target,
-    catalogEventNames.entityUpdated,
-    entityUpdatedDetailSchema.parse(detail),
+    catalogEventNames.recordUpdated,
+    recordUpdatedDetailSchema.parse(detail),
     false,
   );
 
@@ -101,14 +101,14 @@ export const dispatchContextChanged = (
     false,
   );
 
-export const requestEntityRefresh = (
+export const requestRecordRefresh = (
   target: EventTarget,
-  detail: RefreshEntityDetail,
+  detail: RefreshRecordDetail,
 ) =>
   dispatch(
     target,
-    catalogEventNames.refreshEntity,
-    refreshEntityDetailSchema.parse(detail),
+    catalogEventNames.refreshRecord,
+    refreshRecordDetailSchema.parse(detail),
     true,
   );
 

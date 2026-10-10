@@ -5,14 +5,14 @@ use sqlx::FromRow;
 use thiserror::Error;
 use uuid::Uuid;
 
-pub const ENTITY_CREATED_V1: &str = "entity.created.v1";
-pub const ENTITY_UPDATED_V1: &str = "entity.updated.v1";
-pub const ENTITY_DELETED_V1: &str = "entity.deleted.v1";
-pub const ENTITY_MIGRATED_V1: &str = "entity.migrated.v1";
-pub const ENTITY_PUBLISHED_V1: &str = "entity.published.v1";
-pub const ENTITY_UNPUBLISHED_V1: &str = "entity.unpublished.v1";
-/// An extension changed its own namespace of entity system tags/metadata.
-pub const ENTITY_ANNOTATIONS_CHANGED_V1: &str = "entity.annotations_changed.v1";
+pub const RECORD_CREATED_V1: &str = "record.created.v1";
+pub const RECORD_UPDATED_V1: &str = "record.updated.v1";
+pub const RECORD_DELETED_V1: &str = "record.deleted.v1";
+pub const RECORD_MIGRATED_V1: &str = "record.migrated.v1";
+pub const RECORD_PUBLISHED_V1: &str = "record.published.v1";
+pub const RECORD_UNPUBLISHED_V1: &str = "record.unpublished.v1";
+/// An extension changed its own namespace of record system tags/metadata.
+pub const RECORD_ANNOTATIONS_CHANGED_V1: &str = "record.annotations_changed.v1";
 pub const ATTRIBUTE_VALUE_CHANGED_V1: &str = "attribute_value.changed.v1";
 pub const ATTRIBUTE_VALUE_RESTORED_V1: &str = "attribute_value.restored.v1";
 pub const RELATIONSHIP_CHANGED_V1: &str = "relationship.changed.v1";
@@ -24,13 +24,13 @@ pub const CONTEXT_UPDATED_V1: &str = "context.updated.v1";
 pub const CONTEXT_DELETED_V1: &str = "context.deleted.v1";
 
 pub const ALL_EVENT_TYPES_V1: &[&str] = &[
-    ENTITY_CREATED_V1,
-    ENTITY_UPDATED_V1,
-    ENTITY_DELETED_V1,
-    ENTITY_MIGRATED_V1,
-    ENTITY_PUBLISHED_V1,
-    ENTITY_UNPUBLISHED_V1,
-    ENTITY_ANNOTATIONS_CHANGED_V1,
+    RECORD_CREATED_V1,
+    RECORD_UPDATED_V1,
+    RECORD_DELETED_V1,
+    RECORD_MIGRATED_V1,
+    RECORD_PUBLISHED_V1,
+    RECORD_UNPUBLISHED_V1,
+    RECORD_ANNOTATIONS_CHANGED_V1,
     ATTRIBUTE_VALUE_CHANGED_V1,
     ATTRIBUTE_VALUE_RESTORED_V1,
     RELATIONSHIP_CHANGED_V1,
@@ -42,7 +42,7 @@ pub const ALL_EVENT_TYPES_V1: &[&str] = &[
     CONTEXT_DELETED_V1,
 ];
 const CORE_EVENT_PREFIXES: &[&str] = &[
-    "entity.",
+    "record.",
     "attribute_value.",
     "relationship.",
     "blueprint.",
@@ -114,8 +114,8 @@ pub struct BlueprintRevisionV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct EntityPublicationV1 {
-    pub entity_id: Uuid,
+pub struct RecordPublicationV1 {
+    pub record_id: Uuid,
     pub context_id: Uuid,
     pub published_at: Option<DateTime<Utc>>,
     pub published_by_user_id: Option<Uuid>,
@@ -125,8 +125,8 @@ pub struct EntityPublicationV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct EntityMigratedV1 {
-    pub entity_id: Uuid,
+pub struct RecordMigratedV1 {
+    pub record_id: Uuid,
     pub blueprint_id: Uuid,
     pub source_version: i64,
     pub target_version: i64,
@@ -147,13 +147,13 @@ pub struct EntityMigratedV1 {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ReleasedRelationshipV1 {
     pub attribute_code: String,
-    pub target_entity_ids: Vec<Uuid>,
+    pub target_record_ids: Vec<Uuid>,
 }
 
-/// The most released targets `entity.migrated.v1` lists per relationship.
+/// The most released targets `record.migrated.v1` lists per relationship.
 pub const MAX_RELEASED_RELATIONSHIP_TARGETS: usize = 100;
 
-/// The most released targets `entity.migrated.v1` lists across all
+/// The most released targets `record.migrated.v1` lists across all
 /// relationships; about 40 KB of the 64 KiB payload limit.
 pub const MAX_RELEASED_TARGETS_PER_EVENT: usize = 1_000;
 
@@ -171,8 +171,8 @@ pub struct ContextCreatedV1 {
 pub type ContextUpdatedV1 = ContextCreatedV1;
 pub type ContextDeletedV1 = ContextCreatedV1;
 
-/// A normalized catalog fact affected by an entity mutation. This deliberately
-/// excludes entity projections and other snapshots so consumers can update
+/// A normalized catalog fact affected by a record mutation. This deliberately
+/// excludes record projections and other snapshots so consumers can update
 /// their own state from the smallest useful before/after representation.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AffectedFactV1 {
@@ -180,15 +180,15 @@ pub struct AffectedFactV1 {
     pub attribute_code: String,
     pub context_id: Option<Uuid>,
     pub context_code: Option<String>,
-    pub relationship_target_entity_id: Option<Uuid>,
+    pub relationship_target_record_id: Option<Uuid>,
     pub change_kind: String,
     pub before_value: Option<Value>,
     pub after_value: Option<Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct EntityMutationV1 {
-    pub entity_id: Uuid,
+pub struct RecordMutationV1 {
+    pub record_id: Uuid,
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
     pub facts: Vec<AffectedFactV1>,
@@ -196,13 +196,13 @@ pub struct EntityMutationV1 {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AttributeValueMutationV1 {
-    pub entity_id: Uuid,
+    pub record_id: Uuid,
     pub facts: Vec<AffectedFactV1>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RelationshipMutationV1 {
-    pub entity_id: Uuid,
+    pub record_id: Uuid,
     pub facts: Vec<AffectedFactV1>,
 }
 

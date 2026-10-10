@@ -89,9 +89,9 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 
 ### Umiejscowienie w kliencie
 
-Każde uprawnienie umiejscowienia zezwala na kontrybucję w jednym miejscu osadzenia. Zobacz [Kontrybucje klienckie](/pl/extensions/client/#miejsca-osadzenia). W nazwach uprawnień, miejsc osadzenia i zdarzeń rekordy występują pod nazwą `entity`.
+Każde uprawnienie umiejscowienia zezwala na kontrybucję w jednym miejscu osadzenia. Zobacz [Kontrybucje klienckie](/pl/extensions/client/#miejsca-osadzenia).
 
-`client.blueprint_configuration`, `client.entity_decoration`, `client.entity_action`, `client.entity_header_action`, `client.entity_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`.
+`client.blueprint_configuration`, `client.record_decoration`, `client.record_action`, `client.record_header_action`, `client.record_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`.
 
 ## Uprawnienia hosta
 
@@ -173,7 +173,7 @@ Eksportowane typy zdarzeń muszą zaczynać się od `plugin.<extension-id>.` i k
 ```json
 "server": {
   "event_handlers": [
-    { "id": "on-update", "event_types": ["entity.updated.v1"], "handler": "handle-event" }
+    { "id": "on-update", "event_types": ["record.updated.v1"], "handler": "handle-event" }
   ],
   "commands": [
     { "id": "recalculate", "handler": "recalculate",
@@ -198,7 +198,7 @@ Eksportowane typy zdarzeń muszą zaczynać się od `plugin.<extension-id>.` i k
 "ui": [
   { "id": "workbench", "version": 1, "kind": "route", "artifact": "app", "title": "Formula workbench" },
   { "id": "workbench-nav", "version": 1, "kind": "navigation", "route": "workbench", "title": "Formula workbench" },
-  { "id": "stock", "version": 1, "kind": "embedded", "artifact": "panel", "outlet": "entity_preview_panel" },
+  { "id": "stock", "version": 1, "kind": "embedded", "artifact": "panel", "outlet": "record_preview_panel" },
   { "id": "recalc", "version": 1, "kind": "action", "artifact": "row", "outlet": "explorer_row_action" }
 ]
 ```
@@ -207,12 +207,12 @@ Eksportowane typy zdarzeń muszą zaczynać się od `plugin.<extension-id>.` i k
 | --- | --- | --- |
 | `route` | `artifact`, `title` | Pełna strona pod adresem `/extensions/<extension-id>/<contribution-id>`. |
 | `navigation` | `route`, `title` | Link na pasku bocznym do jednej ze stron tego rozszerzenia. |
-| `embedded` | `artifact`, `outlet` | Ramka w miejscu `navigation`, `entity_preview_panel`, `blueprint_attribute_configuration`, `entity_attribute_decoration`, `entity_action` lub `explorer_table_cell`. |
-| `action` | `artifact`, `outlet` | Akcja rozmieszczana przez host w miejscu `explorer_row_action`, `explorer_action`, `explorer_bulk_action` lub `entity_header_action`. |
-| `panel` | `artifact`, `outlet` | Panel tylko do odczytu rozmieszczany przez host w miejscu `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `entity_attribute_panel`, `file_panel`, `audit_event_panel` lub `data_health_card`. |
+| `embedded` | `artifact`, `outlet` | Ramka w miejscu `navigation`, `record_preview_panel`, `blueprint_attribute_configuration`, `record_attribute_decoration`, `record_action` lub `explorer_table_cell`. |
+| `action` | `artifact`, `outlet` | Akcja rozmieszczana przez host w miejscu `explorer_row_action`, `explorer_action`, `explorer_bulk_action` lub `record_header_action`. |
+| `panel` | `artifact`, `outlet` | Panel tylko do odczytu rozmieszczany przez host w miejscu `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `record_attribute_panel`, `file_panel`, `audit_event_panel` lub `data_health_card`. |
 | `dialog` | `artifact`, `outlet`, `title` | Zarządzane przez host okno `action_dialog` otwierane przez akcje zaznaczenia tego rozszerzenia. |
 
-Każde rozszerzenie może użyć każdego miejsca osadzenia jeden raz. `entity_action`, `explorer_row_action` i `explorer_bulk_action` przyjmują `version` 1 lub 2; wersja 2 otrzymuje [kontekst zaznaczenia](/pl/extensions/client/#kontekst-zaznaczenia).
+Każde rozszerzenie może użyć każdego miejsca osadzenia jeden raz. `record_action`, `explorer_row_action` i `explorer_bulk_action` przyjmują `version` 1 lub 2; wersja 2 otrzymuje [kontekst zaznaczenia](/pl/extensions/client/#kontekst-zaznaczenia).
 
 ## Renderery komórek
 

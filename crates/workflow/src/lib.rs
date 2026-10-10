@@ -42,13 +42,13 @@ pub enum Trigger {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attributes: Vec<String>,
     },
-    /// A management caller supplies one UUID entity target; no arbitrary payload is accepted.
+    /// A management caller supplies one UUID record target; no arbitrary payload is accepted.
     Manual,
     /// Six-field UTC cron only. UTC is intentional: it eliminates DST duplicate/skipped local times.
     Schedule {
         cron: String,
         timezone: String,
-        target_entity_id: String,
+        target_record_id: String,
     },
     /// Reserved contract shape; delivery is intentionally not enabled until the extension dispatcher
     /// has a dynamic, grant-rechecked consumer path.
@@ -77,11 +77,11 @@ pub enum Action {
         attribute_code: String,
         value: ScalarSource,
     },
-    /// Applies fixed local actions to every live entity whose
-    /// `relationship_attribute` currently targets the trigger entity. Each
-    /// target is a separate, idempotent entity write; more than `max_targets`
-    /// referencing entities fails the action before any target is changed.
-    ReferencingEntitiesUpdate {
+    /// Applies fixed local actions to every live record whose
+    /// `relationship_attribute` currently targets the trigger record. Each
+    /// target is a separate, idempotent record write; more than `max_targets`
+    /// referencing records fails the action before any target is changed.
+    ReferencingRecordsUpdate {
         relationship_attribute: String,
         max_targets: u32,
         actions: Vec<Action>,
@@ -121,7 +121,7 @@ enum RawTrigger {
         kind: String,
         cron: Option<String>,
         timezone: Option<String>,
-        target_entity_id: Option<String>,
+        target_record_id: Option<String>,
         provider: Option<String>,
         event_type: Option<String>,
         contract_version: Option<u32>,
@@ -157,14 +157,14 @@ enum RawAction {
         fixed: Option<Value>,
         event_field: Option<String>,
     },
-    ReferencingEntitiesUpdate {
+    ReferencingRecordsUpdate {
         relationship_attribute: String,
         max_targets: Option<u32>,
         actions: Vec<RawAction>,
     },
 }
 
-/// Default and hard upper bound for `referencing_entities_update` targets.
+/// Default and hard upper bound for `referencing_records_update` targets.
 pub const DEFAULT_REFERENCING_TARGETS: u32 = 100;
 pub const MAX_REFERENCING_TARGETS: u32 = 500;
 const MAX_NESTED_ACTIONS: usize = 20;
@@ -232,9 +232,9 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
             facts,
             attributes,
         }) => {
-            if !ENTITY_TRIGGER_EVENTS.contains(&event_type.as_str()) {
+            if !RECORD_TRIGGER_EVENTS.contains(&event_type.as_str()) {
                 return Err(WorkflowError::Invalid(format!(
-                    "unsupported entity workflow event type '{event_type}'"
+                    "unsupported record workflow event type '{event_type}'"
                 )));
             }
             envelope_map(&envelope)?;
@@ -242,9 +242,9 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
             let attributes = match attributes {
                 None => Vec::new(),
                 Some(codes) => {
-                    if event_type == "entity.migrated.v1" {
+                    if event_type == "record.migrated.v1" {
                         return Err(WorkflowError::Invalid(
-                            "entity.migrated.v1 carries no attribute facts, so it cannot filter on attributes".into(),
+                            "record.migrated.v1 carries no attribute facts, so it cannot filter on attributes".into(),
                         ));
                     }
                     let codes =
@@ -266,7 +266,7 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
             kind,
             cron,
             timezone,
-            target_entity_id,
+            target_record_id,
             provider,
             event_type,
             contract_version,
@@ -280,7 +280,7 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
                 "manual" => {
                     if cron.is_none()
                         && timezone.is_none()
-                        && target_entity_id.is_none()
+                        && target_record_id.is_none()
                         && provider.is_none()
                         && event_type.is_none()
                         && contract_version.is_none()
@@ -295,16 +295,16 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
                 "schedule" => {
                     let cron = required(cron, "schedule cron")?;
                     let timezone = required(timezone, "schedule timezone")?;
-                    let target_entity_id = required(target_entity_id, "schedule target_entity_id")?;
+                    let target_record_id = required(target_record_id, "schedule target_record_id")?;
                     if timezone != "UTC" {
                         return Err(WorkflowError::Invalid(
                             "schedule timezone must be UTC".into(),
                         ));
                     }
                     parse_six_field_cron(&cron)?;
-                    if uuid::Uuid::parse_str(&target_entity_id).is_err() {
+                    if uuid::Uuid::parse_str(&target_record_id).is_err() {
                         return Err(WorkflowError::Invalid(
-                            "schedule target_entity_id must be a UUID".into(),
+                            "schedule target_record_id must be a UUID".into(),
                         ));
                     }
                     if provider.is_some() || event_type.is_some() || contract_version.is_some() {
@@ -315,7 +315,7 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
                     Ok(Trigger::Schedule {
                         cron,
                         timezone,
-                        target_entity_id,
+                        target_record_id,
                     })
                 }
                 "extension_event" => {
@@ -339,7 +339,7 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
                     if contract_version == 0
                         || cron.is_some()
                         || timezone.is_some()
-                        || target_entity_id.is_some()
+                        || target_record_id.is_some()
                     {
                         return Err(WorkflowError::Invalid(
                             "invalid extension_event trigger".into(),
@@ -390,10 +390,10 @@ pub fn compile(source: &str) -> Result<CompiledWorkflow, WorkflowError> {
 pub fn raw_hash(source: &str) -> String {
     format!("{:x}", Sha256::digest(source.as_bytes()))
 }
-const ENTITY_TRIGGER_EVENTS: &[&str] = &[
-    "entity.created.v1",
-    "entity.updated.v1",
-    "entity.migrated.v1",
+const RECORD_TRIGGER_EVENTS: &[&str] = &[
+    "record.created.v1",
+    "record.updated.v1",
+    "record.migrated.v1",
     "attribute_value.changed.v1",
     "attribute_value.restored.v1",
     "relationship.changed.v1",
@@ -445,7 +445,7 @@ fn action(a: RawAction) -> Result<Action, WorkflowError> {
                 value,
             })
         }
-        RawAction::ReferencingEntitiesUpdate {
+        RawAction::ReferencingRecordsUpdate {
             relationship_attribute,
             max_targets,
             actions,
@@ -459,25 +459,25 @@ fn action(a: RawAction) -> Result<Action, WorkflowError> {
             }
             if actions.is_empty() || actions.len() > MAX_NESTED_ACTIONS {
                 return Err(WorkflowError::Invalid(format!(
-                    "referencing_entities_update requires 1 to {MAX_NESTED_ACTIONS} actions"
+                    "referencing_records_update requires 1 to {MAX_NESTED_ACTIONS} actions"
                 )));
             }
             let actions = actions
                 .into_iter()
                 .map(|nested| match nested {
-                    RawAction::ReferencingEntitiesUpdate { .. } => Err(WorkflowError::Invalid(
-                        "referencing_entities_update cannot be nested".into(),
+                    RawAction::ReferencingRecordsUpdate { .. } => Err(WorkflowError::Invalid(
+                        "referencing_records_update cannot be nested".into(),
                     )),
                     RawAction::AttributeWrite {
                         event_field: Some(_),
                         ..
                     } => Err(WorkflowError::Invalid(
-                        "referencing_entities_update attribute writes require fixed values".into(),
+                        "referencing_records_update attribute writes require fixed values".into(),
                     )),
                     nested => action(nested),
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(Action::ReferencingEntitiesUpdate {
+            Ok(Action::ReferencingRecordsUpdate {
                 relationship_attribute,
                 max_targets,
                 actions,
@@ -486,7 +486,7 @@ fn action(a: RawAction) -> Result<Action, WorkflowError> {
     }
 }
 
-/// Whether an entity event's payload facts name at least one of `attributes`.
+/// Whether a record event's payload facts name at least one of `attributes`.
 /// An empty filter always matches. Facts exist only for values that actually
 /// changed, so an unchanged write never satisfies a filter.
 pub fn changed_attributes_match(attributes: &[String], payload: &Value) -> bool {
@@ -614,21 +614,21 @@ mod tests {
     use super::*;
     #[test]
     fn v1_remains_compatible() {
-        assert!(parse("format_version=1\ncode='x'\nname='x'\n[[triggers]]\nevent_type='entity.updated.v1'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_ok())
+        assert!(parse("format_version=1\ncode='x'\nname='x'\n[[triggers]]\nevent_type='record.updated.v1'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_ok())
     }
     #[test]
     fn v2_manual_and_utc_schedule_are_strict() {
         assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='manual'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_ok());
-        assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='0 */5 * * * *'\ntimezone='UTC'\ntarget_entity_id='00000000-0000-0000-0000-000000000001'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_ok());
-        assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='0 */5 * * * *'\ntimezone='America/New_York'\ntarget_entity_id='00000000-0000-0000-0000-000000000001'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_err());
+        assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='0 */5 * * * *'\ntimezone='UTC'\ntarget_record_id='00000000-0000-0000-0000-000000000001'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_ok());
+        assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='0 */5 * * * *'\ntimezone='America/New_York'\ntarget_record_id='00000000-0000-0000-0000-000000000001'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_err());
         for cron in ["*/5 * * * *", "0 0 */5 * * * *"] {
-            assert!(parse(&format!("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='{cron}'\ntimezone='UTC'\ntarget_entity_id='00000000-0000-0000-0000-000000000001'\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
+            assert!(parse(&format!("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='{cron}'\ntimezone='UTC'\ntarget_record_id='00000000-0000-0000-0000-000000000001'\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
         }
     }
     #[test]
     fn extension_contract_is_explicit_but_not_generic() {
         assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='extension_event'\nprovider='example'\nevent_type='plugin.example.changed.v1'\ncontract_version=1\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_ok());
-        assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='extension_event'\nprovider='example'\nevent_type='entity.updated.v1'\ncontract_version=1\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_err())
+        assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='extension_event'\nprovider='example'\nevent_type='record.updated.v1'\ncontract_version=1\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_err())
     }
 
     const HEAD: &str = "format_version=2\ncode='x'\nname='x'\n";
@@ -645,15 +645,15 @@ mod tests {
             "attributes=['a','a']",
             "attributes=['Not A Code']",
         ] {
-            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='entity.updated.v1'\n{invalid}\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err(), "{invalid}");
+            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\n{invalid}\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err(), "{invalid}");
         }
-        assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='entity.migrated.v1'\nattributes=['a']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
+        assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.migrated.v1'\nattributes=['a']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
         assert!(parse(&format!("{HEAD}[[triggers]]\ntype='manual'\nattributes=['a']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
     }
 
     #[test]
     fn stored_plans_without_attribute_filters_still_deserialize() {
-        let stored = serde_json::json!({"type":"event","event_type":"entity.updated.v1","envelope":{},"facts":{}});
+        let stored = serde_json::json!({"type":"event","event_type":"record.updated.v1","envelope":{},"facts":{}});
         let trigger: Trigger = serde_json::from_value(stored.clone()).unwrap();
         assert!(matches!(&trigger, Trigger::Event { attributes, .. } if attributes.is_empty()));
         assert_eq!(serde_json::to_value(&trigger).unwrap(), stored);
@@ -678,10 +678,10 @@ mod tests {
 
     #[test]
     fn referencing_update_is_bounded_and_fixed() {
-        let ok = parse(&format!("{HEAD}[[triggers]]\nevent_type='entity.updated.v1'\n[[actions]]\ntype='referencing_entities_update'\nrelationship_attribute='license'\nmax_targets=25\n[[actions.actions]]\ntype='attribute_write'\nattribute_code='status'\nfixed='in_review'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['needs-review']")).unwrap();
+        let ok = parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\n[[actions]]\ntype='referencing_records_update'\nrelationship_attribute='license'\nmax_targets=25\n[[actions.actions]]\ntype='attribute_write'\nattribute_code='status'\nfixed='in_review'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['needs-review']")).unwrap();
         assert_eq!(
             ok.actions[0],
-            Action::ReferencingEntitiesUpdate {
+            Action::ReferencingRecordsUpdate {
                 relationship_attribute: "license".into(),
                 max_targets: 25,
                 actions: vec![
@@ -697,10 +697,10 @@ mod tests {
                 ],
             }
         );
-        let default = parse(&format!("{HEAD}[[triggers]]\ntype='manual'\n[[actions]]\ntype='referencing_entities_update'\nrelationship_attribute='license'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        let default = parse(&format!("{HEAD}[[triggers]]\ntype='manual'\n[[actions]]\ntype='referencing_records_update'\nrelationship_attribute='license'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
         assert!(matches!(
             default.actions[0],
-            Action::ReferencingEntitiesUpdate {
+            Action::ReferencingRecordsUpdate {
                 max_targets: DEFAULT_REFERENCING_TARGETS,
                 ..
             }
@@ -710,12 +710,12 @@ mod tests {
             "max_targets=501\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']",
             "actions=[]",
             "[[actions.actions]]\ntype='attribute_write'\nattribute_code='status'\nevent_field='facts.0.after_value'",
-            "[[actions.actions]]\ntype='referencing_entities_update'\nrelationship_attribute='x'\n[[actions.actions.actions]]\ntype='system_tags_add'\ntags=['x']",
+            "[[actions.actions]]\ntype='referencing_records_update'\nrelationship_attribute='x'\n[[actions.actions.actions]]\ntype='system_tags_add'\ntags=['x']",
             "unknown=1\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']",
         ] {
-            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='entity.updated.v1'\n[[actions]]\ntype='referencing_entities_update'\nrelationship_attribute='license'\n{invalid}")).is_err(), "{invalid}");
+            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\n[[actions]]\ntype='referencing_records_update'\nrelationship_attribute='license'\n{invalid}")).is_err(), "{invalid}");
         }
-        let compiled = compile(&format!("{HEAD}[[triggers]]\ntype='manual'\n[[actions]]\ntype='referencing_entities_update'\nrelationship_attribute='license'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        let compiled = compile(&format!("{HEAD}[[triggers]]\ntype='manual'\n[[actions]]\ntype='referencing_records_update'\nrelationship_attribute='license'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
         let round_trip: CompiledWorkflow =
             serde_json::from_value(serde_json::to_value(&compiled).unwrap()).unwrap();
         assert_eq!(round_trip, compiled);

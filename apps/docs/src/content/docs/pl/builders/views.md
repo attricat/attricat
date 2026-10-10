@@ -83,12 +83,12 @@ Układ szczegółów steruje zarówno wyświetlaniem, jak i edycją. Na stronie 
 
 ## Nagłówek rekordu
 
-Aby nadać stronie szczegółów właściwy tytuł, umieść pola w `stack` z komponentem `catalog.entity_heading`. W identyfikatorach komponentów i miejsc osadzenia rozszerzeń, takich jak ten, rekordy występują pod nazwą `entity`. Jego pierwszy element podrzędny musi być polem skalarnym i staje się nagłówkiem strony. Kolejne elementy, tekst lub pola skalarne, tworzą podtytuł.
+Aby nadać stronie szczegółów właściwy tytuł, umieść pola w `stack` z komponentem `catalog.record_heading`. Jego pierwszy element podrzędny musi być polem skalarnym i staje się nagłówkiem strony. Kolejne elementy, tekst lub pola skalarne, tworzą podtytuł.
 
 ```toml
 [[views.detail.children]]
 type = "stack"
-component = { id = "catalog.entity_heading", version = 1 }
+component = { id = "catalog.record_heading", version = 1 }
 children = [
   { type = "field", field = "title" },
   { type = "field", field = "sku" },
@@ -197,7 +197,7 @@ renderer = { id = "catalog.url_display", version = 1 }
 
 Wartości, które nie pasują do kontrolki, np. starsze dane, nadal są widoczne jako zwykły tekst bez linku i próbki. Pola bez komponentu korzystają ze standardowego edytora dla swojego typu wartości.
 
-Kontrolki edycji walidują wartości tylko w aplikacji internetowej. Aby odrzucać błędne wartości również z API, CLI i importów, dodaj `value_schema` lub `entity_schema`; zobacz [Walidacja](/pl/builders/validation/).
+Kontrolki edycji walidują wartości tylko w aplikacji internetowej. Aby odrzucać błędne wartości również z API, CLI i importów, dodaj `value_schema` lub `record_schema`; zobacz [Walidacja](/pl/builders/validation/).
 
 ## Komponenty
 
@@ -212,9 +212,9 @@ Administratorzy obszaru roboczego ustawiają domyślną kolejność elementów r
 type = "extension_layout"
 version = 1
 
-[views.extension_layout.outlets.entity_preview_panel]
+[views.extension_layout.outlets.record_preview_panel]
 order = ["acme.inventory:summary", "acme.pricing:margin"]
 hidden = ["acme.legacy:panel"]
 ```
 
-Miejsca osadzenia, które można tu ustawić, to `entity_preview_panel`, `entity_attribute_decoration` i `entity_action`. Układ nigdy nie nadaje uprawnień ani nie włącza rozszerzenia. Wpisy dla brakujących lub wyłączonych rozszerzeń są zachowywane i ignorowane, więc układ przetrwa wyłączenie i ponowne włączenie rozszerzenia.
+Miejsca osadzenia, które można tu ustawić, to `record_preview_panel`, `record_attribute_decoration` i `record_action`. Układ nigdy nie nadaje uprawnień ani nie włącza rozszerzenia. Wpisy dla brakujących lub wyłączonych rozszerzeń są zachowywane i ignorowane, więc układ przetrwa wyłączenie i ponowne włączenie rozszerzenia.

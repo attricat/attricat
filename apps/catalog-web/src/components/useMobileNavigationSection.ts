@@ -6,7 +6,7 @@ export type MobileNavigationSection =
   'primary' | 'explore' | 'extensions' | 'manage';
 
 export const mobileSectionTitleKeys = {
-  explore: 'navigation.entityExplorer',
+  explore: 'navigation.recordExplorer',
   extensions: 'navigation.apps',
   manage: 'navigation.manage',
 } as const;

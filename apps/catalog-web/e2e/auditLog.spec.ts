@@ -1,36 +1,36 @@
 import { expect, test } from '@playwright/test';
 import {
   commitField,
-  createEntity,
-  createEntityBlueprint,
+  createRecord,
+  createRecordBlueprint,
   scalar,
   suffix,
 } from './helpers';
 
 test('records a browser edit and filters the audit log', async ({ page }) => {
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     `audited_${suffix()}`,
     'Audited product',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"',
   );
-  const entity = await createEntity(blueprint, [scalar('title', 'Before')]);
+  const record = await createRecord(blueprint, [scalar('title', 'Before')]);
 
-  await page.goto(`/entities/${entity.id}`);
+  await page.goto(`/records/${record.id}`);
   const title = page.getByLabel('title');
   await title.fill('After audit');
-  await commitField(page, entity.id, title);
+  await commitField(page, record.id, title);
 
   await page.goto('/manage/audit-log');
   const update = page
     .getByRole('row')
-    .filter({ hasText: `id: ${entity.id}, type: entity` });
+    .filter({ hasText: `id: ${record.id}, type: record` });
   await expect(update).toContainText('owner@example.test');
-  await expect(update).toContainText('catalog.v1.entities.entity_id.update');
+  await expect(update).toContainText('catalog.v1.records.record_id.update');
   await expect(update).toContainText('success');
 
   await update.getByRole('button', { name: /^View details for/ }).click();
   const drawer = page.getByRole('dialog', { name: 'Audit event' });
-  await expect(drawer).toContainText(entity.id);
+  await expect(drawer).toContainText(record.id);
   await expect(drawer).toContainText('Request ID');
   await page.keyboard.press('Escape');
   await expect(drawer).toBeHidden();
@@ -42,6 +42,6 @@ test('records a browser edit and filters the audit log', async ({ page }) => {
     page.getByRole('row').filter({ hasText: 'type: blueprint' }).first(),
   ).toBeVisible();
   await expect(
-    page.getByRole('row').filter({ hasText: 'type: entity' }),
+    page.getByRole('row').filter({ hasText: 'type: record' }),
   ).toHaveCount(0);
 });

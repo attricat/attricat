@@ -17,7 +17,7 @@ const PRODUCT_BLUEPRINT: &[u8] = br#"
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -36,7 +36,7 @@ const CATEGORY_BLUEPRINT: &[u8] = br#"
 format_version = 1
 code = "category"
 name = "Category"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -263,7 +263,7 @@ fn svg_assets_reject_active_remote_and_scriptable_content() {
         br#"<svg xmlns="http://www.w3.org/2000/svg"><use href="https://example.test/a.svg#x"/></svg>"#,
         br#"<svg xmlns="http://www.w3.org/2000/svg"><rect fill="url(https://example.test/x)"/></svg>"#,
         br#"<svg xmlns="http://www.w3.org/2000/svg"><animate attributeName="x"/></svg>"#,
-        br#"<!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><svg xmlns="http://www.w3.org/2000/svg"/>"#,
+        br#"<!DOCTYPE svg [<!RECORD xxe SYSTEM "file:///etc/passwd">]><svg xmlns="http://www.w3.org/2000/svg"/>"#,
     ] {
         let manifest = asset_manifest(svg, "logo", "image/svg+xml");
         assert_invalid(
@@ -623,7 +623,7 @@ fn validates_and_plans_extension_layout_item_level_merge() {
         extension_layout,
         extension_layout_valid: true,
         role_codes: BTreeSet::new(),
-        published_entity_codes: BTreeSet::new(),
+        published_record_codes: BTreeSet::new(),
         seed: Default::default(),
     };
     let action_for = |current| {
@@ -658,7 +658,7 @@ fn validates_and_plans_extension_layout_item_level_merge() {
     assert_eq!(
         action_for(json!({"version":1,"outlets":{
             "navigation":{"order":[],"hidden":[],"promoted":["acme.shop:nav"]},
-            "entity_action":{"order":["acme.shop:nav"],"hidden":[]}
+            "record_action":{"order":["acme.shop:nav"],"hidden":[]}
         }}))
         .action,
         PlanActionKind::Conflict
@@ -682,7 +682,7 @@ fn validates_and_plans_extension_layout_item_level_merge() {
                 extension_layout: json!({"version":1,"outlets":{}}),
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
-                published_entity_codes: BTreeSet::new(),
+                published_record_codes: BTreeSet::new(),
                 seed: Default::default(),
             },
         )
@@ -699,7 +699,7 @@ fn validates_and_plans_extension_layout_item_level_merge() {
     let mut wrong_outlet = installed.clone();
     wrong_outlet
         .contributions
-        .insert("acme.shop:nav".to_owned(), "entity_action".to_owned());
+        .insert("acme.shop:nav".to_owned(), "record_action".to_owned());
     let mut quarantined = installed.clone();
     quarantined.state = "quarantined".to_owned();
     let mut policy_incompatible = installed.clone();
@@ -739,7 +739,7 @@ fn validates_and_plans_extension_layout_item_level_merge() {
             extension_layout: json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
             seed: Default::default(),
         },
     )
@@ -765,7 +765,7 @@ fn blueprint_layout_skips_optional_unavailable_contributions_and_blocks_required
 [views.extension_layout]
 type = "extension_layout"
 version = 1
-[views.extension_layout.outlets.entity_action]
+[views.extension_layout.outlets.record_action]
 order = ["acme.shop:action"]
 hidden = []
 "#
@@ -803,7 +803,7 @@ hidden = []
                 extension_layout: json!({"version":1,"outlets":{}}),
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
-                published_entity_codes: BTreeSet::new(),
+                published_record_codes: BTreeSet::new(),
                 seed: Default::default(),
             },
         )
@@ -827,7 +827,7 @@ hidden = []
                 BTreeMap::new(),
                 BTreeMap::from([(
                     "acme.shop:action".to_owned(),
-                    "entity_preview_panel".to_owned(),
+                    "record_preview_panel".to_owned(),
                 )]),
             ] {
                 let mapped = build_solution_pack_plan(
@@ -844,7 +844,7 @@ hidden = []
                                 id: uuid::Uuid::from_u128(100),
                                 code: "shop_product".to_owned(),
                                 version: 1,
-                                kind: "entity".to_owned(),
+                                kind: "record".to_owned(),
                                 canonical_definition_hash: "0".repeat(64),
                                 definition_hash: "0".repeat(64),
                             },
@@ -866,7 +866,7 @@ hidden = []
                         extension_layout: json!({"version":1,"outlets":{}}),
                         extension_layout_valid: true,
                         role_codes: BTreeSet::new(),
-                        published_entity_codes: BTreeSet::from(["shop_product".to_owned()]),
+                        published_record_codes: BTreeSet::from(["shop_product".to_owned()]),
                         seed: Default::default(),
                     },
                 )
@@ -894,17 +894,17 @@ hidden = []
 fn workspace_layout_accepts_every_manifest_outlet_and_both_primary_lists() {
     for outlet in [
         "navigation",
-        "entity_preview_panel",
+        "record_preview_panel",
         "blueprint_attribute_configuration",
-        "entity_attribute_decoration",
-        "entity_action",
+        "record_attribute_decoration",
+        "record_action",
         "explorer_row_action",
         "explorer_table_cell",
         "blueprint_detail_panel",
         "explorer_action",
         "explorer_bulk_action",
-        "entity_header_action",
-        "entity_attribute_panel",
+        "record_header_action",
+        "record_attribute_panel",
         "blueprint_panel",
         "blueprint_publish_check",
         "file_panel",
@@ -939,10 +939,10 @@ fn blueprint_layout_contribution_evidence_order_is_deterministic() {
 [views.extension_layout]
 type = "extension_layout"
 version = 1
-[views.extension_layout.outlets.entity_preview_panel]
+[views.extension_layout.outlets.record_preview_panel]
 order = ["acme.shop:preview"]
 hidden = []
-[views.extension_layout.outlets.entity_action]
+[views.extension_layout.outlets.record_action]
 order = ["acme.shop:z_action"]
 hidden = ["acme.shop:a_action"]
 "#
@@ -962,9 +962,9 @@ hidden = ["acme.shop:a_action"]
     files[0] = (files[0].0, &blueprint);
     let archive = archive(&manifest, &files);
     let expected = vec![
-        ("entity_action", "acme.shop:a_action"),
-        ("entity_action", "acme.shop:z_action"),
-        ("entity_preview_panel", "acme.shop:preview"),
+        ("record_action", "acme.shop:a_action"),
+        ("record_action", "acme.shop:z_action"),
+        ("record_preview_panel", "acme.shop:preview"),
     ];
     for _ in 0..20 {
         let pack = ValidatedSolutionPack::from_tar_zst(&archive).unwrap();
@@ -982,7 +982,7 @@ hidden = ["acme.shop:a_action"]
 #[test]
 fn rejects_invalid_extension_layout_contract() {
     for invalid in [
-        br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"entity_action","promoted":true,"required":true}]}"#.as_slice(),
+        br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"record_action","promoted":true,"required":true}]}"#.as_slice(),
         br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"navigation","hidden":true,"promoted":true,"required":true}]}"#.as_slice(),
         br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"navigation","required":true,"unknown":true}]}"#.as_slice(),
         br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"navigation","required":true},{"contribution":"acme.shop:nav","outlet":"navigation","required":true}]}"#.as_slice(),
@@ -995,7 +995,7 @@ fn rejects_invalid_extension_layout_contract() {
         "entries": (0..=MAX_SOLUTION_PACK_EXTENSION_LAYOUT_ENTRIES)
             .map(|index| json!({
                 "contribution": format!("acme.shop:item_{index}"),
-                "outlet": "entity_action",
+                "outlet": "record_action",
                 "required": true,
             }))
             .collect::<Vec<_>>(),
@@ -1021,7 +1021,7 @@ fn planner_appends_satisfies_and_conflicts_explore_navigation() {
         extension_layout: serde_json::json!({"version":1,"outlets":{}}),
         extension_layout_valid: true,
         role_codes: BTreeSet::from(["editor".to_owned(), "viewer".to_owned()]),
-        published_entity_codes: BTreeSet::from(["ecom_product".to_owned()]),
+        published_record_codes: BTreeSet::from(["ecom_product".to_owned()]),
         seed: Default::default(),
     };
     let appended = build_solution_pack_plan(
@@ -1093,7 +1093,7 @@ fn validates_lexicon_and_plans_an_idempotent_append() {
             extension_layout: serde_json::json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
             seed: Default::default(),
         },
     )
@@ -1161,7 +1161,7 @@ fn planner_blocks_required_navigation_and_skips_optional_unmet_navigation() {
                 extension_layout: serde_json::json!({"version":1,"outlets":{}}),
                 extension_layout_valid: true,
                 role_codes: BTreeSet::from(["editor".to_owned(), "viewer".to_owned()]),
-                published_entity_codes: BTreeSet::new(),
+                published_record_codes: BTreeSet::new(),
                 seed: Default::default(),
             },
         )
@@ -1198,7 +1198,7 @@ fn planner_blocks_required_navigation_and_skips_optional_unmet_navigation() {
             extension_layout: serde_json::json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
             seed: Default::default(),
         },
     )
@@ -1449,8 +1449,8 @@ fn published_sample_schema_allows_only_the_exact_native_time_object() {
             "format_version":1,
             "kind":"solution_pack_sample_data",
             "classification":"synthetic",
-            "entities":[{
-                "key":"sample-entities/item",
+            "records":[{
+                "key":"sample-records/item",
                 "blueprint":"blueprints/product",
                 "facts":[{"attribute":"blueprints/product/attributes/available_at","value":value}],
                 "relationships":[]
@@ -1997,7 +1997,7 @@ fn validates_blueprint_content_and_logical_reference_closure() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 unknown = true
 [[attributes]]
 code = "name"
@@ -2028,7 +2028,7 @@ fn rejects_blueprints_that_fail_ordinary_compiler_validation() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 [[attributes]]
 code = "name"
 value_type = "string"
@@ -2059,7 +2059,7 @@ component = { id = "INVALID", version = 1 }
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 includes = [{ alias = "base", key = "blueprints/category" }]
 [views.dropdown_option]
 type = "dropdown_option"
@@ -2126,7 +2126,7 @@ fn rejects_blueprints_that_exceed_structural_complexity_limits() {
         r#"format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 includes = [{includes}]
 [views.dropdown_option]
 type = "dropdown_option"
@@ -2142,7 +2142,7 @@ value_type = "string"
     let mut excessive_attributes = br#"format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["field_0"]
@@ -2164,7 +2164,7 @@ fields = ["field_0"]
         r#"format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 includes = [{includes}]
 [views.dropdown_option]
 type = "dropdown_option"
@@ -2278,14 +2278,14 @@ fn assert_blueprint_error(blueprint: &[u8], expected: &str) {
 #[test]
 fn requires_portable_include_keys_instead_of_native_revisions() {
     let native_include = PRODUCT_BLUEPRINT.replace_ascii(
-        b"kind = \"entity\"",
-        b"kind = \"entity\"\nincludes = [{ alias = \"base\", code = \"category\", version = 1 }]",
+        b"kind = \"record\"",
+        b"kind = \"record\"\nincludes = [{ alias = \"base\", code = \"category\", version = 1 }]",
     );
     assert_blueprint_error(&native_include, "native code or revision fields");
 
     let mixed_include = PRODUCT_BLUEPRINT.replace_ascii(
-        b"kind = \"entity\"",
-        b"kind = \"entity\"\nincludes = [{ alias = \"base\", key = \"blueprints/category\", version = 1 }]",
+        b"kind = \"record\"",
+        b"kind = \"record\"\nincludes = [{ alias = \"base\", key = \"blueprints/category\", version = 1 }]",
     );
     assert_blueprint_error(&mixed_include, "native code or revision fields");
 
@@ -2387,7 +2387,7 @@ fn planner_rewrites_portable_references_and_orders_dependencies() {
             extension_layout: serde_json::json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
             seed: Default::default(),
         },
     )
@@ -2460,7 +2460,7 @@ fn planner_rewrites_relationship_target_lists() {
             extension_layout: serde_json::json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
             seed: Default::default(),
         },
     )
@@ -2484,10 +2484,10 @@ fn planner_rewrites_relationship_target_lists() {
 
 #[test]
 fn planner_rewrites_portable_includes_to_mapped_revision_one() {
-    let entity = br#"format_version = 1
+    let record = br#"format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 includes = [{ alias = "base", key = "blueprints/base" }]
 [views.dropdown_option]
 type = "dropdown_option"
@@ -2512,12 +2512,12 @@ value_type = "string"
         "description": "Include rewrite",
         "catalog": {"host_api": "^1.0"},
         "resources": {"blueprints": [
-            resource("blueprints/product", "blueprints/product.toml", entity),
+            resource("blueprints/product", "blueprints/product.toml", record),
             resource("blueprints/base", "blueprints/base.toml", mixin)
         ]}
     });
     let files = [
-        ("blueprints/product.toml", entity.as_slice()),
+        ("blueprints/product.toml", record.as_slice()),
         ("blueprints/base.toml", mixin.as_slice()),
     ];
     let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
@@ -2536,7 +2536,7 @@ value_type = "string"
             extension_layout: serde_json::json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
             seed: Default::default(),
         },
     )
@@ -2578,7 +2578,7 @@ value_type = "string"
             extension_layout: serde_json::json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
             seed: Default::default(),
         },
     )
@@ -2620,7 +2620,7 @@ value_type = "string"
             extension_layout: serde_json::json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
             seed: Default::default(),
         },
     )
@@ -2693,7 +2693,7 @@ fn fully_mapped_resource_does_not_validate_an_unused_generated_code() {
         r#"format_version = 1
 code = "{suffix}"
 name = "Portable"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -2738,7 +2738,7 @@ value_type = "string"
                     id: uuid::Uuid::from_u128(102),
                     code: "shared".to_owned(),
                     version: 3,
-                    kind: "entity".to_owned(),
+                    kind: "record".to_owned(),
                     canonical_definition_hash: catalog_blueprint::raw_hash(&definition),
                     definition_hash: catalog_blueprint::raw_hash(&definition),
                 },
@@ -2749,7 +2749,7 @@ value_type = "string"
             extension_layout: json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::from(["shared".to_owned()]),
+            published_record_codes: BTreeSet::from(["shared".to_owned()]),
             seed: Default::default(),
         },
     )
@@ -2786,7 +2786,7 @@ fn planner_rejects_unsafe_prefixes_and_reports_collisions() {
             extension_layout: serde_json::json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
             seed: Default::default(),
         },
     )
@@ -2821,7 +2821,7 @@ fn planner_blocks_required_resources_when_optional_dependencies_are_skipped() {
             extension_layout: serde_json::json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
             seed: Default::default(),
         },
     )
@@ -2863,7 +2863,7 @@ fn planner_blocks_required_resources_when_optional_dependencies_are_skipped() {
             extension_layout: json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
             seed: Default::default(),
         },
     )
@@ -2892,7 +2892,7 @@ fn planner_blocks_required_resources_when_optional_dependencies_are_skipped() {
                     id: uuid::Uuid::from_u128(99),
                     code: "ecom_product".to_owned(),
                     version: 1,
-                    kind: "entity".to_owned(),
+                    kind: "record".to_owned(),
                     canonical_definition_hash: catalog_blueprint::raw_hash(product_definition),
                     definition_hash: catalog_blueprint::raw_hash(product_definition),
                 },
@@ -2903,7 +2903,7 @@ fn planner_blocks_required_resources_when_optional_dependencies_are_skipped() {
             extension_layout: json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::from(["ecom_product".to_owned()]),
+            published_record_codes: BTreeSet::from(["ecom_product".to_owned()]),
             seed: Default::default(),
         },
     )
@@ -2951,7 +2951,7 @@ value_type = "string"
             br#"format_version = 1
 code = "main"
 name = "Main"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -2967,7 +2967,7 @@ target_blueprint = "blueprints/dep"
             br#"format_version = 1
 code = "dep"
 name = "Dependency"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -2976,14 +2976,14 @@ code = "name"
 value_type = "string"
 "#
             .as_slice(),
-            "entity",
+            "record",
         ),
         (
             "view",
             br#"format_version = 1
 code = "main"
 name = "Main"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -3008,7 +3008,7 @@ value_type = "string"
             br#"format_version = 1
 code = "dep"
 name = "Dependency"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -3021,7 +3021,7 @@ value_type = "relationship"
 target_blueprint = "blueprints/main"
 "#
             .as_slice(),
-            "entity",
+            "record",
         ),
     ];
     for (case, main, dep, main_kind) in cases {
@@ -3056,7 +3056,7 @@ target_blueprint = "blueprints/main"
             extension_layout: json!({"version":1,"outlets":{}}),
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
-            published_entity_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
             seed: Default::default(),
         };
         let baseline = build_solution_pack_plan(
@@ -3103,7 +3103,7 @@ target_blueprint = "blueprints/main"
                 extension_layout: json!({"version":1,"outlets":{}}),
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
-                published_entity_codes: BTreeSet::from(["deps_main".to_owned()]),
+                published_record_codes: BTreeSet::from(["deps_main".to_owned()]),
                 seed: Default::default(),
             },
         )
@@ -3127,7 +3127,7 @@ fn planner_blocks_draft_relationship_paths_and_orders_publish_targets() {
     let product = br#"format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -3145,7 +3145,7 @@ target_blueprint = "blueprints/category"
     let category = br#"format_version = 1
 code = "category"
 name = "Category"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -3181,7 +3181,7 @@ value_type = "string"
         extension_layout: serde_json::json!({"version":1,"outlets":{}}),
         extension_layout_valid: true,
         role_codes: BTreeSet::new(),
-        published_entity_codes: BTreeSet::new(),
+        published_record_codes: BTreeSet::new(),
         seed: Default::default(),
     };
 
@@ -3217,7 +3217,7 @@ value_type = "string"
     let cyclic_category = br#"format_version = 1
 code = "category"
 name = "Category"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -3281,7 +3281,7 @@ target_blueprint = "blueprints/product"
         extension_layout: json!({"version":1,"outlets":{}}),
         extension_layout_valid: true,
         role_codes: BTreeSet::new(),
-        published_entity_codes: BTreeSet::from([
+        published_record_codes: BTreeSet::from([
             "existing_category".to_owned(),
             "existing_product".to_owned(),
         ]),
@@ -3306,7 +3306,7 @@ target_blueprint = "blueprints/product"
                 id: uuid::Uuid::from_u128(id),
                 code: code.to_owned(),
                 version,
-                kind: "entity".to_owned(),
+                kind: "record".to_owned(),
                 canonical_definition_hash: catalog_blueprint::raw_hash(
                     payload["definition"].as_str().unwrap(),
                 ),
@@ -3347,7 +3347,7 @@ fn planner_uses_workspace_wide_codes_and_deterministic_target_ids() {
         extension_layout: serde_json::json!({"version":1,"outlets":{}}),
         extension_layout_valid: true,
         role_codes: BTreeSet::new(),
-        published_entity_codes: BTreeSet::new(),
+        published_record_codes: BTreeSet::new(),
         seed: Default::default(),
     };
     let first =
@@ -3393,8 +3393,8 @@ fn planner_uses_workspace_wide_codes_and_deterministic_target_ids() {
 #[test]
 fn rejects_unsafe_workspace_dependent_blueprint_constructs_and_allows_layouts() {
     let role = PRODUCT_BLUEPRINT.replace_ascii(
-        b"kind = \"entity\"",
-        b"kind = \"entity\"\n[publication]\nretain_on_edit_roles = [\"editor\"]",
+        b"kind = \"record\"",
+        b"kind = \"record\"\n[publication]\nretain_on_edit_roles = [\"editor\"]",
     );
     assert_blueprint_error(&role, "cannot declare workspace roles");
 
@@ -3453,7 +3453,7 @@ const DOCUMENT_BLUEPRINT: &[u8] = br#"
 format_version = 1
 code = "document"
 name = "Document"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -3563,8 +3563,8 @@ fn predicates_resolve_and_rewrite_pack_blueprint_codes() {
         Box::leak(rule.into_boxed_slice()),
     );
     let product = String::from_utf8(PRODUCT_BLUEPRINT.to_vec()).unwrap().replace(
-        "kind = \"entity\"\n",
-        "kind = \"entity\"\nentity_schema = '{\"type\":\"object\",\"x-attricat-checks\":[{\"code\":\"in_category\",\"predicate\":{\"type\":\"referenced_by\",\"blueprint_code\":\"category\",\"relationship_code\":\"products\",\"min\":1}}]}'\n",
+        "kind = \"record\"\n",
+        "kind = \"record\"\nrecord_schema = '{\"type\":\"object\",\"x-attricat-checks\":[{\"code\":\"in_category\",\"predicate\":{\"type\":\"referenced_by\",\"blueprint_code\":\"category\",\"relationship_code\":\"products\",\"min\":1}}]}'\n",
     );
     let product: &'static [u8] = Box::leak(product.into_bytes().into_boxed_slice());
     replace_seed_file(
@@ -3623,7 +3623,7 @@ fn channels_require_rules_by_physical_code_and_enforcing_rules_on_mapped_bluepri
     let (mut manifest, mut files) = seed_manifest();
     let context = String::from_utf8(PL_CONTEXT.to_vec()).unwrap().replace(
         "{\"enabled\":true}",
-        "{\"enabled\":true,\"required_rules\":[\"rules/name-required\"],\"require_valid_entity\":true}",
+        "{\"enabled\":true,\"required_rules\":[\"rules/name-required\"],\"require_valid_record\":true}",
     );
     replace_seed_file(
         &mut manifest,
@@ -3658,8 +3658,8 @@ fn channels_require_rules_by_physical_code_and_enforcing_rules_on_mapped_bluepri
         channel["required_rule_codes"],
         json!(["ecom_name-required"])
     );
-    assert_eq!(channel["require_valid_entity"], json!(true));
-    // A newly created blueprint has no entities, so the rule is enabled.
+    assert_eq!(channel["require_valid_record"], json!(true));
+    // A newly created blueprint has no records, so the rule is enabled.
     let rule = action(&plan, "rules/name-required");
     assert_eq!(
         rule.normalized_payload.as_ref().unwrap()["enabled"],
@@ -3671,7 +3671,7 @@ fn channels_require_rules_by_physical_code_and_enforcing_rules_on_mapped_bluepri
         id: uuid::Uuid::from_u128(9),
         code: "shared_product".into(),
         version: 2,
-        kind: "entity".into(),
+        kind: "record".into(),
         canonical_definition_hash: hash,
         definition_hash: "0".repeat(64),
     };
@@ -3747,7 +3747,7 @@ fn seed_workspace(seed: SeedWorkspaceSnapshot) -> PlanningWorkspaceSnapshot {
         extension_layout: json!({"version":1,"outlets":{}}),
         extension_layout_valid: true,
         role_codes: BTreeSet::new(),
-        published_entity_codes: BTreeSet::new(),
+        published_record_codes: BTreeSet::new(),
         seed,
     }
 }
@@ -3814,7 +3814,7 @@ fn seed_resources_plan_with_physical_references_in_dependency_order() {
             "context_code": "ecom_pl",
             "enabled": true,
             "required_rule_codes": [],
-            "require_valid_entity": false,
+            "require_valid_record": false,
         }))
     );
 
@@ -3906,7 +3906,7 @@ fn seed_resources_respect_publication_mapping_and_existing_codes() {
                             crate::solution_pack_seeds::ExistingPublicationChannel {
                                 enabled,
                                 required_rule_codes: Vec::new(),
-                                require_valid_entity: false,
+                                require_valid_record: false,
                             }
                         }),
                     },
@@ -4003,7 +4003,7 @@ fn invalid_seed_resources_are_rejected_offline() {
                 .unwrap()
                 .replace(
                     "type = \"manual\"",
-                    "type = \"schedule\"\ncron = \"0 0 * * * *\"\ntimezone = \"UTC\"\ntarget_entity_id = \"00000000-0000-0000-0000-000000000001\"",
+                    "type = \"schedule\"\ncron = \"0 0 * * * *\"\ntimezone = \"UTC\"\ntarget_record_id = \"00000000-0000-0000-0000-000000000001\"",
                 )
                 .into_bytes(),
             "schedule trigger",
@@ -4027,7 +4027,7 @@ fn invalid_seed_resources_are_rejected_offline() {
                     "\"selectedIds\":[\"00000000-0000-0000-0000-000000000001\"]",
                 )
                 .into_bytes(),
-            "selected entity IDs",
+            "selected record IDs",
         ),
         (
             "saved_searches",
@@ -4044,7 +4044,7 @@ fn invalid_seed_resources_are_rejected_offline() {
             rule_with_predicate(
                 "type = \"referenced_by\"\nblueprint_code = \"missing\"\nrelationship_code = \"products\"\nmin = 1",
             ),
-            "not a pack entity blueprint",
+            "not a pack record blueprint",
         ),
         (
             "rules",
@@ -4077,7 +4077,7 @@ fn invalid_seed_resources_are_rejected_offline() {
                 .unwrap()
                 .replace(
                     "[[actions]]\ntype = \"system_tags_add\"\ntags = [\"reviewed\"]",
-                    "[[actions]]\ntype = \"referencing_entities_update\"\nrelationship_attribute = \"categories\"\nmax_targets = 5\n[[actions.actions]]\ntype = \"attribute_write\"\nattribute_code = \"products\"\nfixed = \"x\"",
+                    "[[actions]]\ntype = \"referencing_records_update\"\nrelationship_attribute = \"categories\"\nmax_targets = 5\n[[actions.actions]]\ntype = \"attribute_write\"\nattribute_code = \"products\"\nfixed = \"x\"",
                 )
                 .into_bytes(),
             "writes attribute 'products'",
@@ -4089,7 +4089,7 @@ fn invalid_seed_resources_are_rejected_offline() {
                 .unwrap()
                 .replace(
                     "[[actions]]\ntype = \"system_tags_add\"\ntags = [\"reviewed\"]",
-                    "[[actions]]\ntype = \"referencing_entities_update\"\nrelationship_attribute = \"name\"\nmax_targets = 5\n[[actions.actions]]\ntype = \"system_tags_add\"\ntags = [\"x\"]",
+                    "[[actions]]\ntype = \"referencing_records_update\"\nrelationship_attribute = \"name\"\nmax_targets = 5\n[[actions.actions]]\ntype = \"system_tags_add\"\ntags = [\"x\"]",
                 )
                 .into_bytes(),
             "follows relationship 'name'",
@@ -4282,7 +4282,7 @@ fn prerequisites_are_declared_and_reused_blueprints_must_match_exactly() {
         id: uuid::Uuid::from_u128(9),
         code: "base_category".into(),
         version: 3,
-        kind: "entity".into(),
+        kind: "record".into(),
         canonical_definition_hash: hash,
         definition_hash: "0".repeat(64),
     };
@@ -4354,12 +4354,12 @@ fn sample_seed_archive(sample: &[u8], file_paths: &[(&'static str, &'static [u8]
     archive(&manifest, &files)
 }
 
-fn document_sample(entity: Value) -> Vec<u8> {
+fn document_sample(record: Value) -> Vec<u8> {
     serde_json::to_vec(&json!({
         "format_version": 1,
         "kind": "solution_pack_sample_data",
         "classification": "synthetic",
-        "entities": [entity],
+        "records": [record],
     }))
     .unwrap()
 }
@@ -4376,8 +4376,8 @@ fn samples_cannot_share_a_unique_key() {
             "format_version": 1,
             "kind": "solution_pack_sample_data",
             "classification": "synthetic",
-            "entities": titles.iter().enumerate().map(|(index, title)| json!({
-                "key": format!("sample-entities/doc-{index}"),
+            "records": titles.iter().enumerate().map(|(index, title)| json!({
+                "key": format!("sample-records/doc-{index}"),
                 "blueprint": "blueprints/document",
                 "facts": [{"attribute": "blueprints/document/attributes/title", "value": title}],
                 "relationships": []
@@ -4421,7 +4421,7 @@ fn samples_cannot_set_status_values() {
     );
     let statused: &'static [u8] = Box::leak(statused.into_bytes().into_boxed_slice());
     let sample = document_sample(json!({
-        "key": "sample-entities/doc",
+        "key": "sample-records/doc",
         "blueprint": "blueprints/document",
         "facts": [
             {"attribute": "blueprints/document/attributes/title", "value": "Spec"},
@@ -4457,7 +4457,7 @@ fn samples_cannot_set_status_values() {
 #[test]
 fn samples_attach_bundled_files_and_set_contextual_values() {
     let valid = json!({
-        "key": "sample-entities/spec",
+        "key": "sample-records/spec",
         "blueprint": "blueprints/document",
         "facts": [
             {"attribute": "blueprints/document/attributes/title", "value": "Sample specification"},
@@ -4488,7 +4488,7 @@ fn samples_attach_bundled_files_and_set_contextual_values() {
     );
 
     let unchanged = document_sample(json!({
-        "key": "sample-entities/plain",
+        "key": "sample-records/plain",
         "blueprint": "blueprints/document",
         "facts": [{"attribute": "blueprints/document/attributes/title", "value": "Plain"}],
         "relationships": []
@@ -4508,9 +4508,9 @@ fn samples_attach_bundled_files_and_set_contextual_values() {
     );
 
     let mutate = |pointer: &str, value: Value| {
-        let mut entity = valid.clone();
-        *entity.pointer_mut(pointer).unwrap() = value;
-        document_sample(entity)
+        let mut record = valid.clone();
+        *record.pointer_mut(pointer).unwrap() = value;
+        document_sample(record)
     };
     for (sample, files, expected) in [
         (
@@ -4559,7 +4559,7 @@ fn samples_attach_bundled_files_and_set_contextual_values() {
                 ("sample-data/files/spec.pdf", PDF_BYTES),
                 ("sample-data/files/unused.pdf", PDF_BYTES),
             ],
-            "not attached by any sample entity",
+            "not attached by any sample record",
         ),
     ] {
         let Err(error) = ValidatedSolutionPack::from_tar_zst(&sample_seed_archive(&sample, &files))
@@ -4645,7 +4645,7 @@ fn published_seed_schemas_accept_the_seed_fixtures() {
     }
     let mut gated: Value = serde_json::from_slice(PL_CONTEXT).unwrap();
     gated["publication_channel"]["required_rules"] = json!(["rules/name-required"]);
-    gated["publication_channel"]["require_valid_entity"] = json!(true);
+    gated["publication_channel"]["require_valid_record"] = json!(true);
     assert!(accepts(&context, &gated));
     gated["publication_channel"]["required_rules"] = json!(["name-required"]);
     assert!(!accepts(&context, &gated));
@@ -4672,8 +4672,8 @@ fn published_seed_schemas_accept_the_seed_fixtures() {
         "format_version": 1,
         "kind": "solution_pack_sample_data",
         "classification": "synthetic",
-        "entities": [{
-            "key": "sample-entities/spec",
+        "records": [{
+            "key": "sample-records/spec",
             "blueprint": "blueprints/document",
             "facts": [{"attribute": "blueprints/document/attributes/summary", "value": "EU", "context": "contexts/eu"}],
             "relationships": [],
@@ -4686,7 +4686,7 @@ fn published_seed_schemas_accept_the_seed_fixtures() {
     });
     assert!(accepts(&sample, &declaration));
     let mut unsupported = declaration;
-    unsupported["entities"][0]["files"][0]["files"][0]["media_type"] = json!("image/svg+xml");
+    unsupported["records"][0]["files"][0]["files"][0]["media_type"] = json!("image/svg+xml");
     assert!(!accepts(&sample, &unsupported));
 }
 
@@ -4695,7 +4695,7 @@ fn publication_channel_required_rules_compare_as_a_set() {
     let channel = |codes: &[&str]| crate::solution_pack_seeds::ExistingPublicationChannel {
         enabled: true,
         required_rule_codes: codes.iter().map(|code| (*code).to_owned()).collect(),
-        require_valid_entity: false,
+        require_valid_record: false,
     };
     assert!(channel(&["a", "b"]).same_settings(&channel(&["b", "a"])));
     assert!(channel(&["a", "b"]).same_settings(&channel(&["b", "a", "b"])));
@@ -4801,7 +4801,7 @@ fn saved_search_state_is_validated_with_physical_codes_while_planning() {
                             crate::solution_pack_seeds::ExistingPublicationChannel {
                                 enabled: true,
                                 required_rule_codes: Vec::new(),
-                                require_valid_entity: false,
+                                require_valid_record: false,
                             },
                         ),
                     },

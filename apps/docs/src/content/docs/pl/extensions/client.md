@@ -5,8 +5,6 @@ description: Dodawaj strony, panele, akcje i komórki tabeli do aplikacji webowe
 
 Kontrybucja kliencka to moduł JavaScript, który Attricat ładuje do izolowanej ramki w stałym miejscu aplikacji webowej. Host odpowiada za wszystko wokół ramki: układ, stany ładowania i błędów, fokus i punkty orientacyjne dostępności. Twój moduł odpowiada za to, co jest wewnątrz.
 
-W nazwach miejsc osadzenia, uprawnieniach, polach kontekstu i ścieżkach API rekordy występują pod nazwą `entity`.
-
 ## Piaskownica
 
 Każda kontrybucja dostaje własny element `<iframe sandbox="allow-scripts">` z nieprzezroczystym pochodzeniem (opaque origin) i zasadami Content Security Policy blokującymi dostęp do sieci. Ramka nie ma dostępu do strony Attricat, plików cookie, magazynu ani ramek innych rozszerzeń. Nie może wywoływać `fetch` wobec API.
@@ -21,7 +19,7 @@ Artefakt kliencki musi eksportować `mount(root, catalog)`. Może zwrócić funk
 export const mount = (root, catalog) => {
   const render = () => {
     root.dataset.mode = catalog.theme.color_mode;
-    root.textContent = `Entity: ${catalog.context.entity_id}`;
+    root.textContent = `Record: ${catalog.context.record_id}`;
   };
   root.addEventListener('catalog:context-changed.v1', render);
   root.addEventListener('catalog:theme-changed.v1', render);
@@ -36,15 +34,15 @@ Ramka pozostaje zamontowana, gdy użytkownik przełącza kontekst lub motyw. Nas
 
 | Element | Wymaga | Opis |
 | --- | --- | --- |
-| `catalog.context` | | Identyfikatory dla miejsca osadzenia, np. `entity_id` i `context_id`. Obecne są tylko pola udokumentowane dla danego miejsca osadzenia. |
+| `catalog.context` | | Identyfikatory dla miejsca osadzenia, np. `record_id` i `context_id`. Obecne są tylko pola udokumentowane dla danego miejsca osadzenia. |
 | `catalog.theme` | | `{ color_mode: 'light' \| 'dark' }`. Właściwość `color-scheme` ramki jest ustawiana odpowiednio przed `mount`, więc kolory systemowe, takie jak `Canvas` i `CanvasText`, za nią podążają. |
 | `catalog.configuration` | `configuration.read` | Konfiguracja instalacji. |
-| `catalog.request(path)` | `catalog.read` | `GET` jednego z adresów `/api/entities`, `/api/v1/entities/<uuid>` lub `/api/blueprints/<uuid>/versions/<n>`. Odpowiedzi są ograniczone do 1 MiB. Odczyty wersji w `blueprint_attribute_configuration` są ograniczone do wersji Schematu tego miejsca osadzenia. |
+| `catalog.request(path)` | `catalog.read` | `GET` jednego z adresów `/api/records`, `/api/v1/records/<uuid>` lub `/api/blueprints/<uuid>/versions/<n>`. Odpowiedzi są ograniczone do 1 MiB. Odczyty wersji w `blueprint_attribute_configuration` są ograniczone do wersji Schematu tego miejsca osadzenia. |
 | `catalog.command({ command_id, payload })` | `client.commands` | Wywołuje jedno z zadeklarowanych poleceń serwerowych rozszerzenia. |
 | `catalog.storage.get/set/delete/list(…)` | `storage.extension` | Magazyn klucz-wartość rozszerzenia. `set` i `delete` przyjmują `expected_revision`. |
-| `catalog.navigate({ entity_id })` | `client.navigation` | Otwiera stronę rekordu. |
+| `catalog.navigate({ record_id })` | `client.navigation` | Otwiera stronę rekordu. |
 | `catalog.notify({ message, severity })` | `client.notification` | Wyświetla powiadomienie hosta. Komunikaty są przycinane do 512 znaków. |
-| `catalog.refresh({ target: 'current_entity' })` | `client.refresh` | Ponownie ładuje widoki bieżącego rekordu po zmianie wprowadzonej przez Twoje polecenie. Dostępne w miejscach osadzenia na stronach rekordów. |
+| `catalog.refresh({ target: 'current_record' })` | `client.refresh` | Ponownie ładuje widoki bieżącego rekordu po zmianie wprowadzonej przez Twoje polecenie. Dostępne w miejscach osadzenia na stronach rekordów. |
 | `catalog.dialog.open()` / `catalog.dialog.close()` | `client.action_dialog` | Otwiera `action_dialog` rozszerzenia z akcji zaznaczenia w wersji 2, z zaznaczeniem tej akcji; `close` działa wewnątrz okna. |
 | `catalog.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Uruchamia [operację interaktywną](/pl/extensions/operations/#operacje-interaktywne) dla zaznaczenia ramki i zwraca `{ run_id }`. Dostępne w akcjach zaznaczenia w wersji 2 i w oknie akcji. |
 | `catalog.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Tylko uruchomienia tego rozszerzenia rozpoczęte przez zalogowanego użytkownika, także gdy jest on operatorem. Pobieranie wykonuje host. |
@@ -71,42 +69,42 @@ Dodaj kontrybucję `navigation`, aby umieścić do niej link na pasku bocznym. A
 
 | Miejsce osadzenia | Rodzaj | Uprawnienie | Kontekst |
 | --- | --- | --- | --- |
-| `entity_preview_panel` | `embedded` | | `entity_id`, opcjonalnie `context_id` |
-| `entity_action` | `embedded` | `client.entity_action` | rekord, atrybut, kontekst |
-| `entity_attribute_decoration` | `embedded` | `client.entity_decoration` | rekord, atrybut, Schemat i wersja, opcjonalnie kontekst |
-| `entity_header_action` | `action` | `client.entity_header_action` | `entity_id`, `blueprint_id`, `blueprint_version` |
-| `entity_attribute_panel` | `panel` | `client.entity_attribute_panel` | `entity_id`, `attribute_id`, `blueprint_id`, `blueprint_version`, `context_id` |
-| `file_panel` | `panel` | `client.file_panel` | `file_id`, `entity_id`, `attribute_id`, `blueprint_id`, `blueprint_version` |
+| `record_preview_panel` | `embedded` | | `record_id`, opcjonalnie `context_id` |
+| `record_action` | `embedded` | `client.record_action` | rekord, atrybut, kontekst |
+| `record_attribute_decoration` | `embedded` | `client.record_decoration` | rekord, atrybut, Schemat i wersja, opcjonalnie kontekst |
+| `record_header_action` | `action` | `client.record_header_action` | `record_id`, `blueprint_id`, `blueprint_version` |
+| `record_attribute_panel` | `panel` | `client.record_attribute_panel` | `record_id`, `attribute_id`, `blueprint_id`, `blueprint_version`, `context_id` |
+| `file_panel` | `panel` | `client.file_panel` | `file_id`, `record_id`, `attribute_id`, `blueprint_id`, `blueprint_version` |
 
-`entity_preview_panel` pojawia się w szufladzie rozszerzeń rekordu. `entity_action` w wersji 2 otrzymuje zamiast tego [kontekst zaznaczenia](#kontekst-zaznaczenia). Paski akcji pokazują jedną akcję główną i trzy dodatkowe przed menu przepełnienia. Panele pokazują do trzech kontrybucji przed przepełnieniem.
+`record_preview_panel` pojawia się w szufladzie rozszerzeń rekordu. `record_action` w wersji 2 otrzymuje zamiast tego [kontekst zaznaczenia](#kontekst-zaznaczenia). Paski akcji pokazują jedną akcję główną i trzy dodatkowe przed menu przepełnienia. Panele pokazują do trzech kontrybucji przed przepełnieniem.
 
 ### Przeglądarka rekordów
 
 | Miejsce osadzenia | Rodzaj | Uprawnienie | Kontekst |
 | --- | --- | --- | --- |
-| `explorer_row_action` | `action` | `client.explorer_row_action` | `entity_id`, `blueprint_id`, `blueprint_version` |
+| `explorer_row_action` | `action` | `client.explorer_row_action` | `record_id`, `blueprint_id`, `blueprint_version` |
 | `explorer_action` | `action` | `client.explorer_action` | `blueprint_id`, `blueprint_version` |
-| `explorer_bulk_action` | `action` | `client.explorer_bulk_action` | `blueprint_id`, `blueprint_version`, zaznaczone `entity_ids` (od 1 do 50) |
+| `explorer_bulk_action` | `action` | `client.explorer_bulk_action` | `blueprint_id`, `blueprint_version`, zaznaczone `record_ids` (od 1 do 50) |
 | `explorer_table_cell` | `embedded` | `client.explorer_table_cell` | Wartość komórki, dla kolumny używającej Twojego [renderera komórek](/pl/extensions/manifest/#renderery-komórek). |
 
 Konteksty przeglądarki rekordów nigdy nie zawierają zapytania wyszukiwania, filtrów ani wartości wierszy. Zaznaczenie to wskazówka, na co patrzy użytkownik, a nie autoryzacja: polecenia nadal sprawdzają uprawnienia na serwerze. Akcje wiersza i akcje zbiorcze w wersji 2 otrzymują [kontekst zaznaczenia](#kontekst-zaznaczenia).
 
 ### Kontekst zaznaczenia
 
-Kontrybucje do `entity_action`, `explorer_row_action` i `explorer_bulk_action` mogą zadeklarować `"version": 2`. Otrzymują wtedy jeden kształt kontekstu na każdej powierzchni:
+Kontrybucje do `record_action`, `explorer_row_action` i `explorer_bulk_action` mogą zadeklarować `"version": 2`. Otrzymują wtedy jeden kształt kontekstu na każdej powierzchni:
 
 ```json
 {
   "context_version": 2,
-  "selection_source": "entity_preview",
+  "selection_source": "record_preview",
   "blueprint_id": "…",
   "blueprint_version": 3,
   "context_id": null,
-  "entity_ids": ["…"]
+  "record_ids": ["…"]
 }
 ```
 
-`selection_source` to `entity_preview`, `explorer_row` lub `explorer_selection`. `entity_ids` zawiera od 1 do 50 zapisanych rekordów jednej wersji schematu w kolejności wyświetlania. `context_id` to kontekst rozwiązywania wartości na danej powierzchni albo `null` dla domyślnego. Kontrybucje w wersji 1 zachowują opisane wyżej konteksty.
+`selection_source` to `record_preview`, `explorer_row` lub `explorer_selection`. `record_ids` zawiera od 1 do 50 zapisanych rekordów jednej wersji schematu w kolejności wyświetlania. `context_id` to kontekst rozwiązywania wartości na danej powierzchni albo `null` dla domyślnego. Kontrybucje w wersji 1 zachowują opisane wyżej konteksty.
 
 ### Okno akcji
 

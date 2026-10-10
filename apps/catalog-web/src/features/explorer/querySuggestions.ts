@@ -1,5 +1,5 @@
-import type { Attribute } from '../entities/api';
-import { attributeValueTypes } from '../entities/valueTypes';
+import type { Attribute } from '../records/api';
+import { attributeValueTypes } from '../records/valueTypes';
 import { relationshipPathSeparator } from './constants';
 import {
   findAttribute,
@@ -42,7 +42,7 @@ export type QuerySuggestion =
       target: string;
     }
   | { kind: 'global'; code: string; insert: string }
-  /** Matches listed entity IDs: `@id:id-1,id-2`. */
+  /** Matches listed record IDs: `@id:id-1,id-2`. */
   | { kind: 'ids'; code: string; insert: string }
   | { kind: 'value'; code: string; insert: string };
 

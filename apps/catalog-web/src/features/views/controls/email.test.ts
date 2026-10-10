@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { emailHref, isEmailAddress, validateEmail } from './email';
-import { validatesJsonSchema } from '../../entities/jsonSchema';
+import { validatesJsonSchema } from '../../records/jsonSchema';
 
 const valid = [
   'Name+tag@Example.com',

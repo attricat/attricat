@@ -77,11 +77,11 @@ export const DraftProposal = ({
         }}
         variant="outlined"
       >
-        {t('entities.applySmartFill')}
+        {t('records.applySmartFill')}
       </Button>
       {conflicts.length > 0 && (
         <Typography color="text.secondary" variant="body2">
-          {t('entities.draftChanged', { fields: conflicts.join(', ') })}
+          {t('records.draftChanged', { fields: conflicts.join(', ') })}
         </Typography>
       )}
     </Paper>

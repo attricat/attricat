@@ -16,17 +16,17 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
-import { getIncomingRelationships } from '../../entities/api';
-import { displayLabel } from '../../entities/entityDisplay';
-import { entityQueryKeys } from '../../entities/queryKeys';
+import { getIncomingRelationships } from '../../records/api';
+import { displayLabel } from '../../records/recordDisplay';
+import { recordQueryKeys } from '../../records/queryKeys';
 import type { ViewComponentDefinition } from './componentTypes';
 import { VIEW_COMPONENT_IDS, VIEW_COMPONENT_VERSION } from '../constants';
 
 export const IncomingRelationshipListDisplay = ({
-  entityId,
+  recordId,
   node,
 }: {
-  entityId: string;
+  recordId: string;
   node: {
     type: 'incoming_relationship_list';
     label: string;
@@ -37,14 +37,14 @@ export const IncomingRelationshipListDisplay = ({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const results = useInfiniteQuery({
-    queryKey: entityQueryKeys.incomingRelationships(
-      entityId,
+    queryKey: recordQueryKeys.incomingRelationships(
+      recordId,
       node.relationships,
       node.page_size,
     ),
     queryFn: ({ pageParam }) =>
       getIncomingRelationships(
-        entityId,
+        recordId,
         node.relationships,
         node.page_size,
         pageParam,
@@ -69,14 +69,14 @@ export const IncomingRelationshipListDisplay = ({
         <DialogTitle>{node.label}</DialogTitle>
         <DialogContent dividers>
           {results.isPending && (
-            <Typography>{t('views.loadingLinkedEntities')}</Typography>
+            <Typography>{t('views.loadingLinkedRecords')}</Typography>
           )}
           {results.isError && (
             <Typography color="error">{results.error.message}</Typography>
           )}
           {!results.isPending && !results.isError && !items.length && (
             <Typography color="text.secondary">
-              {t('views.noLinkedEntities')}
+              {t('views.noLinkedRecords')}
             </Typography>
           )}
           {items.length > 0 && (
@@ -86,8 +86,8 @@ export const IncomingRelationshipListDisplay = ({
                   <ListItemText
                     primary={
                       <Link
-                        params={{ entityId: item.id }}
-                        to="/entities/$entityId"
+                        params={{ recordId: item.id }}
+                        to="/records/$recordId"
                       >
                         {displayLabel(item.display, item.id)}
                       </Link>

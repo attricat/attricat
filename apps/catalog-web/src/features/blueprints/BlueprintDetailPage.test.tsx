@@ -43,7 +43,7 @@ it('shows the publish-check panel only inside the publish confirmation', async (
     {
       id,
       code: 'product',
-      kind: 'entity',
+      kind: 'record',
       name: 'Product',
       version: 1,
       status: 'draft',
@@ -77,7 +77,7 @@ it('gives each blueprint detail instance independent tab IDs', () => {
     {
       id,
       code: 'product',
-      kind: 'entity',
+      kind: 'record',
       name: 'Product',
       version: 1,
       status: 'draft',
@@ -107,7 +107,7 @@ it('shows a refused publish inside its dialog and clears it on reopen', async ()
     {
       id,
       code: 'product',
-      kind: 'entity',
+      kind: 'record',
       name: 'Product',
       version: 1,
       status: 'draft',

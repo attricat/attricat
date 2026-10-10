@@ -1,4 +1,4 @@
-import { entityQueryKeys } from '../entities/queryKeys';
+import { recordQueryKeys } from '../records/queryKeys';
 import { explorerSortFields, sortDirections } from './constants';
 import { isRelationshipPath } from './explorerTableColumns';
 import type {
@@ -121,7 +121,7 @@ export const explorerResultsQueryKey = (
   sort: ReturnType<typeof requestSort>,
   contextCode: string,
 ) =>
-  entityQueryKeys.search({
+  recordQueryKeys.search({
     allVersions: Boolean(search.allVersions),
     blueprint: search.blueprint,
     contextCode,

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { Attribute, ComponentReference } from '../../entities/api';
-import { EntityAttributeEditor } from '../../entities/components/EntityAttributeEditor';
-import { EntityFormAttributeEditor } from '../../entities/components/EntityFormAttributeEditor';
-import { EntityView } from '../components/EntityView';
+import type { Attribute, ComponentReference } from '../../records/api';
+import { RecordAttributeEditor } from '../../records/components/RecordAttributeEditor';
+import { RecordFormAttributeEditor } from '../../records/components/RecordFormAttributeEditor';
+import { RecordView } from '../components/RecordView';
 import { PhoneValue } from './values';
 
 const attribute: Attribute = { code: 'phone', value_type: 'string' };
@@ -54,7 +54,7 @@ it.each([
   { ...attribute, context_editable: 'default' as const },
 ])('keeps restricted phone fields disabled', (restrictedAttribute) => {
   render(
-    <EntityFormAttributeEditor
+    <RecordFormAttributeEditor
       attribute={restrictedAttribute}
       component={component}
       contextId="translation"
@@ -74,7 +74,7 @@ it.each([
 it('passes configured components to the form-owned editor', () => {
   const editor = vi.fn(() => <span>Editor</span>);
   render(
-    <EntityView
+    <RecordView
       attributes={[attribute]}
       values={{}}
       renderEditor={editor}
@@ -99,14 +99,14 @@ it('uses telephone input without normalizing edits and respects disabled state',
     showMigrationBadge: false,
     value: '020 7946 0958',
   };
-  const { rerender } = render(<EntityAttributeEditor {...props} />);
+  const { rerender } = render(<RecordAttributeEditor {...props} />);
   const input = screen.getByRole('textbox') as HTMLInputElement;
   expect(input.type).toBe('tel');
   expect(input.inputMode).toBe('tel');
   fireEvent.change(input, { target: { value: '+1 (202) 555-0123 x0042' } });
   expect(onChange).toHaveBeenCalledWith('+1 (202) 555-0123 x0042');
-  rerender(<EntityAttributeEditor {...props} disabled />);
+  rerender(<RecordAttributeEditor {...props} disabled />);
   expect(input.disabled).toBe(true);
-  rerender(<EntityAttributeEditor {...props} component={undefined} />);
+  rerender(<RecordAttributeEditor {...props} component={undefined} />);
   expect((screen.getByRole('textbox') as HTMLInputElement).type).toBe('text');
 });

@@ -25,7 +25,7 @@ import {
 } from './constants';
 import { MigrationBatchStatus } from './MigrationBatchStatus';
 import { PublishBlueprintDialog } from './PublishBlueprintDialog';
-import { PublishBlueprintEntitiesDialog } from './PublishBlueprintEntitiesDialog';
+import { PublishBlueprintRecordsDialog } from './PublishBlueprintRecordsDialog';
 import { blueprintQueryKeys } from './queryKeys';
 import { RevisionHistory } from './RevisionHistory';
 import { SafeMigrationDialog } from './SafeMigrationDialog';
@@ -34,7 +34,7 @@ import { useBlueprintRevisionComparison } from './useBlueprintRevisionComparison
 import { useSafeBlueprintMigration } from './useSafeBlueprintMigration';
 import { lexiconText } from '../lexicon/lexicon';
 
-type BlueprintDetailDialog = 'publish' | 'publishEntities' | 'safeMigration';
+type BlueprintDetailDialog = 'publish' | 'publishRecords' | 'safeMigration';
 
 export const BlueprintDetailPage = ({
   blueprintId,
@@ -50,10 +50,10 @@ export const BlueprintDetailPage = ({
     null,
   );
   const closeDialog = () => setOpenDialog(null);
-  const { publish, publishEntities, safeMigration } = useBlueprintDetailActions(
+  const { publish, publishRecords, safeMigration } = useBlueprintDetailActions(
     blueprintId,
     {
-      onEntitiesPublished: closeDialog,
+      onRecordsPublished: closeDialog,
       onMigrationStarted: () => {
         closeDialog();
         setPageTab(blueprintDetailTabs.migrations);
@@ -63,7 +63,7 @@ export const BlueprintDetailPage = ({
   );
   // Each dialog shows its own failure, so a reopened dialog starts clean.
   const openActionDialog = (dialog: BlueprintDetailDialog) => {
-    ({ publish, publishEntities, safeMigration })[dialog].reset();
+    ({ publish, publishRecords, safeMigration })[dialog].reset();
     setOpenDialog(dialog);
   };
   const revisions = useQuery({
@@ -97,7 +97,7 @@ export const BlueprintDetailPage = ({
             migrationStatusKnown={migration.migrationBatches.isSuccess}
             onMigrate={() => openActionDialog('safeMigration')}
             onPublish={() => openActionDialog('publish')}
-            onPublishEntities={() => openActionDialog('publishEntities')}
+            onPublishRecords={() => openActionDialog('publishRecords')}
           />
           {migration.wasEvaluated && !migration.canStart && (
             <Alert severity="info" sx={{ mt: 2 }}>
@@ -180,15 +180,15 @@ export const BlueprintDetailPage = ({
               <MigrationBatchStatus batches={migration.migrationBatches} />
             </Box>
           )}
-          <PublishBlueprintEntitiesDialog
+          <PublishBlueprintRecordsDialog
             blueprint={blueprint}
-            error={publishEntities.error}
-            isPending={publishEntities.isPending}
+            error={publishRecords.error}
+            isPending={publishRecords.isPending}
             onClose={closeDialog}
             onConfirm={(contextId) =>
-              publishEntities.mutate({ version: blueprint.version, contextId })
+              publishRecords.mutate({ version: blueprint.version, contextId })
             }
-            open={openDialog === 'publishEntities'}
+            open={openDialog === 'publishRecords'}
           />
           <SafeMigrationDialog
             error={safeMigration.error}

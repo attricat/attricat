@@ -26,7 +26,7 @@ Do tworzenia szkiców potrzebujesz uprawnienia `blueprints.write`, a do ich publ
 format_version = 1
 code = "category"
 name = "Category"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "name"
@@ -38,7 +38,7 @@ fields = ["name"]
 ```
 
 - `code` identyfikuje schemat przez cały czas jego istnienia. Wybierz go starannie; nie można go zmienić w kolejnych wersjach.
-- `kind = "entity"` oznacza, że można z niego tworzyć rekordy. W TOML schematu, API i CLI rekordy występują pod nazwą `entity`.
+- `kind = "record"` oznacza, że można z niego tworzyć rekordy.
 - Każdy schemat rekordu potrzebuje `views.dropdown_option`. Określa on, jak Attricat opisuje kategorię wszędzie tam, gdzie pojawia się ona na liście: w selektorach relacji, etykietach filtrów i wynikach wyszukiwania.
 
 Zapisz to jako szkic. Szkic można dowolnie edytować, ale nie może jeszcze zawierać rekordów.
@@ -61,7 +61,7 @@ Aby zmienić opublikowany schemat, utwórz nową wersję. Następna sekcja wyja�
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "title"
@@ -180,7 +180,7 @@ type = "stack"
 
 [[views.detail.children]]
 type = "stack"
-component = { id = "catalog.entity_heading", version = 1 }
+component = { id = "catalog.record_heading", version = 1 }
 
 [[views.detail.children.children]]
 type = "field"
@@ -233,16 +233,16 @@ label = "Brand"
 field = "price"
 ```
 
-Stos `catalog.entity_heading` zamienia swoje pierwsze pole w tytuł strony, a pozostałe w podtytuł. Kolumna tabeli `brand.name` podąża za relacją `brand` i pokazuje `name` marki. Ponieważ `brand` ma `cardinality = "one"`, tę kolumnę można też sortować.
+Stos `catalog.record_heading` zamienia swoje pierwsze pole w tytuł strony, a pozostałe w podtytuł. Kolumna tabeli `brand.name` podąża za relacją `brand` i pokazuje `name` marki. Ponieważ `brand` ma `cardinality = "one"`, tę kolumnę można też sortować.
 
 [Widoki i układy](/pl/builders/views/) opisują wszystkie bloki i komponenty.
 
 ## Krok 8: walidacja wielu pól
 
-`value_schema` sprawdza jedną wartość. `entity_schema` sprawdza cały rekord, więc może wyrażać reguły typu „produkt w promocji wymaga ceny promocyjnej”. Ten przykład zakłada, że schemat ma też atrybut logiczny `on_sale` i liczbowy `sale_price`:
+`value_schema` sprawdza jedną wartość. `record_schema` sprawdza cały rekord, więc może wyrażać reguły typu „produkt w promocji wymaga ceny promocyjnej”. Ten przykład zakłada, że schemat ma też atrybut logiczny `on_sale` i liczbowy `sale_price`:
 
 ```toml
-entity_schema = '''
+record_schema = '''
 {
   "type": "object",
   "required": ["title", "sku"],
@@ -252,14 +252,14 @@ entity_schema = '''
 '''
 ```
 
-Umieść `entity_schema` razem z pozostałymi kluczami najwyższego poziomu, przed pierwszym `[[attributes]]`. W TOML klucz zapisany po nagłówku tabeli należy do tej tabeli.
+Umieść `record_schema` razem z pozostałymi kluczami najwyższego poziomu, przed pierwszym `[[attributes]]`. W TOML klucz zapisany po nagłówku tabeli należy do tej tabeli.
 
-Attricat sprawdza schemat w każdym kontekście po każdej zmianie. Zapis, który pozostawiłby którykolwiek kontekst w niepoprawnym stanie, zostaje odrzucony z `422 entity_schema_mismatch` i nic nie jest zapisywane.
+Attricat sprawdza schemat w każdym kontekście po każdej zmianie. Zapis, który pozostawiłby którykolwiek kontekst w niepoprawnym stanie, zostaje odrzucony z `422 record_schema_mismatch` i nic nie jest zapisywane.
 
 JSON Schema nie potrafi porównać dwóch atrybutów. Dla reguł w rodzaju „cena promocyjna musi być niższa od ceny” dodaj do tego samego schematu nazwaną kontrolę w `x-attricat-checks`:
 
 ```toml
-entity_schema = '''
+record_schema = '''
 {
   "type": "object",
   "required": ["title", "sku"],
@@ -271,7 +271,7 @@ entity_schema = '''
 '''
 ```
 
-Kontrola, która nie przejdzie, powoduje odrzucenie zapisu z `422 entity_check_failed`. Kontrole mogą też sprawdzać powiązane rekordy. Zobacz [Walidacja](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli).
+Kontrola, która nie przejdzie, powoduje odrzucenie zapisu z `422 record_check_failed`. Kontrole mogą też sprawdzać powiązane rekordy. Zobacz [Walidacja](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli).
 
 ## Krok 9: udostępnij atrybuty w mixinie
 
@@ -338,7 +338,7 @@ value_schema = '''{
       { "from": "review", "to": "approved", "code": "approve",
         "roles": ["reviewer"], "separate_from": ["submit"] },
       { "from": "approved", "to": "released", "code": "release",
-        "permission": "entities.publish" },
+        "permission": "records.publish" },
       { "from": "released", "to": "draft", "code": "correct",
         "roles": ["owner", "admin"] }
     ]
@@ -348,7 +348,7 @@ value_schema = '''{
 
 W tym przykładzie:
 
-- Osoba, która przesłała dokument do przeglądu, nie może go też zatwierdzić, a zatwierdzać mogą tylko osoby z rolą `reviewer`. Wydanie wymaga `entities.publish`.
+- Osoba, która przesłała dokument do przeglądu, nie może go też zatwierdzić, a zatwierdzać mogą tylko osoby z rolą `reviewer`. Wydanie wymaga `records.publish`.
 - Edycja tytułu lub procedury zatwierdzonego dokumentu unieważnia zatwierdzenie i odsyła dokument z powrotem do przeglądu.
 - Wydany dokument jest tylko do odczytu, nie można go usunąć, a jego pliki są zachowywane przez dziesięć lat. Właściciele i administratorzy poprawiają go przejściem `correct`, a potem edytują.
 

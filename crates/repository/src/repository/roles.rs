@@ -179,8 +179,8 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             "context_subtree" => {
                 "SELECT id, code AS label FROM attribute_contexts WHERE workspace_id = $1 ORDER BY code"
             }
-            "entity" => {
-                "SELECT id, id::text AS label FROM entities WHERE workspace_id = $1 ORDER BY id"
+            "record" => {
+                "SELECT id, id::text AS label FROM records WHERE workspace_id = $1 ORDER BY id"
             }
             _ => return Err(RepositoryError::NotFound("grant scope")),
         };

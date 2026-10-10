@@ -7,10 +7,10 @@ import '../../../i18n';
 import { makeTheme } from '../../../app/theme';
 import { ColorEditor } from './editors';
 import { ColorValue } from './values';
-import { EntityView } from '../components/EntityView';
+import { RecordView } from '../components/RecordView';
 import { BlueprintViewsPreview } from '../../blueprints/BlueprintViewsPreview';
 import { ConfiguredColumnCell } from '../../explorer/ConfiguredColumnCell';
-import type { EntityItem } from '../../entities/api';
+import type { RecordItem } from '../../records/api';
 
 const attribute = { code: 'hex', value_type: 'string' as const };
 const display = { id: 'catalog.color_display', version: 1, props: {} };
@@ -94,7 +94,7 @@ describe('color components', () => {
   });
   it('uses explicit field configuration only', () => {
     const { container } = render(
-      <EntityView
+      <RecordView
         attributes={[attribute]}
         values={{ hex: { value: '#123456' } }}
         view={{
@@ -141,10 +141,10 @@ describe('color components', () => {
           sortable: false,
           relationshipSortBlocked: false,
         }}
-        entity={
+        record={
           {
             table_values: { 'color.hex': ['#ffffff', '#000000'] },
-          } as unknown as EntityItem
+          } as unknown as RecordItem
         }
         extension={undefined}
         frameAllowed={false}

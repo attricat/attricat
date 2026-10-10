@@ -1,15 +1,15 @@
 //! Extension catalog batches: bounded, idempotent create, update,
 //! relationship, upsert and annotation intents. Each intent runs through the
-//! ordinary entity seams in its own transaction.
+//! ordinary record seams in its own transaction.
 
-use super::entity_commands::{ChosenIdEntityCreate, writes_relationship_values};
 use super::extension_catalog_data::{
     ExtensionCatalogBatch, ExtensionCatalogIntent, ExtensionCatalogIntentOutcome,
     ExtensionCatalogIntentStatus, MAX_EXTENSION_BATCH_INTENTS, MAX_EXTENSION_BATCH_KEY_BYTES,
     MAX_EXTENSION_INTENT_KEY_BYTES,
 };
+use super::record_commands::{ChosenIdRecordCreate, writes_relationship_values};
 use super::*;
-use crate::model::UpdateEntityFormRequest;
+use crate::model::UpdateRecordFormRequest;
 use sha2::Digest;
 use sqlx::{Postgres, Transaction};
 use std::collections::BTreeSet;
@@ -75,7 +75,7 @@ impl CatalogRepository {
                 Err(error) => outcomes.push(ExtensionCatalogIntentOutcome {
                     intent_key: key,
                     status: ExtensionCatalogIntentStatus::Rejected,
-                    entity_id: None,
+                    record_id: None,
                     error: Some(error.to_string()),
                     annotation_revision: None,
                 }),
@@ -116,7 +116,7 @@ impl CatalogRepository {
         }
         let result = match intent {
             ExtensionCatalogIntent::Annotate {
-                entity_id,
+                record_id,
                 add_tags,
                 remove_tags,
                 set_metadata,
@@ -127,7 +127,7 @@ impl CatalogRepository {
                 .apply_extension_annotation_patch(
                     &mut transaction,
                     extension_id,
-                    entity_id,
+                    record_id,
                     &super::ExtensionAnnotationPatch {
                         add_tags,
                         remove_tags,
@@ -138,14 +138,14 @@ impl CatalogRepository {
                     super::extension_annotations::AnnotationPatchAuthority::Extension,
                 )
                 .await
-                .map(|revision| (entity_id, Some(revision))),
+                .map(|revision| (record_id, Some(revision))),
             intent => self
                 .apply_extension_catalog_intent(&mut transaction, intent)
                 .await
-                .map(|entity_id| (entity_id, None)),
+                .map(|record_id| (record_id, None)),
         };
         match result {
-            Ok((entity_id, annotation_revision)) => {
+            Ok((record_id, annotation_revision)) => {
                 let status = if dry_run {
                     ExtensionCatalogIntentStatus::Validated
                 } else {
@@ -154,7 +154,7 @@ impl CatalogRepository {
                 let outcome = ExtensionCatalogIntentOutcome {
                     intent_key: key.clone(),
                     status,
-                    entity_id: Some(entity_id),
+                    record_id: Some(record_id),
                     error: None,
                     annotation_revision,
                 };
@@ -174,7 +174,7 @@ impl CatalogRepository {
                     Ok(ExtensionCatalogIntentOutcome {
                         intent_key: key,
                         status: ExtensionCatalogIntentStatus::Rejected,
-                        entity_id: None,
+                        record_id: None,
                         error: Some(error.to_string()),
                         annotation_revision: None,
                     })
@@ -191,7 +191,7 @@ impl CatalogRepository {
         intent: ExtensionCatalogIntent,
     ) -> Result<Uuid, RepositoryError> {
         // An interactive run is bounded by its frozen selection; it cannot
-        // create catalog entities outside that selection.
+        // create catalog records outside that selection.
         if self.authorization_actor().is_some()
             && matches!(
                 intent,
@@ -199,7 +199,7 @@ impl CatalogRepository {
             )
         {
             return Err(RepositoryError::InvalidExtension(
-                "interactive runs cannot create or upsert entities".into(),
+                "interactive runs cannot create or upsert records".into(),
             ));
         }
         match intent {
@@ -222,22 +222,22 @@ impl CatalogRepository {
                 .await
             }
             ExtensionCatalogIntent::Update {
-                entity_id,
+                record_id,
                 values,
                 relationships,
                 ..
             } => {
-                self.apply_extension_catalog_update(transaction, entity_id, values, relationships)
+                self.apply_extension_catalog_update(transaction, record_id, values, relationships)
                     .await
             }
             ExtensionCatalogIntent::Relationships {
-                entity_id,
+                record_id,
                 relationships,
                 ..
             } => {
                 self.apply_extension_catalog_update(
                     transaction,
-                    entity_id,
+                    record_id,
                     Vec::new(),
                     relationships,
                 )
@@ -265,7 +265,7 @@ impl CatalogRepository {
                         "upsert lookup value must be 1-512 bytes".into(),
                     ));
                 }
-                // The lookup locks the matched entity row, so the workspace
+                // The lookup locks the matched record row, so the workspace
                 // relationship lock must be taken before it.
                 if !relationships.is_empty() || writes_relationship_values(&values) {
                     self.lock_relationship_cardinality_writes(transaction)
@@ -282,17 +282,17 @@ impl CatalogRepository {
                     )
                     .await?;
                 match existing {
-                    Some(entity_id) => {
+                    Some(record_id) => {
                         self.apply_extension_catalog_update(
                             transaction,
-                            entity_id,
+                            record_id,
                             values,
                             relationships,
                         )
                         .await
                     }
                     None => {
-                        // A new entity has no current targets, so each
+                        // A new record has no current targets, so each
                         // declared set is written as plain relationship values.
                         let values = values
                             .into_iter()
@@ -313,14 +313,14 @@ impl CatalogRepository {
         }
     }
 
-    /// Finds the entity an extension lookup names, which is the entity a
+    /// Finds the record an extension lookup names, which is the record a
     /// legacy upsert with the same lookup updates. When the lookup attribute
     /// alone forms a declared unique key, the key index resolves it across
     /// every revision of the blueprint family, with the key's normalization.
-    /// Otherwise the lookup is advisory: an exact text match among entities
+    /// Otherwise the lookup is advisory: an exact text match among records
     /// pinned to the requested revision. More than one match is an error.
     /// [`ExtensionLookupMode::Upsert`] also serializes concurrent upserts of
-    /// the value and locks the matched entity row.
+    /// the value and locks the matched record row.
     pub(super) async fn extension_lookup(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -334,8 +334,8 @@ impl CatalogRepository {
         let row_lock = if upsert { " FOR UPDATE OF e" } else { "" };
         let workspace_id = self.workspace_id.0;
         if upsert {
-            // The entity-writer lock comes before any entity row lock.
-            super::entity_commands::lock_entity_writes(transaction, workspace_id, false).await?;
+            // The record-writer lock comes before any record row lock.
+            super::record_commands::lock_record_writes(transaction, workspace_id, false).await?;
         }
         let attribute: Option<(String, String)> = sqlx::query_as(
             "SELECT code, value_type FROM attributes WHERE id = $1 AND workspace_id = $2 AND blueprint_id = $3 AND blueprint_version = $4 AND deleted_at IS NULL",
@@ -386,7 +386,7 @@ impl CatalogRepository {
                 .await?
                 .ok_or(RepositoryError::InvalidContext)?;
             sqlx::query_scalar(&format!(
-                "SELECT e.id FROM entity_unique_key_values k JOIN entities e ON e.id = k.entity_id AND e.workspace_id = k.workspace_id \
+                "SELECT e.id FROM record_unique_key_values k JOIN records e ON e.id = k.record_id AND e.workspace_id = k.workspace_id \
                  WHERE k.workspace_id = $1 AND k.blueprint_id = $2 AND k.key_code = $3 AND k.context_id = $4 AND k.key_hash = $5 AND e.deleted_at IS NULL \
                  ORDER BY e.id{row_lock} LIMIT 2",
             ))
@@ -408,9 +408,9 @@ impl CatalogRepository {
                     .await?;
             }
             sqlx::query_scalar(&format!(
-                "SELECT e.id FROM entities e JOIN attribute_values v ON v.entity_id=e.id AND v.workspace_id=e.workspace_id AND v.active \
+                "SELECT e.id FROM records e JOIN attribute_values v ON v.record_id=e.id AND v.workspace_id=e.workspace_id AND v.active \
                  WHERE e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
-                   AND v.attribute_id=$4 AND v.relationship_target_entity_id IS NULL AND v.value_text=$5 \
+                   AND v.attribute_id=$4 AND v.relationship_target_record_id IS NULL AND v.value_text=$5 \
                  ORDER BY e.id{row_lock} LIMIT 2",
             ))
             .bind(workspace_id)
@@ -423,9 +423,9 @@ impl CatalogRepository {
         };
         match matches.as_slice() {
             [] => Ok(None),
-            [entity_id] => Ok(Some(*entity_id)),
+            [record_id] => Ok(Some(*record_id)),
             _ => Err(RepositoryError::InvalidExtension(
-                "lookup matched multiple entities".into(),
+                "lookup matched multiple records".into(),
             )),
         }
     }
@@ -442,24 +442,24 @@ impl CatalogRepository {
         system_tags: Vec<String>,
         system_metadata: Value,
     ) -> Result<Uuid, RepositoryError> {
-        let (entity, changes, event) = self
-            .create_entity_in_transaction(
+        let (record, changes, event) = self
+            .create_record_in_transaction(
                 transaction,
-                ChosenIdEntityCreate {
-                    entity_id: Uuid::new_v4(),
+                ChosenIdRecordCreate {
+                    record_id: Uuid::new_v4(),
                     blueprint_id,
                     blueprint_version,
                     values,
-                    files: super::entity_commands::CreateFileValues::None,
+                    files: super::record_commands::CreateFileValues::None,
                     system_tags,
                     system_metadata,
                     host_sample_marker: false,
                 },
             )
             .await?;
-        self.stage_entity_mutation(transaction, changes, event)
+        self.stage_record_mutation(transaction, changes, event)
             .await?;
-        Ok(entity.id)
+        Ok(record.id)
     }
 
     /// A legacy extension update: the ordinary update seam, bounded for an
@@ -468,7 +468,7 @@ impl CatalogRepository {
     async fn apply_extension_catalog_update(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity_id: Uuid,
+        record_id: Uuid,
         values: Vec<NewAttributeValue>,
         relationships: Vec<RelationshipTargets>,
     ) -> Result<Uuid, RepositoryError> {
@@ -477,33 +477,33 @@ impl CatalogRepository {
             self.lock_relationship_cardinality_writes(transaction)
                 .await?;
         }
-        self.ensure_actor_may(transaction, "entities.write", &[entity_id])
+        self.ensure_actor_may(transaction, "records.write", &[record_id])
             .await?;
-        // A run bound to a user may link only to entities that user can read,
+        // A run bound to a user may link only to records that user can read,
         // whether or not they are in the run's selection.
         let targets: Vec<Uuid> = values
             .iter()
             .filter_map(|value| match value {
                 NewAttributeValue::Relationship {
-                    target_entity_id, ..
-                } => Some(*target_entity_id),
+                    target_record_id, ..
+                } => Some(*target_record_id),
                 NewAttributeValue::Scalar { .. } => None,
             })
             .chain(
                 relationships
                     .iter()
-                    .flat_map(|set| set.target_entity_ids.iter().copied()),
+                    .flat_map(|set| set.target_record_ids.iter().copied()),
             )
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect();
-        self.ensure_actor_may(transaction, "entities.read", &targets)
+        self.ensure_actor_may(transaction, "records.read", &targets)
             .await?;
-        let (entity, changes, event) = self
-            .update_entity_in_transaction(
+        let (record, changes, event) = self
+            .update_record_in_transaction(
                 transaction,
-                entity_id,
-                UpdateEntityFormRequest {
+                record_id,
+                UpdateRecordFormRequest {
                     expected_updated_at: None,
                     values,
                     relationships,
@@ -513,9 +513,9 @@ impl CatalogRepository {
                 },
             )
             .await?;
-        self.stage_entity_mutation(transaction, changes, event)
+        self.stage_record_mutation(transaction, changes, event)
             .await?;
-        Ok(entity.id)
+        Ok(record.id)
     }
 }
 
@@ -525,17 +525,17 @@ fn relationship_values(set: RelationshipTargets) -> impl Iterator<Item = NewAttr
         attribute_id,
         attribute_code,
         context_id,
-        target_entity_ids,
+        target_record_ids,
     } = set;
-    target_entity_ids
+    target_record_ids
         .into_iter()
         .collect::<BTreeSet<_>>()
         .into_iter()
-        .map(move |target_entity_id| NewAttributeValue::Relationship {
+        .map(move |target_record_id| NewAttributeValue::Relationship {
             attribute_id,
             attribute_code: attribute_code.clone(),
             context_id,
-            target_entity_id,
+            target_record_id,
         })
 }
 

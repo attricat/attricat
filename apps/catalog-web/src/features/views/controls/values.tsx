@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
   statusCodeLabel,
   type StatusConfiguration,
-} from '../../entities/status';
+} from '../../records/status';
 import { MarkdownContent } from '../../markdown/MarkdownContent';
 import type { ValueRenderer } from '../components/componentTypes';
 import { NotSetValue } from '../components/values/NotSetValue';
@@ -114,7 +114,7 @@ export const StatusValue = ({
       />
       {!option && (
         <Typography color="text.secondary" variant="caption">
-          {t('entities.statusUnknown', { value: label })}
+          {t('records.statusUnknown', { value: label })}
         </Typography>
       )}
     </Stack>

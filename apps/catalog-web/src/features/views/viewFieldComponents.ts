@@ -3,7 +3,7 @@ import type {
   ComponentReference,
   ViewDefinition,
   ViewNode,
-} from '../entities/api';
+} from '../records/api';
 import {
   resolveEditComponent,
   resolveValueEditor,
@@ -54,7 +54,7 @@ const placedFields = (view?: ViewDefinition | ViewNode) =>
 
 /**
  * Attribute codes placed inside blocks rendered by `componentId`, such as the
- * entity heading, in layout order.
+ * record heading, in layout order.
  */
 export const componentPlacedFields = (
   view: ViewDefinition | undefined,

@@ -1,4 +1,4 @@
-import type { Attribute } from '../entities/api';
+import type { Attribute } from '../records/api';
 import { principalKinds, PRINCIPAL_SCHEMA_KEY } from './constants';
 import {
   principalConfigurationSchema,

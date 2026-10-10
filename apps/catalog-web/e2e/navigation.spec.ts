@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { createEntityBlueprint, suffix } from './helpers.ts';
+import { createRecordBlueprint, suffix } from './helpers.ts';
 
 // The home page shows workspace onboarding until a blueprint exists.
 test.beforeAll(async () => {
   const id = suffix();
-  await createEntityBlueprint(
+  await createRecordBlueprint(
     `navigation_${id}`,
     `Navigation ${id}`,
     '[[attributes]]\ncode = "title"\nvalue_type = "string"',
@@ -64,12 +64,12 @@ test('opens mobile navigation and closes it after navigation', async ({
   const backButton = page.getByRole('button', {
     name: 'Back to main navigation',
   });
-  const allEntitiesLink = page.getByRole('link', { name: 'All records' });
+  const allRecordsLink = page.getByRole('link', { name: 'All records' });
   await expect(backButton).toBeVisible();
-  await expect(allEntitiesLink).toBeVisible();
-  const allEntitiesLinkBox = await allEntitiesLink.boundingBox();
-  expect(allEntitiesLinkBox?.width).toBeGreaterThan(220);
-  expect(allEntitiesLinkBox?.height).toBeLessThan(80);
+  await expect(allRecordsLink).toBeVisible();
+  const allRecordsLinkBox = await allRecordsLink.boundingBox();
+  expect(allRecordsLinkBox?.width).toBeGreaterThan(220);
+  expect(allRecordsLinkBox?.height).toBeLessThan(80);
   await expect(page.getByRole('link', { name: 'Agents' })).toBeHidden();
   await backButton.click();
 

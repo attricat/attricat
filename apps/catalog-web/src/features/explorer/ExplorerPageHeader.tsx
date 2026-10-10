@@ -28,7 +28,7 @@ export const ExplorerPageHeader = ({
       actions={
         <RouterButton
           search={createSearch(blueprint, locked)}
-          to="/entities/new"
+          to="/records/new"
           variant="contained"
         >
           {blueprintName

@@ -47,10 +47,10 @@ Open the record and choose to upgrade it. Attricat compares its current values w
 
 The target is always the current published revision. Migration copies values into the new revision, validates them, rebuilds the record's search data, and records the migration in one step. If anything fails, nothing changes.
 
-With the CLI, where records are called entities:
+With the CLI:
 
 ```sh
-acli entity migrate <entity-id>
+acli record migrate <record-id>
 ```
 
 ## Migrate many records
@@ -72,11 +72,11 @@ Two server settings tune batches: `BLUEPRINT_MIGRATION_PAGE_SIZE` and `BLUEPRINT
 
 ### From the CLI
 
-`entity migrate-bulk` migrates every `ready` record from one source revision and reports the rest:
+`record migrate-bulk` migrates every `ready` record from one source revision and reports the rest:
 
 ```sh
-acli entity migrate-bulk --blueprint product --from-version 1 --dry-run
-acli entity migrate-bulk --blueprint product --from-version 1
+acli record migrate-bulk --blueprint product --from-version 1 --dry-run
+acli record migrate-bulk --blueprint product --from-version 1
 ```
 
 The summary groups records into `ready`, `needs_input`, `blocked`, and `failed`. Records that need input or are blocked are skipped; resolve them on their upgrade pages, then run the command again.

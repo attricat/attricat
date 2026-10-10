@@ -92,14 +92,14 @@ fn action(method: &Method, route: &str) -> String {
 }
 
 fn audit_permission(method: &Method, route: &str) -> &'static str {
-    if route.starts_with("/v1/entities/{entity_id}/comments") {
-        "entities.read"
+    if route.starts_with("/v1/records/{record_id}/comments") {
+        "records.read"
     } else if route == "/extensions/{extension_id}/{contribution_id}/command" {
-        "entities.write"
+        "records.write"
     } else if route == "/extensions/{extension_id}/{contribution_id}/operations"
         || route.starts_with("/extension-runs")
     {
-        "entities.read"
+        "records.read"
     } else if route.starts_with("/solution-packs") || route.starts_with("/presentation-assets") {
         "solution_packs.manage"
     } else if route.contains("connector-jobs")
@@ -120,8 +120,8 @@ fn audit_permission(method: &Method, route: &str) -> &'static str {
         } else {
             "blueprints.write"
         }
-    } else if route.starts_with("/v1/entities/{entity_id}/publications") {
-        "entities.publish"
+    } else if route.starts_with("/v1/records/{record_id}/publications") {
+        "records.publish"
     } else if route.starts_with("/contexts") || route.starts_with("/publication-channels") {
         "contexts.write"
     } else if route.starts_with("/personal-access-tokens") {
@@ -134,9 +134,9 @@ fn audit_permission(method: &Method, route: &str) -> &'static str {
     } else if route.starts_with("/workspace/navigation") {
         "workspace_navigation.manage"
     } else if method == Method::DELETE {
-        "entities.delete"
+        "records.delete"
     } else {
-        "entities.write"
+        "records.write"
     }
 }
 
@@ -161,8 +161,8 @@ fn audit_context(method: &Method, route: &str, path: &str) -> (Value, Value) {
         "lexicon"
     } else if route.contains("/contexts") || route.contains("/publication-channels") {
         "context"
-    } else if route.contains("/entities") {
-        "entity"
+    } else if route.contains("/records") {
+        "record"
     } else if route.contains("/workspace") {
         "workspace"
     } else {
@@ -238,7 +238,7 @@ mod tests {
                 &Method::POST,
                 "/extensions/{extension_id}/{contribution_id}/command"
             ),
-            "entities.write"
+            "records.write"
         );
     }
 
@@ -261,12 +261,12 @@ mod tests {
         assert_eq!(
             redact_metadata(json!({
                 "password": "not retained",
-                "nested": { "accessToken": "also not retained", "target": "entity" },
+                "nested": { "accessToken": "also not retained", "target": "record" },
                 "items": [{ "api_key": "nope" }],
             })),
             json!({
                 "password": "[REDACTED]",
-                "nested": { "accessToken": "[REDACTED]", "target": "entity" },
+                "nested": { "accessToken": "[REDACTED]", "target": "record" },
                 "items": [{ "api_key": "[REDACTED]" }],
             })
         );

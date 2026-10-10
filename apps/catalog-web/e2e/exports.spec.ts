@@ -2,20 +2,20 @@ import { expect, test, type Page } from '@playwright/test';
 import {
   appendValues,
   createContext,
-  createEntity,
-  createEntityBlueprint,
+  createRecord,
+  createRecordBlueprint,
   defaultContext,
   request,
   scalar,
   suffix,
 } from './helpers';
 
-const openEntityInContext = async (
+const openRecordInContext = async (
   page: Page,
-  entityId: string,
+  recordId: string,
   contextCode: string,
 ) => {
-  await page.goto(`/entities/${entityId}`);
+  await page.goto(`/records/${recordId}`);
   await page.getByRole('tab', { name: contextCode }).click();
 };
 
@@ -29,7 +29,7 @@ test('enables an export channel, publishes to it and enforces its checks', async
 }) => {
   const code = `exported_${suffix()}`;
   const ruleCode = `summary-required-${suffix()}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Exported product',
     `[[attributes]]
@@ -54,8 +54,8 @@ attribute_code = "summary"`,
   );
   const root = await defaultContext();
   const channel = await createContext(`export_${suffix()}`, root.id);
-  const entity = await createEntity(blueprint, [
-    scalar('title', 'Exported entity'),
+  const record = await createRecord(blueprint, [
+    scalar('title', 'Exported record'),
   ]);
   // Channels may only require enabled rules.
   const rules =
@@ -69,7 +69,7 @@ attribute_code = "summary"`,
     body: '{}',
   });
 
-  await openEntityInContext(page, entity.id, channel.code);
+  await openRecordInContext(page, record.id, channel.code);
   await expect(page.getByText('Not an export channel')).toBeVisible();
 
   await page.goto('/manage/exports');
@@ -80,7 +80,7 @@ attribute_code = "summary"`,
   await page.reload();
   await expect(channelRow).toContainText('Enabled');
 
-  await openEntityInContext(page, entity.id, channel.code);
+  await openRecordInContext(page, record.id, channel.code);
   await expect(page.getByText('Not published', { exact: true })).toBeVisible();
   await publishFromMenu(page);
   await expect(page.getByText('Published', { exact: true })).toBeVisible();
@@ -96,7 +96,7 @@ attribute_code = "summary"`,
     channelRow.getByRole('button', { name: ruleCode }),
   ).toBeVisible();
 
-  await openEntityInContext(page, entity.id, channel.code);
+  await openRecordInContext(page, record.id, channel.code);
   await expect(page.getByText('Not ready', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Publication', exact: true }).click();
   await expect(
@@ -105,17 +105,17 @@ attribute_code = "summary"`,
   await page.keyboard.press('Escape');
   // The disabled menu item is a hint; the API enforces the channel's checks.
   await expect(
-    request(`/v1/entities/${entity.id}/publications`, {
+    request(`/v1/records/${record.id}/publications`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ context_id: channel.id }),
     }),
   ).rejects.toThrow(/422 .*publication_checks_failed/);
 
-  await appendValues(entity.id, [
+  await appendValues(record.id, [
     { ...scalar('summary', 'Now complete'), context_id: root.id },
   ]);
-  await openEntityInContext(page, entity.id, channel.code);
+  await openRecordInContext(page, record.id, channel.code);
   await expect(page.getByText('Not published', { exact: true })).toBeVisible();
   await expect(page.getByText('Not ready', { exact: true })).toBeHidden();
   await publishFromMenu(page);
@@ -124,6 +124,6 @@ attribute_code = "summary"`,
   await page.goto('/manage/exports');
   await channelRow.getByRole('switch').first().click();
   await expect(channelRow).toContainText('Disabled');
-  await openEntityInContext(page, entity.id, channel.code);
+  await openRecordInContext(page, record.id, channel.code);
   await expect(page.getByText('Not an export channel')).toBeVisible();
 });

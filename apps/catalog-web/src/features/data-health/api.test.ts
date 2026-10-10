@@ -20,11 +20,11 @@ const respond = (body: unknown) => {
 describe('data health API client', () => {
   it('requests threshold-specific health sections', async () => {
     respond({
-      active_entities: 3,
-      entity_blueprints: 1,
+      active_records: 3,
+      record_blueprints: 1,
       contexts: 1,
-      outdated_entities: 1,
-      stale_entities: 2,
+      outdated_records: 1,
+      stale_records: 2,
       deleted_relationship_targets: 0,
     });
     await getDataHealthSummary(180);
@@ -40,7 +40,7 @@ describe('data health API client', () => {
   });
 
   it('rejects malformed API responses', async () => {
-    respond({ active_entities: 'three' });
+    respond({ active_records: 'three' });
     await expect(getDataHealthSummary(90)).rejects.toThrow(
       'Invalid API response',
     );

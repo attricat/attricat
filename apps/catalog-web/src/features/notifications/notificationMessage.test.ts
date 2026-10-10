@@ -5,13 +5,13 @@ import type { Notification } from './schemas';
 
 const notification = (overrides: Partial<Notification>): Notification => ({
   id: '00000000-0000-4000-8000-000000000001',
-  kind: 'entity.assigned',
+  kind: 'record.assigned',
   title: 'Ada assigned you to a Task record',
   body: null,
   actor_user_id: '00000000-0000-4000-8000-000000000002',
   actor_display_name: 'Ada',
   actor_email: 'ada@example.test',
-  subject: { kind: 'entity', id: '00000000-0000-4000-8000-000000000003' },
+  subject: { kind: 'record', id: '00000000-0000-4000-8000-000000000003' },
   data: { blueprint_name: 'Task' },
   read: false,
   read_at: null,
@@ -69,7 +69,7 @@ describe('notificationMessage', () => {
     expect(
       notificationMessage(
         i18n.t,
-        notification({ kind: 'entity.commented' }),
+        notification({ kind: 'record.commented' }),
         'Przegląd',
       ),
     ).toBe('Nowy komentarz do „Przegląd” (od: Ada)');

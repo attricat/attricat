@@ -21,11 +21,11 @@ Pola `name` i `description` schematu, `name` i `description` atrybutu, `label` k
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
-entity_schema = '''{ "type": "object", "required": ["title"] }'''
+kind = "record"
+record_schema = '''{ "type": "object", "required": ["title"] }'''
 ```
 
-Schematy rekordów mają `kind = "entity"`: w kluczach schematu, tak jak w API, rekordy występują pod nazwą `entity`.
+Schematy rekordów mają `kind = "record"`.
 
 | Klucz | Typ | Wymagany | Opis |
 | --- | --- | --- | --- |
@@ -33,11 +33,11 @@ Schematy rekordów mają `kind = "entity"`: w kluczach schematu, tak jak w API, 
 | `code` | kod | Tak | Identyfikator rodziny schematów. Nie może się zmieniać między wersjami. |
 | `name` | ciąg znaków | Tak | Nazwa wyświetlana. Może się zmieniać między wersjami. |
 | `description` | ciąg znaków | Nie | Czym są rekordy schematu, do 500 znaków, np. „Grupy produktów, np. Narzędzia podstawowe”. Agent czyta go, by dopasować słowa użytkowników do rekordów; aplikacja webowa jeszcze go nie wyświetla. |
-| `kind` | `"entity"` lub `"mixin"` | Tak | Schemat `entity` może mieć rekordy. Mixin jedynie dostarcza atrybuty innym schematom przez `[[includes]]`. |
+| `kind` | `"record"` lub `"mixin"` | Tak | Schemat `record` może mieć rekordy. Mixin jedynie dostarcza atrybuty innym schematom przez `[[includes]]`. |
 | `attributes` | tablica tabel | Tak | Co najmniej jeden atrybut. Zobacz [Atrybuty](#atrybuty). |
 | `includes` | tablica tabel | Nie | Mixiny, z których ten schemat pobiera atrybuty. Zobacz [Include](#include). |
-| `views` | tabela | Dla `entity`: tak | Układy dla aplikacji webowej. Schematy rekordów muszą definiować `views.dropdown_option`. Zobacz [Widoki](#widoki). |
-| `entity_schema` | ciąg znaków (JSON) | Nie | JSON Schema dla całego rekordu, opcjonalnie z [`x-attricat-checks`](#kontrole-rekordów). Tylko schematy rekordów. Zobacz [Walidacja](/pl/builders/validation/). |
+| `views` | tabela | Dla `record`: tak | Układy dla aplikacji webowej. Schematy rekordów muszą definiować `views.dropdown_option`. Zobacz [Widoki](#widoki). |
+| `record_schema` | ciąg znaków (JSON) | Nie | JSON Schema dla całego rekordu, opcjonalnie z [`x-attricat-checks`](#kontrole-rekordów). Tylko schematy rekordów. Zobacz [Walidacja](/pl/builders/validation/). |
 | `publication` | tabela | Nie | Zasady ponownego zatwierdzania publikacji. Zobacz [Publikacja](#publikacja). |
 | `rules` | tablica tabel | Nie | Reguły jakości danych należące do tego schematu. Zobacz [Reguły](/pl/builders/rules/). |
 | `unique_keys` | tablica tabel | Nie | Klucze biznesowe, których wartości muszą być unikalne. Tylko schematy rekordów. Zobacz [Klucze unikalne](#klucze-unikalne). |
@@ -111,7 +111,7 @@ value_schema = '''{
       { "from": "draft", "to": "review", "code": "submit" },
       { "from": "review", "to": "released", "code": "release",
         "roles": ["reviewer"], "separate_from": ["submit"] },
-      { "from": "released", "to": "draft", "code": "correct", "permission": "entities.publish" }
+      { "from": "released", "to": "draft", "code": "correct", "permission": "records.publish" }
     ]
   }
 }'''
@@ -212,7 +212,7 @@ context_editable = "default"
 - Hierarchia dotyczy całej rodziny schematów zgodnie z jej najnowszą opublikowaną wersją, także rekordów przypiętych do starszych wersji.
 - Publikacja wersji, która dodaje `acyclic` lub `tree`, najpierw sprawdza istniejące powiązania. Jeśli zawierają cykle albo drzewo ma rekordy z więcej niż jednym celem, publikacja kończy się błędem `409 relationship_hierarchy_violations`; `error.details` wymienia do 20 cykli i rekordów z nadmiarowymi celami. Popraw powiązania i opublikuj ponownie.
 
-Relacje nie mogą mieć `value_schema` ani `default_value`. Ograniczaj je zamiast tego przez `entity_schema`.
+Relacje nie mogą mieć `value_schema` ani `default_value`. Ograniczaj je zamiast tego przez `record_schema`.
 
 ### Klucze plików
 
@@ -395,7 +395,7 @@ Wbudowane komponenty:
 | `catalog.relationship_list_edit` | 1 | `relationship_list` (edit) | `relationship` | |
 | `catalog.relationship_hierarchy` | 1 | `relationship_list` (detail) | `relationship` | `parent_field` |
 | `catalog.incoming_relationship_list_display` | 1 | `incoming_relationship_list` | | |
-| `catalog.entity_heading` | 1 | `stack` (detail) | | |
+| `catalog.record_heading` | 1 | `stack` (detail) | | |
 | `catalog.table_display` | 1 | `table` | Skalarne | |
 | `catalog.table_edit` | 1 | `table` | Skalarne | |
 | `catalog.table_image` | 1 | `renderer` kolumny tabeli | `file` z `cardinality = "one"` i `image_only = true` | |
@@ -421,7 +421,7 @@ Identyfikator i wersja renderera komórek z rozszerzenia muszą odpowiadać rend
 type = "extension_layout"
 version = 1
 
-[views.extension_layout.outlets.entity_preview_panel]
+[views.extension_layout.outlets.record_preview_panel]
 order = ["acme.inventory:summary"]
 hidden = ["acme.legacy:panel"]
 ```
@@ -429,7 +429,7 @@ hidden = ["acme.legacy:panel"]
 | Klucz | Opis |
 | --- | --- |
 | `version` | Musi wynosić `1`. |
-| `outlets` | Klucze `entity_preview_panel`, `entity_attribute_decoration` lub `entity_action`. |
+| `outlets` | Klucze `record_preview_panel`, `record_attribute_decoration` lub `record_action`. |
 | `outlets.<outlet>.order` | Klucze kontrybucji (`<extension-id>:<contribution-id>`) w kolejności wyświetlania. |
 | `outlets.<outlet>.hidden` | Klucze kontrybucji do ukrycia. |
 
@@ -457,7 +457,7 @@ Tabele `[[rules]]` używają składni reguł opisanej w [Reguły](/pl/builders/r
 code = "released-documents-approved"
 name = "Released documents have an approver"
 severity = "error"
-triggers = [{ type = "event", event_type = "entity.updated.v1" }]
+triggers = [{ type = "event", event_type = "record.updated.v1" }]
 predicate = { type = "required", attribute_code = "approved_by" }
 
 [rules.enforcement]
@@ -515,10 +515,10 @@ Operatory `compare`:
 
 ### Kontrole rekordów
 
-`x-attricat-checks` to tablica wewnątrz `entity_schema`:
+`x-attricat-checks` to tablica wewnątrz `record_schema`:
 
 ```toml
-entity_schema = '''
+record_schema = '''
 {
   "type": "object",
   "x-attricat-checks": [
@@ -535,7 +535,7 @@ entity_schema = '''
 | `message` | ciąg znaków | Nie | Od 1 do 500 znaków. Zastępuje wygenerowany komunikat. |
 | `predicate` | obiekt | Tak | [Predykat](#predykaty) z wyjątkiem `stale`, `unique` i `acyclic`. |
 
-Najwyżej 32 kontrole. Niepowodzenie zwraca `422 entity_check_failed`. Zobacz [Walidacja](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli).
+Najwyżej 32 kontrole. Niepowodzenie zwraca `422 record_check_failed`. Zobacz [Walidacja](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli).
 
 ### Warunki przejść
 
@@ -577,10 +577,10 @@ Jak porównywane są wartości:
 
 - Tekst jest przycinany, a każdy ciąg białych znaków zamieniany na jedną spację. Jeśli nie ustawiono `case_sensitive = true`, tekst jest też porównywany małymi literami, więc `ABC-1  Rev` i ` abc-1 rev` to ten sam klucz.
 - Liczby są porównywane według wartości (`1.50` równa się `1.5`), daty z czasem według chwili, a relacje według powiązanego rekordu.
-- Rekord, który nie ma wartości (albo ma tylko pusty tekst) dla któregokolwiek atrybutu klucza, nie jest sprawdzany względem tego klucza. Jeśli każdy rekord musi mieć klucz, oznacz atrybuty jako wymagane w `entity_schema`.
+- Rekord, który nie ma wartości (albo ma tylko pusty tekst) dla któregokolwiek atrybutu klucza, nie jest sprawdzany względem tego klucza. Jeśli każdy rekord musi mieć klucz, oznacz atrybuty jako wymagane w `record_schema`.
 - Klucz obejmuje całą rodzinę schematów zgodnie z jej najnowszą opublikowaną wersją, także rekordy przypięte do starszych wersji. Atrybuty są dopasowywane według kodu.
 
-Zapis, który nadałby drugiemu rekordowi tę samą wartość klucza, zwraca `409 unique_key_conflict`. `error.details` zawiera `key`, kod kontekstu `context`, znormalizowane wartości `values` oraz `conflicting_entity_id` rekordu, który już je ma. Sprawdzenie odbywa się w bazie danych w transakcji zapisu, więc gdy dwie osoby zapisują tę samą wartość w tym samym momencie, udaje się dokładnie jeden zapis.
+Zapis, który nadałby drugiemu rekordowi tę samą wartość klucza, zwraca `409 unique_key_conflict`. `error.details` zawiera `key`, kod kontekstu `context`, znormalizowane wartości `values` oraz `conflicting_record_id` rekordu, który już je ma. Sprawdzenie odbywa się w bazie danych w transakcji zapisu, więc gdy dwie osoby zapisują tę samą wartość w tym samym momencie, udaje się dokładnie jeden zapis.
 
 Publikacja wersji, która dodaje lub zmienia klucze unikalne, najpierw sprawdza istniejące rekordy. Jeśli niektóre już współdzielą wartość, publikacja kończy się błędem `409 unique_key_duplicates`, a `error.details.duplicates` wymienia do 20 grup z kluczem, kontekstem, wartościami i identyfikatorami rekordów (`error.details.total` podaje liczbę wszystkich grup). Zmień lub usuń duplikaty i opublikuj ponownie.
 
@@ -618,8 +618,8 @@ Kilka reguł kompilacji, które łatwo przeoczyć:
 
 - `format_version` inny niż `1` jest odrzucany.
 - Schemat rekordu bez `views.dropdown_option` jest odrzucany.
-- `entity_schema` w mixinie jest odrzucany.
-- `entity_schema` może wskazywać tylko atrybuty, które schemat posiada, w swoich kluczach najwyższego poziomu `required`, `properties`, `dependentRequired` i `dependentSchemas`.
+- `record_schema` w mixinie jest odrzucany.
+- `record_schema` może wskazywać tylko atrybuty, które schemat posiada, w swoich kluczach najwyższego poziomu `required`, `properties`, `dependentRequired` i `dependentSchemas`.
 - Predykaty w `x-attricat-checks`, warunkach przejść (`conditions`) i `[[rules]]` muszą wskazywać atrybuty, które schemat posiada, o typach pasujących do predykatu. Porównanie porządkujące na łańcuchu znaków albo porównanie daty z liczbą jest odrzucane.
 - `target_blueprint`, `target_blueprints`, `acyclic` i `tree` w atrybucie innym niż relacja są odrzucane.
 - `unique_keys` w mixinie, klucz wskazujący nieznany atrybut, atrybut `json`, plikowy lub relację z wieloma celami, a także klucz wymieniający atrybut dwa razy są odrzucane.

@@ -29,7 +29,7 @@ import { smallIconSize } from '../../components/iconSizes';
 import { SearchScopeIcon } from '../../components/systemIcons';
 import type { AttributeContext } from '../contexts/api';
 import { defaultContextCode } from '../contexts/constants';
-import type { Blueprint, BlueprintWithAttributes } from '../entities/api';
+import type { Blueprint, BlueprintWithAttributes } from '../records/api';
 import {
   blueprintSelectWidth,
   pendingVersionPlaceholder,

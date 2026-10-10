@@ -177,7 +177,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.entity_heading",
+      "id": "catalog.record_heading",
       "version": 1,
       "capabilities": ["display"],
       "placements": ["stack"],

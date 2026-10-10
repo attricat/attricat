@@ -3,7 +3,7 @@ import { extensionRunFailures, extensionRunStatuses } from './constants';
 
 /**
  * Optional, extension-reported domain outcome. Execution status stays
- * separate: a completed run can still report per-entity failures.
+ * separate: a completed run can still report per-record failures.
  */
 const progressSchema = z.record(z.string(), z.unknown());
 

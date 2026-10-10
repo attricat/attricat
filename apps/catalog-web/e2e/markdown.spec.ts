@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import {
   commitField,
-  createEntity,
-  createEntityBlueprint,
+  createRecord,
+  createRecordBlueprint,
   scalar,
   suffix,
 } from './helpers';
@@ -16,7 +16,7 @@ for (const mode of ['light', 'dark'] as const) {
       mode,
     );
     const code = `markdown_${suffix()}`;
-    const blueprint = await createEntityBlueprint(
+    const blueprint = await createRecordBlueprint(
       code,
       'Markdown samples',
       `
@@ -35,11 +35,11 @@ children = [{ type = "field", field = "title" }, { type = "field", field = "note
 `,
       },
     );
-    const entity = await createEntity(blueprint, [
+    const record = await createRecord(blueprint, [
       scalar('title', 'Lamp'),
       scalar('notes', '## Care\n\nWipe with a **dry** cloth.'),
     ]);
-    await page.goto(`/entities/${entity.id}`);
+    await page.goto(`/records/${record.id}`);
 
     const notes = page.getByRole('textbox', { name: 'notes', exact: true });
     const edit = page.getByRole('button', { name: 'Edit notes' });
@@ -57,7 +57,7 @@ children = [{ type = "field", field = "title" }, { type = "field", field = "note
     await page.screenshot({
       path: testInfo.outputPath(`markdown-editing-${mode}.png`),
     });
-    await commitField(page, entity.id, notes);
+    await commitField(page, record.id, notes);
     await expect(
       page.getByText('Wipe with a dry cloth. Avoid water.', { exact: true }),
     ).toBeVisible();

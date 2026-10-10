@@ -7,13 +7,13 @@ import type {
   Blueprint,
   ComponentReference,
   ViewDefinition,
-} from '../entities/api';
-import { EditableEntityLayout } from '../views/components/EditableEntityLayout';
+} from '../records/api';
+import { EditableRecordLayout } from '../views/components/EditableRecordLayout';
 import { resolveEditComponent } from '../views/components/registry';
 import {
   headingEditableAttributes,
   unplacedEditableAttributes,
-} from '../entities/entityFormAttributes';
+} from '../records/recordFormAttributes';
 import { legacyEditViewName, sandboxEditTab } from './constants';
 import { RenderedBlueprintView } from './RenderedBlueprintView';
 import { SandboxAttributeEditor } from './SandboxAttributeEditor';
@@ -92,7 +92,7 @@ export const BlueprintViewsPreview = ({
         variant="outlined"
       >
         {activeViewName === sandboxEditTab ? (
-          <EditableEntityLayout
+          <EditableRecordLayout
             attributes={attributes}
             fallbackVisibilityScope="detail"
             headingAttributes={headingEditableAttributes(

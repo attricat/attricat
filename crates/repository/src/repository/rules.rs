@@ -33,7 +33,7 @@ pub struct ClaimedRuleRun {
     pub rule_id: Uuid,
     pub rule_version: i64,
     pub dry_run: bool,
-    pub scope_entity_id: Option<Uuid>,
+    pub scope_record_id: Option<Uuid>,
     pub candidate_cursor: Option<Uuid>,
     pub candidates_evaluated: i64,
     pub blueprint_id: Uuid,
@@ -46,7 +46,7 @@ pub struct ClaimedRuleRun {
 /// deliberately data-only: all findings and run progress are persisted later
 /// under the task token.
 pub struct RuleCandidateResult {
-    pub entity_id: Uuid,
+    pub record_id: Uuid,
     pub failed: bool,
     pub message: String,
     pub evidence: serde_json::Value,
@@ -278,7 +278,7 @@ impl CatalogRepository {
 
     /// Enables a published revision. An enforcing rule first needs a
     /// completed full dry run of that revision, unless its blueprint revision
-    /// has no live entities; existing violations must be accepted explicitly.
+    /// has no live records; existing violations must be accepted explicitly.
     pub async fn enable_rule_with(
         &self,
         id: Uuid,
@@ -297,7 +297,7 @@ impl CatalogRepository {
     }
     /// The enable gate shared by every path that enables a rule revision: it
     /// must be published, and an enforcing rule whose blueprint revision has
-    /// live entities needs a completed full dry run of that revision; existing
+    /// live records needs a completed full dry run of that revision; existing
     /// violations, and a dry run that stopped at the candidate cap, must be
     /// accepted explicitly.
     pub(super) async fn ensure_rule_enable_allowed(
@@ -315,10 +315,10 @@ impl CatalogRepository {
         let target_rule: catalog_rules::CompiledRule = serde_json::from_value(target_plan)
             .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
         if target_rule.enforcement.is_some() {
-            let has_entities: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM entities WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL)")
+            let has_records: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL)")
                 .bind(ws).bind(blueprint_id).bind(blueprint_version).fetch_one(&mut **tx).await?;
-            if has_entities {
-                let latest: Option<(i64, bool)> = sqlx::query_as("SELECT findings_created,truncated FROM rule_runs WHERE workspace_id=$1 AND rule_id=$2 AND rule_version=$3 AND dry_run AND scope_entity_id IS NULL AND status='completed' ORDER BY completed_at DESC LIMIT 1")
+            if has_records {
+                let latest: Option<(i64, bool)> = sqlx::query_as("SELECT findings_created,truncated FROM rule_runs WHERE workspace_id=$1 AND rule_id=$2 AND rule_version=$3 AND dry_run AND scope_record_id IS NULL AND status='completed' ORDER BY completed_at DESC LIMIT 1")
                     .bind(ws).bind(id).bind(version).fetch_optional(&mut **tx).await?;
                 dry_run_enable_gate(latest, accept_existing_violations)?;
             }
@@ -379,7 +379,7 @@ impl CatalogRepository {
             .ok_or(RepositoryError::NotFound("rule"))
     }
     /// Creates a durable, idempotent manual run for the currently enabled revision.
-    /// An optional entity scope is checked before enqueueing, so callers cannot turn a
+    /// An optional record scope is checked before enqueueing, so callers cannot turn a
     /// manual request into an arbitrary cross-workspace scan.
     pub async fn create_manual_rule_run(
         &self,
@@ -428,16 +428,16 @@ impl CatalogRepository {
                 RepositoryError::RuleNotPublished
             });
         };
-        if let Some(entity_id) = input.entity_id {
-            let matches: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM entities e JOIN rules r ON r.id=$3 AND r.workspace_id=$1 AND r.version=$4 WHERE e.id=$2 AND e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version)")
-                .bind(ws).bind(entity_id).bind(rule_id).bind(version).fetch_one(&mut *tx).await?;
+        if let Some(record_id) = input.record_id {
+            let matches: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM records e JOIN rules r ON r.id=$3 AND r.workspace_id=$1 AND r.version=$4 WHERE e.id=$2 AND e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version)")
+                .bind(ws).bind(record_id).bind(rule_id).bind(version).fetch_one(&mut *tx).await?;
             if !matches {
-                return Err(RepositoryError::NotFound("entity in rule blueprint"));
+                return Err(RepositoryError::NotFound("record in rule blueprint"));
             }
         }
         let id = Uuid::new_v4();
-        let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,dry_run,scope_entity_id,idempotency_key) VALUES($1,$2,$3,$4,'manual',$5,$6,$7) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
-            .bind(id).bind(ws).bind(rule_id).bind(version).bind(input.dry_run).bind(input.entity_id).bind(&input.idempotency_key).fetch_optional(&mut *tx).await?;
+        let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,dry_run,scope_record_id,idempotency_key) VALUES($1,$2,$3,$4,'manual',$5,$6,$7) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
+            .bind(id).bind(ws).bind(rule_id).bind(version).bind(input.dry_run).bind(input.record_id).bind(&input.idempotency_key).fetch_optional(&mut *tx).await?;
         if let Some(id) = inserted {
             self.enqueue_rule_task(&mut tx, ws, id, None, None).await?;
             self.commit_mutation(tx).await?;
@@ -448,16 +448,16 @@ impl CatalogRepository {
             Ok(existing)
         }
     }
-    /// Event intake only creates bounded entity-scoped work. It never executes on the outbox lease.
+    /// Event intake only creates bounded record-scoped work. It never executes on the outbox lease.
     pub async fn fan_out_rule_runs(&self, event: &DomainEvent) -> Result<u64, RepositoryError> {
-        if event.aggregate_kind != "entity" || event.source_name.starts_with("rule:") {
+        if event.aggregate_kind != "record" || event.source_name.starts_with("rule:") {
             return Ok(0);
         }
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         // Every enabled rule in one read: whether it targets the event
-        // entity's own revision, and that entity's blueprint code.
-        let rows: Vec<EventRuleRow> = sqlx::query_as("SELECT r.id, r.version, r.compiled_plan, r.blueprint_id, r.blueprint_version, (e.id IS NOT NULL) AS direct, (SELECT b.code FROM entities x JOIN blueprints b ON b.id=x.blueprint_id AND b.version=x.blueprint_version WHERE x.workspace_id=$1 AND x.id=$3) AS event_blueprint FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id LEFT JOIN entities e ON e.id=$3 AND e.workspace_id=r.workspace_id AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version AND e.deleted_at IS NULL WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l").bind(ws).bind(event.sequence).bind(event.aggregate_id).fetch_all(&mut *tx).await?;
+        // record's own revision, and that record's blueprint code.
+        let rows: Vec<EventRuleRow> = sqlx::query_as("SELECT r.id, r.version, r.compiled_plan, r.blueprint_id, r.blueprint_version, (e.id IS NOT NULL) AS direct, (SELECT b.code FROM records x JOIN blueprints b ON b.id=x.blueprint_id AND b.version=x.blueprint_version WHERE x.workspace_id=$1 AND x.id=$3) AS event_blueprint FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id LEFT JOIN records e ON e.id=$3 AND e.workspace_id=r.workspace_id AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version AND e.deleted_at IS NULL WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l").bind(ws).bind(event.sequence).bind(event.aggregate_id).fetch_all(&mut *tx).await?;
         let mut rules = Vec::with_capacity(rows.len());
         for row in rows {
             let compiled: catalog_rules::CompiledRule =
@@ -496,7 +496,7 @@ impl CatalogRepository {
         Ok(inserted)
     }
 
-    /// Creates event-sourced runs `(rule, version, scope entity, key)` and
+    /// Creates event-sourced runs `(rule, version, scope record, key)` and
     /// their task envelopes with one statement; existing runs are skipped.
     async fn insert_event_rule_runs(
         &self,
@@ -514,7 +514,7 @@ impl CatalogRepository {
         let scopes: Vec<Uuid> = runs.iter().map(|run| run.2).collect();
         let keys: Vec<String> = runs.iter().map(|run| run.3.clone()).collect();
         let kind = TaskKind::RuleRunV1;
-        let created: i64 = sqlx::query_scalar("WITH candidates AS (SELECT * FROM UNNEST($2::uuid[], $3::uuid[], $4::uuid[], $5::bigint[], $6::uuid[], $7::text[]) AS c(id, task_id, rule_id, rule_version, scope_entity_id, idempotency_key)), created AS (INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,scope_entity_id,idempotency_key) SELECT id, $1, rule_id, rule_version, 'event', scope_entity_id, idempotency_key FROM candidates ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id), service AS (INSERT INTO task_workspace_service (workspace_id) VALUES ($1) ON CONFLICT (workspace_id) DO NOTHING), queued AS (INSERT INTO tasks (id, workspace_id, kind, envelope_version, subject_id, generation, payload, max_failures, correlation_id, causation_id) SELECT c.task_id, $1, $8, 1, c.id, 0, '{}'::jsonb, $9, $10, $11 FROM created JOIN candidates c ON c.id = created.id RETURNING id) SELECT count(*) FROM queued")
+        let created: i64 = sqlx::query_scalar("WITH candidates AS (SELECT * FROM UNNEST($2::uuid[], $3::uuid[], $4::uuid[], $5::bigint[], $6::uuid[], $7::text[]) AS c(id, task_id, rule_id, rule_version, scope_record_id, idempotency_key)), created AS (INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,scope_record_id,idempotency_key) SELECT id, $1, rule_id, rule_version, 'event', scope_record_id, idempotency_key FROM candidates ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id), service AS (INSERT INTO task_workspace_service (workspace_id) VALUES ($1) ON CONFLICT (workspace_id) DO NOTHING), queued AS (INSERT INTO tasks (id, workspace_id, kind, envelope_version, subject_id, generation, payload, max_failures, correlation_id, causation_id) SELECT c.task_id, $1, $8, 1, c.id, 0, '{}'::jsonb, $9, $10, $11 FROM created JOIN candidates c ON c.id = created.id RETURNING id) SELECT count(*) FROM queued")
             .bind(self.workspace_id.0)
             .bind(&ids)
             .bind(&task_ids)
@@ -532,7 +532,7 @@ impl CatalogRepository {
     }
 
     /// A change to a linked or referencing record can invalidate another
-    /// entity's `linked` or `referenced_by` predicate. Event-triggered rules
+    /// record's `linked` or `referenced_by` predicate. Event-triggered rules
     /// re-evaluate those dependents (at most 100 per rule and event), so the
     /// change is reported as a finding rather than rejected.
     async fn rule_dependents(
@@ -547,11 +547,11 @@ impl CatalogRepository {
         let requirements =
             catalog_validation::predicate::Requirements::for_predicates([&compiled.predicate]);
         let mut dependents: Vec<Uuid> = Vec::new();
-        // The rule evaluates only entities pinned to its revision; their
+        // The rule evaluates only records pinned to its revision; their
         // relationship may be a revision field or an additional attribute.
         for relationship in &requirements.linked {
             dependents.extend(
-                super::references::referencing_entity_ids(
+                super::references::referencing_record_ids(
                     tx,
                     ws,
                     super::references::ReferenceQuery {
@@ -573,13 +573,13 @@ impl CatalogRepository {
             if rule.event_blueprint.as_deref() != Some(blueprint_code.as_str()) {
                 continue;
             }
-            dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT DISTINCT av.relationship_target_entity_id FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id AND a.code=$3 JOIN entities t ON t.id=av.relationship_target_entity_id AND t.workspace_id=$1 AND t.deleted_at IS NULL AND t.blueprint_id=$4 AND t.blueprint_version=$5 WHERE av.entity_id=$2 AND av.active LIMIT $6")
+            dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT DISTINCT av.relationship_target_record_id FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id AND a.code=$3 JOIN records t ON t.id=av.relationship_target_record_id AND t.workspace_id=$1 AND t.deleted_at IS NULL AND t.blueprint_id=$4 AND t.blueprint_version=$5 WHERE av.record_id=$2 AND av.active LIMIT $6")
                 .bind(ws).bind(event.aggregate_id).bind(relationship).bind(rule.blueprint_id).bind(rule.blueprint_version).bind(MAX_DEPENDENTS).fetch_all(&mut **tx).await?);
             // A record the write stopped referencing (a removed or re-pointed
             // relationship) no longer appears above, yet its count changed.
             let released = changed_relationship_targets(event, relationship);
             if !released.is_empty() {
-                dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT id FROM entities WHERE workspace_id=$1 AND id=ANY($2) AND deleted_at IS NULL AND blueprint_id=$3 AND blueprint_version=$4")
+                dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT id FROM records WHERE workspace_id=$1 AND id=ANY($2) AND deleted_at IS NULL AND blueprint_id=$3 AND blueprint_version=$4")
                     .bind(ws).bind(&released).bind(rule.blueprint_id).bind(rule.blueprint_version).fetch_all(&mut **tx).await?);
             }
         }
@@ -661,14 +661,14 @@ impl CatalogRepository {
     }
     pub async fn list_rule_runs(&self) -> Result<Vec<RuleRun>, RepositoryError> {
         let ws = self.workspace_id.0;
-        Ok(sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_entity_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?.into_domain())
+        Ok(sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_record_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?.into_domain())
     }
     pub async fn list_rule_findings(
         &self,
-        entity_id: Option<Uuid>,
+        record_id: Option<Uuid>,
     ) -> Result<Vec<RuleFinding>, RepositoryError> {
         let ws = self.workspace_id.0;
-        Ok(sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,entity_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR entity_id=$2) ORDER BY updated_at DESC").bind(ws).bind(entity_id).fetch_all(&self.pool).await?.into_domain())
+        Ok(sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,record_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR record_id=$2) ORDER BY updated_at DESC").bind(ws).bind(record_id).fetch_all(&self.pool).await?.into_domain())
     }
     pub async fn rule_runs_page(
         &self,
@@ -677,7 +677,7 @@ impl CatalogRepository {
         offset: i64,
     ) -> Result<(Vec<RuleRun>, bool), RepositoryError> {
         let ws = self.workspace_id.0;
-        let mut rows = sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_entity_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 AND ($2::uuid IS NULL OR rule_id=$2) ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4")
+        let mut rows = sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_record_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 AND ($2::uuid IS NULL OR rule_id=$2) ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4")
             .bind(ws).bind(rule_id).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
@@ -686,13 +686,13 @@ impl CatalogRepository {
 
     pub async fn rule_findings_page(
         &self,
-        entity_id: Option<Uuid>,
+        record_id: Option<Uuid>,
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<RuleFinding>, bool), RepositoryError> {
         let ws = self.workspace_id.0;
-        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,entity_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR entity_id=$2) ORDER BY updated_at DESC,id DESC LIMIT $3 OFFSET $4")
-            .bind(ws).bind(entity_id).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
+        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,record_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR record_id=$2) ORDER BY updated_at DESC,id DESC LIMIT $3 OFFSET $4")
+            .bind(ws).bind(record_id).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
         Ok((rows.into_domain(), has_more))
@@ -718,7 +718,7 @@ impl CatalogRepository {
                 return Err(RepositoryError::NotFound("rule finding"));
             }
         }
-        let finding = sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,entity_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND id=$2").bind(ws).bind(id).fetch_one(&mut *tx).await?.into_domain();
+        let finding = sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,record_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND id=$2").bind(ws).bind(id).fetch_one(&mut *tx).await?.into_domain();
         self.commit_mutation(tx).await?;
         Ok(finding)
     }
@@ -740,7 +740,7 @@ impl CatalogRepository {
         let fenced = self.for_rule_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
         let row: Option<RuleRunTaskRow> = sqlx::query_as(
-            "SELECT rr.status,rr.id,rr.rule_id,rr.rule_version,rr.dry_run,rr.scope_entity_id,rr.candidate_cursor,rr.candidates_evaluated,r.blueprint_id,r.blueprint_version,r.context_id,r.compiled_plan FROM rule_runs rr JOIN rules r ON r.id=rr.rule_id AND r.version=rr.rule_version AND r.workspace_id=rr.workspace_id WHERE rr.id=$1 AND rr.workspace_id=$2 FOR UPDATE OF rr",
+            "SELECT rr.status,rr.id,rr.rule_id,rr.rule_version,rr.dry_run,rr.scope_record_id,rr.candidate_cursor,rr.candidates_evaluated,r.blueprint_id,r.blueprint_version,r.context_id,r.compiled_plan FROM rule_runs rr JOIN rules r ON r.id=rr.rule_id AND r.version=rr.rule_version AND r.workspace_id=rr.workspace_id WHERE rr.id=$1 AND rr.workspace_id=$2 FOR UPDATE OF rr",
         ).bind(task.subject_id).bind(ws).fetch_optional(&mut *tx).await?;
         let Some((
             status,
@@ -748,7 +748,7 @@ impl CatalogRepository {
             rule_id,
             rule_version,
             dry_run,
-            scope_entity_id,
+            scope_record_id,
             candidate_cursor,
             candidates_evaluated,
             blueprint_id,
@@ -773,7 +773,7 @@ impl CatalogRepository {
             rule_id,
             rule_version,
             dry_run,
-            scope_entity_id,
+            scope_record_id,
             candidate_cursor,
             candidates_evaluated,
             blueprint_id,
@@ -842,7 +842,7 @@ impl CatalogRepository {
         let mut resolved = 0_i64;
         let distinct = results
             .iter()
-            .map(|result| (result.entity_id, result.evaluation_key.as_str()))
+            .map(|result| (result.record_id, result.evaluation_key.as_str()))
             .collect::<std::collections::HashSet<_>>()
             .len()
             == results.len();
@@ -854,13 +854,13 @@ impl CatalogRepository {
             let (failed, passed): (Vec<_>, Vec<_>) =
                 results.iter().partition(|result| result.failed);
             if !failed.is_empty() {
-                created = sqlx::query_scalar("WITH upserted AS (INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,entity_id,context_id,evaluation_key,severity,message,evidence) SELECT f.id,$1,$2,$3,f.entity_id,$4,f.evaluation_key,f.severity,f.message,f.evidence FROM unnest($5::uuid[],$6::uuid[],$7::text[],$8::text[],$9::text[],$10::jsonb[]) AS f(id,entity_id,evaluation_key,severity,message,evidence) ON CONFLICT(workspace_id,rule_id,entity_id,context_id,evaluation_key) DO UPDATE SET rule_version=EXCLUDED.rule_version,severity=EXCLUDED.severity,message=EXCLUDED.message,evidence=EXCLUDED.evidence,state='open',resolved_at=NULL,resolved_by_run_id=NULL,updated_at=clock_timestamp() RETURNING (xmax=0) AS inserted) SELECT count(*) FILTER (WHERE inserted) FROM upserted")
+                created = sqlx::query_scalar("WITH upserted AS (INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,record_id,context_id,evaluation_key,severity,message,evidence) SELECT f.id,$1,$2,$3,f.record_id,$4,f.evaluation_key,f.severity,f.message,f.evidence FROM unnest($5::uuid[],$6::uuid[],$7::text[],$8::text[],$9::text[],$10::jsonb[]) AS f(id,record_id,evaluation_key,severity,message,evidence) ON CONFLICT(workspace_id,rule_id,record_id,context_id,evaluation_key) DO UPDATE SET rule_version=EXCLUDED.rule_version,severity=EXCLUDED.severity,message=EXCLUDED.message,evidence=EXCLUDED.evidence,state='open',resolved_at=NULL,resolved_by_run_id=NULL,updated_at=clock_timestamp() RETURNING (xmax=0) AS inserted) SELECT count(*) FILTER (WHERE inserted) FROM upserted")
                     .bind(ws)
                     .bind(run.rule_id)
                     .bind(run.rule_version)
                     .bind(run.context_id)
                     .bind(failed.iter().map(|_| Uuid::new_v4()).collect::<Vec<_>>())
-                    .bind(failed.iter().map(|result| result.entity_id).collect::<Vec<_>>())
+                    .bind(failed.iter().map(|result| result.record_id).collect::<Vec<_>>())
                     .bind(failed.iter().map(|result| result.evaluation_key.as_str()).collect::<Vec<_>>())
                     .bind(failed.iter().map(|result| result.severity.as_str()).collect::<Vec<_>>())
                     .bind(failed.iter().map(|result| result.message.as_str()).collect::<Vec<_>>())
@@ -869,12 +869,12 @@ impl CatalogRepository {
                     .await?;
             }
             if !passed.is_empty() {
-                resolved = sqlx::query("UPDATE rule_findings f SET state='resolved',resolved_at=clock_timestamp(),resolved_by_run_id=$3,updated_at=clock_timestamp() FROM unnest($5::uuid[],$6::text[]) AS p(entity_id,evaluation_key) WHERE f.workspace_id=$1 AND f.rule_id=$2 AND f.entity_id=p.entity_id AND f.context_id IS NOT DISTINCT FROM $4 AND f.evaluation_key=p.evaluation_key AND f.state <> 'resolved'")
+                resolved = sqlx::query("UPDATE rule_findings f SET state='resolved',resolved_at=clock_timestamp(),resolved_by_run_id=$3,updated_at=clock_timestamp() FROM unnest($5::uuid[],$6::text[]) AS p(record_id,evaluation_key) WHERE f.workspace_id=$1 AND f.rule_id=$2 AND f.record_id=p.record_id AND f.context_id IS NOT DISTINCT FROM $4 AND f.evaluation_key=p.evaluation_key AND f.state <> 'resolved'")
                     .bind(ws)
                     .bind(run.rule_id)
                     .bind(run.id)
                     .bind(run.context_id)
-                    .bind(passed.iter().map(|result| result.entity_id).collect::<Vec<_>>())
+                    .bind(passed.iter().map(|result| result.record_id).collect::<Vec<_>>())
                     .bind(passed.iter().map(|result| result.evaluation_key.as_str()).collect::<Vec<_>>())
                     .execute(&mut *tx)
                     .await?
@@ -883,12 +883,12 @@ impl CatalogRepository {
         } else {
             for result in &results {
                 if result.failed {
-                    let inserted: bool = sqlx::query_scalar("INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,entity_id,context_id,evaluation_key,severity,message,evidence) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(workspace_id,rule_id,entity_id,context_id,evaluation_key) DO UPDATE SET rule_version=EXCLUDED.rule_version,severity=EXCLUDED.severity,message=EXCLUDED.message,evidence=EXCLUDED.evidence,state='open',resolved_at=NULL,resolved_by_run_id=NULL,updated_at=clock_timestamp() RETURNING (xmax=0)")
-                        .bind(Uuid::new_v4()).bind(ws).bind(run.rule_id).bind(run.rule_version).bind(result.entity_id).bind(run.context_id).bind(&result.evaluation_key).bind(&result.severity).bind(&result.message).bind(&result.evidence).fetch_one(&mut *tx).await?;
+                    let inserted: bool = sqlx::query_scalar("INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,record_id,context_id,evaluation_key,severity,message,evidence) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(workspace_id,rule_id,record_id,context_id,evaluation_key) DO UPDATE SET rule_version=EXCLUDED.rule_version,severity=EXCLUDED.severity,message=EXCLUDED.message,evidence=EXCLUDED.evidence,state='open',resolved_at=NULL,resolved_by_run_id=NULL,updated_at=clock_timestamp() RETURNING (xmax=0)")
+                        .bind(Uuid::new_v4()).bind(ws).bind(run.rule_id).bind(run.rule_version).bind(result.record_id).bind(run.context_id).bind(&result.evaluation_key).bind(&result.severity).bind(&result.message).bind(&result.evidence).fetch_one(&mut *tx).await?;
                     created += i64::from(inserted);
                 } else {
-                    resolved += sqlx::query("UPDATE rule_findings SET state='resolved',resolved_at=clock_timestamp(),resolved_by_run_id=$4,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND entity_id=$3 AND context_id IS NOT DISTINCT FROM $5 AND evaluation_key=$6 AND state <> 'resolved'")
-                        .bind(ws).bind(run.rule_id).bind(result.entity_id).bind(run.id).bind(run.context_id).bind(&result.evaluation_key).execute(&mut *tx).await?.rows_affected() as i64;
+                    resolved += sqlx::query("UPDATE rule_findings SET state='resolved',resolved_at=clock_timestamp(),resolved_by_run_id=$4,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND record_id=$3 AND context_id IS NOT DISTINCT FROM $5 AND evaluation_key=$6 AND state <> 'resolved'")
+                        .bind(ws).bind(run.rule_id).bind(result.record_id).bind(run.id).bind(run.context_id).bind(&result.evaluation_key).execute(&mut *tx).await?.rows_affected() as i64;
                 }
             }
         }
@@ -974,9 +974,9 @@ struct EventRuleRow {
     compiled_plan: serde_json::Value,
     blueprint_id: Uuid,
     blueprint_version: i64,
-    /// The rule targets the event entity's own revision.
+    /// The rule targets the event record's own revision.
     direct: bool,
-    /// The event entity's blueprint code.
+    /// The event record's blueprint code.
     event_blueprint: Option<String>,
 }
 
@@ -996,16 +996,16 @@ impl CatalogRepository {
         let contexts = context_id
             .map(|context| vec![context])
             .unwrap_or_else(|| scope.context_ids());
-        let mut entities = super::checks::load_entities(&mut conn, ws, candidates).await?;
+        let mut records = super::checks::load_current_records(&mut conn, ws, candidates).await?;
         let requirements =
             catalog_validation::predicate::Requirements::for_predicates([&rule.predicate]);
         let prefetch =
-            super::checks::prefetch_related(&mut conn, &scope, &entities, &contexts, &requirements)
+            super::checks::prefetch_related(&mut conn, &scope, &records, &contexts, &requirements)
                 .await?;
         let severity = severity_code(&rule.severity);
         let mut results = Vec::with_capacity(candidates.len());
-        for entity_id in candidates {
-            let Some(subject) = entities.remove(entity_id) else {
+        for record_id in candidates {
+            let Some(subject) = records.remove(record_id) else {
                 continue;
             };
             let mut failure: Option<catalog_validation::predicate::Failure> = None;
@@ -1038,7 +1038,7 @@ impl CatalogRepository {
                 object.insert("contexts".into(), serde_json::json!(failing_contexts));
             }
             results.push(RuleCandidateResult {
-                entity_id: *entity_id,
+                record_id: *record_id,
                 failed,
                 message,
                 evidence,
@@ -1066,13 +1066,13 @@ fn changed_relationship_targets(event: &DomainEvent, attribute_code: &str) -> Ve
             .flatten()
             .filter(has_code)
     };
-    // Entity writes list changed targets in their facts; a migration, which
+    // Record writes list changed targets in their facts; a migration, which
     // carries no facts, lists the targets it released.
     let mut targets: Vec<Uuid> = entries("facts")
-        .filter_map(|fact| fact.get("relationship_target_entity_id").and_then(as_uuid))
+        .filter_map(|fact| fact.get("relationship_target_record_id").and_then(as_uuid))
         .chain(
             entries("released_relationships")
-                .filter_map(|released| released.get("target_entity_ids").and_then(Value::as_array))
+                .filter_map(|released| released.get("target_record_ids").and_then(Value::as_array))
                 .flatten()
                 .filter_map(as_uuid),
         )
@@ -1144,7 +1144,7 @@ mod tests {
         ));
         assert!(dry_run_enable_gate(Some((3, false)), true).is_ok());
         // A dry run that stopped at the candidate cap never proves the
-        // remaining entities pass.
+        // remaining records pass.
         assert!(matches!(
             dry_run_enable_gate(Some((0, true)), false),
             Err(RepositoryError::RuleDryRunTruncated(0))

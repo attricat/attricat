@@ -17,11 +17,11 @@ import {
 } from '@mui/material';
 import { createConversation, sendMessage } from '../agents/api';
 import { agentQueryKeys } from '../agents/queryKeys';
-import type { EntityItem } from '../entities/api';
-import { displayLabel } from '../entities/entityDisplay';
-import { selectedEntitiesMessage } from './agentSelection';
+import type { RecordItem } from '../records/api';
+import { displayLabel } from '../records/recordDisplay';
+import { selectedRecordsMessage } from './agentSelection';
 import {
-  agentEntityListMaxHeight,
+  agentRecordListMaxHeight,
   agentInstructionsRows,
   maximumAgentConversationBlueprintNameLength,
   maximumAgentInstructionsLength,
@@ -29,12 +29,12 @@ import {
 
 export const SendSelectedToAgentDialog = ({
   blueprintName,
-  entities,
+  records,
   onClose,
   onSuccess,
 }: {
   blueprintName: string;
-  entities: EntityItem[];
+  records: RecordItem[];
   onClose: () => void;
   onSuccess: () => void;
 }) => {
@@ -49,7 +49,7 @@ export const SendSelectedToAgentDialog = ({
       if (!id) {
         const conversation = await createConversation(
           t('explorer.agentConversationTitle', {
-            count: entities.length,
+            count: records.length,
             blueprint: blueprintName.slice(
               0,
               maximumAgentConversationBlueprintNameLength,
@@ -61,7 +61,7 @@ export const SendSelectedToAgentDialog = ({
       }
       await sendMessage(
         id,
-        selectedEntitiesMessage(t, instructions, blueprintName, entities),
+        selectedRecordsMessage(t, instructions, blueprintName, records),
       );
       return id;
     },
@@ -94,24 +94,24 @@ export const SendSelectedToAgentDialog = ({
           <Typography>
             {t('explorer.selectedCountForBlueprint', {
               blueprint: blueprintName,
-              count: entities.length,
+              count: records.length,
             })}
           </Typography>
           <Box
             component="ul"
             sx={{
-              maxHeight: agentEntityListMaxHeight,
+              maxHeight: agentRecordListMaxHeight,
               my: 0,
               overflowY: 'auto',
               pl: 3,
             }}
           >
-            {entities.map((entity) => (
-              <li key={entity.id}>
+            {records.map((record) => (
+              <li key={record.id}>
                 <Typography variant="body2">
-                  {t('explorer.agentEntityListItem', {
-                    entityId: entity.id,
-                    label: displayLabel(entity.display, entity.id),
+                  {t('explorer.agentRecordListItem', {
+                    recordId: record.id,
+                    label: displayLabel(record.display, record.id),
                   })}
                 </Typography>
               </li>

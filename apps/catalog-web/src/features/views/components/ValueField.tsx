@@ -1,8 +1,8 @@
 import { Box, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Attribute, ComponentReference } from '../../entities/api';
-import { attributeLabel } from '../../entities/entityDisplay';
+import type { Attribute, ComponentReference } from '../../records/api';
+import { attributeLabel } from '../../records/recordDisplay';
 import { FieldErrorBoundary } from './boundaries/FieldErrorBoundary';
 import { resolveValueRenderer } from './registry';
 import { AttributeValue } from './values/AttributeValue';
@@ -21,7 +21,7 @@ export const ValueField = ({
   renderFilePanel,
   component,
   contextId,
-  entityId,
+  recordId,
 }: {
   attribute: Attribute;
   resolved?: ResolvedValue;
@@ -34,7 +34,7 @@ export const ValueField = ({
   renderFilePanel?: (attribute: Attribute, fileId: string) => ReactNode;
   component?: ComponentReference | null;
   contextId?: string;
-  entityId?: string;
+  recordId?: string;
 }) => {
   const { t } = useTranslation();
   const label = attributeLabel(attribute);
@@ -64,7 +64,7 @@ export const ValueField = ({
                   attribute={attribute}
                   component={component}
                   contextId={contextId}
-                  entityId={entityId}
+                  recordId={recordId}
                   renderFilePanel={
                     renderFilePanel && attribute.value_type === 'file'
                       ? (fileId) => renderFilePanel(attribute, fileId)

@@ -25,7 +25,7 @@ pub struct JsonSchemaViolation {
 
 pub fn validate_json_schema_definition(schema: &serde_json::Value) -> Result<(), String> {
     status::validate_status_definition(schema)?;
-    predicate::entity_checks(schema)?;
+    predicate::record_checks(schema)?;
     principal::validate_principal_definition(schema)?;
     jsonschema::draft202012::options()
         .should_validate_formats(true)

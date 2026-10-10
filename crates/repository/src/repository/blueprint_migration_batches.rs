@@ -3,7 +3,7 @@ use crate::persistence_rows::{Db, IntoDomain};
 use crate::{
     model::{
         BlueprintMigrationBatch, BlueprintMigrationBatchStatus, BlueprintMigrationImpact,
-        BlueprintMigrationRemovalPolicy, MigrateEntityRequest,
+        BlueprintMigrationRemovalPolicy, MigrateRecordRequest,
     },
     task_queue::{TaskInsert, TaskKind},
 };
@@ -34,11 +34,11 @@ impl CatalogRepository {
         Ok(sqlx::query_as::<_, Db<BlueprintMigrationBatchStatus>>(
             r#"WITH stats AS (
                    SELECT m.batch_id,
-                          COUNT(DISTINCT m.entity_id) AS processed_entities,
-                          COUNT(DISTINCT m.entity_id) FILTER (WHERE m.status = 'migrated') AS migrated_entities,
-                          COUNT(DISTINCT m.entity_id) FILTER (WHERE m.status IN ('needs_input', 'blocked')) AS needs_input_entities,
-                          COUNT(DISTINCT m.entity_id) FILTER (WHERE m.status = 'failed') AS failed_entities
-                   FROM entity_blueprint_migrations m
+                          COUNT(DISTINCT m.record_id) AS processed_records,
+                          COUNT(DISTINCT m.record_id) FILTER (WHERE m.status = 'migrated') AS migrated_records,
+                          COUNT(DISTINCT m.record_id) FILTER (WHERE m.status IN ('needs_input', 'blocked')) AS needs_input_records,
+                          COUNT(DISTINCT m.record_id) FILTER (WHERE m.status = 'failed') AS failed_records
+                   FROM record_blueprint_migrations m
                    JOIN blueprint_migration_batches scoped ON scoped.id = m.batch_id
                    WHERE m.workspace_id = $1
                      AND scoped.workspace_id = $1
@@ -47,21 +47,21 @@ impl CatalogRepository {
                )
                SELECT b.id, b.blueprint_id, b.target_version, b.status, b.removal_policy,
                       b.created_at, b.started_at, b.completed_at,
-                      COALESCE(s.processed_entities, 0) + (
-                          SELECT COUNT(*) FROM entities e
+                      COALESCE(s.processed_records, 0) + (
+                          SELECT COUNT(*) FROM records e
                           WHERE e.workspace_id = b.workspace_id
                             AND e.blueprint_id = b.blueprint_id
                             AND e.blueprint_version < b.target_version
                             AND e.deleted_at IS NULL
                             AND NOT EXISTS (
-                                SELECT 1 FROM entity_blueprint_migrations m
-                                WHERE m.batch_id = b.id AND m.entity_id = e.id
+                                SELECT 1 FROM record_blueprint_migrations m
+                                WHERE m.batch_id = b.id AND m.record_id = e.id
                             )
-                      ) AS total_entities,
-                      COALESCE(s.processed_entities, 0) AS processed_entities,
-                      COALESCE(s.migrated_entities, 0) AS migrated_entities,
-                      COALESCE(s.needs_input_entities, 0) AS needs_input_entities,
-                      COALESCE(s.failed_entities, 0) AS failed_entities
+                      ) AS total_records,
+                      COALESCE(s.processed_records, 0) AS processed_records,
+                      COALESCE(s.migrated_records, 0) AS migrated_records,
+                      COALESCE(s.needs_input_records, 0) AS needs_input_records,
+                      COALESCE(s.failed_records, 0) AS failed_records
                FROM blueprint_migration_batches b
                LEFT JOIN stats s ON s.batch_id = b.id
                WHERE b.workspace_id = $1 AND b.blueprint_id = $2
@@ -112,7 +112,7 @@ impl CatalogRepository {
             .get_current_blueprint(blueprint_id)
             .await?
             .ok_or(RepositoryError::NotFound("blueprint"))?;
-        if target.blueprint.version != target_version || target.blueprint.kind != "entity" {
+        if target.blueprint.version != target_version || target.blueprint.kind != "record" {
             return Err(RepositoryError::BlueprintMigrationNotSafe);
         }
         let removed_attribute_codes = self
@@ -175,7 +175,7 @@ impl CatalogRepository {
             .get_current_blueprint(blueprint_id)
             .await?
             .ok_or(RepositoryError::NotFound("blueprint"))?;
-        if target.blueprint.version != target_version || target.blueprint.kind != "entity" {
+        if target.blueprint.version != target_version || target.blueprint.kind != "record" {
             return Err(RepositoryError::BlueprintMigrationNotSafe);
         }
         let removed_attribute_codes = self
@@ -202,7 +202,7 @@ impl CatalogRepository {
         {
             return Err(RepositoryError::BlueprintMigrationNotSafe);
         }
-        // Draft revisions cannot have entities, so use the nearest published
+        // Draft revisions cannot have records, so use the nearest published
         // ancestor and every earlier published revision as migration sources.
         // Aggregate removal requirements across all possible sources.
         let mut removed = std::collections::BTreeSet::new();
@@ -229,19 +229,19 @@ impl CatalogRepository {
         removed_attribute_codes: &[String],
     ) -> Result<BlueprintMigrationImpact, RepositoryError> {
         let workspace_id = self.workspace_id.0;
-        let eligible_entities = sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM entities WHERE workspace_id = $1 AND blueprint_id = $2 AND blueprint_version < $3 AND deleted_at IS NULL",
+        let eligible_records = sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM records WHERE workspace_id = $1 AND blueprint_id = $2 AND blueprint_version < $3 AND deleted_at IS NULL",
         )
         .bind(workspace_id)
         .bind(blueprint_id)
         .bind(target_version)
         .fetch_one(&self.pool)
         .await?;
-        let (entities_with_removed_values, removed_values) = if removed_attribute_codes.is_empty() {
+        let (records_with_removed_values, removed_values) = if removed_attribute_codes.is_empty() {
             (0, 0)
         } else {
             sqlx::query_as::<_, (i64, i64)>(
-                "SELECT count(DISTINCT e.id), count(av.id) FROM entities e JOIN attribute_values av ON av.entity_id = e.id AND av.workspace_id = e.workspace_id JOIN attributes a ON a.id = av.attribute_id AND a.workspace_id = e.workspace_id WHERE e.workspace_id = $1 AND e.blueprint_id = $2 AND e.blueprint_version < $3 AND e.deleted_at IS NULL AND a.blueprint_version = e.blueprint_version AND a.code = ANY($4)",
+                "SELECT count(DISTINCT e.id), count(av.id) FROM records e JOIN attribute_values av ON av.record_id = e.id AND av.workspace_id = e.workspace_id JOIN attributes a ON a.id = av.attribute_id AND a.workspace_id = e.workspace_id WHERE e.workspace_id = $1 AND e.blueprint_id = $2 AND e.blueprint_version < $3 AND e.deleted_at IS NULL AND a.blueprint_version = e.blueprint_version AND a.code = ANY($4)",
             )
             .bind(workspace_id)
             .bind(blueprint_id)
@@ -251,16 +251,16 @@ impl CatalogRepository {
             .await?
         };
         Ok(BlueprintMigrationImpact {
-            eligible_entities,
+            eligible_records,
             removed_attribute_codes: removed_attribute_codes.to_vec(),
-            entities_with_removed_values,
+            records_with_removed_values,
             removed_values,
             requires_removal_disposition: removed_values > 0,
         })
     }
 
-    /// Runs a batch under the shared task lease. Each entity is reserved before
-    /// preview/migration, making `(batch_id, entity_id)` its durable retry
+    /// Runs a batch under the shared task lease. Each record is reserved before
+    /// preview/migration, making `(batch_id, record_id)` its durable retry
     /// identity. Every progress checkpoint commits through the task fence.
     pub async fn run_safe_blueprint_migration_batch_task(
         &self,
@@ -295,22 +295,22 @@ impl CatalogRepository {
             };
         };
         let mut cursor: Option<(DateTime<Utc>, Uuid)> = None;
-        // Read on the first candidate page; see `preview_entity_migration_against`.
+        // Read on the first candidate page; see `preview_record_migration_against`.
         let mut target = None;
         loop {
             let candidates = match cursor {
                 Some((created_at, id)) => {
                     sqlx::query_as::<_, BatchCandidate>(
                         r#"SELECT e.id, e.created_at
-                           FROM entities e
+                           FROM records e
                            WHERE e.blueprint_id = $1
                              AND e.blueprint_version < $2
                              AND e.workspace_id = $3
                              AND e.deleted_at IS NULL
                              AND (e.created_at, e.id) < ($4, $5)
                              AND NOT EXISTS (
-                                 SELECT 1 FROM entity_blueprint_migrations m
-                                 WHERE m.batch_id = $6 AND m.entity_id = e.id
+                                 SELECT 1 FROM record_blueprint_migrations m
+                                 WHERE m.batch_id = $6 AND m.record_id = e.id
                                    AND m.workspace_id = $3
                                    AND m.status IN ('migrated', 'needs_input', 'blocked', 'failed', 'skipped', 'superseded')
                              )
@@ -330,14 +330,14 @@ impl CatalogRepository {
                 None => {
                     sqlx::query_as::<_, BatchCandidate>(
                         r#"SELECT e.id, e.created_at
-                           FROM entities e
+                           FROM records e
                            WHERE e.blueprint_id = $1
                              AND e.blueprint_version < $2
                              AND e.workspace_id = $3
                              AND e.deleted_at IS NULL
                              AND NOT EXISTS (
-                                 SELECT 1 FROM entity_blueprint_migrations m
-                                 WHERE m.batch_id = $4 AND m.entity_id = e.id
+                                 SELECT 1 FROM record_blueprint_migrations m
+                                 WHERE m.batch_id = $4 AND m.record_id = e.id
                                    AND m.workspace_id = $3
                                    AND m.status IN ('migrated', 'needs_input', 'blocked', 'failed', 'skipped', 'superseded')
                              )
@@ -371,18 +371,18 @@ impl CatalogRepository {
             }
             let preloaded = target.as_ref().and_then(Option::as_ref);
             let results = stream::iter(candidate_ids)
-                .map(|entity_id| self.process_batch_candidate(&batch, preloaded, entity_id))
+                .map(|record_id| self.process_batch_candidate(&batch, preloaded, record_id))
                 .buffer_unordered(concurrency)
                 .collect::<Vec<_>>()
                 .await;
             for result in results {
                 let outcome = result?;
-                metrics::counter!("catalog_blueprint_migration_entities_total", "outcome" => outcome)
+                metrics::counter!("catalog_blueprint_migration_records_total", "outcome" => outcome)
                     .increment(1);
             }
             let elapsed = page_started.elapsed().as_secs_f64();
             if elapsed > 0.0 {
-                metrics::histogram!("catalog_blueprint_migration_entities_per_second")
+                metrics::histogram!("catalog_blueprint_migration_records_per_second")
                     .record(candidates.len() as f64 / elapsed);
             }
             let last = candidates.last().expect("non-empty candidate page");
@@ -410,16 +410,16 @@ impl CatalogRepository {
     async fn process_batch_candidate(
         &self,
         batch: &BlueprintMigrationBatch,
-        target: Option<&super::entity_migration::MigrationTarget>,
-        entity_id: Uuid,
+        target: Option<&super::record_migration::MigrationTarget>,
+        record_id: Uuid,
     ) -> Result<&'static str, RepositoryError> {
-        let migration = self.reserve_batch_migration(batch, entity_id).await?;
+        let migration = self.reserve_batch_migration(batch, record_id).await?;
         match migration.status.as_str() {
             "migrated" | "needs_input" | "blocked" | "failed" | "skipped" | "superseded" => {
                 return Ok("already_terminal");
             }
             "pending" => match self
-                .preview_entity_migration_against(entity_id, Some(migration.id), target)
+                .preview_record_migration_against(record_id, Some(migration.id), target)
                 .await
             {
                 Ok(preview)
@@ -449,9 +449,9 @@ impl CatalogRepository {
         }
         self.begin_batch_migration(migration.id).await?;
         match self
-            .migrate_entity_to_latest(
-                entity_id,
-                MigrateEntityRequest {
+            .migrate_record_to_latest(
+                record_id,
+                MigrateRecordRequest {
                     migration_id: migration.id,
                     expected_target_version: batch.target_version,
                     values: Vec::new(),
@@ -501,28 +501,28 @@ impl CatalogRepository {
     async fn reserve_batch_migration(
         &self,
         batch: &BlueprintMigrationBatch,
-        entity_id: Uuid,
+        record_id: Uuid,
     ) -> Result<BatchMigration, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         let inserted = sqlx::query_as::<_, BatchMigration>(
-            "INSERT INTO entity_blueprint_migrations (id, batch_id, workspace_id, entity_id, blueprint_id, source_version, target_version, status, issues, task_owned) SELECT $1, $2, $3, e.id, $4, e.blueprint_version, $5, 'pending', '[]'::jsonb, true FROM entities e WHERE e.id = $6 AND e.workspace_id = $3 ON CONFLICT (batch_id, entity_id) WHERE batch_id IS NOT NULL AND task_owned DO NOTHING RETURNING id, status",
+            "INSERT INTO record_blueprint_migrations (id, batch_id, workspace_id, record_id, blueprint_id, source_version, target_version, status, issues, task_owned) SELECT $1, $2, $3, e.id, $4, e.blueprint_version, $5, 'pending', '[]'::jsonb, true FROM records e WHERE e.id = $6 AND e.workspace_id = $3 ON CONFLICT (batch_id, record_id) WHERE batch_id IS NOT NULL AND task_owned DO NOTHING RETURNING id, status",
         )
         .bind(Uuid::new_v4())
         .bind(batch.id)
         .bind(workspace_id)
         .bind(batch.blueprint_id)
         .bind(batch.target_version)
-        .bind(entity_id)
+        .bind(record_id)
         .fetch_optional(&mut *transaction)
         .await?;
         let migration = match inserted {
             Some(migration) => migration,
             None => sqlx::query_as::<_, BatchMigration>(
-                "SELECT id, status FROM entity_blueprint_migrations WHERE batch_id = $1 AND entity_id = $2 AND workspace_id = $3 AND task_owned FOR UPDATE",
+                "SELECT id, status FROM record_blueprint_migrations WHERE batch_id = $1 AND record_id = $2 AND workspace_id = $3 AND task_owned FOR UPDATE",
             )
             .bind(batch.id)
-            .bind(entity_id)
+            .bind(record_id)
             .bind(workspace_id)
             .fetch_one(&mut *transaction)
             .await?,
@@ -535,7 +535,7 @@ impl CatalogRepository {
         let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         sqlx::query(
-            "UPDATE entity_blueprint_migrations SET status = 'migrating', started_at = COALESCE(started_at, now()) WHERE id = $1 AND workspace_id = $2 AND status IN ('ready', 'migrating')",
+            "UPDATE record_blueprint_migrations SET status = 'migrating', started_at = COALESCE(started_at, now()) WHERE id = $1 AND workspace_id = $2 AND status IN ('ready', 'migrating')",
         )
         .bind(migration_id)
         .bind(workspace_id)
@@ -552,7 +552,7 @@ impl CatalogRepository {
         let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         sqlx::query(
-            "UPDATE entity_blueprint_migrations SET status = 'failed', issues = $2, completed_at = now() WHERE id = $1 AND workspace_id = $3 AND status IN ('pending', 'ready', 'migrating')",
+            "UPDATE record_blueprint_migrations SET status = 'failed', issues = $2, completed_at = now() WHERE id = $1 AND workspace_id = $3 AND status IN ('pending', 'ready', 'migrating')",
         )
         .bind(migration_id)
         .bind(json!([{"kind": "migration_failed", "message": message}]))
@@ -591,7 +591,7 @@ fn safe_automatic_migration(
     source: &crate::model::BlueprintWithAttributes,
     target: &crate::model::BlueprintWithAttributes,
 ) -> Option<Vec<String>> {
-    if source.blueprint.entity_schema != target.blueprint.entity_schema {
+    if source.blueprint.record_schema != target.blueprint.record_schema {
         return None;
     }
     let target_attributes: HashMap<_, _> = target

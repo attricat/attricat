@@ -23,7 +23,7 @@ Przesłane archiwa przechodzą te same kontrole co instalacje z rejestru: limity
 
 Nowa instalacja startuje jako **wyłączona**. Przed jej włączeniem:
 
-1. **Przeczytaj żądane uprawnienia.** Każde z nich wskazuje możliwość, np. `catalog.write` (zmiana rekordów), `events.subscribe` (reagowanie na zmiany), `network.request` (wywoływanie usług zewnętrznych) lub `client.entity_action` (dodanie przycisku na stronach rekordów). W nazwach uprawnień rekordy występują pod nazwą `entity`. Wszystkie wymienia [dokumentacja manifestu](/pl/extensions/manifest/#uprawnienia).
+1. **Przeczytaj żądane uprawnienia.** Każde z nich wskazuje możliwość, np. `catalog.write` (zmiana rekordów), `events.subscribe` (reagowanie na zmiany), `network.request` (wywoływanie usług zewnętrznych) lub `client.record_action` (dodanie przycisku na stronach rekordów). Wszystkie wymienia [dokumentacja manifestu](/pl/extensions/manifest/#uprawnienia).
 2. **Sprawdź dostęp do sieci.** `network.request` pozwala wyłącznie na wywołania wzorców URL wymienionych jako uprawnienia hosta. Każdy wzorzec pokazuje swoje hosty, metody, limity rozmiaru i limit czasu.
 3. **Skonfiguruj** rozszerzenie, jeśli ma ustawienia.
 4. **Przyznaj** wymagane uprawnienia. Uprawnienia opcjonalne można pominąć; rozszerzenie musi działać bez nich.

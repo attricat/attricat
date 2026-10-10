@@ -24,7 +24,7 @@ pub struct Blueprint {
     pub version: i64,
     pub includes: Value,
     pub views: Value,
-    pub entity_schema: Option<Value>,
+    pub record_schema: Option<Value>,
     pub status: String,
     pub published_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
@@ -50,7 +50,7 @@ pub struct Attribute {
     pub file_policy: Option<Value>,
     /// The single allowed target blueprint, if exactly one is allowed.
     pub target_blueprint_code: Option<String>,
-    /// Every allowed target blueprint; empty means any entity blueprint.
+    /// Every allowed target blueprint; empty means any record blueprint.
     pub target_blueprint_codes: Vec<String>,
     pub cardinality: Option<String>,
     pub target_cardinality: Option<String>,
@@ -125,7 +125,7 @@ pub struct ReusableAttributeGroup {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct EntityReusableAttribute {
+pub struct RecordReusableAttribute {
     pub attachment_id: Uuid,
     pub attribute_id: Uuid,
     pub definition_id: Uuid,
@@ -151,7 +151,7 @@ pub struct EntityReusableAttribute {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct Entity {
+pub struct Record {
     pub id: Uuid,
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
@@ -175,10 +175,10 @@ pub struct AttributeContext {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AttributeValue {
     pub id: Uuid,
-    pub entity_id: Uuid,
+    pub record_id: Uuid,
     pub attribute_id: Uuid,
     pub value: Value,
-    pub relationship_target_entity_id: Option<Uuid>,
+    pub relationship_target_record_id: Option<Uuid>,
     pub active: bool,
     pub context_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
@@ -187,10 +187,10 @@ pub struct AttributeValue {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AttributeValueHistory {
     pub id: Uuid,
-    pub entity_id: Uuid,
+    pub record_id: Uuid,
     pub attribute_id: Uuid,
     pub value: Value,
-    pub relationship_target_entity_id: Option<Uuid>,
+    pub relationship_target_record_id: Option<Uuid>,
     pub active: bool,
     pub context_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
@@ -204,12 +204,12 @@ pub struct PublicationChannel {
     pub enabled: bool,
     /// Codes of enabled rules that must pass before publication.
     pub required_rule_codes: Vec<String>,
-    /// Whether the entity schema and blueprint checks must pass in this context.
-    pub require_valid_entity: bool,
+    /// Whether the record schema and blueprint checks must pass in this context.
+    pub require_valid_record: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct EntityPublicationStatus {
+pub struct RecordPublicationStatus {
     pub context_id: Uuid,
     pub context_code: String,
     pub status: String,
@@ -224,8 +224,8 @@ pub struct PublicationContextRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct BlueprintEntityPublicationSummary {
-    pub entity_count: i64,
+pub struct BlueprintRecordPublicationSummary {
+    pub record_count: i64,
     pub channel_count: i64,
     pub publication_count: i64,
 }
@@ -239,11 +239,11 @@ pub struct UpdatePublicationChannel {
     pub required_rule_codes: Option<Vec<String>>,
     /// Omit to keep the current setting.
     #[serde(default)]
-    pub require_valid_entity: Option<bool>,
+    pub require_valid_record: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct EntityAuditChange {
+pub struct RecordAuditChange {
     pub audit_event_id: Uuid,
     pub occurred_at: DateTime<Utc>,
     pub actor_user_id: Option<Uuid>,
@@ -303,7 +303,7 @@ pub enum NewAttributeValue {
         attribute_id: Option<Uuid>,
         attribute_code: Option<String>,
         context_id: Option<Uuid>,
-        target_entity_id: Uuid,
+        target_record_id: Uuid,
     },
 }
 
@@ -326,7 +326,7 @@ pub struct RelationshipTargets {
     pub attribute_id: Option<Uuid>,
     pub attribute_code: Option<String>,
     pub context_id: Option<Uuid>,
-    pub target_entity_ids: Vec<Uuid>,
+    pub target_record_ids: Vec<Uuid>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -353,22 +353,22 @@ pub struct TablePathAttribute {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct MatchPathEdge {
-    pub source_entity_id: Uuid,
+    pub source_record_id: Uuid,
     pub attribute_code: String,
-    pub target_entity_id: Uuid,
+    pub target_record_id: Uuid,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct MatchExplanation {
     pub term: String,
-    pub matching_entity_id: Uuid,
+    pub matching_record_id: Uuid,
     pub matching_attribute_code: Option<String>,
     pub traversal_depth: u8,
     pub relationship_path: Vec<MatchPathEdge>,
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct EntityPreview {
+pub struct RecordPreview {
     pub id: Uuid,
     pub blueprint_version: i64,
     pub schema_outdated: bool,
@@ -384,13 +384,13 @@ pub struct EntityPreview {
     /// Direct relationship targets required by the current table columns, keyed by relationship
     /// attribute code. Each target is loaded once for the page and carries scalar cache only.
     #[serde(default)]
-    pub related: HashMap<String, Vec<RelatedEntityPreview>>,
+    pub related: HashMap<String, Vec<RelatedRecordPreview>>,
     #[serde(default)]
     pub match_explanations: Vec<MatchExplanation>,
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct RelatedEntityPreview {
+pub struct RelatedRecordPreview {
     pub id: Uuid,
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
@@ -402,8 +402,8 @@ pub struct RelatedEntityPreview {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct EntityPreviewPage {
-    pub items: Vec<EntityPreview>,
+pub struct RecordPreviewPage {
+    pub items: Vec<RecordPreview>,
     pub next_cursor: Option<Uuid>,
 }
 
@@ -421,8 +421,8 @@ pub struct IncomingRelationshipsRequest {
     pub page: SearchPage,
 }
 
-/// A relationship field that currently links some live entities to a target,
-/// with how many distinct source entities it links.
+/// A relationship field that currently links some live records to a target,
+/// with how many distinct source records it links.
 #[derive(Clone, Debug, Serialize)]
 pub struct IncomingRelationshipField {
     pub source_blueprint: String,
@@ -439,9 +439,9 @@ pub struct IncomingRelationshipItem {
     pub display: Value,
 }
 
-/// Display labels of one entity, per context, for naming it in other views.
+/// Display labels of one record, per context, for naming it in other views.
 #[derive(Clone, Debug, Serialize)]
-pub struct EntityLabel {
+pub struct RecordLabel {
     pub id: Uuid,
     pub blueprint_code: String,
     pub display: Value,
@@ -454,39 +454,39 @@ pub struct IncomingRelationshipsPage {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct EntityPreviewResponse {
-    pub entity: EntityIdentity,
+pub struct RecordPreviewResponse {
+    pub record: RecordIdentity,
     pub context: Value,
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct ResolvedEntityPreviewResponse {
-    pub entity: EntityIdentity,
+pub struct ResolvedRecordPreviewResponse {
+    pub record: RecordIdentity,
     pub requested_context: AttributeContext,
     pub values: Value,
     /// Attached definitions are deliberately a second namespace rather than
     /// fields injected into blueprint-controlled layouts.
-    pub reusable_attributes: Vec<EntityReusableAttribute>,
+    pub reusable_attributes: Vec<RecordReusableAttribute>,
     pub reusable_values: Value,
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct EntityHierarchyItem {
+pub struct RecordHierarchyItem {
     pub id: Uuid,
     pub display: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct EntityHierarchyResponse {
-    pub items: Vec<EntityHierarchyItem>,
-    pub paths: Vec<Vec<EntityHierarchyItem>>,
+pub struct RecordHierarchyResponse {
+    pub items: Vec<RecordHierarchyItem>,
+    pub paths: Vec<Vec<RecordHierarchyItem>>,
     pub truncated: bool,
     pub multiple_parents: bool,
     pub cycle_detected: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct EntityIdentity {
+pub struct RecordIdentity {
     pub id: Uuid,
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
@@ -495,19 +495,19 @@ pub struct EntityIdentity {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SearchEntitiesRequest {
+pub struct SearchRecordsRequest {
     pub blueprint: SearchBlueprint,
     #[serde(default)]
     pub query: Option<String>,
     #[serde(default)]
     pub filters: Vec<SearchFilter>,
-    /// Filters source entities by targets reached through one to three relationship hops.
+    /// Filters source records by targets reached through one to three relationship hops.
     #[serde(default)]
     pub relationship_filters: Vec<RelationshipFilter>,
     /// All requested tags must be present. System tags are outside blueprint data.
     #[serde(default)]
     pub system_tags: Vec<String>,
-    /// Restrict results to entities pinned to an older published blueprint revision.
+    /// Restrict results to records pinned to an older published blueprint revision.
     #[serde(default)]
     pub outdated: bool,
     #[serde(default)]
@@ -578,7 +578,7 @@ pub struct RelationshipTreeFacetChildItem {
 #[derive(Clone, Debug, Serialize)]
 pub struct RelationshipTreeFacetChildrenResponse {
     pub items: Vec<RelationshipTreeFacetChildItem>,
-    pub selected_items: Vec<EntityHierarchyItem>,
+    pub selected_items: Vec<RecordHierarchyItem>,
     pub next_cursor: Option<Uuid>,
 }
 
@@ -631,9 +631,9 @@ pub enum SearchResultVersionScope {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct EntitySearchResponse {
+pub struct RecordSearchResponse {
     pub blueprint: BlueprintWithAttributes,
-    pub items: Vec<EntityPreview>,
+    pub items: Vec<RecordPreview>,
     pub next_cursor: Option<String>,
     pub total_count: Option<i64>,
     pub total_count_capped: bool,
@@ -644,12 +644,12 @@ pub struct EntitySearchResponse {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct CreateEntityFormRequest {
+pub struct CreateRecordFormRequest {
     pub blueprint: SearchBlueprint,
     #[serde(default)]
     pub values: Vec<NewAttributeValue>,
     /// Files staged for the blueprint's file attributes by the caller, which
-    /// the create claims and links before validating the new entity.
+    /// the create claims and links before validating the new record.
     #[serde(default)]
     pub files: Vec<NewFileAttributeValue>,
     #[serde(default)]
@@ -670,7 +670,7 @@ pub struct NewFileAttributeValue {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct UpdateEntityFormRequest {
+pub struct UpdateRecordFormRequest {
     pub expected_updated_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub values: Vec<NewAttributeValue>,
@@ -683,26 +683,26 @@ pub struct UpdateEntityFormRequest {
     pub system_metadata: Option<Value>,
 }
 
-/// Operations an entity batch may hold.
-pub const MAX_ENTITY_BATCH_OPERATIONS: usize = 50;
-/// Scalar values, relationship targets and removals across one entity batch.
-pub const MAX_ENTITY_BATCH_VALUES: usize = 1000;
+/// Operations a record batch may hold.
+pub const MAX_RECORD_BATCH_OPERATIONS: usize = 50;
+/// Scalar values, relationship targets and removals across one record batch.
+pub const MAX_RECORD_BATCH_VALUES: usize = 1000;
 
-/// Writes, status transitions and deletions applied to several entities in
+/// Writes, status transitions and deletions applied to several records in
 /// one transaction: every operation commits, or none does.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct EntityBatchRequest {
-    pub operations: Vec<EntityBatchOperation>,
+pub struct RecordBatchRequest {
+    pub operations: Vec<RecordBatchOperation>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
-pub enum EntityBatchOperation {
-    /// Creates an entity. A caller-chosen `entity_id` lets later operations
+pub enum RecordBatchOperation {
+    /// Creates a record. A caller-chosen `record_id` lets later operations
     /// in the same batch link to it.
     Create {
-        entity_id: Option<Uuid>,
+        record_id: Option<Uuid>,
         blueprint: SearchBlueprint,
         #[serde(default)]
         values: Vec<NewAttributeValue>,
@@ -711,9 +711,9 @@ pub enum EntityBatchOperation {
         #[serde(default = "empty_json_object")]
         system_metadata: Value,
     },
-    /// Updates an entity like `PUT /v1/entities/{id}`.
+    /// Updates a record like `PUT /v1/records/{id}`.
     Update {
-        entity_id: Uuid,
+        record_id: Uuid,
         expected_updated_at: Option<DateTime<Utc>>,
         #[serde(default)]
         values: Vec<NewAttributeValue>,
@@ -724,28 +724,28 @@ pub enum EntityBatchOperation {
         system_tags: Option<Vec<String>>,
         system_metadata: Option<Value>,
     },
-    /// Deletes an entity.
+    /// Deletes a record.
     Delete {
-        entity_id: Uuid,
+        record_id: Uuid,
         expected_updated_at: Option<DateTime<Utc>>,
     },
 }
 
-impl EntityBatchOperation {
-    /// The entity the operation writes, when known before it runs.
-    pub fn entity_id(&self) -> Option<Uuid> {
+impl RecordBatchOperation {
+    /// The record the operation writes, when known before it runs.
+    pub fn record_id(&self) -> Option<Uuid> {
         match self {
-            Self::Create { entity_id, .. } => *entity_id,
-            Self::Update { entity_id, .. } | Self::Delete { entity_id, .. } => Some(*entity_id),
+            Self::Create { record_id, .. } => *record_id,
+            Self::Update { record_id, .. } | Self::Delete { record_id, .. } => Some(*record_id),
         }
     }
 
-    /// The permission the operation needs and the entity it is checked on.
+    /// The permission the operation needs and the record it is checked on.
     pub fn permission(&self) -> (&'static str, Option<Uuid>) {
         match self {
-            Self::Create { .. } => ("entities.write", None),
-            Self::Update { entity_id, .. } => ("entities.write", Some(*entity_id)),
-            Self::Delete { entity_id, .. } => ("entities.delete", Some(*entity_id)),
+            Self::Create { .. } => ("records.write", None),
+            Self::Update { record_id, .. } => ("records.write", Some(*record_id)),
+            Self::Delete { record_id, .. } => ("records.delete", Some(*record_id)),
         }
     }
 
@@ -762,7 +762,7 @@ impl EntityBatchOperation {
                     + remove_values.len()
                     + relationships
                         .iter()
-                        .map(|relationship| relationship.target_entity_ids.len().max(1))
+                        .map(|relationship| relationship.target_record_ids.len().max(1))
                         .sum::<usize>()
             }
             Self::Delete { .. } => 0,
@@ -790,16 +790,16 @@ impl EntityBatchOperation {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct EntityBatchResponse {
-    pub operations: Vec<EntityBatchOperationResult>,
+pub struct RecordBatchResponse {
+    pub operations: Vec<RecordBatchOperationResult>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
-pub enum EntityBatchOperationResult {
-    Create { entity: Entity },
-    Update { entity: Entity },
-    Delete { entity_id: Uuid },
+pub enum RecordBatchOperationResult {
+    Create { record: Record },
+    Update { record: Record },
+    Delete { record_id: Uuid },
 }
 
 fn empty_json_object() -> Value {
@@ -817,7 +817,7 @@ pub enum FormAttributeValue {
     Relationship {
         attribute_code: String,
         context_id: Option<Uuid>,
-        target_entity_id: Uuid,
+        target_record_id: Uuid,
     },
     File {
         attribute_code: String,
@@ -826,7 +826,7 @@ pub enum FormAttributeValue {
     },
 }
 
-/// Public metadata for a file attached to an entity attribute.
+/// Public metadata for a file attached to a record attribute.
 #[derive(Clone, Debug, Serialize)]
 pub struct FileMetadata {
     pub id: Uuid,
@@ -849,22 +849,22 @@ pub struct FileVariantMetadata {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct EntityFormResponse {
+pub struct RecordFormResponse {
     pub can_write: bool,
-    pub entity: Entity,
+    pub record: Record,
     pub blueprint: BlueprintWithAttributes,
     pub values: Vec<FormAttributeValue>,
-    /// Entity-owned, namespace-qualified definitions and their values are kept
+    /// Record-owned, namespace-qualified definitions and their values are kept
     /// separate from blueprint fields so callers cannot accidentally merge the
     /// two namespaces.
-    pub reusable_attributes: Vec<EntityReusableAttribute>,
+    pub reusable_attributes: Vec<RecordReusableAttribute>,
     pub reusable_values: Vec<FormAttributeValue>,
     pub context: Value,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct MigrateEntityRequest {
+pub struct MigrateRecordRequest {
     pub migration_id: Uuid,
     pub expected_target_version: i64,
     #[serde(default)]
@@ -895,9 +895,9 @@ pub struct StartBlueprintMigrationBatchRequest {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct BlueprintMigrationImpact {
-    pub eligible_entities: i64,
+    pub eligible_records: i64,
     pub removed_attribute_codes: Vec<String>,
-    pub entities_with_removed_values: i64,
+    pub records_with_removed_values: i64,
     pub removed_values: i64,
     pub requires_removal_disposition: bool,
 }
@@ -910,7 +910,7 @@ pub struct MigrationIssue {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct EntityMigrationPreview {
+pub struct RecordMigrationPreview {
     pub source_updated_at: DateTime<Utc>,
     pub migration_id: Uuid,
     pub source_version: i64,
@@ -942,20 +942,20 @@ pub struct BlueprintMigrationBatchStatus {
     pub created_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
-    pub total_entities: i64,
-    pub processed_entities: i64,
-    pub migrated_entities: i64,
-    pub needs_input_entities: i64,
-    pub failed_entities: i64,
+    pub total_records: i64,
+    pub processed_records: i64,
+    pub migrated_records: i64,
+    pub needs_input_records: i64,
+    pub failed_records: i64,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct DataHealthSummary {
-    pub active_entities: i64,
-    pub entity_blueprints: i64,
+    pub active_records: i64,
+    pub record_blueprints: i64,
     pub contexts: i64,
-    pub outdated_entities: i64,
-    pub stale_entities: i64,
+    pub outdated_records: i64,
+    pub stale_records: i64,
     pub deleted_relationship_targets: i64,
 }
 
@@ -964,9 +964,9 @@ pub struct BlueprintHealth {
     pub code: String,
     pub name: String,
     pub current_version: i64,
-    pub active_entities: i64,
-    pub outdated_entities: i64,
-    pub stale_entities: i64,
+    pub active_records: i64,
+    pub outdated_records: i64,
+    pub stale_records: i64,
     pub oldest_updated_at: Option<DateTime<Utc>>,
     pub newest_updated_at: Option<DateTime<Utc>>,
 }
@@ -974,13 +974,13 @@ pub struct BlueprintHealth {
 #[derive(Clone, Debug, Serialize)]
 pub struct FreshnessBand {
     pub label: String,
-    pub entities: i64,
+    pub records: i64,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ContextHealth {
     pub code: String,
-    pub direct_entities: i64,
+    pub direct_records: i64,
     pub direct_values: i64,
 }
 
@@ -1003,9 +1003,9 @@ pub struct CompletenessHealth {
     pub code: String,
     pub name: String,
     pub current_version: i64,
-    pub active_entities: i64,
-    pub outdated_entities: i64,
-    pub default_complete_entities: i64,
+    pub active_records: i64,
+    pub outdated_records: i64,
+    pub default_complete_records: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1030,11 +1030,11 @@ pub struct CreateWorkflow {
     pub definition: String,
 }
 
-/// Bounded manual workflow input: the target is an existing entity and no caller payload is persisted.
+/// Bounded manual workflow input: the target is an existing record and no caller payload is persisted.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateManualWorkflowRun {
-    pub entity_id: Uuid,
+    pub record_id: Uuid,
     /// Client-generated opaque key. Reusing it retries the same durable run.
     pub idempotency_key: String,
 }
@@ -1069,7 +1069,7 @@ pub struct CreateRule {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateManualRuleRun {
-    pub entity_id: Option<Uuid>,
+    pub record_id: Option<Uuid>,
     pub dry_run: bool,
     pub idempotency_key: String,
     /// Published revision to dry-run before enabling it. Defaults to the
@@ -1083,7 +1083,7 @@ pub struct CreateManualRuleRun {
 #[serde(deny_unknown_fields)]
 pub struct EnableRule {
     /// Enable an enforcing rule although its completed dry run found
-    /// existing violations. Those entities cannot be saved until fixed.
+    /// existing violations. Those records cannot be saved until fixed.
     #[serde(default)]
     pub accept_existing_violations: bool,
 }
@@ -1095,7 +1095,7 @@ pub struct RuleRun {
     pub rule_version: i64,
     pub source: String,
     pub dry_run: bool,
-    pub scope_entity_id: Option<Uuid>,
+    pub scope_record_id: Option<Uuid>,
     pub status: String,
     pub candidate_cursor: Option<Uuid>,
     pub candidates_evaluated: i64,
@@ -1115,7 +1115,7 @@ pub struct RuleFinding {
     pub id: Uuid,
     pub rule_id: Uuid,
     pub rule_version: i64,
-    pub entity_id: Uuid,
+    pub record_id: Uuid,
     pub context_id: Option<Uuid>,
     pub severity: String,
     pub message: String,

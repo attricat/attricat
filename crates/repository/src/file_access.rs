@@ -12,10 +12,10 @@ use crate::repository::{CatalogRepository, RepositoryError};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FileAccessOperation {
     Upload {
-        entity_id: Uuid,
+        record_id: Uuid,
     },
     UpdateReferences {
-        entity_id: Uuid,
+        record_id: Uuid,
     },
     /// Uploading files for a file attribute of a blueprint before the record
     /// that will reference them exists.
@@ -35,24 +35,24 @@ pub enum FileAccessOperation {
     },
     ReadMetadata {
         file_id: Uuid,
-        entity_id: Uuid,
+        record_id: Uuid,
         blueprint_id: Uuid,
     },
     DownloadOriginal {
         file_id: Uuid,
-        entity_id: Uuid,
+        record_id: Uuid,
         blueprint_id: Uuid,
     },
     DownloadVariant {
         file_id: Uuid,
-        entity_id: Uuid,
+        record_id: Uuid,
         blueprint_id: Uuid,
     },
     /// A provider-visible file read requested by an approved user through an
     /// agent run.
     AgentRead {
         file_id: Uuid,
-        entity_id: Uuid,
+        record_id: Uuid,
         blueprint_id: Uuid,
     },
 }
@@ -87,16 +87,16 @@ pub async fn authorize_file_read(
     if targets.is_empty() {
         return Ok(false);
     }
-    // One grant query for every referencing entity; the policy is still
+    // One grant query for every referencing record; the policy is still
     // consulted per readable target, in order, until one allows.
-    let entity_ids: Vec<Uuid> = targets.iter().map(|target| target.entity_id).collect();
+    let record_ids: Vec<Uuid> = targets.iter().map(|target| target.record_id).collect();
     let readable = repository
-        .authorized_entity_ids(principal, workspace, "entities.read", &entity_ids)
+        .authorized_record_ids(principal, workspace, "records.read", &record_ids)
         .await?;
     for target in targets {
-        if readable.contains(&target.entity_id)
+        if readable.contains(&target.record_id)
             && policy
-                .authorize(operation(file_id, target.entity_id, target.blueprint_id))
+                .authorize(operation(file_id, target.record_id, target.blueprint_id))
                 .await
                 == FileAccessDecision::Allow
         {

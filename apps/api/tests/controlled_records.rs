@@ -9,7 +9,7 @@ use support::*;
 const DEFINITION: &str = r#"format_version = 1
 code = 'controlled_document'
 name = 'Controlled document'
-kind = 'entity'
+kind = 'record'
 [views.dropdown_option]
 type = 'dropdown_option'
 fields = ['title']
@@ -39,20 +39,20 @@ value_schema = '''{"type":"string","enum":["draft","review","approved","released
     {"from":null,"to":"draft"},
     {"from":"draft","to":"review","code":"submit"},
     {"from":"review","to":"approved","code":"approve","roles":["reviewer"],"separate_from":["submit"]},
-    {"from":"approved","to":"released","code":"release","permission":"entities.publish"},
+    {"from":"approved","to":"released","code":"release","permission":"records.publish"},
     {"from":"released","to":"draft","code":"correct","roles":["owner"]}
   ]}}'''
 "#;
 
 async fn reviewer_role(pool: &PgPool) -> Uuid {
-    create_role(pool, "reviewer", &["entities.read", "entities.write"]).await
+    create_role(pool, "reviewer", &["records.read", "records.write"]).await
 }
 
-struct Record {
+struct RecordClient {
     url: String,
 }
 
-impl Record {
+impl RecordClient {
     async fn read(&self, client: &Client) -> Value {
         get_json(client, &self.url).await
     }
@@ -62,7 +62,7 @@ impl Record {
         client
             .put(&self.url)
             .json(
-                &json!({"expected_updated_at": current["entity"]["updated_at"], "values": values}),
+                &json!({"expected_updated_at": current["record"]["updated_at"], "values": values}),
             )
             .send()
             .await
@@ -74,31 +74,36 @@ impl Record {
     }
 
     async fn status(&self, client: &Client) -> Value {
-        self.read(client).await["entity"]["projections"]["preview"]["default"]["status"].clone()
+        self.read(client).await["record"]["projections"]["preview"]["default"]["status"].clone()
     }
 }
 
-async fn setup(pool: &PgPool) -> (String, JoinHandle<()>, Arc<FakeObjectStore>, Record) {
+async fn setup(pool: &PgPool) -> (String, JoinHandle<()>, Arc<FakeObjectStore>, RecordClient) {
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let owner = authenticated_client();
     create_blueprint(&owner, &base, DEFINITION).await;
-    let entity = create_entity_with(
+    let record = create_record_with(
         &owner,
         &base,
         "controlled_document",
         json!([scalar("status", "draft"), scalar("title", "Procedure")]),
     )
     .await;
-    let url = format!("{base}/v1/entities/{}", entity["id"].as_str().unwrap());
-    (base, server, store, Record { url })
+    let url = format!("{base}/v1/records/{}", record["id"].as_str().unwrap());
+    (base, server, store, RecordClient { url })
 }
 
-async fn upload(client: &Client, base: &str, record: &Record, name: &str) -> reqwest::Response {
-    let entity_id = record.url.rsplit('/').next().unwrap();
+async fn upload(
+    client: &Client,
+    base: &str,
+    record: &RecordClient,
+    name: &str,
+) -> reqwest::Response {
+    let record_id = record.url.rsplit('/').next().unwrap();
     client
         .post(format!(
-            "{base}/entities/{entity_id}/file-attributes/document/uploads"
+            "{base}/records/{record_id}/file-attributes/document/uploads"
         ))
         .multipart(
             Form::new().part(
@@ -172,7 +177,7 @@ async fn transitions_enforce_roles_permissions_and_separation_of_duties(pool: Pg
         StatusCode::OK,
     )
     .await;
-    // Releasing requires entities.publish, which editors do not hold.
+    // Releasing requires records.publish, which editors do not hold.
     expect_error(
         record.set_status(&editor, "released").await,
         StatusCode::FORBIDDEN,
@@ -182,7 +187,7 @@ async fn transitions_enforce_roles_permissions_and_separation_of_duties(pool: Pg
     expect_status(record.set_status(&owner, "released").await, StatusCode::OK).await;
     assert_eq!(record.status(&owner).await, "released");
     let actors: Vec<(Option<String>, Option<String>)> = sqlx::query_as(
-        "SELECT edge_code, to_status FROM entity_status_transitions ORDER BY occurred_at, to_status",
+        "SELECT edge_code, to_status FROM record_status_transitions ORDER BY occurred_at, to_status",
     )
     .fetch_all(&pool)
     .await
@@ -229,10 +234,10 @@ async fn locked_records_reject_writes_until_an_audited_correction(pool: PgPool) 
         "record_locked",
     )
     .await;
-    let entity_id = record.url.rsplit('/').next().unwrap();
+    let record_id = record.url.rsplit('/').next().unwrap();
     expect_error(
         owner
-            .delete(format!("{base}/entities/{entity_id}"))
+            .delete(format!("{base}/records/{record_id}"))
             .send()
             .await
             .unwrap(),
@@ -261,15 +266,15 @@ async fn locked_records_reject_writes_until_an_audited_correction(pool: PgPool) 
     expect_status(record.set_status(&owner, "draft").await, StatusCode::OK).await;
     expect_status(record.put(&owner, title("Changed")).await, StatusCode::OK).await;
     let unlocks: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM audit_events WHERE action = 'entity.record.unlock' AND target->>'entity_id' = $1",
+        "SELECT count(*) FROM audit_events WHERE action = 'record.unlock' AND target->>'record_id' = $1",
     )
-    .bind(entity_id)
+    .bind(record_id)
     .fetch_one(&pool)
     .await
     .unwrap();
     assert_eq!(unlocks, 1);
     let unlocked: bool = sqlx::query_scalar(
-        "SELECT unlocked FROM entity_status_transitions WHERE edge_code = 'correct'",
+        "SELECT unlocked FROM record_status_transitions WHERE edge_code = 'correct'",
     )
     .fetch_one(&pool)
     .await
@@ -339,19 +344,19 @@ async fn approvals_bind_to_content_and_void_on_change(pool: PgPool) {
     assert_eq!(voided[0]["end_reason"], "content_changed");
     assert_eq!(voided[0]["void_status"], "review");
     let actions: Vec<String> = sqlx::query_scalar(
-        "SELECT action FROM audit_events WHERE action LIKE 'entity.approval.%' ORDER BY occurred_at",
+        "SELECT action FROM audit_events WHERE action LIKE 'record.approval.%' ORDER BY occurred_at",
     )
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert_eq!(actions, ["entity.approval.record", "entity.approval.void"]);
+    assert_eq!(actions, ["record.approval.record", "record.approval.void"]);
     server.abort();
 }
 
 const VOIDABLE: &str = r#"format_version = 1
 code = 'voidable_document'
 name = 'Voidable document'
-kind = 'entity'
+kind = 'record'
 [views.dropdown_option]
 type = 'dropdown_option'
 fields = ['title']
@@ -383,15 +388,15 @@ async fn approval_voids_are_not_guarded_by_transition_conditions(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
     create_blueprint(&owner, &base, VOIDABLE).await;
-    let entity = create_entity_with(
+    let record = create_record_with(
         &owner,
         &base,
         "voidable_document",
         json!([scalar("status", "draft"), scalar("title", "Procedure")]),
     )
     .await;
-    let record = Record {
-        url: format!("{base}/v1/entities/{}", entity["id"].as_str().unwrap()),
+    let record = RecordClient {
+        url: format!("{base}/v1/records/{}", record["id"].as_str().unwrap()),
     };
     expect_status(record.set_status(&owner, "approved").await, StatusCode::OK).await;
     // A user moving approved -> draft must give a reason ...
@@ -496,7 +501,7 @@ async fn released_files_are_held_and_explicit_holds_are_managed(pool: PgPool) {
         &pool,
         membership,
         VIEWER_ROLE_ID,
-        GrantScope::Entity(Uuid::new_v4()),
+        GrantScope::Record(Uuid::new_v4()),
     )
     .await;
     expect_status(
@@ -556,7 +561,7 @@ async fn context_reparenting_revalidates_without_status_effects(pool: PgPool) {
     let c_id: Uuid = c.as_str().unwrap().parse().unwrap();
     let active_in_c = || async {
         sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM entity_approvals WHERE context_id = $1 AND ended_at IS NULL",
+            "SELECT count(*) FROM record_approvals WHERE context_id = $1 AND ended_at IS NULL",
         )
         .bind(c_id)
         .fetch_one(&pool)
@@ -564,7 +569,7 @@ async fn context_reparenting_revalidates_without_status_effects(pool: PgPool) {
         .unwrap()
     };
     let transitions = || async {
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM entity_status_transitions")
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM record_status_transitions")
             .fetch_one(&pool)
             .await
             .unwrap()

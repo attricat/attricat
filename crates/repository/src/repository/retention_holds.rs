@@ -11,7 +11,7 @@ pub struct FileRetentionHold {
     /// `status` holds come from entering a status with `retention_days`;
     /// `explicit` holds are placed by a user.
     pub source: String,
-    pub entity_id: Option<Uuid>,
+    pub record_id: Option<Uuid>,
     pub attribute_code: Option<String>,
     pub status: Option<String>,
     pub reason: Option<String>,
@@ -24,7 +24,7 @@ pub struct FileRetentionHold {
     pub active: bool,
 }
 
-const HOLD_COLUMNS: &str = "id, file_id, source, entity_id, attribute_code, status, reason, held_until, created_by_user_id, created_at, released_at, released_by_user_id, (released_at IS NULL AND held_until > now()) AS active";
+const HOLD_COLUMNS: &str = "id, file_id, source, record_id, attribute_code, status, reason, held_until, created_by_user_id, created_at, released_at, released_by_user_id, (released_at IS NULL AND held_until > now()) AS active";
 
 impl CatalogRepository {
     /// Holds on one file, newest first, including expired and released ones.
@@ -41,16 +41,16 @@ impl CatalogRepository {
         .await?)
     }
 
-    /// Holds on files the entity references or placed by its statuses.
-    pub async fn entity_retention_holds(
+    /// Holds on files the record references or placed by its statuses.
+    pub async fn record_retention_holds(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
     ) -> Result<Vec<FileRetentionHold>, RepositoryError> {
         Ok(sqlx::query_as::<_, FileRetentionHold>(&format!(
-            "SELECT {HOLD_COLUMNS} FROM file_retention_holds h WHERE workspace_id = $1 AND (entity_id = $2 OR file_id IN (SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id WHERE v.entity_id = $2 AND v.workspace_id = $1)) ORDER BY created_at DESC, id DESC LIMIT 200"
+            "SELECT {HOLD_COLUMNS} FROM file_retention_holds h WHERE workspace_id = $1 AND (record_id = $2 OR file_id IN (SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id WHERE v.record_id = $2 AND v.workspace_id = $1)) ORDER BY created_at DESC, id DESC LIMIT 200"
         ))
         .bind(self.workspace_id.0)
-        .bind(entity_id)
+        .bind(record_id)
         .fetch_all(&self.pool)
         .await?)
     }

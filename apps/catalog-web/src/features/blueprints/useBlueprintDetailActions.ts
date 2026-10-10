@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { entityQueryKeys } from '../entities/queryKeys';
+import { recordQueryKeys } from '../records/queryKeys';
 import {
-  publishBlueprintEntities,
-  publishBlueprintEntitiesAllChannels,
+  publishBlueprintRecords,
+  publishBlueprintRecordsAllChannels,
   publishBlueprintRevision,
   startSafeBlueprintMigrationBatch,
 } from './api';
@@ -13,11 +13,11 @@ import { blueprintQueryKeys } from './queryKeys';
 export const useBlueprintDetailActions = (
   blueprintId: string,
   {
-    onEntitiesPublished,
+    onRecordsPublished,
     onMigrationStarted,
     onPublished,
   }: {
-    onEntitiesPublished: () => void;
+    onRecordsPublished: () => void;
     onMigrationStarted: () => void;
     onPublished: () => void;
   },
@@ -61,7 +61,7 @@ export const useBlueprintDetailActions = (
       });
     },
   });
-  const publishEntities = useMutation({
+  const publishRecords = useMutation({
     mutationFn: ({
       version,
       contextId,
@@ -70,15 +70,15 @@ export const useBlueprintDetailActions = (
       contextId: string;
     }) =>
       contextId === allPublicationChannels
-        ? publishBlueprintEntitiesAllChannels(blueprintId, version)
-        : publishBlueprintEntities(blueprintId, version, contextId),
+        ? publishBlueprintRecordsAllChannels(blueprintId, version)
+        : publishBlueprintRecords(blueprintId, version, contextId),
     onSuccess: async () => {
-      onEntitiesPublished();
+      onRecordsPublished();
       await queryClient.invalidateQueries({
-        queryKey: entityQueryKeys.publications(),
+        queryKey: recordQueryKeys.publications(),
       });
     },
   });
 
-  return { publish, publishEntities, safeMigration };
+  return { publish, publishRecords, safeMigration };
 };

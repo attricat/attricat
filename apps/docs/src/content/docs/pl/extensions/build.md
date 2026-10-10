@@ -44,7 +44,7 @@ Projektuj z myślą o tym: Twoje rozszerzenie prosi o uprawnienia, a administrat
       "version": 1,
       "kind": "embedded",
       "artifact": "panel",
-      "outlet": "entity_preview_panel"
+      "outlet": "record_preview_panel"
     }
   ]
 }
@@ -53,13 +53,11 @@ Projektuj z myślą o tym: Twoje rozszerzenie prosi o uprawnienia, a administrat
 ```js
 // dist/panel.js
 export const mount = async (root, catalog) => {
-  const form = await catalog.request(`/api/v1/entities/${catalog.context.entity_id}`);
-  root.textContent = `${form.blueprint.blueprint.name} v${form.entity.blueprint_version}`;
+  const form = await catalog.request(`/api/v1/records/${catalog.context.record_id}`);
+  root.textContent = `${form.blueprint.blueprint.name} v${form.record.blueprint_version}`;
   return () => root.replaceChildren();
 };
 ```
-
-W ścieżkach API, nazwach miejsc osadzenia i polach kontekstu rekordy występują pod nazwą `entity`.
 
 Pełny format manifestu opisuje [dokumentacja manifestu](/pl/extensions/manifest/).
 

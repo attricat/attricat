@@ -12,8 +12,8 @@ import { compactIconSize } from '../../components/iconSizes';
 import { useId, useRef } from 'react';
 import { ImageGalleryEditor } from './ImageGalleryEditor';
 import { useTranslation } from 'react-i18next';
-import type { Attribute } from '../entities/api';
-import { attributeLabel } from '../entities/entityDisplay';
+import type { Attribute } from '../records/api';
+import { attributeLabel } from '../records/recordDisplay';
 import { fileCardinalities } from './constants';
 import { acceptedFileTypes } from './fileAcceptance';
 import { PendingFileRow } from './PendingFileRow';
@@ -25,16 +25,16 @@ type FileAttributeEditorProps = {
   attribute: Attribute;
   contextId: string | null;
   disabled: boolean;
-  entityId?: string;
+  recordId?: string;
   files: FileMetadata[];
   error?: string;
   helperText?: string;
-  onEntityUpdated?: (updatedAt: string) => void;
+  onRecordUpdated?: (updatedAt: string) => void;
   required?: boolean;
 };
 
 const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
-  const { attribute, entityId, error, helperText, required } = props;
+  const { attribute, recordId, error, helperText, required } = props;
   const disabled = props.disabled || attribute.readonly === true;
   const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);
@@ -46,8 +46,8 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
   const queueDisabled = !uploads.canQueue || !uploads.canQueueFile;
   const savingHelp = uploads.deferred
     ? t('files.uploadedOnCreate')
-    : !entityId
-      ? t('files.saveEntityBeforeUploading')
+    : !recordId
+      ? t('files.saveRecordBeforeUploading')
       : (!helperText || !disabled) && t('files.savedImmediately');
 
   return (
@@ -116,7 +116,7 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
         >
           {t('files.chooseOrDropFiles')}
         </Button>
-        {entityId && uploads.pending.length > 0 && (
+        {recordId && uploads.pending.length > 0 && (
           <Button
             color="primary"
             disabled={!uploads.canUpload || !uploads.hasQueuedFiles}
@@ -155,7 +155,7 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
 /** Editor for a file attribute; resets its queue when the target changes. */
 export const FileAttributeEditor = (props: FileAttributeEditorProps) => (
   <FileAttributeEditorContent
-    key={`${props.entityId ?? ''}:${props.attribute.code}:${props.contextId ?? ''}`}
+    key={`${props.recordId ?? ''}:${props.attribute.code}:${props.contextId ?? ''}`}
     {...props}
   />
 );

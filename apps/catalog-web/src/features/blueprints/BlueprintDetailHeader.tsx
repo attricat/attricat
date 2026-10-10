@@ -16,7 +16,7 @@ export const BlueprintDetailHeader = ({
   migrationStatusKnown,
   onMigrate,
   onPublish,
-  onPublishEntities,
+  onPublishRecords,
 }: {
   blueprint: Blueprint;
   canStartSafeMigration: boolean;
@@ -24,7 +24,7 @@ export const BlueprintDetailHeader = ({
   migrationStatusKnown: boolean;
   onMigrate: () => void;
   onPublish: () => void;
-  onPublishEntities: () => void;
+  onPublishRecords: () => void;
 }) => {
   const { t } = useTranslation();
   return (
@@ -55,11 +55,11 @@ export const BlueprintDetailHeader = ({
             )}
             {blueprint.status === blueprintStatuses.published && (
               <Button
-                onClick={onPublishEntities}
+                onClick={onPublishRecords}
                 startIcon={<SendIcon />}
                 variant="outlined"
               >
-                {t('blueprints.publishEntities')}
+                {t('blueprints.publishRecords')}
               </Button>
             )}
             {canStartSafeMigration && (
@@ -71,7 +71,7 @@ export const BlueprintDetailHeader = ({
               >
                 {migrationActive
                   ? t('blueprints.migrationInProgress')
-                  : t('blueprints.migrateCompatibleEntities')}
+                  : t('blueprints.migrateCompatibleRecords')}
               </Button>
             )}
           </Stack>

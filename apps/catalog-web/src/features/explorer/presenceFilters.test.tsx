@@ -5,8 +5,8 @@ import userEvent from '@testing-library/user-event';
 import i18n from 'i18next';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import type { Attribute } from '../entities/api';
-import { entitySearchFilterSchema } from '../entities/schemas';
+import type { Attribute } from '../records/api';
+import { recordSearchFilterSchema } from '../records/schemas';
 import { AttributeFilterDialog } from './AttributeFilterDialog';
 import {
   attributeFilterLabel,
@@ -63,7 +63,7 @@ describe('presence filters', () => {
     ).toEqual([filter]);
     for (const value of ['false', 0, null]) {
       expect(
-        entitySearchFilterSchema.safeParse({ ...filter, value }).success,
+        recordSearchFilterSchema.safeParse({ ...filter, value }).success,
       ).toBe(false);
     }
   });

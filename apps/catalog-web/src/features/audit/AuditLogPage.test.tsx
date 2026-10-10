@@ -21,7 +21,7 @@ vi.mock('../extensions/ExtensionOutlet', () => ({
 }));
 
 const event: AuditEvent = {
-  action: 'entity.updated',
+  action: 'record.updated',
   actor_avatar_file_id: null,
   actor_display_name: 'Ada Lovelace',
   actor_email: null,
@@ -43,7 +43,7 @@ const event: AuditEvent = {
   occurred_at: '2026-03-06T12:00:00.000Z',
   outcome: 'success',
   request_id: '00000000-0000-4000-8000-000000000004',
-  target: { type: 'entity' },
+  target: { type: 'record' },
 };
 
 const renderPage = () => {
@@ -76,7 +76,7 @@ describe('AuditLogPage', () => {
     renderPage();
 
     const detailsButton = await screen.findByRole('button', {
-      name: 'View details for entity.updated by Ada Lovelace',
+      name: 'View details for record.updated by Ada Lovelace',
     });
     await user.click(detailsButton);
     const dialog = await screen.findByRole('dialog', { name: 'Audit event' });

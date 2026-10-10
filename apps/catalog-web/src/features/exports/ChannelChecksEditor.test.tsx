@@ -11,7 +11,7 @@ const renderEditor = (requiredRuleCodes: readonly string[]) => {
     <ChannelChecksEditor
       disabled={false}
       onChange={onChange}
-      requireValidEntity={false}
+      requireValidRecord={false}
       requiredRuleCodes={requiredRuleCodes}
       ruleCodes={[]}
     />,

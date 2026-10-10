@@ -32,7 +32,7 @@ the frontend implementation source; the JSON file is its shared validation
 contract.
 
 Persisted value constraints do not belong to view components. Blueprints own
-attribute and entity JSON Schemas, which Rust enforces before values are stored.
+attribute and record JSON Schemas, which Rust enforces before values are stored.
 See [JSON Schema Validation](json-schema-validation.md) for that contract.
 
 ## Add A Component
@@ -73,7 +73,7 @@ implementation, so increment the version when making an incompatible change.
 
 `capabilities` limits a component to display views (`detail`, `table`) or
 to the deprecated `edit` view, which the UI ignores. Blueprints place display
-components; an editable field on the entity page or create form uses the
+components; an editable field on the record page or create form uses the
 display component's `editComponentId` counterpart, so a display component that
 should edit with a custom control must name one. `placements`
 selects the supported view block type: `field`, `relationship_list`,
@@ -104,39 +104,39 @@ type ValueRenderer = ComponentType<{
 }>;
 ```
 
-Table renderers receive the search projection rather than a fetched entity:
+Table renderers receive the search projection rather than a fetched record:
 `catalog.table_image@1`, for example, renders the file metadata hydrated into
 the projection for a direct image-only single-file attribute. Use
 `NotSetValue` for absent values and `EachValue` when a column can project
 several values.
 
-`headingRenderer` is reserved for a stack component that renders the entity
-page heading. It receives attributes, resolved values, the entity ID, and the
+`headingRenderer` is reserved for a stack component that renders the record
+page heading. It receives attributes, resolved values, the record ID, and the
 detail view.
 
 ## Editors
 
-On the entity page, `EntityInlineFields` hosts each editor in an
-`InlineFieldEditor` and saves it through `useEntityFieldSaves`; the create and
-migration forms keep their state in `EntityForm`. An edit component may supply
+On the record page, `RecordInlineFields` hosts each editor in an
+`InlineFieldEditor` and saves it through `useRecordFieldSaves`; the create and
+migration forms keep their state in `RecordForm`. An edit component may supply
 a `valueEditor` that receives `ValueEditorProps` (attribute, string value,
 disabled, required, error, helper text and `onChange`).
 
-`ScalarAttributeEditor` (`features/entities/components`) picks the editor for
-a scalar attribute on the entity page, in the entity form and in the blueprint
+`ScalarAttributeEditor` (`features/records/components`) picks the editor for
+a scalar attribute on the record page, in the record form and in the blueprint
 preview sandbox: a status annotation first, then the paired `valueEditor` when it
 supports the attribute's value type (`resolveValueEditor`), then the built-in
 input for the type, as for `catalog.field_edit`.
 
 Two optional fields add form behavior:
 
-- `validateValue(value)` returns a message for an invalid string. The entity
+- `validateValue(value)` returns a message for an invalid string. The record
   page runs it before saving the field, and the create form on Save after the
   required check; editors can show the same message while typing. It is a
   web-app check only, never a persisted constraint.
 - `preservesWhitespace: true` saves the edited string verbatim instead of
   trimming it (used by Markdown).
-- `editsOnRequest: true` shows a set value on the entity page with the
+- `editsOnRequest: true` shows a set value on the record page with the
   paired display component's `valueRenderer` and an edit button, and opens
   the editor only when asked (used by Markdown). The editor closes again when
   focus leaves it or on Escape, and stays open while the value is blank,

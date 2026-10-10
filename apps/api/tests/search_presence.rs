@@ -4,7 +4,7 @@ use support::*;
 const ITEM: &str = r#"format_version = 1
 code = 'presence_item'
 name = 'Presence item'
-kind = 'entity'
+kind = 'record'
 [views.dropdown_option]
 type = 'dropdown_option'
 fields = ['name']
@@ -51,7 +51,7 @@ value_type = 'file'
 "#;
 
 async fn search(client: &Client, base: &str, filters: Value, version: Option<i64>) -> Value {
-    expect_status(client.post(format!("{base}/v1/entities/search"))
+    expect_status(client.post(format!("{base}/v1/records/search"))
         .json(&json!({"blueprint":{"code":"presence_item","version":version},"filters":filters,"include_total":true,"page":{"size":100}}))
         .send().await.unwrap(), StatusCode::OK).await
 }
@@ -84,14 +84,14 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
     let (base, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     create_blueprint(&client, &base, ITEM).await;
-    let absent = create_entity_with(
+    let absent = create_record_with(
         &client,
         &base,
         "presence_item",
         json!([scalar("name", "Absent")]),
     )
     .await;
-    let present = create_entity_with(
+    let present = create_record_with(
         &client,
         &base,
         "presence_item",
@@ -118,7 +118,7 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
         StatusCode::CREATED,
     )
     .await;
-    expect_status(client.put(format!("{base}/v1/entities/{}",absent["id"].as_str().unwrap()))
+    expect_status(client.put(format!("{base}/v1/records/{}",absent["id"].as_str().unwrap()))
         .json(&json!({"values":[{"kind":"scalar","attribute_code":"text","context_id":context["id"],"value":"Only in alternate context"}]}))
         .send().await.unwrap(),StatusCode::OK).await;
     let workspace = bootstrap_workspace_id();
@@ -135,7 +135,7 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
                 &repository,
                 actor,
                 workspace,
-                "search_entities",
+                "search_records",
                 json!({"blueprint":{"code":"presence_item"},"filters":presence(field,value)}),
             )
             .await
@@ -185,13 +185,13 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
         ("payload", json!(false)),
         ("unknown", json!(false)),
     ] {
-        let response=client.post(format!("{base}/v1/entities/search")).json(&json!({"blueprint":{"code":"presence_item"},"filters":[{"field":field,"operator":"is_set","value":value}]})).send().await.unwrap();
+        let response=client.post(format!("{base}/v1/records/search")).json(&json!({"blueprint":{"code":"presence_item"},"filters":[{"field":field,"operator":"is_set","value":value}]})).send().await.unwrap();
         assert_eq!(
             response.status(),
             StatusCode::UNPROCESSABLE_ENTITY,
             "{field}: {value}"
         );
-        let result = api::agent_tools::execute_read(&repository, actor, workspace, "search_entities",
+        let result = api::agent_tools::execute_read(&repository, actor, workspace, "search_records",
             json!({"blueprint":{"code":"presence_item"},"filters":[{"field":field,"operator":"is_set","value":value}]})).await;
         assert!(
             matches!(
@@ -204,7 +204,7 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
     let id = present["id"].as_str().unwrap();
     expect_status(
         client
-            .put(format!("{base}/v1/entities/{id}"))
+            .put(format!("{base}/v1/records/{id}"))
             .json(&json!({"remove_values":[{"attribute_code":"assignee","context_id":null}]}))
             .send()
             .await
@@ -216,7 +216,7 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
         &search(&client, &base, presence("assignee", false), None).await,
         &[&absent, &present],
     );
-    let history = get_json(&client, format!("{base}/entities/{id}/values/history")).await;
+    let history = get_json(&client, format!("{base}/records/{id}/values/history")).await;
     let entry = history
         .as_array()
         .unwrap()
@@ -226,7 +226,7 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
     expect_status(
         client
             .post(format!(
-                "{base}/entities/{id}/values/history/{}/restore",
+                "{base}/records/{id}/values/history/{}/restore",
                 entry["id"].as_str().unwrap()
             ))
             .send()
@@ -245,11 +245,11 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
         &pool,
         membership,
         VIEWER_ROLE_ID,
-        GrantScope::Entity(Uuid::parse_str(id).unwrap()),
+        GrantScope::Record(Uuid::parse_str(id).unwrap()),
     )
     .await;
     let denied = limited
-        .post(format!("{base}/v1/entities/search"))
+        .post(format!("{base}/v1/records/search"))
         .json(&json!({"blueprint":{"code":"presence_item"},"filters":presence("assignee",false)}))
         .send()
         .await
@@ -259,7 +259,7 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
         &repository,
         user,
         workspace,
-        "search_entities",
+        "search_records",
         json!({"blueprint":{"code":"presence_item"},"filters":presence("assignee",false)}),
     )
     .await;
@@ -269,7 +269,7 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
     ));
     expect_status(
         client
-            .delete(format!("{base}/entities/{id}"))
+            .delete(format!("{base}/records/{id}"))
             .send()
             .await
             .unwrap(),
@@ -297,16 +297,16 @@ async fn file_presence_requires_an_attached_file(pool: PgPool) {
     let client = authenticated_client();
     create_blueprint(&client, &base, ITEM).await;
     let named = |name: &str| json!([scalar("name", name)]);
-    let absent = create_entity_with(&client, &base, "presence_item", named("Absent")).await;
-    let attached = create_entity_with(&client, &base, "presence_item", named("Attached")).await;
-    let cleared = create_entity_with(&client, &base, "presence_item", named("Cleared")).await;
+    let absent = create_record_with(&client, &base, "presence_item", named("Absent")).await;
+    let attached = create_record_with(&client, &base, "presence_item", named("Attached")).await;
+    let cleared = create_record_with(&client, &base, "presence_item", named("Cleared")).await;
     let mut file_ids = Vec::new();
-    for entity in [&attached, &cleared] {
+    for record in [&attached, &cleared] {
         let uploaded = expect_status(
             client
                 .post(format!(
-                    "{base}/entities/{}/file-attributes/files/uploads",
-                    entity["id"].as_str().unwrap()
+                    "{base}/records/{}/file-attributes/files/uploads",
+                    record["id"].as_str().unwrap()
                 ))
                 .multipart(
                     reqwest::multipart::Form::new().part(
@@ -329,7 +329,7 @@ async fn file_presence_requires_an_attached_file(pool: PgPool) {
     expect_status(
         client
             .put(format!(
-                "{base}/entities/{}/file-attributes/files/references",
+                "{base}/records/{}/file-attributes/files/references",
                 cleared["id"].as_str().unwrap()
             ))
             .json(&json!({"expected_file_ids":[file_ids[1]],"file_ids":[]}))
@@ -358,7 +358,7 @@ async fn file_presence_requires_an_attached_file(pool: PgPool) {
             &repository,
             actor,
             workspace,
-            "search_entities",
+            "search_records",
             json!({"blueprint":{"code":"presence_item"},"filters":filters}),
         )
     };
@@ -384,7 +384,7 @@ async fn file_presence_requires_an_attached_file(pool: PgPool) {
         ),
         "{rejected:?}"
     );
-    let child = create_entity_with(
+    let child = create_record_with(
         &client,
         &base,
         "presence_item",
@@ -405,7 +405,7 @@ async fn file_presence_requires_an_attached_file(pool: PgPool) {
     );
     for operator in ["eq", "contains"] {
         let response = client
-            .post(format!("{base}/v1/entities/search"))
+            .post(format!("{base}/v1/records/search"))
             .json(&json!({"blueprint":{"code":"presence_item"},"filters":[{"field":"files","operator":operator,"value":"notes.txt"}]}))
             .send()
             .await
@@ -420,28 +420,28 @@ async fn presence_traverses_paths_and_preserves_version_and_blueprint_scope(pool
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();
     let first = create_blueprint(&client, &base, ITEM).await;
-    let absent = create_entity_with(
+    let absent = create_record_with(
         &client,
         &base,
         "presence_item",
         json!([scalar("name", "Absent")]),
     )
     .await;
-    let present = create_entity_with(
+    let present = create_record_with(
         &client,
         &base,
         "presence_item",
         json!([scalar("name", "Present"), scalar("amount", 0)]),
     )
     .await;
-    let child = create_entity_with(
+    let child = create_record_with(
         &client,
         &base,
         "presence_item",
         json!([scalar("name", "Child"), relationship("parent", &present)]),
     )
     .await;
-    let empty_child = create_entity_with(
+    let empty_child = create_record_with(
         &client,
         &base,
         "presence_item",
@@ -465,7 +465,7 @@ async fn presence_traverses_paths_and_preserves_version_and_blueprint_scope(pool
         &ITEM.replace("presence_item", "other_family"),
     )
     .await;
-    create_entity(&client, &base, &other).await;
+    create_record(&client, &base, &other).await;
     assert_ids(
         &search(&client, &base, presence("amount", false), None).await,
         &[&absent, &child, &empty_child],
@@ -495,7 +495,7 @@ async fn presence_traverses_paths_and_preserves_version_and_blueprint_scope(pool
         StatusCode::OK,
     )
     .await;
-    let newer = create_entity_with(
+    let newer = create_record_with(
         &client,
         &base,
         "presence_item",
@@ -530,14 +530,14 @@ async fn presence_searches_attached_reusable_values_and_round_trips_saved_views(
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();
     create_blueprint(&client, &base, ITEM).await;
-    let absent = create_entity_with(
+    let absent = create_record_with(
         &client,
         &base,
         "presence_item",
         json!([scalar("name", "Unattached")]),
     )
     .await;
-    let present = create_entity_with(
+    let present = create_record_with(
         &client,
         &base,
         "presence_item",
@@ -560,7 +560,7 @@ async fn presence_searches_attached_reusable_values_and_round_trips_saved_views(
     expect_status(
         client
             .post(format!(
-                "{base}/v1/entities/{}/reusable-attributes",
+                "{base}/v1/records/{}/reusable-attributes",
                 present["id"].as_str().unwrap()
             ))
             .json(&json!({"reusable_attribute_revision_id":published["id"]}))
@@ -630,21 +630,21 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
         "{ITEM}\n[[attributes]]\ncode = 'children'\nvalue_type = 'relationship'\ncardinality = 'many'\ntarget_blueprint = 'presence_item'\n"
     );
     let blueprint = create_blueprint(&client, &base, &definition).await;
-    let absent = create_entity_with(
+    let absent = create_record_with(
         &client,
         &base,
         "presence_item",
         json!([scalar("name", "Absent")]),
     )
     .await;
-    let present = create_entity_with(
+    let present = create_record_with(
         &client,
         &base,
         "presence_item",
         json!([scalar("name", "Present"), scalar("amount", 0)]),
     )
     .await;
-    let mixed = create_entity_with(
+    let mixed = create_record_with(
         &client,
         &base,
         "presence_item",
@@ -655,7 +655,7 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
         ]),
     )
     .await;
-    let empty = create_entity_with(
+    let empty = create_record_with(
         &client,
         &base,
         "presence_item",
@@ -677,7 +677,7 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
     let mut ids = Vec::new();
     loop {
         assert!(ids.len() < 4, "pagination did not terminate");
-        let page=expect_status(client.post(format!("{base}/v1/entities/search"))
+        let page=expect_status(client.post(format!("{base}/v1/records/search"))
             .json(&json!({"blueprint":{"code":"presence_item"},"filters":presence("children.amount",false),"page":{"size":1,"cursor":cursor},"include_total":true}))
             .send().await.unwrap(),StatusCode::OK).await;
         if cursor.is_null() {
@@ -710,7 +710,7 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
     let other = system.for_workspace(other_workspace).await.unwrap();
     let context = other.search_context("default").await.unwrap().unwrap();
     for value in ["true", "false"] {
-        let filter = api::repository::EntitySearchFilter {
+        let filter = api::repository::RecordSearchFilter {
             field: "amount".into(),
             reusable: false,
             relationship_path: vec![],
@@ -720,7 +720,7 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
             value: value.into(),
         };
         let ids = other
-            .filter_entity_ids(
+            .filter_record_ids(
                 Uuid::parse_str(blueprint["blueprint"]["id"].as_str().unwrap()).unwrap(),
                 None,
                 &[filter],
@@ -733,7 +733,7 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
     expect_status(
         client
             .delete(format!(
-                "{base}/entities/{}",
+                "{base}/records/{}",
                 present["id"].as_str().unwrap()
             ))
             .send()

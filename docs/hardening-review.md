@@ -16,13 +16,13 @@ an exhaustive audit of every source file.
 - **Agent privilege escalation:** deferred tools lost their initiating token,
   and agent-only users could approve another user's privileged mutation. Runs
   now persist and recheck the credential, preserve it in audit attribution, and
-  require the approver's mutation permission. Entity-bound conversations and
+  require the approver's mutation permission. Record-bound conversations and
   smart-fill also enforce the token's read permission.
-- **Related-entity disclosure:** previews, hierarchy and incoming relationships
-  could expose labels from unreadable entities. Hydration now checks each
-  related entity. Incoming pagination still advances over filtered rows.
+- **Related-record disclosure:** previews, hierarchy and incoming relationships
+  could expose labels from unreadable records. Hydration now checks each
+  related record. Incoming pagination still advances over filtered rows.
 - **Missing file authorization:** file-retention-hold reads skipped the deferred
-  file-access check. They now use the same entity and deployment policy checks
+  file-access check. They now use the same record and deployment policy checks
   as file metadata.
 - **Login throttling bypass:** changing the workspace reset the guessing budget
   for a global account credential. The normalized account address now shares
@@ -56,7 +56,7 @@ an exhaustive audit of every source file.
 
 - **Agent stream revocation gap:** an open event stream could continue reading
   new events after credential expiry or revocation, removal of `agents.run`,
-  or loss of access to its conversation's entity. Streams now recheck live
+  or loss of access to its conversation's record. Streams now recheck live
   credentials and permissions before exposing each batch, including idle
   polls, and terminate with an error when access is lost.
 
@@ -125,7 +125,7 @@ worktree's readiness endpoint. The clean, non-overlapping workspace run passed
 Workspace Clippy, formatting, dependency-policy checks and readiness passed.
 This verification ran after rebasing onto `main` at `77ccaf1`, including its
 demo-mode changes.
-An earlier follow-up reviewed entity-batch authorization and atomicity, context
+An earlier follow-up reviewed record-batch authorization and atomicity, context
 mutation locking, controlled-record protections, and file download/cache handling
 without finding an additional confirmed major issue. A credential lifecycle
 review reproduced the invitation restoration gap in three failing regressions

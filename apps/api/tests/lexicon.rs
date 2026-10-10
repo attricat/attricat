@@ -5,7 +5,7 @@ const BLUEPRINT: &str = r#"
 format_version = 1
 code = "product"
 name = "{{Product}}"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"

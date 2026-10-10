@@ -14,7 +14,7 @@ use chrono::Utc;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
-/// A live status attribute of an entity's blueprint revision or one of its
+/// A live status attribute of a record's blueprint revision or one of its
 /// own additional attributes.
 #[derive(Clone, Debug, sqlx::FromRow)]
 struct StatusAttribute {
@@ -46,7 +46,7 @@ impl StatusChange {
     }
 }
 
-/// How a row of `entity_status_transitions` came about.
+/// How a row of `record_status_transitions` came about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TransitionKind {
     /// A write moved the status along a declared edge.
@@ -83,7 +83,7 @@ pub struct StatusTransitionAccess {
 
 /// One recorded approval decision.
 #[derive(Debug, serde::Serialize, sqlx::FromRow)]
-pub struct EntityApproval {
+pub struct RecordApproval {
     pub id: Uuid,
     pub attribute_code: String,
     pub context_id: Uuid,
@@ -239,34 +239,34 @@ fn write_status_attributes(write: &WriteContext) -> Vec<StatusAttribute> {
 }
 
 impl CatalogRepository {
-    /// Status attributes of the entity's blueprint revision and its own additional attributes.
+    /// Status attributes of the record's blueprint revision and its own additional attributes.
     async fn status_attributes(
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
     ) -> Result<Vec<StatusAttribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, StatusAttribute>(
-            "SELECT id, code, value_schema, context_fallback <> 'none' AS inherit FROM attributes WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR entity_id = $3) AND deleted_at IS NULL AND value_schema ? $4",
+            "SELECT id, code, value_schema, context_fallback <> 'none' AS inherit FROM attributes WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR record_id = $3) AND deleted_at IS NULL AND value_schema ? $4",
         )
-        .bind(entity.blueprint_id)
-        .bind(entity.blueprint_version)
-        .bind(entity.id)
+        .bind(record.blueprint_id)
+        .bind(record.blueprint_version)
+        .bind(record.id)
         .bind(STATUS_KEY)
         .fetch_all(&mut **transaction)
         .await?)
     }
 
-    /// The entity's live values; an entity without values is empty.
+    /// The record's live values; a record without values is empty.
     async fn record_values(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         state: RecordState,
     ) -> Result<RecordValues, RepositoryError> {
         Ok(
-            load_record(transaction, self.workspace_id.0, entity.id, state)
+            load_record(transaction, self.workspace_id.0, record.id, state)
                 .await?
                 .unwrap_or_else(|| {
-                    RecordValues::empty(entity.id, entity.blueprint_id, entity.blueprint_version)
+                    RecordValues::empty(record.id, record.blueprint_id, record.blueprint_version)
                 }),
         )
     }
@@ -289,11 +289,11 @@ impl CatalogRepository {
 
     pub(super) fn check_status_precondition(
         write: &WriteContext,
-        entity: &Entity,
+        record: &Record,
         expected_updated_at: Option<DateTime<Utc>>,
     ) -> Result<(), RepositoryError> {
-        if expected_updated_at.is_some_and(|expected| expected != entity.updated_at) {
-            return Err(RepositoryError::StaleEntity);
+        if expected_updated_at.is_some_and(|expected| expected != record.updated_at) {
+            return Err(RepositoryError::StaleRecord);
         }
         if expected_updated_at.is_none() && !write.status_attributes().is_empty() {
             return Err(RepositoryError::StatusPreconditionRequired);
@@ -306,13 +306,13 @@ impl CatalogRepository {
     async fn status_changes(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         attributes: &[StatusAttribute],
         write: &WriteContext,
     ) -> Result<Vec<StatusChange>, RepositoryError> {
         let tree = &write.tree;
-        let after = write.preview(transaction, entity.id).await?;
-        let before = entity.projections.get("preview").unwrap_or(&Value::Null);
+        let after = write.preview(transaction, record.id).await?;
+        let before = record.projections.get("preview").unwrap_or(&Value::Null);
         let paths = context_paths(tree)?;
         let mut changes = Vec::new();
         for attribute in attributes {
@@ -343,17 +343,17 @@ impl CatalogRepository {
         Ok(changes)
     }
 
-    /// Run once on the final transaction state, using the locked entity's saved
+    /// Run once on the final transaction state, using the locked record's saved
     /// projection as the baseline. Checks transition edges, their permission,
     /// role and separation-of-duties requirements, and status locks. It has no
     /// side effects; [`Self::apply_status_effects_in`] records the outcome.
     pub(super) async fn validate_status_values(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
     ) -> Result<(), RepositoryError> {
-        let write = WriteContext::load(transaction, self.workspace_id.0, entity).await?;
-        self.checked_status_changes(transaction, entity, &write)
+        let write = WriteContext::load(transaction, self.workspace_id.0, record).await?;
+        self.checked_status_changes(transaction, record, &write)
             .await
             .map(drop)
     }
@@ -364,7 +364,7 @@ impl CatalogRepository {
     pub(super) async fn checked_status_changes(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         write: &WriteContext,
     ) -> Result<Vec<StatusChange>, RepositoryError> {
         let attributes = write_status_attributes(write);
@@ -372,20 +372,20 @@ impl CatalogRepository {
             return Ok(Vec::new());
         }
         let changes = self
-            .status_changes(transaction, entity, &attributes, write)
+            .status_changes(transaction, record, &attributes, write)
             .await?;
         let actor = self.acting_principal();
         for change in &changes {
             let requirements =
                 transition_requirements(&change.schema, &change.before, &change.after);
             if let Some(error) = self
-                .transition_denial(transaction, entity, change, &requirements, actor)
+                .transition_denial(transaction, record, change, &requirements, actor)
                 .await?
             {
                 return Err(error);
             }
         }
-        self.check_status_locks(transaction, entity, &attributes, write)
+        self.check_status_locks(transaction, record, &attributes, write)
             .await?;
         Ok(changes)
     }
@@ -415,7 +415,7 @@ impl CatalogRepository {
     async fn transition_denial(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         change: &StatusChange,
         requirements: &TransitionRequirements,
         actor: Option<AuthorizationActor>,
@@ -439,7 +439,7 @@ impl CatalogRepository {
         };
         if let Some(permission) = &requirements.permission {
             match self
-                .ensure_principal_may(transaction, actor, permission, &[entity.id])
+                .ensure_principal_may(transaction, actor, permission, &[record.id])
                 .await
             {
                 Ok(()) => {}
@@ -457,7 +457,7 @@ impl CatalogRepository {
                 actor.user_id,
                 self.workspace_id.0,
                 super::GrantCodes::Roles(&requirements.roles),
-                Some(entity.id),
+                Some(record.id),
                 None,
             )
             .await?;
@@ -475,10 +475,10 @@ impl CatalogRepository {
         }
         for edge in &requirements.separate_from {
             let previous: Option<Option<Uuid>> = sqlx::query_scalar(
-                "SELECT actor_user_id FROM entity_status_transitions WHERE workspace_id = $1 AND entity_id = $2 AND attribute_code = $3 AND context_id = $4 AND edge_code = $5 AND kind = $6 ORDER BY occurred_at DESC, id DESC LIMIT 1",
+                "SELECT actor_user_id FROM record_status_transitions WHERE workspace_id = $1 AND record_id = $2 AND attribute_code = $3 AND context_id = $4 AND edge_code = $5 AND kind = $6 ORDER BY occurred_at DESC, id DESC LIMIT 1",
             )
             .bind(self.workspace_id.0)
-            .bind(entity.id)
+            .bind(record.id)
             .bind(&change.attribute_code)
             .bind(change.context_id)
             .bind(edge)
@@ -502,23 +502,23 @@ impl CatalogRepository {
     async fn check_status_locks(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         attributes: &[StatusAttribute],
         write: &WriteContext,
     ) -> Result<(), RepositoryError> {
         let tree = &write.tree;
-        let locks = Self::active_locks(entity, attributes, tree)?;
+        let locks = Self::active_locks(record, attributes, tree)?;
         if locks.is_empty() {
             return Ok(());
         }
         let before = self
-            .record_values(transaction, entity, RecordState::Before)
+            .record_values(transaction, record, RecordState::Before)
             .await?;
         let after = write
-            .after_record(transaction, self.workspace_id.0, entity.id)
+            .after_record(transaction, self.workspace_id.0, record.id)
             .await?
             .unwrap_or_else(|| {
-                RecordValues::empty(entity.id, entity.blueprint_id, entity.blueprint_version)
+                RecordValues::empty(record.id, record.blueprint_id, record.blueprint_version)
             });
         let all_codes = attribute_codes(&[&before, &after]);
         for lock in locks {
@@ -543,11 +543,11 @@ impl CatalogRepository {
 
     /// Every context whose saved effective status declares a lock.
     fn active_locks<'a>(
-        entity: &Entity,
+        record: &Record,
         attributes: &'a [StatusAttribute],
         tree: &'a ContextTree,
     ) -> Result<Vec<ActiveLock<'a>>, RepositoryError> {
-        let projection = entity.projections.get("preview").unwrap_or(&Value::Null);
+        let projection = record.projections.get("preview").unwrap_or(&Value::Null);
         let mut locks = Vec::new();
         let controlled: Vec<&StatusAttribute> = attributes
             .iter()
@@ -585,11 +585,11 @@ impl CatalogRepository {
     pub(super) async fn ensure_attribute_unlocked(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         attribute_code: &str,
         context_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        let attributes = Self::status_attributes(transaction, entity).await?;
+        let attributes = Self::status_attributes(transaction, record).await?;
         if !attributes
             .iter()
             .any(|attribute| has_record_controls(&attribute.schema))
@@ -598,11 +598,11 @@ impl CatalogRepository {
         }
         let tree = ContextTree::load(transaction, self.workspace_id.0).await?;
         let inherit = sqlx::query_scalar::<_, String>(
-            "SELECT context_fallback FROM attributes WHERE code = $4 AND ((blueprint_id = $1 AND blueprint_version = $2) OR entity_id = $3) AND deleted_at IS NULL",
+            "SELECT context_fallback FROM attributes WHERE code = $4 AND ((blueprint_id = $1 AND blueprint_version = $2) OR record_id = $3) AND deleted_at IS NULL",
         )
-        .bind(entity.blueprint_id)
-        .bind(entity.blueprint_version)
-        .bind(entity.id)
+        .bind(record.blueprint_id)
+        .bind(record.blueprint_version)
+        .bind(record.id)
         .bind(attribute_code)
         .fetch_optional(&mut **transaction)
         .await?
@@ -610,7 +610,7 @@ impl CatalogRepository {
         if tree.get(context_id).is_none() {
             return Err(RepositoryError::InvalidContext);
         }
-        for lock in Self::active_locks(entity, &attributes, &tree)? {
+        for lock in Self::active_locks(record, &attributes, &tree)? {
             if lock.coverage.covers(attribute_code, lock.attribute_code)
                 && tree.path(lock.context.id, inherit)?.contains(&context_id)
             {
@@ -626,12 +626,12 @@ impl CatalogRepository {
 
     /// A record with any locked content cannot be deleted; a correction
     /// transition must unlock it first.
-    pub(super) async fn ensure_entity_deletable(
+    pub(super) async fn ensure_record_deletable(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
     ) -> Result<(), RepositoryError> {
-        let attributes = Self::status_attributes(transaction, entity).await?;
+        let attributes = Self::status_attributes(transaction, record).await?;
         if !attributes
             .iter()
             .any(|attribute| has_record_controls(&attribute.schema))
@@ -639,7 +639,7 @@ impl CatalogRepository {
             return Ok(());
         }
         let tree = ContextTree::load(transaction, self.workspace_id.0).await?;
-        if let Some(lock) = Self::active_locks(entity, &attributes, &tree)?
+        if let Some(lock) = Self::active_locks(record, &attributes, &tree)?
             .into_iter()
             .next()
         {
@@ -659,25 +659,25 @@ impl CatalogRepository {
     pub(super) async fn apply_status_effects_in(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         write: &WriteContext,
     ) -> Result<(), RepositoryError> {
         let tree = &write.tree;
         let attributes = write_status_attributes(write);
         let active_approvals: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM entity_approvals WHERE workspace_id = $1 AND entity_id = $2 AND ended_at IS NULL",
+            "SELECT count(*) FROM record_approvals WHERE workspace_id = $1 AND record_id = $2 AND ended_at IS NULL",
         )
         .bind(self.workspace_id.0)
-        .bind(entity.id)
+        .bind(record.id)
         .fetch_one(&mut **transaction)
         .await?;
         if attributes.is_empty() && active_approvals == 0 {
             return Ok(());
         }
         let changes = self
-            .status_changes(transaction, entity, &attributes, write)
+            .status_changes(transaction, record, &attributes, write)
             .await?;
-        self.record_write_transitions(transaction, entity, &changes)
+        self.record_write_transitions(transaction, record, &changes)
             .await?;
         let needs_content = active_approvals > 0
             || changes.iter().any(|change| {
@@ -688,17 +688,17 @@ impl CatalogRepository {
             return Ok(());
         }
         let content = write
-            .after_record(transaction, self.workspace_id.0, entity.id)
+            .after_record(transaction, self.workspace_id.0, record.id)
             .await?
             .unwrap_or_else(|| {
-                RecordValues::empty(entity.id, entity.blueprint_id, entity.blueprint_version)
+                RecordValues::empty(record.id, record.blueprint_id, record.blueprint_version)
             });
-        self.record_approvals(transaction, entity, &changes, tree, &content)
+        self.store_approvals(transaction, record, &changes, tree, &content)
             .await?;
-        self.void_changed_approvals(transaction, entity, &attributes, write, &content)
+        self.void_changed_approvals(transaction, record, &attributes, write, &content)
             .await?;
         for change in &changes {
-            self.place_status_retention_holds(transaction, entity, change, tree, &content)
+            self.place_status_retention_holds(transaction, record, change, tree, &content)
                 .await?;
         }
         Ok(())
@@ -709,7 +709,7 @@ impl CatalogRepository {
     async fn record_write_transitions(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         changes: &[StatusChange],
     ) -> Result<(), RepositoryError> {
         for change in changes {
@@ -718,7 +718,7 @@ impl CatalogRepository {
             let unlocked = status_lock(&change.schema, &change.before).is_some();
             self.record_status_transition(
                 transaction,
-                entity,
+                record,
                 change,
                 requirements.code.as_deref(),
                 TransitionKind::Transition,
@@ -728,8 +728,8 @@ impl CatalogRepository {
             if unlocked {
                 self.write_control_audit_event(
                     transaction,
-                    "entity.record.unlock",
-                    entity.id,
+                    "record.unlock",
+                    record.id,
                     serde_json::json!({
                         "attribute_code": change.attribute_code,
                         "context_code": change.context_code,
@@ -746,10 +746,10 @@ impl CatalogRepository {
 
     /// Records an approval for every change into a status that declares one,
     /// superseding the previous decision for that status attribute and context.
-    async fn record_approvals(
+    async fn store_approvals(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         changes: &[StatusChange],
         tree: &ContextTree,
         content: &RecordValues,
@@ -760,10 +760,10 @@ impl CatalogRepository {
                 continue;
             };
             sqlx::query(
-                "UPDATE entity_approvals SET ended_at = now(), end_reason = 'superseded', ended_by_user_id = $5 WHERE workspace_id = $1 AND entity_id = $2 AND attribute_code = $3 AND context_id = $4 AND ended_at IS NULL",
+                "UPDATE record_approvals SET ended_at = now(), end_reason = 'superseded', ended_by_user_id = $5 WHERE workspace_id = $1 AND record_id = $2 AND attribute_code = $3 AND context_id = $4 AND ended_at IS NULL",
             )
             .bind(self.workspace_id.0)
-            .bind(entity.id)
+            .bind(record.id)
             .bind(&change.attribute_code)
             .bind(change.context_id)
             .bind(actor.map(|actor| actor.user_id))
@@ -781,11 +781,11 @@ impl CatalogRepository {
             );
             let approval_id = Uuid::new_v4();
             sqlx::query(
-                "INSERT INTO entity_approvals (id, workspace_id, entity_id, attribute_code, context_id, status, covers_all, covered_attributes, content_digest, approved_by_user_id, approved_by_token_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+                "INSERT INTO record_approvals (id, workspace_id, record_id, attribute_code, context_id, status, covers_all, covered_attributes, content_digest, approved_by_user_id, approved_by_token_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
             )
             .bind(approval_id)
             .bind(self.workspace_id.0)
-            .bind(entity.id)
+            .bind(record.id)
             .bind(&change.attribute_code)
             .bind(change.context_id)
             .bind(change.after.as_str())
@@ -798,8 +798,8 @@ impl CatalogRepository {
             .await?;
             self.write_control_audit_event(
                 transaction,
-                "entity.approval.record",
-                entity.id,
+                "record.approval.record",
+                record.id,
                 serde_json::json!({
                     "approval_id": approval_id,
                     "attribute_code": change.attribute_code,
@@ -822,7 +822,7 @@ impl CatalogRepository {
     async fn void_changed_approvals(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         attributes: &[StatusAttribute],
         write: &WriteContext,
         content: &RecordValues,
@@ -836,10 +836,10 @@ impl CatalogRepository {
             void_to: String,
         }
         let approvals = sqlx::query_as::<_, (Uuid, String, Uuid, String, bool, Vec<String>, String)>(
-            "SELECT id, attribute_code, context_id, status, covers_all, covered_attributes, content_digest FROM entity_approvals WHERE workspace_id = $1 AND entity_id = $2 AND ended_at IS NULL",
+            "SELECT id, attribute_code, context_id, status, covers_all, covered_attributes, content_digest FROM record_approvals WHERE workspace_id = $1 AND record_id = $2 AND ended_at IS NULL",
         )
         .bind(self.workspace_id.0)
-        .bind(entity.id)
+        .bind(record.id)
         .fetch_all(&mut **transaction)
         .await?;
         let mut voided = Vec::new();
@@ -867,7 +867,7 @@ impl CatalogRepository {
                 })
                 .map(|approval| approval.void_to);
             sqlx::query(
-                "UPDATE entity_approvals SET ended_at = now(), end_reason = 'content_changed', ended_by_user_id = $2, void_status = $3 WHERE id = $1 AND ended_at IS NULL",
+                "UPDATE record_approvals SET ended_at = now(), end_reason = 'content_changed', ended_by_user_id = $2, void_status = $3 WHERE id = $1 AND ended_at IS NULL",
             )
             .bind(id)
             .bind(self.acting_principal().map(|actor| actor.user_id))
@@ -876,8 +876,8 @@ impl CatalogRepository {
             .await?;
             self.write_control_audit_event(
                 transaction,
-                "entity.approval.void",
-                entity.id,
+                "record.approval.void",
+                record.id,
                 serde_json::json!({
                     "approval_id": id,
                     "attribute_code": attribute_code,
@@ -907,7 +907,7 @@ impl CatalogRepository {
                 ..
             } = voided;
             // An earlier void may already have moved an inheriting context.
-            let projection = write.preview(transaction, entity.id).await?;
+            let projection = write.preview(transaction, record.id).await?;
             let path = tree.path(context.id, true)?;
             let current =
                 effective_projection(&projection, tree, &path, attribute.inherit, &attribute.code);
@@ -917,7 +917,7 @@ impl CatalogRepository {
             self.insert_value_in(
                 transaction,
                 write,
-                entity,
+                record,
                 NewAttributeValue::Scalar {
                     attribute_id: Some(attribute.id),
                     attribute_code: None,
@@ -928,7 +928,7 @@ impl CatalogRepository {
             .await?;
             self.record_status_transition(
                 transaction,
-                entity,
+                record,
                 &StatusChange {
                     attribute_code: attribute.code.clone(),
                     schema: Value::Null,
@@ -952,7 +952,7 @@ impl CatalogRepository {
     async fn place_status_retention_holds(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         change: &StatusChange,
         tree: &ContextTree,
         content: &RecordValues,
@@ -987,12 +987,12 @@ impl CatalogRepository {
         for (code, file_id) in file_ids {
             let hold_id = Uuid::new_v4();
             let held_until: DateTime<Utc> = sqlx::query_scalar(
-                "INSERT INTO file_retention_holds (id, workspace_id, file_id, source, entity_id, attribute_code, status, held_until, created_by_user_id) VALUES ($1, $2, $3, 'status', $4, $5, $6, now() + make_interval(days => $7), $8) RETURNING held_until",
+                "INSERT INTO file_retention_holds (id, workspace_id, file_id, source, record_id, attribute_code, status, held_until, created_by_user_id) VALUES ($1, $2, $3, 'status', $4, $5, $6, now() + make_interval(days => $7), $8) RETURNING held_until",
             )
             .bind(hold_id)
             .bind(self.workspace_id.0)
             .bind(file_id)
-            .bind(entity.id)
+            .bind(record.id)
             .bind(code)
             .bind(change.after.as_str())
             .bind(days as i32)
@@ -1002,7 +1002,7 @@ impl CatalogRepository {
             self.write_control_audit_event(
                 transaction,
                 "file.retention_hold.place",
-                entity.id,
+                record.id,
                 serde_json::json!({
                     "hold_id": hold_id,
                     "file_id": file_id,
@@ -1020,7 +1020,7 @@ impl CatalogRepository {
     async fn record_status_transition(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         change: &StatusChange,
         edge_code: Option<&str>,
         kind: TransitionKind,
@@ -1028,11 +1028,11 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         let actor = self.acting_principal();
         sqlx::query(
-            "INSERT INTO entity_status_transitions (id, workspace_id, entity_id, attribute_code, context_id, from_status, to_status, edge_code, kind, unlocked, actor_user_id, actor_token_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+            "INSERT INTO record_status_transitions (id, workspace_id, record_id, attribute_code, context_id, from_status, to_status, edge_code, kind, unlocked, actor_user_id, actor_token_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
         )
         .bind(Uuid::new_v4())
         .bind(self.workspace_id.0)
-        .bind(entity.id)
+        .bind(record.id)
         .bind(&change.attribute_code)
         .bind(change.context_id)
         .bind(change.before.as_str())
@@ -1053,7 +1053,7 @@ impl CatalogRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         action: &str,
-        entity_id: Uuid,
+        record_id: Uuid,
         details: Value,
     ) -> Result<(), RepositoryError> {
         let Some(audit) = &self.audit_context else {
@@ -1066,7 +1066,7 @@ impl CatalogRepository {
         let mut repository = self.clone();
         repository.audit_context = Some(AuditContext {
             action: action.to_owned(),
-            target: serde_json::json!({"entity_id": entity_id}),
+            target: serde_json::json!({"record_id": record_id}),
             metadata,
             ..audit.clone()
         });
@@ -1078,16 +1078,16 @@ impl CatalogRepository {
     /// value in `context_id`, and whether `actor` may take each one now.
     pub async fn status_transition_access(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         context_id: Option<Uuid>,
         actor: AuthorizationActor,
     ) -> Result<Vec<StatusTransitionAccess>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let entity = self
-            .get_entity(entity_id)
+        let record = self
+            .get_record(record_id)
             .await?
-            .ok_or(RepositoryError::NotFound("entity"))?;
-        let attributes = Self::status_attributes(&mut transaction, &entity).await?;
+            .ok_or(RepositoryError::NotFound("record"))?;
+        let attributes = Self::status_attributes(&mut transaction, &record).await?;
         let tree = ContextTree::load(&mut transaction, self.workspace_id.0).await?;
         let context = match context_id {
             Some(id) => tree.get(id).ok_or(RepositoryError::InvalidContext)?,
@@ -1098,17 +1098,17 @@ impl CatalogRepository {
         }
         let path = tree.path(context.id, true)?;
         let paths = context_paths(&tree)?;
-        let projection = entity.projections.get("preview").unwrap_or(&Value::Null);
+        let projection = record.projections.get("preview").unwrap_or(&Value::Null);
         // Every edge is evaluated against the same saved state and rules.
         let rules = enabled_rules(
             &mut transaction,
             self.workspace_id.0,
-            entity.blueprint_id,
-            entity.blueprint_version,
+            record.blueprint_id,
+            record.blueprint_version,
         )
         .await?;
         let subject = self
-            .record_values(&mut transaction, &entity, RecordState::After)
+            .record_values(&mut transaction, &record, RecordState::After)
             .await?;
         let scope = CheckScope::new(self.workspace_id.0, tree.clone());
         let mut access = Vec::new();
@@ -1134,7 +1134,7 @@ impl CatalogRepository {
                     denial = self
                         .transition_denial(
                             &mut transaction,
-                            &entity,
+                            &record,
                             change,
                             &requirements,
                             Some(actor),
@@ -1193,16 +1193,16 @@ impl CatalogRepository {
         Ok(access)
     }
 
-    /// Approval decisions recorded on an entity, newest first.
-    pub async fn entity_approvals(
+    /// Approval decisions recorded on a record, newest first.
+    pub async fn record_approvals(
         &self,
-        entity_id: Uuid,
-    ) -> Result<Vec<EntityApproval>, RepositoryError> {
-        Ok(sqlx::query_as::<_, EntityApproval>(
-            "SELECT a.id, a.attribute_code, a.context_id, c.code AS context_code, a.status, a.covers_all, a.covered_attributes, a.content_digest, a.approved_by_user_id, COALESCE(u.display_name, u.email) AS approved_by, a.approved_at, a.ended_at, a.end_reason, a.ended_by_user_id, a.void_status FROM entity_approvals a JOIN attribute_contexts c ON c.id = a.context_id LEFT JOIN users u ON u.id = a.approved_by_user_id WHERE a.workspace_id = $1 AND a.entity_id = $2 ORDER BY a.approved_at DESC, a.id DESC LIMIT 200",
+        record_id: Uuid,
+    ) -> Result<Vec<RecordApproval>, RepositoryError> {
+        Ok(sqlx::query_as::<_, RecordApproval>(
+            "SELECT a.id, a.attribute_code, a.context_id, c.code AS context_code, a.status, a.covers_all, a.covered_attributes, a.content_digest, a.approved_by_user_id, COALESCE(u.display_name, u.email) AS approved_by, a.approved_at, a.ended_at, a.end_reason, a.ended_by_user_id, a.void_status FROM record_approvals a JOIN attribute_contexts c ON c.id = a.context_id LEFT JOIN users u ON u.id = a.approved_by_user_id WHERE a.workspace_id = $1 AND a.record_id = $2 ORDER BY a.approved_at DESC, a.id DESC LIMIT 200",
         )
         .bind(self.workspace_id.0)
-        .bind(entity_id)
+        .bind(record_id)
         .fetch_all(&self.pool)
         .await?)
     }

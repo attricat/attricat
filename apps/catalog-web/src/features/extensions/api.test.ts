@@ -24,7 +24,7 @@ const contribution = {
   id: 'panel',
   version: 1,
   kind: 'embedded',
-  outlet: 'entity_preview_panel',
+  outlet: 'record_preview_panel',
   route: null,
   title: null,
 };

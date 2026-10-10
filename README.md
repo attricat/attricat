@@ -8,9 +8,8 @@
 Attricat is a catalog for structured records whose shape changes over time.
 
 You describe a kind of record with a **blueprint**, which lists its fields and
-their types. Records built from a blueprint are **entities**. When you change a
-blueprint, Attricat saves it as a new revision. Each entity keeps the exact
-revision it was created with.
+their types. When you change a blueprint, Attricat saves it as a new revision.
+Each record keeps the exact revision it was created with.
 
 The project has three parts:
 

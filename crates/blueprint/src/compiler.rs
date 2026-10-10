@@ -132,15 +132,15 @@ pub fn compile(
             position: position as i64,
         });
     }
-    if definition.kind == BlueprintKind::Entity
-        && let Some(schema) = &definition.entity_schema
+    if definition.kind == BlueprintKind::Record
+        && let Some(schema) = &definition.record_schema
     {
-        validate_entity_schema_attributes(schema, &attributes)?;
+        validate_record_schema_attributes(schema, &attributes)?;
     }
     validate_declarative_checks(&definition, &attributes)?;
     validate_unique_key_attributes(&definition.unique_keys, &attributes)?;
     validate_selected_hierarchies(&definition.code, &definition.kind, &attributes)?;
-    if definition.kind == BlueprintKind::Entity && !definition.views.contains_key("dropdown_option")
+    if definition.kind == BlueprintKind::Record && !definition.views.contains_key("dropdown_option")
     {
         return Err(BlueprintError::MissingDropdownOptionView);
     }
@@ -161,34 +161,34 @@ pub fn compile(
         raw_definition_hash: raw_hash(source),
         includes: definition.includes,
         views: definition.views,
-        entity_schema: definition.entity_schema,
+        record_schema: definition.record_schema,
         rules: definition.rules,
         unique_keys: definition.unique_keys,
         attributes,
     })
 }
 
-/// Type-checks entity-schema checks, status transition conditions and rules
+/// Type-checks record-schema checks, status transition conditions and rules
 /// against the effective attributes. They share one predicate engine.
 fn validate_declarative_checks(
     definition: &BlueprintDefinition,
     attributes: &[EffectiveAttribute],
 ) -> Result<(), BlueprintError> {
     use catalog_validation::predicate::{
-        MAX_ENTITY_CHECKS, MAX_TRANSITION_CONDITIONS, Usage, entity_checks, validate_checks,
+        MAX_RECORD_CHECKS, MAX_TRANSITION_CONDITIONS, Usage, record_checks, validate_checks,
     };
     use catalog_validation::status::{STATUS_KEY, transition_edges};
     let types: HashMap<String, String> = attributes
         .iter()
         .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
         .collect();
-    if let Some(schema) = &definition.entity_schema {
+    if let Some(schema) = &definition.record_schema {
         let invalid = |message: String| BlueprintError::InvalidJsonSchema {
-            field: "entity_schema".to_owned(),
+            field: "record_schema".to_owned(),
             message,
         };
-        let checks = entity_checks(schema).map_err(invalid)?;
-        validate_checks(&checks, Some(&types), Usage::Enforced, MAX_ENTITY_CHECKS)
+        let checks = record_checks(schema).map_err(invalid)?;
+        validate_checks(&checks, Some(&types), Usage::Enforced, MAX_RECORD_CHECKS)
             .map_err(|message| invalid(format!("invalid x-attricat-checks: {message}")))?;
     }
     for attribute in attributes {
@@ -287,7 +287,7 @@ fn validate_selected_hierarchies(
     kind: &BlueprintKind,
     attributes: &[EffectiveAttribute],
 ) -> Result<(), BlueprintError> {
-    if *kind != BlueprintKind::Entity {
+    if *kind != BlueprintKind::Record {
         return Ok(());
     }
     if let Some(attribute) = attributes.iter().find(|attribute| {
@@ -308,7 +308,7 @@ fn validate_selected_hierarchies(
     Ok(())
 }
 
-fn validate_entity_schema_attributes(
+fn validate_record_schema_attributes(
     schema: &serde_json::Value,
     attributes: &[EffectiveAttribute],
 ) -> Result<(), BlueprintError> {
@@ -323,7 +323,7 @@ fn validate_entity_schema_attributes(
         if attribute_codes.contains(attribute) {
             Ok(())
         } else {
-            Err(BlueprintError::EntitySchemaUnknownAttribute {
+            Err(BlueprintError::RecordSchemaUnknownAttribute {
                 keyword,
                 attribute: attribute.to_owned(),
             })

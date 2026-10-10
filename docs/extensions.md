@@ -127,10 +127,10 @@ The v1 capability catalogue is: `catalog.read`, `catalog.write`,
 `client.files.read`, `client.files.upload`, `client.search`,
 `client.live_updates`, `client.clipboard`, `client.theme.read`,
 `client.locale.read`, `client.blueprint_configuration`,
-`client.entity_decoration`, `client.entity_action`, `client.explorer_row_action`,
+`client.record_decoration`, `client.record_action`, `client.explorer_row_action`,
 `client.explorer_table_cell`, `client.blueprint_detail_panel`, `client.explorer_action`,
-`client.explorer_bulk_action`, `client.entity_header_action`,
-`client.entity_attribute_panel`, `client.blueprint_panel`,
+`client.explorer_bulk_action`, `client.record_header_action`,
+`client.record_attribute_panel`, `client.blueprint_panel`,
 `client.blueprint_publish_check`, `client.file_panel`,
 `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`,
 `client.operations.start`, `client.operations.read`,
@@ -286,18 +286,18 @@ opaque and filter/workspace-bound. A `lookup` resolves exactly like an upsert's
 business key (below): a single-attribute unique key on a string attribute uses
 its normalized index
 across every revision of the blueprint family, and a value that matches more
-than one entity fails with `lookup matched multiple entities` rather than
+than one record fails with `lookup matched multiple records` rather than
 returning an arbitrary match. `catalog.command.v1` accepts a bounded,
 idempotent batch of typed `create`, `update`, `relationships`, or `upsert`
-intents. Each intent runs the ordinary entity create or update path (validation,
+intents. Each intent runs the ordinary record create or update path (validation,
 checks, audit, publication reconciliation and its domain event). An upsert
 serializes its declared blueprint/attribute business key, creates only when it
 is absent, and rejects an ambiguous match. When the lookup attribute alone is a
 declared unique key on a string attribute, the lookup uses that key's normalized index across every
 revision of the blueprint family; otherwise it matches the exact text among
-entities of the requested revision. An upsert's declared relationship sets
+records of the requested revision. An upsert's declared relationship sets
 apply whether it updates a match or creates; on create they are written as the
-new entity's relationship values.
+new record's relationship values.
 `events.emit.v1`
 is implemented only for a manifest-declared, per-contract event export as
 described in [Inter-extension events](#inter-extension-events).
@@ -470,7 +470,7 @@ attribute values use retained history to return their as-of values across
 batches. Cursors expire after 30 days (before history retention expires).
 This is **not** a long-lived MVCC database snapshot: concurrent transactions
 committing after the first page and blueprint migrations/publication changes
-can affect entity membership. For an immutable externally delivered export,
+can affect record membership. For an immutable externally delivered export,
 freeze the source or coordinate updates for the duration of the run.
 
 `artifacts.append-output(name, media-type, batch-key, bytes)` accepts 1–65536
@@ -524,7 +524,7 @@ workspace-scoped run and artifact endpoints.
 
 ### Blueprint connector jobs
 
-Blueprint connector jobs are declared **in the entity blueprint TOML**, not
+Blueprint connector jobs are declared **in the record blueprint TOML**, not
 configured through a separate write API. For example (alongside the regular
 `format_version`, `code`, `name`, `kind`, views and attributes):
 
@@ -577,7 +577,7 @@ The host stores job, blueprint/version, context and channel on each run (the
 job/channel IDs appear in the run list), and
 rejects connector `schema`, `page` and `upsert-batch` calls outside the
 run-bound scope. Scoped runs cannot use the generic catalog read/batch API to
-bypass that filter. Export pages include only entities **currently published**
+bypass that filter. Export pages include only records **currently published**
 for the run's enabled channel. A disabled channel or withdrawn publication is
 excluded from subsequent pages; data already delivered externally cannot be
 recalled. Retried manual keys return the same run IDs. Run status and artifacts
@@ -598,7 +598,7 @@ Enabled `client_component` artifacts can expose a strict `ui` contribution:
   "version": 1,
   "kind": "embedded",
   "artifact": "client",
-  "outlet": "entity_preview_panel"
+  "outlet": "record_preview_panel"
 }
 ```
 
@@ -609,8 +609,8 @@ explicit read-only `panel`. `action` is
 required for `explorer_row_action` (and requires `client.explorer_row_action`);
 `panel` is required for `blueprint_detail_panel` (and requires
 `client.blueprint_detail_panel`). `embedded` contributions use `navigation`,
-`entity_preview_panel`, `blueprint_attribute_configuration`,
-`entity_attribute_decoration`, or `entity_action`; the additional mediated
+`record_preview_panel`, `blueprint_attribute_configuration`,
+`record_attribute_decoration`, or `record_action`; the additional mediated
 placement capabilities reserve their matching fixed outlets for their explicit
 host-owned action or panel layouts. Routes are always namespaced at
 `/extensions/:extensionId/:contributionId`; manifests cannot provide a path,
@@ -619,13 +619,13 @@ contribution/artifact IDs remain stable across releases. Multiple enabled
 extensions may contribute to a surface. The host orders them deterministically
 by `extension_id`, then contribution `id`, unless a workspace administrator
 sets an outlet layout through `PUT /workspace/extension-layout`. Layouts use
-`{"version":1,"outlets":{"entity_preview_panel":{"order":["acme.panel:summary"],"hidden":[]},"navigation":{"order":["acme.app:entry"],"hidden":[],"promoted":["acme.app:entry"]}}}`.
+`{"version":1,"outlets":{"record_preview_panel":{"order":["acme.panel:summary"],"hidden":[]},"navigation":{"order":["acme.app:entry"],"hidden":[],"promoted":["acme.app:entry"]}}}`.
 Keys are stable `<extension-id>:<contribution-id>` values; unavailable keys are
 retained for restoration. Navigation contributions are kept in a host-owned
 extension group unless an administrator lists their key in `promoted`; built-in
 navigation is never addressable by the layout. The runtime descriptor contains
 the host-computed `display_order` and navigation grouping, so clients never
-implement precedence themselves. Entity action bars render one host-selected
+implement precedence themselves. Record action bars render one host-selected
 primary action and up to three secondary actions; remaining extension actions
 are placed in a host-owned overflow popover. Each mounted panel surface has an
 explicit host policy and shows at most three contributions before the host-owned
@@ -652,7 +652,7 @@ Today, such an application can use the granted mediated client APIs described
 below: read the limited Catalog resources through `catalog.request`, invoke its
 declared server commands through `catalog.command`, persist its own
 release-scoped state through `catalog.storage`, show host notifications, and
-navigate the user to a Catalog entity. It still has no generic browser fetch,
+navigate the user to a Catalog record. It still has no generic browser fetch,
 host DOM access, browser credentials, arbitrary URL navigation, or
 inter-extension RPC. Required capabilities and the corresponding server command
 or artifact declarations remain necessary for each operation.
@@ -686,27 +686,27 @@ contextual actions—not an application-wide navigation tree.
 - **`navigation`** (`embedded`) remains available for a sandboxed compact
   iframe contribution, such as a button or status indicator in Catalog's side
   navigation.
-- **`entity_preview_panel`** (`embedded`) appears in the entity extension
-  drawer. It is appropriate for an entity-specific summary, diagnostics, or a
-  focused mini-workflow. Its context supplies `entity_id` and optional
+- **`record_preview_panel`** (`embedded`) appears in the record extension
+  drawer. It is appropriate for a record-specific summary, diagnostics, or a
+  focused mini-workflow. Its context supplies `record_id` and optional
   `context_id`.
 - **`blueprint_attribute_configuration`** (`embedded`, requiring
   `client.blueprint_configuration`) is rendered for an attribute in the
   blueprint editor. Use it to configure extension-owned behavior for that
   blueprint/attribute; scoped configuration is separately declared and requires
   `configuration.write`.
-- **`entity_attribute_decoration`** (`embedded`, requiring
-  `client.entity_decoration`) is an attribute-level popover on an entity page.
+- **`record_attribute_decoration`** (`embedded`, requiring
+  `client.record_decoration`) is an attribute-level popover on a record page.
   Use it for a concise indicator, explanation, or contextual detail. Its
-  context identifies the entity, attribute, blueprint/version, and optional
+  context identifies the record, attribute, blueprint/version, and optional
   context.
-- **`entity_action`** (`embedded`, requiring `client.entity_action`) is a
-  host-owned entity-page action area. Use it for a focused entity action or
+- **`record_action`** (`embedded`, requiring `client.record_action`) is a
+  host-owned record-page action area. Use it for a focused record action or
   status; mutations still go through declared `catalog.command` commands.
 - **`explorer_row_action`** (`action`, requiring
-  `client.explorer_row_action`) is the Explorer row overflow UI for one entity.
-  Its strict context is `entity_id`, `blueprint_id`, `blueprint_version`, and
-  `context_version: 1`; it deliberately does not include search state or entity
+  `client.explorer_row_action`) is the Explorer row overflow UI for one record.
+  Its strict context is `record_id`, `blueprint_id`, `blueprint_version`, and
+  `context_version: 1`; it deliberately does not include search state or record
   values. A version 2 contribution receives the
   [selection context](#selection-aware-actions-and-interactive-operations)
   instead.
@@ -736,15 +736,15 @@ contextual actions—not an application-wide navigation tree.
   appears between the Explorer result toolbar and table when results are scoped
   to one blueprint revision. Its strict v1 context contains only
   `context_version: 1`, `blueprint_id`, and `blueprint_version`; it does not
-  expose search filters, selections, or entity rows. The host shows one
+  expose search filters, selections, or record rows. The host shows one
   primary and three secondary actions before overflow. Mutations still need
   separately declared `client.commands`.
 
 - **`explorer_bulk_action`** (`action`, requiring
   `client.explorer_bulk_action`) appears below the Explorer toolbar only while
-  1–50 loaded entities are selected and all belong to the displayed blueprint
+  1–50 loaded records are selected and all belong to the displayed blueprint
   revision. Its strict v1 context contains `context_version: 1`,
-  `blueprint_id`, `blueprint_version`, and the selected `entity_ids` in display
+  `blueprint_id`, `blueprint_version`, and the selected `record_ids` in display
   order; it contains no row values or search filters. Closing selection mode
   unmounts the frame. Selection is a UI hint, not an authorization grant:
   commands still require `client.commands` and server-side permission checks.
@@ -776,18 +776,18 @@ dialog frame should call `catalog.dialog.close()` on Escape. Closing it
   call commands, or replace the host's server-side validation. Authoritative
   publish-time checks require a separate server contract.
 
-- **`entity_attribute_panel`** (`panel`, requiring
-  `client.entity_attribute_panel`) appears below each rendered field in the
-  entity detail view when an enabled extension contributes that outlet. Its
-  strict v1 context contains `context_version: 1`, `entity_id`, `attribute_id`,
+- **`record_attribute_panel`** (`panel`, requiring
+  `client.record_attribute_panel`) appears below each rendered field in the
+  record detail view when an enabled extension contributes that outlet. Its
+  strict v1 context contains `context_version: 1`, `record_id`, `attribute_id`,
   `blueprint_id`, `blueprint_version`, and nullable `context_id`. No field
   values are passed automatically. The panel is read-only; it does not appear
   for attributes outside the blueprint detail view.
 
 - **`file_panel`** (`panel`, requiring `client.file_panel`) appears beneath
-  each file link rendered by the default file-value renderer in an entity's
+  each file link rendered by the default file-value renderer in a record's
   detail view. Its strict v1 context contains `context_version: 1`, `file_id`,
-  `entity_id`, `attribute_id`, `blueprint_id`, and `blueprint_version`. It
+  `record_id`, `attribute_id`, `blueprint_id`, and `blueprint_version`. It
   receives no filename, file bytes, or field value automatically. It is
   read-only, appears only for actual file values (not empty fields), and does
   not render in custom file-value renderers that do not forward the optional
@@ -831,7 +831,7 @@ asynchronous cleanup function. For example:
 
 ```js
 export const mount = (root, catalog) => {
-  root.textContent = `Current entity: ${catalog.context.entity_id}`;
+  root.textContent = `Current record: ${catalog.context.record_id}`;
   return () => root.replaceChildren();
 };
 ```
@@ -839,31 +839,31 @@ export const mount = (root, catalog) => {
 The frame provides a versioned `MessageChannel` API as `globalThis.catalog` and
 passes that same object to `mount`. It may use only granted operations:
 
-- `catalog.navigate({ entity_id })` requires `client.navigation` and resolves
-  only to Catalog's entity route.
+- `catalog.navigate({ record_id })` requires `client.navigation` and resolves
+  only to Catalog's record route.
 - `catalog.notify({ message, severity? })` requires `client.notification`;
   messages are trimmed and limited to 512 characters and are displayed through
   a host-owned accessible notification surface.
 - `catalog.request(path)` requires `catalog.read` and is limited to `GET`
-  reads of `/api/entities`, `/api/v1/entities/:uuid`, or the exact revision
+  reads of `/api/records`, `/api/v1/records/:uuid`, or the exact revision
   route `/api/blueprints/:uuid/versions/:positive-version`. Responses are
   limited to 1 MiB measured as UTF-8 bytes. Revision reads are bound to the
   `blueprint_attribute_configuration` outlet's blueprint ID and revision.
 - `catalog.command({ command_id, payload })` requires `client.commands` and
   invokes a declared, bounded server command. The host validates the caller,
   contribution, release, installation state, configuration, and grants.
-- `catalog.refresh({ target: 'current_entity' })` requires `client.refresh`
-  and an entity action, preview panel, or attribute decoration outlet with a
-  current entity. It invalidates the host's entity-scoped views and awaits
-  active refetches; it cannot select another entity or mutate server data.
-  Call it after a successful command that changes the current entity.
+- `catalog.refresh({ target: 'current_record' })` requires `client.refresh`
+  and a record action, preview panel, or attribute decoration outlet with a
+  current record. It invalidates the host's record-scoped views and awaits
+  active refetches; it cannot select another record or mutate server data.
+  Call it after a successful command that changes the current record.
 - `catalog.dialog.open()` requires `client.action_dialog` and a version 2
   selection action; `catalog.dialog.close()` is available only inside the
   `action_dialog` frame.
 - `catalog.operations.start({ operation_id, input, idempotency_key })` requires
   `client.operations.start` and is available in version 2 selection actions and
   the action dialog. The host supplies the frame's selection; the frame cannot
-  name entities, a workspace, a release, or a user. `idempotency_key` is 1–64
+  name records, a workspace, a release, or a user. `idempotency_key` is 1–64
   visible ASCII characters. It resolves to `{ run_id }`.
 - `catalog.operations.list()`, `catalog.operations.get({ run_id })`, and
   `catalog.operations.download({ run_id, artifact_id })` require
@@ -878,7 +878,7 @@ passes that same object to `mount`. It may use only granted operations:
   bounded; `set` and `delete` support an optional optimistic
   `expected_revision`.
 - `catalog.context` contains only the documented outlet identifiers (the
-  entity preview outlet supplies `entity_id` and optional `context_id`).
+  record preview outlet supplies `record_id` and optional `context_id`).
   `catalog.configuration` is supplied only when `configuration.read` is
   granted. `client.events` dispatches a `catalog:context-changed.v1` event on
   the `root` passed to `mount` at startup and after every host context update.
@@ -911,7 +911,7 @@ context, and re-authorized by the host at execution time. The host owns focus,
 confirmation, notification, download, navigation, upload, error, and
 accessibility UI.
 
-`client.refresh` currently supports only `current_entity` in entity outlets;
+`client.refresh` currently supports only `current_record` in record outlets;
 other targets such as Explorer results require separate host implementations.
 `client.confirmation` has bounded title, message, and severity. `client.download` accepts bounded data or a host artifact
 reference with a validated filename and media type. `client.external_navigation`
@@ -944,15 +944,15 @@ loading state, and failure announcements.
 
 ## Selection-aware actions and interactive operations
 
-An extension can let a signed-in user process one entity from its preview or
-Explorer row, or up to 50 selected Explorer entities, as a durable background
+An extension can let a signed-in user process one record from its preview or
+Explorer row, or up to 50 selected Explorer records, as a durable background
 run. Core provides the action surfaces, authorization, the run, its artifacts,
 and annotations; templates, rendering, result reports and document history stay
 in the extension.
 
 ### Selection context
 
-Contributions to `entity_action`, `explorer_row_action`, and
+Contributions to `record_action`, `explorer_row_action`, and
 `explorer_bulk_action` may declare `"version": 2`. Version 1 contributions
 keep their released contexts. A version 2 contribution receives:
 
@@ -963,16 +963,16 @@ keep their released contexts. A version 2 contribution receives:
   "blueprint_id": "<uuid>",
   "blueprint_version": 3,
   "context_id": "<uuid or null>",
-  "entity_ids": ["<uuid>", "<uuid>"]
+  "record_ids": ["<uuid>", "<uuid>"]
 }
 ```
 
-Preview and row actions use a one-item `entity_ids`. `context_id` is the
+Preview and row actions use a one-item `record_ids`. `context_id` is the
 effective value-resolution context of the surface (the preview's selected
 context or the Explorer context), or `null` for the workspace default.
-Selections contain only saved entities from one blueprint revision in display
+Selections contain only saved records from one blueprint revision in display
 order; the host never widens them to hidden rows or to all matching results.
-Generation reads saved data only: when a selected entity has unsaved editor
+Generation reads saved data only: when a selected record has unsaved editor
 changes in the tab, the host-owned dialog says so and offers the editor.
 
 ### Interactive operations
@@ -992,7 +992,7 @@ Starting a run (through `catalog.operations.start` or
 `POST /extensions/{extension_id}/{contribution_id}/operations`) checks the
 enabled exact release, the contribution's capability, the declared operation,
 its request schema and byte limit, and that the caller can read every selected
-entity. One unreadable or mismatched entity rejects the whole selection. The
+record. One unreadable or mismatched record rejects the whole selection. The
 host then freezes, in one transaction, the initiating user (and token, if any),
 release, operation, validated input, configuration snapshot, effective context,
 contribution, and ordered membership. A context cannot be deleted while a
@@ -1014,8 +1014,8 @@ Inside the run:
 - Generic `catalog-data.read` and the connector `catalog` calls are rejected.
   `catalog-data.batch` accepts only `update`, `relationships`, and `annotate`
   intents for members of the selection, and checks the initiator's current
-  grants for each intent (`entities.write` for values, `entities.read` for
-  annotations, and `entities.read` on every entity a relationship links to,
+  grants for each intent (`records.write` for values, `records.read` for
+  annotations, and `records.read` on every record a relationship links to,
   selected or not). Writes are audited as `catalog.extensions.operations.write`
   with the initiator as actor and the extension as event source.
 - Before every batch the host checks that the initiator is still an active
@@ -1038,7 +1038,7 @@ Users follow their runs under **Profile → Extension runs**
 (`/profile/extension-runs`) and through `GET /extension-runs`. Execution
 status (`queued`, `running`, `cancelling`, `cancelled`, `completed`, `failed`)
 is separate from the extension's domain outcome: a completed run can report
-per-entity failures. Extensions report progress as a bounded object; the host
+per-record failures. Extensions report progress as a bounded object; the host
 displays the optional fields `completed`, `total`, and
 `outcome: {succeeded, failed, skipped}`. A fatal runtime failure still fails
 the run.
@@ -1051,16 +1051,16 @@ Operators can read, cancel, or download any run, except with `?scope=own` on
 which limits every caller to runs they started. Run responses include
 `initiated_by_me`. The initiator can always
 cancel their own run (cancelling reveals nothing about the selection), but can
-read or download it only while they can still read every selected entity:
+read or download it only while they can still read every selected record:
 because a combined artifact may contain any member, losing access to one
 member denies every download of that run. Outputs are downloadable only after the run
 completes and for 30 days; history keeps the run but marks outputs expired.
 Finalized outputs carry the extension's output name as the download filename.
 
-## Extension-owned entity annotations
+## Extension-owned record annotations
 
 With the `catalog.annotations.write` capability an extension can patch its own
-annotation namespace on an entity: tags named `<extension-id>:<tag>` and the
+annotation namespace on a record: tags named `<extension-id>:<tag>` and the
 object at `system_metadata[<extension-id>]`. Callers supply only local names; the
 host derives the namespace from the extension's provenance, so one extension can
 never write another's. The intent is available from operation batches and
@@ -1068,7 +1068,7 @@ from any `catalog.command.v1` batch (for example a client command) when the
 capability is granted; an annotation-only batch does not need `catalog.write`.
 
 ```json
-{"kind": "annotate", "intent_key": "doc-<run>-<entity>", "entity_id": "<uuid>",
+{"kind": "annotate", "intent_key": "doc-<run>-<record>", "record_id": "<uuid>",
  "add_tags": ["document-generated"], "remove_tags": [],
  "set_metadata": {"last_document": {"template_version": 2}}, "remove_metadata": [],
  "expected_revision": null}
@@ -1076,31 +1076,31 @@ capability is granted; an annotation-only batch does not need `catalog.write`.
 
 Patches are bounded (1–32 operations, local names of 1–64 ASCII letters,
 digits, `.`, `_`, `-`), unambiguous (a tag or key appears once), and applied
-under the entity row lock against current state, so concurrent writers of
+under the record row lock against current state, so concurrent writers of
 other namespaces never lose changes. Setting a key replaces its whole value.
 `expected_revision` makes a write conditional; a retried intent key is
 recognized as `already_applied` before the revision is compared. Applied
 outcomes include `annotation_revision`. Each change is audited and emits
-`entity.annotations_changed.v1`; it does not change the entity's `updated_at`,
+`record.annotations_changed.v1`; it does not change the record's `updated_at`,
 so an extension's own bookkeeping never makes its output look stale. A tag
-change runs the entity's checks and on-save enforcing rules when any of them
-uses `has_tag` or `missing_tag` on the entity, and is rejected like any other
+change runs the record's checks and on-save enforcing rules when any of them
+uses `has_tag` or `missing_tag` on the record, and is rejected like any other
 write that would violate them. Do not
 store signed URLs or secret inputs in annotations, and do not treat a tag as
 proof that a download is available: resolve that through the run and artifact
 APIs.
 
-A namespace is claimed on the extension's first annotation write. If entities
+A namespace is claimed on the extension's first annotation write. If records
 already carry data under that name, the write is rejected until an operator
 adopts it with `POST /extensions/{extension_id}/annotation-namespace`
 (inventory with `GET`); adoption never renames or deletes existing values. The
 names `attricat`, `attricat.sample`, `catalog`, `core`, and `system` cannot be
 claimed. Claims are kept across disable, upgrade, and removal, and annotations
-are preserved. Generic writes (entity create and `PUT`, duplicate, workflow
+are preserved. Generic writes (record create and `PUT`, duplicate, workflow
 annotation actions, and legacy extension `create`/`upsert` fields) cannot
 change a claimed namespace. Operators repair or clean up a namespace on one
-entity with `POST
-/extensions/{extension_id}/annotation-namespace/entities/{entity_id}`.
+record with `POST
+/extensions/{extension_id}/annotation-namespace/records/{record_id}`.
 
 ## Context-aware catalog APIs
 
@@ -1112,9 +1112,9 @@ shapes, and write selectors are typed WIT records and variants. Components have
 no WASI, network, filesystem, database, browser credential, or ambient host
 access.
 
-Server components granted `catalog.read` can request an entity, direct current
-values, or resolved values for a supplied entity/context pair. Every typed read
-response includes the workspace-owned entity, its pinned `BlueprintWithAttributes`
+Server components granted `catalog.read` can request a record, direct current
+values, or resolved values for a supplied record/context pair. Every typed read
+response includes the workspace-owned record, its pinned `BlueprintWithAttributes`
 metadata, direct values, and resolved values when requested. Resolved reads use
 Catalog's existing context/fallback path rather than a copy in the extension.
 `catalog.write` permits only validated scalar writes with an explicit context
@@ -1149,23 +1149,23 @@ No extension receives browser cookies, routes, or arbitrary fetch access.
 
 The additional fixed embedded outlets are
 `blueprint_attribute_configuration` (requires `client.blueprint_configuration`),
-`entity_attribute_decoration` (requires `client.entity_decoration`), and
-`entity_action` (requires `client.entity_action`). Their contexts contain only
+`record_attribute_decoration` (requires `client.record_decoration`), and
+`record_action` (requires `client.record_action`). Their contexts contain only
 the relevant catalog IDs: blueprint/revision/attribute, or
-entity/attribute/context. Extensions cannot provide DOM selectors, arbitrary
+record/attribute/context. Extensions cannot provide DOM selectors, arbitrary
 host routes, React state, or inter-extension RPC.
 
-The `entity_header_action` outlet mounts compact extension actions immediately
-before the entity's host-owned toolbar. Its strict v1 context is
-`{ "context_version": 1, "entity_id", "blueprint_id", "blueprint_version" }`;
+The `record_header_action` outlet mounts compact extension actions immediately
+before the record's host-owned toolbar. Its strict v1 context is
+`{ "context_version": 1, "record_id", "blueprint_id", "blueprint_version" }`;
 the host shows one primary and three secondary actions before overflow. It
-requires `client.entity_header_action`; commands still need `client.commands`.
-The `explorer_row_action` outlet is host-controlled overflow UI for one entity;
-its strict v1 context is `{ "context_version": 1, "entity_id", "blueprint_id",
+requires `client.record_header_action`; commands still need `client.commands`.
+The `explorer_row_action` outlet is host-controlled overflow UI for one record;
+its strict v1 context is `{ "context_version": 1, "record_id", "blueprint_id",
 "blueprint_version" }`. The `blueprint_detail_panel` outlet is a host-owned,
 read-only detail-page region with strict v1 context `{ "context_version": 1,
 "blueprint_id", "blueprint_version" }`. These contexts deliberately exclude
-search state, arbitrary entity values, and browser page state. Commands from an
+search state, arbitrary record values, and browser page state. Commands from an
 action still require `client.commands` and use the existing validated,
 authorized command broker.
 
@@ -1204,15 +1204,15 @@ without exposing input or secrets.
 When available, the sibling checkout at `../../attricat-extension-example`
 contains the packaged `attricat-extension-example` formula component using the
 `catalog:host` ABI and sandboxed client contributions. It
-responds to `entity.updated.v1` by writing a calculated numeric attribute.
+responds to `record.updated.v1` by writing a calculated numeric attribute.
 
 The same checkout's `just pack` also writes `dist/reference-documents.tar.zst`
 (`attricat.reference-documents`), which exercises selection-aware actions: grant all of
-its permissions and enable it, then use **Generate document** from an entity
+its permissions and enable it, then use **Generate document** from a record
 preview, an Explorer row, or an Explorer selection. It renders PDFs (separate,
 ZIP, or combined) in an interactive operation run, writes a `report.json` with
-per-entity results, and annotates entities whose output was finalized. An
-entity without values fails rendering on purpose, which exercises partial
+per-record results, and annotates records whose output was finalized. A
+record without values fails rendering on purpose, which exercises partial
 failures without failing the run.
 
 Run the real-host compatibility suite only against a worktree-local stack after
@@ -1229,7 +1229,7 @@ just test-reference-extension-e2e
 The suite builds and packages the maintained sibling example archive, side-loads
 it through the public CLI, grants every manifest-declared capability, enables
 it, and downloads a declared client contribution. It creates a fresh formula
-blueprint and entity, updates a dependency in the default context, and waits
+blueprint and record, updates a dependency in the default context, and waits
 for the real event handler's calculated write in that same context. It uses no
 repository/runtime mocks. The caller's token needs extension management,
-blueprint write/publish, entity write/read, and audit-read permissions.
+blueprint write/publish, record write/read, and audit-read permissions.

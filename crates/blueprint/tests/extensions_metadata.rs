@@ -6,7 +6,7 @@ fn accepts_namespaced_extension_metadata_without_relaxing_core_fields() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"

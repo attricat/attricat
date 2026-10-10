@@ -52,7 +52,7 @@ describe('extension management API', () => {
     const layout = {
       version: 1 as const,
       outlets: {
-        entity_preview_panel: {
+        record_preview_panel: {
           order: ['acme.test:panel'],
           hidden: ['acme.legacy:panel'],
         },

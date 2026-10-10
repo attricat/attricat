@@ -5,14 +5,14 @@ import {
   type Attribute,
   type Blueprint,
   type BlueprintWithAttributes,
-} from '../entities/api';
-import { entityQueryKeys } from '../entities/queryKeys';
+} from '../records/api';
+import { recordQueryKeys } from '../records/queryKeys';
 import type { QuerySchema } from './queryLanguage';
 import { queryTargetCodes } from './querySuggestions';
 import { lexiconText, useLexiconRevision } from '../lexicon/lexicon';
 
 const targetQueryKey = (code: string) =>
-  entityQueryKeys.blueprintByCode(code, undefined);
+  recordQueryKeys.blueprintByCode(code, undefined);
 
 /**
  * Builds the schema used to highlight and complete an Explorer query,

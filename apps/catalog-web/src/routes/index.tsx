@@ -4,12 +4,12 @@ import { parseExplorerRouteSearch } from '../features/explorer/search';
 import { WorkspaceOnboardingGate } from '../features/onboarding/WorkspaceOnboardingGate';
 
 const IndexRouteComponent = () => {
-  const { entity, ...search } = Route.useSearch();
+  const { record, ...search } = Route.useSearch();
   return (
     <WorkspaceOnboardingGate
       disabled={Boolean(search.savedView ?? search.viewState)}
     >
-      <SavedExplorer panelEntityId={entity} search={search} />
+      <SavedExplorer panelRecordId={record} search={search} />
     </WorkspaceOnboardingGate>
   );
 };

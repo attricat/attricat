@@ -17,7 +17,7 @@ const BLUEPRINT: &str = r#"
 format_version = 1
 code = "unified_item"
 name = "Unified item"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["title"]
@@ -60,7 +60,7 @@ fn manifest() -> Value {
             {"id": "client", "kind": "client_component", "path": "client.js"}
         ],
         "server": {
-            "event_handlers": [{"id": "on-update", "event_types": ["entity.updated.v1"], "handler": "handle-event"}],
+            "event_handlers": [{"id": "on-update", "event_types": ["record.updated.v1"], "handler": "handle-event"}],
             "commands": [{
                 "id": "probe", "handler": "probe",
                 "request_schema": {"type": "object"},
@@ -139,9 +139,9 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
     // Interactive operations run through the operations export of the same
     // component, with direct api catalog access denied inside the run.
     let blueprint = published_blueprint(&repository, BLUEPRINT).await;
-    let mut entities = Vec::new();
+    let mut records = Vec::new();
     for title in ["First", "Second"] {
-        entities.push(titled_entity(&repository, blueprint, title).await);
+        records.push(titled_record(&repository, blueprint, title).await);
     }
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let response = authenticated_client()
@@ -155,7 +155,7 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
                 "blueprint_id": blueprint.0,
                 "blueprint_version": blueprint.1,
                 "context_id": null,
-                "entity_ids": entities
+                "record_ids": records
             }
         }))
         .send()

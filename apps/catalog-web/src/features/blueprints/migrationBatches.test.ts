@@ -14,11 +14,11 @@ const batch = (
   created_at: '2026-10-05T12:00:00Z',
   started_at: null,
   completed_at: null,
-  total_entities: 10,
-  processed_entities: 0,
-  migrated_entities: 0,
-  needs_input_entities: 0,
-  failed_entities: 0,
+  total_records: 10,
+  processed_records: 0,
+  migrated_records: 0,
+  needs_input_records: 0,
+  failed_records: 0,
 });
 
 describe('hasActiveMigrationForVersion', () => {

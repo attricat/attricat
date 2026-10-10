@@ -1,4 +1,4 @@
-import type { Attribute } from '../entities/api';
+import type { Attribute } from '../records/api';
 
 export type RelationshipFilterAttribute = Attribute & {
   target_blueprint_code: string;

@@ -26,7 +26,7 @@ Use a dedicated local database for performance work. Start a release-mode API ag
 
 ```sh
 CATALOG_TOKEN=cat_pat_... just generate medium
-# Full benchmark dataset (1,000,000 entities; this can take substantial time):
+# Full benchmark dataset (1,000,000 records; this can take substantial time):
 CATALOG_TOKEN=cat_pat_... just generate large
 ```
 
@@ -41,7 +41,7 @@ Do not run a benchmark until its checkpoint reports `benchmark_ready: true`.
 
 ## Run the local workload
 
-Install [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) and use a personal access token with `entities.read`:
+Install [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) and use a personal access token with `records.read`:
 
 ```sh
 CATALOG_TOKEN=cat_pat_... just perf smoke

@@ -36,7 +36,7 @@ export const WorkflowActions = ({
   workflowId: string;
 }) => {
   const { t } = useTranslation();
-  const [manualEntityId, setManualEntityId] = useState('');
+  const [manualRecordId, setManualRecordId] = useState('');
   const isEnabledRevision = current.enabled_version === current.version;
   return (
     <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
@@ -73,18 +73,18 @@ export const WorkflowActions = ({
         <Stack direction="row" spacing={1}>
           <TextField
             disabled={runNow.isPending}
-            label={t('workflows.entityId')}
+            label={t('workflows.recordId')}
             required
             slotProps={{
-              htmlInput: { 'aria-label': t('workflows.manualRunEntityId') },
+              htmlInput: { 'aria-label': t('workflows.manualRunRecordId') },
             }}
-            onChange={(event) => setManualEntityId(event.target.value)}
+            onChange={(event) => setManualRecordId(event.target.value)}
             size="small"
-            value={manualEntityId}
+            value={manualRecordId}
           />
           <Button
-            disabled={runNow.isPending || !manualEntityId.trim()}
-            onClick={() => runNow.mutate(manualEntityId.trim())}
+            disabled={runNow.isPending || !manualRecordId.trim()}
+            onClick={() => runNow.mutate(manualRecordId.trim())}
             startIcon={<PlayIcon />}
             variant="outlined"
           >

@@ -2,13 +2,13 @@
 //! acyclic relationship hierarchies.
 //!
 //! The latest published revision of a blueprint family decides which keys and
-//! hierarchies apply to every entity in that family, whichever revision the
-//! entity is pinned to. Key and hierarchy attributes are matched by code.
-//! (Entity checks, transition conditions and rules instead use the entity's
+//! hierarchies apply to every record in that family, whichever revision the
+//! record is pinned to. Key and hierarchy attributes are matched by code.
+//! (Record checks, transition conditions and rules instead use the record's
 //! pinned revision; see `docs/database.md#structural-constraints`.)
 //!
-//! Unique keys are enforced by `entity_unique_key_values`: each write rebuilds
-//! the written entity's rows inside its transaction, and the table's unique
+//! Unique keys are enforced by `record_unique_key_values`: each write rebuilds
+//! the written record's rows inside its transaction, and the table's unique
 //! constraint makes the second of two concurrent duplicate writers fail.
 //! Publication takes an exclusive per-family lock that every writer shares,
 //! so a revision that adds a key indexes a stable family snapshot. Key values
@@ -35,18 +35,18 @@ use super::record_values::{
 };
 use super::write_context::WriteContext;
 use super::{CatalogRepository, RepositoryError};
-use crate::model::Entity;
+use crate::model::Record;
 
 /// Duplicate groups and hierarchy violations reported when publication fails.
 const MAX_REPORTED_VIOLATIONS: usize = 20;
 
-/// One group of entities that already share a key value.
+/// One group of records that already share a key value.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct UniqueKeyDuplicate {
     pub key: String,
     pub context: String,
     pub values: Value,
-    pub entity_ids: Vec<Uuid>,
+    pub record_ids: Vec<Uuid>,
 }
 
 /// Where a unique key's values must be unique.
@@ -74,7 +74,7 @@ pub(crate) struct EnforcedUniqueKey {
 pub(super) enum Hierarchy {
     /// No cycles.
     Acyclic,
-    /// No cycles and at most one parent per entity and context.
+    /// No cycles and at most one parent per record and context.
     Tree,
 }
 
@@ -101,14 +101,14 @@ pub(super) struct StructuralConstraints {
 
 #[derive(Clone, Debug, PartialEq)]
 struct KeyRow {
-    entity_id: Uuid,
+    record_id: Uuid,
     key_code: String,
     context_id: Uuid,
     key_hash: String,
     key_values: Value,
 }
 
-/// The SHA-256 stored in `entity_unique_key_values.key_hash`.
+/// The SHA-256 stored in `record_unique_key_values.key_hash`.
 pub(crate) fn key_hash(key_values: &Value) -> String {
     format!("{:x}", Sha256::digest(key_values.to_string().as_bytes()))
 }
@@ -149,16 +149,16 @@ fn key_codes(keys: &[EnforcedUniqueKey]) -> Vec<String> {
 }
 
 impl CatalogRepository {
-    /// Applies unique keys to one entity after its values changed. Called by
-    /// every value-write path through entity validation.
-    pub(super) async fn sync_entity_unique_keys(
+    /// Applies unique keys to one record after its values changed. Called by
+    /// every value-write path through record validation.
+    pub(super) async fn sync_record_unique_keys(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
     ) -> Result<(), RepositoryError> {
-        lock_unique_keys(transaction, self.workspace_id.0, entity.blueprint_id, false).await?;
+        lock_unique_keys(transaction, self.workspace_id.0, record.blueprint_id, false).await?;
         let keys =
-            enforced_unique_keys(transaction, self.workspace_id.0, entity.blueprint_id).await?;
+            enforced_unique_keys(transaction, self.workspace_id.0, record.blueprint_id).await?;
         let (contexts, desired) = if keys.is_empty() {
             (ContextTree::default(), Vec::new())
         } else {
@@ -166,7 +166,7 @@ impl CatalogRepository {
             let records = load_records(
                 transaction,
                 self.workspace_id.0,
-                Selection::Entities(&[entity.id]),
+                Selection::Records(&[record.id]),
                 Some(&key_codes(&keys)),
                 RecordState::After,
             )
@@ -175,10 +175,10 @@ impl CatalogRepository {
             (contexts, rows)
         };
         let existing = sqlx::query_as::<_, (String, Uuid, String)>(
-            "SELECT key_code, context_id, key_hash FROM entity_unique_key_values WHERE workspace_id = $1 AND entity_id = $2",
+            "SELECT key_code, context_id, key_hash FROM record_unique_key_values WHERE workspace_id = $1 AND record_id = $2",
         )
         .bind(self.workspace_id.0)
-        .bind(entity.id)
+        .bind(record.id)
         .fetch_all(&mut **transaction)
         .await?;
         let wanted: HashSet<_> = desired
@@ -192,12 +192,12 @@ impl CatalogRepository {
         let stale: Vec<_> = held.difference(&wanted).collect();
         if !stale.is_empty() {
             sqlx::query(
-                r#"DELETE FROM entity_unique_key_values
-                   WHERE workspace_id = $1 AND entity_id = $2
+                r#"DELETE FROM record_unique_key_values
+                   WHERE workspace_id = $1 AND record_id = $2
                      AND (key_code, context_id, key_hash) IN (SELECT * FROM UNNEST($3::text[], $4::uuid[], $5::text[]))"#,
             )
             .bind(self.workspace_id.0)
-            .bind(entity.id)
+            .bind(record.id)
             .bind(stale.iter().map(|(code, ..)| *code).collect::<Vec<_>>())
             .bind(stale.iter().map(|(_, context, _)| *context).collect::<Vec<_>>())
             .bind(stale.iter().map(|(.., hash)| *hash).collect::<Vec<_>>())
@@ -210,29 +210,29 @@ impl CatalogRepository {
             // A concurrent writer of the same value holds the index entry
             // until it finishes; DO NOTHING then reports its committed row.
             let inserted = sqlx::query_scalar::<_, Uuid>(
-                r#"INSERT INTO entity_unique_key_values
-                       (workspace_id, blueprint_id, key_code, context_id, key_hash, key_values, entity_id)
+                r#"INSERT INTO record_unique_key_values
+                       (workspace_id, blueprint_id, key_code, context_id, key_hash, key_values, record_id)
                    VALUES ($1, $2, $3, $4, $5, $6, $7)
-                   ON CONFLICT ON CONSTRAINT entity_unique_key_values_value_key DO NOTHING
-                   RETURNING entity_id"#,
+                   ON CONFLICT ON CONSTRAINT record_unique_key_values_value_key DO NOTHING
+                   RETURNING record_id"#,
             )
             .bind(self.workspace_id.0)
-            .bind(entity.blueprint_id)
+            .bind(record.blueprint_id)
             .bind(&row.key_code)
             .bind(row.context_id)
             .bind(&row.key_hash)
             .bind(&row.key_values)
-            .bind(row.entity_id)
+            .bind(row.record_id)
             .fetch_optional(&mut **transaction)
             .await?;
             if inserted.is_some() {
                 continue;
             }
-            let conflicting_entity_id = sqlx::query_scalar::<_, Uuid>(
-                "SELECT entity_id FROM entity_unique_key_values WHERE workspace_id = $1 AND blueprint_id = $2 AND key_code = $3 AND context_id = $4 AND key_hash = $5",
+            let conflicting_record_id = sqlx::query_scalar::<_, Uuid>(
+                "SELECT record_id FROM record_unique_key_values WHERE workspace_id = $1 AND blueprint_id = $2 AND key_code = $3 AND context_id = $4 AND key_hash = $5",
             )
             .bind(self.workspace_id.0)
-            .bind(entity.blueprint_id)
+            .bind(record.blueprint_id)
             .bind(&row.key_code)
             .bind(row.context_id)
             .bind(&row.key_hash)
@@ -242,23 +242,23 @@ impl CatalogRepository {
                 key: row.key_code.clone(),
                 context: contexts.code(row.context_id),
                 values: row.key_values.clone(),
-                conflicting_entity_id,
+                conflicting_record_id,
             });
         }
         Ok(())
     }
 
-    /// Releases a deleted entity's key values.
-    pub(super) async fn delete_entity_unique_keys(
+    /// Releases a deleted record's key values.
+    pub(super) async fn delete_record_unique_keys(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity_id: Uuid,
+        record_id: Uuid,
     ) -> Result<(), RepositoryError> {
         sqlx::query(
-            "DELETE FROM entity_unique_key_values WHERE workspace_id = $1 AND entity_id = $2",
+            "DELETE FROM record_unique_key_values WHERE workspace_id = $1 AND record_id = $2",
         )
         .bind(self.workspace_id.0)
-        .bind(entity_id)
+        .bind(record_id)
         .execute(&mut **transaction)
         .await?;
         Ok(())
@@ -269,7 +269,7 @@ impl CatalogRepository {
     /// key writer holds the same lock shared until it commits, so a context
     /// change that holds these locks sees every committed key row and no
     /// writer computes rows against the old context tree. Callers first take
-    /// the workspace row and the exclusive entity-writer lock (see the lock
+    /// the workspace row and the exclusive record-writer lock (see the lock
     /// order in `mod.rs`), so no writer holding a family lock waits on them. Returns
     /// the families.
     pub(super) async fn lock_context_unique_keys(
@@ -295,7 +295,7 @@ impl CatalogRepository {
     }
 
     /// Indexes a new context's context-scoped key values. The context has no
-    /// values yet, so each entity resolves there like in the parent except
+    /// values yet, so each record resolves there like in the parent except
     /// for attributes with `context_fallback = "none"`, which are missing.
     /// The caller holds [`Self::lock_context_unique_keys`].
     pub(super) async fn seed_context_unique_keys(
@@ -334,8 +334,8 @@ impl CatalogRepository {
     }
 
     /// Re-indexes `families` after a context reparent changed how values
-    /// are inherited. Entities are not re-synced one by one, because a row
-    /// computed under the new tree could collide with another entity's row
+    /// are inherited. Records are not re-synced one by one, because a row
+    /// computed under the new tree could collide with another record's row
     /// that is still stale; real duplicates are reported together. The
     /// caller holds [`Self::lock_context_unique_keys`].
     pub(super) async fn rebuild_context_unique_keys(
@@ -353,7 +353,7 @@ impl CatalogRepository {
     /// Runs after a revision's status becomes `published`. When the family's
     /// enforced keys or hierarchies change, existing data is checked in the
     /// same transaction so publication fails with a report instead of
-    /// leaving entities that violate the new constraints.
+    /// leaving records that violate the new constraints.
     pub(super) async fn apply_published_structural_constraints(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -410,7 +410,7 @@ impl CatalogRepository {
         blueprint_id: Uuid,
     ) -> Result<(), RepositoryError> {
         sqlx::query(
-            "DELETE FROM entity_unique_key_values WHERE workspace_id = $1 AND blueprint_id = $2",
+            "DELETE FROM record_unique_key_values WHERE workspace_id = $1 AND blueprint_id = $2",
         )
         .bind(self.workspace_id.0)
         .bind(blueprint_id)
@@ -454,13 +454,13 @@ impl CatalogRepository {
             .values()
             .filter(|group| group.len() > 1)
             .map(|group| {
-                let mut entity_ids: Vec<_> = group.iter().map(|row| row.entity_id).collect();
-                entity_ids.sort();
+                let mut record_ids: Vec<_> = group.iter().map(|row| row.record_id).collect();
+                record_ids.sort();
                 UniqueKeyDuplicate {
                     key: group[0].key_code.clone(),
                     context: contexts.code(group[0].context_id),
                     values: group[0].key_values.clone(),
-                    entity_ids,
+                    record_ids,
                 }
             })
             .collect();
@@ -476,11 +476,11 @@ impl CatalogRepository {
         }
         for chunk in rows.chunks(1000) {
             sqlx::query(
-                r#"INSERT INTO entity_unique_key_values
-                       (workspace_id, blueprint_id, key_code, context_id, key_hash, key_values, entity_id)
-                   SELECT $1, $2, row.key_code, row.context_id, row.key_hash, row.key_values, row.entity_id
+                r#"INSERT INTO record_unique_key_values
+                       (workspace_id, blueprint_id, key_code, context_id, key_hash, key_values, record_id)
+                   SELECT $1, $2, row.key_code, row.context_id, row.key_hash, row.key_values, row.record_id
                    FROM UNNEST($3::text[], $4::uuid[], $5::text[], $6::jsonb[], $7::uuid[])
-                        AS row(key_code, context_id, key_hash, key_values, entity_id)"#,
+                        AS row(key_code, context_id, key_hash, key_values, record_id)"#,
             )
             .bind(self.workspace_id.0)
             .bind(blueprint_id)
@@ -488,7 +488,7 @@ impl CatalogRepository {
             .bind(chunk.iter().map(|row| row.context_id).collect::<Vec<_>>())
             .bind(chunk.iter().map(|row| row.key_hash.clone()).collect::<Vec<_>>())
             .bind(chunk.iter().map(|row| row.key_values.clone()).collect::<Vec<_>>())
-            .bind(chunk.iter().map(|row| row.entity_id).collect::<Vec<_>>())
+            .bind(chunk.iter().map(|row| row.record_id).collect::<Vec<_>>())
             .execute(&mut **transaction)
             .await?;
         }
@@ -519,7 +519,7 @@ impl CatalogRepository {
     }
 
     /// Rejects a new edge that would close a cycle in a hierarchy, or give an
-    /// entity a second parent in a tree. Edges of every revision of the
+    /// record a second parent in a tree. Edges of every revision of the
     /// blueprint family's field count; the latest published revision decides
     /// whether the field is a hierarchy. The edge is checked in every context
     /// whose resolved value of the field it becomes.
@@ -528,22 +528,22 @@ impl CatalogRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         write: &WriteContext,
-        entity: &Entity,
+        record: &Record,
         attribute_id: Uuid,
         attribute_code: &str,
         context_id: Option<Uuid>,
-        target_entity_id: Uuid,
+        target_record_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        // Entity-scoped reusable attributes are not part of a blueprint field.
+        // Record-scoped reusable attributes are not part of a blueprint field.
         let Some(context_fallback) = write
             .by_id(attribute_id)
-            .filter(|attribute| !attribute.entity_scoped)
+            .filter(|attribute| !attribute.record_scoped)
             .map(|attribute| attribute.context_fallback.clone())
         else {
             return Ok(());
         };
         let Some(hierarchy) = write
-            .family_constraints(transaction, self.workspace_id.0, entity.blueprint_id)
+            .family_constraints(transaction, self.workspace_id.0, record.blueprint_id)
             .await?
             .hierarchies
             .get(attribute_code)
@@ -555,37 +555,37 @@ impl CatalogRepository {
             .await?;
         if hierarchy == Hierarchy::Tree {
             let other_parent = sqlx::query_scalar::<_, Uuid>(
-                r#"SELECT av.relationship_target_entity_id
+                r#"SELECT av.relationship_target_record_id
                    FROM attribute_values av JOIN attributes a ON a.id = av.attribute_id
-                   WHERE av.workspace_id = $1 AND av.entity_id = $2
+                   WHERE av.workspace_id = $1 AND av.record_id = $2
                      AND a.blueprint_id = $3 AND a.code = $4
                      AND av.context_id IS NOT DISTINCT FROM $5
-                     AND av.relationship_target_entity_id IS NOT NULL AND av.active
-                     AND av.relationship_target_entity_id <> $6
+                     AND av.relationship_target_record_id IS NOT NULL AND av.active
+                     AND av.relationship_target_record_id <> $6
                    LIMIT 1"#,
             )
             .bind(self.workspace_id.0)
-            .bind(entity.id)
-            .bind(entity.blueprint_id)
+            .bind(record.id)
+            .bind(record.blueprint_id)
             .bind(attribute_code)
             .bind(context_id)
-            .bind(target_entity_id)
+            .bind(target_record_id)
             .fetch_optional(&mut **transaction)
             .await?;
             if let Some(existing_target) = other_parent {
                 return Err(RepositoryError::RelationshipCardinalityConflict {
                     attribute: attribute_code.to_owned(),
                     context_id,
-                    source_entity_id: entity.id,
-                    target_entity_id: existing_target,
-                    conflicting_source_entity_id: None,
+                    source_record_id: record.id,
+                    target_record_id: existing_target,
+                    conflicting_source_record_id: None,
                 });
             }
         }
-        if target_entity_id == entity.id {
+        if target_record_id == record.id {
             return Err(RepositoryError::RelationshipCycle {
                 attribute: attribute_code.to_owned(),
-                path: vec![entity.id, entity.id],
+                path: vec![record.id, record.id],
             });
         }
         let tree = &write.tree;
@@ -595,12 +595,12 @@ impl CatalogRepository {
         };
         let field = HierarchyField {
             code: attribute_code,
-            family: Some(entity.blueprint_id),
+            family: Some(record.blueprint_id),
         };
         let source_edges =
-            hierarchy_edges(transaction, self.workspace_id.0, &field, &[entity.id], None).await?;
+            hierarchy_edges(transaction, self.workspace_id.0, &field, &[record.id], None).await?;
         let source_contexts: HashSet<Uuid> = source_edges
-            .get(&entity.id)
+            .get(&record.id)
             .map(|edges| edges.by_context.keys().copied().collect())
             .unwrap_or_default();
         let inherit = context_fallback != "none";
@@ -613,10 +613,10 @@ impl CatalogRepository {
                        SELECT 1 FROM attribute_values av JOIN attributes a ON a.id = av.attribute_id
                        WHERE av.workspace_id = $1 AND a.blueprint_id = $2 AND a.code = $3
                          AND av.context_id <> $4
-                         AND av.relationship_target_entity_id IS NOT NULL AND av.active)"#,
+                         AND av.relationship_target_record_id IS NOT NULL AND av.active)"#,
             )
             .bind(self.workspace_id.0)
-            .bind(entity.blueprint_id)
+            .bind(record.blueprint_id)
             .bind(attribute_code)
             .bind(written)
             .fetch_one(&mut **transaction)
@@ -643,8 +643,8 @@ impl CatalogRepository {
                 tree,
                 context.id,
                 &field,
-                &[target_entity_id],
-                entity.id,
+                &[target_record_id],
+                record.id,
                 None,
             )
             .await?
@@ -666,7 +666,7 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
     ) -> Result<(), RepositoryError> {
         let families: Vec<Uuid> = sqlx::query_scalar(
-            "SELECT DISTINCT blueprint_id FROM entities WHERE workspace_id = $1 AND deleted_at IS NULL ORDER BY blueprint_id",
+            "SELECT DISTINCT blueprint_id FROM records WHERE workspace_id = $1 AND deleted_at IS NULL ORDER BY blueprint_id",
         )
         .bind(self.workspace_id.0)
         .fetch_all(&mut **transaction)
@@ -739,18 +739,18 @@ impl CatalogRepository {
 pub(crate) struct HierarchyField<'a> {
     pub code: &'a str,
     /// Restricts edges to one blueprint family; `None` follows the code on
-    /// any entity, including the entity's own additional attributes.
+    /// any record, including the record's own additional attributes.
     pub family: Option<Uuid>,
 }
 
-/// One entity's direct edges of a field.
+/// One record's direct edges of a field.
 #[derive(Clone, Debug, Default, PartialEq)]
-struct EntityEdges {
+struct RecordEdges {
     inherit: bool,
     by_context: BTreeMap<Uuid, Vec<Uuid>>,
 }
 
-/// Active edges of `field` from `sources` (every live entity when empty),
+/// Active edges of `field` from `sources` (every live record when empty),
 /// optionally only in `contexts`.
 async fn hierarchy_edges(
     conn: &mut PgConnection,
@@ -758,18 +758,18 @@ async fn hierarchy_edges(
     field: &HierarchyField<'_>,
     sources: &[Uuid],
     contexts: Option<&[Uuid]>,
-) -> Result<BTreeMap<Uuid, EntityEdges>, RepositoryError> {
+) -> Result<BTreeMap<Uuid, RecordEdges>, RepositoryError> {
     let rows = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String)>(
-        r#"SELECT av.entity_id, av.context_id, av.relationship_target_entity_id, a.context_fallback
+        r#"SELECT av.record_id, av.context_id, av.relationship_target_record_id, a.context_fallback
            FROM attribute_values av
-           JOIN entities e ON e.id = av.entity_id AND e.workspace_id = av.workspace_id AND e.deleted_at IS NULL
+           JOIN records e ON e.id = av.record_id AND e.workspace_id = av.workspace_id AND e.deleted_at IS NULL
            JOIN attributes a ON a.id = av.attribute_id AND a.code = $2 AND a.deleted_at IS NULL
             AND ($3::uuid IS NULL OR a.blueprint_id = $3)
-            AND ((a.blueprint_id = e.blueprint_id AND a.blueprint_version = e.blueprint_version) OR a.entity_id = e.id)
-           WHERE av.workspace_id = $1 AND av.relationship_target_entity_id IS NOT NULL AND av.active
-             AND (cardinality($4::uuid[]) = 0 OR av.entity_id = ANY($4))
+            AND ((a.blueprint_id = e.blueprint_id AND a.blueprint_version = e.blueprint_version) OR a.record_id = e.id)
+           WHERE av.workspace_id = $1 AND av.relationship_target_record_id IS NOT NULL AND av.active
+             AND (cardinality($4::uuid[]) = 0 OR av.record_id = ANY($4))
              AND ($5::uuid[] IS NULL OR av.context_id = ANY($5))
-           ORDER BY av.entity_id, av.context_id, av.relationship_target_entity_id"#,
+           ORDER BY av.record_id, av.context_id, av.relationship_target_record_id"#,
     )
     .bind(workspace_id)
     .bind(field.code)
@@ -778,7 +778,7 @@ async fn hierarchy_edges(
     .bind(contexts)
     .fetch_all(conn)
     .await?;
-    let mut edges: BTreeMap<Uuid, EntityEdges> = BTreeMap::new();
+    let mut edges: BTreeMap<Uuid, RecordEdges> = BTreeMap::new();
     for (source, context, target, fallback) in rows {
         let entry = edges.entry(source).or_default();
         entry.inherit = fallback != "none";
@@ -789,7 +789,7 @@ async fn hierarchy_edges(
 
 /// Each source's resolved targets in one context.
 fn resolve_graph(
-    edges: &BTreeMap<Uuid, EntityEdges>,
+    edges: &BTreeMap<Uuid, RecordEdges>,
     tree: &ContextTree,
     context_id: Uuid,
 ) -> Result<BTreeMap<Uuid, Vec<Uuid>>, RepositoryError> {
@@ -811,7 +811,7 @@ pub(crate) enum HierarchyWalk {
     Clear,
     /// The closed path `[goal, start, ..., goal]`.
     Cycle(Vec<Uuid>),
-    /// More than the allowed number of entities were visited.
+    /// More than the allowed number of records were visited.
     LimitReached,
 }
 
@@ -887,11 +887,11 @@ pub(super) fn describe_duplicates(duplicates: &[UniqueKeyDuplicate]) -> String {
         .iter()
         .map(|duplicate| {
             format!(
-                "key '{}' values {} in context '{}' on entities {}",
+                "key '{}' values {} in context '{}' on records {}",
                 duplicate.key,
                 duplicate.values,
                 duplicate.context,
-                join_ids(&duplicate.entity_ids)
+                join_ids(&duplicate.record_ids)
             )
         })
         .collect::<Vec<_>>()
@@ -989,7 +989,7 @@ fn key_rows(
                     let component = record
                         .attributes
                         .get(code)
-                        .filter(|attribute| !attribute.entity_scoped)
+                        .filter(|attribute| !attribute.record_scoped)
                         .and_then(|attribute| {
                             attribute.resolve(path).and_then(|direct| {
                                 normalize_key_component(
@@ -1006,7 +1006,7 @@ fn key_rows(
                 }
                 let key_values = Value::Array(components);
                 rows.push(KeyRow {
-                    entity_id: record.id,
+                    record_id: record.id,
                     key_code: key.code.clone(),
                     context_id: *context_id,
                     key_hash: key_hash(&key_values),
@@ -1086,14 +1086,14 @@ mod tests {
         )
     }
 
-    /// `(entity, attribute, context, value)` string rows.
+    /// `(record, attribute, context, value)` string rows.
     fn records(
         rows: &[(u128, &str, u128, &str)],
         no_fallback: &[&str],
     ) -> BTreeMap<Uuid, RecordValues> {
         let mut records: BTreeMap<Uuid, RecordValues> = BTreeMap::new();
-        for (entity, attribute, context, value) in rows {
-            let id = Uuid::from_u128(*entity);
+        for (record, attribute, context, value) in rows {
+            let id = Uuid::from_u128(*record);
             records
                 .entry(id)
                 .or_insert_with(|| RecordValues::empty(id, Uuid::nil(), 1))
@@ -1159,9 +1159,9 @@ mod tests {
     fn number_keys_hash_the_exact_decimal() {
         let contexts = contexts(&[(1, "default", None)]);
         let mut sources = records(&[(10, "price", 1, "x"), (11, "price", 1, "x")], &[]);
-        for (entity, exact, json) in [(10u128, "1.50", 1.5), (11, "1.5", 1.5)] {
+        for (record, exact, json) in [(10u128, "1.50", 1.5), (11, "1.5", 1.5)] {
             let attribute = sources
-                .get_mut(&Uuid::from_u128(entity))
+                .get_mut(&Uuid::from_u128(record))
                 .unwrap()
                 .attributes
                 .get_mut("price")
@@ -1208,7 +1208,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert_eq!(composite.len(), 1, "entity 11 has no revision");
+        assert_eq!(composite.len(), 1, "record 11 has no revision");
         assert_eq!(composite[0].key_values, serde_json::json!(["d-1", "a"]));
         assert_eq!(composite[0].context_id, Uuid::from_u128(1));
 
@@ -1281,14 +1281,14 @@ mod tests {
         let mut edges = BTreeMap::from([
             (
                 a,
-                EntityEdges {
+                RecordEdges {
                     inherit: true,
                     by_context: BTreeMap::from([(default, vec![b])]),
                 },
             ),
             (
                 b,
-                EntityEdges {
+                RecordEdges {
                     inherit: true,
                     by_context: BTreeMap::from([(fr, vec![a])]),
                 },

@@ -13,11 +13,11 @@ unread or delete them permanently.
 | Column | Meaning |
 | --- | --- |
 | `workspace_id`, `recipient_user_id` | Whose inbox the row is in. Every read and write is keyed by both. |
-| `kind` | A dotted code such as `entity.assigned` (`^[a-z][a-z0-9_.]{0,99}$`). |
+| `kind` | A dotted code such as `record.assigned` (`^[a-z][a-z0-9_.]{0,99}$`). |
 | `title` | A plain-text, self-contained summary of 1–300 characters, used by the API, the CLI and agents, and by the web app for kinds it does not know. |
 | `body` | Optional detail of up to 2,000 characters, for example a comment excerpt. |
 | `actor_user_id` | Who caused it, or `NULL` for automation and agent runs. |
-| `subject_kind`, `subject_id` | Optional link target: `entity` or `agent_conversation`. Both are set or neither is; a notification without a subject is a plain message. |
+| `subject_kind`, `subject_id` | Optional link target: `record` or `agent_conversation`. Both are set or neither is; a notification without a subject is a plain message. |
 | `data` | A JSON object of kind-specific values that the web app uses to render a translated message. |
 | `read_at` | `NULL` while unread. |
 
@@ -34,20 +34,20 @@ transaction for producers that have none. Both apply these rules:
   notifications.
 - The actor who caused a notification never receives it.
 - A notification whose subject is a record only reaches recipients who hold
-  `entities.read` on that record when it is created.
+  `records.read` on that record when it is created.
 - The same notification (recipient, kind, subject and `data`) is created at most
   once per transaction, so write paths that revalidate a change twice notify
   once.
 - Titles name a record by its blueprint, never by its label: labels can contain
   values a recipient may not read. Clients resolve the current label through the
-  authorized `POST /v1/entities/labels` and fall back to the blueprint name.
+  authorized `POST /v1/records/labels` and fall back to the blueprint name.
 
 ## Producers
 
 | Kind | Recipients | Subject | Created in |
 | --- | --- | --- | --- |
-| `entity.assigned` | A newly assigned user, or each member of a newly assigned team (`data.team_id`, `data.team_name`) | Record | Every record write, through assignment validation (`validate_principal_values`). Saving an unchanged assignment notifies nobody. |
-| `entity.commented` | The record's current user and team assignees and everyone who commented on it before | Record | `create_entity_comment`; `body` holds the first 500 characters of the comment. |
+| `record.assigned` | A newly assigned user, or each member of a newly assigned team (`data.team_id`, `data.team_name`) | Record | Every record write, through assignment validation (`validate_principal_values`). Saving an unchanged assignment notifies nobody. |
+| `record.commented` | The record's current user and team assignees and everyone who commented on it before | Record | `create_record_comment`; `body` holds the first 500 characters of the comment. |
 | `agent.approval_required` | The user who started the run | Agent conversation | `transition_agent_run` to `awaiting_approval` |
 | `agent.run_failed` | The user who started the run | Agent conversation | A run that fails, times out or is interrupted |
 | `agent.run_completed` | The user who started the run | Agent conversation | Completion of scheduled and manual runs; interactive completions are visible in the conversation |

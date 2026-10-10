@@ -20,11 +20,11 @@ outbound details throw instead of being emitted.
 
 | Event                        | Detail                                         |
 | ---------------------------- | ---------------------------------------------- |
-| `catalog:entity-updated.v1`  | `{ entity_id, change_hints, correlation_id? }` |
+| `catalog:record-updated.v1`  | `{ record_id, change_hints, correlation_id? }` |
 | `catalog:context-changed.v1` | `{ context_id, correlation_id? }`              |
 
-`entity_id`, `context_id`, and `correlation_id` are UUIDs. `change_hints` is a
-bounded list of `entity`, `attribute_values`, `relationships`, or `blueprint`.
+`record_id`, `context_id`, and `correlation_id` are UUIDs. `change_hints` is a
+bounded list of `record`, `attribute_values`, `relationships`, or `blueprint`.
 It is deliberately not a list of outbox facts or values.
 
 ## Component to host
@@ -38,8 +38,8 @@ validated, the embedding page supplies the behavior:
 
 | Event                       | Detail                                          | Host behavior                                                               |
 | --------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------- |
-| `catalog:refresh-entity.v1` | `{ entity_id, change_hints?, correlation_id? }` | Re-fetch or invalidate authorized entity data.                              |
-| `catalog:navigate.v1`       | `{ entity_id, correlation_id? }`                | Navigate using the host-owned entity route. Components cannot supply a URL. |
+| `catalog:refresh-record.v1` | `{ record_id, change_hints?, correlation_id? }` | Re-fetch or invalidate authorized record data.                              |
+| `catalog:navigate.v1`       | `{ record_id, correlation_id? }`                | Navigate using the host-owned record route. Components cannot supply a URL. |
 | `catalog:notify.v1`         | `{ message, severity?, correlation_id? }`       | Display a bounded user-facing notification.                                 |
 
 `severity` is `success`, `info`, `warning`, or `error`; `message` is trimmed
@@ -58,6 +58,6 @@ component's view.
 
 The bridge is intentionally **not** an outbox subscription, webhook, server
 push protocol, audit stream, or generic inter-plugin RPC mechanism. It never
-forwards domain-event envelopes, event metadata/payloads, entity snapshots,
+forwards domain-event envelopes, event metadata/payloads, record snapshots,
 values, credentials, or authorization decisions. It also does not provide
 ordering, delivery, persistence, retries, or DOM-event cancellation semantics.

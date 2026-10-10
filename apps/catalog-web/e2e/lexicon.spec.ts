@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { createEntityBlueprint, suffix } from './helpers';
+import { createRecordBlueprint, suffix } from './helpers';
 
 test('translates a blueprint name reference and falls back after deleting it', async ({
   page,
 }) => {
   const key = `gadget_${suffix()}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     `lexicon_${suffix()}`,
     `{{${key}}}`,
     '[[attributes]]\ncode = "title"\nvalue_type = "string"',

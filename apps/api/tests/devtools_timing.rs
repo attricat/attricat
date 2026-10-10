@@ -13,7 +13,7 @@ async fn devtools_search_timings_are_aggregate_and_sanitized(pool: PgPool) {
 format_version = 1
 code = "timing_product"
 name = "Timing product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -29,11 +29,11 @@ value_type = "string"
 "#,
     )
     .await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let record = create_record(&client, &base_url, &blueprint).await;
     client
         .post(format!(
-            "{base_url}/entities/{}/values",
-            entity["id"].as_str().unwrap()
+            "{base_url}/records/{}/values",
+            record["id"].as_str().unwrap()
         ))
         .json(&json!({ "values": [{ "kind": "scalar", "attribute_code": "title", "value": "private query value" }] }))
         .send()
@@ -43,7 +43,7 @@ value_type = "string"
         .unwrap();
 
     let response = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({
             "blueprint": { "code": "timing_product" },
             "sort": { "field": "title", "direction": "asc" },
@@ -64,7 +64,7 @@ value_type = "string"
     }
     assert!(!timing.contains("private query value"));
     assert!(!timing.contains("SELECT"));
-    assert!(!timing.contains(entity["id"].as_str().unwrap()));
+    assert!(!timing.contains(record["id"].as_str().unwrap()));
 
     server.abort();
 }

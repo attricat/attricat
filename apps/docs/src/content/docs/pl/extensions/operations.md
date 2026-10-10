@@ -81,10 +81,10 @@ Użytkownicy widzą swoje uruchomienia w **Profil → Uruchomienia rozszerzeń**
 
 ## Adnotacje rekordów
 
-Z `catalog.annotations.write` dodawaj do paczki intencje `annotate`, aby zapisać informacje o rekordzie we własnej przestrzeni nazw: tagi `<extension-id>:<tag>` i obiekt w `system_metadata[<extension-id>]`. Intencje wskazują rekord przez `entity_id`.
+Z `catalog.annotations.write` dodawaj do paczki intencje `annotate`, aby zapisać informacje o rekordzie we własnej przestrzeni nazw: tagi `<extension-id>:<tag>` i obiekt w `system_metadata[<extension-id>]`. Intencje wskazują rekord przez `record_id`.
 
 ```json
-{"kind": "annotate", "intent_key": "doc-<run>-<entity>", "entity_id": "…",
+{"kind": "annotate", "intent_key": "doc-<run>-<record>", "record_id": "…",
  "add_tags": ["document-generated"], "set_metadata": {"last_document": {"template_version": 2}},
  "remove_tags": [], "remove_metadata": [], "expected_revision": null}
 ```

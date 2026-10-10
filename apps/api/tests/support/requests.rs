@@ -8,9 +8,9 @@ pub fn scalar(code: &str, value: impl Into<Value>) -> Value {
     json!({"kind": "scalar", "attribute_code": code, "value": value.into()})
 }
 
-/// A relationship value write pointing at `target`, an entity response body.
+/// A relationship value write pointing at `target`, a record response body.
 pub fn relationship(code: &str, target: &Value) -> Value {
-    json!({"kind": "relationship", "attribute_code": code, "target_entity_id": target["id"]})
+    json!({"kind": "relationship", "attribute_code": code, "target_record_id": target["id"]})
 }
 
 /// The response status and JSON body, or `Value::Null` when the body is not JSON.
@@ -48,29 +48,29 @@ pub async fn get_json(client: &Client, url: impl IntoUrl) -> Value {
         .unwrap()
 }
 
-/// POSTs a new entity of the latest published `blueprint` with `values`.
-pub async fn post_entity(
+/// POSTs a new record of the latest published `blueprint` with `values`.
+pub async fn post_record(
     client: &Client,
     base_url: &str,
     blueprint: &str,
     values: Value,
 ) -> Response {
     client
-        .post(format!("{base_url}/v1/entities"))
+        .post(format!("{base_url}/v1/records"))
         .json(&json!({"blueprint": {"code": blueprint}, "values": values}))
         .send()
         .await
         .unwrap()
 }
 
-/// Creates an entity of the latest published `blueprint`, requiring success.
-pub async fn create_entity_with(
+/// Creates a record of the latest published `blueprint`, requiring success.
+pub async fn create_record_with(
     client: &Client,
     base_url: &str,
     blueprint: &str,
     values: Value,
 ) -> Value {
-    let (status, body) = status_json(post_entity(client, base_url, blueprint, values).await).await;
+    let (status, body) = status_json(post_record(client, base_url, blueprint, values).await).await;
     assert!(status.is_success(), "{status}: {body}");
     body
 }

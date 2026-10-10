@@ -3,9 +3,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type { MouseEventHandler, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import type { EntityItem } from '../entities/api';
-import { entityPanelOpenerAttribute } from './constants';
-import { EntityDisplayCell } from './ExplorerTableCells';
+import type { RecordItem } from '../records/api';
+import { recordPanelOpenerAttribute } from './constants';
+import { RecordDisplayCell } from './ExplorerTableCells';
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -21,7 +21,7 @@ vi.mock('@tanstack/react-router', () => ({
       {...Object.fromEntries(
         Object.entries(props).filter(([name]) => name.startsWith('data-')),
       )}
-      href="#entity"
+      href="#record"
       onClick={onClick}
     >
       {children}
@@ -29,19 +29,19 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }));
 
-const entity = {
+const record = {
   display: { default: 'Sample product' },
   id: '123e4567-e89b-12d3-a456-426614174001',
   is_sample: false,
-} as unknown as EntityItem;
+} as unknown as RecordItem;
 
-describe('EntityDisplayCell', () => {
-  it('opens the entity panel on a plain click instead of navigating', () => {
+describe('RecordDisplayCell', () => {
+  it('opens the record panel on a plain click instead of navigating', () => {
     const onOpenPanel = vi.fn();
     render(
-      <EntityDisplayCell
+      <RecordDisplayCell
         contextCodes={['default']}
-        entity={entity}
+        record={record}
         onOpenPanel={onOpenPanel}
       />,
     );
@@ -50,9 +50,9 @@ describe('EntityDisplayCell', () => {
     const navigated = fireEvent.click(link);
 
     expect(navigated).toBe(false);
-    expect(onOpenPanel).toHaveBeenCalledWith(entity.id, link);
+    expect(onOpenPanel).toHaveBeenCalledWith(record.id, link);
     // Marks the link so clicking it switches the open panel instead of closing it.
-    expect(link.hasAttribute(entityPanelOpenerAttribute)).toBe(true);
+    expect(link.hasAttribute(recordPanelOpenerAttribute)).toBe(true);
   });
 
   it.each([
@@ -64,9 +64,9 @@ describe('EntityDisplayCell', () => {
   ])('keeps the link default for a modified click (%o)', (modifier) => {
     const onOpenPanel = vi.fn();
     render(
-      <EntityDisplayCell
+      <RecordDisplayCell
         contextCodes={['default']}
-        entity={entity}
+        record={record}
         onOpenPanel={onOpenPanel}
       />,
     );
@@ -80,11 +80,11 @@ describe('EntityDisplayCell', () => {
     expect(onOpenPanel).not.toHaveBeenCalled();
   });
 
-  it('navigates to the entity page without a panel', () => {
-    render(<EntityDisplayCell contextCodes={['default']} entity={entity} />);
+  it('navigates to the record page without a panel', () => {
+    render(<RecordDisplayCell contextCodes={['default']} record={record} />);
     const link = screen.getByRole('link', { name: 'Sample product' });
 
     expect(fireEvent.click(link)).toBe(true);
-    expect(link.hasAttribute(entityPanelOpenerAttribute)).toBe(false);
+    expect(link.hasAttribute(recordPanelOpenerAttribute)).toBe(false);
   });
 });

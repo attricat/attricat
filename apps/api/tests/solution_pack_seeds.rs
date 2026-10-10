@@ -10,7 +10,7 @@ const PRODUCT_BLUEPRINT: &[u8] = br#"
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -30,7 +30,7 @@ const CATEGORY_BLUEPRINT: &[u8] = br#"
 format_version = 1
 code = "category"
 name = "Category"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -44,7 +44,7 @@ const DOCUMENT_BLUEPRINT: &[u8] = br#"
 format_version = 1
 code = "document"
 name = "Document"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -237,7 +237,7 @@ async fn seeds_install_contexts_channels_rules_workflows_and_saved_searches(pool
     assert_eq!(inspection["seeds"]["workflows"][0]["enabled"], false);
     assert_eq!(
         inspection["seeds"]["contexts"][1]["publication_channel"],
-        json!({"enabled": true, "required_rules": ["rules/name-required"], "require_valid_entity": false})
+        json!({"enabled": true, "required_rules": ["rules/name-required"], "require_valid_record": false})
     );
     assert_eq!(
         inspection["seeds"]["saved_searches"][0]["name"],
@@ -760,8 +760,8 @@ fn sample_archive() -> (Vec<u8>, Vec<u8>) {
         "format_version": 1,
         "kind": "solution_pack_sample_data",
         "classification": "synthetic",
-        "entities": [{
-            "key": "sample-entities/spec",
+        "records": [{
+            "key": "sample-records/spec",
             "blueprint": "blueprints/document",
             "facts": [
                 {"attribute": "blueprints/document/attributes/title", "value": "Sample specification"},
@@ -850,8 +850,8 @@ async fn samples_store_bundled_files_and_contextual_values(pool: PgPool) {
 
     let application = apply(&client, &base_url, &plan).await;
     assert_eq!(application["state"], "completed", "{application}");
-    let entity_id: Uuid = sqlx::query_scalar(
-        "SELECT target_id FROM solution_pack_application_steps WHERE resource_kind = 'sample_entity' AND plan_id = $1",
+    let record_id: Uuid = sqlx::query_scalar(
+        "SELECT target_id FROM solution_pack_application_steps WHERE resource_kind = 'sample_record' AND plan_id = $1",
     )
     .bind(plan_id)
     .fetch_one(&pool)
@@ -863,9 +863,9 @@ async fn samples_store_bundled_files_and_contextual_values(pool: PgPool) {
             .await
             .unwrap();
     let summaries: Vec<(String, String)> = sqlx::query_as(
-        "SELECT c.code, v.value_text FROM attribute_values v JOIN attributes a ON a.id = v.attribute_id JOIN attribute_contexts c ON c.id = v.context_id WHERE v.entity_id = $1 AND a.code = 'summary' AND v.active ORDER BY c.code",
+        "SELECT c.code, v.value_text FROM attribute_values v JOIN attributes a ON a.id = v.attribute_id JOIN attribute_contexts c ON c.id = v.context_id WHERE v.record_id = $1 AND a.code = 'summary' AND v.active ORDER BY c.code",
     )
-    .bind(entity_id)
+    .bind(record_id)
     .fetch_all(&pool)
     .await
     .unwrap();
@@ -877,9 +877,9 @@ async fn samples_store_bundled_files_and_contextual_values(pool: PgPool) {
         ]
     );
     let (filename, sha256, stored_key, context_id): (String, String, String, Uuid) = sqlx::query_as(
-        "SELECT f.display_filename, f.sha256, f.original_key, v.context_id FROM files f JOIN attribute_file_references r ON r.file_id = f.id JOIN attribute_values v ON v.id = r.attribute_value_id WHERE v.entity_id = $1 AND f.id = $2",
+        "SELECT f.display_filename, f.sha256, f.original_key, v.context_id FROM files f JOIN attribute_file_references r ON r.file_id = f.id JOIN attribute_values v ON v.id = r.attribute_value_id WHERE v.record_id = $1 AND f.id = $2",
     )
-    .bind(entity_id)
+    .bind(record_id)
     .bind(file_id)
     .fetch_one(&pool)
     .await
@@ -889,8 +889,8 @@ async fn samples_store_bundled_files_and_contextual_values(pool: PgPool) {
     assert_eq!(stored_key, object_key);
     assert_eq!(context_id, eu_id);
     let preview: Value =
-        sqlx::query_scalar("SELECT projections->'preview' FROM entities WHERE id = $1")
-            .bind(entity_id)
+        sqlx::query_scalar("SELECT projections->'preview' FROM records WHERE id = $1")
+            .bind(record_id)
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -960,7 +960,7 @@ async fn unapplied_sample_file_staging_is_released_for_cleanup(pool: PgPool) {
     assert_eq!(
         count(
             &pool,
-            "SELECT count(*) FROM solution_pack_plan_sample_entities"
+            "SELECT count(*) FROM solution_pack_plan_sample_records"
         )
         .await,
         0

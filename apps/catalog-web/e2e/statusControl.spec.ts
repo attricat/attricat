@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createEntityBlueprint, entitySave, suffix } from './helpers';
+import { createRecordBlueprint, recordSave, suffix } from './helpers';
 
 const statusSchema = JSON.stringify({
   type: 'string',
@@ -26,12 +26,12 @@ for (const colorScheme of ['light', 'dark'] as const) {
   }) => {
     await page.emulateMedia({ colorScheme });
     const code = `status_${suffix()}`;
-    await createEntityBlueprint(
+    await createRecordBlueprint(
       code,
       'Status items',
       `[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "status"\nvalue_type = "string"\nvalue_schema = '${statusSchema}'`,
     );
-    await page.goto('/entities/new');
+    await page.goto('/records/new');
     await page.getByLabel('Blueprint').click();
     await page.getByRole('option', { name: `Status items (${code})` }).click();
     await page.getByRole('button', { name: 'Load blueprint' }).click();
@@ -42,12 +42,12 @@ for (const colorScheme of ['light', 'dark'] as const) {
     ).toBeDisabled();
     await page.getByRole('option', { name: 'Draft', exact: true }).click();
     await page.getByRole('button', { name: 'Create record' }).click();
-    await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
+    await expect(page).toHaveURL(/\/records\/[0-9a-f-]{36}$/);
     await expect(page.getByText('Draft', { exact: true })).toBeVisible();
-    const entityUrl = page.url();
-    const entityId = entityUrl.split('/').at(-1)!;
+    const recordUrl = page.url();
+    const recordId = recordUrl.split('/').at(-1)!;
     const stalePage = await context.newPage();
-    await stalePage.goto(entityUrl);
+    await stalePage.goto(recordUrl);
     await expect(
       stalePage.getByRole('combobox', { name: 'status', exact: true }),
     ).toBeVisible();
@@ -57,7 +57,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       page.getByRole('option', { name: 'Done', exact: true }),
     ).toBeDisabled();
     // A status choice saves at once and becomes the next starting state.
-    const saved = entitySave(page, entityId);
+    const saved = recordSave(page, recordId);
     await page.getByRole('option', { name: 'Live', exact: true }).click();
     expect((await saved).ok()).toBe(true);
     await expect(status).toContainText('Live');
@@ -77,7 +77,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       name: 'status',
       exact: true,
     });
-    const staleSave = entitySave(stalePage, entityId);
+    const staleSave = recordSave(stalePage, recordId);
     await staleStatus.click();
     await stalePage.getByRole('option', { name: 'Live', exact: true }).click();
     expect((await staleSave).status()).toBe(409);

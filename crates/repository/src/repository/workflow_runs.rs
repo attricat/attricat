@@ -26,12 +26,12 @@ pub struct WorkflowRun {
     pub causal_depth: i32,
 }
 
-/// Per-target outcome of a `referencing_entities_update` action. Failed rows
+/// Per-target outcome of a `referencing_records_update` action. Failed rows
 /// keep the latest error while the run retries; they never expose payloads.
 #[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
 pub struct WorkflowRunTarget {
     pub action_index: i32,
-    pub entity_id: Uuid,
+    pub record_id: Uuid,
     pub status: String,
     pub attempts: i32,
     pub last_error: Option<String>,
@@ -127,7 +127,7 @@ impl CatalogRepository {
     /// Fan-out creates the immutable run and its delivery envelope in one
     /// transaction. The outbox handler is therefore only a producer.
     pub async fn fan_out_workflow_runs(&self, event: &DomainEvent) -> Result<u64, RepositoryError> {
-        if event.aggregate_kind != "entity"
+        if event.aggregate_kind != "record"
             || event.source_name.starts_with("workflow:")
             || event
                 .metadata
@@ -273,7 +273,7 @@ impl CatalogRepository {
         if !exists {
             return Ok(None);
         }
-        let targets = sqlx::query_as("SELECT action_index,entity_id,status,attempts,last_error,created_at,updated_at FROM workflow_run_action_targets WHERE run_id=$1 AND workspace_id=$2 ORDER BY action_index,entity_id")
+        let targets = sqlx::query_as("SELECT action_index,record_id,status,attempts,last_error,created_at,updated_at FROM workflow_run_action_targets WHERE run_id=$1 AND workspace_id=$2 ORDER BY action_index,record_id")
             .bind(run_id)
             .bind(ws)
             .fetch_all(&mut *tx)
@@ -298,7 +298,7 @@ impl CatalogRepository {
     pub async fn create_manual_workflow_run(
         &self,
         workflow_id: Uuid,
-        entity_id: Uuid,
+        record_id: Uuid,
         idempotency_key: &str,
     ) -> Result<Uuid, RepositoryError> {
         if idempotency_key.is_empty() || idempotency_key.len() > 128 || !idempotency_key.is_ascii()
@@ -337,12 +337,12 @@ impl CatalogRepository {
                 "enabled revision does not allow manual runs".into(),
             ));
         }
-        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM entities WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL)").bind(entity_id).bind(ws).fetch_one(&mut *tx).await?;
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM records WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL)").bind(record_id).bind(ws).fetch_one(&mut *tx).await?;
         if !exists {
-            return Err(RepositoryError::NotFound("entity"));
+            return Err(RepositoryError::NotFound("record"));
         }
         let id = Uuid::new_v4();
-        let event = synthetic_trigger(id, ws, entity_id, "manual", self.audit_context.as_ref());
+        let event = synthetic_trigger(id, ws, record_id, "manual", self.audit_context.as_ref());
         let snapshot = serde_json::to_value(&event).expect("domain event serializes");
         let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO workflow_runs(id,workspace_id,workflow_id,workflow_version,trigger_event,compiled_plan,source,idempotency_key,causal_depth) VALUES($1,$2,$3,$4,$5,$6,'manual',$7,0) ON CONFLICT (workspace_id,workflow_id,workflow_version,source,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING RETURNING id")
             .bind(id).bind(ws).bind(workflow_id).bind(version).bind(snapshot).bind(plan).bind(idempotency_key).fetch_optional(&mut *tx).await?;
@@ -390,7 +390,7 @@ impl CatalogRepository {
             for (index, trigger) in compiled.triggers.iter().enumerate() {
                 let catalog_workflow::Trigger::Schedule {
                     cron,
-                    target_entity_id,
+                    target_record_id,
                     ..
                 } = trigger
                 else {
@@ -401,7 +401,7 @@ impl CatalogRepository {
                         "stored schedule cron is invalid".into(),
                     )
                 })?;
-                let target = target_entity_id.parse::<Uuid>().map_err(|_| {
+                let target = target_record_id.parse::<Uuid>().map_err(|_| {
                     RepositoryError::InvalidWorkflowDefinition(
                         "stored schedule target is invalid".into(),
                     )
@@ -506,7 +506,7 @@ impl CatalogRepository {
 fn synthetic_trigger(
     id: Uuid,
     workspace_id: Uuid,
-    entity_id: Uuid,
+    record_id: Uuid,
     source: &str,
     audit: Option<&AuditContext>,
 ) -> DomainEvent {
@@ -523,8 +523,8 @@ fn synthetic_trigger(
         workspace_id,
         occurred_at: Utc::now(),
         event_type: format!("workflow.{source}.v1"),
-        aggregate_kind: "entity".into(),
-        aggregate_id: entity_id,
+        aggregate_kind: "record".into(),
+        aggregate_id: record_id,
         correlation_id: id,
         causation_id: None,
         source_kind: "workflow".into(),
@@ -580,7 +580,7 @@ mod tests {
     #[test]
     fn matching_uses_exact_event_and_immutable_facts() {
         let trigger = catalog_workflow::Trigger::Event {
-            event_type: "entity.updated.v1".into(),
+            event_type: "record.updated.v1".into(),
             envelope: [("source_kind".into(), json!("api"))].into(),
             facts: [("facts.0.attribute_code".into(), json!("title"))].into(),
             attributes: Vec::new(),
@@ -590,8 +590,8 @@ mod tests {
             sequence: 1,
             workspace_id: Uuid::new_v4(),
             occurred_at: Utc::now(),
-            event_type: "entity.updated.v1".into(),
-            aggregate_kind: "entity".into(),
+            event_type: "record.updated.v1".into(),
+            aggregate_kind: "record".into(),
             aggregate_id: Uuid::new_v4(),
             correlation_id: Uuid::new_v4(),
             causation_id: None,
@@ -608,7 +608,7 @@ mod tests {
         assert!(!workflow_trigger_matches(&trigger, &different));
 
         let metadata_trigger = catalog_workflow::Trigger::Event {
-            event_type: "entity.updated.v1".into(),
+            event_type: "record.updated.v1".into(),
             envelope: [("metadata.tenant_hint".into(), json!("north"))].into(),
             facts: Default::default(),
             attributes: Vec::new(),
@@ -635,7 +635,7 @@ mod tests {
             workspace_id: Uuid::new_v4(),
             occurred_at: Utc::now(),
             event_type: "relationship.changed.v1".into(),
-            aggregate_kind: "entity".into(),
+            aggregate_kind: "record".into(),
             aggregate_id: Uuid::new_v4(),
             correlation_id: Uuid::new_v4(),
             causation_id: None,

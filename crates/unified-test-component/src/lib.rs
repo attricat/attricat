@@ -54,7 +54,7 @@ impl operations::Guest for Component {
         let cursor = checkpoint["cursor"].as_str().unwrap_or_default().to_owned();
         let described = parse(&selection::describe()?)?;
         let page = parse(&selection::page(&cursor, 1)?)?;
-        let entity_id = page["entities"][0]["entity_id"]
+        let record_id = page["records"][0]["record_id"]
             .as_str()
             .unwrap_or_default()
             .to_owned();
@@ -63,20 +63,20 @@ impl operations::Guest for Component {
             "dry_run": false,
             "intents": [{
                 "kind": "annotate",
-                "intent_key": format!("unified-{entity_id}"),
-                "entity_id": entity_id,
+                "intent_key": format!("unified-{record_id}"),
+                "record_id": record_id,
                 "add_tags": ["unified"]
             }]
         }});
         catalog_data::batch(&batch.to_string())?;
         let direct_read = api::read(&api::ReadRequest::Entity(api::EntityReference {
-            entity_id: entity_id.clone(),
+            entity_id: record_id.clone(),
         }));
         let direct_command = api::call("catalog.read.v1", "{}");
         checkpoint["direct_read_error"] = json!(direct_read.err());
         checkpoint["direct_command_error"] = json!(direct_command.err());
         let mut seen = checkpoint["seen"].as_array().cloned().unwrap_or_default();
-        seen.push(json!(entity_id));
+        seen.push(json!(record_id));
         checkpoint["seen"] = Value::Array(seen.clone());
         let next = page["next_cursor"].as_str().map(str::to_owned);
         let done = next.is_none();

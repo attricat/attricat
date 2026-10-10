@@ -13,7 +13,7 @@ async fn typed_category_and_color_relationships_can_be_replaced_and_removed(pool
 format_version = 1
 code = "category"
 name = "Category"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -33,7 +33,7 @@ tags = ["searchable"]
 format_version = 1
 code = "color"
 name = "Color"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -57,7 +57,7 @@ value_type = "string"
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -85,13 +85,13 @@ target_blueprint = "color"
         "category"
     );
 
-    let shirts = create_entity(&client, &base_url, &category).await;
-    let sale = create_entity(&client, &base_url, &category).await;
-    let navy = create_entity(&client, &base_url, &color).await;
-    let shirt = create_entity(&client, &base_url, &product).await;
+    let shirts = create_record(&client, &base_url, &category).await;
+    let sale = create_record(&client, &base_url, &category).await;
+    let navy = create_record(&client, &base_url, &color).await;
+    let shirt = create_record(&client, &base_url, &product).await;
     let shirt_id = shirt["id"].as_str().unwrap();
 
-    for (entity, values) in [
+    for (record, values) in [
         (
             &shirts,
             json!({ "values": [{ "kind": "scalar", "attribute_code": "name", "value": "Shirts" }] }),
@@ -110,8 +110,8 @@ target_blueprint = "color"
     ] {
         client
             .post(format!(
-                "{base_url}/entities/{}/values",
-                entity["id"].as_str().unwrap()
+                "{base_url}/records/{}/values",
+                record["id"].as_str().unwrap()
             ))
             .json(&values)
             .send()
@@ -122,7 +122,7 @@ target_blueprint = "color"
     }
 
     client
-        .post(format!("{base_url}/entities/{shirt_id}/values"))
+        .post(format!("{base_url}/records/{shirt_id}/values"))
         .json(&json!({ "values": [{
             "kind": "scalar", "attribute_code": "title", "value": "Navy shirt"
         }] }))
@@ -133,9 +133,9 @@ target_blueprint = "color"
         .unwrap();
 
     let invalid = client
-        .post(format!("{base_url}/entities/{shirt_id}/values"))
+        .post(format!("{base_url}/records/{shirt_id}/values"))
         .json(&json!({ "values": [{
-            "kind": "relationship", "attribute_code": "categories", "target_entity_id": navy["id"]
+            "kind": "relationship", "attribute_code": "categories", "target_record_id": navy["id"]
         }] }))
         .send()
         .await
@@ -148,11 +148,11 @@ target_blueprint = "color"
 
     let replace = client
         .post(format!(
-            "{base_url}/entities/{shirt_id}/relationships/replace"
+            "{base_url}/records/{shirt_id}/relationships/replace"
         ))
         .json(&json!({ "relationships": [
-            { "attribute_code": "categories", "target_entity_ids": [shirts["id"], sale["id"]] },
-            { "attribute_code": "colors", "target_entity_ids": [navy["id"]] }
+            { "attribute_code": "categories", "target_record_ids": [shirts["id"], sale["id"]] },
+            { "attribute_code": "colors", "target_record_ids": [navy["id"]] }
         ] }))
         .send()
         .await
@@ -160,7 +160,7 @@ target_blueprint = "color"
     assert_eq!(replace.status(), StatusCode::CREATED);
 
     let preview: Value = client
-        .get(format!("{base_url}/entities/{shirt_id}/preview"))
+        .get(format!("{base_url}/records/{shirt_id}/preview"))
         .send()
         .await
         .unwrap()
@@ -187,7 +187,7 @@ target_blueprint = "color"
 
     let bounded_preview: Value = client
         .get(format!(
-            "{base_url}/entities/{shirt_id}/preview?relationship_limit=1"
+            "{base_url}/records/{shirt_id}/preview?relationship_limit=1"
         ))
         .send()
         .await
@@ -211,7 +211,7 @@ target_blueprint = "color"
 
     let scalar_preview: Value = client
         .get(format!(
-            "{base_url}/entities/{shirt_id}/preview?relationship_depth=0"
+            "{base_url}/records/{shirt_id}/preview?relationship_depth=0"
         ))
         .send()
         .await
@@ -234,7 +234,7 @@ target_blueprint = "color"
 
     let excessive_depth = client
         .get(format!(
-            "{base_url}/entities/{shirt_id}/preview?relationship_depth=4"
+            "{base_url}/records/{shirt_id}/preview?relationship_depth=4"
         ))
         .send()
         .await
@@ -243,7 +243,7 @@ target_blueprint = "color"
 
     let first_page: Value = client
         .get(format!(
-            "{base_url}/entities?blueprint=category&related_from={shirt_id}&relationship=categories&limit=1"
+            "{base_url}/records?blueprint=category&related_from={shirt_id}&relationship=categories&limit=1"
         ))
         .send()
         .await
@@ -257,7 +257,7 @@ target_blueprint = "color"
     let cursor = first_page["next_cursor"].as_str().unwrap();
     let second_page: Value = client
         .get(format!(
-            "{base_url}/entities?blueprint=category&related_from={shirt_id}&relationship=categories&limit=1&cursor={cursor}"
+            "{base_url}/records?blueprint=category&related_from={shirt_id}&relationship=categories&limit=1&cursor={cursor}"
         ))
         .send()
         .await
@@ -272,10 +272,10 @@ target_blueprint = "color"
 
     client
         .post(format!(
-            "{base_url}/entities/{shirt_id}/relationships/remove"
+            "{base_url}/records/{shirt_id}/relationships/remove"
         ))
         .json(&json!({ "relationships": [{
-            "attribute_code": "categories", "target_entity_ids": [sale["id"]]
+            "attribute_code": "categories", "target_record_ids": [sale["id"]]
         }] }))
         .send()
         .await
@@ -283,7 +283,7 @@ target_blueprint = "color"
         .error_for_status()
         .unwrap();
     let preview: Value = client
-        .get(format!("{base_url}/entities/{shirt_id}/preview"))
+        .get(format!("{base_url}/records/{shirt_id}/preview"))
         .send()
         .await
         .unwrap()
@@ -305,7 +305,7 @@ target_blueprint = "color"
     );
 
     let history: Vec<Value> = client
-        .get(format!("{base_url}/entities/{shirt_id}/values/history"))
+        .get(format!("{base_url}/records/{shirt_id}/values/history"))
         .send()
         .await
         .unwrap()
@@ -316,11 +316,11 @@ target_blueprint = "color"
         .unwrap();
     let removed_sale = history
         .iter()
-        .find(|value| value["relationship_target_entity_id"] == sale["id"])
+        .find(|value| value["relationship_target_record_id"] == sale["id"])
         .unwrap();
     client
         .post(format!(
-            "{base_url}/entities/{shirt_id}/values/history/{}/restore",
+            "{base_url}/records/{shirt_id}/values/history/{}/restore",
             removed_sale["id"].as_str().unwrap()
         ))
         .send()
@@ -329,7 +329,7 @@ target_blueprint = "color"
         .error_for_status()
         .unwrap();
     let restored_preview: Value = client
-        .get(format!("{base_url}/entities/{shirt_id}/preview"))
+        .get(format!("{base_url}/records/{shirt_id}/preview"))
         .send()
         .await
         .unwrap()
@@ -348,7 +348,7 @@ target_blueprint = "color"
 
     let delete = client
         .delete(format!(
-            "{base_url}/entities/{}",
+            "{base_url}/records/{}",
             shirts["id"].as_str().unwrap()
         ))
         .send()
@@ -358,7 +358,7 @@ target_blueprint = "color"
     assert_eq!(
         client
             .get(format!(
-                "{base_url}/entities/{}",
+                "{base_url}/records/{}",
                 shirts["id"].as_str().unwrap()
             ))
             .send()
@@ -368,7 +368,7 @@ target_blueprint = "color"
         StatusCode::NOT_FOUND
     );
     let preview: Value = client
-        .get(format!("{base_url}/entities/{shirt_id}/preview"))
+        .get(format!("{base_url}/records/{shirt_id}/preview"))
         .send()
         .await
         .unwrap()
@@ -391,7 +391,7 @@ target_blueprint = "color"
     assert_eq!(
         client
             .delete(format!(
-                "{base_url}/entities/{}",
+                "{base_url}/records/{}",
                 shirts["id"].as_str().unwrap()
             ))
             .send()
@@ -415,7 +415,7 @@ async fn previews_expand_cycles_and_shared_targets_per_path(pool: PgPool) {
 format_version = 1
 code = "linked_node"
 name = "Linked node"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -434,10 +434,10 @@ target_blueprint = "linked_node"
     .await;
     let mut ids = Vec::new();
     for name in ["a", "b", "c", "d"] {
-        let entity = create_entity(&client, &base_url, &blueprint).await;
-        let id = entity["id"].as_str().unwrap().to_owned();
+        let record = create_record(&client, &base_url, &blueprint).await;
+        let id = record["id"].as_str().unwrap().to_owned();
         client
-            .post(format!("{base_url}/entities/{id}/values"))
+            .post(format!("{base_url}/records/{id}/values"))
             .json(&json!({ "values": [
                 { "kind": "scalar", "attribute_code": "name", "value": name }
             ] }))
@@ -457,12 +457,12 @@ target_blueprint = "linked_node"
     ] {
         client
             .post(format!(
-                "{base_url}/entities/{}/relationships/replace",
+                "{base_url}/records/{}/relationships/replace",
                 ids[source]
             ))
             .json(&json!({ "relationships": [{
                 "attribute_code": "links",
-                "target_entity_ids": targets.iter().map(|target: &usize| ids[*target].clone()).collect::<Vec<_>>()
+                "target_record_ids": targets.iter().map(|target: &usize| ids[*target].clone()).collect::<Vec<_>>()
             }] }))
             .send()
             .await
@@ -475,7 +475,7 @@ target_blueprint = "linked_node"
     for (depth, limit) in [(0, 2), (1, 5), (2, 5), (3, 5)] {
         let preview = client
             .get(format!(
-                "{base_url}/entities/{}/preview?relationship_depth={depth}&relationship_limit={limit}",
+                "{base_url}/records/{}/preview?relationship_depth={depth}&relationship_limit={limit}",
                 ids[0]
             ))
             .send()
@@ -491,11 +491,11 @@ target_blueprint = "linked_node"
             preview = preview.replace(id.as_str(), &format!("<{name}>"));
         }
         let mut value: Value = serde_json::from_str(&preview).unwrap();
-        value["entity"]["blueprint_id"] = json!("<blueprint>");
+        value["record"]["blueprint_id"] = json!("<blueprint>");
         sort_items(&mut value["context"]);
         rendered.push(value["context"].clone());
     }
-    // An entity on the expansion path is listed but not expanded again; the
+    // A record on the expansion path is listed but not expanded again; the
     // same target reached through different paths is expanded on each.
     let expected: Value = serde_json::from_str(
         r#"[{"default":{"links":{"items":[],"truncated":true},"name":"a"}},{"default":{"links":{"items":[{"display":"b","id":"<b>","links":{"items":[],"truncated":true}},{"display":"c","id":"<c>","links":{"items":[],"truncated":true}}],"truncated":false},"name":"a"}},{"default":{"links":{"items":[{"display":"b","id":"<b>","links":{"items":[{"display":"a","id":"<a>"},{"display":"c","id":"<c>","links":{"items":[],"truncated":true}},{"display":"d","id":"<d>","links":{"items":[],"truncated":true}}],"truncated":false}},{"display":"c","id":"<c>","links":{"items":[{"display":"d","id":"<d>","links":{"items":[],"truncated":true}}],"truncated":false}}],"truncated":false},"name":"a"}},{"default":{"links":{"items":[{"display":"b","id":"<b>","links":{"items":[{"display":"a","id":"<a>"},{"display":"c","id":"<c>","links":{"items":[{"display":"d","id":"<d>","links":{"items":[],"truncated":true}}],"truncated":false}},{"display":"d","id":"<d>","links":{"items":[{"display":"a","id":"<a>"}],"truncated":false}}],"truncated":false}},{"display":"c","id":"<c>","links":{"items":[{"display":"d","id":"<d>","links":{"items":[{"display":"a","id":"<a>"}],"truncated":false}}],"truncated":false}}],"truncated":false},"name":"a"}}]"#,
@@ -506,7 +506,7 @@ target_blueprint = "linked_node"
 }
 
 /// Orders every relationship item list by its target, so snapshots do not
-/// depend on the random entity IDs that decide edge order.
+/// depend on the random record IDs that decide edge order.
 fn sort_items(value: &mut Value) {
     match value {
         Value::Object(map) => {

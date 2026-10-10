@@ -1,4 +1,4 @@
-import type { Attribute } from '../entities/api';
+import type { Attribute } from '../records/api';
 import {
   IMAGE_MIME_PREFIX,
   MIME_GROUP_WILDCARD_SUFFIX,

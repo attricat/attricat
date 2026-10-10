@@ -6,7 +6,7 @@ const uuid = z.uuid();
 const scopeTypeSchema = z.enum([
   'workspace',
   'blueprint_family',
-  'entity',
+  'record',
   'context_subtree',
 ]);
 const grantSchema = z.object({

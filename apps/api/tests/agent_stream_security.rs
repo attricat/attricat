@@ -6,11 +6,11 @@ use api::{account::SessionSecret, repository::CatalogRepository};
 use chrono::Utc;
 use support::*;
 
-async fn run(repository: &CatalogRepository, entity: Option<Uuid>) -> Uuid {
+async fn run(repository: &CatalogRepository, record: Option<Uuid>) -> Uuid {
     let owner = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let conversation = if let Some(entity) = entity {
+    let conversation = if let Some(record) = record {
         repository
-            .create_entity_conversation(owner, "Stream", entity, None)
+            .create_record_conversation(owner, "Stream", record, None)
             .await
             .unwrap()
     } else {
@@ -218,11 +218,11 @@ async fn open_agent_streams_stop_when_agent_permission_is_removed(pool: PgPool) 
 }
 
 #[sqlx::test]
-async fn open_agent_streams_stop_when_the_conversation_entity_becomes_unreadable(pool: PgPool) {
+async fn open_agent_streams_stop_when_the_conversation_record_becomes_unreadable(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
-    let blueprint = create_blueprint(&owner, &base, "format_version = 1\ncode = 'stream_record'\nname = 'Record'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'").await;
-    let entity: Uuid = create_entity(&owner, &base, &blueprint).await["id"]
+    let blueprint = create_blueprint(&owner, &base, "format_version = 1\ncode = 'stream_record'\nname = 'Record'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'").await;
+    let record: Uuid = create_record(&owner, &base, &blueprint).await["id"]
         .as_str()
         .unwrap()
         .parse()
@@ -235,11 +235,11 @@ async fn open_agent_streams_stop_when_the_conversation_entity_becomes_unreadable
         &pool,
         membership,
         VIEWER_ROLE_ID,
-        GrantScope::Entity(entity),
+        GrantScope::Record(record),
     )
     .await;
     let client = client_for(user);
-    let run = run(&repository, Some(entity)).await;
+    let run = run(&repository, Some(record)).await;
     let response = open_stream(&client, &base, run).await;
     owner
         .delete(format!(

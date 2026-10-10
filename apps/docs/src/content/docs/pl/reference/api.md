@@ -5,8 +5,6 @@ description: Jak uwierzytelniać się w HTTP API Attricat, jakie obowiązują ko
 
 Aplikacja webowa Attricat jest zbudowana na tym samym HTTP API, które możesz wywoływać ze skryptów i integracji. [CLI](/pl/reference/cli/) opakowuje niemal całe API.
 
-W API rekordy występują pod nazwą `entity`, np. w trasach (`/v1/entities`), polach (`entity_id`), uprawnieniach i kodach błędów.
-
 ## Bazowy adres URL
 
 Trasy API są dostępne pod `/api`, np. `GET https://catalog.example.com/api/blueprints`; ścieżki na tej stronie są względne wobec tego prefiksu. Wszystkie pozostałe ścieżki należą do aplikacji webowej. Sondy stanu (`/health`, `/health/live`, `/health/ready`) odpowiadają także w katalogu głównym, na potrzeby load balancerów i kontroli kontenerów.
@@ -24,7 +22,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 ## Konwencje
 
 - Żądania i odpowiedzi są w formacie JSON, chyba że trasa stanowi inaczej. Udane puste odpowiedzi mają kod `204`.
-- Błędy zwracają status HTTP i treść w postaci `{"error": {"code": "entity_schema_mismatch", "message": "…"}}`. Dopasowuj po `code`, a nie po komunikacie. Niektóre błędy dodają obiekt `error.details` z danymi, na podstawie których możesz działać, np. rekordem, który już ma dany klucz unikalny, lub kontrolami, które nie przeszły; zobacz niżej.
+- Błędy zwracają status HTTP i treść w postaci `{"error": {"code": "record_schema_mismatch", "message": "…"}}`. Dopasowuj po `code`, a nie po komunikacie. Niektóre błędy dodają obiekt `error.details` z danymi, na podstawie których możesz działać, np. rekordem, który już ma dany klucz unikalny, lub kontrolami, które nie przeszły; zobacz niżej.
 - `401` oznacza brak ważnych danych uwierzytelniających; `403` oznacza, że dane uwierzytelniające nie mają uprawnienia lub zakresu.
 - `422` oznacza, że żądanie zostało zrozumiane, ale jest nieprawidłowe, np. schemat się nie kompiluje albo wartość nie spełnia swojego schematu walidacji.
 - `409` oznacza konflikt z bieżącym stanem, np. przekroczenie limitu krotności relacji.
@@ -38,24 +36,24 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `invalid_input` | 422 | Treść żądania zawiera nieprawidłową wartość, na przykład błędny, powtórzony lub nieznany kod. Komunikat wskazuje, którą. |
 | `invalid_blueprint_definition` | 422 | TOML schematu się nie kompiluje. Komunikat podaje przyczynę. |
 | `attribute_value_schema_mismatch` | 422 | Wartość nie spełnia `value_schema` swojego atrybutu. |
-| `entity_schema_mismatch` | 422 | Rekord nie spełnia swojego `entity_schema` w którymś kontekście. |
+| `record_schema_mismatch` | 422 | Rekord nie spełnia swojego `record_schema` w którymś kontekście. |
 | `relationship_cardinality_conflict` | 409 | Zapis relacji przekracza `cardinality` lub `target_cardinality` albo nadaje rekordowi w drzewie (`tree`) drugiego rodzica. |
 | `relationship_target_type_mismatch` | 422 | Schemat powiązanego rekordu nie jest dozwolony przez `target_blueprint` ani `target_blueprints`. |
 | `relationship_cycle` | 409 | Powiązanie zamknęłoby cykl w relacji `acyclic` lub `tree`. `details.path` wymienia identyfikatory rekordów wzdłuż cyklu. |
-| `unique_key_conflict` | 409 | Inny rekord ma już te wartości klucza unikalnego. `details` zawiera `key`, `context`, `values` i `conflicting_entity_id`. |
+| `unique_key_conflict` | 409 | Inny rekord ma już te wartości klucza unikalnego. `details` zawiera `key`, `context`, `values` i `conflicting_record_id`. |
 | `unique_key_duplicates` | 409 | Publikacja nowego klucza unikalnego lub przeniesienie kontekstu pod innego rodzica nie powiodły się, bo istniejące rekordy współdzieliłyby wartości. `details.duplicates` je wymienia. |
 | `relationship_hierarchy_violations` | 409 | Publikacja `acyclic` lub `tree` nie powiodła się, bo istniejące powiązania zawierają cykle lub nadmiarowych rodziców. `details` je wymienia. |
-| `stale_entity` | 409 | `expected_updated_at` nie odpowiada już rekordowi. Wczytaj go ponownie i spróbuj jeszcze raz. |
+| `stale_record` | 409 | `expected_updated_at` nie odpowiada już rekordowi. Wczytaj go ponownie i spróbuj jeszcze raz. |
 | `status_precondition_required` | 428 | Zapis atrybutu statusu nie zawiera `expected_updated_at`. Odczytaj rekord i wyślij jego `updated_at`. |
 | `status_transition_forbidden` | 403 | Przejście statusu wymaga uprawnienia lub roli, których wywołujący nie ma. |
 | `status_separation_of_duties` | 403 | Przejście statusu musi wykonać ktoś inny niż osoba, która wykonała wcześniejsze przejście. |
 | `record_locked` | 409 | Status rekordu blokuje zmienianą treść albo rekordu nie można usunąć, dopóki jest zablokowany. |
-| `entity_id_taken` | 409 | Operacja `create` we wsadzie wybrała `entity_id`, który już istnieje. |
+| `record_id_taken` | 409 | Operacja `create` we wsadzie wybrała `record_id`, który już istnieje. |
 | `relationship_path_sort_requires_single_result_version` | 422 | Sortowanie według powiązanej wartości w kilku wersjach schematu. |
 | `file_processing` | 409 | Plik nie jest jeszcze gotowy do pobrania. |
 | `approval_already_decided` | 409 | Wywołanie narzędzia przez agenta zostało już zatwierdzone lub odrzucone. |
 | `service_unavailable` | 503 | Dla tras agentów: nie skonfigurowano dostawcy AI. |
-| `entity_check_failed` | 422 | Kontrola z `x-attricat-checks` nie przechodzi w którymś kontekście. |
+| `record_check_failed` | 422 | Kontrola z `x-attricat-checks` nie przechodzi w którymś kontekście. |
 | `transition_conditions_unmet` | 422 | Warunki przejścia statusu nie są spełnione. |
 | `rule_violation` | 422 | Po zapisie rekord naruszałby egzekwowaną regułę. |
 | `publication_checks_failed` | 422 | Kontrole wymagane przez kanał nie przechodzą. `details.context` to kod kanału. |
@@ -67,7 +65,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 
 ### Szczegóły błędu
 
-`entity_check_failed`, `transition_conditions_unmet`, `rule_violation` i `publication_checks_failed` wymieniają do 50 naruszeń w `error.details.violations`:
+`record_check_failed`, `transition_conditions_unmet`, `rule_violation` i `publication_checks_failed` wymieniają do 50 naruszeń w `error.details.violations`:
 
 ```json
 {"error": {"code": "transition_conditions_unmet", "message": "…", "details": {"violations": [
@@ -80,14 +78,14 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 
 | Pole | Opis |
 | --- | --- |
-| `source` | `entity_check`, `transition_condition`, `rule` lub, tylko przy publikacji, `entity_schema`. |
+| `source` | `record_check`, `transition_condition`, `rule` lub, tylko przy publikacji, `record_schema`. |
 | `code` | Kod kontroli, warunku lub reguły. |
 | `message` | Własny komunikat lub wygenerowany. |
 | `contexts` | Kody kontekstów, w których wystąpił problem. |
 | `attributes` | Atrybuty tego rekordu, których dotyczy naruszenie, np. obie strony porównania lub relacja kontroli `linked`. Służą do wyróżnienia pól. |
 | `severity` | Dla reguł: waga reguły. |
 | `transition` | Dla warunków i chronionych przejść: `attribute_code`, `from` i `to`. |
-| `evidence` | Szczegóły, np. porównywane wartości lub identyfikatory powiązanych rekordów, które nie przeszły kontroli. Niepowodzenia publikacji zbiorczej dodają `entity_id`. |
+| `evidence` | Szczegóły, np. porównywane wartości lub identyfikatory powiązanych rekordów, które nie przeszły kontroli. Niepowodzenia publikacji zbiorczej dodają `record_id`. |
 
 `publication_checks_failed` ma też `details.context`, czyli kod kanału. Znaczenie każdego błędu i sposób naprawy opisuje [Walidacja](/pl/builders/validation/#błędy-i-ich-naprawa).
 
@@ -114,54 +112,54 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
-| `POST` | `/v1/entities` | Tworzy rekord z wartościami, opcjonalnymi przesłanymi plikami (`files`) oraz opcjonalnymi `system_tags` i `system_metadata`. Zobacz [Pliki nowego rekordu](#pliki-nowego-rekordu). |
-| `POST` | `/v1/entities/batch` | Tworzy, aktualizuje i usuwa kilka rekordów naraz: zapisują się wszystkie zmiany albo żadna. Zobacz [Zmiany wsadowe](#zmiany-wsadowe). |
-| `GET`, `PUT` | `/v1/entities/{id}` | Odczytuje lub aktualizuje formularz rekordu: wartości, relacje, usunięcia, adnotacje. |
-| `GET`, `DELETE` | `/entities/{id}` | Odczytuje lub usuwa rekord. |
-| `POST` | `/v1/entities/{id}/duplicate` | Tworzy kopię rekordu z jego wartościami, relacjami i plikami. Wartości kluczy unikalnych nie są kopiowane. |
-| `POST` | `/v1/entities/search` | Wyszukiwanie. Zobacz poniżej. |
-| `POST` | `/v1/entities/labels` | Etykiety wyświetlane dla maksymalnie 100 identyfikatorów rekordów: `{"entity_ids": [...]}`. Zwraca tylko istniejące rekordy, które możesz odczytać; pozostałe identyfikatory są pomijane. |
-| `POST` | `/v1/entities/facets/relationship-tree/children` | Jedna strona elementów podrzędnych fasety relacji, z liczebnościami. |
-| `GET` | `/entities/{id}/preview` | Wartości w poszczególnych kontekstach, z powiązanymi rekordami osadzonymi w odpowiedzi. |
-| `GET` | `/entities/{id}/resolved-preview?context_id=…` | Wartości rozstrzygnięte w jednym kontekście, wraz z kontekstem, z którego pochodzi każda z nich. |
-| `GET` | `/entities/{id}/hierarchy` | Przodkowie wzdłuż relacji. |
-| `POST` | `/v1/entities/{id}/incoming-relationships` | Rekordy wskazujące na ten rekord. |
-| `GET` | `/entities` | Przeglądanie celów relacji. |
-| `GET` | `/entities/{id}/values/current` | Bieżące wartości bezpośrednie i powiązania. |
-| `POST` | `/entities/{id}/values` | Dołącza wartości. |
-| `POST` | `/entities/{id}/relationships/replace`, `/remove` | Zastępuje lub usuwa cele relacji. |
-| `GET` | `/entities/{id}/changes` | Historia zmian. Dodaj `limit` (od 1 do 50) i `offset`, aby stronicować. |
-| `GET` | `/entities/{id}/values/history` | Historia wartości. Stronicowanie jak wyżej. |
-| `POST` | `/entities/{id}/values/history/{history_id}/restore` | Przywraca wcześniejszą wartość. |
-| `POST` | `/v1/entities/{id}/blueprint-migration/preview` | Sprawdza migrację do bieżącej wersji. |
-| `POST` | `/v1/entities/{id}/blueprint-migration` | Migruje. |
-| `POST` | `/v1/entities/{id}/reusable-attributes`, `/v1/entities/{id}/reusable-attribute-groups/{group_id}` | Dołącza atrybut lub grupę atrybutów wielokrotnego użytku. |
-| `GET` | `/v1/entities/{id}/status-transitions?context_id=…` | Zadeklarowane przejścia z zapisanego statusu w jednym kontekście (bez parametru: kontekst domyślny): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, unmet}]}`. `denial_code` to `status_transition_forbidden`, `status_separation_of_duties` lub `transition_conditions_unmet`; `unmet` wymienia niespełnione warunki i egzekwowane reguły jako naruszenia. |
-| `GET` | `/v1/entities/{id}/approvals` | Zatwierdzenia zarejestrowane przez przejścia statusów, od najnowszych, z osobą zatwierdzającą, czasem, skrótem objętej treści i powodem unieważnienia. |
-| `GET` | `/v1/entities/{id}/retention-holds` | Blokady retencji na plikach rekordu. |
+| `POST` | `/v1/records` | Tworzy rekord z wartościami, opcjonalnymi przesłanymi plikami (`files`) oraz opcjonalnymi `system_tags` i `system_metadata`. Zobacz [Pliki nowego rekordu](#pliki-nowego-rekordu). |
+| `POST` | `/v1/records/batch` | Tworzy, aktualizuje i usuwa kilka rekordów naraz: zapisują się wszystkie zmiany albo żadna. Zobacz [Zmiany wsadowe](#zmiany-wsadowe). |
+| `GET`, `PUT` | `/v1/records/{id}` | Odczytuje lub aktualizuje formularz rekordu: wartości, relacje, usunięcia, adnotacje. |
+| `GET`, `DELETE` | `/records/{id}` | Odczytuje lub usuwa rekord. |
+| `POST` | `/v1/records/{id}/duplicate` | Tworzy kopię rekordu z jego wartościami, relacjami i plikami. Wartości kluczy unikalnych nie są kopiowane. |
+| `POST` | `/v1/records/search` | Wyszukiwanie. Zobacz poniżej. |
+| `POST` | `/v1/records/labels` | Etykiety wyświetlane dla maksymalnie 100 identyfikatorów rekordów: `{"record_ids": [...]}`. Zwraca tylko istniejące rekordy, które możesz odczytać; pozostałe identyfikatory są pomijane. |
+| `POST` | `/v1/records/facets/relationship-tree/children` | Jedna strona elementów podrzędnych fasety relacji, z liczebnościami. |
+| `GET` | `/records/{id}/preview` | Wartości w poszczególnych kontekstach, z powiązanymi rekordami osadzonymi w odpowiedzi. |
+| `GET` | `/records/{id}/resolved-preview?context_id=…` | Wartości rozstrzygnięte w jednym kontekście, wraz z kontekstem, z którego pochodzi każda z nich. |
+| `GET` | `/records/{id}/hierarchy` | Przodkowie wzdłuż relacji. |
+| `POST` | `/v1/records/{id}/incoming-relationships` | Rekordy wskazujące na ten rekord. |
+| `GET` | `/records` | Przeglądanie celów relacji. |
+| `GET` | `/records/{id}/values/current` | Bieżące wartości bezpośrednie i powiązania. |
+| `POST` | `/records/{id}/values` | Dołącza wartości. |
+| `POST` | `/records/{id}/relationships/replace`, `/remove` | Zastępuje lub usuwa cele relacji. |
+| `GET` | `/records/{id}/changes` | Historia zmian. Dodaj `limit` (od 1 do 50) i `offset`, aby stronicować. |
+| `GET` | `/records/{id}/values/history` | Historia wartości. Stronicowanie jak wyżej. |
+| `POST` | `/records/{id}/values/history/{history_id}/restore` | Przywraca wcześniejszą wartość. |
+| `POST` | `/v1/records/{id}/blueprint-migration/preview` | Sprawdza migrację do bieżącej wersji. |
+| `POST` | `/v1/records/{id}/blueprint-migration` | Migruje. |
+| `POST` | `/v1/records/{id}/reusable-attributes`, `/v1/records/{id}/reusable-attribute-groups/{group_id}` | Dołącza atrybut lub grupę atrybutów wielokrotnego użytku. |
+| `GET` | `/v1/records/{id}/status-transitions?context_id=…` | Zadeklarowane przejścia z zapisanego statusu w jednym kontekście (bez parametru: kontekst domyślny): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, unmet}]}`. `denial_code` to `status_transition_forbidden`, `status_separation_of_duties` lub `transition_conditions_unmet`; `unmet` wymienia niespełnione warunki i egzekwowane reguły jako naruszenia. |
+| `GET` | `/v1/records/{id}/approvals` | Zatwierdzenia zarejestrowane przez przejścia statusów, od najnowszych, z osobą zatwierdzającą, czasem, skrótem objętej treści i powodem unieważnienia. |
+| `GET` | `/v1/records/{id}/retention-holds` | Blokady retencji na plikach rekordu. |
 
 ### Zmiany wsadowe
 
 Niektóre zmiany mają sens tylko razem: wydanie nowej wersji dokumentu i oznaczenie poprzedniej jako zastąpionej albo zarejestrowanie przemieszczenia i aktualizacja bieżącej lokalizacji obiektu. Wyślij je jako jeden wsad, aby błąd nie zostawił zapisanej tylko połowy zmiany.
 
 ```json
-POST /api/v1/entities/batch
+POST /api/v1/records/batch
 {
   "operations": [
     {
       "op": "create",
-      "entity_id": "5b0b8c55-0c55-4cc5-9a0f-4a4c3d1a2b10",
+      "record_id": "5b0b8c55-0c55-4cc5-9a0f-4a4c3d1a2b10",
       "blueprint": { "code": "document_revision" },
       "values": [
         { "kind": "scalar", "attribute_code": "label", "context_id": null, "value": "B" },
         { "kind": "scalar", "attribute_code": "status", "context_id": null, "value": "released" },
         { "kind": "relationship", "attribute_code": "previous", "context_id": null,
-          "target_entity_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11" }
+          "target_record_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11" }
       ]
     },
     {
       "op": "update",
-      "entity_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11",
+      "record_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11",
       "expected_updated_at": "2026-10-01T09:30:00Z",
       "values": [
         { "kind": "scalar", "attribute_code": "status", "context_id": null, "value": "superseded" }
@@ -171,20 +169,20 @@ POST /api/v1/entities/batch
 }
 ```
 
-- `op` to `create`, `update` lub `delete`. `create` przyjmuje te same pola co `POST /v1/entities` oraz opcjonalny wybrany przez Ciebie `entity_id`, aby kolejne operacje mogły powiązać się z nowym rekordem. `update` przyjmuje te same pola co `PUT /v1/entities/{id}`. `delete` przyjmuje `entity_id`.
-- `expected_updated_at` w `update` i `delete` jest warunkiem wstępnym: jeśli rekord zmienił się od odczytu, wsad kończy się błędem `409 stale_entity`. Zmiany statusu go wymagają, tak jak pojedyncza aktualizacja.
+- `op` to `create`, `update` lub `delete`. `create` przyjmuje te same pola co `POST /v1/records` oraz opcjonalny wybrany przez Ciebie `record_id`, aby kolejne operacje mogły powiązać się z nowym rekordem. `update` przyjmuje te same pola co `PUT /v1/records/{id}`. `delete` przyjmuje `record_id`.
+- `expected_updated_at` w `update` i `delete` jest warunkiem wstępnym: jeśli rekord zmienił się od odczytu, wsad kończy się błędem `409 stale_record`. Zmiany statusu go wymagają, tak jak pojedyncza aktualizacja.
 - Operacje są wykonywane po kolei, a każda jest sprawdzana jak odpowiednie pojedyncze żądanie w chwili wykonania: wartości, schematy walidacji, przejścia statusów, reguły relacji i klucze unikalne. Ułóż je tak, aby każda była poprawna w swojej kolejności.
 - Wsad ma od 1 do 50 operacji i do 1000 wartości, powiązań i usunięć. Rekord może wystąpić tylko w jednej operacji.
-- Każda operacja wymaga własnego uprawnienia: `entities.write` dla rekordu, aby go zaktualizować, `entities.delete`, aby go usunąć, oraz `entities.write` w całym obszarze roboczym, aby utworzyć rekord. Jeśli któregoś brakuje, nic nie jest wykonywane, a odpowiedź to `403`.
+- Każda operacja wymaga własnego uprawnienia: `records.write` dla rekordu, aby go zaktualizować, `records.delete`, aby go usunąć, oraz `records.write` w całym obszarze roboczym, aby utworzyć rekord. Jeśli któregoś brakuje, nic nie jest wykonywane, a odpowiedź to `403`.
 
-Udany wsad zwraca `200` z jednym wynikiem na operację, np. `{"op": "update", "entity": {…}}` lub `{"op": "delete", "entity_id": "…"}`. Każda operacja jest zapisywana w dzienniku audytu i emituje swoje zwykłe zdarzenie, ale dopiero po zapisaniu całego wsadu.
+Udany wsad zwraca `200` z jednym wynikiem na operację, np. `{"op": "update", "record": {…}}` lub `{"op": "delete", "record_id": "…"}`. Każda operacja jest zapisywana w dzienniku audytu i emituje swoje zwykłe zdarzenie, ale dopiero po zapisaniu całego wsadu.
 
-Jeśli operacja się nie powiedzie, nic nie zostaje zapisane. Odpowiedź ma status i kod błędu tej operacji, komunikat zaczyna się od `operation <index>:`, a `error.details` zawiera `operation_index` i `entity_id`. Popraw tę operację i wyślij cały wsad ponownie. Odpowiednikiem w CLI jest `acli entity batch --operations <file>`.
+Jeśli operacja się nie powiedzie, nic nie zostaje zapisane. Odpowiedź ma status i kod błędu tej operacji, komunikat zaczyna się od `operation <index>:`, a `error.details` zawiera `operation_index` i `record_id`. Popraw tę operację i wyślij cały wsad ponownie. Odpowiednikiem w CLI jest `acli record batch --operations <file>`.
 
 ### Wyszukiwanie
 
 ```json
-POST /api/v1/entities/search
+POST /api/v1/records/search
 {
   "blueprint": { "code": "product", "version": 3 },
   "query": "colors.name:red linen",
@@ -214,7 +212,7 @@ POST /api/v1/entities/search
 
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
-| `POST` | `/entities/{entity_id}/file-attributes/{attribute_code}/uploads` | Przesyłanie z `multipart/form-data`: jedna lub więcej części `files` i opcjonalna część `context_id`. Zwraca `201`. |
+| `POST` | `/records/{record_id}/file-attributes/{attribute_code}/uploads` | Przesyłanie z `multipart/form-data`: jedna lub więcej części `files` i opcjonalna część `context_id`. Zwraca `201`. |
 | `POST` | `/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads` | Przesyła pliki dla rekordu, który zamierzasz utworzyć. Treść jak wyżej. Zwraca `201` z `files` i `expires_at`. |
 | `GET` | `/files/{file_id}` | Metadane i stan przetwarzania. |
 | `GET` | `/files/{file_id}/download` | Oryginalny plik. Obsługuje jeden zakres `Range`. |
@@ -226,7 +224,7 @@ Pobieranie zwraca `409 file_processing`, dopóki plik nie ma stanu `ready`.
 
 #### Pliki nowego rekordu
 
-Rekord, którego schemat wymaga pliku, tworzy się razem z plikami w jednym żądaniu. Najpierw prześlij każdy plik do `/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads`, co wymaga uprawnienia do tworzenia rekordów. Następnie przekaż zwrócone identyfikatory do `POST /v1/entities`:
+Rekord, którego schemat wymaga pliku, tworzy się razem z plikami w jednym żądaniu. Najpierw prześlij każdy plik do `/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads`, co wymaga uprawnienia do tworzenia rekordów. Następnie przekaż zwrócone identyfikatory do `POST /v1/records`:
 
 ```json
 {
@@ -246,12 +244,12 @@ Dodaj `context_id` do wpisu dla kontekstu innego niż domyślny. Przesłanych pl
 | `GET` | `/contexts/{code}` | Odczyt po kodzie. |
 | `PUT`, `DELETE` | `/contexts/id/{id}` | Aktualizuje lub usuwa. |
 | `GET` | `/publication-channels` | Konteksty będące kanałami. |
-| `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}`, aby uczynić kontekst kanałem. Opcjonalne `required_rule_codes` (do 32 kodów reguł) i `require_valid_entity` ustawiają kontrole wymagane przed publikacją; pominięte pola zachowują bieżącą wartość. Nieprawidłowe lub powtórzone kody albo kody, które nie wskazują żadnej reguły w obszarze roboczym, zwracają `422 invalid_input`. |
-| `GET`, `POST` | `/v1/entities/{id}/publications` | Stan publikacji lub publikacja z `{"context_id": "…"}`. |
-| `POST` | `/v1/entities/{id}/publications/unpublish` | Wycofuje publikację z jednego kanału. |
-| `POST` | `/v1/entities/{id}/publications/publish-all` | Publikuje we wszystkich kanałach. |
-| `GET` | `/v1/entities/{id}/publications/readiness` | Dla każdego włączonego kanału: `{context_id, context_code, ready, violations}`. |
-| `POST` | `/blueprints/{id}/versions/{version}/entity-publications`, `…/publish-all` | Publikuje wszystkie rekordy danej wersji. |
+| `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}`, aby uczynić kontekst kanałem. Opcjonalne `required_rule_codes` (do 32 kodów reguł) i `require_valid_record` ustawiają kontrole wymagane przed publikacją; pominięte pola zachowują bieżącą wartość. Nieprawidłowe lub powtórzone kody albo kody, które nie wskazują żadnej reguły w obszarze roboczym, zwracają `422 invalid_input`. |
+| `GET`, `POST` | `/v1/records/{id}/publications` | Stan publikacji lub publikacja z `{"context_id": "…"}`. |
+| `POST` | `/v1/records/{id}/publications/unpublish` | Wycofuje publikację z jednego kanału. |
+| `POST` | `/v1/records/{id}/publications/publish-all` | Publikuje we wszystkich kanałach. |
+| `GET` | `/v1/records/{id}/publications/readiness` | Dla każdego włączonego kanału: `{context_id, context_code, ready, violations}`. |
+| `POST` | `/blueprints/{id}/versions/{version}/record-publications`, `…/publish-all` | Publikuje wszystkie rekordy danej wersji. |
 
 ### Zapisane wyszukiwania
 
@@ -275,13 +273,13 @@ Każda ścieżka działa na Twojej [skrzynce powiadomień](/pl/guides/inbox/) w 
 | `PATCH` | `/notifications/{id}` | `{"read": true}` lub `{"read": false}`. |
 | `POST` | `/notifications/read-all` | Oznacza wszystkie nieprzeczytane jako przeczytane; opcjonalne `{"up_to": "<RFC 3339>"}` pozostawia późniejsze nieprzeczytane. Zwraca `{"updated"}`. |
 
-Każde powiadomienie ma `id`, `kind` (np. `entity.assigned`), tekstowy `title`, opcjonalne `body`, autora zmiany, opcjonalny `subject` (`{"kind": "entity" | "agent_conversation", "id"}`), zależne od rodzaju `data`, `read`, `read_at` i `created_at`. Mogą pojawić się nowe rodzaje; dla nieznanych pokazuj `title`.
+Każde powiadomienie ma `id`, `kind` (np. `record.assigned`), tekstowy `title`, opcjonalne `body`, autora zmiany, opcjonalny `subject` (`{"kind": "record" | "agent_conversation", "id"}`), zależne od rodzaju `data`, `read`, `read_at` i `created_at`. Mogą pojawić się nowe rodzaje; dla nieznanych pokazuj `title`.
 
 ### Tłumaczenia
 
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
-| `GET` | `/lexicon/entries` | Lista wpisów, opcjonalnie dla jednego języka `language` (`entities.read`). |
+| `GET` | `/lexicon/entries` | Lista wpisów, opcjonalnie dla jednego języka `language` (`records.read`). |
 | `PUT` | `/lexicon/entries` | Utworzenie lub zastąpienie wpisu: `key`, opcjonalny `context`, `language`, opcjonalna `plural_category` (domyślnie `other`) i `text` (`blueprints.write`). |
 | `DELETE` | `/lexicon/entries` | Usunięcie wpisu wskazanego parametrami `key`, `context`, `language` i `plural_category` (`blueprints.write`). |
 | `GET` | `/lexicon/export` | Eksport jednego języka `language` jako pliku importu (`blueprints.read`). |
@@ -298,7 +296,7 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 | `GET`, `POST` | `/rules` | Wyświetla lub tworzy reguły. |
 | `GET` | `/rules/{id}` | Odczytuje regułę. |
 | `POST` | `/rules/{id}/versions/{version}/publish`, `/enable`; `/rules/{id}/disable` | Cykl życia. `/enable` przyjmuje opcjonalne `{"accept_existing_violations": true}` dla egzekwowanej reguły, której przebieg próbny znalazł naruszenia. |
-| `POST` | `/rules/{id}/run-now` | `{"entity_id": null, "dry_run": false, "idempotency_key": "…"}`. Przebieg próbny może dodać `"version": 2`, aby objąć opublikowaną wersję, która nie jest włączona; domyślnie dotyczy wersji włączonej albo najnowszej opublikowanej. |
+| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. Przebieg próbny może dodać `"version": 2`, aby objąć opublikowaną wersję, która nie jest włączona; domyślnie dotyczy wersji włączonej albo najnowszej opublikowanej. |
 | `GET` | `/rule-runs`, `/rule-findings` | Uruchomienia i ustalenia. Pole `truncated` uruchomienia ma wartość `true`, gdy zatrzymało się ono na limicie rekordów, zanim sprawdziło wszystkie. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Ponawia martwą wiadomość; potwierdza ustalenie. |
 | `POST` | `/workflows/validate` | Weryfikuje TOML przepływu pracy. |
@@ -306,7 +304,7 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Cykl życia. |
 | `POST` | `/workflows/{id}/run-now` | Uruchomienie ręczne. |
 | `GET` | `/workflow-runs` | Historia uruchomień. |
-| `GET` | `/workflow-runs/{id}/targets` | Wyniki akcji `referencing_entities_update` dla poszczególnych rekordów. |
+| `GET` | `/workflow-runs/{id}/targets` | Wyniki akcji `referencing_records_update` dla poszczególnych rekordów. |
 | `POST` | `/workflow-runs/{id}/replay` | Ponawia martwą wiadomość. |
 
 ### Agenci
@@ -337,7 +335,7 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 | `GET`, `POST`, `DELETE` | `/workspace/invitations[/{id}]`; `POST /workspace/invitations/accept` | Zaproszenia. |
 | `POST` | `/workspace/users` | Tworzy użytkownika. |
 | `GET`, `PUT` | `/workspace/navigation`; `GET /workspace/navigation/sidebar` | Skróty na pasku bocznym. |
-| `GET` | `/directory` | Użytkownicy i zespoły, do których mogą odwoływać się atrybuty użytkownika lub zespołu (`entities.read`). |
+| `GET` | `/directory` | Użytkownicy i zespoły, do których mogą odwoływać się atrybuty użytkownika lub zespołu (`records.read`). |
 | `GET`, `POST`, `PATCH`, `DELETE` | `/workspace/teams[/{id}]` | Zespoły (`members.manage`). `PATCH` przyjmuje `name` lub `member_user_ids`, które zastępuje cały skład. |
 | `GET` | `/audit-events` | Dziennik audytu. |
 

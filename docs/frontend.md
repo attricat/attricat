@@ -13,7 +13,7 @@ light and dark modes.
 - Use semicolons and two-space indentation.
 - Keep feature code under `src/features/<feature>`.
 - Prefer relative imports within and between features; no path aliases are configured.
-- Name non-component TypeScript files in camelCase (for example, `queryKeys.ts` and `latestRevisions.test.ts`); name React component files in PascalCase (for example, `EntityForm.tsx`). Keep file-based route filenames aligned with their URL segments, including kebab-case where appropriate, and retain tooling-required filenames such as `vite-env.d.ts`.
+- Name non-component TypeScript files in camelCase (for example, `queryKeys.ts` and `latestRevisions.test.ts`); name React component files in PascalCase (for example, `RecordForm.tsx`). Keep file-based route filenames aligned with their URL segments, including kebab-case where appropriate, and retain tooling-required filenames such as `vite-env.d.ts`.
 
 ## Data Fetching
 
@@ -28,7 +28,7 @@ light and dark modes.
 - Use Zustand for client-only state shared across independent components or updated outside React (for example, toast notifications and Inspector timings). Keep stores feature-local unless the state is truly app-wide, and subscribe to the smallest slice needed.
 - Keep server state in TanStack Query, navigable search/filter state in the router URL, fields submitted with an explicit Save button in TanStack Form, and component-scoped UI state in React. Do not move these into a global store just to avoid passing a prop or using a small context.
 - Bound and sanitize data before writing it to a shared store; do not store sensitive API responses in diagnostic state.
-- Keep unsaved values of editors with an explicit Save button across refreshes with `src/features/drafts/useEditorDraft` and its `DraftRestoreDialog`. Drafts live in tab-scoped session storage keyed by workspace, user, editor, and resource/version/context; they are only applied when the user chooses **Restore draft**, and are cleared after a confirmed save or discard. Never pass passwords, tokens, secrets, or file inputs to a draft. The entity page saves each field as it is committed and does not use drafts.
+- Keep unsaved values of editors with an explicit Save button across refreshes with `src/features/drafts/useEditorDraft` and its `DraftRestoreDialog`. Drafts live in tab-scoped session storage keyed by workspace, user, editor, and resource/version/context; they are only applied when the user chooses **Restore draft**, and are cleared after a confirmed save or discard. Never pass passwords, tokens, secrets, or file inputs to a draft. The record page saves each field as it is committed and does not use drafts.
 
 ## Components
 
@@ -37,7 +37,7 @@ light and dark modes.
 - Keep one route-level page component per feature module. Extract independent
   pages and substantial page sections into descriptive sibling modules rather
   than growing a multi-route page file.
-- Use TanStack Form for forms with an explicit Save button (for example, entity create and migration): submitted field values, validation, reset behavior, and submission handling. The entity page instead saves fields individually: `InlineFieldEditor` (`src/features/entities/components`) keeps a field's typing local and commits it on blur, Enter, or an immediate choice, and `useEntityFieldSaves` (`src/features/entities`) queues each committed field as its own save, keeps rejected changes to resend with the next one, and detects concurrent edits. Reserve React state for non-form UI state such as dialogs, notices, and upload progress. Use Material UI for interface components.
+- Use TanStack Form for forms with an explicit Save button (for example, record create and migration): submitted field values, validation, reset behavior, and submission handling. The record page instead saves fields individually: `InlineFieldEditor` (`src/features/records/components`) keeps a field's typing local and commits it on blur, Enter, or an immediate choice, and `useRecordFieldSaves` (`src/features/records`) queues each committed field as its own save, keeps rejected changes to resend with the next one, and detects concurrent edits. Reserve React state for non-form UI state such as dialogs, notices, and upload progress. Use Material UI for interface components.
 - Validate API payloads with Zod before using them in the UI.
 - Do not scatter magic values through components or feature clients. Name domain values, repeated UI values, limits, storage keys, query parameters, and API literals as feature-local constants; keep a one-off literal inline only when its meaning is obvious at the use site. Promote cross-feature concepts to a shared, descriptive module rather than duplicating them.
 - For imperative integrations that retain a callback (for example Monaco commands or browser event listeners), do not capture render-time values that can change. Re-register and dispose the callback when dependencies change, or read current values through refs.
@@ -65,7 +65,7 @@ light and dark modes.
 - If the page presents a concept with no registry export yet, add a semantic
   export to `systemIcons.ts` first (see [Icons](#icons)) rather than importing
   a Lucide icon directly.
-- A heading rendered outside `PageHeader`, such as an entity heading built from
+- A heading rendered outside `PageHeader`, such as a record heading built from
   a view definition, uses `PageTitle` from `src/components/PageTitle.tsx` so
   its icon, colour, and sizing match every other page.
 - A header that shows only an `eyebrow` and no title does not take an icon.
@@ -75,13 +75,13 @@ light and dark modes.
 
 ## Wording
 
-- In user-facing text, call a catalog item a **record**, never an "entity".
+- In user-facing text, call a catalog item a **record**, never an "record".
   This covers both locale files, page titles, accessible names, tooltips,
   toasts, and prose sent to agents. In Polish use **rekord** (masculine), and
   make adjectives, pronouns, verbs, and plural forms agree with it, for
   example "Usunąć ten rekord?", "Wybrano {{count}} rekordów".
-- Keep "entity" in code: identifiers, translation keys, routes, API fields,
-  and agent tool names such as `get_entity` and `entity_id` that agent prose
+- Keep "record" in code: identifiers, translation keys, routes, API fields,
+  and agent tool names such as `get_record` and `record_id` that agent prose
   refers to.
 - When a test or Playwright spec looks up text, use the record wording.
 - Render every label a blueprint author writes through `lexiconText` from

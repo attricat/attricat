@@ -15,7 +15,7 @@ Otwórz **Zarządzanie → Schematy → Nowy schemat** i wklej:
 format_version = 1
 code = "category"
 name = "Category"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "name"
@@ -34,7 +34,7 @@ fields = ["name"]
 
 Zapisz go, a następnie **Opublikuj** wersję 1.
 
-`parent` wskazuje na inną kategorię, więc kategorie mogą tworzyć drzewo. `kind = "entity"` oznacza schemat rekordu: w plikach schematów, API i CLI rekordy występują pod nazwą `entity`.
+`parent` wskazuje na inną kategorię, więc kategorie mogą tworzyć drzewo. `kind = "record"` oznacza schemat rekordu.
 
 ## 2. Utwórz schemat produktu
 
@@ -44,8 +44,8 @@ Utwórz drugi schemat:
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
-entity_schema = '{"type":"object","required":["sku","title"]}'
+kind = "record"
+record_schema = '{"type":"object","required":["sku","title"]}'
 
 [[attributes]]
 code = "sku"
@@ -82,7 +82,7 @@ columns = [
 
 Opublikuj go.
 
-`entity_schema` zawiera schemat rekordu. Celowo znajduje się nad pierwszym `[[attributes]]`. W TOML każdy klucz po nagłówku `[table]` należy do tej tabeli, więc klucz najwyższego poziomu umieszczony niżej stałby się częścią ostatniego atrybutu.
+`record_schema` zawiera schemat rekordu. Celowo znajduje się nad pierwszym `[[attributes]]`. W TOML każdy klucz po nagłówku `[table]` należy do tej tabeli, więc klucz najwyższego poziomu umieszczony niżej stałby się częścią ostatniego atrybutu.
 
 ## 3. Dodaj kategorie
 

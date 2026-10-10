@@ -5,10 +5,10 @@ import {
 import type { TFunction } from 'i18next';
 import type {
   BlueprintWithAttributes,
-  EntityItem,
-  EntityPublicationStatus,
-} from '../entities/api';
-import { EntityIdPopover } from '../entities/components/EntityIdPopover';
+  RecordItem,
+  RecordPublicationStatus,
+} from '../records/api';
+import { RecordIdPopover } from '../records/components/RecordIdPopover';
 import type { getExtensionRuntime } from '../extensions/api';
 import { FilterableCell } from './CellFilterButton';
 import type { AttributeFilterDraft } from './attributeFilterValues';
@@ -32,12 +32,12 @@ import {
   SortableColumnHeader,
 } from './ExplorerColumnHeaders';
 import {
-  EntityActionsCell,
-  EntityDisplayCell,
+  RecordActionsCell,
+  RecordDisplayCell,
   PublicationStatusCell,
   SchemaVersionCell,
   type ActionMenuPosition,
-  type OpenEntityPanel,
+  type OpenRecordPanel,
 } from './ExplorerTableCells';
 import {
   configuredColumnLabel,
@@ -48,7 +48,7 @@ import type { ExplorerColumnPreferences } from './columnPreferences';
 import type { AttributeFilter, ExplorerSort } from './search';
 
 type ExtensionRuntime = Awaited<ReturnType<typeof getExtensionRuntime>>;
-type ExplorerColumnDef = LegacyColumnDef<EntityItem, unknown>;
+type ExplorerColumnDef = LegacyColumnDef<RecordItem, unknown>;
 
 type ColumnOptions = {
   blueprint: BlueprintWithAttributes;
@@ -57,13 +57,13 @@ type ColumnOptions = {
   contextCodes: readonly string[];
   publicationContextCode: string;
   publicationSortAvailable: boolean;
-  publicationsByEntityId: Map<string, EntityPublicationStatus | undefined>;
+  publicationsByRecordId: Map<string, RecordPublicationStatus | undefined>;
   runtime: ExtensionRuntime | undefined;
   sort?: ExplorerSort;
   onSortChange: (field: string) => void;
   onFilterCell?: (draft: AttributeFilterDraft) => void;
-  onOpenActions: (entityId: string, position: ActionMenuPosition) => void;
-  onOpenPanel?: OpenEntityPanel;
+  onOpenActions: (recordId: string, position: ActionMenuPosition) => void;
+  onOpenPanel?: OpenRecordPanel;
   takeCellFrame: () => boolean;
   t: TFunction;
   /** The user's effective zone, used to edit datetime cell filters. */
@@ -94,7 +94,7 @@ export const buildExplorerColumnDefinitions = ({
   contextCodes,
   publicationContextCode,
   publicationSortAvailable,
-  publicationsByEntityId,
+  publicationsByRecordId,
   runtime,
   sort,
   onSortChange,
@@ -105,7 +105,7 @@ export const buildExplorerColumnDefinitions = ({
   t,
   timeZone,
 }: ColumnOptions): ExplorerColumnDef[] => {
-  const columnHelper = legacyCreateColumnHelper<EntityItem>();
+  const columnHelper = legacyCreateColumnHelper<RecordItem>();
   const attributes = new Map(
     blueprint.attributes.map((attribute) => [attribute.code, attribute]),
   );
@@ -121,12 +121,12 @@ export const buildExplorerColumnDefinitions = ({
           blueprint.table_path_attributes,
         )
       : undefined;
-    const filterFor = (entity: EntityItem) =>
+    const filterFor = (record: RecordItem) =>
       filterValueType
         ? cellValueFilter(
             column.field,
             filterValueType,
-            entity.table_values[column.field] ?? [],
+            record.table_values[column.field] ?? [],
           )
         : undefined;
     const openFilter = (filter: AttributeFilter) =>
@@ -152,7 +152,7 @@ export const buildExplorerColumnDefinitions = ({
             <ConfiguredColumnCell
               attribute={attribute}
               column={column}
-              entity={info.row.original}
+              record={info.row.original}
               extension={extension}
               frameAllowed={usesExtensionRenderer(column) && takeCellFrame()}
             />
@@ -165,15 +165,15 @@ export const buildExplorerColumnDefinitions = ({
     columnHelper.accessor('id', {
       id: explorerColumnIds.id,
       header: t('explorer.id'),
-      cell: (info) => <EntityIdPopover entityId={info.getValue()} />,
+      cell: (info) => <RecordIdPopover recordId={info.getValue()} />,
     }) as ExplorerColumnDef,
     columnHelper.display({
       id: explorerColumnIds.display,
       header: t('explorer.display'),
       cell: (info) => (
-        <EntityDisplayCell
+        <RecordDisplayCell
           contextCodes={contextCodes}
-          entity={info.row.original}
+          record={info.row.original}
           onOpenPanel={onOpenPanel}
         />
       ),
@@ -196,7 +196,7 @@ export const buildExplorerColumnDefinitions = ({
       },
       cell: (info) => (
         <PublicationStatusCell
-          publication={publicationsByEntityId.get(info.row.original.id)}
+          publication={publicationsByRecordId.get(info.row.original.id)}
         />
       ),
     }) as ExplorerColumnDef,
@@ -210,15 +210,15 @@ export const buildExplorerColumnDefinitions = ({
           sort={sort}
         />
       ),
-      cell: (info) => <SchemaVersionCell entity={info.row.original} />,
+      cell: (info) => <SchemaVersionCell record={info.row.original} />,
     }) as ExplorerColumnDef,
     ...configuredColumns,
     columnHelper.display({
       id: explorerColumnIds.actions,
       header: '',
       cell: (info) => (
-        <EntityActionsCell
-          entityId={info.row.original.id}
+        <RecordActionsCell
+          recordId={info.row.original.id}
           onOpenActions={onOpenActions}
         />
       ),
@@ -240,7 +240,7 @@ export const arrangeExplorerColumns = (
   const actionColumn = definitions.find(
     (definition) => definition.id === explorerColumnIds.actions,
   );
-  const selectionColumn = legacyCreateColumnHelper<EntityItem>().display({
+  const selectionColumn = legacyCreateColumnHelper<RecordItem>().display({
     id: explorerColumnIds.select,
     header: '',
     cell: () => null,

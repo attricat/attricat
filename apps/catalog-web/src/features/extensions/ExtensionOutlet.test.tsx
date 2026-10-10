@@ -71,7 +71,7 @@ const renderOutlet = () => {
           blueprint_id: '22222222-2222-4222-8222-222222222222',
           blueprint_version: 1,
           context_version: 1,
-          entity_id: '33333333-3333-4333-8333-333333333333',
+          record_id: '33333333-3333-4333-8333-333333333333',
         }}
         label="Extension actions"
         outlet="explorer_row_action"
@@ -104,7 +104,7 @@ describe('ExtensionOutlet', () => {
     const context = {
       context_version: 1,
       file_id: '55555555-5555-4555-8555-555555555555',
-      entity_id: '33333333-3333-4333-8333-333333333333',
+      record_id: '33333333-3333-4333-8333-333333333333',
       attribute_id: '44444444-4444-4444-8444-444444444444',
       blueprint_id: '22222222-2222-4222-8222-222222222222',
       blueprint_version: 1,
@@ -127,19 +127,19 @@ describe('ExtensionOutlet', () => {
     expect(screen.queryByText('file-panel')).toBeNull();
   });
 
-  it('mounts only attribute panels with a strict entity and revision context', async () => {
+  it('mounts only attribute panels with a strict record and revision context', async () => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       {
         ...contribution,
         id: 'attribute-panel',
         kind: 'panel',
-        outlet: 'entity_attribute_panel',
+        outlet: 'record_attribute_panel',
       },
       {
         ...contribution,
         id: 'wrong-kind',
         kind: 'embedded',
-        outlet: 'entity_attribute_panel',
+        outlet: 'record_attribute_panel',
       },
     ]);
     const queryClient = new QueryClient({
@@ -147,7 +147,7 @@ describe('ExtensionOutlet', () => {
     });
     const context = {
       context_version: 1,
-      entity_id: '33333333-3333-4333-8333-333333333333',
+      record_id: '33333333-3333-4333-8333-333333333333',
       attribute_id: '44444444-4444-4444-8444-444444444444',
       blueprint_id: '22222222-2222-4222-8222-222222222222',
       blueprint_version: 1,
@@ -155,7 +155,7 @@ describe('ExtensionOutlet', () => {
     };
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
-        <ExtensionOutlet outlet="entity_attribute_panel" context={context} />
+        <ExtensionOutlet outlet="record_attribute_panel" context={context} />
       </QueryClientProvider>,
     );
     expect(await screen.findByText('attribute-panel')).toBeTruthy();
@@ -163,7 +163,7 @@ describe('ExtensionOutlet', () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <ExtensionOutlet
-          outlet="entity_attribute_panel"
+          outlet="record_attribute_panel"
           context={{ ...context, value: 'private' }}
         />
       </QueryClientProvider>,
@@ -276,7 +276,7 @@ describe('ExtensionOutlet', () => {
       context_version: 1,
       blueprint_id: '22222222-2222-4222-8222-222222222222',
       blueprint_version: 1,
-      entity_ids: ['33333333-3333-4333-8333-333333333333'],
+      record_ids: ['33333333-3333-4333-8333-333333333333'],
     };
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
@@ -285,9 +285,9 @@ describe('ExtensionOutlet', () => {
     );
     expect(await screen.findByText('bulk-action')).toBeTruthy();
     expect(screen.queryByText('wrong-kind')).toBeNull();
-    for (const entity_ids of [
+    for (const record_ids of [
       [],
-      [context.entity_ids[0], context.entity_ids[0]],
+      [context.record_ids[0], context.record_ids[0]],
       Array.from(
         { length: 51 },
         (_, index) =>
@@ -298,7 +298,7 @@ describe('ExtensionOutlet', () => {
         <QueryClientProvider client={queryClient}>
           <ExtensionOutlet
             outlet="explorer_bulk_action"
-            context={{ ...context, entity_ids }}
+            context={{ ...context, record_ids }}
           />
         </QueryClientProvider>,
       );
@@ -428,14 +428,14 @@ describe('ExtensionOutlet', () => {
     expect(screen.queryByText('blueprint-panel')).toBeNull();
   });
 
-  it('mounts only action contributions with a valid entity header context', async () => {
+  it('mounts only action contributions with a valid record header context', async () => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([
-      { ...contribution, id: 'header-action', outlet: 'entity_header_action' },
+      { ...contribution, id: 'header-action', outlet: 'record_header_action' },
       {
         ...contribution,
         id: 'wrong-kind',
         kind: 'panel',
-        outlet: 'entity_header_action',
+        outlet: 'record_header_action',
       },
     ]);
     const queryClient = new QueryClient({
@@ -443,13 +443,13 @@ describe('ExtensionOutlet', () => {
     });
     const context = {
       context_version: 1,
-      entity_id: '33333333-3333-4333-8333-333333333333',
+      record_id: '33333333-3333-4333-8333-333333333333',
       blueprint_id: '22222222-2222-4222-8222-222222222222',
       blueprint_version: 1,
     };
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
-        <ExtensionOutlet outlet="entity_header_action" context={context} />
+        <ExtensionOutlet outlet="record_header_action" context={context} />
       </QueryClientProvider>,
     );
     expect(await screen.findByText('header-action')).toBeTruthy();
@@ -457,7 +457,7 @@ describe('ExtensionOutlet', () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <ExtensionOutlet
-          outlet="entity_header_action"
+          outlet="record_header_action"
           context={{ ...context, unexpected: 'private' }}
         />
       </QueryClientProvider>,
@@ -466,16 +466,16 @@ describe('ExtensionOutlet', () => {
   });
 
   it.each([
-    'entity_preview_panel',
-    'entity_action',
-    'entity_attribute_decoration',
+    'record_preview_panel',
+    'record_action',
+    'record_attribute_decoration',
   ] as const)('requests an explicit blueprint scope for %s', async (outlet) => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([]);
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
     const props = {
-      context: { entity_id: '33333333-3333-4333-8333-333333333333' },
+      context: { record_id: '33333333-3333-4333-8333-333333333333' },
       outlet,
       runtimeScope: {
         blueprintId: '22222222-2222-4222-8222-222222222222',
@@ -484,7 +484,7 @@ describe('ExtensionOutlet', () => {
     };
     render(
       <QueryClientProvider client={queryClient}>
-        {outlet === 'entity_attribute_decoration' ? (
+        {outlet === 'record_attribute_decoration' ? (
           <ExtensionPopoverOutlet {...props} label="Decorations" />
         ) : (
           <ExtensionOutlet {...props} />
@@ -625,13 +625,13 @@ describe('ExtensionOutlet', () => {
     expect(screen.queryByText('extensions.browseExtensions')).toBeNull();
   });
 
-  it('keeps one primary and three secondary entity actions before overflow', async () => {
+  it('keeps one primary and three secondary record actions before overflow', async () => {
     const actions = Array.from({ length: 5 }, (_, index) => ({
       ...contribution,
       contribution_key: `example.extension:action-${index}`,
       display_order: index,
       id: `action-${index}`,
-      outlet: 'entity_action' as const,
+      outlet: 'record_action' as const,
       kind: 'embedded' as const,
     }));
     vi.mocked(getExtensionRuntime).mockResolvedValue(actions);
@@ -641,7 +641,7 @@ describe('ExtensionOutlet', () => {
     const user = userEvent.setup();
     render(
       <QueryClientProvider client={queryClient}>
-        <ExtensionOutlet outlet="entity_action" />
+        <ExtensionOutlet outlet="record_action" />
       </QueryClientProvider>,
     );
     await screen.findByText('action-3');

@@ -21,21 +21,21 @@ pub const MAX_NOTIFICATION_BODY_LENGTH: usize = 2_000;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NotificationSubjectKind {
-    Entity,
+    Record,
     AgentConversation,
 }
 
 impl NotificationSubjectKind {
     fn as_str(self) -> &'static str {
         match self {
-            Self::Entity => "entity",
+            Self::Record => "record",
             Self::AgentConversation => "agent_conversation",
         }
     }
 
     fn parse(value: &str) -> Option<Self> {
         match value {
-            "entity" => Some(Self::Entity),
+            "record" => Some(Self::Record),
             "agent_conversation" => Some(Self::AgentConversation),
             _ => None,
         }
@@ -150,14 +150,14 @@ impl CatalogRepository {
                 continue;
             }
             if let Some(NotificationSubject {
-                kind: NotificationSubjectKind::Entity,
+                kind: NotificationSubjectKind::Record,
                 id,
             }) = notification.subject
-                && !Self::authorized_entity_ids_on(
+                && !Self::authorized_record_ids_on(
                     transaction,
                     *recipient,
                     self.workspace_id_for_runtime(),
-                    "entities.read",
+                    "records.read",
                     &[id],
                 )
                 .await?
@@ -385,8 +385,8 @@ impl CatalogRepository {
 /// Notification kinds. Clients render a translated message per kind and fall
 /// back to the stored title for kinds they do not know.
 pub mod kinds {
-    pub const ENTITY_ASSIGNED: &str = "entity.assigned";
-    pub const ENTITY_COMMENTED: &str = "entity.commented";
+    pub const RECORD_ASSIGNED: &str = "record.assigned";
+    pub const RECORD_COMMENTED: &str = "record.commented";
     pub const AGENT_APPROVAL_REQUIRED: &str = "agent.approval_required";
     pub const AGENT_RUN_COMPLETED: &str = "agent.run_completed";
     pub const AGENT_RUN_FAILED: &str = "agent.run_failed";
@@ -432,38 +432,38 @@ impl CatalogRepository {
         })
     }
 
-    /// The blueprint code and name of a live entity. Notifications name the
+    /// The blueprint code and name of a live record. Notifications name the
     /// blueprint rather than the record: record labels can contain values a
     /// recipient may not read, so clients resolve them through the
     /// authorized label lookup instead.
-    async fn notification_entity_on(
+    async fn notification_record_on(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: Uuid,
+        record: Uuid,
     ) -> Result<Option<(String, String)>, RepositoryError> {
         Ok(sqlx::query_as(
-            "SELECT b.code,b.name FROM entities e JOIN blueprints b ON b.id=e.blueprint_id AND b.version=e.blueprint_version
+            "SELECT b.code,b.name FROM records e JOIN blueprints b ON b.id=e.blueprint_id AND b.version=e.blueprint_version
              WHERE e.workspace_id=$1 AND e.id=$2 AND e.deleted_at IS NULL",
         )
         .bind(self.workspace_id_for_runtime())
-        .bind(entity)
+        .bind(record)
         .fetch_optional(&mut **transaction)
         .await?)
     }
 
     /// Notifies the users named by newly assigned values, and the active
-    /// members of newly assigned teams, that they were assigned to `entity`.
+    /// members of newly assigned teams, that they were assigned to `record`.
     pub(super) async fn notify_assignments_on(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: Uuid,
+        record: Uuid,
         assignments: &[(String, PrincipalRef)],
     ) -> Result<(), RepositoryError> {
         if assignments.is_empty() {
             return Ok(());
         }
         let Some((blueprint_code, blueprint_name)) =
-            self.notification_entity_on(transaction, entity).await?
+            self.notification_record_on(transaction, record).await?
         else {
             return Ok(());
         };
@@ -515,13 +515,13 @@ impl CatalogRepository {
                 transaction,
                 &recipients,
                 &NewNotification {
-                    kind: kinds::ENTITY_ASSIGNED,
+                    kind: kinds::RECORD_ASSIGNED,
                     title,
                     body: None,
                     actor_user_id: actor.id,
                     subject: Some(NotificationSubject {
-                        kind: NotificationSubjectKind::Entity,
-                        id: entity,
+                        kind: NotificationSubjectKind::Record,
+                        id: record,
                     }),
                     data,
                 },
@@ -536,13 +536,13 @@ impl CatalogRepository {
     pub(super) async fn notify_comment_on(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: Uuid,
+        record: Uuid,
         comment: Uuid,
         author: Uuid,
         body: &str,
     ) -> Result<(), RepositoryError> {
         let Some((blueprint_code, blueprint_name)) =
-            self.notification_entity_on(transaction, entity).await?
+            self.notification_record_on(transaction, record).await?
         else {
             return Ok(());
         };
@@ -550,15 +550,15 @@ impl CatalogRepository {
         // values keep history, so they also name earlier assignees.
         let assigned: Vec<String> = sqlx::query_scalar(
             "SELECT DISTINCT preview.values ->> a.code
-             FROM entities e
+             FROM records e
              JOIN attributes a ON a.workspace_id=e.workspace_id AND a.deleted_at IS NULL
-              AND ((a.blueprint_id=e.blueprint_id AND a.blueprint_version=e.blueprint_version) OR a.entity_id=e.id)
+              AND ((a.blueprint_id=e.blueprint_id AND a.blueprint_version=e.blueprint_version) OR a.record_id=e.id)
               AND a.value_schema ? 'x-attricat-principal'
              CROSS JOIN LATERAL jsonb_each(COALESCE(e.projections -> 'preview', '{}'::jsonb)) AS preview(context_code, values)
              WHERE e.workspace_id=$1 AND e.id=$2 AND jsonb_typeof(preview.values -> a.code) = 'string'",
         )
         .bind(self.workspace_id_for_runtime())
-        .bind(entity)
+        .bind(record)
         .fetch_all(&mut **transaction)
         .await?;
         let references: Vec<PrincipalRef> = assigned
@@ -578,11 +578,11 @@ impl CatalogRepository {
                 "SELECT m.user_id FROM team_members tm JOIN teams t ON t.id=tm.team_id
                  JOIN workspace_memberships m ON m.id=tm.membership_id
                  WHERE tm.workspace_id=$1 AND tm.team_id=ANY($2) AND t.deleted_at IS NULL
-                 UNION SELECT author_user_id FROM entity_comments WHERE workspace_id=$1 AND entity_id=$3",
+                 UNION SELECT author_user_id FROM record_comments WHERE workspace_id=$1 AND record_id=$3",
             )
             .bind(self.workspace_id_for_runtime())
             .bind(ids(PrincipalKind::Team))
-            .bind(entity)
+            .bind(record)
             .fetch_all(&mut **transaction)
             .await?,
         );
@@ -593,13 +593,13 @@ impl CatalogRepository {
             transaction,
             &recipients,
             &NewNotification {
-                kind: kinds::ENTITY_COMMENTED,
+                kind: kinds::RECORD_COMMENTED,
                 title: format!("{} commented on a {blueprint_name} record", actor.name),
                 body: Some(notification_excerpt(body, COMMENT_EXCERPT_LENGTH)),
                 actor_user_id: actor.id,
                 subject: Some(NotificationSubject {
-                    kind: NotificationSubjectKind::Entity,
-                    id: entity,
+                    kind: NotificationSubjectKind::Record,
+                    id: record,
                 }),
                 data: json!({
                     "blueprint_code": blueprint_code,
@@ -756,7 +756,7 @@ mod tests {
     #[test]
     fn subject_kinds_round_trip_their_stored_names() {
         for kind in [
-            NotificationSubjectKind::Entity,
+            NotificationSubjectKind::Record,
             NotificationSubjectKind::AgentConversation,
         ] {
             assert_eq!(NotificationSubjectKind::parse(kind.as_str()), Some(kind));

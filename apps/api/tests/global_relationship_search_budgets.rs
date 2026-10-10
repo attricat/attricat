@@ -11,11 +11,11 @@ fn budget_test_lock() -> &'static tokio::sync::Mutex<()> {
     LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
 }
 
-async fn set_values(client: &Client, base_url: &str, entity: &Value, values: Value) {
+async fn set_values(client: &Client, base_url: &str, record: &Value, values: Value) {
     client
         .post(format!(
-            "{base_url}/entities/{}/values",
-            entity["id"].as_str().unwrap()
+            "{base_url}/records/{}/values",
+            record["id"].as_str().unwrap()
         ))
         .json(&json!({ "values": values }))
         .send()
@@ -32,7 +32,7 @@ async fn search(
     query: &str,
 ) -> reqwest::Response {
     client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({
             "blueprint": { "code": blueprint["blueprint"]["code"] },
             "query": query,
@@ -52,7 +52,7 @@ async fn assert_budget_failure(
 ) {
     // Bulk fixture inserts bypass the normal write path, so refresh planner
     // statistics before exercising the production 250 ms statement limit.
-    sqlx::query("ANALYZE entities").execute(pool).await.unwrap();
+    sqlx::query("ANALYZE records").execute(pool).await.unwrap();
     sqlx::query("ANALYZE attribute_values")
         .execute(pool)
         .await
@@ -77,7 +77,7 @@ async fn create_node_blueprint(client: &Client, base_url: &str, code: &str) -> V
 format_version = 1
 code = "{code}"
 name = "{code}"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["needle"]
@@ -124,9 +124,9 @@ async fn attribute_id(pool: &PgPool, blueprint: &Value, code: &str) -> Uuid {
         .unwrap()
 }
 
-async fn insert_entities(pool: &PgPool, blueprint: &Value, count: i64) -> Vec<Uuid> {
+async fn insert_records(pool: &PgPool, blueprint: &Value, count: i64) -> Vec<Uuid> {
     sqlx::query_scalar(
-        "INSERT INTO entities (id, workspace_id, blueprint_id, blueprint_version) \
+        "INSERT INTO records (id, workspace_id, blueprint_id, blueprint_version) \
          SELECT gen_random_uuid(), $1, $2, $3 FROM generate_series(1, $4) RETURNING id",
     )
     .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
@@ -138,16 +138,16 @@ async fn insert_entities(pool: &PgPool, blueprint: &Value, count: i64) -> Vec<Uu
     .unwrap()
 }
 
-async fn insert_scalar_values(pool: &PgPool, entities: &[Uuid], attribute: Uuid, value: &str) {
+async fn insert_scalar_values(pool: &PgPool, records: &[Uuid], attribute: Uuid, value: &str) {
     sqlx::query(
-        "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active, value_text) \
-         SELECT gen_random_uuid(), $1, entity_id, $2, $3, true, $4 FROM unnest($5::uuid[]) entity_id",
+        "INSERT INTO attribute_values (id, workspace_id, record_id, attribute_id, context_id, active, value_text) \
+         SELECT gen_random_uuid(), $1, record_id, $2, $3, true, $4 FROM unnest($5::uuid[]) record_id",
     )
     .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
     .bind(attribute)
     .bind(DEFAULT_CONTEXT_ID.parse::<Uuid>().unwrap())
     .bind(value)
-    .bind(entities)
+    .bind(records)
     .execute(pool)
     .await
     .unwrap();
@@ -155,8 +155,8 @@ async fn insert_scalar_values(pool: &PgPool, entities: &[Uuid], attribute: Uuid,
 
 async fn insert_edges(pool: &PgPool, sources: &[Uuid], attribute: Uuid, target: Uuid) {
     sqlx::query(
-        "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active, relationship_target_entity_id) \
-         SELECT gen_random_uuid(), $1, entity_id, $2, $3, true, $4 FROM unnest($5::uuid[]) entity_id",
+        "INSERT INTO attribute_values (id, workspace_id, record_id, attribute_id, context_id, active, relationship_target_record_id) \
+         SELECT gen_random_uuid(), $1, record_id, $2, $3, true, $4 FROM unnest($5::uuid[]) record_id",
     )
     .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
     .bind(attribute)
@@ -170,7 +170,7 @@ async fn insert_edges(pool: &PgPool, sources: &[Uuid], attribute: Uuid, target: 
 
 async fn insert_paired_edges(pool: &PgPool, sources: &[Uuid], attribute: Uuid, targets: &[Uuid]) {
     sqlx::query(
-        "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active, relationship_target_entity_id) \
+        "INSERT INTO attribute_values (id, workspace_id, record_id, attribute_id, context_id, active, relationship_target_record_id) \
          SELECT gen_random_uuid(), $1, source_id, $2, $3, true, target_id \
          FROM unnest($4::uuid[], $5::uuid[]) AS edge(source_id, target_id)",
     )
@@ -190,10 +190,10 @@ async fn global_search_rejects_root_budget_without_a_partial_page(pool: PgPool) 
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_node_blueprint(&client, &base_url, "global_budget_roots").await;
-    let entities = insert_entities(&pool, &blueprint, 1_001).await;
+    let records = insert_records(&pool, &blueprint, 1_001).await;
     insert_scalar_values(
         &pool,
-        &entities,
+        &records,
         attribute_id(&pool, &blueprint, "needle").await,
         "root-budget",
     )
@@ -209,7 +209,7 @@ async fn global_search_rejects_frontier_budget_without_a_partial_page(pool: PgPo
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_node_blueprint(&client, &base_url, "global_budget_frontier").await;
-    let target = create_entity(&client, &base_url, &blueprint).await;
+    let target = create_record(&client, &base_url, &blueprint).await;
     set_values(
         &client,
         &base_url,
@@ -217,7 +217,7 @@ async fn global_search_rejects_frontier_budget_without_a_partial_page(pool: PgPo
         json!([{ "kind": "scalar", "attribute_code": "needle", "value": "frontier-budget" }]),
     )
     .await;
-    let sources = insert_entities(&pool, &blueprint, 5_001).await;
+    let sources = insert_records(&pool, &blueprint, 5_001).await;
     insert_edges(
         &pool,
         &sources,
@@ -236,7 +236,7 @@ async fn global_search_rejects_edge_budget_without_a_partial_page(pool: PgPool) 
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_node_blueprint(&client, &base_url, "global_budget_edges").await;
-    let target = create_entity(&client, &base_url, &blueprint).await;
+    let target = create_record(&client, &base_url, &blueprint).await;
     set_values(
         &client,
         &base_url,
@@ -244,7 +244,7 @@ async fn global_search_rejects_edge_budget_without_a_partial_page(pool: PgPool) 
         json!([{ "kind": "scalar", "attribute_code": "needle", "value": "edge-budget" }]),
     )
     .await;
-    let sources = insert_entities(&pool, &blueprint, 3_334).await;
+    let sources = insert_records(&pool, &blueprint, 3_334).await;
     let target_id = target["id"].as_str().unwrap().parse().unwrap();
     for code in ["link_one", "link_two", "link_three"] {
         insert_edges(
@@ -266,7 +266,7 @@ async fn global_search_rejects_visited_budget_without_a_partial_page(pool: PgPoo
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_node_blueprint(&client, &base_url, "global_budget_visited").await;
-    let target = create_entity(&client, &base_url, &blueprint).await;
+    let target = create_record(&client, &base_url, &blueprint).await;
     set_values(
         &client,
         &base_url,
@@ -274,8 +274,8 @@ async fn global_search_rejects_visited_budget_without_a_partial_page(pool: PgPoo
         json!([{ "kind": "scalar", "attribute_code": "needle", "value": "visited-budget" }]),
     )
     .await;
-    let middle = insert_entities(&pool, &blueprint, 2_500).await;
-    let roots = insert_entities(&pool, &blueprint, 2_500).await;
+    let middle = insert_records(&pool, &blueprint, 2_500).await;
+    let roots = insert_records(&pool, &blueprint, 2_500).await;
     let link = attribute_id(&pool, &blueprint, "link_one").await;
     let target_id = target["id"].as_str().unwrap().parse().unwrap();
     insert_edges(&pool, &middle, link, target_id).await;
@@ -290,11 +290,11 @@ async fn global_search_returns_an_exact_three_level_witness(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let blueprint = create_node_blueprint(&client, &base_url, "global_budget_three_levels").await;
-    let leaf = create_entity(&client, &base_url, &blueprint).await;
-    let one = create_entity(&client, &base_url, &blueprint).await;
-    let two = create_entity(&client, &base_url, &blueprint).await;
-    let three = create_entity(&client, &base_url, &blueprint).await;
-    let four = create_entity(&client, &base_url, &blueprint).await;
+    let leaf = create_record(&client, &base_url, &blueprint).await;
+    let one = create_record(&client, &base_url, &blueprint).await;
+    let two = create_record(&client, &base_url, &blueprint).await;
+    let three = create_record(&client, &base_url, &blueprint).await;
+    let four = create_record(&client, &base_url, &blueprint).await;
     set_values(
         &client,
         &base_url,
@@ -303,8 +303,8 @@ async fn global_search_returns_an_exact_three_level_witness(pool: PgPool) {
     )
     .await;
     for (source, target) in [(&one, &leaf), (&two, &one), (&three, &two), (&four, &three)] {
-        client.put(format!("{base_url}/v1/entities/{}", source["id"].as_str().unwrap()))
-            .json(&json!({ "relationships": [{ "attribute_code": "link_one", "target_entity_ids": [target["id"]] }] }))
+        client.put(format!("{base_url}/v1/records/{}", source["id"].as_str().unwrap()))
+            .json(&json!({ "relationships": [{ "attribute_code": "link_one", "target_record_ids": [target["id"]] }] }))
             .send().await.unwrap().error_for_status().unwrap();
     }
 

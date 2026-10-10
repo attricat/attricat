@@ -83,12 +83,12 @@ The detail layout drives both display and editing. On the record page, every fie
 
 ## Record heading
 
-To give the detail page a proper title, wrap fields in a `stack` with the `catalog.entity_heading` component. Component and extension outlet identifiers, like this one, call records entities. Its first child must be a scalar field and becomes the page heading. Later children, text or scalar fields, form the subtitle.
+To give the detail page a proper title, wrap fields in a `stack` with the `catalog.record_heading` component. Its first child must be a scalar field and becomes the page heading. Later children, text or scalar fields, form the subtitle.
 
 ```toml
 [[views.detail.children]]
 type = "stack"
-component = { id = "catalog.entity_heading", version = 1 }
+component = { id = "catalog.record_heading", version = 1 }
 children = [
   { type = "field", field = "title" },
   { type = "field", field = "sku" },
@@ -197,7 +197,7 @@ renderer = { id = "catalog.url_display", version = 1 }
 
 Values that do not fit the control, such as older data, are still shown, as plain text without a link or swatch. Fields without a component use the standard editor for their value type.
 
-The edit controls validate only in the web app. To reject bad values from the API, CLI, and imports too, add a `value_schema` or `entity_schema`; see [Validation](/builders/validation/).
+The edit controls validate only in the web app. To reject bad values from the API, CLI, and imports too, add a `value_schema` or `record_schema`; see [Validation](/builders/validation/).
 
 ## Components
 
@@ -212,9 +212,9 @@ Workspace administrators set the default order of extension contributions for th
 type = "extension_layout"
 version = 1
 
-[views.extension_layout.outlets.entity_preview_panel]
+[views.extension_layout.outlets.record_preview_panel]
 order = ["acme.inventory:summary", "acme.pricing:margin"]
 hidden = ["acme.legacy:panel"]
 ```
 
-The outlets you can set here are `entity_preview_panel`, `entity_attribute_decoration`, and `entity_action`. The layout never grants permissions or enables an extension. Entries for extensions that are missing or disabled are kept and ignored, so a layout survives an extension being turned off and on again.
+The outlets you can set here are `record_preview_panel`, `record_attribute_decoration`, and `record_action`. The layout never grants permissions or enables an extension. Entries for extensions that are missing or disabled are kept and ignored, so a layout survives an extension being turned off and on again.

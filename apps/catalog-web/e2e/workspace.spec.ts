@@ -84,7 +84,7 @@ test('grants and revokes a workspace member role', async ({ page }) => {
 
   await page.goto('/manage/workspace/roles');
   await page.getByLabel('Role code').fill(roleCode);
-  await page.getByLabel(/^entities\.read —/).check();
+  await page.getByLabel(/^records\.read —/).check();
   await page.getByRole('button', { name: 'Create role' }).click();
   await expect(
     page.getByRole('listitem').filter({ hasText: roleCode }),

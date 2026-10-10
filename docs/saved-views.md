@@ -1,7 +1,7 @@
 # Saved searches and share links
 
 Explorer supports named `explorer_search` views. Dashboards and other saved-view
-kinds are not implemented. Search execution still uses the ordinary entity
+kinds are not implemented. Search execution still uses the ordinary record
 search endpoint and checks current blueprint permissions and validation.
 
 ## Links and access
@@ -11,7 +11,7 @@ search endpoint and checks current blueprint permissions and validation.
   Only the owner can update or delete a named view.
 - `/?viewState=<uuid>` opens an unnamed snapshot created by **Share search** when
   inline URL state is too large. Anyone with the ID *and* workspace access and
-  `entities.read` can open it; treat it as shareable, not private. Snapshots are
+  `records.read` can open it; treat it as shareable, not private. Snapshots are
   not listed.
 - Small searches remain inline in the Explorer URL. Changing filters does not
   write a saved view.
@@ -42,6 +42,6 @@ and the state is validated and normalized by the same code as an ordinary
 write. Field paths must resolve through the pack's blueprints, following at
 most three single-target relationship hops like Explorer, and a relationship
 facet's target blueprint must be one of the relationship's targets. Packs cannot seed a pinned
-blueprint `version` or selected relationship entity IDs, because both identify
+blueprint `version` or selected relationship record IDs, because both identify
 workspace data. Like any named view, only its owner can update or delete it
 afterwards.

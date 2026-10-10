@@ -23,7 +23,7 @@ async fn token_issuance_is_pool_safe_and_cannot_amplify_its_issuer(pool: PgPool)
     let secret = parent["secret"].as_str().unwrap();
     let client = Client::new();
     for permissions in [
-        json!(["entities.write"]),
+        json!(["records.write"]),
         json!(["tokens.manage", "roles.manage"]),
     ] {
         let response = client

@@ -21,7 +21,7 @@ import {
   STATUS_PUBLISHED,
 } from './constants';
 import { lexiconText } from '../lexicon/lexicon';
-import { ValueTypeLabel } from '../entities/components/ValueTypeLabel';
+import { ValueTypeLabel } from '../records/components/ValueTypeLabel';
 import { EmptyState } from '../../components/EmptyState';
 import { ReusableAttributeIcon } from '../../components/systemIcons';
 

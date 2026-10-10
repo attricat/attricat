@@ -138,7 +138,7 @@ impl CatalogRepository {
         Ok((rows, has_more))
     }
 
-    /// One run per enabled publication channel. No channel or entity filter is
+    /// One run per enabled publication channel. No channel or record filter is
     /// supplied by the component: every catalog page is checked against this
     /// run's persisted scope by the host.
     pub async fn run_blueprint_connector_job(
@@ -171,7 +171,7 @@ impl CatalogRepository {
                     .find(|op| op.id == job.operation_id)
             })
             .ok_or_else(|| invalid("connector operation is unavailable"))?;
-        let version: i64 = sqlx::query_scalar("SELECT max(version) FROM blueprints WHERE workspace_id=$1 AND id=$2 AND kind='entity' AND status='published' AND deleted_at IS NULL")
+        let version: i64 = sqlx::query_scalar("SELECT max(version) FROM blueprints WHERE workspace_id=$1 AND id=$2 AND kind='record' AND status='published' AND deleted_at IS NULL")
             .bind(self.extension_workspace()).bind(job.blueprint_id).fetch_optional(&self.pool).await?
             .flatten().ok_or_else(|| invalid("blueprint is no longer published"))?;
         let channels: Vec<Uuid> = if job.direction == "export" {

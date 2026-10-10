@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import type { Attribute } from '../entities/api';
+import type { Attribute } from '../records/api';
 import {
   getFileMetadata,
   updateFileReferences,
@@ -54,7 +54,7 @@ const attribute = {
     image_only: false,
   },
 } as Attribute;
-const entityId = '123e4567-e89b-12d3-a456-426614174000';
+const recordId = '123e4567-e89b-12d3-a456-426614174000';
 const blueprintId = '123e4567-e89b-12d3-a456-426614174002';
 const file = new File(['contents'], 'document.txt', { type: 'text/plain' });
 const renderEditor = (files: FileMetadata[] = [], id?: string) =>
@@ -63,7 +63,7 @@ const renderEditor = (files: FileMetadata[] = [], id?: string) =>
       attribute={attribute}
       contextId={null}
       disabled={false}
-      entityId={id}
+      recordId={id}
       files={files}
     />,
   );
@@ -86,7 +86,7 @@ describe('FileAttributeEditor', () => {
         attribute={single}
         contextId={null}
         disabled={false}
-        entityId={entityId}
+        recordId={recordId}
         files={[]}
       />,
     );
@@ -123,7 +123,7 @@ describe('FileAttributeEditor', () => {
     expect(screen.queryByText('third.txt')).toBeNull();
   });
 
-  it('does not show uploads from the previous entity after navigation', async () => {
+  it('does not show uploads from the previous record after navigation', async () => {
     const metadata = {
       id: 'uploaded-id',
       filename: 'previous.txt',
@@ -132,7 +132,7 @@ describe('FileAttributeEditor', () => {
     vi.mocked(uploadFiles).mockResolvedValue({ files: [metadata] } as Awaited<
       ReturnType<typeof uploadFiles>
     >);
-    const view = renderEditor([], entityId);
+    const view = renderEditor([], recordId);
     fireEvent.change(view.container.querySelector('input[type="file"]')!, {
       target: { files: [file] },
     });
@@ -143,14 +143,14 @@ describe('FileAttributeEditor', () => {
         attribute={attribute}
         contextId={null}
         disabled={false}
-        entityId="another-entity"
+        recordId="another-record"
         files={[]}
       />,
     );
     expect(screen.queryByText('previous.txt')).toBeNull();
   });
 
-  it('does not queue dropped files until an entity exists', () => {
+  it('does not queue dropped files until a record exists', () => {
     renderEditor();
     fireEvent.drop(
       screen.getByRole('button', { name: 'Choose or drop files' })
@@ -164,7 +164,7 @@ describe('FileAttributeEditor', () => {
 
   it('queues files to upload when a new record is created', async () => {
     vi.mocked(uploadStagedFiles).mockResolvedValue({
-      files: [{ id: entityId }],
+      files: [{ id: recordId }],
     } as unknown as Awaited<ReturnType<typeof uploadStagedFiles>>);
     const results: unknown[] = [];
     const Creating = () => {
@@ -208,7 +208,7 @@ describe('FileAttributeEditor', () => {
             {
               attribute_code: 'document',
               context_id: 'context-id',
-              file_ids: [entityId],
+              file_ids: [recordId],
             },
           ],
         },
@@ -269,7 +269,7 @@ describe('FileAttributeEditor', () => {
   });
 
   it('uploads each queued file only once when upload is clicked repeatedly', async () => {
-    const view = renderEditor([], entityId);
+    const view = renderEditor([], recordId);
     let finish!: (value: Awaited<ReturnType<typeof uploadFiles>>) => void;
     vi.mocked(uploadFiles).mockImplementation(
       () =>
@@ -289,7 +289,7 @@ describe('FileAttributeEditor', () => {
   });
 
   it('reflects refreshed server files instead of freezing the initial prop', () => {
-    const view = renderEditor([], entityId);
+    const view = renderEditor([], recordId);
     const metadata = {
       id: '123e4567-e89b-12d3-a456-426614174001',
       filename: 'server.txt',
@@ -300,7 +300,7 @@ describe('FileAttributeEditor', () => {
         attribute={attribute}
         contextId={null}
         disabled={false}
-        entityId={entityId}
+        recordId={recordId}
         files={[metadata]}
       />,
     );
@@ -319,7 +319,7 @@ describe('FileAttributeEditor', () => {
         attribute={imageAttribute}
         contextId={null}
         disabled={false}
-        entityId={entityId}
+        recordId={recordId}
         files={[]}
       />,
     );
@@ -347,7 +347,7 @@ describe('FileAttributeEditor', () => {
 
   it('blocks drop, retry and queued removal when disabled after an upload error', async () => {
     vi.mocked(uploadFiles).mockRejectedValue(new Error('Upload denied'));
-    const view = renderEditor([], entityId);
+    const view = renderEditor([], recordId);
     fireEvent.change(view.container.querySelector('input[type="file"]')!, {
       target: { files: [file] },
     });
@@ -358,7 +358,7 @@ describe('FileAttributeEditor', () => {
         attribute={attribute}
         contextId={null}
         disabled
-        entityId={entityId}
+        recordId={recordId}
         files={[]}
       />,
     );
@@ -382,7 +382,7 @@ describe('FileAttributeEditor', () => {
 
   it('sends compare-and-swap references and keeps attachments on conflicts', async () => {
     const images = [
-      { id: entityId, filename: 'a.png', status: 'ready' },
+      { id: recordId, filename: 'a.png', status: 'ready' },
       {
         id: '123e4567-e89b-12d3-a456-426614174001',
         filename: 'b.png',
@@ -404,13 +404,13 @@ describe('FileAttributeEditor', () => {
         }}
         contextId={null}
         disabled={false}
-        entityId={entityId}
+        recordId={recordId}
         files={images}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Move a.png later' }));
     expect(await screen.findByText('References changed; refresh')).toBeTruthy();
-    expect(updateFileReferences).toHaveBeenCalledWith(entityId, 'document', {
+    expect(updateFileReferences).toHaveBeenCalledWith(recordId, 'document', {
       context_id: null,
       expected_file_ids: images.map((file) => file.id),
       file_ids: [images[1].id, images[0].id],

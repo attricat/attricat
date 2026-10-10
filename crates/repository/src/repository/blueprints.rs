@@ -21,16 +21,16 @@ struct LatestBlueprint {
 }
 
 impl CatalogRepository {
-    pub async fn list_entity_blueprints(
+    pub async fn list_record_blueprints(
         &self,
         include_drafts: bool,
     ) -> Result<Vec<Blueprint>, RepositoryError> {
         Ok(sqlx::query_as::<_, Db<Blueprint>>(
             r#"SELECT DISTINCT ON (id)
-                     id, code, name, kind, version, views, includes, entity_schema, status, published_at, created_at, updated_at,
+                     id, code, name, kind, version, views, includes, record_schema, status, published_at, created_at, updated_at,
                     deleted_at, definition, definition_hash
                FROM blueprints
-               WHERE kind = 'entity' AND deleted_at IS NULL
+               WHERE kind = 'record' AND deleted_at IS NULL
                  AND ($1 OR status = 'published')
                  AND workspace_id = $2
                ORDER BY id, version DESC"#,
@@ -45,7 +45,7 @@ impl CatalogRepository {
     pub async fn list_blueprints(&self) -> Result<Vec<Blueprint>, RepositoryError> {
         Ok(sqlx::query_as::<_, Db<Blueprint>>(
             r#"SELECT DISTINCT ON (id)
-                     id, code, name, kind, version, views, includes, entity_schema, status, published_at, created_at, updated_at,
+                     id, code, name, kind, version, views, includes, record_schema, status, published_at, created_at, updated_at,
                     deleted_at, definition, definition_hash
                FROM blueprints
                WHERE deleted_at IS NULL AND workspace_id = $1
@@ -62,7 +62,7 @@ impl CatalogRepository {
         blueprint_id: Uuid,
     ) -> Result<Vec<Blueprint>, RepositoryError> {
         Ok(sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
                ORDER BY version DESC"#,
@@ -189,9 +189,9 @@ impl CatalogRepository {
             ))
         })?;
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"INSERT INTO blueprints (id, workspace_id, code, name, kind, version, includes, views, entity_schema, status, definition, definition_hash, unique_keys)
+            r#"INSERT INTO blueprints (id, workspace_id, code, name, kind, version, includes, views, record_schema, status, definition, definition_hash, unique_keys)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, $11, $12)
-               RETURNING id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash"#,
+               RETURNING id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash"#,
         )
         .bind(blueprint_id)
         .bind(self.workspace_id.0)
@@ -201,7 +201,7 @@ impl CatalogRepository {
         .bind(version)
         .bind(includes)
         .bind(views)
-        .bind(compiled.entity_schema)
+        .bind(compiled.record_schema)
         .bind(definition)
         .bind(compiled.raw_definition_hash)
         .bind(unique_keys)
@@ -299,7 +299,7 @@ impl CatalogRepository {
             };
         }
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE id = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL
                ORDER BY version DESC
@@ -330,7 +330,7 @@ impl CatalogRepository {
                 .map(Some);
         }
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL"#,
         )
@@ -356,7 +356,7 @@ impl CatalogRepository {
             };
         }
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE code = $1 AND status = 'published' AND workspace_id = $2 AND deleted_at IS NULL
                ORDER BY version DESC
@@ -377,7 +377,7 @@ impl CatalogRepository {
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE code = $1 AND workspace_id = $2 AND deleted_at IS NULL
                ORDER BY version DESC
@@ -408,7 +408,7 @@ impl CatalogRepository {
                 .map(Some);
         }
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE code = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL"#,
         )
@@ -439,7 +439,7 @@ impl CatalogRepository {
                 .map(Some);
         }
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE code = $1 AND version = $2 AND status = 'published' AND workspace_id = $3 AND deleted_at IS NULL"#,
         )
@@ -459,7 +459,7 @@ impl CatalogRepository {
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                FOR UPDATE"#,
@@ -576,7 +576,7 @@ impl CatalogRepository {
         version: i64,
     ) -> Result<Blueprint, RepositoryError> {
         let mut blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                FOR UPDATE"#,
@@ -619,7 +619,7 @@ impl CatalogRepository {
             blueprint = sqlx::query_as::<_, Db<Blueprint>>(
                 r#"UPDATE blueprints SET status = 'published', published_at = now(), updated_at = now()
                    WHERE id = $1 AND version = $2 AND workspace_id = $3
-                   RETURNING id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash"#,
+                   RETURNING id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash"#,
             )
             .bind(blueprint_id)
             .bind(version)
@@ -949,7 +949,7 @@ impl CatalogRepository {
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
         // Availability is presentation-only metadata. The pinned
         // declaration remains in the revision even when its provider
-        // is disabled, so ordinary blueprint/entity reads cannot fail
+        // is disabled, so ordinary blueprint/record reads cannot fail
         // and clients can choose the host-owned read-only fallback.
         if attributes
             .iter()

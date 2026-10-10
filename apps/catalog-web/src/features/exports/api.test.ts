@@ -25,7 +25,7 @@ describe('publication channel API client', () => {
         context_code: 'storefront',
         enabled: true,
         required_rule_codes: [],
-        require_valid_entity: false,
+        require_valid_record: false,
       },
     ]);
     expect(fetchMock).toHaveBeenCalledWith('/api/publication-channels');
@@ -60,7 +60,7 @@ describe('publication channel API client', () => {
       context_code: 'storefront',
       enabled: true,
       required_rule_codes: ['has-sku'],
-      require_valid_entity: true,
+      require_valid_record: true,
     };
     fetchMock.mockResolvedValue({
       ok: true,
@@ -70,7 +70,7 @@ describe('publication channel API client', () => {
     await expect(
       updatePublicationChannel(contextId, true, {
         required_rule_codes: ['has-sku'],
-        require_valid_entity: true,
+        require_valid_record: true,
       }),
     ).resolves.toEqual(channel);
     expect(fetchMock).toHaveBeenCalledWith(
@@ -81,7 +81,7 @@ describe('publication channel API client', () => {
         body: JSON.stringify({
           enabled: true,
           required_rule_codes: ['has-sku'],
-          require_valid_entity: true,
+          require_valid_record: true,
         }),
       },
     );

@@ -31,7 +31,7 @@ async fn setup_rule(pool: &PgPool) -> (String, tokio::task::JoinHandle<()>, Uuid
 format_version = 1
 code = "rule_task_product"
 name = "Rule task product"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["title"]
@@ -79,10 +79,10 @@ value_type = "string"
     (base_url, server, rule_id, blueprint)
 }
 
-async fn manual_run(base_url: &str, rule_id: Uuid, entity_id: Option<Uuid>, key: &str) -> Uuid {
+async fn manual_run(base_url: &str, rule_id: Uuid, record_id: Option<Uuid>, key: &str) -> Uuid {
     let run: Value = authenticated_client()
         .post(format!("{base_url}/rules/{rule_id}/run-now"))
-        .json(&json!({"entity_id": entity_id, "dry_run": false, "idempotency_key": key}))
+        .json(&json!({"record_id": record_id, "dry_run": false, "idempotency_key": key}))
         .send()
         .await
         .unwrap()
@@ -98,9 +98,9 @@ async fn manual_run(base_url: &str, rule_id: Uuid, entity_id: Option<Uuid>, key:
 async fn rule_task_lease_loss_and_crash_after_page_are_fenced(pool: PgPool) {
     let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
     let client = authenticated_client();
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap().parse().unwrap();
-    let run_id = manual_run(&base_url, rule_id, Some(entity_id), "lease-loss").await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap().parse().unwrap();
+    let run_id = manual_run(&base_url, rule_id, Some(record_id), "lease-loss").await;
     let repository = CatalogRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
@@ -131,8 +131,8 @@ async fn rule_task_lease_loss_and_crash_after_page_are_fenced(pool: PgPool) {
     let handler = rule_runtime::task_handler(repository.clone());
     assert!(handler.handle(stale).await.is_err());
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM rule_findings WHERE entity_id=$1")
-            .bind(entity_id)
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM rule_findings WHERE record_id=$1")
+            .bind(record_id)
             .fetch_one(&pool)
             .await
             .unwrap(),
@@ -169,8 +169,8 @@ async fn rule_task_lease_loss_and_crash_after_page_are_fenced(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM rule_findings WHERE entity_id=$1")
-            .bind(entity_id)
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM rule_findings WHERE record_id=$1")
+            .bind(record_id)
             .fetch_one(&pool)
             .await
             .unwrap(),
@@ -185,12 +185,12 @@ async fn checkpoint_failure_on_final_attempt_dead_letters_rule_run_and_replays_g
 ) {
     let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
     let client = authenticated_client();
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap().parse().unwrap();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap().parse().unwrap();
     let run_id = manual_run(
         &base_url,
         rule_id,
-        Some(entity_id),
+        Some(record_id),
         "checkpoint-final-failure",
     )
     .await;
@@ -261,7 +261,7 @@ async fn checkpoint_failure_on_final_attempt_dead_letters_rule_run_and_replays_g
 async fn rule_page_continuation_yields_without_failure_budget(pool: PgPool) {
     let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
     let client = authenticated_client();
-    let first = create_entity(&client, &base_url, &blueprint).await;
+    let first = create_record(&client, &base_url, &blueprint).await;
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let blueprint_id: Uuid = blueprint["blueprint"]["id"]
         .as_str()
@@ -269,9 +269,9 @@ async fn rule_page_continuation_yields_without_failure_budget(pool: PgPool) {
         .parse()
         .unwrap();
     let blueprint_version = blueprint["blueprint"]["version"].as_i64().unwrap();
-    // Candidate paging uses only entity identity and metadata, so build a page
+    // Candidate paging uses only record identity and metadata, so build a page
     // boundary directly without creating 500 unrelated HTTP mutations.
-    sqlx::query("INSERT INTO entities(id,workspace_id,blueprint_id,blueprint_version,projections) SELECT gen_random_uuid(),$1,$2,$3,'{}'::jsonb FROM generate_series(1,500)")
+    sqlx::query("INSERT INTO records(id,workspace_id,blueprint_id,blueprint_version,projections) SELECT gen_random_uuid(),$1,$2,$3,'{}'::jsonb FROM generate_series(1,500)")
         .bind(workspace).bind(blueprint_id).bind(blueprint_version).execute(&pool).await.unwrap();
     let run_id = manual_run(&base_url, rule_id, None, "continuation").await;
     let repository = CatalogRepository::new(

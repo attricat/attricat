@@ -42,7 +42,7 @@ async fn invitation(repository: &CatalogRepository, user: Uuid) -> String {
 async fn token_client(user: Uuid, base: &str) -> Client {
     let token: Value = client_for(user)
         .post(format!("{base}/personal-access-tokens"))
-        .json(&json!({"label":"revocation", "permissions":["entities.read"]}))
+        .json(&json!({"label":"revocation", "permissions":["records.read"]}))
         .send()
         .await
         .unwrap()
@@ -158,7 +158,7 @@ async fn old_invitation_cannot_restore_a_revoked_role_grant(pool: PgPool) {
     );
     assert!(
         !repository
-            .is_authorized(user, bootstrap_workspace_id(), "entities.read", None, None)
+            .is_authorized(user, bootstrap_workspace_id(), "records.read", None, None)
             .await
             .unwrap()
     );

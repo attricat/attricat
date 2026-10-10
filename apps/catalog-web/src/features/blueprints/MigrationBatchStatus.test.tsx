@@ -39,11 +39,11 @@ describe('MigrationBatchStatus', () => {
         created_at: '2026-10-05T12:00:00Z',
         started_at: '2026-10-05T12:00:01Z',
         completed_at: null,
-        total_entities: 10_000,
-        processed_entities: 42,
-        migrated_entities: 40,
-        needs_input_entities: 1,
-        failed_entities: 1,
+        total_records: 10_000,
+        processed_records: 42,
+        migrated_records: 40,
+        needs_input_records: 1,
+        failed_records: 1,
       },
     ]);
     const client = new QueryClient({

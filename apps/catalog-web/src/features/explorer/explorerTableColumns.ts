@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next';
-import type { BlueprintWithAttributes } from '../entities/api';
-import { attributeLabel } from '../entities/entityDisplay';
-import type { AttributeValueType } from '../entities/valueTypeIcons';
+import type { BlueprintWithAttributes } from '../records/api';
+import { attributeLabel } from '../records/recordDisplay';
+import type { AttributeValueType } from '../records/valueTypeIcons';
 import {
   builtInConfigurableColumnIds,
   catalogRendererPrefix,

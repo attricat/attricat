@@ -1,13 +1,13 @@
-//! Per-operation state for one entity write.
+//! Per-operation state for one record write.
 //!
-//! An entity write resolves contexts and attributes for every value, then
+//! A record write resolves contexts and attributes for every value, then
 //! validates statuses, principals and checks against the same definitions.
-//! [`WriteContext`] loads the workspace context tree and the entity's
-//! applicable attributes once, after the entity row lock, so those steps read
+//! [`WriteContext`] loads the workspace context tree and the record's
+//! applicable attributes once, after the record row lock, so those steps read
 //! memory instead of repeating the same queries per value and per validator.
 //!
-//! Published blueprint attributes are immutable, and entity-scoped attributes
-//! change only under the entity lock the writer already holds.
+//! Published blueprint attributes are immutable, and record-scoped attributes
+//! change only under the record lock the writer already holds.
 
 use std::{
     collections::{BTreeMap, HashSet},
@@ -22,15 +22,15 @@ use uuid::Uuid;
 use std::sync::Mutex;
 
 use super::{
-    CatalogRepository, Entity, RepositoryError,
+    CatalogRepository, Record, RepositoryError,
     checks::EnabledRule,
     generations::WritePrefetch,
     record_values::{ContextTree, RecordState, RecordValues, load_record},
     validate_attribute_selector_code,
 };
 
-/// One attribute that applies to the entity: a column of its blueprint
-/// revision or an attribute attached to the entity itself.
+/// One attribute that applies to the record: a column of its blueprint
+/// revision or an attribute attached to the record itself.
 #[derive(Clone, Debug, sqlx::FromRow)]
 pub(super) struct WriteAttribute {
     pub id: Uuid,
@@ -43,8 +43,8 @@ pub(super) struct WriteAttribute {
     pub context_editable: String,
     pub context_fallback: String,
     pub default_value: Option<Value>,
-    /// Attached to the entity itself rather than a blueprint column.
-    pub entity_scoped: bool,
+    /// Attached to the record itself rather than a blueprint column.
+    pub record_scoped: bool,
 }
 
 impl WriteAttribute {
@@ -63,7 +63,7 @@ pub(super) struct WriteContext {
     pub enabled_rules: Option<Vec<EnabledRule>>,
     /// Read on first use by a relationship write.
     family: OnceCell<FamilyConstraints>,
-    /// State derived from the entity's values, shared by the validators of
+    /// State derived from the record's values, shared by the validators of
     /// one write. Every value write through this context clears it.
     derived: Mutex<Derived>,
 }
@@ -74,7 +74,7 @@ struct Derived {
     after: Option<Option<RecordValues>>,
 }
 
-/// Relationship constraints of the entity's blueprint family. They follow
+/// Relationship constraints of the record's blueprint family. They follow
 /// the latest published revision, so they are read once per operation
 /// rather than per relationship target.
 #[derive(Clone, Debug, Default)]
@@ -89,9 +89,9 @@ impl WriteContext {
     pub(super) async fn load(
         transaction: &mut Transaction<'_, Postgres>,
         workspace_id: Uuid,
-        entity: &Entity,
+        record: &Record,
     ) -> Result<Self, RepositoryError> {
-        Self::load_with(transaction, workspace_id, entity, None).await
+        Self::load_with(transaction, workspace_id, record, None).await
     }
 
     /// [`Self::load`] taking the context tree and enabled rules from
@@ -99,7 +99,7 @@ impl WriteContext {
     pub(super) async fn load_with(
         transaction: &mut Transaction<'_, Postgres>,
         workspace_id: Uuid,
-        entity: &Entity,
+        record: &Record,
         prefetch: Option<&WritePrefetch>,
     ) -> Result<Self, RepositoryError> {
         let tree = match prefetch {
@@ -109,11 +109,11 @@ impl WriteContext {
         let enabled_rules = prefetch.map(|prefetch| {
             prefetch
                 .rules
-                .get(&(entity.blueprint_id, entity.blueprint_version))
+                .get(&(record.blueprint_id, record.blueprint_version))
                 .cloned()
                 .unwrap_or_default()
         });
-        let attributes = Self::load_attributes(transaction, entity).await?;
+        let attributes = Self::load_attributes(transaction, record).await?;
         Ok(Self {
             tree,
             enabled_rules,
@@ -134,31 +134,31 @@ impl WriteContext {
         *self.derived() = Derived::default();
     }
 
-    /// The entity's preview projection for its current values.
+    /// The record's preview projection for its current values.
     pub(super) async fn preview(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity_id: Uuid,
+        record_id: Uuid,
     ) -> Result<Value, RepositoryError> {
         if let Some(preview) = self.derived().preview.clone() {
             return Ok(preview);
         }
-        let preview = CatalogRepository::build_preview_projection(transaction, entity_id).await?;
+        let preview = CatalogRepository::build_preview_projection(transaction, record_id).await?;
         self.derived().preview = Some(preview.clone());
         Ok(preview)
     }
 
-    /// The entity's current values, as `load_record(.., RecordState::After)`.
+    /// The record's current values, as `load_record(.., RecordState::After)`.
     pub(super) async fn after_record(
         &self,
         connection: &mut PgConnection,
         workspace_id: Uuid,
-        entity_id: Uuid,
+        record_id: Uuid,
     ) -> Result<Option<RecordValues>, RepositoryError> {
         if let Some(record) = self.derived().after.clone() {
             return Ok(record);
         }
-        let record = load_record(connection, workspace_id, entity_id, RecordState::After).await?;
+        let record = load_record(connection, workspace_id, record_id, RecordState::After).await?;
         self.derived().after = Some(record.clone());
         Ok(record)
     }
@@ -212,21 +212,21 @@ impl WriteContext {
 
     async fn load_attributes(
         connection: &mut PgConnection,
-        entity: &Entity,
+        record: &Record,
     ) -> Result<Vec<WriteAttribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, WriteAttribute>(
             r#"SELECT id, code, value_type, value_schema,
                       CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes,
                       cardinality, target_cardinality, context_editable, context_fallback, default_value,
-                      entity_id IS NOT NULL AS entity_scoped
+                      record_id IS NOT NULL AS record_scoped
                FROM attributes
-               WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR entity_id = $3)
+               WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR record_id = $3)
                  AND deleted_at IS NULL
-               ORDER BY entity_id IS NOT NULL, position, id"#,
+               ORDER BY record_id IS NOT NULL, position, id"#,
         )
-        .bind(entity.blueprint_id)
-        .bind(entity.blueprint_version)
-        .bind(entity.id)
+        .bind(record.blueprint_id)
+        .bind(record.blueprint_version)
+        .bind(record.id)
         .fetch_all(connection)
         .await?)
     }

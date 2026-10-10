@@ -19,7 +19,7 @@ pub const MAX_EXTENSION_INTENT_KEY_BYTES: usize = 128;
 
 /// A bounded, host-owned mutation envelope. The component never receives a
 /// repository handle: this payload is validated then committed through the
-/// same entity mutation transaction that writes audit and outbox records.
+/// same record mutation transaction that writes audit and outbox records.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExtensionCatalogBatch {
@@ -43,7 +43,7 @@ pub enum ExtensionCatalogIntent {
     },
     Update {
         intent_key: String,
-        entity_id: Uuid,
+        record_id: Uuid,
         #[serde(default)]
         values: Vec<NewAttributeValue>,
         #[serde(default)]
@@ -51,11 +51,11 @@ pub enum ExtensionCatalogIntent {
     },
     Relationships {
         intent_key: String,
-        entity_id: Uuid,
+        record_id: Uuid,
         relationships: Vec<RelationshipTargets>,
     },
     /// Creates when the declared business value is absent, otherwise updates
-    /// that one entity. The intent marker makes both branches replay-safe.
+    /// that one record. The intent marker makes both branches replay-safe.
     Upsert {
         intent_key: String,
         blueprint_id: Uuid,
@@ -75,7 +75,7 @@ pub enum ExtensionCatalogIntent {
     /// the separately granted `catalog.annotations.write` capability.
     Annotate {
         intent_key: String,
-        entity_id: Uuid,
+        record_id: Uuid,
         #[serde(default)]
         add_tags: Vec<String>,
         #[serde(default)]
@@ -94,12 +94,12 @@ impl ExtensionCatalogIntent {
         matches!(self, Self::Annotate { .. })
     }
 
-    /// The existing entity an intent targets; creates and upserts have none.
-    pub fn target_entity_id(&self) -> Option<Uuid> {
+    /// The existing record an intent targets; creates and upserts have none.
+    pub fn target_record_id(&self) -> Option<Uuid> {
         match self {
-            Self::Update { entity_id, .. }
-            | Self::Relationships { entity_id, .. }
-            | Self::Annotate { entity_id, .. } => Some(*entity_id),
+            Self::Update { record_id, .. }
+            | Self::Relationships { record_id, .. }
+            | Self::Annotate { record_id, .. } => Some(*record_id),
             Self::Create { .. } | Self::Upsert { .. } => None,
         }
     }
@@ -118,7 +118,7 @@ pub enum ExtensionCatalogIntentStatus {
 pub struct ExtensionCatalogIntentOutcome {
     pub intent_key: String,
     pub status: ExtensionCatalogIntentStatus,
-    pub entity_id: Option<Uuid>,
+    pub record_id: Option<Uuid>,
     pub error: Option<String>,
     /// The extension namespace revision after an applied annotation intent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -141,13 +141,13 @@ pub struct ExtensionCatalogPageRequest {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ExtensionCatalogPage {
-    pub entities: Vec<Entity>,
+    pub records: Vec<Record>,
     pub next_cursor: Option<String>,
     #[serde(skip_serializing)]
     pub snapshot_at: DateTime<Utc>,
 }
 
-/// A stable, ordered page of entity mutation events. `next_cursor` carries the
+/// A stable, ordered page of record mutation events. `next_cursor` carries the
 /// high-water sequence captured by the first request, so events committed after
 /// that request are never interleaved into an in-progress catch-up.
 #[derive(Clone, Debug, Serialize)]
@@ -165,7 +165,7 @@ struct ExtensionCatalogCursor {
     publication_context_id: Option<Uuid>,
     snapshot_at: DateTime<Utc>,
     created_at: DateTime<Utc>,
-    entity_id: Uuid,
+    record_id: Uuid,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -178,7 +178,7 @@ struct ExtensionCatalogChangeCursor {
 }
 
 impl CatalogRepository {
-    /// Lists an immutable-as-of-start entity set. New entities created after
+    /// Lists an immutable-as-of-start record set. New records created after
     /// `snapshot_at` are deliberately left for a later export; updates do not
     /// change ordering, so a page cannot move between cursors.
     pub async fn extension_catalog_page(
@@ -196,7 +196,7 @@ impl CatalogRepository {
             .as_deref()
             .map(decode_extension_cursor)
             .transpose()?;
-        let (snapshot_at, created_at, entity_id) = if let Some(cursor) = cursor {
+        let (snapshot_at, created_at, record_id) = if let Some(cursor) = cursor {
             if cursor.snapshot_at < Utc::now() - chrono::Duration::days(30)
                 || cursor.workspace_id != workspace_id
                 || cursor.blueprint_id != request.blueprint_id
@@ -211,7 +211,7 @@ impl CatalogRepository {
             (
                 cursor.snapshot_at,
                 Some(cursor.created_at),
-                Some(cursor.entity_id),
+                Some(cursor.record_id),
             )
         } else {
             // The database is the ordering authority. Its clock avoids losing a
@@ -247,22 +247,22 @@ impl CatalogRepository {
                 return Err(RepositoryError::NotFound("context"));
             }
         }
-        let rows = sqlx::query_as::<_, Db<Entity>>(
+        let rows = sqlx::query_as::<_, Db<Record>>(
             "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,('attricat.sample'=ANY(e.system_tags)) AS is_sample,e.created_at,e.updated_at,e.deleted_at \
-             FROM entities e \
+             FROM records e \
              WHERE e.workspace_id=$1 AND (e.deleted_at IS NULL OR e.deleted_at > $4) AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
                AND e.created_at <= $4 \
                AND ($5::timestamptz IS NULL OR (e.created_at,e.id) > ($5,$6)) \
-               AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM entity_channel_publications p WHERE p.workspace_id=e.workspace_id AND p.entity_id=e.id AND p.context_id=$7 AND p.published_at IS NOT NULL)) \
+               AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM record_channel_publications p WHERE p.workspace_id=e.workspace_id AND p.record_id=e.id AND p.context_id=$7 AND p.published_at IS NOT NULL)) \
              ORDER BY e.created_at,e.id LIMIT $8",
         )
         .bind(workspace_id).bind(request.blueprint_id).bind(request.blueprint_version)
-        .bind(snapshot_at).bind(created_at).bind(entity_id).bind(request.publication_context_id)
+        .bind(snapshot_at).bind(created_at).bind(record_id).bind(request.publication_context_id)
         .bind(i64::from(request.limit) + 1).fetch_all(&self.pool).await?;
-        let mut entities = rows.into_domain();
-        let next_cursor = if entities.len() > request.limit as usize {
-            entities.pop();
-            entities.last().map(|entity| {
+        let mut records = rows.into_domain();
+        let next_cursor = if records.len() > request.limit as usize {
+            records.pop();
+            records.last().map(|record| {
                 encode_extension_cursor(&ExtensionCatalogCursor {
                     workspace_id,
                     blueprint_id: request.blueprint_id,
@@ -270,21 +270,21 @@ impl CatalogRepository {
                     context_id: request.context_id,
                     publication_context_id: request.publication_context_id,
                     snapshot_at,
-                    created_at: entity.created_at,
-                    entity_id: entity.id,
+                    created_at: record.created_at,
+                    record_id: record.id,
                 })
             })
         } else {
             None
         };
         Ok(ExtensionCatalogPage {
-            entities,
+            records,
             next_cursor,
             snapshot_at,
         })
     }
 
-    /// Reads entity mutation events in sequence order. This is deliberately a
+    /// Reads record mutation events in sequence order. This is deliberately a
     /// separate cursor from snapshots: a client first completes a snapshot,
     /// then persists the returned change cursor and consumes changes.
     pub async fn extension_catalog_changes(
@@ -325,7 +325,7 @@ impl CatalogRepository {
         };
         let events = sqlx::query_as::<_, crate::domain_events::DomainEvent>(
             "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload \
-             FROM domain_events WHERE workspace_id=$1 AND aggregate_kind='entity' AND sequence > $2 AND sequence <= $3 \
+             FROM domain_events WHERE workspace_id=$1 AND aggregate_kind='record' AND sequence > $2 AND sequence <= $3 \
                AND payload->>'blueprint_id'=$4 AND (payload->>'blueprint_version')::bigint=$5 \
              ORDER BY sequence LIMIT $6",
         ).bind(workspace_id).bind(after_sequence).bind(high_water_sequence).bind(blueprint_id.to_string()).bind(blueprint_version).bind(i64::from(limit) + 1).fetch_all(&self.pool).await?;
@@ -358,16 +358,16 @@ impl CatalogRepository {
         blueprint_version: i64,
         attribute_id: Uuid,
         value: &str,
-    ) -> Result<Option<Entity>, RepositoryError> {
+    ) -> Result<Option<Record>, RepositoryError> {
         if value.is_empty() || value.len() > MAX_EXTENSION_LOOKUP_VALUE_BYTES {
             return Err(RepositoryError::InvalidExtension(
                 "lookup value must be 1-512 bytes".into(),
             ));
         }
         // Resolve exactly as an upsert with this lookup would, so a read never
-        // names a different entity than the one a write would update.
+        // names a different record than the one a write would update.
         let mut transaction = self.pool.begin().await?;
-        let Some(entity_id) = self
+        let Some(record_id) = self
             .extension_lookup(
                 &mut transaction,
                 blueprint_id,
@@ -380,16 +380,16 @@ impl CatalogRepository {
         else {
             return Ok(None);
         };
-        let entity = sqlx::query_as::<_, Db<Entity>>(
-            "SELECT id,blueprint_id,blueprint_version,projections,system_tags,system_metadata,('attricat.sample'=ANY(system_tags)) AS is_sample,created_at,updated_at,deleted_at FROM entities WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL",
+        let record = sqlx::query_as::<_, Db<Record>>(
+            "SELECT id,blueprint_id,blueprint_version,projections,system_tags,system_metadata,('attricat.sample'=ANY(system_tags)) AS is_sample,created_at,updated_at,deleted_at FROM records WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL",
         )
-        .bind(entity_id)
+        .bind(record_id)
         .bind(self.workspace_id.0)
         .fetch_optional(&mut *transaction)
         .await?
         .into_domain();
         transaction.commit().await?;
-        Ok(entity)
+        Ok(record)
     }
 }
 
@@ -439,7 +439,7 @@ mod tests {
             publication_context_id: None,
             snapshot_at: Utc::now(),
             created_at: Utc::now(),
-            entity_id: Uuid::nil(),
+            record_id: Uuid::nil(),
         };
         assert_eq!(
             decode_extension_cursor(&encode_extension_cursor(&cursor))

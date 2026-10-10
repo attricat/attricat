@@ -75,9 +75,9 @@ export const createReusableAttributeGroup = (input: {
     body: JSON.stringify(createReusableAttributeGroupSchema.parse(input)),
   });
 
-export const attachReusableAttribute = (entityId: string, revisionId: string) =>
+export const attachReusableAttribute = (recordId: string, revisionId: string) =>
   request(
-    `/api/v1/entities/${encodeURIComponent(z.uuid().parse(entityId))}/reusable-attributes`,
+    `/api/v1/records/${encodeURIComponent(z.uuid().parse(recordId))}/reusable-attributes`,
     z.unknown(),
     {
       method: 'POST',
@@ -89,11 +89,11 @@ export const attachReusableAttribute = (entityId: string, revisionId: string) =>
   );
 
 export const attachReusableAttributeGroup = (
-  entityId: string,
+  recordId: string,
   groupId: string,
 ) =>
   request(
-    `/api/v1/entities/${encodeURIComponent(z.uuid().parse(entityId))}/reusable-attribute-groups/${encodeURIComponent(z.uuid().parse(groupId))}`,
+    `/api/v1/records/${encodeURIComponent(z.uuid().parse(recordId))}/reusable-attribute-groups/${encodeURIComponent(z.uuid().parse(groupId))}`,
     z.array(z.unknown()),
     { method: 'POST' },
   );

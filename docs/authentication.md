@@ -162,14 +162,14 @@ reconciliation reclaims it.
 
 The session payload's `avatar` field is the caller's own avatar in the session
 workspace, including one that is still `queued` or `processing`. Member lists,
-audit events, and entity change history expose `avatar_file_id`,
+audit events, and record change history expose `avatar_file_id`,
 `actor_avatar_file_id`, or `approved_by_avatar_file_id` only once the avatar is
 `ready` and the member is active. Any authenticated member of the workspace
 can download a current avatar with
 `GET /files/{file_id}/variants/avatar/download`. The original upload, its
 metadata, and other variants are never served for avatar files, because the
 original may carry EXIF data such as location. Avatar files cannot be linked to
-entity file attributes. Deployments can restrict avatar operations through the
+record file attributes. Deployments can restrict avatar operations through the
 `AvatarUpload` and `AvatarRead` file access policy operations.
 
 ## Personal API tokens
@@ -215,7 +215,7 @@ The CLI reads the bearer secret from `CATALOG_TOKEN` (or `--token`).
 
 ## Attribute visibility
 
-Authorization applies to whole entities: a person who can read an entity reads
+Authorization applies to whole records: a person who can read a record reads
 all of its attribute values, history included. See
 [Field-level read restrictions](field-level-read-restrictions.md) for the audit
 of every read surface and the design for restricted attributes.

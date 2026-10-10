@@ -1,10 +1,10 @@
 # Relationship-Aware Explore Search
 
 > **Status: deployed.** This document describes the relationship-aware search
-> behavior used by the Explorer and `POST /v1/entities/search`.
+> behavior used by the Explorer and `POST /v1/records/search`.
 
-Explore finds entities of the selected blueprint from values on the entity
-itself and values on entities connected to it through relationships. It uses a typed query language parsed and validated before candidate resolution.
+Explore finds records of the selected blueprint from values on the record
+itself and values on records connected to it through relationships. It uses a typed query language parsed and validated before candidate resolution.
 
 The query pipeline is application-owned Rust code: it parses and validates the
 query, plans every term, performs breadth-first traversal, and combines
@@ -19,7 +19,7 @@ Search produces candidate IDs for the selected blueprint, then applies the
 existing version, system-tag, outdated, facet, ordering, and cursor filters.
 
 For a bare free-text term, the server searches only non-relationship scalar
-values on entities of the selected blueprint (depth 0). It does not traverse
+values on records of the selected blueprint (depth 0). It does not traverse
 relationships.
 
 A relationship-qualified term, such as `color.name:red` or
@@ -27,24 +27,24 @@ A relationship-qualified term, such as `color.name:red` or
 path's target blueprint, then traverses up to three named **incoming active
 relationship edges** in batched steps:
 an edge from Product to Color allows a matching Color value to select that
-Product. Deleted entities and inactive edges are excluded.
+Product. Deleted records and inactive edges are excluded.
 
 The `*:` selector explicitly opts into global relationship-aware discovery. It
 first finds matching scalar values across blueprints, then traverses incoming
 active relationship edges in breadth-first batches for up to three edges before
-returning selected-blueprint entities. Intermediate ID sets use batched set
+returning selected-blueprint records. Intermediate ID sets use batched set
 reads rather than N+1 queries.
 
 Every query term independently produces a candidate set. Multiple whitespace-
 separated terms are intersected (implicit `AND`). Relationship-tree facet
 counts, selected-facet filtering, and paginated result pages consume that same
-candidate set, so they cannot disagree about which source entities match.
+candidate set, so they cannot disagree about which source records match.
 
 The resolver retains a match witness for every accepted result and term. The
 search response includes `match_explanations` to each item: an array
 with one deterministic witness per matched term containing the original term,
-the matching entity ID, matching attribute code when applicable, traversal
-depth, and the relationship-edge path from the returned entity to that match.
+the matching record ID, matching attribute code when applicable, traversal
+depth, and the relationship-edge path from the returned record to that match.
 Depth `0` has an empty path. This data lets clients show why a record matched
 without rerunning the search; it is explanatory metadata, not ranking input.
 
@@ -54,13 +54,13 @@ without rerunning the search; it is explanatory metadata, not ranking input.
 | --- | --- |
 | `red` | Free text across scalar values on the selected blueprint only. |
 | `*:red` | Explicit global relationship-aware search through up to three incoming edges. |
-| `color:red` | Match values on entities reached through selected-blueprint relationship `color`. |
+| `color:red` | Match values on records reached through selected-blueprint relationship `color`. |
 | `color.name:red` | As above, restricted to related attribute `name`. |
 | `Produkt:czerwony` | Free text limited to the selected blueprint, identified by its user-specified name (its code, `product:czerwony`, also works). |
 | `sku:123*` | Match selected-blueprint attribute `sku`. |
 | `product.sku:123*` | Explicit selected-blueprint form of the preceding query; `product` may be its code or user-specified name. |
-| `@id:ID-1,ID-2` | Selected-blueprint entities whose ID is one of the comma-separated UUIDs (`product.@id:…` is equivalent). |
-| `color.@id:ID-1,ID-2` | Selected-blueprint entities linked through `color` to one of the listed entities. |
+| `@id:ID-1,ID-2` | Selected-blueprint records whose ID is one of the comma-separated UUIDs (`product.@id:…` is equivalent). |
+| `color.@id:ID-1,ID-2` | Selected-blueprint records linked through `color` to one of the listed records. |
 
 Selectors are validated against the selected blueprint revision before the
 query executes:
@@ -79,7 +79,7 @@ query executes:
   blueprints share that name, the selector is rejected as ambiguous and the
   caller must use the blueprint code.
 
-- `@id` as the final part (case-insensitive) matches entity IDs instead of a
+- `@id` as the final part (case-insensitive) matches record IDs instead of a
   scalar leaf. The preceding parts, if any, must be the selected-blueprint alias
   or up to three relationships. The value is a comma-separated list of at most
   100 UUIDs; wildcards are rejected. Listed IDs seed the same incoming-edge
@@ -97,7 +97,7 @@ are out of scope. `*:` remains the only global multi-hop mode.
 
 ## API and UI Contract
 
-`POST /v1/entities/search` continues to take the query in its existing `query`
+`POST /v1/records/search` continues to take the query in its existing `query`
 string field. An empty or absent query preserves current browse behavior. Each
 non-empty-query result additionally returns `match_explanations` as described
 above. The Explore query field and URL query parameter preserve the supplied
@@ -112,13 +112,13 @@ CLI client.
 ## Implementation Boundaries
 
 The backend parses typed query terms, compiles validated terms using blueprint
-metadata, and invokes a shared candidate-ID resolver. Main entity search and
+metadata, and invokes a shared candidate-ID resolver. Main record search and
 relationship-tree facet child/count paths use that resolver so their text-query
 semantics agree.
 
 No migration is required. Only `*:` global traversal is resource-bounded: all
 such terms in one request share caps for matching scalar rows, discovered
-entities, and relationship edges. Traversal is an ordered, three-level BFS;
+records, and relationship edges. Traversal is an ordered, three-level BFS;
 exhausting any cap fails the whole request with a typed `422` response (never a
 partial page). Its scalar, edge, and selected-ID reads run in one transaction
 with a 250 ms PostgreSQL `statement_timeout`. Counters, histograms, and warning
@@ -130,7 +130,7 @@ these global caps.
 
 Integration tests cover direct matches, the fact that bare terms do not
 traverse relationships, `*:` global traversal, explicit relationship matches,
-deleted entities, inactive relationships, structured selectors (including
+deleted records, inactive relationships, structured selectors (including
 selected-blueprint code and user-specified-name aliases in both `blueprint:term`
 and `blueprint.attribute:term` forms), wildcard matching, invalid or ambiguous
 syntax/selectors, AND intersections, pagination, facet counts/filtering, and

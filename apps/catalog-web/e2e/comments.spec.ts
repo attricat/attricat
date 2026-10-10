@@ -1,16 +1,16 @@
 import { expect, test } from '@playwright/test';
-import { createEntity, createEntityBlueprint, scalar, suffix } from './helpers';
+import { createRecord, createRecordBlueprint, scalar, suffix } from './helpers';
 
 for (const mode of ['light', 'dark'] as const) {
   test(`creates, renders and edits Markdown comments in ${mode} mode`, async ({
     page,
   }, testInfo) => {
-    const blueprint = await createEntityBlueprint(
+    const blueprint = await createRecordBlueprint(
       `comments_${suffix()}`,
-      'Commented entities',
+      'Commented records',
       '[[attributes]]\ncode = "title"\nvalue_type = "string"',
     );
-    const entity = await createEntity(blueprint, [
+    const record = await createRecord(blueprint, [
       scalar('title', 'Comments example'),
     ]);
     await page.addInitScript(
@@ -19,7 +19,7 @@ for (const mode of ['light', 'dark'] as const) {
     );
     if (mode === 'dark')
       await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(`/entities/${entity.id}`);
+    await page.goto(`/records/${record.id}`);
     const panel = page.getByRole('region', { name: 'Comments', exact: true });
     const input = panel.getByRole('textbox', { name: /^Comment/ });
     await expect(input).toBeEnabled();

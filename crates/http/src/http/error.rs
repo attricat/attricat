@@ -13,7 +13,7 @@ pub(super) struct ApiError {
     code: &'static str,
     message: String,
     /// Machine-readable context for clients that recover from the error,
-    /// such as the entity holding a conflicting unique key.
+    /// such as the record holding a conflicting unique key.
     details: Option<serde_json::Value>,
 }
 impl ApiError {

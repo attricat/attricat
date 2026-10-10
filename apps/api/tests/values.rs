@@ -13,7 +13,7 @@ async fn creates_default_scalar_attribute_values(pool: PgPool) {
 format_version = 1
 code = "defaulted_product"
 name = "Defaulted product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -32,11 +32,11 @@ default_value = 0
     )
     .await;
 
-    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let record = create_record(&client, &base_url, &blueprint).await;
     let values: Vec<Value> = client
         .get(format!(
-            "{base_url}/entities/{}/values/current",
-            entity["id"].as_str().unwrap()
+            "{base_url}/records/{}/values/current",
+            record["id"].as_str().unwrap()
         ))
         .send()
         .await
@@ -64,7 +64,7 @@ async fn create_values_override_default_attribute_values(pool: PgPool) {
 format_version = 1
 code = "overridden_default_product"
 name = "Overridden default product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -77,8 +77,8 @@ default_value = "Untitled"
 "#,
     )
     .await;
-    let entity: Value = client
-        .post(format!("{base_url}/v1/entities"))
+    let record: Value = client
+        .post(format!("{base_url}/v1/records"))
         .json(&json!({
             "blueprint": {
                 "code": blueprint["blueprint"]["code"],
@@ -98,9 +98,9 @@ default_value = "Untitled"
         .json()
         .await
         .unwrap();
-    let entity_id = entity["id"].as_str().unwrap();
+    let record_id = record["id"].as_str().unwrap();
     let values: Vec<Value> = client
-        .get(format!("{base_url}/entities/{entity_id}/values/current"))
+        .get(format!("{base_url}/records/{record_id}/values/current"))
         .send()
         .await
         .unwrap()
@@ -112,7 +112,7 @@ default_value = "Untitled"
     assert_eq!(values.len(), 1);
     assert_eq!(values[0]["value"], "Specified title");
     let history: Vec<Value> = client
-        .get(format!("{base_url}/entities/{entity_id}/values/history"))
+        .get(format!("{base_url}/records/{record_id}/values/history"))
         .send()
         .await
         .unwrap()
@@ -127,16 +127,16 @@ default_value = "Untitled"
 }
 
 #[sqlx::test]
-async fn paginates_entity_changes_and_value_history_without_breaking_legacy_reads(pool: PgPool) {
+async fn paginates_record_changes_and_value_history_without_breaking_legacy_reads(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"paged_history_product\"\nname = \"Paged product\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let id = entity["id"].as_str().unwrap();
+        "format_version = 1\ncode = \"paged_history_product\"\nname = \"Paged product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let id = record["id"].as_str().unwrap();
     for title in ["first", "second", "third", "fourth"] {
         client
-            .post(format!("{base_url}/entities/{id}/values"))
+            .post(format!("{base_url}/records/{id}/values"))
             .json(&json!({"values":[{"kind":"scalar","attribute_code":"title","value":title}]}))
             .send()
             .await
@@ -145,7 +145,7 @@ async fn paginates_entity_changes_and_value_history_without_breaking_legacy_read
             .unwrap();
     }
     for path in ["changes", "values/history"] {
-        let url = format!("{base_url}/entities/{id}/{path}");
+        let url = format!("{base_url}/records/{id}/{path}");
         let legacy: Vec<Value> = client
             .get(&url)
             .send()
@@ -213,15 +213,15 @@ async fn restores_a_scalar_value_from_synchronous_history(pool: PgPool) {
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"restorable_product\"\nname = \"Restorable product\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+        "format_version = 1\ncode = \"restorable_product\"\nname = \"Restorable product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
     )
     .await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap();
 
     for title in ["Original title", "Replacement title"] {
         client
-            .post(format!("{base_url}/entities/{entity_id}/values"))
+            .post(format!("{base_url}/records/{record_id}/values"))
             .json(&json!({ "values": [{
                 "kind": "scalar", "attribute_code": "title", "value": title
             }] }))
@@ -233,7 +233,7 @@ async fn restores_a_scalar_value_from_synchronous_history(pool: PgPool) {
     }
 
     let history: Vec<Value> = client
-        .get(format!("{base_url}/entities/{entity_id}/values/history"))
+        .get(format!("{base_url}/records/{record_id}/values/history"))
         .send()
         .await
         .unwrap()
@@ -248,7 +248,7 @@ async fn restores_a_scalar_value_from_synchronous_history(pool: PgPool) {
 
     client
         .post(format!(
-            "{base_url}/entities/{entity_id}/values/history/{history_id}/restore"
+            "{base_url}/records/{record_id}/values/history/{history_id}/restore"
         ))
         .send()
         .await
@@ -257,7 +257,7 @@ async fn restores_a_scalar_value_from_synchronous_history(pool: PgPool) {
         .unwrap();
 
     let current: Vec<Value> = client
-        .get(format!("{base_url}/entities/{entity_id}/values/current"))
+        .get(format!("{base_url}/records/{record_id}/values/current"))
         .send()
         .await
         .unwrap()
@@ -270,9 +270,9 @@ async fn restores_a_scalar_value_from_synchronous_history(pool: PgPool) {
     assert_eq!(current[0]["value"], "Original title");
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM attribute_value_history WHERE entity_id = $1"
+            "SELECT COUNT(*) FROM attribute_value_history WHERE record_id = $1"
         )
-        .bind(entity_id.parse::<Uuid>().unwrap())
+        .bind(record_id.parse::<Uuid>().unwrap())
         .fetch_one(&pool)
         .await
         .unwrap(),
@@ -293,7 +293,7 @@ async fn stores_typed_scalar_values_in_native_columns(pool: PgPool) {
 format_version = 1
 code = "measurement"
 name = "Measurement"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -329,10 +329,10 @@ value_type = "time"
 "#,
     )
     .await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id: Uuid = entity["id"].as_str().unwrap().parse().unwrap();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
     client
-        .post(format!("{base_url}/entities/{entity_id}/values"))
+        .post(format!("{base_url}/records/{record_id}/values"))
         .json(&json!({ "values": [
             { "kind": "scalar", "attribute_code": "name", "value": "Widget" },
             { "kind": "scalar", "attribute_code": "price", "value": 12.50 },
@@ -349,7 +349,7 @@ value_type = "time"
         .unwrap();
 
     let values: Vec<Value> = client
-        .get(format!("{base_url}/entities/{entity_id}/values/current"))
+        .get(format!("{base_url}/records/{record_id}/values/current"))
         .send()
         .await
         .unwrap()
@@ -371,9 +371,9 @@ value_type = "time"
     );
     assert_eq!(
         sqlx::query_scalar::<_, rust_decimal::Decimal>(
-            "SELECT SUM(value_number) FROM attribute_values WHERE entity_id = $1"
+            "SELECT SUM(value_number) FROM attribute_values WHERE record_id = $1"
         )
-        .bind(entity_id)
+        .bind(record_id)
         .fetch_one(&pool)
         .await
         .unwrap(),
@@ -381,9 +381,9 @@ value_type = "time"
     );
     assert!(
         sqlx::query_scalar::<_, bool>(
-            "SELECT value_boolean FROM attribute_values WHERE entity_id = $1 AND value_boolean IS NOT NULL"
+            "SELECT value_boolean FROM attribute_values WHERE record_id = $1 AND value_boolean IS NOT NULL"
         )
-        .bind(entity_id)
+        .bind(record_id)
         .fetch_one(&pool)
         .await
         .unwrap()
@@ -403,7 +403,7 @@ async fn rejects_mismatched_native_value_storage_on_read(pool: PgPool) {
 format_version = 1
 code = "typed_read"
 name = "Typed read"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -415,18 +415,18 @@ value_type = "string"
 "#,
     )
     .await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id: Uuid = entity["id"].as_str().unwrap().parse().unwrap();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
     let attribute_id: Uuid = blueprint["attributes"][0]["id"]
         .as_str()
         .unwrap()
         .parse()
         .unwrap();
     sqlx::query(
-        "INSERT INTO attribute_values (id, entity_id, attribute_id, context_id, value_number) VALUES ($1, $2, $3, $4, 12.50)",
+        "INSERT INTO attribute_values (id, record_id, attribute_id, context_id, value_number) VALUES ($1, $2, $3, $4, 12.50)",
     )
     .bind(Uuid::new_v4())
-    .bind(entity_id)
+    .bind(record_id)
     .bind(attribute_id)
     .bind(Uuid::from_u128(0x00000000000040008000000000000001))
     .execute(&pool)
@@ -434,7 +434,7 @@ value_type = "string"
     .unwrap();
 
     let response = client
-        .get(format!("{base_url}/entities/{entity_id}/values/current"))
+        .get(format!("{base_url}/records/{record_id}/values/current"))
         .send()
         .await
         .unwrap();
@@ -455,7 +455,7 @@ async fn rejects_values_from_another_blueprint_version(pool: PgPool) {
 format_version = 1
 code = "first"
 name = "First"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -475,7 +475,7 @@ tags = ["searchable"]
 format_version = 1
 code = "second"
 name = "Second"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -488,12 +488,12 @@ tags = ["searchable"]
 "#,
     )
     .await;
-    let entity = create_entity(&client, &base_url, &first).await;
+    let record = create_record(&client, &base_url, &first).await;
 
     let response = client
         .post(format!(
-            "{base_url}/entities/{}/values",
-            entity["id"].as_str().unwrap()
+            "{base_url}/records/{}/values",
+            record["id"].as_str().unwrap()
         ))
         .json(&json!({
             "values": [{
@@ -513,15 +513,15 @@ tags = ["searchable"]
         json!({
             "error": {
                 "code": "attribute_not_applicable",
-                "message": "attribute does not belong to the entity blueprint version"
+                "message": "attribute does not belong to the record blueprint version"
             }
         })
     );
 
     let response = client
         .post(format!(
-            "{base_url}/entities/{}/values",
-            entity["id"].as_str().unwrap()
+            "{base_url}/records/{}/values",
+            record["id"].as_str().unwrap()
         ))
         .json(&json!({
             "values": [{
@@ -560,7 +560,7 @@ async fn multi_value_writes_archive_each_replaced_value_once(pool: PgPool) {
 format_version = 1
 code = "batched_product"
 name = "Batched product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -588,11 +588,11 @@ value_type = "boolean"
 "#,
     )
     .await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap();
     let put = |values: Value| {
         let client = client.clone();
-        let url = format!("{base_url}/v1/entities/{entity_id}");
+        let url = format!("{base_url}/v1/records/{record_id}");
         async move {
             client
                 .put(url)
@@ -626,19 +626,19 @@ value_type = "boolean"
     assert_eq!(preview["released_on"], "2026-01-02");
     assert_eq!(preview["available"], true);
 
-    let entity_uuid: Uuid = entity_id.parse().unwrap();
+    let record_uuid: Uuid = record_id.parse().unwrap();
     let current: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM attribute_values WHERE entity_id = $1 AND relationship_target_entity_id IS NULL",
+        "SELECT count(*) FROM attribute_values WHERE record_id = $1 AND relationship_target_record_id IS NULL",
     )
-    .bind(entity_uuid)
+    .bind(record_uuid)
     .fetch_one(&pool)
     .await
     .unwrap();
     assert_eq!(current, 5);
     let archived: Vec<(String, Option<String>, Option<i64>)> = sqlx::query_as(
-        "SELECT a.code, h.value_text, h.value_integer FROM attribute_value_history h JOIN attributes a ON a.id = h.attribute_id WHERE h.entity_id = $1 ORDER BY a.code",
+        "SELECT a.code, h.value_text, h.value_integer FROM attribute_value_history h JOIN attributes a ON a.id = h.attribute_id WHERE h.record_id = $1 ORDER BY a.code",
     )
-    .bind(entity_uuid)
+    .bind(record_uuid)
     .fetch_all(&pool)
     .await
     .unwrap();
@@ -666,9 +666,9 @@ value_type = "boolean"
         "Fourth"
     );
     let titles: Vec<String> = sqlx::query_scalar(
-        "SELECT h.value_text FROM attribute_value_history h JOIN attributes a ON a.id = h.attribute_id WHERE h.entity_id = $1 AND a.code = 'title' ORDER BY h.value_text",
+        "SELECT h.value_text FROM attribute_value_history h JOIN attributes a ON a.id = h.attribute_id WHERE h.record_id = $1 AND a.code = 'title' ORDER BY h.value_text",
     )
-    .bind(entity_uuid)
+    .bind(record_uuid)
     .fetch_all(&pool)
     .await
     .unwrap();
@@ -682,9 +682,9 @@ value_type = "boolean"
     .await;
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let title: String = sqlx::query_scalar(
-        "SELECT v.value_text FROM attribute_values v JOIN attributes a ON a.id = v.attribute_id WHERE v.entity_id = $1 AND a.code = 'title'",
+        "SELECT v.value_text FROM attribute_values v JOIN attributes a ON a.id = v.attribute_id WHERE v.record_id = $1 AND a.code = 'title'",
     )
-    .bind(entity_uuid)
+    .bind(record_uuid)
     .fetch_one(&pool)
     .await
     .unwrap();

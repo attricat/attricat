@@ -45,18 +45,18 @@ async fn token_cannot_launder_owner_authority_through_roles_or_invitations(pool:
             "roles.manage",
             "roles.grant",
             "members.manage",
-            "entities.read",
+            "records.read",
         ],
     )
     .await;
     let limited = bearer(&token);
     let (_, member) = add_workspace_user(&pool).await;
-    let reader = create_role(&pool, "hardening-reader", &["entities.read"]).await;
+    let reader = create_role(&pool, "hardening-reader", &["records.read"]).await;
     let role_payload = json!({"role_id":OWNER_ROLE_ID, "scope_type":"workspace", "scope_target_id":BOOTSTRAP_WORKSPACE_ID});
     let expiry = Utc::now() + chrono::Duration::hours(1);
     let requests = [
-        limited.post(format!("{base}/workspace/roles")).json(&json!({"code":"amplified", "permissions":["entities.write"]})),
-        limited.put(format!("{base}/workspace/roles/{reader}")).json(&json!({"code":"hardening-reader", "permissions":["entities.write"]})),
+        limited.post(format!("{base}/workspace/roles")).json(&json!({"code":"amplified", "permissions":["records.write"]})),
+        limited.put(format!("{base}/workspace/roles/{reader}")).json(&json!({"code":"hardening-reader", "permissions":["records.write"]})),
         limited.post(format!("{base}/workspace/roles/{OWNER_ROLE_ID}/duplicate")).json(&json!({"code":"owner-copy"})),
         limited.post(format!("{base}/workspace/members/{member}/grants")).json(&role_payload),
         limited.post(format!("{base}/workspace/members/{member}/transfer-ownership")),
@@ -99,7 +99,7 @@ async fn token_cannot_launder_owner_authority_through_roles_or_invitations(pool:
 async fn role_cannot_retire_into_itself_and_delete_its_grants(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
     let repository = CatalogRepository::system(pool.clone());
-    let role = create_role(&pool, "self-replacement", &["entities.read"]).await;
+    let role = create_role(&pool, "self-replacement", &["records.read"]).await;
     let (_, member) = add_workspace_user(&pool).await;
     let grant = grant_role(&pool, member, role, GrantScope::Workspace).await;
     assert!(
@@ -139,9 +139,9 @@ async fn queued_agent_runs_retain_and_enforce_the_initiating_token(pool: PgPool)
     let token = token(&owner, &base, &["agents.run", "blueprints.read"]).await;
     let limited = bearer(&token);
     let blueprint = create_blueprint(&owner, &base,
-        "format_version = 1\ncode = 'token_private'\nname = 'Private'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'").await;
-    let entity = create_entity(&owner, &base, &blueprint).await;
-    let anchored = json!({"title":"Private entity", "entity_id":entity["id"]});
+        "format_version = 1\ncode = 'token_private'\nname = 'Private'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'").await;
+    let record = create_record(&owner, &base, &blueprint).await;
+    let anchored = json!({"title":"Private record", "record_id":record["id"]});
     let private: Value = owner
         .post(format!("{base}/agent/conversations"))
         .json(&anchored)
@@ -176,7 +176,7 @@ async fn queued_agent_runs_retain_and_enforce_the_initiating_token(pool: PgPool)
         StatusCode::FORBIDDEN
     );
     assert_eq!(limited.post(format!("{base}/agent/smart-fill"))
-        .json(&json!({"entity_id":entity["id"], "is_default_context":true, "content":"Read private values"}))
+        .json(&json!({"record_id":record["id"], "is_default_context":true, "content":"Read private values"}))
         .send().await.unwrap().status(), StatusCode::FORBIDDEN);
     let conversation: Value = limited
         .post(format!("{base}/agent/conversations"))
@@ -226,7 +226,7 @@ async fn queued_agent_runs_retain_and_enforce_the_initiating_token(pool: PgPool)
     );
     for (name, arguments) in [
         ("list_contexts", json!({})),
-        ("get_entity_labels", json!({"entity_ids":[]})),
+        ("get_record_labels", json!({"record_ids":[]})),
         ("read_file", json!({"file_id":Uuid::new_v4()})),
     ] {
         assert!(
@@ -402,30 +402,30 @@ async fn approving_another_users_agent_change_requires_the_mutation_permission(p
 }
 
 #[sqlx::test]
-async fn relationship_hydration_does_not_expose_unreadable_entities(pool: PgPool) {
+async fn relationship_hydration_does_not_expose_unreadable_records(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
     let blueprint = create_blueprint(&owner, &base,
-        "format_version = 1\ncode = 'scoped_links'\nname = 'Links'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'\n\n[[attributes]]\ncode = 'related'\nvalue_type = 'relationship'\ntarget_blueprint = 'scoped_links'").await;
-    let root = create_entity(&owner, &base, &blueprint).await;
-    let hidden = create_entity(&owner, &base, &blueprint).await;
-    let visible = create_entity(&owner, &base, &blueprint).await;
-    for (entity, title, targets) in [
+        "format_version = 1\ncode = 'scoped_links'\nname = 'Links'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'\n\n[[attributes]]\ncode = 'related'\nvalue_type = 'relationship'\ntarget_blueprint = 'scoped_links'").await;
+    let root = create_record(&owner, &base, &blueprint).await;
+    let hidden = create_record(&owner, &base, &blueprint).await;
+    let visible = create_record(&owner, &base, &blueprint).await;
+    for (record, title, targets) in [
         (&root, "Root", json!([hidden["id"], visible["id"]])),
         (&hidden, "CONFIDENTIAL", json!([root["id"]])),
         (&visible, "Visible", json!([root["id"]])),
     ] {
-        owner.put(format!("{base}/v1/entities/{}", entity["id"].as_str().unwrap()))
-            .json(&json!({"values":[scalar("title", title)], "relationships":[{"attribute_code":"related", "target_entity_ids":targets}], "remove_values":[]}))
+        owner.put(format!("{base}/v1/records/{}", record["id"].as_str().unwrap()))
+            .json(&json!({"values":[scalar("title", title)], "relationships":[{"attribute_code":"related", "target_record_ids":targets}], "remove_values":[]}))
             .send().await.unwrap().error_for_status().unwrap();
     }
     let (user, membership) = add_workspace_user(&pool).await;
-    for entity in [&root, &visible] {
+    for record in [&root, &visible] {
         grant_role(
             &pool,
             membership,
             VIEWER_ROLE_ID,
-            GrantScope::Entity(entity["id"].as_str().unwrap().parse().unwrap()),
+            GrantScope::Record(record["id"].as_str().unwrap().parse().unwrap()),
         )
         .await;
     }
@@ -443,7 +443,7 @@ async fn relationship_hydration_does_not_expose_unreadable_entities(pool: PgPool
         format!("resolved-preview?context_id={context}"),
         format!("hierarchy?context_id={context}&field=related"),
     ] {
-        let path = format!("{base}/entities/{root_id}/{suffix}");
+        let path = format!("{base}/records/{root_id}/{suffix}");
         let full = owner
             .get(&path)
             .send()
@@ -471,7 +471,7 @@ async fn relationship_hydration_does_not_expose_unreadable_entities(pool: PgPool
         assert!(!filtered.contains("CONFIDENTIAL"), "{suffix}");
         assert!(filtered.contains("Visible"), "{suffix}");
     }
-    let path = format!("{base}/v1/entities/{root_id}/incoming-relationships");
+    let path = format!("{base}/v1/records/{root_id}/incoming-relationships");
     let mut cursor = Value::Null;
     let mut ids = Vec::new();
     loop {
@@ -496,8 +496,8 @@ async fn relationship_hydration_does_not_expose_unreadable_entities(pool: PgPool
         &repository,
         user,
         bootstrap_workspace_id(),
-        "get_entity_context_preview",
-        json!({"entity_id":root["id"], "context_id":context}),
+        "get_record_context_preview",
+        json!({"record_id":root["id"], "context_id":context}),
     )
     .await
     .unwrap();
@@ -510,8 +510,8 @@ async fn relationship_previews_have_a_global_expansion_budget(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
     let blueprint = create_blueprint(&owner, &base,
-        "format_version = 1\ncode = 'bounded_links'\nname = 'Links'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'\n\n[[attributes]]\ncode = 'related'\nvalue_type = 'relationship'\ntarget_blueprint = 'bounded_links'").await;
-    let root = create_entity(&owner, &base, &blueprint).await;
+        "format_version = 1\ncode = 'bounded_links'\nname = 'Links'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'\n\n[[attributes]]\ncode = 'related'\nvalue_type = 'relationship'\ntarget_blueprint = 'bounded_links'").await;
+    let root = create_record(&owner, &base, &blueprint).await;
     let root_id: Uuid = root["id"].as_str().unwrap().parse().unwrap();
     let blueprint_id: Uuid = blueprint["blueprint"]["id"]
         .as_str()
@@ -520,9 +520,9 @@ async fn relationship_previews_have_a_global_expansion_budget(pool: PgPool) {
         .unwrap();
     let workspace = bootstrap_workspace_id();
     let targets: Vec<Uuid> = (0..4097).map(|_| Uuid::new_v4()).collect();
-    sqlx::query("INSERT INTO entities (id, workspace_id, blueprint_id, blueprint_version, projections) SELECT id, $2, $3, 1, $4 FROM unnest($1::uuid[]) id")
+    sqlx::query("INSERT INTO records (id, workspace_id, blueprint_id, blueprint_version, projections) SELECT id, $2, $3, 1, $4 FROM unnest($1::uuid[]) id")
         .bind(&targets).bind(workspace).bind(blueprint_id).bind(json!({"preview":{"default":{}}})).execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active, relationship_target_entity_id) SELECT gen_random_uuid(), $2, $3, a.id, c.id, true, target FROM unnest($1::uuid[]) target CROSS JOIN attributes a CROSS JOIN attribute_contexts c WHERE a.blueprint_id=$4 AND a.blueprint_version=1 AND a.code='related' AND c.workspace_id=$2 AND c.code='default'")
+    sqlx::query("INSERT INTO attribute_values (id, workspace_id, record_id, attribute_id, context_id, active, relationship_target_record_id) SELECT gen_random_uuid(), $2, $3, a.id, c.id, true, target FROM unnest($1::uuid[]) target CROSS JOIN attributes a CROSS JOIN attribute_contexts c WHERE a.blueprint_id=$4 AND a.blueprint_version=1 AND a.code='related' AND c.workspace_id=$2 AND c.code='default'")
         .bind(&targets).bind(workspace).bind(root_id).bind(blueprint_id).execute(&pool).await.unwrap();
     let repository = CatalogRepository::new(pool, workspace);
     assert!(repository.preview(root_id, 1, 10).await.is_ok());

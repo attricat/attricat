@@ -12,7 +12,7 @@ Większość pytań o modelowanie w Attricat sprowadza się do czterech element�
 | **Relacji** | Powiązania między rekordami | Produkt → kategorie, produkt → marka |
 | **Kontekstu** | Zakresu, w którym wartości się różnią | Rynek, język, kanał sprzedaży, sklep |
 
-W TOML schematu i nazwach uprawnień rekordy występują pod nazwą `entity`, np. `kind = "entity"`.
+`kind = "record"`.
 
 ## Klasyfikacje to rekordy
 
@@ -24,7 +24,7 @@ Klasyfikacja zwykle potrzebuje tego, czego łańcuch znaków nie zapewni: stałe
 format_version = 1
 code = "material"
 name = "Material"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "name"
@@ -155,7 +155,7 @@ searchable = true
 
 Przyjmuje te same klucze atrybutów co schemat (`value_type`, `value_schema`, `default_value`, `tags`, `context_fallback`, `context_editable`, `readonly` oraz klucze relacji z `target_blueprint_code`), a także `searchable`, który uwzględnia wartości w wyszukiwaniu i filtrach **Przeglądarki rekordów**. Każda zmiana tworzy nową wersję; wersję trzeba opublikować, zanim będzie można ją dołączyć. Przestrzeń nazw pochodzi z obszaru roboczego, więc pełny kod atrybutu wielokrotnego użytku to `<namespace>:<code>`.
 
-Tworzenie i publikowanie atrybutów wielokrotnego użytku wymaga uprawnienia `blueprints.write`. Dołączenie takiego atrybutu do rekordu wymaga uprawnienia `entities.write` do tego rekordu.
+Tworzenie i publikowanie atrybutów wielokrotnego użytku wymaga uprawnienia `blueprints.write`. Dołączenie takiego atrybutu do rekordu wymaga uprawnienia `records.write` do tego rekordu.
 
 ## Przypisz odpowiedzialność
 

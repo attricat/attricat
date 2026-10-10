@@ -84,10 +84,10 @@ impl CatalogRepository {
             .map(|entry| entry.blueprint_code.clone())
             .collect();
         let readable = self
-            .authorized_target_codes(actor_id, workspace_id, "entities.read", &codes)
+            .authorized_target_codes(actor_id, workspace_id, "records.read", &codes)
             .await?;
         let names: HashMap<String, String> = sqlx::query_as::<_, (String, String)>(
-            "SELECT DISTINCT ON (code) code, name FROM blueprints WHERE workspace_id = $1 AND code = ANY($2) AND kind = 'entity' AND status = 'published' AND deleted_at IS NULL ORDER BY code, version DESC",
+            "SELECT DISTINCT ON (code) code, name FROM blueprints WHERE workspace_id = $1 AND code = ANY($2) AND kind = 'record' AND status = 'published' AND deleted_at IS NULL ORDER BY code, version DESC",
         )
         .bind(workspace_id)
         .bind(&codes)
@@ -182,14 +182,14 @@ impl CatalogRepository {
                 return Err(RepositoryError::InvalidCode);
             }
             let blueprint_id: Option<Uuid> = sqlx::query_scalar(
-                "SELECT id FROM blueprints WHERE workspace_id = $1 AND code = $2 AND kind = 'entity' AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1 FOR SHARE",
+                "SELECT id FROM blueprints WHERE workspace_id = $1 AND code = $2 AND kind = 'record' AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1 FOR SHARE",
             )
             .bind(workspace_id)
             .bind(&entry.blueprint_code)
             .fetch_optional(&mut **tx)
             .await?;
             if blueprint_id.is_none() {
-                return Err(RepositoryError::NotFound("published entity blueprint"));
+                return Err(RepositoryError::NotFound("published record blueprint"));
             }
             let role_codes: HashSet<_> = entry.visible_to_role_codes.iter().collect();
             if role_codes.len() != entry.visible_to_role_codes.len() {

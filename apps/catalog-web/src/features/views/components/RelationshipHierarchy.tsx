@@ -2,8 +2,8 @@ import { useQueries } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Breadcrumbs, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { getEntityHierarchy } from '../../entities/api';
-import { entityQueryKeys } from '../../entities/queryKeys';
+import { getRecordHierarchy } from '../../records/api';
+import { recordQueryKeys } from '../../records/queryKeys';
 import type { ViewComponentDefinition } from './componentTypes';
 import {
   HIERARCHY_FONT_SIZE,
@@ -16,13 +16,13 @@ export const RelationshipHierarchy = ({
   attribute,
   component,
   contextId,
-  entityId,
+  recordId,
   value,
 }: {
   attribute: { code: string };
   component?: { props: Record<string, unknown> } | null;
   contextId?: string;
-  entityId?: string;
+  recordId?: string;
   value: unknown;
 }) => {
   const { t } = useTranslation();
@@ -36,19 +36,19 @@ export const RelationshipHierarchy = ({
               .filter((id): id is string => Boolean(id)) ?? [],
           ),
         ]
-      : entityId
-        ? [entityId]
+      : recordId
+        ? [recordId]
         : [];
   const hierarchyField =
     typeof parentField === 'string' ? parentField : attribute.code;
   const hierarchies = useQueries({
     queries: targetIds.map((targetId) => ({
-      queryKey: entityQueryKeys.hierarchy(
+      queryKey: recordQueryKeys.hierarchy(
         targetId,
         contextId ?? '',
         hierarchyField,
       ),
-      queryFn: () => getEntityHierarchy(targetId, contextId!, hierarchyField),
+      queryFn: () => getRecordHierarchy(targetId, contextId!, hierarchyField),
       enabled: Boolean(contextId),
     })),
   });
@@ -82,8 +82,8 @@ export const RelationshipHierarchy = ({
           {items.map((item) => (
             <Link
               key={item.id}
-              params={{ entityId: item.id }}
-              to="/entities/$entityId"
+              params={{ recordId: item.id }}
+              to="/records/$recordId"
             >
               {item.display || item.id}
             </Link>

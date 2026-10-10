@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiRequestError } from '../entities/api';
+import { ApiRequestError } from '../records/api';
 import {
   fileDownloadUrl,
   uploadConversationFiles,
@@ -21,7 +21,7 @@ describe('file API client', () => {
         Promise.resolve({
           attribute_code: 'images',
           context_id: id,
-          entity_updated_at: '2026-10-07T10:00:00Z',
+          record_updated_at: '2026-10-07T10:00:00Z',
           files: [
             {
               id,
@@ -36,7 +36,7 @@ describe('file API client', () => {
     });
     const progress = vi.fn();
     const result = await uploadFiles({
-      entityId: id,
+      recordId: id,
       attributeCode: 'images',
       contextId: id,
       files: [new File(['image'], 'shirt.png', { type: 'image/png' })],
@@ -44,7 +44,7 @@ describe('file API client', () => {
     });
 
     expect(fetchMock.mock.calls[0][0]).toBe(
-      `/api/entities/${id}/file-attributes/images/uploads`,
+      `/api/records/${id}/file-attributes/images/uploads`,
     );
     expect(result.files[0].filename).toBe('shirt.png');
     expect(progress).toHaveBeenCalledWith(100);
@@ -86,7 +86,7 @@ describe('file API client', () => {
     expect(result.files[0].id).toBe(id);
   });
 
-  it('uploads conversation attachments without an entity attribute', async () => {
+  it('uploads conversation attachments without a record attribute', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       json: () =>
@@ -126,7 +126,7 @@ describe('file API client', () => {
     });
 
     await expect(
-      uploadFiles({ entityId: id, attributeCode: 'manual', files: [] }),
+      uploadFiles({ recordId: id, attributeCode: 'manual', files: [] }),
     ).rejects.toBeInstanceOf(ApiRequestError);
     expect(fileDownloadUrl(id, 'thumbnail')).toBe(
       `/api/files/${id}/variants/thumbnail/download`,

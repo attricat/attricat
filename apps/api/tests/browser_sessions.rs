@@ -225,7 +225,7 @@ async fn session_workspace_selects_the_explicit_catalog_scope(pool: PgPool) {
         .post(format!("{base_url}/blueprints"))
         .header("cookie", &second_cookie)
         .header("x-catalog-csrf", csrf_value)
-        .json(&json!({ "definition": "format_version = 1\ncode = \"second_only\"\nname = \"Second only\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"" }))
+        .json(&json!({ "definition": "format_version = 1\ncode = \"second_only\"\nname = \"Second only\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"" }))
         .send()
         .await
         .unwrap();

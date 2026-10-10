@@ -7,32 +7,32 @@ that do not define them.
 
 ## View Types
 
-- `detail`: the entity page layout, used for both display and editing, and
+- `detail`: the record page layout, used for both display and editing, and
   the layout of the create and migration forms.
 - `edit`: deprecated. The UI ignores it. The compiler still accepts it and
   still requires edit-capable components inside it, but no longer requires it
   to place required attributes.
-- `table`: configured columns in the entity explorer.
+- `table`: configured columns in the record explorer.
 
 `detail` uses a recursive layout root. A table column may reference a
 local scalar field or a scalar leaf through at most three relationship hops.
 
-On the entity page (`EntityInlineFields`), every field the user may change is
+On the record page (`RecordInlineFields`), every field the user may change is
 an always-editable control in its `detail` position; readonly, status-locked
 and default-context-only attributes, and every field for users without write
 permission, render as values. Editable fields placed in the
-`catalog.entity_heading` block are offered as editors before the layout,
+`catalog.record_heading` block are offered as editors before the layout,
 because the heading only displays values. Editable attributes the layout does
 not place render after it under **Other attributes**, and reusable attributes
 under **Additional attributes**, so a required attribute is never out of
-reach. The create and migration forms (`EntityForm`) use the same order:
+reach. The create and migration forms (`RecordForm`) use the same order:
 heading fields, the layout, then **Other attributes**.
 
 ## Extension layout
 
-Entity blueprint revisions may override workspace extension placement for their
-owned surfaces (`entity_preview_panel`, `entity_attribute_decoration`, and
-`entity_action`). This is versioned declarative data, published with the normal
+Record blueprint revisions may override workspace extension placement for their
+owned surfaces (`record_preview_panel`, `record_attribute_decoration`, and
+`record_action`). This is versioned declarative data, published with the normal
 blueprint revision flow; it neither grants permissions nor runs extension code.
 Use stable contribution keys (`<extension-id>:<contribution-id>`). Missing or
 disabled contributions are ignored at runtime while their entries remain in the
@@ -45,13 +45,13 @@ valid so removed or disabled contributions can later be restored:
 type = "extension_layout"
 version = 1
 
-[views.extension_layout.outlets.entity_preview_panel]
+[views.extension_layout.outlets.record_preview_panel]
 order = ["acme.inventory:summary"]
 hidden = ["acme.legacy:panel"]
 ```
 
-Each declared entity-owned outlet replaces only that outlet's workspace default;
-unspecified entity outlets and all global outlets continue to use the workspace
+Each declared record-owned outlet replaces only that outlet's workspace default;
+unspecified record outlets and all global outlets continue to use the workspace
 layout. Global outlets, including navigation and explorer surfaces, are
 workspace-only.
 
@@ -71,7 +71,7 @@ label = "Product type"
 `columns` must be non-empty and have unique `field` paths. Every intermediate
 segment must be a relationship and relationship-path leaves must be scalar.
 Direct columns may also be file attributes when a compatible renderer is used.
-Paths are resolved with each linked entity's pinned blueprint revision; incompatible
+Paths are resolved with each linked record's pinned blueprint revision; incompatible
 historical revisions yield an empty cell. `label` is optional; a direct column
 defaults to the attribute's `name`, and a column without either uses the
 humanized field path.
@@ -103,11 +103,11 @@ set contains one source revision. The built-in **Schema** column is sortable
 without any blueprint table-column configuration. Select **All versions** and
 click **Schema** for ascending version order (oldest/outdated first); click
 again for descending order (newest first). In a single-version scope every
-entity has the same schema version, so this sort only changes the ID tie order.
+record has the same schema version, so this sort only changes the ID tie order.
 The built-in **Publication** column is sortable when the selected context is an
-enabled publication channel. Click once for unpublished entities first and
-again for published entities first. Changing the selected context sorts by
-that channel instead; the agent `search_entities` tool can request the same
+enabled publication channel. Click once for unpublished records first and
+again for published records first. Changing the selected context sorts by
+that channel instead; the agent `search_records` tool can request the same
 order with `sort.field = "publication_status"` and `sort.context_code`.
 
 ### Table context
@@ -158,24 +158,24 @@ field = "price"
 Every referenced field must be an effective attribute. `field` accepts scalar
 attributes; `relationship_list` accepts relationships only.
 
-When editable, a relationship field opens the entity picker for its allowed target
+When editable, a relationship field opens the record picker for its allowed target
 blueprints. When the attribute lists several `target_blueprints`, the picker
 shows a **Target blueprint** selector and searches one of them at a time;
-selected entities are labelled with their own blueprint's `dropdown_option`
+selected records are labelled with their own blueprint's `dropdown_option`
 view. An `incoming_relationship_list` may name such a field on any of its
 allowed target blueprints.
 
-## Entity Heading
+## Record Heading
 
 The preview heading reuses a normal `stack` with the
-`catalog.entity_heading` component override. Its first child is the scalar
+`catalog.record_heading` component override. Its first child is the scalar
 field rendered as the page `h1`; subsequent children are subtitle or metadata
 content.
 
 ```toml
 [[views.detail.children]]
 type = "stack"
-component = { id = "catalog.entity_heading", version = 1 }
+component = { id = "catalog.record_heading", version = 1 }
 
 [[views.detail.children.children]]
 type = "field"
@@ -186,7 +186,7 @@ type = "text"
 text = "Current catalog entry"
 ```
 
-The entity ID is the fallback when the first field is unset or its renderer
+The record ID is the fallback when the first field is unset or its renderer
 fails. The heading block is removed from the normal detail body so it is not
 rendered twice. This component is detail-only; its first child must be a scalar
 field and later children may be text or scalar fields.
@@ -212,7 +212,7 @@ Component IDs use dot-delimited lowercase, underscore-separated segments. The fr
 `apps/catalog-web/src/features/views/components/registry.ts`. Layout and
 relationship components have their own modules in that directory; the string
 field controls below live together in `apps/catalog-web/src/features/views/controls`.
-`EntityView` resolves a blueprint reference through this registry and isolates
+`RecordView` resolves a blueprint reference through this registry and isolates
 field renderers with an error boundary.
 
 The Rust blueprint compiler reads
@@ -251,7 +251,7 @@ Shared behavior:
 - The color, email and URL editors validate in the web app only, as the user
   types and again before the field is saved (on Save in the create form).
   Choosing a component does not constrain API, CLI or agent writes; add an
-  attribute `value_schema` or the blueprint `entity_schema` for that.
+  attribute `value_schema` or the blueprint `record_schema` for that.
 - Values are trimmed before saving, except Markdown, which is stored verbatim.
   Clearing an optional value unsets it; required, readonly, context and draft
   behavior is the same as for other fields.
@@ -296,7 +296,7 @@ The editor has Write and Preview tabs; preview and display render CommonMark.
 Raw HTML is ignored, images show their alt text without being fetched, and
 links are limited to HTTP(S), `mailto:`, relative paths and fragments. The
 source is stored exactly as typed, including indentation and trailing spaces;
-whitespace-only input counts as unset. Entity comments use the same renderer
+whitespace-only input counts as unset. Record comments use the same renderer
 and link policy.
 
 ### Status attributes

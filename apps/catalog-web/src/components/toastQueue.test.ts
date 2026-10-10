@@ -46,12 +46,12 @@ describe('reduceToasts', () => {
   it('counts notifications in a custom group', () => {
     const queue = reduceToasts(
       reduceToasts([], {
-        toast: makeToast({ dedupeKey: 'entity-save', message: 'Saving…' }),
+        toast: makeToast({ dedupeKey: 'record-save', message: 'Saving…' }),
         type: 'show',
       }),
       {
         toast: makeToast({
-          dedupeKey: 'entity-save',
+          dedupeKey: 'record-save',
           id: 2,
           message: 'Saved',
         }),
@@ -62,7 +62,7 @@ describe('reduceToasts', () => {
     expect(queue).toEqual([
       {
         count: 2,
-        dedupeKey: 'entity-save',
+        dedupeKey: 'record-save',
         id: 1,
         message: 'Saved',
         severity: 'success',

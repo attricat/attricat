@@ -22,17 +22,17 @@ export const maximumActionSelection = 50;
 /** Host-owned insertion points an extension contribution may target. */
 export const extensionOutletNames = [
   'navigation',
-  'entity_preview_panel',
+  'record_preview_panel',
   'blueprint_attribute_configuration',
-  'entity_attribute_decoration',
-  'entity_action',
+  'record_attribute_decoration',
+  'record_action',
   'explorer_row_action',
   'explorer_table_cell',
   'blueprint_detail_panel',
   'explorer_action',
   'explorer_bulk_action',
-  'entity_header_action',
-  'entity_attribute_panel',
+  'record_header_action',
+  'record_attribute_panel',
   'blueprint_panel',
   'blueprint_publish_check',
   'file_panel',
@@ -45,12 +45,12 @@ export const navigationOutlet = 'navigation';
 export const actionDialogOutlet = 'action_dialog';
 /** Outlets whose version 2 contributions receive a normalized selection. */
 export const selectionActionOutlets = [
-  'entity_action',
+  'record_action',
   'explorer_row_action',
   'explorer_bulk_action',
 ] as const;
 export const selectionSources = {
-  entityPreview: 'entity_preview',
+  recordPreview: 'record_preview',
   explorerRow: 'explorer_row',
   explorerSelection: 'explorer_selection',
 } as const;
@@ -188,11 +188,11 @@ export const layoutValidationMessages = {
   multipleOutlets: 'A contribution can be configured in only one outlet',
 } as const;
 
-// Components may read current entity data or the exact blueprint revision named
+// Components may read current record data or the exact blueprint revision named
 // by the blueprint-configuration outlet. They cannot supply methods, query
 // strings, arbitrary URLs, or credentials.
 export const catalogReadPathPattern =
-  /^\/api\/(?:entities|v1\/entities\/[0-9a-f-]{36}|blueprints\/[0-9a-f-]{36}\/versions\/[1-9][0-9]*)$/;
+  /^\/api\/(?:records|v1\/records\/[0-9a-f-]{36}|blueprints\/[0-9a-f-]{36}\/versions\/[1-9][0-9]*)$/;
 export const blueprintRevisionPathPattern =
   /^\/api\/blueprints\/([0-9a-f-]{36})\/versions\/([1-9][0-9]*)$/;
 

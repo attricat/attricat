@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test';
 import {
   commitField,
   createContext,
-  createEntity,
-  createEntityBlueprint,
+  createRecord,
+  createRecordBlueprint,
   defaultContext,
   scalar,
   suffix,
@@ -13,12 +13,12 @@ test('resolves inherited values and saves a context-specific override', async ({
   page,
 }) => {
   const code = `contextual_${suffix()}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Contextual product',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "stock"\nvalue_type = "integer"\ncontext_editable = "default"',
   );
-  const entity = await createEntity(blueprint, [
+  const record = await createRecord(blueprint, [
     scalar('title', 'Default title'),
     scalar('stock', 5),
   ]);
@@ -27,7 +27,7 @@ test('resolves inherited values and saves a context-specific override', async ({
     (await defaultContext()).id,
   );
 
-  await page.goto(`/entities/${entity.id}`);
+  await page.goto(`/records/${record.id}`);
   await page.getByRole('tab', { name: context.code }).click();
   await expect(
     page.getByText('Inherited from default context').first(),
@@ -44,7 +44,7 @@ test('resolves inherited values and saves a context-specific override', async ({
   await expect(page.getByRole('textbox', { name: 'stock' })).toHaveCount(0);
   const title = page.getByLabel('title');
   await title.fill('UK title');
-  await commitField(page, entity.id, title);
+  await commitField(page, record.id, title);
 
   await page.reload();
   await page.getByRole('tab', { name: context.code }).click();

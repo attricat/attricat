@@ -18,7 +18,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { EmptyState } from '../../components/EmptyState';
 import { InboxIcon } from '../../components/systemIcons';
-import { useEntityLabels } from '../entities/useEntityLabels';
+import { useRecordLabels } from '../records/useRecordLabels';
 import { listNotifications } from './api';
 import { inboxFilters, inboxRoute, type InboxFilter } from './constants';
 import { NotificationListItem } from './NotificationListItem';
@@ -55,9 +55,9 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
   const items = pages.flatMap((page) => page.items);
   // The newest page reports the current count; later pages can be older.
   const unreadCount = pages[0]?.unread_count ?? 0;
-  const recordLabels = useEntityLabels(
+  const recordLabels = useRecordLabels(
     items.flatMap((item) =>
-      item.subject?.kind === 'entity' ? [item.subject.id] : [],
+      item.subject?.kind === 'record' ? [item.subject.id] : [],
     ),
   );
   const error = notifications.error ?? session.error;
@@ -142,7 +142,7 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
                   })
                 }
                 recordLabel={
-                  notification.subject?.kind === 'entity'
+                  notification.subject?.kind === 'record'
                     ? recordLabels.get(notification.subject.id)
                     : undefined
                 }

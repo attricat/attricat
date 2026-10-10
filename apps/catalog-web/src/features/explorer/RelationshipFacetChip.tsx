@@ -1,7 +1,7 @@
 import type { Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
-import { useRelationshipSelectionLabels } from '../entities/components/useRelationshipSelectionLabels';
+import { useRelationshipSelectionLabels } from '../records/components/useRelationshipSelectionLabels';
 import { ExplorerFilterChip } from './ExplorerFilterChip';
 import type {
   ExplorerRelationshipFacet,
@@ -70,13 +70,13 @@ export const RelationshipFacetChip = ({
         />
       )}
       <RelationshipSelectorDialog
-        closeLabel={t('entities.closeRelationshipSelector')}
+        closeLabel={t('records.closeRelationshipSelector')}
         onClose={onClose}
         open={open}
-        selectedLabel={t('entities.relationshipSelected', {
+        selectedLabel={t('records.relationshipSelected', {
           count: facet.selectedIds.length,
         })}
-        title={t('entities.selectRelationships', { blueprint: label })}
+        title={t('records.selectRelationships', { blueprint: label })}
         topAction={{ label: t('explorer.done'), onClick: onClose }}
       >
         <RelationshipTargetPicker

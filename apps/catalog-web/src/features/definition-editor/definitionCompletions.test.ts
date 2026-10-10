@@ -25,7 +25,7 @@ const references: DefinitionReferences = {
         : [],
   ),
   blueprints: vi.fn(async () => [
-    { code: 'category', kind: 'entity', name: 'Category', version: 3 },
+    { code: 'category', kind: 'record', name: 'Category', version: 3 },
     { code: 'seo', kind: 'mixin', name: 'SEO', version: 2 },
   ]),
   contexts: vi.fn(async () => ['default', 'pl']),
@@ -54,7 +54,7 @@ const complete = async (
 const header = `format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 `;
 
 describe('definitionCompletions', () => {
@@ -66,7 +66,7 @@ describe('definitionCompletions', () => {
         '[[includes]]',
         '[[rules]]',
         '[views.…]',
-        'entity_schema',
+        'record_schema',
       ]),
     );
     expect(labels).not.toContain('code');
@@ -110,12 +110,12 @@ describe('definitionCompletions', () => {
       'value_type = "${1|string,number,integer,boolean,date,datetime,time,json,relationship,file|}"',
     );
     const value = await complete('kind = "|"');
-    expect(value.labels).toEqual(['entity', 'mixin']);
+    expect(value.labels).toEqual(['record', 'mixin']);
     expect(value.suggestions[1].documentation).toBe(
       'Provides attributes for other blueprints to include.',
     );
     const unquoted = await complete('kind = |');
-    expect(unquoted.suggestions[0].insertText).toBe('"entity"');
+    expect(unquoted.suggestions[0].insertText).toBe('"record"');
   });
 
   it('suggests view block variants with their required keys', async () => {

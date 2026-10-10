@@ -11,7 +11,7 @@ import ReactMarkdown from 'react-markdown';
 import { useTranslation } from 'react-i18next';
 import { RouterListItemButton } from '../../components/RouterLink';
 import { Timestamp } from '../../time/Timestamp';
-import { conversationRoute, entityRoute } from './constants';
+import { conversationRoute, recordRoute } from './constants';
 import { NotificationKindIcon } from './NotificationKindIcon';
 import { notificationMessage } from './notificationMessage';
 import type { Notification } from './schemas';
@@ -112,12 +112,12 @@ export const NotificationListItem = ({
   );
   return (
     <ListItem disablePadding divider sx={{ alignItems: 'flex-start' }}>
-      {subject?.kind === 'entity' ? (
+      {subject?.kind === 'record' ? (
         <RouterListItemButton
           onClick={onOpen}
-          params={{ entityId: subject.id }}
+          params={{ recordId: subject.id }}
           sx={contentSx}
-          to={entityRoute}
+          to={recordRoute}
         >
           {content}
         </RouterListItemButton>

@@ -17,8 +17,6 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as AgentsIndexRouteImport } from './routes/agents/index'
 import { Route as AgentsConversationIdRouteImport } from './routes/agents/$conversationId'
 import { Route as AgentsNewRouteImport } from './routes/agents/new'
-import { Route as EntitiesEntityIdRouteImport } from './routes/entities/$entityId'
-import { Route as EntitiesNewRouteImport } from './routes/entities/new'
 import { Route as ExtensionsIndexRouteImport } from './routes/extensions/index'
 import { Route as InvitationsAcceptRouteImport } from './routes/invitations/accept'
 import { Route as LoginIndexRouteImport } from './routes/login/index'
@@ -33,9 +31,8 @@ import { Route as ManageSystemHealthRouteImport } from './routes/manage/system-h
 import { Route as PasswordResetIndexRouteImport } from './routes/password-reset/index'
 import { Route as PasswordResetConfirmRouteImport } from './routes/password-reset/confirm'
 import { Route as ProfileIndexRouteImport } from './routes/profile/index'
-import { Route as EntitiesEntityIdIndexRouteImport } from './routes/entities/$entityId/index'
-import { Route as EntitiesEntityIdChangesRouteImport } from './routes/entities/$entityId/changes'
-import { Route as EntitiesEntityIdMigrateRouteImport } from './routes/entities/$entityId/migrate'
+import { Route as RecordsRecordIdRouteImport } from './routes/records/$recordId'
+import { Route as RecordsNewRouteImport } from './routes/records/new'
 import { Route as ExtensionsExtensionIdContributionIdRouteImport } from './routes/extensions/$extensionId/$contributionId'
 import { Route as ManageBlueprintsIndexRouteImport } from './routes/manage/blueprints/index'
 import { Route as ManageBlueprintsBlueprintIdRouteImport } from './routes/manage/blueprints/$blueprintId'
@@ -67,6 +64,9 @@ import { Route as ProfileExtensionRunsIndexRouteImport } from './routes/profile/
 import { Route as ProfileExtensionRunsRunIdRouteImport } from './routes/profile/extension-runs/$runId'
 import { Route as ProfilePersonalAccessTokensIndexRouteImport } from './routes/profile/personal-access-tokens/index'
 import { Route as ProfilePersonalAccessTokensNewRouteImport } from './routes/profile/personal-access-tokens/new'
+import { Route as RecordsRecordIdIndexRouteImport } from './routes/records/$recordId/index'
+import { Route as RecordsRecordIdChangesRouteImport } from './routes/records/$recordId/changes'
+import { Route as RecordsRecordIdMigrateRouteImport } from './routes/records/$recordId/migrate'
 import { Route as ManageBlueprintsBlueprintIdIndexRouteImport } from './routes/manage/blueprints/$blueprintId/index'
 import { Route as ManageExtensionsOwnerRepositoryRouteImport } from './routes/manage/extensions/$owner/$repository'
 import { Route as ManageWorkflowsWorkflowIdIndexRouteImport } from './routes/manage/workflows/$workflowId/index'
@@ -111,16 +111,6 @@ const AgentsConversationIdRoute = AgentsConversationIdRouteImport.update({
 const AgentsNewRoute = AgentsNewRouteImport.update({
   id: '/agents/new',
   path: '/agents/new',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EntitiesEntityIdRoute = EntitiesEntityIdRouteImport.update({
-  id: '/entities/$entityId',
-  path: '/entities/$entityId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EntitiesNewRoute = EntitiesNewRouteImport.update({
-  id: '/entities/new',
-  path: '/entities/new',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExtensionsIndexRoute = ExtensionsIndexRouteImport.update({
@@ -194,20 +184,15 @@ const ProfileIndexRoute = ProfileIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ProfileRoute,
 } as any)
-const EntitiesEntityIdIndexRoute = EntitiesEntityIdIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => EntitiesEntityIdRoute,
+const RecordsRecordIdRoute = RecordsRecordIdRouteImport.update({
+  id: '/records/$recordId',
+  path: '/records/$recordId',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const EntitiesEntityIdChangesRoute = EntitiesEntityIdChangesRouteImport.update({
-  id: '/changes',
-  path: '/changes',
-  getParentRoute: () => EntitiesEntityIdRoute,
-} as any)
-const EntitiesEntityIdMigrateRoute = EntitiesEntityIdMigrateRouteImport.update({
-  id: '/migrate',
-  path: '/migrate',
-  getParentRoute: () => EntitiesEntityIdRoute,
+const RecordsNewRoute = RecordsNewRouteImport.update({
+  id: '/records/new',
+  path: '/records/new',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ExtensionsExtensionIdContributionIdRoute =
   ExtensionsExtensionIdContributionIdRouteImport.update({
@@ -380,6 +365,21 @@ const ProfilePersonalAccessTokensNewRoute =
     path: '/personal-access-tokens/new',
     getParentRoute: () => ProfileRoute,
   } as any)
+const RecordsRecordIdIndexRoute = RecordsRecordIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => RecordsRecordIdRoute,
+} as any)
+const RecordsRecordIdChangesRoute = RecordsRecordIdChangesRouteImport.update({
+  id: '/changes',
+  path: '/changes',
+  getParentRoute: () => RecordsRecordIdRoute,
+} as any)
+const RecordsRecordIdMigrateRoute = RecordsRecordIdMigrateRouteImport.update({
+  id: '/migrate',
+  path: '/migrate',
+  getParentRoute: () => RecordsRecordIdRoute,
+} as any)
 const ManageBlueprintsBlueprintIdIndexRoute =
   ManageBlueprintsBlueprintIdIndexRouteImport.update({
     id: '/',
@@ -419,8 +419,6 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ProfileRouteWithChildren
   '/agents/$conversationId': typeof AgentsConversationIdRoute
   '/agents/new': typeof AgentsNewRoute
-  '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
-  '/entities/new': typeof EntitiesNewRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/login/$identifier': typeof LoginIdentifierRoute
   '/manage/audit-log': typeof ManageAuditLogRoute
@@ -430,14 +428,14 @@ export interface FileRoutesByFullPath {
   '/manage/lexicon': typeof ManageLexiconRoute
   '/manage/system-health': typeof ManageSystemHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
+  '/records/$recordId': typeof RecordsRecordIdRouteWithChildren
+  '/records/new': typeof RecordsNewRoute
   '/agents/': typeof AgentsIndexRoute
   '/extensions/': typeof ExtensionsIndexRoute
   '/login/': typeof LoginIndexRoute
   '/manage/': typeof ManageIndexRoute
   '/password-reset/': typeof PasswordResetIndexRoute
   '/profile/': typeof ProfileIndexRoute
-  '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
-  '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/extensions/$extensionId/$contributionId': typeof ExtensionsExtensionIdContributionIdRoute
   '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRouteWithChildren
   '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
@@ -460,7 +458,8 @@ export interface FileRoutesByFullPath {
   '/manage/workspace/teams': typeof ManageWorkspaceTeamsRoute
   '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
   '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
-  '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
+  '/records/$recordId/changes': typeof RecordsRecordIdChangesRoute
+  '/records/$recordId/migrate': typeof RecordsRecordIdMigrateRoute
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
   '/manage/contexts/': typeof ManageContextsIndexRoute
   '/manage/extensions/': typeof ManageExtensionsIndexRoute
@@ -470,6 +469,7 @@ export interface FileRoutesByFullPath {
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
   '/profile/extension-runs/': typeof ProfileExtensionRunsIndexRoute
   '/profile/personal-access-tokens/': typeof ProfilePersonalAccessTokensIndexRoute
+  '/records/$recordId/': typeof RecordsRecordIdIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
   '/manage/workflows/$workflowId/': typeof ManageWorkflowsWorkflowIdIndexRoute
@@ -482,7 +482,6 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/agents/$conversationId': typeof AgentsConversationIdRoute
   '/agents/new': typeof AgentsNewRoute
-  '/entities/new': typeof EntitiesNewRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/login/$identifier': typeof LoginIdentifierRoute
   '/manage/audit-log': typeof ManageAuditLogRoute
@@ -492,14 +491,13 @@ export interface FileRoutesByTo {
   '/manage/lexicon': typeof ManageLexiconRoute
   '/manage/system-health': typeof ManageSystemHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
+  '/records/new': typeof RecordsNewRoute
   '/agents': typeof AgentsIndexRoute
   '/extensions': typeof ExtensionsIndexRoute
   '/login': typeof LoginIndexRoute
   '/manage': typeof ManageIndexRoute
   '/password-reset': typeof PasswordResetIndexRoute
   '/profile': typeof ProfileIndexRoute
-  '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
-  '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/extensions/$extensionId/$contributionId': typeof ExtensionsExtensionIdContributionIdRoute
   '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
   '/manage/contexts/new': typeof ManageContextsNewRoute
@@ -520,7 +518,8 @@ export interface FileRoutesByTo {
   '/manage/workspace/teams': typeof ManageWorkspaceTeamsRoute
   '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
   '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
-  '/entities/$entityId': typeof EntitiesEntityIdIndexRoute
+  '/records/$recordId/changes': typeof RecordsRecordIdChangesRoute
+  '/records/$recordId/migrate': typeof RecordsRecordIdMigrateRoute
   '/manage/blueprints': typeof ManageBlueprintsIndexRoute
   '/manage/contexts': typeof ManageContextsIndexRoute
   '/manage/extensions': typeof ManageExtensionsIndexRoute
@@ -530,6 +529,7 @@ export interface FileRoutesByTo {
   '/manage/workspace': typeof ManageWorkspaceIndexRoute
   '/profile/extension-runs': typeof ProfileExtensionRunsIndexRoute
   '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensIndexRoute
+  '/records/$recordId': typeof RecordsRecordIdIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdIndexRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdIndexRoute
@@ -545,8 +545,6 @@ export interface FileRoutesById {
   '/profile': typeof ProfileRouteWithChildren
   '/agents/$conversationId': typeof AgentsConversationIdRoute
   '/agents/new': typeof AgentsNewRoute
-  '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
-  '/entities/new': typeof EntitiesNewRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/login/$identifier': typeof LoginIdentifierRoute
   '/manage/audit-log': typeof ManageAuditLogRoute
@@ -556,14 +554,14 @@ export interface FileRoutesById {
   '/manage/lexicon': typeof ManageLexiconRoute
   '/manage/system-health': typeof ManageSystemHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
+  '/records/$recordId': typeof RecordsRecordIdRouteWithChildren
+  '/records/new': typeof RecordsNewRoute
   '/agents/': typeof AgentsIndexRoute
   '/extensions/': typeof ExtensionsIndexRoute
   '/login/': typeof LoginIndexRoute
   '/manage/': typeof ManageIndexRoute
   '/password-reset/': typeof PasswordResetIndexRoute
   '/profile/': typeof ProfileIndexRoute
-  '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
-  '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/extensions/$extensionId/$contributionId': typeof ExtensionsExtensionIdContributionIdRoute
   '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRouteWithChildren
   '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
@@ -586,7 +584,8 @@ export interface FileRoutesById {
   '/manage/workspace/teams': typeof ManageWorkspaceTeamsRoute
   '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
   '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
-  '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
+  '/records/$recordId/changes': typeof RecordsRecordIdChangesRoute
+  '/records/$recordId/migrate': typeof RecordsRecordIdMigrateRoute
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
   '/manage/contexts/': typeof ManageContextsIndexRoute
   '/manage/extensions/': typeof ManageExtensionsIndexRoute
@@ -596,6 +595,7 @@ export interface FileRoutesById {
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
   '/profile/extension-runs/': typeof ProfileExtensionRunsIndexRoute
   '/profile/personal-access-tokens/': typeof ProfilePersonalAccessTokensIndexRoute
+  '/records/$recordId/': typeof RecordsRecordIdIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
   '/manage/workflows/$workflowId/': typeof ManageWorkflowsWorkflowIdIndexRoute
@@ -612,8 +612,6 @@ export interface FileRouteTypes {
     | '/profile'
     | '/agents/$conversationId'
     | '/agents/new'
-    | '/entities/$entityId'
-    | '/entities/new'
     | '/invitations/accept'
     | '/login/$identifier'
     | '/manage/audit-log'
@@ -623,14 +621,14 @@ export interface FileRouteTypes {
     | '/manage/lexicon'
     | '/manage/system-health'
     | '/password-reset/confirm'
+    | '/records/$recordId'
+    | '/records/new'
     | '/agents/'
     | '/extensions/'
     | '/login/'
     | '/manage/'
     | '/password-reset/'
     | '/profile/'
-    | '/entities/$entityId/changes'
-    | '/entities/$entityId/migrate'
     | '/extensions/$extensionId/$contributionId'
     | '/manage/blueprints/$blueprintId'
     | '/manage/blueprints/new'
@@ -653,7 +651,8 @@ export interface FileRouteTypes {
     | '/manage/workspace/teams'
     | '/profile/extension-runs/$runId'
     | '/profile/personal-access-tokens/new'
-    | '/entities/$entityId/'
+    | '/records/$recordId/changes'
+    | '/records/$recordId/migrate'
     | '/manage/blueprints/'
     | '/manage/contexts/'
     | '/manage/extensions/'
@@ -663,6 +662,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/'
     | '/profile/extension-runs/'
     | '/profile/personal-access-tokens/'
+    | '/records/$recordId/'
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId/'
     | '/manage/workflows/$workflowId/'
@@ -675,7 +675,6 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/agents/$conversationId'
     | '/agents/new'
-    | '/entities/new'
     | '/invitations/accept'
     | '/login/$identifier'
     | '/manage/audit-log'
@@ -685,14 +684,13 @@ export interface FileRouteTypes {
     | '/manage/lexicon'
     | '/manage/system-health'
     | '/password-reset/confirm'
+    | '/records/new'
     | '/agents'
     | '/extensions'
     | '/login'
     | '/manage'
     | '/password-reset'
     | '/profile'
-    | '/entities/$entityId/changes'
-    | '/entities/$entityId/migrate'
     | '/extensions/$extensionId/$contributionId'
     | '/manage/blueprints/new'
     | '/manage/contexts/new'
@@ -713,7 +711,8 @@ export interface FileRouteTypes {
     | '/manage/workspace/teams'
     | '/profile/extension-runs/$runId'
     | '/profile/personal-access-tokens/new'
-    | '/entities/$entityId'
+    | '/records/$recordId/changes'
+    | '/records/$recordId/migrate'
     | '/manage/blueprints'
     | '/manage/contexts'
     | '/manage/extensions'
@@ -723,6 +722,7 @@ export interface FileRouteTypes {
     | '/manage/workspace'
     | '/profile/extension-runs'
     | '/profile/personal-access-tokens'
+    | '/records/$recordId'
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId'
     | '/manage/workflows/$workflowId'
@@ -737,8 +737,6 @@ export interface FileRouteTypes {
     | '/profile'
     | '/agents/$conversationId'
     | '/agents/new'
-    | '/entities/$entityId'
-    | '/entities/new'
     | '/invitations/accept'
     | '/login/$identifier'
     | '/manage/audit-log'
@@ -748,14 +746,14 @@ export interface FileRouteTypes {
     | '/manage/lexicon'
     | '/manage/system-health'
     | '/password-reset/confirm'
+    | '/records/$recordId'
+    | '/records/new'
     | '/agents/'
     | '/extensions/'
     | '/login/'
     | '/manage/'
     | '/password-reset/'
     | '/profile/'
-    | '/entities/$entityId/changes'
-    | '/entities/$entityId/migrate'
     | '/extensions/$extensionId/$contributionId'
     | '/manage/blueprints/$blueprintId'
     | '/manage/blueprints/new'
@@ -778,7 +776,8 @@ export interface FileRouteTypes {
     | '/manage/workspace/teams'
     | '/profile/extension-runs/$runId'
     | '/profile/personal-access-tokens/new'
-    | '/entities/$entityId/'
+    | '/records/$recordId/changes'
+    | '/records/$recordId/migrate'
     | '/manage/blueprints/'
     | '/manage/contexts/'
     | '/manage/extensions/'
@@ -788,6 +787,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/'
     | '/profile/extension-runs/'
     | '/profile/personal-access-tokens/'
+    | '/records/$recordId/'
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId/'
     | '/manage/workflows/$workflowId/'
@@ -803,8 +803,6 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRouteWithChildren
   AgentsConversationIdRoute: typeof AgentsConversationIdRoute
   AgentsNewRoute: typeof AgentsNewRoute
-  EntitiesEntityIdRoute: typeof EntitiesEntityIdRouteWithChildren
-  EntitiesNewRoute: typeof EntitiesNewRoute
   InvitationsAcceptRoute: typeof InvitationsAcceptRoute
   ManageAuditLogRoute: typeof ManageAuditLogRoute
   ManageBackgroundProcessingRoute: typeof ManageBackgroundProcessingRoute
@@ -813,6 +811,8 @@ export interface RootRouteChildren {
   ManageLexiconRoute: typeof ManageLexiconRoute
   ManageSystemHealthRoute: typeof ManageSystemHealthRoute
   PasswordResetConfirmRoute: typeof PasswordResetConfirmRoute
+  RecordsRecordIdRoute: typeof RecordsRecordIdRouteWithChildren
+  RecordsNewRoute: typeof RecordsNewRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
   ExtensionsIndexRoute: typeof ExtensionsIndexRoute
   ManageIndexRoute: typeof ManageIndexRoute
@@ -903,20 +903,6 @@ declare module '@tanstack/react-router' {
       path: '/agents/new'
       fullPath: '/agents/new'
       preLoaderRoute: typeof AgentsNewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/entities/$entityId': {
-      id: '/entities/$entityId'
-      path: '/entities/$entityId'
-      fullPath: '/entities/$entityId'
-      preLoaderRoute: typeof EntitiesEntityIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/entities/new': {
-      id: '/entities/new'
-      path: '/entities/new'
-      fullPath: '/entities/new'
-      preLoaderRoute: typeof EntitiesNewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/extensions/': {
@@ -1017,26 +1003,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfileIndexRouteImport
       parentRoute: typeof ProfileRoute
     }
-    '/entities/$entityId/': {
-      id: '/entities/$entityId/'
-      path: '/'
-      fullPath: '/entities/$entityId/'
-      preLoaderRoute: typeof EntitiesEntityIdIndexRouteImport
-      parentRoute: typeof EntitiesEntityIdRoute
+    '/records/$recordId': {
+      id: '/records/$recordId'
+      path: '/records/$recordId'
+      fullPath: '/records/$recordId'
+      preLoaderRoute: typeof RecordsRecordIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/entities/$entityId/changes': {
-      id: '/entities/$entityId/changes'
-      path: '/changes'
-      fullPath: '/entities/$entityId/changes'
-      preLoaderRoute: typeof EntitiesEntityIdChangesRouteImport
-      parentRoute: typeof EntitiesEntityIdRoute
-    }
-    '/entities/$entityId/migrate': {
-      id: '/entities/$entityId/migrate'
-      path: '/migrate'
-      fullPath: '/entities/$entityId/migrate'
-      preLoaderRoute: typeof EntitiesEntityIdMigrateRouteImport
-      parentRoute: typeof EntitiesEntityIdRoute
+    '/records/new': {
+      id: '/records/new'
+      path: '/records/new'
+      fullPath: '/records/new'
+      preLoaderRoute: typeof RecordsNewRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/extensions/$extensionId/$contributionId': {
       id: '/extensions/$extensionId/$contributionId'
@@ -1255,6 +1234,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfilePersonalAccessTokensNewRouteImport
       parentRoute: typeof ProfileRoute
     }
+    '/records/$recordId/': {
+      id: '/records/$recordId/'
+      path: '/'
+      fullPath: '/records/$recordId/'
+      preLoaderRoute: typeof RecordsRecordIdIndexRouteImport
+      parentRoute: typeof RecordsRecordIdRoute
+    }
+    '/records/$recordId/changes': {
+      id: '/records/$recordId/changes'
+      path: '/changes'
+      fullPath: '/records/$recordId/changes'
+      preLoaderRoute: typeof RecordsRecordIdChangesRouteImport
+      parentRoute: typeof RecordsRecordIdRoute
+    }
+    '/records/$recordId/migrate': {
+      id: '/records/$recordId/migrate'
+      path: '/migrate'
+      fullPath: '/records/$recordId/migrate'
+      preLoaderRoute: typeof RecordsRecordIdMigrateRouteImport
+      parentRoute: typeof RecordsRecordIdRoute
+    }
     '/manage/blueprints/$blueprintId/': {
       id: '/manage/blueprints/$blueprintId/'
       path: '/'
@@ -1324,20 +1324,21 @@ const ProfileRouteChildren: ProfileRouteChildren = {
 const ProfileRouteWithChildren =
   ProfileRoute._addFileChildren(ProfileRouteChildren)
 
-interface EntitiesEntityIdRouteChildren {
-  EntitiesEntityIdChangesRoute: typeof EntitiesEntityIdChangesRoute
-  EntitiesEntityIdMigrateRoute: typeof EntitiesEntityIdMigrateRoute
-  EntitiesEntityIdIndexRoute: typeof EntitiesEntityIdIndexRoute
+interface RecordsRecordIdRouteChildren {
+  RecordsRecordIdChangesRoute: typeof RecordsRecordIdChangesRoute
+  RecordsRecordIdMigrateRoute: typeof RecordsRecordIdMigrateRoute
+  RecordsRecordIdIndexRoute: typeof RecordsRecordIdIndexRoute
 }
 
-const EntitiesEntityIdRouteChildren: EntitiesEntityIdRouteChildren = {
-  EntitiesEntityIdChangesRoute: EntitiesEntityIdChangesRoute,
-  EntitiesEntityIdMigrateRoute: EntitiesEntityIdMigrateRoute,
-  EntitiesEntityIdIndexRoute: EntitiesEntityIdIndexRoute,
+const RecordsRecordIdRouteChildren: RecordsRecordIdRouteChildren = {
+  RecordsRecordIdChangesRoute: RecordsRecordIdChangesRoute,
+  RecordsRecordIdMigrateRoute: RecordsRecordIdMigrateRoute,
+  RecordsRecordIdIndexRoute: RecordsRecordIdIndexRoute,
 }
 
-const EntitiesEntityIdRouteWithChildren =
-  EntitiesEntityIdRoute._addFileChildren(EntitiesEntityIdRouteChildren)
+const RecordsRecordIdRouteWithChildren = RecordsRecordIdRoute._addFileChildren(
+  RecordsRecordIdRouteChildren,
+)
 
 interface ManageBlueprintsBlueprintIdRouteChildren {
   ManageBlueprintsBlueprintIdIndexRoute: typeof ManageBlueprintsBlueprintIdIndexRoute
@@ -1382,8 +1383,6 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRouteWithChildren,
   AgentsConversationIdRoute: AgentsConversationIdRoute,
   AgentsNewRoute: AgentsNewRoute,
-  EntitiesEntityIdRoute: EntitiesEntityIdRouteWithChildren,
-  EntitiesNewRoute: EntitiesNewRoute,
   InvitationsAcceptRoute: InvitationsAcceptRoute,
   ManageAuditLogRoute: ManageAuditLogRoute,
   ManageBackgroundProcessingRoute: ManageBackgroundProcessingRoute,
@@ -1392,6 +1391,8 @@ const rootRouteChildren: RootRouteChildren = {
   ManageLexiconRoute: ManageLexiconRoute,
   ManageSystemHealthRoute: ManageSystemHealthRoute,
   PasswordResetConfirmRoute: PasswordResetConfirmRoute,
+  RecordsRecordIdRoute: RecordsRecordIdRouteWithChildren,
+  RecordsNewRoute: RecordsNewRoute,
   AgentsIndexRoute: AgentsIndexRoute,
   ExtensionsIndexRoute: ExtensionsIndexRoute,
   ManageIndexRoute: ManageIndexRoute,

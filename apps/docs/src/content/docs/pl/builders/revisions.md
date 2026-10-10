@@ -47,10 +47,10 @@ Otwórz rekord i wybierz jego aktualizację. Attricat porównuje jego bieżące 
 
 Celem jest zawsze bieżąca opublikowana wersja. Migracja w jednym kroku kopiuje wartości do nowej wersji, waliduje je, odbudowuje dane wyszukiwania rekordu i zapisuje migrację. Jeśli cokolwiek się nie powiedzie, nic się nie zmienia.
 
-Za pomocą CLI, w którym rekordy występują pod nazwą `entity`:
+Za pomocą CLI:
 
 ```sh
-acli entity migrate <entity-id>
+acli record migrate <record-id>
 ```
 
 ## Zmigruj wiele rekordów
@@ -72,11 +72,11 @@ Partie konfigurują dwa ustawienia serwera: `BLUEPRINT_MIGRATION_PAGE_SIZE` i `B
 
 ### Z CLI
 
-`entity migrate-bulk` migruje każdy rekord z wynikiem `ready` z jednej wersji źródłowej i raportuje pozostałe:
+`record migrate-bulk` migruje każdy rekord z wynikiem `ready` z jednej wersji źródłowej i raportuje pozostałe:
 
 ```sh
-acli entity migrate-bulk --blueprint product --from-version 1 --dry-run
-acli entity migrate-bulk --blueprint product --from-version 1
+acli record migrate-bulk --blueprint product --from-version 1 --dry-run
+acli record migrate-bulk --blueprint product --from-version 1
 ```
 
 Podsumowanie grupuje rekordy w `ready`, `needs_input`, `blocked` i `failed`. Rekordy wymagające danych lub zablokowane są pomijane; rozwiąż je na ich stronach aktualizacji, a następnie uruchom polecenie ponownie.

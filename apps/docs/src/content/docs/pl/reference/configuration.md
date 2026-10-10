@@ -95,7 +95,7 @@ Czas trwania sesji (osiem godzin), limit prób logowania (pięć niepowodzeń na
 | --- | --- | --- |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | Największa głębokość zagnieżdżenia relacji, o jaką może prosić podgląd rekordu. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | Maksymalna liczba powiązanych rekordów pokazywanych bezpośrednio w podglądzie dla jednej relacji. |
-| `ENTITY_MAX_PAGE_SIZE` | `100` | Największy rozmiar strony przy przeglądaniu celów relacji. |
+| `RECORD_MAX_PAGE_SIZE` | `100` | Największy rozmiar strony przy przeglądaniu celów relacji. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | Największy rozmiar strony list relacji przychodzących. Ogranicza `page_size` w blokach widoku `incoming_relationship_list`. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | Maksymalna liczba węzłów zwracanych na stronę faset relacji w przeglądarce rekordów. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | Jak długo buforowane są odpowiedzi stanu danych. `0` wyłącza bufor. Każda zapisana zmiana katalogu odświeża je przy następnym żądaniu. |

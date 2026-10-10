@@ -1,23 +1,23 @@
 import type { TFunction } from 'i18next';
-import type { EntityItem } from '../entities/api';
-import { displayLabel } from '../entities/entityDisplay';
-import { maximumAgentEntityLabelLength } from './constants';
+import type { RecordItem } from '../records/api';
+import { displayLabel } from '../records/recordDisplay';
+import { maximumAgentRecordLabelLength } from './constants';
 
 export { maximumAgentSelection } from './constants';
 
-export const selectedEntitiesMessage = (
+export const selectedRecordsMessage = (
   t: TFunction,
   instructions: string,
   blueprintName: string,
-  entities: EntityItem[],
+  records: RecordItem[],
 ) => {
-  const references = entities
-    .map((entity) =>
-      t('explorer.agentMessage.entityReference', {
-        entityId: entity.id,
-        label: displayLabel(entity.display, entity.id)
+  const references = records
+    .map((record) =>
+      t('explorer.agentMessage.recordReference', {
+        recordId: record.id,
+        label: displayLabel(record.display, record.id)
           .replaceAll('\n', ' ')
-          .slice(0, maximumAgentEntityLabelLength),
+          .slice(0, maximumAgentRecordLabelLength),
       }),
     )
     .join('\n');
@@ -25,9 +25,9 @@ export const selectedEntitiesMessage = (
     instructions.trim(),
     '',
     t('explorer.agentMessage.blueprint', { blueprint: blueprintName }),
-    t('explorer.agentMessage.selectedEntities'),
+    t('explorer.agentMessage.selectedRecords'),
     references,
     '',
-    t('explorer.agentMessage.getEntityInstruction'),
+    t('explorer.agentMessage.getRecordInstruction'),
   ].join('\n');
 };

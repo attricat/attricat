@@ -1,0 +1,2256 @@
+use super::generations::WritePrefetch;
+use super::record_search::empty_projections;
+use super::record_values::{ContextTree, RecordValues};
+use super::structural_constraints::{UniqueKeyScope, enforced_unique_keys};
+use super::system_annotations::{
+    validate_system_annotations, validate_system_metadata, validate_system_tag_update,
+};
+use super::values::{NativeValue, ValueType};
+use super::write_context::WriteContext;
+use super::*;
+use crate::domain_events::{
+    ATTRIBUTE_VALUE_CHANGED_V1, AttributeValueMutationV1, NewDomainEvent, RECORD_CREATED_V1,
+    RECORD_DELETED_V1, RECORD_UPDATED_V1, RELATIONSHIP_CHANGED_V1, RecordMutationV1,
+    RelationshipMutationV1,
+};
+use crate::model::{NewFileAttributeValue, UpdateRecordFormRequest};
+use crate::persistence_rows::{Db, IntoDomain};
+use catalog_validation::validate_json_schema;
+use chrono::Utc;
+use serde_json::{Map, Value};
+use sqlx::{Postgres, Transaction};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+
+#[derive(sqlx::FromRow, Clone)]
+pub(super) struct AuditValueSnapshot {
+    attribute_id: Uuid,
+    attribute_code: String,
+    context_id: Option<Uuid>,
+    context_code: Option<String>,
+    relationship_target_record_id: Option<Uuid>,
+    value: Value,
+}
+
+/// How [`CatalogRepository::validate_record_schema_with`] treats status.
+/// A value resolved against its [`WriteContext`] and validated in memory.
+struct PreparedValue {
+    attribute_id: Uuid,
+    attribute_code: String,
+    context_id: Uuid,
+    relationship: Option<PreparedRelationship>,
+    native: Option<NativeValue>,
+}
+
+struct PreparedRelationship {
+    target_record_id: Uuid,
+    target_blueprint_codes: Vec<String>,
+    cardinality: String,
+    target_cardinality: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Revalidation {
+    /// A record write: status transitions are checked (edges, permissions,
+    /// separation of duties, locks) and recorded, and approvals whose covered
+    /// content changed are voided, with the writer as actor.
+    Write,
+    /// A structural change that is not an edit of the record, such as context
+    /// reparenting: effective values may change through inheritance, but no
+    /// transition is enforced or recorded and no approval is voided or hold
+    /// placed. Schema, principal values, unique keys and record checks still
+    /// apply.
+    Structural,
+}
+
+/// File values a create writes before it validates the new record, so that an
+/// record schema requiring a file attribute can be satisfied.
+pub(super) enum CreateFileValues {
+    None,
+    /// Files the workspace already holds, such as a duplicated record's.
+    Existing(Vec<NewFileAttributeValue>),
+    /// Files staged by `uploaded_by` for the blueprint, which the create
+    /// claims; see [`CatalogRepository::claim_staged_files_in_transaction`].
+    Staged {
+        uploaded_by: Uuid,
+        values: Vec<NewFileAttributeValue>,
+    },
+}
+
+pub(super) struct ChosenIdRecordCreate {
+    pub record_id: Uuid,
+    pub blueprint_id: Uuid,
+    pub blueprint_version: i64,
+    pub values: Vec<NewAttributeValue>,
+    pub files: CreateFileValues,
+    pub system_tags: Vec<String>,
+    pub system_metadata: Value,
+    pub host_sample_marker: bool,
+}
+
+struct CardinalityCheck<'a> {
+    record: &'a Record,
+    attribute_id: Uuid,
+    attribute_code: &'a str,
+    cardinality: &'a str,
+    target_cardinality: &'a str,
+    context_id: Option<Uuid>,
+    target_record_id: Uuid,
+}
+
+impl CatalogRepository {
+    pub async fn create_record_with_values(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+        values: Vec<NewAttributeValue>,
+        system_tags: Vec<String>,
+        system_metadata: Value,
+    ) -> Result<Record, RepositoryError> {
+        self.create_record_with_staged_files(
+            blueprint_id,
+            blueprint_version,
+            values,
+            Vec::new(),
+            None,
+            system_tags,
+            system_metadata,
+        )
+        .await
+    }
+
+    /// [`Self::create_record_with_values`], also claiming and linking `files`
+    /// that `uploaded_by` staged for the blueprint before the record is
+    /// validated. Files require the uploader.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_record_with_staged_files(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+        values: Vec<NewAttributeValue>,
+        files: Vec<NewFileAttributeValue>,
+        uploaded_by: Option<Uuid>,
+        system_tags: Vec<String>,
+        system_metadata: Value,
+    ) -> Result<Record, RepositoryError> {
+        let files = match (files.is_empty(), uploaded_by) {
+            (true, _) => CreateFileValues::None,
+            (false, Some(uploaded_by)) => CreateFileValues::Staged {
+                uploaded_by,
+                values: files,
+            },
+            (false, None) => return Err(RepositoryError::InvalidFileReferences),
+        };
+        let mut transaction = self.pool.begin().await?;
+        let (record, changes, event) = self
+            .create_record_in_transaction(
+                &mut transaction,
+                ChosenIdRecordCreate {
+                    record_id: Uuid::new_v4(),
+                    blueprint_id,
+                    blueprint_version,
+                    values,
+                    files,
+                    system_tags,
+                    system_metadata,
+                    host_sample_marker: false,
+                },
+            )
+            .await?;
+        self.commit_record_mutation(transaction, changes, event)
+            .await?;
+        Ok(record)
+    }
+
+    /// Chosen-ID, caller-transaction seam for ordinary record creation.
+    ///
+    /// The create, update and delete seams share one contract: each takes the
+    /// locks it needs itself (the workspace relationship lock when it writes
+    /// relationships, then the record row), which is a no-op when the caller
+    /// already holds them, and returns the audit changes and event for the
+    /// caller to pass to [`Self::stage_record_mutation`] (or
+    /// [`Self::commit_record_mutation`]) before committing. A caller that locks
+    /// record rows itself before a relationship write must take the
+    /// relationship lock first.
+    pub(super) async fn create_record_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        input: ChosenIdRecordCreate,
+    ) -> Result<(Record, Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
+        let ChosenIdRecordCreate {
+            record_id,
+            blueprint_id,
+            blueprint_version,
+            values,
+            files,
+            system_tags,
+            system_metadata,
+            host_sample_marker,
+        } = input;
+        if host_sample_marker {
+            let ordinary_tags = system_tags
+                .iter()
+                .filter(|tag| tag.as_str() != "attricat.sample")
+                .cloned()
+                .collect::<Vec<_>>();
+            if ordinary_tags.len() + 1 != system_tags.len() {
+                return Err(RepositoryError::InvalidSystemTags);
+            }
+            validate_system_annotations(&ordinary_tags, &system_metadata)?;
+        } else {
+            validate_system_annotations(&system_tags, &system_metadata)?;
+        }
+        // Do not expose a record before its initial values and derived preview
+        // agree; otherwise a concurrent reader can observe a partial create.
+        if writes_relationship_values(&values) {
+            self.lock_relationship_cardinality_writes(transaction)
+                .await?;
+        }
+        // Namespace locks come after the relationship lock, as on updates.
+        self.ensure_annotation_namespaces_unchanged(
+            transaction,
+            &[],
+            &Value::Object(Map::new()),
+            &system_tags,
+            &system_metadata,
+        )
+        .await?;
+        let record = self
+            .insert_record(
+                transaction,
+                record_id,
+                blueprint_id,
+                blueprint_version,
+                system_tags,
+                system_metadata,
+            )
+            .await?;
+        let write = WriteContext::load(transaction, self.workspace_id.0, &record).await?;
+        let default_context_id = write.default_context_id()?;
+        let defaults = write
+            .attributes()
+            .iter()
+            .filter(|attribute| {
+                attribute.default_value.is_some()
+                    && !values.iter().any(|value| {
+                        matches!(
+                            value,
+                            NewAttributeValue::Scalar {
+                                attribute_id,
+                                attribute_code,
+                                context_id,
+                                ..
+                            } if (attribute_id == &Some(attribute.id)
+                                || attribute_code.as_deref() == Some(attribute.code.as_str()))
+                                && context_id.is_none_or(|id| id == default_context_id)
+                        )
+                    })
+            })
+            .map(|attribute| NewAttributeValue::Scalar {
+                attribute_id: Some(attribute.id),
+                attribute_code: None,
+                context_id: Some(default_context_id),
+                value: attribute.default_value.clone().expect("filtered above"),
+            })
+            .collect::<Vec<_>>();
+        self.insert_values_in(transaction, &write, &record, defaults)
+            .await?;
+        self.insert_values_in(transaction, &write, &record, values)
+            .await?;
+        // Files are linked before validation, so the record schema sees them.
+        let file_changes = self
+            .write_created_file_values(transaction, &record, files)
+            .await?;
+        if !file_changes.is_empty() {
+            write.values_changed();
+        }
+        self.validate_record_schema_in(transaction, &write, &record, Revalidation::Write)
+            .await?;
+        let preview = write.preview(transaction, record.id).await?;
+        let record = self.store_preview(transaction, record.id, preview).await?;
+        let after = self.record_audit_snapshot(transaction, record.id).await?;
+        let mut changes = Self::audit_changes(record.id, Vec::new(), after, false);
+        changes.extend(file_changes);
+        let event = self.core_event(
+            RECORD_CREATED_V1,
+            "record",
+            record.id,
+            serde_json::to_value(RecordMutationV1 {
+                record_id: record.id,
+                blueprint_id: record.blueprint_id,
+                blueprint_version: record.blueprint_version,
+                facts: Self::affected_facts(&changes),
+            })
+            .expect("record-created payload is serializable"),
+        );
+        Ok((record, changes, event))
+    }
+
+    /// Writes each file list of a new record once and returns their audit
+    /// changes. Every file row is locked first, in ID order, so two writes
+    /// sharing files cannot deadlock (see [`Self::lock_files_in_transaction`]);
+    /// staged files are then claimed before they are linked.
+    async fn write_created_file_values(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record: &Record,
+        files: CreateFileValues,
+    ) -> Result<Vec<AuditEventChange>, RepositoryError> {
+        let values = match files {
+            CreateFileValues::None => return Ok(Vec::new()),
+            CreateFileValues::Existing(values) => {
+                self.lock_created_files(transaction, &values).await?;
+                values
+            }
+            CreateFileValues::Staged {
+                uploaded_by,
+                values,
+            } => {
+                self.lock_created_files(transaction, &values).await?;
+                self.claim_staged_files_in_transaction(transaction, record, uploaded_by, &values)
+                    .await?;
+                values
+            }
+        };
+        let mut changes = Vec::with_capacity(values.len());
+        for value in values {
+            changes.push(
+                self.link_files_in_transaction(
+                    transaction,
+                    record,
+                    &value.attribute_code,
+                    value.context_id,
+                    &value.file_ids,
+                )
+                .await?,
+            );
+        }
+        Ok(changes)
+    }
+
+    async fn lock_created_files(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        values: &[NewFileAttributeValue],
+    ) -> Result<(), RepositoryError> {
+        let file_ids: Vec<Uuid> = values
+            .iter()
+            .flat_map(|value| value.file_ids.iter().copied())
+            .collect();
+        self.lock_files_in_transaction(transaction, &file_ids).await
+    }
+
+    /// Copies a record's blueprint values, relationships and file
+    /// references into a new record. Values of enforced `[[unique_keys]]`
+    /// attributes are left out, because the copy could never share them with
+    /// its source: default-context values for workspace-scoped keys and every
+    /// context's values for context-scoped keys.
+    pub async fn duplicate_record(&self, record_id: Uuid) -> Result<Record, RepositoryError> {
+        let source = self
+            .get_record(record_id)
+            .await?
+            .ok_or(RepositoryError::NotFound("record"))?;
+        let (default_context_id, key_codes) =
+            self.unique_key_attributes(source.blueprint_id).await?;
+        let copied = |attribute_code: &str, context_id: Option<Uuid>| {
+            key_codes
+                .get(attribute_code)
+                .is_none_or(|scope| match scope {
+                    UniqueKeyScope::Context => false,
+                    UniqueKeyScope::Workspace => {
+                        context_id.is_some_and(|id| id != default_context_id)
+                    }
+                })
+        };
+        // File references are grouped by attribute and context, in order, so
+        // each list is written once instead of archiving every partial list.
+        let mut file_values: Vec<NewFileAttributeValue> = Vec::new();
+        let values = self
+            .form_values(record_id)
+            .await?
+            .into_iter()
+            .filter_map(|value| match value {
+                FormAttributeValue::Scalar {
+                    attribute_code,
+                    context_id,
+                    value,
+                } => copied(&attribute_code, context_id).then_some(NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some(attribute_code),
+                    context_id,
+                    value,
+                }),
+                FormAttributeValue::Relationship {
+                    attribute_code,
+                    context_id,
+                    target_record_id,
+                } => {
+                    copied(&attribute_code, context_id).then_some(NewAttributeValue::Relationship {
+                        attribute_id: None,
+                        attribute_code: Some(attribute_code),
+                        context_id,
+                        target_record_id,
+                    })
+                }
+                FormAttributeValue::File {
+                    attribute_code,
+                    context_id,
+                    files,
+                } => {
+                    let ids = files.into_iter().map(|file| file.id);
+                    match file_values.iter_mut().find(|value| {
+                        value.attribute_code == attribute_code && value.context_id == context_id
+                    }) {
+                        Some(value) => value.file_ids.extend(ids),
+                        None => file_values.push(NewFileAttributeValue {
+                            attribute_code,
+                            context_id,
+                            file_ids: ids.collect(),
+                        }),
+                    }
+                    None
+                }
+            })
+            .collect();
+        let system_tags = source
+            .system_tags
+            .into_iter()
+            .filter(|tag| tag != "attricat.sample")
+            .collect();
+        let (system_tags, system_metadata) = self
+            .without_claimed_annotations(system_tags, source.system_metadata)
+            .await?;
+        // The copy, its file references and its audit/event commit together,
+        // so a failed file link cannot leave a partial duplicate behind. The
+        // create links the files before it validates the copy, so a record
+        // schema that requires a file attribute is satisfied.
+        let mut transaction = self.pool.begin().await?;
+        let (record, changes, event) = self
+            .create_record_in_transaction(
+                &mut transaction,
+                ChosenIdRecordCreate {
+                    record_id: Uuid::new_v4(),
+                    blueprint_id: source.blueprint_id,
+                    blueprint_version: source.blueprint_version,
+                    values,
+                    files: if file_values.is_empty() {
+                        CreateFileValues::None
+                    } else {
+                        CreateFileValues::Existing(file_values)
+                    },
+                    system_tags,
+                    system_metadata,
+                    host_sample_marker: false,
+                },
+            )
+            .await?;
+        self.commit_record_mutation(transaction, changes, event)
+            .await?;
+        Ok(record)
+    }
+
+    /// The workspace's default context and the scope of each attribute code
+    /// that an enforced unique key of the blueprint family covers. An
+    /// attribute in both a workspace and a context key reports `Context`.
+    async fn unique_key_attributes(
+        &self,
+        blueprint_id: Uuid,
+    ) -> Result<(Uuid, HashMap<String, UniqueKeyScope>), RepositoryError> {
+        let mut connection = self.pool.acquire().await?;
+        let default_context_id: Uuid = sqlx::query_scalar(
+            "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
+        )
+        .bind(self.workspace_id.0)
+        .fetch_optional(&mut *connection)
+        .await?
+        .ok_or(RepositoryError::InvalidContext)?;
+        let mut scopes = HashMap::new();
+        for key in enforced_unique_keys(&mut connection, self.workspace_id.0, blueprint_id).await? {
+            for code in key.attributes {
+                let scope = scopes.entry(code).or_insert(key.scope);
+                if key.scope == UniqueKeyScope::Context {
+                    *scope = UniqueKeyScope::Context;
+                }
+            }
+        }
+        Ok((default_context_id, scopes))
+    }
+
+    pub async fn update_record_with_values(
+        &self,
+        record_id: Uuid,
+        values: Vec<NewAttributeValue>,
+        relationships: Vec<RelationshipTargets>,
+        remove_values: Vec<AttributeValueSelector>,
+        system_tags: Option<Vec<String>>,
+        system_metadata: Option<Value>,
+    ) -> Result<Record, RepositoryError> {
+        self.update_record_with_values_checked(
+            record_id,
+            values,
+            relationships,
+            remove_values,
+            system_tags,
+            system_metadata,
+            None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn update_record_with_values_checked(
+        &self,
+        record_id: Uuid,
+        values: Vec<NewAttributeValue>,
+        relationships: Vec<RelationshipTargets>,
+        remove_values: Vec<AttributeValueSelector>,
+        system_tags: Option<Vec<String>>,
+        system_metadata: Option<Value>,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<Record, RepositoryError> {
+        // Committed workspace state is prefetched before the transaction
+        // opens; the transaction uses it only at the same generations.
+        let prefetch = self.write_prefetch().await?;
+        let mut transaction = self.pool.begin().await?;
+        let (record, changes, event) = self
+            .update_record_in_transaction_with(
+                &mut transaction,
+                record_id,
+                UpdateRecordFormRequest {
+                    expected_updated_at,
+                    values,
+                    relationships,
+                    remove_values,
+                    system_tags,
+                    system_metadata,
+                },
+                prefetch.as_ref(),
+            )
+            .await?;
+        self.commit_record_mutation(transaction, changes, event)
+            .await?;
+        Ok(record)
+    }
+
+    /// Caller-transaction seam for a record update; see
+    /// [`Self::create_record_in_transaction`] for the shared contract.
+    /// `system_tags` and `system_metadata` replace the whole field.
+    pub(super) async fn update_record_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+        input: UpdateRecordFormRequest,
+    ) -> Result<(Record, Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
+        self.update_record_in_transaction_with(transaction, record_id, input, None)
+            .await
+    }
+
+    async fn update_record_in_transaction_with(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+        input: UpdateRecordFormRequest,
+        prefetch: Option<&WritePrefetch>,
+    ) -> Result<(Record, Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
+        let UpdateRecordFormRequest {
+            expected_updated_at,
+            values,
+            relationships,
+            remove_values,
+            system_tags,
+            system_metadata,
+        } = input;
+        if let Some(metadata) = &system_metadata {
+            validate_system_metadata(metadata)?;
+        }
+        if !relationships.is_empty() || writes_relationship_values(&values) {
+            self.lock_relationship_cardinality_writes(transaction)
+                .await?;
+        }
+        // The row lock serializes writers for a record. It protects both the
+        // one-latest-value invariant and the preview rebuilt from that state.
+        let (record, generations) = self
+            .lock_record_with_generations(transaction, record_id)
+            .await?;
+        // Snapshot under the lock so a concurrent writer cannot change the
+        // audited "before" state between the read and this mutation.
+        let before = self.record_audit_snapshot(transaction, record_id).await?;
+        let prefetch = prefetch.filter(|prefetch| Some(prefetch.generations) == generations);
+        let write =
+            WriteContext::load_with(transaction, self.workspace_id.0, &record, prefetch).await?;
+        if expected_updated_at.is_some() || Self::has_status_writes(&write, &values, &remove_values)
+        {
+            Self::check_status_precondition(&write, &record, expected_updated_at)?;
+        }
+        if let Some(tags) = &system_tags {
+            validate_system_tag_update(&record.system_tags, tags)?;
+        }
+        if system_tags.is_some() || system_metadata.is_some() {
+            // Whole-field annotation writes may change unrelated tags and keys
+            // but never a claimed extension namespace.
+            self.ensure_annotation_namespaces_unchanged(
+                transaction,
+                &record.system_tags,
+                &record.system_metadata,
+                system_tags.as_deref().unwrap_or(&record.system_tags),
+                system_metadata.as_ref().unwrap_or(&record.system_metadata),
+            )
+            .await?;
+            sqlx::query(
+                r#"UPDATE records
+                   SET system_tags = COALESCE($2, system_tags),
+                       system_metadata = COALESCE($3, system_metadata),
+                       updated_at = now()
+                   WHERE id = $1 AND workspace_id = $4"#,
+            )
+            .bind(record_id)
+            .bind(system_tags)
+            .bind(system_metadata)
+            .bind(self.workspace_id.0)
+            .execute(&mut **transaction)
+            .await?;
+        }
+        self.insert_values_in(transaction, &write, &record, values)
+            .await?;
+        for selector in remove_values {
+            self.remove_scalar_value(transaction, &write, &record, selector)
+                .await?;
+        }
+        self.replace_relationship_sets(transaction, &write, &record, relationships)
+            .await?;
+        self.validate_record_schema_in(transaction, &write, &record, Revalidation::Write)
+            .await?;
+        let preview = write.preview(transaction, record.id).await?;
+        let record = self.store_preview(transaction, record.id, preview).await?;
+        let after = self.record_audit_snapshot(transaction, record_id).await?;
+        let changes = Self::audit_changes(record_id, before, after, false);
+        let event = self.core_event(
+            RECORD_UPDATED_V1,
+            "record",
+            record.id,
+            serde_json::to_value(RecordMutationV1 {
+                record_id: record.id,
+                blueprint_id: record.blueprint_id,
+                blueprint_version: record.blueprint_version,
+                facts: Self::affected_facts(&changes),
+            })
+            .expect("record-updated payload is serializable"),
+        );
+        Ok((record, changes, event))
+    }
+
+    pub async fn record_audit_changes(
+        &self,
+        record_id: Uuid,
+    ) -> Result<Vec<RecordAuditChange>, RepositoryError> {
+        Ok(sqlx::query_as::<_, Db<RecordAuditChange>>(
+            r#"SELECT c.audit_event_id, e.occurred_at, e.actor_user_id,
+                      actor.display_name AS actor_display_name, actor.email AS actor_email,
+                      actor_avatar.id AS actor_avatar_file_id,
+                      e.executor_type, e.agent_run_id, e.approval_decision, e.approved_by_user_id,
+                      approver.display_name AS approved_by_display_name,
+                      approver_avatar.id AS approved_by_avatar_file_id,
+                      c.attribute_id, c.attribute_code, c.context_id, c.context_code,
+                      c.change_kind, c.before_value, c.after_value
+               FROM audit_event_changes c
+               JOIN audit_events e ON e.id = c.audit_event_id
+               LEFT JOIN users actor ON actor.id = e.actor_user_id
+               LEFT JOIN users approver ON approver.id = e.approved_by_user_id
+               LEFT JOIN workspace_memberships actor_m ON actor_m.workspace_id = c.workspace_id AND actor_m.user_id = e.actor_user_id AND actor_m.state = 'active' LEFT JOIN files actor_avatar ON actor_avatar.workspace_id = actor_m.workspace_id AND actor_avatar.id = actor_m.avatar_file_id AND actor_avatar.purpose = 'avatar' AND actor_avatar.status = 'ready' AND actor_avatar.deleted_at IS NULL
+               LEFT JOIN workspace_memberships approver_m ON approver_m.workspace_id = c.workspace_id AND approver_m.user_id = e.approved_by_user_id AND approver_m.state = 'active' LEFT JOIN files approver_avatar ON approver_avatar.workspace_id = approver_m.workspace_id AND approver_avatar.id = approver_m.avatar_file_id AND approver_avatar.purpose = 'avatar' AND approver_avatar.status = 'ready' AND approver_avatar.deleted_at IS NULL
+               WHERE c.record_id = $1 AND c.workspace_id = $2
+               ORDER BY e.occurred_at DESC, c.id DESC"#,
+        )
+        .bind(record_id)
+        .bind(self.workspace_id.0)
+        .fetch_all(&self.pool)
+        .await?
+        .into_domain())
+    }
+
+    pub async fn record_audit_changes_page(
+        &self,
+        record_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<RecordAuditChange>, bool), RepositoryError> {
+        let mut rows = sqlx::query_as::<_, Db<RecordAuditChange>>(
+            r#"SELECT c.audit_event_id, e.occurred_at, e.actor_user_id,
+                      actor.display_name AS actor_display_name, actor.email AS actor_email,
+                      actor_avatar.id AS actor_avatar_file_id,
+                      e.executor_type, e.agent_run_id, e.approval_decision, e.approved_by_user_id,
+                      approver.display_name AS approved_by_display_name,
+                      approver_avatar.id AS approved_by_avatar_file_id,
+                      c.attribute_id, c.attribute_code, c.context_id, c.context_code,
+                      c.change_kind, c.before_value, c.after_value
+               FROM audit_event_changes c
+               JOIN audit_events e ON e.id = c.audit_event_id
+               LEFT JOIN users actor ON actor.id = e.actor_user_id
+               LEFT JOIN users approver ON approver.id = e.approved_by_user_id
+               LEFT JOIN workspace_memberships actor_m ON actor_m.workspace_id = c.workspace_id AND actor_m.user_id = e.actor_user_id AND actor_m.state = 'active' LEFT JOIN files actor_avatar ON actor_avatar.workspace_id = actor_m.workspace_id AND actor_avatar.id = actor_m.avatar_file_id AND actor_avatar.purpose = 'avatar' AND actor_avatar.status = 'ready' AND actor_avatar.deleted_at IS NULL
+               LEFT JOIN workspace_memberships approver_m ON approver_m.workspace_id = c.workspace_id AND approver_m.user_id = e.approved_by_user_id AND approver_m.state = 'active' LEFT JOIN files approver_avatar ON approver_avatar.workspace_id = approver_m.workspace_id AND approver_avatar.id = approver_m.avatar_file_id AND approver_avatar.purpose = 'avatar' AND approver_avatar.status = 'ready' AND approver_avatar.deleted_at IS NULL
+               WHERE c.record_id = $1 AND c.workspace_id = $2
+               ORDER BY e.occurred_at DESC, c.id DESC
+               LIMIT $3 OFFSET $4"#,
+        )
+        .bind(record_id)
+        .bind(self.workspace_id.0)
+        .bind(limit + 1)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        let has_more = rows.len() as i64 > limit;
+        rows.truncate(limit as usize);
+        Ok((rows.into_domain(), has_more))
+    }
+
+    pub async fn get_record(&self, record_id: Uuid) -> Result<Option<Record>, RepositoryError> {
+        Ok(sqlx::query_as::<_, Db<Record>>(
+            r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at
+               FROM records
+               WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL"#,
+        )
+        .bind(record_id)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&self.pool)
+        .await?
+        .into_domain())
+    }
+
+    /// Whether a live record exists, without loading its projections.
+    pub async fn record_exists(&self, record_id: Uuid) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM records WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL)",
+        )
+        .bind(record_id)
+        .bind(self.workspace_id.0)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    pub async fn delete_record(&self, record_id: Uuid) -> Result<(), RepositoryError> {
+        self.delete_record_checked(record_id, None).await
+    }
+
+    /// Deletes a record, failing with [`RepositoryError::StaleRecord`] when
+    /// `expected_updated_at` is set and no longer current.
+    pub async fn delete_record_checked(
+        &self,
+        record_id: Uuid,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let (changes, event) = self
+            .delete_record_in_transaction(&mut transaction, record_id, expected_updated_at)
+            .await?;
+        self.commit_record_mutation(transaction, changes, event)
+            .await?;
+        Ok(())
+    }
+
+    /// Caller-transaction seam for record deletion with an optional
+    /// optimistic-concurrency precondition; see
+    /// [`Self::create_record_in_transaction`] for the shared contract.
+    pub(super) async fn delete_record_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<(Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
+        let record = self.lock_record(transaction, record_id).await?;
+        let before = self.record_audit_snapshot(transaction, record_id).await?;
+        if expected_updated_at.is_some_and(|expected| expected != record.updated_at) {
+            return Err(RepositoryError::StaleRecord);
+        }
+        self.ensure_record_deletable(transaction, &record).await?;
+        // Withdraw live publications through the shared helper so consumers
+        // receive `record.unpublished`, then drop the record's rows.
+        self.clear_record_publications(transaction, record_id, "record_deleted")
+            .await?;
+        sqlx::query(
+            "DELETE FROM record_channel_publications WHERE workspace_id = $1 AND record_id = $2",
+        )
+        .bind(self.workspace_id.0)
+        .bind(record_id)
+        .execute(&mut **transaction)
+        .await?;
+        let result = sqlx::query(
+            "UPDATE records SET deleted_at = now(), updated_at = now() WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
+        )
+        .bind(record_id)
+        .bind(self.workspace_id.0)
+        .execute(&mut **transaction)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound("record"));
+        }
+        self.delete_record_unique_keys(transaction, record_id)
+            .await?;
+        let changes = Self::audit_changes(record_id, before, Vec::new(), false);
+        let event = self.core_event(
+            RECORD_DELETED_V1,
+            "record",
+            record_id,
+            serde_json::to_value(RecordMutationV1 {
+                record_id,
+                blueprint_id: record.blueprint_id,
+                blueprint_version: record.blueprint_version,
+                facts: Vec::new(),
+            })
+            .expect("record-deleted payload is serializable"),
+        );
+        Ok((changes, event))
+    }
+
+    pub async fn append_values(
+        &self,
+        record_id: Uuid,
+        input: AppendAttributeValues,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        if input
+            .values
+            .iter()
+            .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
+        {
+            self.lock_relationship_cardinality_writes(&mut transaction)
+                .await?;
+        }
+        lock_record_writes(&mut transaction, self.workspace_id.0, false).await?;
+        let record = sqlx::query_as::<_, Db<Record>>(
+            r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at
+               FROM records
+               WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
+               FOR UPDATE"#,
+        )
+        .bind(record_id)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .into_domain()
+        .ok_or(RepositoryError::NotFound("record"))?;
+        let before = self
+            .record_audit_snapshot(&mut transaction, record_id)
+            .await?;
+
+        let write = WriteContext::load(&mut transaction, self.workspace_id.0, &record).await?;
+        if input.expected_updated_at.is_some()
+            || Self::has_status_writes(&write, &input.values, &[])
+        {
+            Self::check_status_precondition(&write, &record, input.expected_updated_at)?;
+        }
+        let values = self
+            .insert_values_in(&mut transaction, &write, &record, input.values)
+            .await?;
+
+        self.validate_record_schema_in(&mut transaction, &write, &record, Revalidation::Write)
+            .await?;
+
+        let preview = write.preview(&mut transaction, record_id).await?;
+        sqlx::query(
+            r#"UPDATE records
+               SET projections = jsonb_set(projections, '{preview}', $2, true), updated_at = now()
+               WHERE id = $1 AND workspace_id = $3"#,
+        )
+        .bind(record_id)
+        .bind(preview)
+        .bind(self.workspace_id.0)
+        .execute(&mut *transaction)
+        .await?;
+
+        let after = self
+            .record_audit_snapshot(&mut transaction, record_id)
+            .await?;
+        let changes = Self::audit_changes(record_id, before, after, false);
+        let facts = Self::affected_facts(&changes);
+        let contains_relationship = values
+            .iter()
+            .any(|value| value.relationship_target_record_id.is_some());
+        let contains_scalar = values
+            .iter()
+            .any(|value| value.relationship_target_record_id.is_none());
+        let event = if contains_relationship && !contains_scalar {
+            self.core_event(
+                RELATIONSHIP_CHANGED_V1,
+                "record",
+                record_id,
+                serde_json::to_value(RelationshipMutationV1 { record_id, facts })
+                    .expect("relationship-changed payload is serializable"),
+            )
+        } else if contains_relationship {
+            self.core_event(
+                RECORD_UPDATED_V1,
+                "record",
+                record_id,
+                serde_json::to_value(RecordMutationV1 {
+                    record_id,
+                    blueprint_id: record.blueprint_id,
+                    blueprint_version: record.blueprint_version,
+                    facts,
+                })
+                .expect("record-updated payload is serializable"),
+            )
+        } else {
+            self.core_event(
+                ATTRIBUTE_VALUE_CHANGED_V1,
+                "record",
+                record_id,
+                serde_json::to_value(AttributeValueMutationV1 { record_id, facts })
+                    .expect("attribute-value-changed payload is serializable"),
+            )
+        };
+        self.commit_record_mutation(transaction, changes, event)
+            .await?;
+        Ok(values)
+    }
+
+    pub async fn replace_relationships(
+        &self,
+        record_id: Uuid,
+        input: RelationshipMutation,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        self.mutate_relationships(record_id, input, true, None)
+            .await
+    }
+
+    pub async fn remove_relationships(
+        &self,
+        record_id: Uuid,
+        input: RelationshipMutation,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        self.mutate_relationships(record_id, input, false, None)
+            .await
+    }
+
+    /// Replaces (`replace`) or removes relationship targets, failing with
+    /// [`RepositoryError::StaleRecord`] when `expected_updated_at` is set and
+    /// no longer current.
+    pub async fn mutate_relationships_checked(
+        &self,
+        record_id: Uuid,
+        input: RelationshipMutation,
+        replace: bool,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        self.mutate_relationships(record_id, input, replace, expected_updated_at)
+            .await
+    }
+
+    async fn mutate_relationships(
+        &self,
+        record_id: Uuid,
+        input: RelationshipMutation,
+        replace: bool,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        if !input.relationships.is_empty() {
+            self.lock_relationship_cardinality_writes(&mut transaction)
+                .await?;
+        }
+        let record = self.lock_record(&mut transaction, record_id).await?;
+        if expected_updated_at.is_some_and(|expected| expected != record.updated_at) {
+            return Err(RepositoryError::StaleRecord);
+        }
+        let before = self
+            .record_audit_snapshot(&mut transaction, record_id)
+            .await?;
+        let write = WriteContext::load(&mut transaction, self.workspace_id.0, &record).await?;
+        let mut values = Vec::new();
+        for relationship in input.relationships {
+            let context_id = Some(write.resolve_context(relationship.context_id)?);
+            let (attribute_id, target_blueprint_codes, context_editable) =
+                Self::relationship_attribute(&write, &relationship)?;
+            write.ensure_editable(context_id, &context_editable)?;
+            // Relationship writes are set operations; sorting target IDs gives
+            // every concurrent writer the same target-lock order.
+            let targets: BTreeSet<_> = relationship.target_record_ids.into_iter().collect();
+            self.validate_relationship_targets(&mut transaction, &targets, &target_blueprint_codes)
+                .await?;
+
+            let current = self
+                .current_relationship_targets(&mut transaction, record.id, attribute_id, context_id)
+                .await?;
+            let removals: Vec<_> = if replace {
+                current.difference(&targets).copied().collect()
+            } else {
+                current.intersection(&targets).copied().collect()
+            };
+            for target_id in removals {
+                values.push(
+                    self.insert_relationship_value(
+                        &mut transaction,
+                        &write,
+                        &record,
+                        attribute_id,
+                        context_id,
+                        target_id,
+                        false,
+                    )
+                    .await?,
+                );
+            }
+            if replace {
+                for target_id in targets.difference(&current) {
+                    values.push(
+                        self.insert_relationship_value(
+                            &mut transaction,
+                            &write,
+                            &record,
+                            attribute_id,
+                            context_id,
+                            *target_id,
+                            true,
+                        )
+                        .await?,
+                    );
+                }
+            }
+        }
+        self.validate_record_schema_in(&mut transaction, &write, &record, Revalidation::Write)
+            .await?;
+        self.touch_record(&mut transaction, record_id).await?;
+        let after = self
+            .record_audit_snapshot(&mut transaction, record_id)
+            .await?;
+        let changes = Self::audit_changes(record_id, before, after, false);
+        let event = self.core_event(
+            RELATIONSHIP_CHANGED_V1,
+            "record",
+            record_id,
+            serde_json::to_value(RelationshipMutationV1 {
+                record_id,
+                facts: Self::affected_facts(&changes),
+            })
+            .expect("relationship-changed payload is serializable"),
+        );
+        self.commit_record_mutation(transaction, changes, event)
+            .await?;
+        Ok(values)
+    }
+
+    pub(super) async fn replace_relationship_sets(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        record: &Record,
+        relationships: Vec<RelationshipTargets>,
+    ) -> Result<(), RepositoryError> {
+        for relationship in relationships {
+            let context_id = Some(write.resolve_context(relationship.context_id)?);
+            let (attribute_id, target_blueprint_codes, context_editable) =
+                Self::relationship_attribute(write, &relationship)?;
+            write.ensure_editable(context_id, &context_editable)?;
+            let targets: BTreeSet<_> = relationship.target_record_ids.into_iter().collect();
+            self.validate_relationship_targets(transaction, &targets, &target_blueprint_codes)
+                .await?;
+            let current = self
+                .current_relationship_targets(transaction, record.id, attribute_id, context_id)
+                .await?;
+            for target_id in current.difference(&targets) {
+                self.insert_relationship_value(
+                    transaction,
+                    write,
+                    record,
+                    attribute_id,
+                    context_id,
+                    *target_id,
+                    false,
+                )
+                .await?;
+            }
+            for target_id in targets.difference(&current) {
+                self.insert_relationship_value(
+                    transaction,
+                    write,
+                    record,
+                    attribute_id,
+                    context_id,
+                    *target_id,
+                    true,
+                )
+                .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Inserts `values` in order. Each value is resolved and validated as it
+    /// is reached, so errors keep their input precedence. Relationship values
+    /// are written immediately because their cardinality checks read the
+    /// values already written; scalar values are written together at the end
+    /// with one archive and one insert.
+    pub(super) async fn insert_values_in(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        record: &Record,
+        values: Vec<NewAttributeValue>,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        let mut inserted: Vec<Option<AttributeValue>> = Vec::with_capacity(values.len());
+        let mut scalars: Vec<(usize, PreparedValue)> = Vec::new();
+        for value in values {
+            let prepared = Self::prepare_value(write, value)?;
+            if prepared.relationship.is_some() {
+                inserted.push(Some(
+                    self.write_prepared_value(transaction, write, record, prepared)
+                        .await?,
+                ));
+            } else {
+                scalars.push((inserted.len(), prepared));
+                inserted.push(None);
+            }
+        }
+        let distinct_keys = scalars
+            .iter()
+            .map(|(_, value)| (value.attribute_id, value.context_id))
+            .collect::<HashSet<_>>()
+            .len();
+        if scalars.len() > 1 && distinct_keys == scalars.len() {
+            let (positions, prepared): (Vec<_>, Vec<_>) = scalars.into_iter().unzip();
+            let written = self
+                .write_scalar_values(transaction, write, record, prepared)
+                .await?;
+            for (position, value) in positions.into_iter().zip(written) {
+                inserted[position] = Some(value);
+            }
+        } else {
+            // A repeated attribute and context archives the earlier value of
+            // the same write, exactly as one-at-a-time writes do.
+            for (position, prepared) in scalars {
+                inserted[position] = Some(
+                    self.write_prepared_value(transaction, write, record, prepared)
+                        .await?,
+                );
+            }
+        }
+        Ok(inserted
+            .into_iter()
+            .map(|value| value.expect("every value was written"))
+            .collect())
+    }
+
+    /// [`Self::insert_value_in`] for a caller without a write context.
+    pub(super) async fn insert_value(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record: &Record,
+        value: NewAttributeValue,
+    ) -> Result<AttributeValue, RepositoryError> {
+        let context = WriteContext::load(transaction, self.workspace_id.0, record).await?;
+        self.insert_value_in(transaction, &context, record, value)
+            .await
+    }
+
+    pub(super) async fn insert_value_in(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        record: &Record,
+        value: NewAttributeValue,
+    ) -> Result<AttributeValue, RepositoryError> {
+        let prepared = Self::prepare_value(write, value)?;
+        self.write_prepared_value(transaction, write, record, prepared)
+            .await
+    }
+
+    /// Resolves a value's context and attribute and validates it without a
+    /// database read: selector, editability, kind, native type and schema.
+    fn prepare_value(
+        write: &WriteContext,
+        value: NewAttributeValue,
+    ) -> Result<PreparedValue, RepositoryError> {
+        let (attribute_id, attribute_code, context_id, payload, target_record_id) = match value {
+            NewAttributeValue::Scalar {
+                attribute_id,
+                attribute_code,
+                context_id,
+                value,
+            } => (attribute_id, attribute_code, context_id, value, None),
+            NewAttributeValue::Relationship {
+                attribute_id,
+                attribute_code,
+                context_id,
+                target_record_id,
+            } => (
+                attribute_id,
+                attribute_code,
+                context_id,
+                Value::Null,
+                Some(target_record_id),
+            ),
+        };
+        let context_id = write.resolve_context(context_id)?;
+        let attribute_label = attribute_code.clone();
+        let attribute = write.attribute(attribute_id, attribute_code.as_deref())?;
+        write.ensure_editable(Some(context_id), &attribute.context_editable)?;
+        if (attribute.value_type == "relationship") != target_record_id.is_some() {
+            return Err(RepositoryError::AttributeKindMismatch);
+        }
+        let attribute_id = attribute.id;
+        if let Some(target_record_id) = target_record_id {
+            return Ok(PreparedValue {
+                attribute_id,
+                attribute_code: attribute.code.clone(),
+                context_id,
+                relationship: Some(PreparedRelationship {
+                    target_record_id,
+                    target_blueprint_codes: attribute.target_blueprint_codes.clone(),
+                    cardinality: attribute
+                        .cardinality
+                        .clone()
+                        .unwrap_or_else(|| "many".to_owned()),
+                    target_cardinality: attribute
+                        .target_cardinality
+                        .clone()
+                        .unwrap_or_else(|| "many".to_owned()),
+                }),
+                native: None,
+            });
+        }
+        let native = NativeValue::parse(ValueType::parse(&attribute.value_type)?, payload)?;
+        if let Some(schema) = &attribute.value_schema
+            && let Some(error) = validate_json_schema(schema, &native.json())
+                .map_err(|message| RepositoryError::AttributeValueSchemaMismatch {
+                    attribute: attribute_label
+                        .clone()
+                        .unwrap_or_else(|| attribute_id.to_string()),
+                    instance_path: String::new(),
+                    message,
+                })?
+                .into_iter()
+                .next()
+        {
+            return Err(RepositoryError::AttributeValueSchemaMismatch {
+                attribute: attribute_label.unwrap_or_else(|| attribute_id.to_string()),
+                instance_path: error.instance_path,
+                message: error.message,
+            });
+        }
+        Ok(PreparedValue {
+            attribute_id,
+            attribute_code: attribute.code.clone(),
+            context_id,
+            relationship: None,
+            native: Some(native),
+        })
+    }
+
+    /// Writes one prepared value: relationship target and cardinality checks,
+    /// then archive the current value and insert the new one.
+    async fn write_prepared_value(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        record: &Record,
+        prepared: PreparedValue,
+    ) -> Result<AttributeValue, RepositoryError> {
+        write.values_changed();
+        let PreparedValue {
+            attribute_id,
+            attribute_code,
+            context_id,
+            relationship,
+            native,
+        } = prepared;
+        let target_record_id = relationship
+            .as_ref()
+            .map(|relationship| relationship.target_record_id);
+        if let Some(relationship) = &relationship {
+            self.validate_relationship_target(
+                transaction,
+                relationship.target_record_id,
+                &relationship.target_blueprint_codes,
+            )
+            .await?;
+            self.validate_relationship_cardinality(
+                transaction,
+                write,
+                CardinalityCheck {
+                    record,
+                    attribute_id,
+                    attribute_code: &attribute_code,
+                    cardinality: &relationship.cardinality,
+                    target_cardinality: &relationship.target_cardinality,
+                    context_id: Some(context_id),
+                    target_record_id: relationship.target_record_id,
+                },
+            )
+            .await?;
+        }
+
+        self.archive_current_value(
+            transaction,
+            record.id,
+            attribute_id,
+            Some(context_id),
+            target_record_id,
+        )
+        .await?;
+
+        let query = sqlx::query_as::<_, Db<AttributeValue>>(
+            r#"INSERT INTO attribute_values (
+                    id, workspace_id, record_id, attribute_id, context_id, relationship_target_record_id, active,
+                    value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                    value_time, value_time_zone, value_json
+                ) VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                RETURNING id, record_id, attribute_id,
+                    'null'::jsonb AS value,
+                    relationship_target_record_id, context_id, active, created_at"#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(self.workspace_id.0)
+        .bind(record.id)
+        .bind(attribute_id)
+        .bind(context_id)
+        .bind(target_record_id);
+        let query = match native {
+            Some(native) => native.bind(query),
+            None => query
+                .bind(Option::<String>::None)
+                .bind(Option::<Decimal>::None)
+                .bind(Option::<i64>::None)
+                .bind(Option::<bool>::None)
+                .bind(Option::<NaiveDate>::None)
+                .bind(Option::<DateTime<Utc>>::None)
+                .bind(Option::<NaiveTime>::None)
+                .bind(Option::<String>::None)
+                .bind(Option::<Value>::None),
+        };
+        Ok(query.fetch_one(&mut **transaction).await?.into_domain())
+    }
+
+    /// Writes scalar values with distinct `(attribute, context)` keys: one
+    /// statement archives every current value, one inserts every new value.
+    /// Returns the inserted values in input order.
+    async fn write_scalar_values(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        record: &Record,
+        prepared: Vec<PreparedValue>,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        write.values_changed();
+        let attribute_ids: Vec<Uuid> = prepared.iter().map(|value| value.attribute_id).collect();
+        let context_ids: Vec<Uuid> = prepared.iter().map(|value| value.context_id).collect();
+        self.archive_current_scalar_values(transaction, record.id, &attribute_ids, &context_ids)
+            .await?;
+        let ids: Vec<Uuid> = prepared.iter().map(|_| Uuid::new_v4()).collect();
+        let mut text = Vec::with_capacity(prepared.len());
+        let mut number = Vec::with_capacity(prepared.len());
+        let mut integer = Vec::with_capacity(prepared.len());
+        let mut boolean = Vec::with_capacity(prepared.len());
+        let mut date = Vec::with_capacity(prepared.len());
+        let mut datetime = Vec::with_capacity(prepared.len());
+        let mut time = Vec::with_capacity(prepared.len());
+        let mut time_zone = Vec::with_capacity(prepared.len());
+        let mut json = Vec::with_capacity(prepared.len());
+        for value in prepared {
+            let columns = value
+                .native
+                .map(NativeValue::into_columns)
+                .unwrap_or_default();
+            text.push(columns.text);
+            number.push(columns.number);
+            integer.push(columns.integer);
+            boolean.push(columns.boolean);
+            date.push(columns.date);
+            datetime.push(columns.datetime);
+            time.push(columns.time);
+            time_zone.push(columns.time_zone);
+            json.push(columns.json);
+        }
+        let rows = sqlx::query_as::<_, Db<AttributeValue>>(
+            r#"INSERT INTO attribute_values (
+                    id, workspace_id, record_id, attribute_id, context_id, relationship_target_record_id, active,
+                    value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                    value_time, value_time_zone, value_json
+                )
+                SELECT v.id, $1, $2, v.attribute_id, v.context_id, NULL, true,
+                       v.value_text, v.value_number, v.value_integer, v.value_boolean, v.value_date,
+                       v.value_datetime, v.value_time, v.value_time_zone, v.value_json
+                FROM UNNEST($3::uuid[], $4::uuid[], $5::uuid[], $6::text[], $7::numeric[],
+                            $8::int8[], $9::bool[], $10::date[], $11::timestamptz[], $12::time[],
+                            $13::text[], $14::jsonb[])
+                     AS v(id, attribute_id, context_id, value_text, value_number, value_integer,
+                          value_boolean, value_date, value_datetime, value_time, value_time_zone,
+                          value_json)
+                RETURNING id, record_id, attribute_id,
+                    'null'::jsonb AS value,
+                    relationship_target_record_id, context_id, active, created_at"#,
+        )
+        .bind(self.workspace_id.0)
+        .bind(record.id)
+        .bind(&ids)
+        .bind(&attribute_ids)
+        .bind(&context_ids)
+        .bind(text)
+        .bind(number)
+        .bind(integer)
+        .bind(boolean)
+        .bind(date)
+        .bind(datetime)
+        .bind(time)
+        .bind(time_zone)
+        .bind(json)
+        .fetch_all(&mut **transaction)
+        .await?
+        .into_iter()
+        .map(|row| {
+            let value: AttributeValue = row.into_domain();
+            (value.id, value)
+        })
+        .collect::<HashMap<_, _>>();
+        let mut rows = rows;
+        Ok(ids
+            .iter()
+            .map(|id| rows.remove(id).expect("every inserted value is returned"))
+            .collect())
+    }
+
+    async fn remove_scalar_value(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        record: &Record,
+        selector: AttributeValueSelector,
+    ) -> Result<(), RepositoryError> {
+        validate_attribute_selector_code(&selector.attribute_code)?;
+        let context_id = Some(write.resolve_context(selector.context_id)?);
+        let attribute = write
+            .by_code(&selector.attribute_code)
+            .ok_or(RepositoryError::AttributeNotApplicable)?;
+        if attribute.value_type == "relationship" {
+            return Err(RepositoryError::AttributeKindMismatch);
+        }
+        write.ensure_editable(context_id, &attribute.context_editable)?;
+        write.values_changed();
+        self.archive_current_value(transaction, record.id, attribute.id, context_id, None)
+            .await?;
+        Ok(())
+    }
+
+    pub(super) async fn resolve_context_id(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        context_id: Option<Uuid>,
+    ) -> Result<Option<Uuid>, RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        let context_id = match context_id {
+            Some(context_id) => context_id,
+            None => sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
+            )
+            .bind(workspace_id)
+            .fetch_optional(&mut **transaction)
+            .await?
+            .ok_or(RepositoryError::InvalidContext)?,
+        };
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
+        )
+        .bind(context_id)
+        .bind(workspace_id)
+        .fetch_one(&mut **transaction)
+        .await?;
+        if !exists {
+            return Err(RepositoryError::InvalidContext);
+        }
+        Ok(Some(context_id))
+    }
+
+    pub(super) async fn validate_context_editable(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        context_id: Option<Uuid>,
+        context_editable: &str,
+    ) -> Result<(), RepositoryError> {
+        if context_editable == "default" {
+            let is_default = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2 AND code = 'default')",
+            )
+            .bind(context_id.ok_or(RepositoryError::InvalidContext)?)
+            .bind(self.workspace_id.0)
+            .fetch_one(&mut **transaction)
+            .await?;
+            if !is_default {
+                return Err(RepositoryError::DefaultContextOnly);
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) async fn lock_record(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+    ) -> Result<Record, RepositoryError> {
+        lock_record_writes(transaction, self.workspace_id.0, false).await?;
+        sqlx::query_as::<_, Db<Record>>(
+            r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at
+               FROM records WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE"#,
+        )
+        .bind(record_id)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .into_domain()
+        .ok_or(RepositoryError::NotFound("record"))
+    }
+
+    /// [`Self::lock_record`] and the workspace's generations as this
+    /// transaction sees them, in one query.
+    pub(super) async fn lock_record_with_generations(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+    ) -> Result<(Record, Option<WorkspaceGenerations>), RepositoryError> {
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            #[sqlx(flatten)]
+            record: Db<Record>,
+            catalog_generation: Option<i64>,
+            contexts_generation: Option<i64>,
+            extensions_generation: Option<i64>,
+        }
+        lock_record_writes(transaction, self.workspace_id.0, false).await?;
+        let row = sqlx::query_as::<_, Row>(
+            r#"SELECT e.id, e.blueprint_id, e.blueprint_version, e.projections, e.system_tags, e.system_metadata, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.updated_at, e.deleted_at,
+                      w.catalog_generation, w.contexts_generation, w.extensions_generation
+               FROM records e LEFT JOIN workspaces w ON w.id = e.workspace_id
+               WHERE e.id = $1 AND e.workspace_id = $2 AND e.deleted_at IS NULL FOR UPDATE OF e"#,
+        )
+        .bind(record_id)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .ok_or(RepositoryError::NotFound("record"))?;
+        let generations = row
+            .catalog_generation
+            .zip(row.contexts_generation)
+            .zip(row.extensions_generation)
+            .map(
+                |((catalog_generation, contexts_generation), extensions_generation)| {
+                    WorkspaceGenerations {
+                        catalog_generation,
+                        contexts_generation,
+                        extensions_generation,
+                    }
+                },
+            );
+        Ok((row.record.into_domain(), generations))
+    }
+
+    async fn insert_record(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+        system_tags: Vec<String>,
+        system_metadata: Value,
+    ) -> Result<Record, RepositoryError> {
+        lock_record_writes(transaction, self.workspace_id.0, false).await?;
+        sqlx::query_as::<_, Db<Record>>(
+            r#"INSERT INTO records (id, workspace_id, blueprint_id, blueprint_version, projections, system_tags, system_metadata)
+               SELECT $1, $2, b.id, b.version, $3, $4, $5
+               FROM blueprints b
+                WHERE b.id = $6 AND b.version = $7 AND b.workspace_id = $2 AND b.kind = 'record' AND b.status = 'published' AND b.deleted_at IS NULL
+                RETURNING id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at"#,
+        )
+        .bind(record_id)
+        .bind(self.workspace_id.0)
+        .bind(empty_projections())
+        .bind(system_tags)
+        .bind(system_metadata)
+        .bind(blueprint_id)
+        .bind(blueprint_version)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .into_domain()
+        .ok_or(RepositoryError::NotFound("blueprint version"))
+    }
+
+    /// The shared validation step of every record write; see [`Revalidation`].
+    pub(super) async fn validate_record_schema_with(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record: &Record,
+        mode: Revalidation,
+    ) -> Result<(), RepositoryError> {
+        let write = WriteContext::load(transaction, self.workspace_id.0, record).await?;
+        self.validate_record_schema_in(transaction, &write, record, mode)
+            .await
+    }
+
+    pub(super) async fn validate_record_schema_in(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        record: &Record,
+        mode: Revalidation,
+    ) -> Result<(), RepositoryError> {
+        let tree = &write.tree;
+        // The write's own status changes, validated before system effects
+        // (approval voids) add transitions of their own.
+        let changes = match mode {
+            Revalidation::Write => {
+                self.checked_status_changes(transaction, record, write)
+                    .await?
+            }
+            Revalidation::Structural => Vec::new(),
+        };
+        let assigned = self
+            .validate_principal_values(transaction, record, write, mode)
+            .await?;
+        if mode == Revalidation::Write {
+            self.apply_status_effects_in(transaction, record, write)
+                .await?;
+            self.notify_assignments_on(transaction, record.id, &assigned)
+                .await?;
+        }
+        // Every value write validates here, so unique keys stay current.
+        self.sync_record_unique_keys(transaction, record).await?;
+        let record_schema = match self
+            .cached_published_revision(record.blueprint_id, record.blueprint_version)
+            .await
+        {
+            Some(revision) => revision.0.record_schema.clone(),
+            None => sqlx::query_scalar::<_, Option<Value>>(
+                "SELECT record_schema FROM blueprints WHERE id = $1 AND version = $2 AND deleted_at IS NULL",
+            )
+            .bind(record.blueprint_id)
+            .bind(record.blueprint_version)
+            .fetch_one(&mut **transaction)
+            .await?,
+        };
+        let record = write
+            .after_record(transaction, self.workspace_id.0, record.id)
+            .await?
+            .unwrap_or_else(|| {
+                RecordValues::empty(record.id, record.blueprint_id, record.blueprint_version)
+            });
+        if let Some(record_schema) = &record_schema {
+            validate_json_record_schema(tree, &record, record_schema)?;
+        }
+        self.enforce_declarative_checks_using(
+            transaction,
+            record_schema.as_ref(),
+            write.enabled_rules.as_deref(),
+            tree,
+            &record,
+            &changes,
+        )
+        .await
+    }
+
+    /// The validation tail for writes that change stored values without the
+    /// update seam (file references, reusable attribute attachment):
+    /// [`Self::validate_record_schema_with`] with its status side effects, then the
+    /// rebuilt preview. Returns the stored record.
+    pub(super) async fn revalidate_record(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record: &Record,
+    ) -> Result<Record, RepositoryError> {
+        let write = WriteContext::load(transaction, self.workspace_id.0, record).await?;
+        self.validate_record_schema_in(transaction, &write, record, Revalidation::Write)
+            .await?;
+        let preview = write.preview(transaction, record.id).await?;
+        self.store_preview(transaction, record.id, preview).await
+    }
+
+    fn relationship_attribute(
+        write: &WriteContext,
+        relationship: &RelationshipTargets,
+    ) -> Result<(Uuid, Vec<String>, String), RepositoryError> {
+        let attribute = write.attribute(
+            relationship.attribute_id,
+            relationship.attribute_code.as_deref(),
+        )?;
+        if attribute.value_type != "relationship" {
+            return Err(RepositoryError::AttributeKindMismatch);
+        }
+        Ok((
+            attribute.id,
+            attribute.target_blueprint_codes.clone(),
+            attribute.context_editable.clone(),
+        ))
+    }
+
+    async fn validate_relationship_target(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        target_record_id: Uuid,
+        allowed_target_blueprints: &[String],
+    ) -> Result<(), RepositoryError> {
+        let target = sqlx::query_scalar::<_, String>(
+            r#"SELECT b.code FROM records e JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
+               WHERE e.id = $1 AND e.workspace_id = $2 AND e.deleted_at IS NULL"#,
+        )
+        .bind(target_record_id)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .ok_or(RepositoryError::NotFound("relationship target record"))?;
+        // An empty set accepts any record blueprint.
+        if !allowed_target_blueprints.is_empty() && !allowed_target_blueprints.contains(&target) {
+            return Err(RepositoryError::RelationshipTargetTypeMismatch);
+        }
+        Ok(())
+    }
+
+    /// [`Self::validate_relationship_target`] for a set of targets in one
+    /// query, reporting the first failing target in set order.
+    async fn validate_relationship_targets(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        targets: &BTreeSet<Uuid>,
+        allowed_target_blueprints: &[String],
+    ) -> Result<(), RepositoryError> {
+        if targets.is_empty() {
+            return Ok(());
+        }
+        let ids: Vec<Uuid> = targets.iter().copied().collect();
+        let codes: HashMap<Uuid, String> = sqlx::query_as::<_, (Uuid, String)>(
+            r#"SELECT e.id, b.code FROM records e JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
+               WHERE e.id = ANY($1) AND e.workspace_id = $2 AND e.deleted_at IS NULL"#,
+        )
+        .bind(&ids)
+        .bind(self.workspace_id.0)
+        .fetch_all(&mut **transaction)
+        .await?
+        .into_iter()
+        .collect();
+        for target in &ids {
+            let code = codes
+                .get(target)
+                .ok_or(RepositoryError::NotFound("relationship target record"))?;
+            // An empty set accepts any record blueprint.
+            if !allowed_target_blueprints.is_empty() && !allowed_target_blueprints.contains(code) {
+                return Err(RepositoryError::RelationshipTargetTypeMismatch);
+            }
+        }
+        Ok(())
+    }
+
+    async fn current_relationship_targets(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+        attribute_id: Uuid,
+        context_id: Option<Uuid>,
+    ) -> Result<BTreeSet<Uuid>, RepositoryError> {
+        Ok(sqlx::query_scalar::<_, Uuid>(
+            r#"SELECT relationship_target_record_id
+               FROM attribute_values
+               WHERE record_id = $1
+                 AND attribute_id = $2
+                 AND context_id IS NOT DISTINCT FROM $3
+                 AND relationship_target_record_id IS NOT NULL
+                  AND active"#,
+        )
+        .bind(record_id)
+        .bind(attribute_id)
+        .bind(context_id)
+        .fetch_all(&mut **transaction)
+        .await?
+        .into_iter()
+        .collect())
+    }
+
+    pub(super) async fn lock_relationship_cardinality_writes(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+    ) -> Result<(), RepositoryError> {
+        // All relationship writers in a workspace acquire the same lock before
+        // record rows, cardinality validation, or relationship mutations. A
+        // single canonical key avoids opposite-order deadlocks across payloads
+        // that claim more than one target while keeping workspaces independent.
+        let lock_key = format!("relationship-cardinality:{}", self.workspace_id.0);
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(lock_key)
+            .execute(&mut **transaction)
+            .await?;
+        Ok(())
+    }
+
+    async fn validate_relationship_cardinality(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        check: CardinalityCheck<'_>,
+    ) -> Result<(), RepositoryError> {
+        let CardinalityCheck {
+            record,
+            attribute_id,
+            attribute_code,
+            cardinality,
+            target_cardinality,
+            context_id,
+            target_record_id,
+        } = check;
+        self.validate_relationship_hierarchy(
+            transaction,
+            write,
+            record,
+            attribute_id,
+            attribute_code,
+            context_id,
+            target_record_id,
+        )
+        .await?;
+        let target_is_one = target_cardinality == "one"
+            || write
+                .family_constraints(transaction, self.workspace_id.0, record.blueprint_id)
+                .await?
+                .target_one_codes
+                .contains(attribute_code);
+        if cardinality != "one" && !target_is_one {
+            return Ok(());
+        }
+
+        let source_conflict = if cardinality == "one" {
+            sqlx::query_scalar::<_, Uuid>(
+                r#"SELECT relationship_target_record_id
+               FROM attribute_values
+               WHERE record_id = $1 AND attribute_id = $2
+                 AND context_id IS NOT DISTINCT FROM $3
+                 AND relationship_target_record_id IS NOT NULL AND active
+                 AND relationship_target_record_id <> $4
+               FOR UPDATE"#,
+            )
+            .bind(record.id)
+            .bind(attribute_id)
+            .bind(context_id)
+            .bind(target_record_id)
+            .fetch_optional(&mut **transaction)
+            .await?
+        } else {
+            None
+        };
+        if let Some(existing_target) = source_conflict {
+            return Err(RepositoryError::RelationshipCardinalityConflict {
+                attribute: attribute_code.to_owned(),
+                context_id,
+                source_record_id: record.id,
+                target_record_id: existing_target,
+                conflicting_source_record_id: None,
+            });
+        }
+
+        // Attribute IDs are revision-local. Field identity is the blueprint
+        // family plus code, so revisions with a target limit cannot claim the
+        // same target merely because their attribute IDs differ.
+        let target_conflict = if target_is_one {
+            sqlx::query_scalar::<_, Uuid>(
+                r#"SELECT av.record_id
+               FROM attribute_values av
+               JOIN attributes a ON a.id = av.attribute_id
+               WHERE ((a.blueprint_id = $1 AND a.code = $2)
+                    OR (a.reusable_attribute_revision_id = (SELECT reusable_attribute_revision_id FROM attributes WHERE id = $7) AND a.code = $2))
+                 AND a.workspace_id = $6 AND av.workspace_id = $6
+                 AND av.context_id IS NOT DISTINCT FROM $3
+                 AND av.relationship_target_record_id = $4 AND av.active
+                 AND av.record_id <> $5
+               FOR UPDATE OF av"#,
+            )
+            .bind(record.blueprint_id)
+            .bind(attribute_code)
+            .bind(context_id)
+            .bind(target_record_id)
+            .bind(record.id)
+            .bind(self.workspace_id.0)
+            .bind(attribute_id)
+            .fetch_optional(&mut **transaction)
+            .await?
+        } else {
+            None
+        };
+        if let Some(conflicting_source_record_id) = target_conflict {
+            return Err(RepositoryError::RelationshipCardinalityConflict {
+                attribute: attribute_code.to_owned(),
+                context_id,
+                source_record_id: record.id,
+                target_record_id,
+                conflicting_source_record_id: Some(conflicting_source_record_id),
+            });
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn insert_relationship_value(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        record: &Record,
+        attribute_id: Uuid,
+        context_id: Option<Uuid>,
+        target_record_id: Uuid,
+        active: bool,
+    ) -> Result<AttributeValue, RepositoryError> {
+        // The caller holds the record lock and resolved the attribute from
+        // the same write context.
+        let record_id = record.id;
+        write.values_changed();
+        if active {
+            let attribute = write
+                .by_id(attribute_id)
+                .filter(|attribute| attribute.value_type == "relationship")
+                .ok_or(RepositoryError::AttributeNotApplicable)?;
+            self.validate_relationship_cardinality(
+                transaction,
+                write,
+                CardinalityCheck {
+                    record,
+                    attribute_id,
+                    attribute_code: &attribute.code,
+                    cardinality: attribute.cardinality.as_deref().unwrap_or("many"),
+                    target_cardinality: attribute.target_cardinality.as_deref().unwrap_or("many"),
+                    context_id,
+                    target_record_id,
+                },
+            )
+            .await?;
+        }
+        let archived = self
+            .archive_current_value(
+                transaction,
+                record_id,
+                attribute_id,
+                context_id,
+                Some(target_record_id),
+            )
+            .await?;
+
+        if !active {
+            return Ok(archived
+                .map(|mut value| {
+                    value.active = false;
+                    value
+                })
+                .unwrap_or(AttributeValue {
+                    id: Uuid::new_v4(),
+                    record_id,
+                    attribute_id,
+                    value: Value::Null,
+                    relationship_target_record_id: Some(target_record_id),
+                    active: false,
+                    context_id,
+                    created_at: Utc::now(),
+                }));
+        }
+
+        Ok(sqlx::query_as::<_, Db<AttributeValue>>(
+            r#"INSERT INTO attribute_values (id, workspace_id, record_id, attribute_id, context_id, relationship_target_record_id, active)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
+               RETURNING id, record_id, attribute_id, 'null'::jsonb AS value, relationship_target_record_id, context_id, active, created_at"#,
+        )
+        .bind(Uuid::new_v4()).bind(self.workspace_id.0).bind(record_id).bind(attribute_id).bind(context_id)
+        .bind(target_record_id).bind(active).fetch_one(&mut **transaction).await?
+        .into_domain())
+    }
+
+    pub(super) async fn record_audit_snapshot(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+    ) -> Result<Vec<AuditValueSnapshot>, RepositoryError> {
+        sqlx::query_as::<_, AuditValueSnapshot>(
+            r#"SELECT av.attribute_id, a.code AS attribute_code, av.context_id, c.code AS context_code,
+                      av.relationship_target_record_id,
+                      CASE a.value_type
+                        WHEN 'string' THEN to_jsonb(av.value_text)
+                        WHEN 'number' THEN to_jsonb(av.value_number)
+                        WHEN 'integer' THEN to_jsonb(av.value_integer)
+                        WHEN 'boolean' THEN to_jsonb(av.value_boolean)
+                        WHEN 'date' THEN to_jsonb(av.value_date)
+                        WHEN 'datetime' THEN to_jsonb(av.value_datetime)
+                        WHEN 'time' THEN jsonb_build_object('time', av.value_time::text, 'time_zone', av.value_time_zone)
+                        WHEN 'json' THEN av.value_json
+                        WHEN 'relationship' THEN to_jsonb(av.relationship_target_record_id::text)
+                      END AS value
+               FROM attribute_values av
+               JOIN attributes a ON a.id = av.attribute_id
+               LEFT JOIN attribute_contexts c ON c.id = av.context_id
+               WHERE av.record_id = $1 AND av.workspace_id = $2 AND (av.relationship_target_record_id IS NULL OR av.active)
+                 AND a.value_type <> 'file'
+               ORDER BY a.code, c.code, av.relationship_target_record_id"#,
+        )
+        .bind(record_id)
+        .bind(self.workspace_id.0)
+        .fetch_all(&mut **transaction)
+        .await
+        .map_err(Into::into)
+    }
+
+    pub(super) fn audit_changes(
+        record_id: Uuid,
+        before: Vec<AuditValueSnapshot>,
+        after: Vec<AuditValueSnapshot>,
+        restored: bool,
+    ) -> Vec<AuditEventChange> {
+        let index = |values: Vec<AuditValueSnapshot>| {
+            values
+                .into_iter()
+                .map(|value| {
+                    (
+                        (
+                            value.attribute_id,
+                            value.context_id,
+                            value.relationship_target_record_id,
+                        ),
+                        value,
+                    )
+                })
+                .collect::<BTreeMap<_, _>>()
+        };
+        let before = index(before);
+        let after = index(after);
+        let keys: std::collections::BTreeSet<_> =
+            before.keys().chain(after.keys()).copied().collect();
+        keys.into_iter()
+            .filter_map(|key| {
+                let old = before.get(&key);
+                let new = after.get(&key);
+                if old.map(|value| &value.value) == new.map(|value| &value.value) {
+                    return None;
+                }
+                let source = new.or(old)?;
+                let relationship = source.relationship_target_record_id.is_some();
+                let change_kind = if restored {
+                    "restore"
+                } else if relationship && old.is_none() {
+                    "relationship_add"
+                } else if relationship && new.is_none() {
+                    "relationship_remove"
+                } else if old.is_none() {
+                    "set"
+                } else if new.is_none() {
+                    "remove"
+                } else {
+                    "replace"
+                };
+                Some(AuditEventChange {
+                    record_id,
+                    attribute_id: source.attribute_id,
+                    attribute_code: source.attribute_code.clone(),
+                    context_id: source.context_id,
+                    context_code: source.context_code.clone(),
+                    relationship_target_record_id: source.relationship_target_record_id,
+                    change_kind,
+                    before_value: old.map(|value| value.value.clone()),
+                    after_value: new.map(|value| value.value.clone()),
+                })
+            })
+            .collect()
+    }
+
+    /// [`Self::archive_current_value`] for many scalar `(attribute, context)`
+    /// keys of one record in one statement.
+    async fn archive_current_scalar_values(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+        attribute_ids: &[Uuid],
+        context_ids: &[Uuid],
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(
+            r#"WITH keys AS (
+                    SELECT * FROM UNNEST($2::uuid[], $3::uuid[]) AS k(attribute_id, context_id)
+                ), file_references AS MATERIALIZED (
+                    SELECT r.attribute_value_id, r.workspace_id, r.file_id, r.position
+                    FROM attribute_file_references r
+                    JOIN attribute_values av ON av.id = r.attribute_value_id
+                    JOIN keys ON keys.attribute_id = av.attribute_id AND keys.context_id = av.context_id
+                    WHERE av.record_id = $1
+                      AND av.workspace_id = $4
+                      AND av.relationship_target_record_id IS NULL
+                ), archived AS (
+                    DELETE FROM attribute_values av
+                    USING keys
+                    WHERE av.record_id = $1
+                      AND av.workspace_id = $4
+                      AND av.attribute_id = keys.attribute_id
+                      AND av.context_id = keys.context_id
+                      AND av.relationship_target_record_id IS NULL
+                    RETURNING av.*
+                ), stored AS (
+                    INSERT INTO attribute_value_history (
+                        id, workspace_id, record_id, attribute_id, context_id, relationship_target_record_id, active,
+                        value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                        value_time, value_time_zone, value_json, created_at
+                    )
+                    SELECT id, workspace_id, record_id, attribute_id, context_id, relationship_target_record_id, active,
+                           value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                           value_time, value_time_zone, value_json, created_at
+                    FROM archived
+                    RETURNING id, workspace_id, archived_at
+                )
+                INSERT INTO attribute_file_reference_history (
+                    attribute_value_history_id, attribute_value_history_archived_at, workspace_id, file_id, position
+                )
+                SELECT stored.id, stored.archived_at, file_references.workspace_id, file_references.file_id, file_references.position
+                FROM file_references JOIN stored
+                  ON stored.id = file_references.attribute_value_id
+                 AND stored.workspace_id = file_references.workspace_id"#,
+        )
+        .bind(record_id)
+        .bind(attribute_ids)
+        .bind(context_ids)
+        .bind(self.workspace_id.0)
+        .execute(&mut **transaction)
+        .await?;
+        Ok(())
+    }
+
+    /// [`Self::audit_changes`] across a blueprint migration. A preserved value
+    /// moves to the target revision's attribute with the same code, so it is
+    /// compared under that attribute instead of appearing removed and re-set.
+    pub(super) fn migration_audit_changes(
+        record_id: Uuid,
+        mut before: Vec<AuditValueSnapshot>,
+        after: Vec<AuditValueSnapshot>,
+    ) -> Vec<AuditEventChange> {
+        let target_ids: std::collections::HashMap<_, _> = after
+            .iter()
+            .map(|value| (value.attribute_code.clone(), value.attribute_id))
+            .collect();
+        for value in &mut before {
+            if let Some(attribute_id) = target_ids.get(&value.attribute_code) {
+                value.attribute_id = *attribute_id;
+            }
+        }
+        Self::audit_changes(record_id, before, after, false)
+    }
+
+    pub(super) async fn archive_current_value(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+        attribute_id: Uuid,
+        context_id: Option<Uuid>,
+        relationship_target_record_id: Option<Uuid>,
+    ) -> Result<Option<AttributeValue>, RepositoryError> {
+        sqlx::query_as::<_, Db<AttributeValue>>(
+            r#"WITH file_references AS MATERIALIZED (
+                    SELECT r.attribute_value_id, r.workspace_id, r.file_id, r.position
+                    FROM attribute_file_references r
+                    JOIN attribute_values av ON av.id = r.attribute_value_id
+                    WHERE av.record_id = $1
+                      AND av.workspace_id = $5
+                      AND av.attribute_id = $2
+                      AND av.context_id IS NOT DISTINCT FROM $3
+                      AND av.relationship_target_record_id IS NOT DISTINCT FROM $4
+                ), archived AS (
+                    DELETE FROM attribute_values
+                    WHERE record_id = $1
+                      AND workspace_id = $5
+                      AND attribute_id = $2
+                      AND context_id IS NOT DISTINCT FROM $3
+                      AND relationship_target_record_id IS NOT DISTINCT FROM $4
+                    RETURNING *
+                ), stored AS (
+                    INSERT INTO attribute_value_history (
+                        id, workspace_id, record_id, attribute_id, context_id, relationship_target_record_id, active,
+                        value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                        value_time, value_time_zone, value_json, created_at
+                    )
+                    SELECT id, workspace_id, record_id, attribute_id, context_id, relationship_target_record_id, active,
+                           value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                           value_time, value_time_zone, value_json, created_at
+                    FROM archived
+                    RETURNING id, workspace_id, archived_at
+                ), copied_references AS (
+                    INSERT INTO attribute_file_reference_history (
+                        attribute_value_history_id, attribute_value_history_archived_at, workspace_id, file_id, position
+                    )
+                    SELECT stored.id, stored.archived_at, file_references.workspace_id, file_references.file_id, file_references.position
+                    FROM file_references JOIN stored
+                      ON stored.id = file_references.attribute_value_id
+                     AND stored.workspace_id = file_references.workspace_id
+                )
+                SELECT id, record_id, attribute_id, 'null'::jsonb AS value,
+                       relationship_target_record_id, context_id, active, created_at
+                FROM archived"#,
+        )
+        .bind(record_id)
+        .bind(attribute_id)
+        .bind(context_id)
+        .bind(relationship_target_record_id)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&mut **transaction)
+        .await
+        .map(IntoDomain::into_domain)
+        .map_err(Into::into)
+    }
+
+    async fn touch_record(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE records SET updated_at = now() WHERE id = $1 AND workspace_id = $2")
+            .bind(record_id)
+            .bind(self.workspace_id.0)
+            .execute(&mut **transaction)
+            .await?;
+        Ok(())
+    }
+}
+
+pub(super) fn writes_relationship_values(values: &[NewAttributeValue]) -> bool {
+    values
+        .iter()
+        .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
+}
+
+/// Validates the blueprint's JSON record schema in every context against the
+/// resolved values of the blueprint's fields (see
+/// [`RecordValues::schema_document`]); the first violation is returned.
+pub(super) fn validate_json_record_schema(
+    tree: &ContextTree,
+    record: &RecordValues,
+    record_schema: &Value,
+) -> Result<(), RepositoryError> {
+    for context in tree.nodes() {
+        let document = record.schema_document(&tree.path(context.id, true)?);
+        if let Some(error) = validate_json_schema(record_schema, &Value::Object(document))
+            .map_err(|message| RepositoryError::RecordSchemaMismatch {
+                context: context.code.clone(),
+                instance_path: String::new(),
+                message,
+            })?
+            .into_iter()
+            .next()
+        {
+            return Err(RepositoryError::RecordSchemaMismatch {
+                context: context.code.clone(),
+                instance_path: error.instance_path,
+                message: error.message,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Every record writer holds this workspace lock shared from before its
+/// first record row lock until it commits; context creation and reparenting
+/// take it exclusively, so they wait for this workspace's in-flight writers
+/// without blocking other workspaces. See the lock order in `mod.rs`.
+pub(super) async fn lock_record_writes(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    exclusive: bool,
+) -> Result<(), RepositoryError> {
+    let statement = if exclusive {
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))"
+    } else {
+        "SELECT pg_advisory_xact_lock_shared(hashtextextended($1, 0))"
+    };
+    sqlx::query(statement)
+        .bind(format!("record-writes:{workspace_id}"))
+        .execute(&mut **transaction)
+        .await?;
+    Ok(())
+}

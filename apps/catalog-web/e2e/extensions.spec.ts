@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
-  createEntity,
-  createEntityBlueprint,
+  createRecord,
+  createRecordBlueprint,
   defaultContext,
   request,
   scalar,
@@ -65,7 +65,7 @@ test('side-loads the example extension and recalculates a blueprint formula', as
     .toBe(true);
 
   const code = `formula_${suffix()}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Formula product',
     `[[attributes]]
@@ -87,9 +87,9 @@ columns = [{ field = "price_net", renderer = { id = "attricat-extension-example.
 [extensions.attricat-extension-example.formulas]
 price_gross = "price_net * (1 + 0.23)"`,
   );
-  const entity = await createEntity(blueprint, [scalar('price_net', 100)]);
+  const record = await createRecord(blueprint, [scalar('price_net', 100)]);
 
-  await page.goto(`/entities/${entity.id}`);
+  await page.goto(`/records/${record.id}`);
   // The decoration asks the server component for the formula index, which
   // compiles its WASM on first use.
   await expect(
@@ -111,7 +111,7 @@ price_gross = "price_net * (1 + 0.23)"`,
       async () => {
         const preview = await request<{
           values: Record<string, { value: unknown }>;
-        }>(`/entities/${entity.id}/resolved-preview?context_id=${context.id}`);
+        }>(`/records/${record.id}/resolved-preview?context_id=${context.id}`);
         return Object.values(preview.values).map(({ value }) => value);
       },
       { timeout: 120_000 },
@@ -130,7 +130,7 @@ price_gross = "price_net * (1 + 0.23)"`,
     });
   }).toPass({ timeout: 60_000 });
 
-  await page.getByLabel(`Record actions for ${entity.id}`).click();
+  await page.getByLabel(`Record actions for ${record.id}`).click();
   await expect(page.getByLabel('Extension actions')).toBeVisible();
   await page.getByLabel('Extension actions').click();
   const rowAction = page
@@ -139,7 +139,7 @@ price_gross = "price_net * (1 + 0.23)"`,
   await expect(rowAction).toBeVisible();
   await rowAction.click();
   const dialog = page.frameLocator('iframe[title="Recalculate formulas"]');
-  await expect(dialog.getByText('1 selected entity')).toBeVisible();
+  await expect(dialog.getByText('1 selected record')).toBeVisible();
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(
     page.locator('iframe[title="Recalculate formulas"]'),

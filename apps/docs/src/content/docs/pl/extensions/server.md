@@ -30,13 +30,13 @@ Zadeklaruj procedurę obsługi i zasubskrybuj dokładne typy zdarzeń:
 "server": {
   "event_handlers": [{
     "id": "recalculate",
-    "event_types": ["entity.updated.v1"],
+    "event_types": ["record.updated.v1"],
     "handler": "handle-event"
   }]
 }
 ```
 
-Eksport `handle-event` komponentu otrzymuje zdarzenie: jego identyfikator, typ, rodzaj i identyfikator agregatu, identyfikatory korelacji i przyczyny oraz ładunek JSON. W typach zdarzeń i wywołaniach hosta rekordy występują pod nazwą `entity`. Zdarzenia rekordów zawierają identyfikator rekordu, jego Schemat i wersję oraz listę faktów opisujących każdy zmieniony atrybut. Zobacz [dokumentację zdarzeń](/pl/reference/events/).
+Eksport `handle-event` komponentu otrzymuje zdarzenie: jego identyfikator, typ, rodzaj i identyfikator agregatu, identyfikatory korelacji i przyczyny oraz ładunek JSON. Interfejs WIT `catalog:host@1.0.0` zachowuje pierwotne nazwy, więc odczyty i zapisy hosta wskazują rekord przez `entity-id`. Zdarzenia rekordów zawierają identyfikator rekordu, jego Schemat i wersję oraz listę faktów opisujących każdy zmieniony atrybut. Zobacz [dokumentację zdarzeń](/pl/reference/events/).
 
 Zasady dostarczania:
 
@@ -57,7 +57,7 @@ Zapis wykonany podczas obsługi zdarzenia jest przypisywany użytkownikowi lub t
 
 Wywołania JSON `catalog.read.v1` i `catalog.command.v1` dodają odczyty stronicowane, kanały zmian, wyszukiwanie pojedynczego atrybutu oraz partie intencji `create`, `update`, `relationships` i `upsert`. Upsert dopasowuje rekord po zadeklarowanym atrybucie klucza biznesowego, tworzy go tylko wtedy, gdy żaden rekord nie pasuje, i kończy się błędem, jeśli pasuje więcej niż jeden. Zbiory relacji z upsertu są stosowane zarówno wtedy, gdy aktualizuje on dopasowany rekord, jak i wtedy, gdy go tworzy.
 
-Wyszukiwanie działa dokładnie tak samo jak dopasowanie w upsercie. Jeśli sam atrybut tekstowy jest zadeklarowanym kluczem unikalnym, wyszukiwanie korzysta ze znormalizowanych wartości tego klucza we wszystkich wersjach Schematu; w przeciwnym razie dopasowuje dokładny tekst wśród rekordów żądanej wersji. Wartość pasująca do więcej niż jednego rekordu kończy się błędem `lookup matched multiple entities`, zamiast zwracać jedną z nich.
+Wyszukiwanie działa dokładnie tak samo jak dopasowanie w upsercie. Jeśli sam atrybut tekstowy jest zadeklarowanym kluczem unikalnym, wyszukiwanie korzysta ze znormalizowanych wartości tego klucza we wszystkich wersjach Schematu; w przeciwnym razie dopasowuje dokładny tekst wśród rekordów żądanej wersji. Wartość pasująca do więcej niż jednego rekordu kończy się błędem `lookup matched multiple records`, zamiast zwracać jedną z nich.
 
 ## Magazyn
 

@@ -28,7 +28,7 @@ const serverPhases = new Set([
   'sql-table-sort-resolve',
   'sql-search-resolve',
   'sql-relationship-facet',
-  'sql-entities-page',
+  'sql-records-page',
   'sql-related-hydrate',
 ]);
 const framePhaseNames = ['frame-load', 'frame-fallback'] as const;
@@ -90,7 +90,7 @@ export const recordServerTiming = (header: string | null) => {
   addEntry(phases);
 };
 
-/** Frame timings intentionally carry no contribution, entity, or artifact data. */
+/** Frame timings intentionally carry no contribution, record, or artifact data. */
 export const recordFrameTiming = (name: FramePhaseName, duration: number) => {
   if (!framePhases.has(name) || !Number.isFinite(duration) || duration < 0)
     return;

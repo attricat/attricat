@@ -6,7 +6,7 @@ const PART: &str = r#"
 format_version = 1
 code = "uk_part"
 name = "Part"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -26,12 +26,12 @@ value_type = "string"
 "#;
 
 #[sqlx::test]
-async fn single_keys_normalize_values_and_report_the_conflicting_entity(pool: PgPool) {
+async fn single_keys_normalize_values_and_report_the_conflicting_record(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     create_blueprint(&client, &base_url, PART).await;
 
-    let first: Value = create_entity_with(
+    let first: Value = create_record_with(
         &client,
         &base_url,
         "uk_part",
@@ -39,7 +39,7 @@ async fn single_keys_normalize_values_and_report_the_conflicting_entity(pool: Pg
     )
     .await;
 
-    let duplicate = post_entity(
+    let duplicate = post_record(
         &client,
         &base_url,
         "uk_part",
@@ -53,13 +53,13 @@ async fn single_keys_normalize_values_and_report_the_conflicting_entity(pool: Pg
     assert_eq!(body["error"]["details"]["context"], "default");
     assert_eq!(body["error"]["details"]["values"], json!(["abc-1 rev"]));
     assert_eq!(
-        body["error"]["details"]["conflicting_entity_id"],
+        body["error"]["details"]["conflicting_record_id"],
         first["id"]
     );
 
-    // Entities without the key attribute do not participate.
+    // Records without the key attribute do not participate.
     for _ in 0..2 {
-        create_entity_with(
+        create_record_with(
             &client,
             &base_url,
             "uk_part",
@@ -69,7 +69,7 @@ async fn single_keys_normalize_values_and_report_the_conflicting_entity(pool: Pg
     }
 
     // Changing or deleting the holder releases its old value.
-    let second: Value = create_entity_with(
+    let second: Value = create_record_with(
         &client,
         &base_url,
         "uk_part",
@@ -78,7 +78,7 @@ async fn single_keys_normalize_values_and_report_the_conflicting_entity(pool: Pg
     .await;
     client
         .post(format!(
-            "{base_url}/entities/{}/values",
+            "{base_url}/records/{}/values",
             first["id"].as_str().unwrap()
         ))
         .json(&json!({ "values": [scalar("part_number", json!("ABC-2"))] }))
@@ -89,7 +89,7 @@ async fn single_keys_normalize_values_and_report_the_conflicting_entity(pool: Pg
         .unwrap();
     let reuse = client
         .post(format!(
-            "{base_url}/entities/{}/values",
+            "{base_url}/records/{}/values",
             second["id"].as_str().unwrap()
         ))
         .json(&json!({ "values": [scalar("part_number", json!("abc-1 rev"))] }))
@@ -97,7 +97,7 @@ async fn single_keys_normalize_values_and_report_the_conflicting_entity(pool: Pg
         .await
         .unwrap();
     assert_eq!(reuse.status(), StatusCode::CREATED);
-    let taken = post_entity(
+    let taken = post_record(
         &client,
         &base_url,
         "uk_part",
@@ -107,7 +107,7 @@ async fn single_keys_normalize_values_and_report_the_conflicting_entity(pool: Pg
     assert_eq!(taken.status(), StatusCode::CONFLICT);
     client
         .delete(format!(
-            "{base_url}/entities/{}",
+            "{base_url}/records/{}",
             first["id"].as_str().unwrap()
         ))
         .send()
@@ -115,7 +115,7 @@ async fn single_keys_normalize_values_and_report_the_conflicting_entity(pool: Pg
         .unwrap()
         .error_for_status()
         .unwrap();
-    create_entity_with(
+    create_record_with(
         &client,
         &base_url,
         "uk_part",
@@ -137,7 +137,7 @@ async fn concurrent_duplicate_writes_allow_exactly_one(pool: PgPool) {
         let client = client.clone();
         let base_url = base_url.clone();
         attempts.spawn(async move {
-            post_entity(
+            post_record(
                 &client,
                 &base_url,
                 "uk_part",
@@ -180,7 +180,7 @@ async fn composite_keys_combine_relationships_and_scalars(pool: PgPool) {
 format_version = 1
 code = "uk_document"
 name = "Document"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["number"]
@@ -197,7 +197,7 @@ value_type = "string"
 format_version = 1
 code = "uk_revision"
 name = "Revision"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["label"]
@@ -220,7 +220,7 @@ value_type = "string"
         let client = client.clone();
         let base_url = base_url.clone();
         async move {
-            post_entity(
+            post_record(
                 &client,
                 &base_url,
                 "uk_document",
@@ -235,14 +235,14 @@ value_type = "string"
     let (first, second) = (document("D-1").await, document("D-2").await);
     let revision = |document: &Value, label: &str| {
         json!([
-            {"kind": "relationship", "attribute_code": "document", "context_id": null, "target_entity_id": document["id"]},
+            {"kind": "relationship", "attribute_code": "document", "context_id": null, "target_record_id": document["id"]},
             scalar("label", json!(label)),
         ])
     };
     for (document, label) in [(&first, "A"), (&second, "A"), (&first, "a")] {
-        create_entity_with(&client, &base_url, "uk_revision", revision(document, label)).await;
+        create_record_with(&client, &base_url, "uk_revision", revision(document, label)).await;
     }
-    let duplicate = post_entity(&client, &base_url, "uk_revision", revision(&first, "A")).await;
+    let duplicate = post_record(&client, &base_url, "uk_revision", revision(&first, "A")).await;
     assert_eq!(duplicate.status(), StatusCode::CONFLICT);
     let body: Value = duplicate.json().await.unwrap();
     assert_eq!(
@@ -267,14 +267,14 @@ async fn publishing_a_key_reports_existing_duplicates_and_then_covers_older_revi
     let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap().to_owned();
     let mut ids = Vec::new();
     for number in ["P-1", "p-1", "P-2"] {
-        let entity: Value = create_entity_with(
+        let record: Value = create_record_with(
             &client,
             &base_url,
             "uk_part",
             json!([scalar("part_number", json!(number))]),
         )
         .await;
-        ids.push(entity["id"].as_str().unwrap().to_owned());
+        ids.push(record["id"].as_str().unwrap().to_owned());
     }
 
     let revision: Value = client
@@ -306,10 +306,10 @@ async fn publishing_a_key_reports_existing_duplicates_and_then_covers_older_revi
     assert_eq!(duplicate["values"], json!(["p-1"]));
     let mut expected = vec![ids[0].clone(), ids[1].clone()];
     expected.sort();
-    assert_eq!(duplicate["entity_ids"], json!(expected));
+    assert_eq!(duplicate["record_ids"], json!(expected));
 
     client
-        .post(format!("{base_url}/entities/{}/values", ids[1]))
+        .post(format!("{base_url}/records/{}/values", ids[1]))
         .json(&json!({ "values": [scalar("part_number", json!("P-3"))] }))
         .send()
         .await
@@ -318,16 +318,16 @@ async fn publishing_a_key_reports_existing_duplicates_and_then_covers_older_revi
         .unwrap();
     publish().await.unwrap().error_for_status().unwrap();
 
-    // Entities pinned to revision 1 are covered by the family's key.
+    // Records pinned to revision 1 are covered by the family's key.
     let pinned_write = client
-        .post(format!("{base_url}/entities/{}/values", ids[2]))
+        .post(format!("{base_url}/records/{}/values", ids[2]))
         .json(&json!({ "values": [scalar("part_number", json!(" P-1 "))] }))
         .send()
         .await
         .unwrap();
     assert_eq!(pinned_write.status(), StatusCode::CONFLICT);
     assert_eq!(
-        pinned_write.json::<Value>().await.unwrap()["error"]["details"]["conflicting_entity_id"],
+        pinned_write.json::<Value>().await.unwrap()["error"]["details"]["conflicting_record_id"],
         ids[0]
     );
 
@@ -345,7 +345,7 @@ async fn context_scoped_keys_compare_resolved_values_in_every_context(pool: PgPo
 format_version = 1
 code = "uk_page"
 name = "Page"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["slug"]
@@ -370,25 +370,25 @@ value_type = "string"
         .json()
         .await
         .unwrap();
-    let shirt: Value = create_entity_with(
+    let shirt: Value = create_record_with(
         &client,
         &base_url,
         "uk_page",
         json!([scalar("slug", json!("shirt"))]),
     )
     .await;
-    let dress: Value = create_entity_with(
+    let dress: Value = create_record_with(
         &client,
         &base_url,
         "uk_page",
         json!([scalar("slug", json!("dress"))]),
     )
     .await;
-    let set_slug = |entity: &Value, context: &Value, slug: &str| {
+    let set_slug = |record: &Value, context: &Value, slug: &str| {
         client
             .post(format!(
-                "{base_url}/entities/{}/values",
-                entity["id"].as_str().unwrap()
+                "{base_url}/records/{}/values",
+                record["id"].as_str().unwrap()
             ))
             .json(&json!({ "values": [{
                 "kind": "scalar", "attribute_code": "slug",
@@ -403,7 +403,7 @@ value_type = "string"
     let body: Value = collision.json().await.unwrap();
     assert_eq!(body["error"]["details"]["context"], "uk-pl");
     assert_eq!(
-        body["error"]["details"]["conflicting_entity_id"],
+        body["error"]["details"]["conflicting_record_id"],
         shirt["id"]
     );
     // Overriding the shirt in Polish frees "shirt" there.
@@ -433,18 +433,18 @@ value_type = "string"
     let inherited = set_slug(&shirt, &web, "shirt").await.unwrap();
     assert_eq!(inherited.status(), StatusCode::CONFLICT);
     assert_eq!(
-        inherited.json::<Value>().await.unwrap()["error"]["details"]["conflicting_entity_id"],
+        inherited.json::<Value>().await.unwrap()["error"]["details"]["conflicting_record_id"],
         dress["id"]
     );
 
     server.abort();
 }
 
-async fn current_values(client: &Client, base_url: &str, entity: &Value) -> Vec<Value> {
+async fn current_values(client: &Client, base_url: &str, record: &Value) -> Vec<Value> {
     client
         .get(format!(
-            "{base_url}/entities/{}/values/current",
-            entity["id"].as_str().unwrap()
+            "{base_url}/records/{}/values/current",
+            record["id"].as_str().unwrap()
         ))
         .send()
         .await
@@ -471,7 +471,7 @@ async fn duplicating_leaves_out_enforced_key_values(pool: PgPool) {
 format_version = 1
 code = "uk_listing"
 name = "Listing"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["slug"]
@@ -499,18 +499,18 @@ value_type = "string"
         .json()
         .await
         .unwrap();
-    let duplicate = |entity: &Value| {
+    let duplicate = |record: &Value| {
         client
             .post(format!(
-                "{base_url}/v1/entities/{}/duplicate",
-                entity["id"].as_str().unwrap()
+                "{base_url}/v1/records/{}/duplicate",
+                record["id"].as_str().unwrap()
             ))
             .send()
     };
 
     // Workspace keys: the default-context key value is left out, other
     // values are copied, and the copy can take a value of its own.
-    let part: Value = create_entity_with(
+    let part: Value = create_record_with(
         &client,
         &base_url,
         "uk_part",
@@ -529,7 +529,7 @@ value_type = "string"
     );
     client
         .post(format!(
-            "{base_url}/entities/{}/values",
+            "{base_url}/records/{}/values",
             copy["id"].as_str().unwrap()
         ))
         .json(&json!({ "values": [scalar("part_number", json!("P-2"))] }))
@@ -540,7 +540,7 @@ value_type = "string"
         .unwrap();
 
     // Context keys: the key's values are left out in every context.
-    let listing: Value = create_entity_with(
+    let listing: Value = create_record_with(
         &client,
         &base_url,
         "uk_listing",
@@ -552,7 +552,7 @@ value_type = "string"
     .await;
     client
         .post(format!(
-            "{base_url}/entities/{}/values",
+            "{base_url}/records/{}/values",
             listing["id"].as_str().unwrap()
         ))
         .json(&json!({ "values": [{
@@ -594,15 +594,15 @@ async fn create_context(client: &Client, base_url: &str, code: &str, parent: &st
 async fn set_scalar(
     client: &Client,
     base_url: &str,
-    entity: &Value,
+    record: &Value,
     context: &Value,
     code: &str,
     value: &str,
 ) -> reqwest::Response {
     client
         .post(format!(
-            "{base_url}/entities/{}/values",
-            entity["id"].as_str().unwrap()
+            "{base_url}/records/{}/values",
+            record["id"].as_str().unwrap()
         ))
         .json(&json!({ "values": [{
             "kind": "scalar", "attribute_code": code,
@@ -624,7 +624,7 @@ async fn new_contexts_do_not_inherit_keys_of_attributes_without_fallback(pool: P
 format_version = 1
 code = "uk_handle"
 name = "Handle"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["handle"]
@@ -639,17 +639,17 @@ context_fallback = "none"
 "#,
     )
     .await;
-    let first = create_entity_with(
+    let first = create_record_with(
         &client,
         &base_url,
         "uk_handle",
         json!([scalar("handle", json!("x"))]),
     )
     .await;
-    let second = create_entity_with(&client, &base_url, "uk_handle", json!([])).await;
+    let second = create_record_with(&client, &base_url, "uk_handle", json!([])).await;
     let polish = create_context(&client, &base_url, "uk-none-pl", DEFAULT_CONTEXT).await;
 
-    // The first entity has no Polish handle, so "x" is free there.
+    // The first record has no Polish handle, so "x" is free there.
     set_scalar(&client, &base_url, &second, &polish, "handle", "x")
         .await
         .error_for_status()
@@ -657,7 +657,7 @@ context_fallback = "none"
     let taken = set_scalar(&client, &base_url, &first, &polish, "handle", "X").await;
     assert_eq!(taken.status(), StatusCode::CONFLICT);
     assert_eq!(
-        taken.json::<Value>().await.unwrap()["error"]["details"]["conflicting_entity_id"],
+        taken.json::<Value>().await.unwrap()["error"]["details"]["conflicting_record_id"],
         second["id"]
     );
 
@@ -665,7 +665,7 @@ context_fallback = "none"
 }
 
 #[sqlx::test]
-async fn reparenting_a_context_can_swap_two_entities_key_values(pool: PgPool) {
+async fn reparenting_a_context_can_swap_two_records_key_values(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     create_blueprint(
@@ -675,7 +675,7 @@ async fn reparenting_a_context_can_swap_two_entities_key_values(pool: PgPool) {
 format_version = 1
 code = "uk_swap"
 name = "Swap"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["slug"]
@@ -696,8 +696,8 @@ value_type = "string"
         local_slug["context_id"] = polish["id"].clone();
         json!([scalar("slug", json!(default)), local_slug])
     };
-    let first = create_entity_with(&client, &base_url, "uk_swap", slugs("a", "b")).await;
-    create_entity_with(&client, &base_url, "uk_swap", slugs("b", "a")).await;
+    let first = create_record_with(&client, &base_url, "uk_swap", slugs("a", "b")).await;
+    create_record_with(&client, &base_url, "uk_swap", slugs("b", "a")).await;
 
     // X resolves a/b under default and b/a under Polish.
     client
@@ -712,7 +712,7 @@ value_type = "string"
         .error_for_status()
         .unwrap();
 
-    let third = create_entity_with(
+    let third = create_record_with(
         &client,
         &base_url,
         "uk_swap",
@@ -722,7 +722,7 @@ value_type = "string"
     let taken = set_scalar(&client, &base_url, &third, &moved, "slug", "b").await;
     assert_eq!(taken.status(), StatusCode::CONFLICT);
     assert_eq!(
-        taken.json::<Value>().await.unwrap()["error"]["details"]["conflicting_entity_id"],
+        taken.json::<Value>().await.unwrap()["error"]["details"]["conflicting_record_id"],
         first["id"]
     );
 

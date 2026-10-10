@@ -21,7 +21,7 @@ async fn upload_blueprint(client: &Client, base_url: &str) -> Value {
         r#"format_version = 1
 code = "file_upload_product"
 name = "File upload product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -65,7 +65,7 @@ async fn malformed_trailing_multipart_field_removes_staged_files(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = upload_blueprint(&client, &base_url).await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let record = create_record(&client, &base_url, &blueprint).await;
     let staged_paths = || -> std::collections::HashSet<_> {
         std::fs::read_dir(std::env::temp_dir())
             .unwrap()
@@ -89,8 +89,8 @@ async fn malformed_trailing_multipart_field_removes_staged_files(pool: PgPool) {
     );
     let response = client
         .post(format!(
-            "{base_url}/entities/{}/file-attributes/image/uploads",
-            entity["id"].as_str().unwrap()
+            "{base_url}/records/{}/file-attributes/image/uploads",
+            record["id"].as_str().unwrap()
         ))
         .header(
             "content-type",
@@ -122,11 +122,11 @@ async fn oversized_context_id_is_rejected_before_buffering_the_field(pool: PgPoo
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = upload_blueprint(&client, &base_url).await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let record = create_record(&client, &base_url, &blueprint).await;
     let response = client
         .post(format!(
-            "{base_url}/entities/{}/file-attributes/image/uploads",
-            entity["id"].as_str().unwrap()
+            "{base_url}/records/{}/file-attributes/image/uploads",
+            record["id"].as_str().unwrap()
         ))
         .multipart(
             Form::new()
@@ -151,7 +151,7 @@ async fn text_upload_with_binary_tail_is_rejected(pool: PgPool) {
         r#"format_version = 1
 code = "text_upload_product"
 name = "Text upload product"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["document"]
@@ -164,13 +164,13 @@ max_bytes = 1024
 "#,
     )
     .await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let record = create_record(&client, &base_url, &blueprint).await;
     let mut bytes = vec![b'a'; 512];
     bytes.extend_from_slice(b"\0binary tail");
     let response = client
         .post(format!(
-            "{base_url}/entities/{}/file-attributes/document/uploads",
-            entity["id"].as_str().unwrap()
+            "{base_url}/records/{}/file-attributes/document/uploads",
+            record["id"].as_str().unwrap()
         ))
         .multipart(
             Form::new().part(
@@ -195,12 +195,12 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let client = authenticated_client();
     let blueprint = upload_blueprint(&client, &base_url).await;
-    let entity_before = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity_before["id"].as_str().unwrap();
+    let record_before = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record_before["id"].as_str().unwrap();
 
     let response: Value = client
         .post(format!(
-            "{base_url}/entities/{entity_id}/file-attributes/image/uploads"
+            "{base_url}/records/{record_id}/file-attributes/image/uploads"
         ))
         .multipart(Form::new().part("file", png_part("product.png")))
         .send()
@@ -235,8 +235,8 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
         1
     );
 
-    let entity: Value = client
-        .get(format!("{base_url}/v1/entities/{entity_id}"))
+    let record: Value = client
+        .get(format!("{base_url}/v1/records/{record_id}"))
         .send()
         .await
         .unwrap()
@@ -245,7 +245,7 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
         .json()
         .await
         .unwrap();
-    assert!(entity["values"].as_array().unwrap().iter().any(|value| {
+    assert!(record["values"].as_array().unwrap().iter().any(|value| {
         value["kind"] == "file"
             && value["attribute_code"] == "image"
             && value["files"]
@@ -253,11 +253,11 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
                 .is_some_and(|files| files.len() == 1)
     }));
     // An open edit form adopts this version so its next field save is not stale.
-    assert!(entity_before["updated_at"].is_string());
-    assert_ne!(response["entity_updated_at"], entity_before["updated_at"]);
+    assert!(record_before["updated_at"].is_string());
+    assert_ne!(response["record_updated_at"], record_before["updated_at"]);
     assert_eq!(
-        response["entity_updated_at"],
-        entity["entity"]["updated_at"]
+        response["record_updated_at"],
+        record["record"]["updated_at"]
     );
 
     let context_id: Uuid =
@@ -267,7 +267,7 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
             .unwrap();
     let preview: Value = client
         .get(format!(
-            "{base_url}/entities/{entity_id}/resolved-preview?context_id={context_id}"
+            "{base_url}/records/{record_id}/resolved-preview?context_id={context_id}"
         ))
         .send()
         .await
@@ -302,7 +302,7 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
         .unwrap();
 
     let search: Value = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&serde_json::json!({
             "blueprint": { "code": "file_upload_product" },
             "filters": [],
@@ -326,7 +326,7 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
     );
 
     client
-        .put(format!("{base_url}/v1/entities/{entity_id}"))
+        .put(format!("{base_url}/v1/records/{record_id}"))
         .json(&serde_json::json!({
             "values": [],
             "relationships": [],
@@ -347,11 +347,11 @@ async fn migration_retains_files_on_compatible_file_attributes(pool: PgPool) {
     let client = authenticated_client();
     let blueprint = upload_blueprint(&client, &base_url).await;
     let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap();
     let uploaded: Value = client
         .post(format!(
-            "{base_url}/entities/{entity_id}/file-attributes/image/uploads"
+            "{base_url}/records/{record_id}/file-attributes/image/uploads"
         ))
         .multipart(Form::new().part("file", png_part("preserved.png")))
         .send()
@@ -367,9 +367,9 @@ async fn migration_retains_files_on_compatible_file_attributes(pool: PgPool) {
         r#"SELECT av.id, av.created_at, r.file_id, r.position
            FROM attribute_values av
            JOIN attribute_file_references r ON r.attribute_value_id = av.id
-           WHERE av.entity_id = $1"#,
+           WHERE av.record_id = $1"#,
     )
-    .bind(entity_id.parse::<uuid::Uuid>().unwrap())
+    .bind(record_id.parse::<uuid::Uuid>().unwrap())
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -379,7 +379,7 @@ async fn migration_retains_files_on_compatible_file_attributes(pool: PgPool) {
         .json(&serde_json::json!({ "definition": r#"format_version = 1
 code = "file_upload_product"
 name = "Renamed file upload product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -414,7 +414,7 @@ image_only = true"# }))
 
     let preview: Value = client
         .post(format!(
-            "{base_url}/v1/entities/{entity_id}/blueprint-migration/preview"
+            "{base_url}/v1/records/{record_id}/blueprint-migration/preview"
         ))
         .send()
         .await
@@ -426,7 +426,7 @@ image_only = true"# }))
         .unwrap();
     client
         .post(format!(
-            "{base_url}/v1/entities/{entity_id}/blueprint-migration"
+            "{base_url}/v1/records/{record_id}/blueprint-migration"
         ))
         .json(&serde_json::json!({
             "migration_id": preview["migration_id"],
@@ -439,7 +439,7 @@ image_only = true"# }))
         .unwrap();
 
     let migrated: Value = client
-        .get(format!("{base_url}/v1/entities/{entity_id}"))
+        .get(format!("{base_url}/v1/records/{record_id}"))
         .send()
         .await
         .unwrap()
@@ -457,9 +457,9 @@ image_only = true"# }))
         r#"SELECT av.id, av.created_at, r.file_id, r.position
            FROM attribute_values av
            JOIN attribute_file_references r ON r.attribute_value_id = av.id
-           WHERE av.entity_id = $1"#,
+           WHERE av.record_id = $1"#,
     )
-    .bind(entity_id.parse::<uuid::Uuid>().unwrap())
+    .bind(record_id.parse::<uuid::Uuid>().unwrap())
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -496,11 +496,11 @@ async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool)
         start_server_with_file_access_policy(pool.clone(), store, policy.clone()).await;
     let client = authenticated_client();
     let blueprint = upload_blueprint(&client, &base_url).await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let record = create_record(&client, &base_url, &blueprint).await;
     let upload: Value = client
         .post(format!(
-            "{base_url}/entities/{}/file-attributes/image/uploads",
-            entity["id"].as_str().unwrap()
+            "{base_url}/records/{}/file-attributes/image/uploads",
+            record["id"].as_str().unwrap()
         ))
         .multipart(Form::new().part("file", png_part("unsafe name \\\".png")))
         .send()
@@ -627,10 +627,10 @@ async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool)
         matches!(
             operation,
             FileAccessOperation::ReadMetadata {
-                entity_id,
+                record_id,
                 blueprint_id,
                 ..
-            } if *entity_id == entity["id"].as_str().unwrap().parse::<Uuid>().unwrap()
+            } if *record_id == record["id"].as_str().unwrap().parse::<Uuid>().unwrap()
                 && *blueprint_id == blueprint["blueprint"]["id"].as_str().unwrap().parse::<Uuid>().unwrap()
         )
     }));
@@ -646,20 +646,20 @@ async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool)
 }
 
 #[sqlx::test]
-async fn file_reads_use_active_linked_entity_scopes(pool: PgPool) {
+async fn file_reads_use_active_linked_record_scopes(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store).await;
     let owner = authenticated_client();
     let blueprint = upload_blueprint(&owner, &base_url).await;
-    let permitted_entity = create_entity(&owner, &base_url, &blueprint).await;
-    let denied_entity = create_entity(&owner, &base_url, &blueprint).await;
-    let upload = |entity_id: String| {
+    let permitted_record = create_record(&owner, &base_url, &blueprint).await;
+    let denied_record = create_record(&owner, &base_url, &blueprint).await;
+    let upload = |record_id: String| {
         let base_url = base_url.clone();
         let owner = owner.clone();
         async move {
             owner
                 .post(format!(
-                    "{base_url}/entities/{entity_id}/file-attributes/image/uploads"
+                    "{base_url}/records/{record_id}/file-attributes/image/uploads"
                 ))
                 .multipart(Form::new().part("file", png_part("product.png")))
                 .send()
@@ -670,18 +670,18 @@ async fn file_reads_use_active_linked_entity_scopes(pool: PgPool) {
                 .unwrap()
         }
     };
-    let permitted_file = upload(permitted_entity["id"].as_str().unwrap().to_owned()).await;
-    let denied_file = upload(denied_entity["id"].as_str().unwrap().to_owned()).await;
+    let permitted_file = upload(permitted_record["id"].as_str().unwrap().to_owned()).await;
+    let denied_file = upload(denied_record["id"].as_str().unwrap().to_owned()).await;
     let permitted_file_id = permitted_file["files"][0]["id"].as_str().unwrap();
     let denied_file_id = denied_file["files"][0]["id"].as_str().unwrap();
     // A file can be reused by several active values. The reader is scoped to
-    // only the first entity, so this also verifies that one readable target is
-    // sufficient even when another linked entity is out of scope.
+    // only the first record, so this also verifies that one readable target is
+    // sufficient even when another linked record is out of scope.
     let denied_value_id = sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM attribute_values WHERE entity_id = $1 AND active",
+        "SELECT id FROM attribute_values WHERE record_id = $1 AND active",
     )
     .bind(
-        denied_entity["id"]
+        denied_record["id"]
             .as_str()
             .unwrap()
             .parse::<Uuid>()
@@ -735,11 +735,11 @@ async fn file_reads_use_active_linked_entity_scopes(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, '00000000-0000-4000-8000-000000000104', 'entity', $4)")
+    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, '00000000-0000-4000-8000-000000000104', 'record', $4)")
         .bind(Uuid::new_v4())
         .bind(workspace_id)
         .bind(membership_id)
-        .bind(permitted_entity["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+        .bind(permitted_record["id"].as_str().unwrap().parse::<Uuid>().unwrap())
         .execute(&pool)
         .await
         .unwrap();
@@ -753,9 +753,9 @@ async fn file_reads_use_active_linked_entity_scopes(pool: PgPool) {
         reqwest::header::HeaderValue::from_static(BOOTSTRAP_WORKSPACE_ID),
     );
     let reader = Client::builder().default_headers(headers).build().unwrap();
-    let permitted_entity_id = permitted_entity["id"].as_str().unwrap();
+    let permitted_record_id = permitted_record["id"].as_str().unwrap();
     let form: Value = reader
-        .get(format!("{base_url}/v1/entities/{permitted_entity_id}"))
+        .get(format!("{base_url}/v1/records/{permitted_record_id}"))
         .send()
         .await
         .unwrap()
@@ -768,7 +768,7 @@ async fn file_reads_use_active_linked_entity_scopes(pool: PgPool) {
     assert_eq!(
         reader
             .put(format!(
-                "{base_url}/entities/{permitted_entity_id}/file-attributes/image/references"
+                "{base_url}/records/{permitted_record_id}/file-attributes/image/references"
             ))
             .json(&json!({"expected_file_ids":[permitted_file_id],"file_ids":[]}))
             .send()
@@ -780,7 +780,7 @@ async fn file_reads_use_active_linked_entity_scopes(pool: PgPool) {
     assert_eq!(
         reader
             .post(format!(
-                "{base_url}/entities/{permitted_entity_id}/file-attributes/image/uploads"
+                "{base_url}/records/{permitted_record_id}/file-attributes/image/uploads"
             ))
             .multipart(Form::new().part("file", png_part("denied.png")))
             .send()
@@ -829,12 +829,12 @@ async fn rejects_policy_and_signature_mismatches_with_the_error_envelope(pool: P
     let (base_url, server) = start_server_with_object_store(pool, store.clone()).await;
     let client = authenticated_client();
     let blueprint = upload_blueprint(&client, &base_url).await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap();
 
     let response: Value = client
         .post(format!(
-            "{base_url}/entities/{entity_id}/file-attributes/image/uploads"
+            "{base_url}/records/{record_id}/file-attributes/image/uploads"
         ))
         .multipart(
             Form::new().part(
@@ -858,12 +858,12 @@ async fn rejects_policy_and_signature_mismatches_with_the_error_envelope(pool: P
 }
 
 #[sqlx::test]
-async fn duplicating_an_entity_is_atomic_with_its_file_links(pool: PgPool) {
+async fn duplicating_an_record_is_atomic_with_its_file_links(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = upload_blueprint(&client, &base_url).await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id: Uuid = entity["id"].as_str().unwrap().parse().unwrap();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
     let workspace_id: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let repository = api::repository::CatalogRepository::new(pool.clone(), workspace_id);
     let file_id = Uuid::new_v4();
@@ -875,13 +875,13 @@ async fn duplicating_an_entity_is_atomic_with_its_file_links(pool: PgPool) {
         .await
         .unwrap();
     repository
-        .link_file_to_attribute(entity_id, "image", None, file_id)
+        .link_file_to_attribute(record_id, "image", None, file_id)
         .await
         .unwrap();
 
-    let copy = repository.duplicate_entity(entity_id).await.unwrap();
+    let copy = repository.duplicate_record(record_id).await.unwrap();
     let references: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id WHERE v.entity_id = $1 AND r.file_id = $2",
+        "SELECT count(*) FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id WHERE v.record_id = $1 AND r.file_id = $2",
     )
     .bind(copy.id)
     .bind(file_id)
@@ -897,17 +897,17 @@ async fn duplicating_an_entity_is_atomic_with_its_file_links(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let entities = || async {
+    let records = || async {
         sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM entities WHERE blueprint_id = $1 AND deleted_at IS NULL",
+            "SELECT count(*) FROM records WHERE blueprint_id = $1 AND deleted_at IS NULL",
         )
         .bind(copy.blueprint_id)
         .fetch_one(&pool)
         .await
         .unwrap()
     };
-    let before = entities().await;
-    assert!(repository.duplicate_entity(entity_id).await.is_err());
-    assert_eq!(entities().await, before);
+    let before = records().await;
+    assert!(repository.duplicate_record(record_id).await.is_err());
+    assert_eq!(records().await, before);
     server.abort();
 }

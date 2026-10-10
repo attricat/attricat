@@ -1,13 +1,13 @@
 # Relationship Tree Facets
 
-The entity explorer can filter a search through a hierarchical relationship and
+The record explorer can filter a search through a hierarchical relationship and
 show a count beside each node. A product/category catalogue is the usual case:
-`product.categories` points to category entities, and a self-targeting category
+`product.categories` points to category records, and a self-targeting category
 relationship such as `category.parent` supplies the tree edges.
 
 ## Use In The Explorer
 
-1. Search an entity blueprint.
+1. Search a record blueprint.
 2. The explorer renders a relationship facet for every relationship field, such
    as `categories` and `color`, and loads each target blueprint independently.
 3. Each facet discovers self-targeting relationship fields and uses the first
@@ -64,7 +64,7 @@ which resolves the result table, filters, and sorting (see
 
 ## Counts And Selection
 
-Counts are the number of distinct result entities assigned to each category or
+Counts are the number of distinct result records assigned to each category or
 one of its descendants. A result assigned to more than one category contributes
 only once to a node's roll-up count.
 
@@ -80,7 +80,7 @@ Selecting both a parent and child does not duplicate results.
 
 ## API Contract
 
-Add `relationship_tree_facets` to `POST /v1/entities/search`:
+Add `relationship_tree_facets` to `POST /v1/records/search`:
 
 ```json
 {
@@ -110,7 +110,7 @@ separately so searching does not transfer an entire taxonomy.
 }
 ```
 
-`POST /v1/entities/facets/relationship-tree/children` accepts the search
+`POST /v1/records/facets/relationship-tree/children` accepts the search
 blueprint/query, facet fields and context, plus an optional `hierarchy_field`,
 `parent_id`, and cursor. Omit `hierarchy_field` for a one-level picker. It
 returns one configured-size page of direct children with `count`,
@@ -120,7 +120,7 @@ is expanded and uses `next_cursor` for that node's **Load more** action.
 ## Performance
 
 The API aggregates complete matching result sets in PostgreSQL so counts remain
-stable across entity pagination, but only returns the requested root or child
+stable across record pagination, but only returns the requested root or child
 page. `RELATIONSHIP_FACET_MAX_NODES` sets the server-side maximum number of
 nodes returned for each page (default: 100).
 

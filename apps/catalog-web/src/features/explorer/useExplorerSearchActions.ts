@@ -26,11 +26,11 @@ export const useExplorerSearchActions = (
 ) => {
   const navigate = useNavigate({ from: '/' });
   const queryClient = useQueryClient();
-  // The entity side panel stays open while the search changes.
+  // The record side panel stays open while the search changes.
   const go = (nextSearch: ExplorerSearch) =>
     void navigate({
       to: '/',
-      search: ({ entity }) => ({ ...nextSearch, entity }),
+      search: ({ record }) => ({ ...nextSearch, record }),
     });
 
   const setAttributeFilters = (attributeFilters: AttributeFilter[]) =>

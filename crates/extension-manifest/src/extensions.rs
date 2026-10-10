@@ -132,8 +132,8 @@ pub const CAPABILITIES: &[&str] = &[
     "configuration.write",
     "client.commands",
     "client.blueprint_configuration",
-    "client.entity_decoration",
-    "client.entity_action",
+    "client.record_decoration",
+    "client.record_action",
     "client.explorer_row_action",
     "client.explorer_table_cell",
     "client.blueprint_detail_panel",
@@ -155,8 +155,8 @@ pub const CAPABILITIES: &[&str] = &[
     "client.locale.read",
     "client.explorer_action",
     "client.explorer_bulk_action",
-    "client.entity_header_action",
-    "client.entity_attribute_panel",
+    "client.record_header_action",
+    "client.record_attribute_panel",
     "client.blueprint_panel",
     "client.blueprint_publish_check",
     "client.file_panel",
@@ -481,12 +481,12 @@ pub enum UiContributionKind {
 #[serde(rename_all = "snake_case")]
 pub enum UiOutlet {
     Navigation,
-    EntityPreviewPanel,
+    RecordPreviewPanel,
     BlueprintAttributeConfiguration,
-    EntityAttributeDecoration,
-    EntityAction,
-    /// A compact, per-entity explorer menu action. The host provides only the
-    /// entity and immutable blueprint revision identifiers.
+    RecordAttributeDecoration,
+    RecordAction,
+    /// A compact, per-record explorer menu action. The host provides only the
+    /// record and immutable blueprint revision identifiers.
     ExplorerRowAction,
     /// A sandboxed renderer for a visible Explorer table cell.
     ExplorerTableCell,
@@ -494,8 +494,8 @@ pub enum UiOutlet {
     BlueprintDetailPanel,
     ExplorerAction,
     ExplorerBulkAction,
-    EntityHeaderAction,
-    EntityAttributePanel,
+    RecordHeaderAction,
+    RecordAttributePanel,
     BlueprintPanel,
     BlueprintPublishCheck,
     FilePanel,
@@ -819,19 +819,19 @@ impl Manifest {
             }
             if let Some(outlet) = &contribution.outlet {
                 let required = match outlet {
-                    UiOutlet::Navigation | UiOutlet::EntityPreviewPanel => None,
+                    UiOutlet::Navigation | UiOutlet::RecordPreviewPanel => None,
                     UiOutlet::BlueprintAttributeConfiguration => {
                         Some("client.blueprint_configuration")
                     }
-                    UiOutlet::EntityAttributeDecoration => Some("client.entity_decoration"),
-                    UiOutlet::EntityAction => Some("client.entity_action"),
+                    UiOutlet::RecordAttributeDecoration => Some("client.record_decoration"),
+                    UiOutlet::RecordAction => Some("client.record_action"),
                     UiOutlet::ExplorerRowAction => Some("client.explorer_row_action"),
                     UiOutlet::ExplorerTableCell => Some("client.explorer_table_cell"),
                     UiOutlet::BlueprintDetailPanel => Some("client.blueprint_detail_panel"),
                     UiOutlet::ExplorerAction => Some("client.explorer_action"),
                     UiOutlet::ExplorerBulkAction => Some("client.explorer_bulk_action"),
-                    UiOutlet::EntityHeaderAction => Some("client.entity_header_action"),
-                    UiOutlet::EntityAttributePanel => Some("client.entity_attribute_panel"),
+                    UiOutlet::RecordHeaderAction => Some("client.record_header_action"),
+                    UiOutlet::RecordAttributePanel => Some("client.record_attribute_panel"),
                     UiOutlet::BlueprintPanel => Some("client.blueprint_panel"),
                     UiOutlet::BlueprintPublishCheck => Some("client.blueprint_publish_check"),
                     UiOutlet::FilePanel => Some("client.file_panel"),
@@ -871,25 +871,25 @@ impl Manifest {
                             | (UiContributionKind::Embedded, UiOutlet::ExplorerTableCell)
                             | (UiContributionKind::Action, UiOutlet::ExplorerAction)
                             | (UiContributionKind::Action, UiOutlet::ExplorerBulkAction)
-                            | (UiContributionKind::Action, UiOutlet::EntityHeaderAction)
+                            | (UiContributionKind::Action, UiOutlet::RecordHeaderAction)
                             | (UiContributionKind::Panel, UiOutlet::BlueprintDetailPanel)
-                            | (UiContributionKind::Panel, UiOutlet::EntityAttributePanel)
+                            | (UiContributionKind::Panel, UiOutlet::RecordAttributePanel)
                             | (UiContributionKind::Panel, UiOutlet::BlueprintPanel)
                             | (UiContributionKind::Panel, UiOutlet::BlueprintPublishCheck)
                             | (UiContributionKind::Panel, UiOutlet::FilePanel)
                             | (UiContributionKind::Panel, UiOutlet::AuditEventPanel)
                             | (UiContributionKind::Panel, UiOutlet::DataHealthCard)
                             | (UiContributionKind::Embedded, UiOutlet::Navigation)
-                            | (UiContributionKind::Embedded, UiOutlet::EntityPreviewPanel)
+                            | (UiContributionKind::Embedded, UiOutlet::RecordPreviewPanel)
                             | (
                                 UiContributionKind::Embedded,
                                 UiOutlet::BlueprintAttributeConfiguration
                             )
                             | (
                                 UiContributionKind::Embedded,
-                                UiOutlet::EntityAttributeDecoration
+                                UiOutlet::RecordAttributeDecoration
                             )
-                            | (UiContributionKind::Embedded, UiOutlet::EntityAction)
+                            | (UiContributionKind::Embedded, UiOutlet::RecordAction)
                             | (UiContributionKind::Dialog, UiOutlet::ActionDialog)
                     );
                     if !valid_kind {
@@ -1312,7 +1312,7 @@ impl Webhook {
 pub fn selection_action_outlet(outlet: &UiOutlet) -> bool {
     matches!(
         outlet,
-        UiOutlet::EntityAction | UiOutlet::ExplorerRowAction | UiOutlet::ExplorerBulkAction
+        UiOutlet::RecordAction | UiOutlet::ExplorerRowAction | UiOutlet::ExplorerBulkAction
     )
 }
 
@@ -1687,7 +1687,7 @@ mod tests {
                     "hidden": [],
                     "promoted": ["acme.shop:nav"]
                 },
-                "entity_action": {
+                "record_action": {
                     "order": [],
                     "hidden": ["acme.shop:hidden"]
                 }
@@ -1703,14 +1703,14 @@ mod tests {
             ),
             (
                 "acme.shop:hidden",
-                "entity_action",
+                "record_action",
                 true,
                 false,
                 ExtensionLayoutPlacement::Exact,
             ),
             (
                 "acme.shop:absent",
-                "entity_action",
+                "record_action",
                 false,
                 false,
                 ExtensionLayoutPlacement::Absent,
@@ -1761,7 +1761,7 @@ mod tests {
                         "hidden":[],
                         "promoted":["acme.shop:item"]
                     },
-                    "entity_action": {
+                    "record_action": {
                         "order":["acme.shop:item"],
                         "hidden":[]
                     }
@@ -1772,7 +1772,7 @@ mod tests {
                 classify_extension_layout_placement(
                     &malformed,
                     "acme.shop:item",
-                    "entity_action",
+                    "record_action",
                     false,
                     false,
                 ),
@@ -1892,8 +1892,8 @@ mod tests {
         let mut value = manifest();
         value.permissions.push("events.subscribe".into());
         value.server.as_mut().unwrap().event_handlers = vec![EventHandler {
-            id: "on-entity".into(),
-            event_types: vec!["entity.updated.v1".into()],
+            id: "on-record".into(),
+            event_types: vec!["record.updated.v1".into()],
             handler: "handle-event".into(),
         }];
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
@@ -1903,7 +1903,7 @@ mod tests {
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
         value.permissions.push("events.subscribe".into());
         value.server.as_mut().unwrap().event_handlers[0].event_types =
-            vec!["entity.updated".into()];
+            vec!["record.updated".into()];
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 
@@ -2074,7 +2074,7 @@ mod tests {
             version: 1,
             kind: UiContributionKind::Embedded,
             artifact: Some("client".into()),
-            outlet: Some(UiOutlet::EntityPreviewPanel),
+            outlet: Some(UiOutlet::RecordPreviewPanel),
             route: None,
             title: None,
         });
@@ -2198,7 +2198,7 @@ mod tests {
         value.permissions.extend([
             "configuration.write".into(),
             "client.commands".into(),
-            "client.entity_action".into(),
+            "client.record_action".into(),
         ]);
         value.scoped_configuration = Some(ScopedConfiguration {
             version: 1,
@@ -2223,17 +2223,17 @@ mod tests {
             version: 1,
             kind: UiContributionKind::Embedded,
             artifact: Some("client".into()),
-            outlet: Some(UiOutlet::EntityAction),
+            outlet: Some(UiOutlet::RecordAction),
             route: None,
             title: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value
             .permissions
-            .retain(|permission| permission != "client.entity_action");
+            .retain(|permission| permission != "client.record_action");
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
 
-        value.permissions.push("client.entity_action".into());
+        value.permissions.push("client.record_action".into());
         value.server.as_mut().unwrap().commands[0].handler = "".into();
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
         value.server.as_mut().unwrap().commands[0].handler = "refresh-handler".into();

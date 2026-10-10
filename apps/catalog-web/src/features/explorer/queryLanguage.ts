@@ -1,5 +1,5 @@
-import type { Attribute } from '../entities/api';
-import { attributeValueTypes } from '../entities/valueTypes';
+import type { Attribute } from '../records/api';
+import { attributeValueTypes } from '../records/valueTypes';
 import { relationshipPathSeparator } from './constants';
 
 // Explorer query syntax; see apps/docs/src/content/docs/guides/search-syntax.md.
@@ -7,12 +7,12 @@ export const querySelectorSeparator = ':';
 export const queryWildcard = '*';
 /** A selector may name at most three relationships and a scalar leaf. */
 export const maximumQueryRelationshipHops = 3;
-/** Path leaf matching entities by ID: `@id:id-1,id-2` or `rel.@id:id-1`. */
+/** Path leaf matching records by ID: `@id:id-1,id-2` or `rel.@id:id-1`. */
 export const queryIdSelector = '@id';
 export const queryIdSeparator = ',';
-/** Mirrors `MAX_SEARCH_IDS` in the API's entity search repository. */
+/** Mirrors `MAX_SEARCH_IDS` in the API's record search repository. */
 export const maximumQueryIds = 100;
-const entityIdPattern =
+const recordIdPattern =
   /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
 
 export type QueryToken = { text: string; start: number; end: number };
@@ -120,7 +120,7 @@ export const resolveRelationshipPath = (
   return { status: 'ok', attributes, targetCode };
 };
 
-/** Mirrors `compile_search_term` in the API's entity search repository. */
+/** Mirrors `compile_search_term` in the API's record search repository. */
 export const resolveSelector = (
   schema: QuerySchema,
   parts: string[],
@@ -232,10 +232,10 @@ const valueSegments = (
   ];
 };
 
-/** `@id` values are comma-separated entity IDs without wildcards. */
+/** `@id` values are comma-separated record IDs without wildcards. */
 const idValueSegments = (value: string, start: number): QuerySegment[] => {
   const ids = value.split(queryIdSeparator);
-  const invalid = ids.find((id) => !entityIdPattern.test(id));
+  const invalid = ids.find((id) => !recordIdPattern.test(id));
   const distinct = new Set(ids.map((id) => id.toLowerCase())).size;
   const error: QueryError | undefined =
     invalid !== undefined
@@ -421,6 +421,6 @@ export const queryCursorContext = (
   };
 };
 
-/** Query matching exactly the given entities, e.g. `@id:id-1,id-2`. */
-export const entityIdsQuery = (ids: string[]) =>
+/** Query matching exactly the given records, e.g. `@id:id-1,id-2`. */
+export const recordIdsQuery = (ids: string[]) =>
   `${queryIdSelector}${querySelectorSeparator}${ids.join(queryIdSeparator)}`;

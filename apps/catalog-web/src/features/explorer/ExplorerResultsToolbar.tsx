@@ -1,7 +1,7 @@
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
 import { Columns3CogIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { EntityItem } from '../entities/api';
+import type { RecordItem } from '../records/api';
 import { lexiconCountNoun } from '../lexicon/lexicon';
 import { maximumAgentSelection } from './agentSelection';
 import { ExplorerSelectionActionsMenu } from './ExplorerSelectionActionsMenu';
@@ -14,9 +14,9 @@ type Props = {
   totalCount: number | null;
   totalCountCapped: boolean;
   selectionMode: boolean;
-  selectedItems: EntityItem[];
+  selectedItems: RecordItem[];
   onClearSelection: () => void;
-  onRemoveSelected: (entityId: string) => void;
+  onRemoveSelected: (recordId: string) => void;
   onSaveSelectionAsSearch: () => void;
   onSendSelection: () => void;
   onToggleSelection: () => void;
@@ -41,7 +41,7 @@ export const ExplorerResultsToolbar = ({
   const resultCount = (count: number, capped: boolean) => {
     const noun = lexiconCountNoun(blueprintName, count);
     if (noun)
-      return t(capped ? 'explorer.entityCountCapped' : 'explorer.entityCount', {
+      return t(capped ? 'explorer.recordCountCapped' : 'explorer.recordCount', {
         count,
         noun,
       });
@@ -97,9 +97,7 @@ export const ExplorerResultsToolbar = ({
         )}
         <Button onClick={onToggleSelection} size="small">
           {t(
-            selectionMode
-              ? 'explorer.exitSelection'
-              : 'explorer.selectEntities',
+            selectionMode ? 'explorer.exitSelection' : 'explorer.selectRecords',
           )}
         </Button>
         <Tooltip title={t('explorer.columnPreferences')}>

@@ -5,7 +5,7 @@ use std::{sync::Arc, time::Duration};
 use api::{
     agent_tools::{
         ToolError, change_names, change_summary_named, execute_mutation, execute_read,
-        pin_entity_versions,
+        pin_record_versions,
     },
     agent_worker,
     agents::AgentProviderConfig,
@@ -32,7 +32,7 @@ async fn agent_blueprint_reads_list_summaries_and_fetch_one_definition(pool: PgP
         .unwrap();
     let definition = |attribute: &str| {
         format!(
-            "format_version = 1\ncode = \"agent_desk\"\nname = \"Desk\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"{attribute}\"]\n\n[[attributes]]\ncode = \"{attribute}\"\nvalue_type = \"string\""
+            "format_version = 1\ncode = \"agent_desk\"\nname = \"Desk\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"{attribute}\"]\n\n[[attributes]]\ncode = \"{attribute}\"\nvalue_type = \"string\""
         )
     };
     let created = execute_mutation(
@@ -98,8 +98,8 @@ async fn agent_blueprint_reads_list_summaries_and_fetch_one_definition(pool: PgP
         .unwrap();
     assert_eq!(desk["version"], 2);
     assert_eq!(desk["status"], "draft");
-    assert_eq!(desk["kind"], "entity");
-    for omitted in ["definition", "entity_schema", "views", "attributes"] {
+    assert_eq!(desk["kind"], "record");
+    for omitted in ["definition", "record_schema", "views", "attributes"] {
         assert!(
             desk.get(omitted).is_none(),
             "{omitted} should not be listed"
@@ -147,14 +147,14 @@ async fn agent_blueprint_reads_list_summaries_and_fetch_one_definition(pool: PgP
 }
 
 #[sqlx::test]
-async fn approved_entity_edits_apply_to_the_proposed_state_and_name_their_targets(pool: PgPool) {
+async fn approved_record_edits_apply_to_the_proposed_state_and_name_their_targets(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"pinned_desk\"\nname = \"Pinned desk\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"related\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"pinned_desk\"").await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap().to_owned();
-    let other = create_entity(&client, &base_url, &blueprint).await;
+        "format_version = 1\ncode = \"pinned_desk\"\nname = \"Pinned desk\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"related\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"pinned_desk\"").await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap().to_owned();
+    let other = create_record(&client, &base_url, &blueprint).await;
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
     let repository = CatalogRepository::system(pool)
@@ -162,23 +162,23 @@ async fn approved_entity_edits_apply_to_the_proposed_state_and_name_their_target
         .await
         .unwrap();
     let set_title = |title: &str| {
-        json!({"entity_id": entity_id, "values": [
+        json!({"record_id": record_id, "values": [
             {"kind":"scalar","attribute_code":"title","context_id":null,"value":title}
         ]})
     };
     execute_mutation(
         &repository,
         actor,
-        "set_entity_values",
+        "set_record_values",
         set_title("Oak desk"),
     )
     .await
     .unwrap();
 
     // A proposal without expected_updated_at is pinned to the current state,
-    // and its summary names the entity by its display label.
+    // and its summary names the record by its display label.
     let mut proposal = set_title("Walnut desk");
-    pin_entity_versions(&repository, "set_entity_values", &mut proposal)
+    pin_record_versions(&repository, "set_record_values", &mut proposal)
         .await
         .unwrap();
     let pinned = proposal["expected_updated_at"].clone();
@@ -187,97 +187,97 @@ async fn approved_entity_edits_apply_to_the_proposed_state_and_name_their_target
         &repository,
         actor,
         workspace,
-        "set_entity_values",
+        "set_record_values",
         &proposal,
     )
     .await
     .unwrap();
     assert_eq!(
-        change_summary_named("set_entity_values", &proposal, &names).unwrap(),
-        format!("Set attribute values on entity pinned_desk 'Oak desk' ({entity_id}).")
+        change_summary_named("set_record_values", &proposal, &names).unwrap(),
+        format!("Set attribute values on record pinned_desk 'Oak desk' ({record_id}).")
     );
 
     // An explicit expected_updated_at is kept as the model supplied it.
     let mut explicit =
-        json!({"entity_id": entity_id, "expected_updated_at": "2026-01-01T00:00:00Z"});
-    pin_entity_versions(&repository, "delete_entity", &mut explicit)
+        json!({"record_id": record_id, "expected_updated_at": "2026-01-01T00:00:00Z"});
+    pin_record_versions(&repository, "delete_record", &mut explicit)
         .await
         .unwrap();
     assert_eq!(explicit["expected_updated_at"], "2026-01-01T00:00:00Z");
 
-    // Someone saves the entity while the proposal waits for approval.
+    // Someone saves the record while the proposal waits for approval.
     execute_mutation(
         &repository,
         actor,
-        "set_entity_values",
+        "set_record_values",
         set_title("Pine desk"),
     )
     .await
     .unwrap();
     assert!(matches!(
-        execute_mutation(&repository, actor, "set_entity_values", proposal).await,
-        Err(ToolError::Repository(RepositoryError::StaleEntity))
+        execute_mutation(&repository, actor, "set_record_values", proposal).await,
+        Err(ToolError::Repository(RepositoryError::StaleRecord))
     ));
-    let mut deletion = json!({"entity_id": entity_id});
+    let mut deletion = json!({"record_id": record_id});
     let mut batch = json!({"operations": [
-        {"op":"update","entity_id": entity_id,"values": []},
+        {"op":"update","record_id": record_id,"values": []},
         {"op":"create","blueprint":{"code":"pinned_desk"}}
     ]});
-    pin_entity_versions(&repository, "apply_entity_batch", &mut batch)
+    pin_record_versions(&repository, "apply_record_batch", &mut batch)
         .await
         .unwrap();
     assert!(batch["operations"][0]["expected_updated_at"].is_string());
     assert!(batch["operations"][1].get("expected_updated_at").is_none());
-    pin_entity_versions(&repository, "delete_entity", &mut deletion)
+    pin_record_versions(&repository, "delete_record", &mut deletion)
         .await
         .unwrap();
     assert_ne!(deletion["expected_updated_at"], pinned);
     execute_mutation(
         &repository,
         actor,
-        "update_entity_annotations",
-        json!({"entity_id": entity_id, "system_tags": ["reviewed"]}),
+        "update_record_annotations",
+        json!({"record_id": record_id, "system_tags": ["reviewed"]}),
     )
     .await
     .unwrap();
     for (name, arguments) in [
-        ("delete_entity", deletion.clone()),
+        ("delete_record", deletion.clone()),
         (
-            "update_entity_annotations",
-            json!({"entity_id": entity_id, "system_tags": [], "expected_updated_at": deletion["expected_updated_at"]}),
+            "update_record_annotations",
+            json!({"record_id": record_id, "system_tags": [], "expected_updated_at": deletion["expected_updated_at"]}),
         ),
         (
-            "remove_entity_values",
-            json!({"entity_id": entity_id, "remove_values": [{"attribute_code":"title"}], "expected_updated_at": deletion["expected_updated_at"]}),
+            "remove_record_values",
+            json!({"record_id": record_id, "remove_values": [{"attribute_code":"title"}], "expected_updated_at": deletion["expected_updated_at"]}),
         ),
         (
-            "replace_entity_relationships",
-            json!({"entity_id": entity_id, "relationships": [{"attribute_code":"related","target_entity_ids":[other["id"]]}], "expected_updated_at": deletion["expected_updated_at"]}),
+            "replace_record_relationships",
+            json!({"record_id": record_id, "relationships": [{"attribute_code":"related","target_record_ids":[other["id"]]}], "expected_updated_at": deletion["expected_updated_at"]}),
         ),
         (
-            "remove_entity_relationships",
-            json!({"entity_id": entity_id, "relationships": [{"attribute_code":"related","target_entity_ids":[other["id"]]}], "expected_updated_at": deletion["expected_updated_at"]}),
+            "remove_record_relationships",
+            json!({"record_id": record_id, "relationships": [{"attribute_code":"related","target_record_ids":[other["id"]]}], "expected_updated_at": deletion["expected_updated_at"]}),
         ),
         (
             "link_file",
-            json!({"entity_id": entity_id, "attribute_code":"title", "file_id": Uuid::new_v4(), "expected_updated_at": deletion["expected_updated_at"]}),
+            json!({"record_id": record_id, "attribute_code":"title", "file_id": Uuid::new_v4(), "expected_updated_at": deletion["expected_updated_at"]}),
         ),
     ] {
         assert!(
             matches!(
                 execute_mutation(&repository, actor, name, arguments).await,
-                Err(ToolError::Repository(RepositoryError::StaleEntity))
+                Err(ToolError::Repository(RepositoryError::StaleRecord))
             ),
             "{name} must refuse a stale proposal"
         );
     }
 
     // A current pin lets the write through.
-    let mut link = json!({"entity_id": entity_id, "relationships": [{"attribute_code":"related","target_entity_ids":[other["id"]]}]});
-    pin_entity_versions(&repository, "replace_entity_relationships", &mut link)
+    let mut link = json!({"record_id": record_id, "relationships": [{"attribute_code":"related","target_record_ids":[other["id"]]}]});
+    pin_record_versions(&repository, "replace_record_relationships", &mut link)
         .await
         .unwrap();
-    execute_mutation(&repository, actor, "replace_entity_relationships", link)
+    execute_mutation(&repository, actor, "replace_record_relationships", link)
         .await
         .unwrap();
 
@@ -285,7 +285,7 @@ async fn approved_entity_edits_apply_to_the_proposed_state_and_name_their_target
     let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
     let revision = execute_mutation(&repository, actor, "create_blueprint_revision", json!({
         "blueprint_id": blueprint_id,
-        "definition": "format_version = 1\ncode = \"pinned_desk\"\nname = \"Pinned desk\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"related\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"pinned_desk\"\n\n[[attributes]]\ncode = \"finish\"\nvalue_type = \"string\""
+        "definition": "format_version = 1\ncode = \"pinned_desk\"\nname = \"Pinned desk\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"related\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"pinned_desk\"\n\n[[attributes]]\ncode = \"finish\"\nvalue_type = \"string\""
     }))
     .await
     .unwrap();
@@ -297,38 +297,38 @@ async fn approved_entity_edits_apply_to_the_proposed_state_and_name_their_target
     )
     .await
     .unwrap();
-    let mut migration = json!({"entity_id": entity_id});
-    pin_entity_versions(&repository, "migrate_entity", &mut migration)
+    let mut migration = json!({"record_id": record_id});
+    pin_record_versions(&repository, "migrate_record", &mut migration)
         .await
         .unwrap();
     execute_mutation(
         &repository,
         actor,
-        "set_entity_values",
+        "set_record_values",
         set_title("Ash desk"),
     )
     .await
     .unwrap();
     assert!(matches!(
-        execute_mutation(&repository, actor, "migrate_entity", migration).await,
-        Err(ToolError::Repository(RepositoryError::StaleEntity))
+        execute_mutation(&repository, actor, "migrate_record", migration).await,
+        Err(ToolError::Repository(RepositoryError::StaleRecord))
     ));
-    let mut migration = json!({"entity_id": entity_id});
-    pin_entity_versions(&repository, "migrate_entity", &mut migration)
+    let mut migration = json!({"record_id": record_id});
+    pin_record_versions(&repository, "migrate_record", &mut migration)
         .await
         .unwrap();
     assert_eq!(
-        execute_mutation(&repository, actor, "migrate_entity", migration)
+        execute_mutation(&repository, actor, "migrate_record", migration)
             .await
             .unwrap()["migrated"],
         true
     );
 
-    let mut current = json!({"entity_id": entity_id});
-    pin_entity_versions(&repository, "delete_entity", &mut current)
+    let mut current = json!({"record_id": record_id});
+    pin_record_versions(&repository, "delete_record", &mut current)
         .await
         .unwrap();
-    execute_mutation(&repository, actor, "delete_entity", current)
+    execute_mutation(&repository, actor, "delete_record", current)
         .await
         .unwrap();
     server.abort();
@@ -339,9 +339,9 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"linked_part\"\nname = \"Linked part\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"parent\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"linked_part\"\ncardinality = \"one\"").await;
+        "format_version = 1\ncode = \"linked_part\"\nname = \"Linked part\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"parent\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"linked_part\"\ncardinality = \"one\"").await;
     create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"linked_order\"\nname = \"Linked order\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"parts\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"linked_part\"").await;
+        "format_version = 1\ncode = \"linked_order\"\nname = \"Linked order\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"parts\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"linked_part\"").await;
     let create = |blueprint: &'static str,
                   title: &'static str,
                   links: Vec<(&'static str, Value)>| {
@@ -352,10 +352,10 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
                 json!({"kind":"scalar","attribute_code":"title","context_id":null,"value":title}),
             ];
             values.extend(links.into_iter().map(|(field, target)| {
-                json!({"kind":"relationship","attribute_code":field,"context_id":null,"target_entity_id":target})
+                json!({"kind":"relationship","attribute_code":field,"context_id":null,"target_record_id":target})
             }));
-            let entity: Value = client
-                .post(format!("{base_url}/v1/entities"))
+            let record: Value = client
+                .post(format!("{base_url}/v1/records"))
                 .json(&json!({"blueprint":{"code":blueprint},"values":values}))
                 .send()
                 .await
@@ -365,7 +365,7 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
                 .json()
                 .await
                 .unwrap();
-            entity["id"].clone()
+            record["id"].clone()
         }
     };
     let root = create("linked_part", "Frame", vec![]).await;
@@ -383,7 +383,7 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
     };
 
     // Without selectors, every linking field is found and searched.
-    let incoming = read("get_incoming_relationships", json!({"entity_id": root}))
+    let incoming = read("get_incoming_relationships", json!({"record_id": root}))
         .await
         .unwrap();
     assert_eq!(
@@ -396,14 +396,14 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
     assert_eq!(incoming["items"].as_array().unwrap().len(), 2);
     let paged = read(
         "get_incoming_relationships",
-        json!({"entity_id": root, "relationships": [{"source_blueprint":"linked_part","field":"parent"}], "page": {"size": 1}}),
+        json!({"record_id": root, "relationships": [{"source_blueprint":"linked_part","field":"parent"}], "page": {"size": 1}}),
     )
     .await
     .unwrap();
     assert_eq!(paged["items"][0]["id"], wheel);
     assert_eq!(paged["items"][0]["display"]["default"], "Wheel");
     assert!(paged["next_cursor"].is_null());
-    let unlinked = read("get_incoming_relationships", json!({"entity_id": spoke}))
+    let unlinked = read("get_incoming_relationships", json!({"record_id": spoke}))
         .await
         .unwrap();
     assert_eq!(unlinked["fields"], json!([]));
@@ -411,15 +411,15 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
     assert!(
         read(
             "get_incoming_relationships",
-            json!({"entity_id": root, "page": {"size": 51}})
+            json!({"record_id": root, "page": {"size": 51}})
         )
         .await
         .is_err()
     );
 
     let hierarchy = read(
-        "get_entity_hierarchy",
-        json!({"entity_id": spoke, "field": "parent"}),
+        "get_record_hierarchy",
+        json!({"record_id": spoke, "field": "parent"}),
     )
     .await
     .unwrap();
@@ -433,22 +433,22 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
     assert_eq!(hierarchy["cycle_detected"], false);
     assert!(
         read(
-            "get_entity_hierarchy",
-            json!({"entity_id": spoke, "field": "title"})
+            "get_record_hierarchy",
+            json!({"record_id": spoke, "field": "title"})
         )
         .await
         .is_err()
     );
 
     let labels = read(
-        "get_entity_labels",
-        json!({"entity_ids": [root, wheel, Uuid::new_v4()]}),
+        "get_record_labels",
+        json!({"record_ids": [root, wheel, Uuid::new_v4()]}),
     )
     .await
     .unwrap();
     assert_eq!(labels["items"].as_array().unwrap().len(), 2);
     assert!(
-        read("get_entity_labels", json!({"entity_ids": []}))
+        read("get_record_labels", json!({"record_ids": []}))
             .await
             .is_err()
     );
@@ -501,13 +501,13 @@ async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: Pg
     let client = authenticated_client();
     let definition = |extra: &str| {
         format!(
-            "format_version = 1\ncode = \"noted_item\"\nname = \"Noted item\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"{extra}"
+            "format_version = 1\ncode = \"noted_item\"\nname = \"Noted item\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"{extra}"
         )
     };
     let blueprint = create_blueprint(&client, &base_url, &definition("")).await;
     let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap().to_owned();
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap().to_owned();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap().to_owned();
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
     let repository = CatalogRepository::system(pool.clone())
@@ -520,8 +520,8 @@ async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: Pg
     execute_mutation(
         &repository,
         actor,
-        "set_entity_values",
-        json!({"entity_id": entity_id, "values": [
+        "set_record_values",
+        json!({"record_id": record_id, "values": [
             {"kind":"scalar","attribute_code":"title","context_id":null,"value":"Lamp"}
         ]}),
     )
@@ -531,13 +531,13 @@ async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: Pg
     let copy = execute_mutation(
         &repository,
         actor,
-        "duplicate_entity",
-        json!({"entity_id": entity_id}),
+        "duplicate_record",
+        json!({"record_id": record_id}),
     )
     .await
     .unwrap();
-    assert_ne!(copy["id"], entity["id"]);
-    let labels = read("get_entity_labels", json!({"entity_ids": [copy["id"]]}))
+    assert_ne!(copy["id"], record["id"]);
+    let labels = read("get_record_labels", json!({"record_ids": [copy["id"]]}))
         .await
         .unwrap();
     assert_eq!(labels["items"][0]["display"]["default"], "Lamp");
@@ -551,8 +551,8 @@ async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: Pg
         execute_mutation(
             &repository,
             actor,
-            "add_entity_comment",
-            json!({"entity_id": entity_id, "body": body}),
+            "add_record_comment",
+            json!({"record_id": record_id, "body": body}),
         )
         .await
         .unwrap();
@@ -561,15 +561,15 @@ async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: Pg
         execute_mutation(
             &repository,
             actor,
-            "add_entity_comment",
-            json!({"entity_id": entity_id, "body": "  "})
+            "add_record_comment",
+            json!({"record_id": record_id, "body": "  "})
         )
         .await
         .is_err()
     );
     let first = read(
-        "list_entity_comments",
-        json!({"entity_id": entity_id, "limit": 2}),
+        "list_record_comments",
+        json!({"record_id": record_id, "limit": 2}),
     )
     .await
     .unwrap();
@@ -578,8 +578,8 @@ async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: Pg
     assert_eq!(first["items"][1]["body"].as_str().unwrap().len(), 1_000);
     assert_eq!(first["items"][1]["body_truncated"], true);
     let rest = read(
-        "list_entity_comments",
-        json!({"entity_id": entity_id, "limit": 2, "before": first["next_before"]}),
+        "list_record_comments",
+        json!({"record_id": record_id, "limit": 2, "before": first["next_before"]}),
     )
     .await
     .unwrap();
@@ -636,11 +636,11 @@ async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: Pg
         .await
         .unwrap();
     let finding_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO rule_findings (id,workspace_id,rule_id,rule_version,entity_id,evaluation_key,severity,message,evidence) VALUES ($1,$2,$3,1,$4,'noted','warning','Check title','{}')")
+    sqlx::query("INSERT INTO rule_findings (id,workspace_id,rule_id,rule_version,record_id,evaluation_key,severity,message,evidence) VALUES ($1,$2,$3,1,$4,'noted','warning','Check title','{}')")
         .bind(finding_id)
         .bind(workspace)
         .bind(created["id"].as_str().unwrap().parse::<Uuid>().unwrap())
-        .bind(entity_id.parse::<Uuid>().unwrap())
+        .bind(record_id.parse::<Uuid>().unwrap())
         .execute(&pool)
         .await
         .unwrap();
@@ -658,7 +658,7 @@ async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: Pg
     // migration would drop.
     let revision = execute_mutation(&repository, actor, "create_blueprint_revision", json!({
         "blueprint_id": blueprint_id,
-        "definition": "format_version = 1\ncode = \"noted_item\"\nname = \"Noted item\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"label\"]\n\n[[attributes]]\ncode = \"label\"\nvalue_type = \"string\"",
+        "definition": "format_version = 1\ncode = \"noted_item\"\nname = \"Noted item\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"label\"]\n\n[[attributes]]\ncode = \"label\"\nvalue_type = \"string\"",
     }))
     .await
     .unwrap();
@@ -678,7 +678,7 @@ async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: Pg
     .await
     .unwrap();
     assert_eq!(impact["removed_attribute_codes"], json!(["title"]));
-    assert_eq!(impact["entities_with_removed_values"], 2);
+    assert_eq!(impact["records_with_removed_values"], 2);
 
     let health = read(
         "data_health_details",
@@ -687,7 +687,7 @@ async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: Pg
     .await
     .unwrap();
     assert_eq!(health["items"].as_array().unwrap().len(), 1);
-    assert_eq!(health["items"][0]["active_entities"], 2);
+    assert_eq!(health["items"][0]["active_records"], 2);
     for section in ["freshness", "completeness", "contexts", "relationships"] {
         read("data_health_details", json!({"section": section}))
             .await
@@ -706,17 +706,17 @@ async fn agent_annotation_and_context_edits_use_catalog_validation(pool: PgPool)
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"annotation_product\"\nname = \"Annotation product\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap();
+        "format_version = 1\ncode = \"annotation_product\"\nname = \"Annotation product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap();
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
     let repository = CatalogRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
-    let updated = execute_mutation(&repository, actor, "update_entity_annotations",
-        json!({"entity_id":entity_id,"system_tags":["reviewed"],"system_metadata":{"source":"agent"}})).await.unwrap();
+    let updated = execute_mutation(&repository, actor, "update_record_annotations",
+        json!({"record_id":record_id,"system_tags":["reviewed"],"system_metadata":{"source":"agent"}})).await.unwrap();
     assert_eq!(updated["system_tags"], json!(["reviewed"]));
     assert_eq!(updated["system_metadata"]["source"], "agent");
     let context = execute_mutation(
@@ -756,8 +756,8 @@ async fn agent_annotation_and_context_edits_use_catalog_validation(pool: PgPool)
         execute_mutation(
             &repository,
             actor,
-            "update_entity_annotations",
-            json!({"entity_id":entity_id})
+            "update_record_annotations",
+            json!({"record_id":record_id})
         )
         .await
         .is_err()
@@ -774,9 +774,9 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"diagnostic_product\"\nname = \"Diagnostic product\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap();
+        "format_version = 1\ncode = \"diagnostic_product\"\nname = \"Diagnostic product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap();
     let rule: Value = client.post(format!("{base_url}/rules"))
         .json(&json!({"blueprint_id":blueprint["blueprint"]["id"],"blueprint_version":1,"context_id":null,
             "definition":"format_version = 1\ncode = \"diagnostic_rule\"\nname = \"Diagnostic rule\"\nseverity = \"warning\"\n[[triggers]]\ntype = \"manual\"\n[predicate]\ntype = \"required\"\nattribute_code = \"title\""}))
@@ -785,8 +785,8 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
     for index in 0..2 {
-        sqlx::query("INSERT INTO rule_findings (id,workspace_id,rule_id,rule_version,entity_id,evaluation_key,severity,message,evidence) VALUES ($1,$2,$3,1,$4,$5,'warning','Check title','{\"secret\":\"hidden\"}')")
-            .bind(Uuid::new_v4()).bind(workspace).bind(rule_id).bind(entity_id.parse::<Uuid>().unwrap())
+        sqlx::query("INSERT INTO rule_findings (id,workspace_id,rule_id,rule_version,record_id,evaluation_key,severity,message,evidence) VALUES ($1,$2,$3,1,$4,$5,'warning','Check title','{\"secret\":\"hidden\"}')")
+            .bind(Uuid::new_v4()).bind(workspace).bind(rule_id).bind(record_id.parse::<Uuid>().unwrap())
             .bind(format!("check-{index}")).execute(&pool).await.unwrap();
     }
     client
@@ -805,7 +805,7 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
         .unwrap();
     client
         .post(format!("{base_url}/rules/{rule_id}/run-now"))
-        .json(&json!({"entity_id":entity_id,"dry_run":true,"idempotency_key":"diagnostic"}))
+        .json(&json!({"record_id":record_id,"dry_run":true,"idempotency_key":"diagnostic"}))
         .send()
         .await
         .unwrap()
@@ -845,7 +845,7 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
     for index in 0..2 {
         client
             .post(format!("{base_url}/workflows/{workflow_id}/run-now"))
-            .json(&json!({"entity_id":entity_id,"idempotency_key":format!("run-{index}")}))
+            .json(&json!({"record_id":record_id,"idempotency_key":format!("run-{index}")}))
             .send()
             .await
             .unwrap()
@@ -865,13 +865,13 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
     )
     .await
     .unwrap();
-    assert_eq!(health["active_entities"], 1);
+    assert_eq!(health["active_records"], 1);
     let findings = execute_read(
         &repository,
         actor,
         workspace,
         "list_rule_findings",
-        json!({"entity_id":entity_id,"limit":1}),
+        json!({"record_id":record_id,"limit":1}),
     )
     .await
     .unwrap();
@@ -951,16 +951,16 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
 }
 
 #[sqlx::test]
-async fn agent_history_reads_and_entity_value_edits_use_scoped_catalog_services(pool: PgPool) {
+async fn agent_history_reads_and_record_value_edits_use_scoped_catalog_services(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"agent_history_product\"\nname = \"Agent history product\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap();
+        "format_version = 1\ncode = \"agent_history_product\"\nname = \"Agent history product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap();
     for title in ["first", "second", "third"] {
         client
-            .post(format!("{base_url}/entities/{entity_id}/values"))
+            .post(format!("{base_url}/records/{record_id}/values"))
             .json(&json!({"values":[{"kind":"scalar","attribute_code":"title","value":title}]}))
             .send()
             .await
@@ -978,8 +978,8 @@ async fn agent_history_reads_and_entity_value_edits_use_scoped_catalog_services(
         &repository,
         actor,
         workspace,
-        "get_entity_changes",
-        json!({"entity_id":entity_id,"limit":1}),
+        "get_record_changes",
+        json!({"record_id":record_id,"limit":1}),
     )
     .await
     .unwrap();
@@ -990,7 +990,7 @@ async fn agent_history_reads_and_entity_value_edits_use_scoped_catalog_services(
         actor,
         workspace,
         "get_value_history",
-        json!({"entity_id":entity_id,"limit":1}),
+        json!({"record_id":record_id,"limit":1}),
     )
     .await
     .unwrap();
@@ -1000,13 +1000,13 @@ async fn agent_history_reads_and_entity_value_edits_use_scoped_catalog_services(
     execute_mutation(
         &repository,
         actor,
-        "remove_entity_values",
-        json!({"entity_id":entity_id,"remove_values":[{"attribute_code":"title"}]}),
+        "remove_record_values",
+        json!({"record_id":record_id,"remove_values":[{"attribute_code":"title"}]}),
     )
     .await
     .unwrap();
     let current: Value = client
-        .get(format!("{base_url}/entities/{entity_id}/values/current"))
+        .get(format!("{base_url}/records/{record_id}/values/current"))
         .send()
         .await
         .unwrap()
@@ -1019,13 +1019,13 @@ async fn agent_history_reads_and_entity_value_edits_use_scoped_catalog_services(
     execute_mutation(
         &repository,
         actor,
-        "restore_entity_value",
-        json!({"entity_id":entity_id,"history_id":history_id}),
+        "restore_record_value",
+        json!({"record_id":record_id,"history_id":history_id}),
     )
     .await
     .unwrap();
     let current: Value = client
-        .get(format!("{base_url}/entities/{entity_id}/values/current"))
+        .get(format!("{base_url}/records/{record_id}/values/current"))
         .send()
         .await
         .unwrap()
@@ -1291,30 +1291,30 @@ async fn conversation_search_paginates_and_manual_titles_win(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn entity_conversations_validate_their_context_and_entity(pool: PgPool) {
+async fn record_conversations_validate_their_context_and_record(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let context = Uuid::new_v4();
     let invalid = client
         .post(format!("{base_url}/agent/conversations"))
-        .json(&json!({"title":"Entity discussion","context_id":context}))
+        .json(&json!({"title":"Record discussion","context_id":context}))
         .send()
         .await
         .unwrap();
     assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let missing = client
         .post(format!("{base_url}/agent/conversations"))
-        .json(&json!({"title":"Entity discussion","entity_id":Uuid::new_v4()}))
+        .json(&json!({"title":"Record discussion","record_id":Uuid::new_v4()}))
         .send()
         .await
         .unwrap();
     assert!(!missing.status().is_success());
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = 'entity_chat_test'\nname = 'Entity chat test'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'").await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
+        "format_version = 1\ncode = 'record_chat_test'\nname = 'Record chat test'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'").await;
+    let record = create_record(&client, &base_url, &blueprint).await;
     let selected_context: Value = client
         .post(format!("{base_url}/contexts"))
-        .json(&json!({"code":"entity-chat-context","data":{}}))
+        .json(&json!({"code":"record-chat-context","data":{}}))
         .send()
         .await
         .unwrap()
@@ -1325,7 +1325,7 @@ async fn entity_conversations_validate_their_context_and_entity(pool: PgPool) {
         .unwrap();
     let created: Value = client
         .post(format!("{base_url}/agent/conversations"))
-        .json(&json!({"title":"About this entity","entity_id":entity["id"],"context_id":selected_context["id"]}))
+        .json(&json!({"title":"About this record","record_id":record["id"],"context_id":selected_context["id"]}))
         .send()
         .await
         .unwrap()
@@ -1347,7 +1347,7 @@ async fn entity_conversations_validate_their_context_and_entity(pool: PgPool) {
         .json()
         .await
         .unwrap();
-    assert_eq!(loaded["entity_id"], entity["id"]);
+    assert_eq!(loaded["record_id"], record["id"]);
     assert_eq!(loaded["context_id"], selected_context["id"]);
     server.abort();
 }
@@ -1690,19 +1690,19 @@ async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPo
 }
 
 #[sqlx::test]
-async fn entity_conversation_mutations_uploads_and_events_require_entity_read(pool: PgPool) {
+async fn record_conversation_mutations_uploads_and_events_require_record_read(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
     let blueprint = create_blueprint(
         &owner,
         &base_url,
-        "format_version = 1\ncode = 'conversation_access'\nname = 'Conversation access'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'",
+        "format_version = 1\ncode = 'conversation_access'\nname = 'Conversation access'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'",
     )
     .await;
-    let entity = create_entity(&owner, &base_url, &blueprint).await;
+    let record = create_record(&owner, &base_url, &blueprint).await;
     let conversation: Value = owner
         .post(format!("{base_url}/agent/conversations"))
-        .json(&json!({"entity_id": entity["id"], "title": "Private discussion"}))
+        .json(&json!({"record_id": record["id"], "title": "Private discussion"}))
         .send()
         .await
         .unwrap()
@@ -1881,10 +1881,10 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
     let blueprint = create_blueprint(
         &owner,
         &base_url,
-        "format_version = 1\ncode = 'agent_scoped'\nname = 'Agent scoped'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'",
+        "format_version = 1\ncode = 'agent_scoped'\nname = 'Agent scoped'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'",
     )
     .await;
-    let entity = create_entity(&owner, &base_url, &blueprint).await;
+    let record = create_record(&owner, &base_url, &blueprint).await;
     let context: Value = owner
         .post(format!("{base_url}/contexts"))
         .json(&json!({"code": "agent-scoped", "data": {}}))
@@ -1965,25 +1965,25 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
             "list_blueprint_connector_jobs",
             json!({"blueprint_id":Uuid::new_v4()}),
         ),
-        ("get_entity", json!({"entity_id": entity["id"]})),
+        ("get_record", json!({"record_id": record["id"]})),
         (
             "get_incoming_relationships",
-            json!({"entity_id": entity["id"]}),
+            json!({"record_id": record["id"]}),
         ),
         (
-            "get_entity_hierarchy",
-            json!({"entity_id": entity["id"], "field": "parent"}),
+            "get_record_hierarchy",
+            json!({"record_id": record["id"], "field": "parent"}),
         ),
         ("list_reusable_attributes", json!({})),
-        ("list_entity_comments", json!({"entity_id": entity["id"]})),
+        ("list_record_comments", json!({"record_id": record["id"]})),
         (
             "validate_rule_definition",
             json!({"definition": "format_version = 1"}),
         ),
         ("data_health_details", json!({"section": "blueprints"})),
         (
-            "get_entity_context_preview",
-            json!({"entity_id": entity["id"], "context_id": context["id"]}),
+            "get_record_context_preview",
+            json!({"record_id": record["id"], "context_id": context["id"]}),
         ),
     ] {
         assert!(matches!(
@@ -1991,14 +1991,14 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
             Err(ToolError::Forbidden)
         ));
     }
-    // Labels are filtered per entity, so an unreadable entity is omitted.
+    // Labels are filtered per record, so an unreadable record is omitted.
     assert_eq!(
         execute_read(
             &repository,
             actor,
             workspace,
-            "get_entity_labels",
-            json!({"entity_ids": [entity["id"]]}),
+            "get_record_labels",
+            json!({"record_ids": [record["id"]]}),
         )
         .await
         .unwrap()["items"],
@@ -2010,7 +2010,7 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
             BOOTSTRAP_OWNER_ID.parse().unwrap(),
             workspace,
             "agent-scoped-reader",
-            &["entities.read".to_owned(), "contexts.read".to_owned()],
+            &["records.read".to_owned(), "contexts.read".to_owned()],
         )
         .await
         .unwrap();
@@ -2020,8 +2020,8 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
             workspace,
             membership,
             scoped_reader,
-            "entity",
-            entity["id"].as_str().unwrap().parse().unwrap(),
+            "record",
+            record["id"].as_str().unwrap().parse().unwrap(),
         )
         .await
         .unwrap();
@@ -2037,17 +2037,17 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
         .await
         .unwrap();
 
-    let loaded_entity = execute_read(
+    let loaded_record = execute_read(
         &repository,
         actor,
         workspace,
-        "get_entity",
-        json!({"entity_id": entity["id"]}),
+        "get_record",
+        json!({"record_id": record["id"]}),
     )
     .await
     .unwrap();
-    assert_eq!(loaded_entity["id"], entity["id"]);
-    assert_eq!(loaded_entity["values"], json!([]));
+    assert_eq!(loaded_record["id"], record["id"]);
+    assert_eq!(loaded_record["values"], json!([]));
     assert_eq!(
         execute_read(&repository, actor, workspace, "list_contexts", json!({}))
             .await
@@ -2633,7 +2633,7 @@ async fn read_only_runs_offer_no_mutations_and_refuse_one_named_anyway(pool: PgP
                         axum::response::Response::builder()
                             .header("content-type", "text/event-stream")
                             .body(axum::body::Body::from(format!(
-                                "data: {{\"choices\":[{{\"delta\":{{\"tool_calls\":[{{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{{\"name\":\"delete_entity\",\"arguments\":\"{{\\\"entity_id\\\":\\\"{}\\\"}}\"}}}}]}}}}]}}\n\ndata: [DONE]\n\n",
+                                "data: {{\"choices\":[{{\"delta\":{{\"tool_calls\":[{{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{{\"name\":\"delete_record\",\"arguments\":\"{{\\\"record_id\\\":\\\"{}\\\"}}\"}}}}]}}}}]}}\n\ndata: [DONE]\n\n",
                                 Uuid::new_v4()
                             )))
                             .unwrap()
@@ -2676,7 +2676,7 @@ async fn read_only_runs_offer_no_mutations_and_refuse_one_named_anyway(pool: PgP
         .unwrap();
 
     let offered = offered.lock().unwrap().clone();
-    assert!(offered.iter().any(|name| name == "get_entity"));
+    assert!(offered.iter().any(|name| name == "get_record"));
     for name in &offered {
         assert!(
             matches!(
@@ -2707,17 +2707,17 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
     let category = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"category\"\nname = \"Categories\"\ndescription = \"Product groupings, such as Basic tools\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+        "format_version = 1\ncode = \"category\"\nname = \"Categories\"\ndescription = \"Product groupings, such as Basic tools\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
     )
     .await;
     let product = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"product\"\nname = \"Products\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"category\"\ndescription = \"Where the product is shelved\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"category\"",
+        "format_version = 1\ncode = \"product\"\nname = \"Products\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"category\"\ndescription = \"Where the product is shelved\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"category\"",
     )
     .await;
     let create = |blueprint: &Value, values: Value| {
-        let request = client.post(format!("{base_url}/v1/entities")).json(&json!({
+        let request = client.post(format!("{base_url}/v1/records")).json(&json!({
             "blueprint": {"code": blueprint["blueprint"]["code"], "version": blueprint["blueprint"]["version"]},
             "values": values,
         }));
@@ -2745,7 +2745,7 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
     ] {
         create(
             &product,
-            json!([title(name), {"kind":"relationship","attribute_code":"category","context_id":null,"target_entity_id":target["id"]}]),
+            json!([title(name), {"kind":"relationship","attribute_code":"category","context_id":null,"target_record_id":target["id"]}]),
         )
         .await;
     }
@@ -2777,7 +2777,7 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
         &repository,
         actor,
         workspace,
-        "search_entities",
+        "search_records",
         json!({
             "blueprint": {"code": "product"},
             "relationship_filters": [{"field": "category", "selected_target_ids": [basic["id"]]}],
@@ -2845,7 +2845,7 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
             "product table columns: none",
         ),
     ] {
-        let error = execute_read(&repository, actor, workspace, "search_entities", arguments)
+        let error = execute_read(&repository, actor, workspace, "search_records", arguments)
             .await
             .unwrap_err()
             .to_string();
@@ -2854,10 +2854,7 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
 
     // A mistyped blueprint names the blueprints that do exist.
     for (tool, arguments) in [
-        (
-            "search_entities",
-            json!({"blueprint": {"code": "products"}}),
-        ),
+        ("search_records", json!({"blueprint": {"code": "products"}})),
         ("get_blueprint", json!({"code": "products"})),
     ] {
         let error = execute_read(&repository, actor, workspace, tool, arguments)

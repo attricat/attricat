@@ -7,18 +7,16 @@ Every catalog change records an event in the same database transaction as the ch
 
 Events drive [workflows](/builders/workflows/), [rules](/builders/rules/), and [extension event handlers](/extensions/server/#handle-catalog-events). They are not exposed as a public feed.
 
-In event types and payloads, records are called entities, as in `entity.updated.v1`.
-
 ## Event types
 
 | Type | Recorded when |
 | --- | --- |
-| `entity.created.v1` | A record is created. |
-| `entity.updated.v1` | A record's values, relationships, or annotations change. |
-| `entity.deleted.v1` | A record is deleted. |
-| `entity.migrated.v1` | A record moves to a newer blueprint revision. |
-| `entity.published.v1` | A record is published to a channel. |
-| `entity.unpublished.v1` | A record's publication is withdrawn. |
+| `record.created.v1` | A record is created. |
+| `record.updated.v1` | A record's values, relationships, or annotations change. |
+| `record.deleted.v1` | A record is deleted. |
+| `record.migrated.v1` | A record moves to a newer blueprint revision. |
+| `record.published.v1` | A record is published to a channel. |
+| `record.unpublished.v1` | A record's publication is withdrawn. |
 | `attribute_value.changed.v1` | An attribute value is set, replaced, or removed. |
 | `attribute_value.restored.v1` | A value is restored from history. |
 | `relationship.changed.v1` | Relationship targets are added or removed. |
@@ -27,7 +25,7 @@ In event types and payloads, records are called entities, as in `entity.updated.
 | `blueprint.published.v1` | A blueprint revision is published. |
 | `context.created.v1`, `context.updated.v1`, `context.deleted.v1` | A context changes. |
 
-Extensions publish their own types, named `plugin.<extension-id>.<name>.vN`. The `entity`, `attribute_value`, `relationship`, `blueprint`, and `context` namespaces are reserved.
+Extensions publish their own types, named `plugin.<extension-id>.<name>.vN`. The `record`, `attribute_value`, `relationship`, `blueprint`, and `context` namespaces are reserved.
 
 A version suffix never changes meaning. An incompatible payload gets a new `.vN` type, and consumers subscribe to the exact versions they understand.
 
@@ -36,9 +34,9 @@ A version suffix never changes meaning. An incompatible payload gets a new `.vN`
 | Field | Description |
 | --- | --- |
 | `id` | Event UUID. Use it to deduplicate. |
-| `event_type` | Such as `entity.updated.v1`. |
+| `event_type` | Such as `record.updated.v1`. |
 | `occurred_at` | When the change was saved. |
-| `aggregate_kind`, `aggregate_id` | What changed, such as `entity` and its UUID. |
+| `aggregate_kind`, `aggregate_id` | What changed, such as `record` and its UUID. |
 | `correlation_id` | Shared by everything that came from one request or job. |
 | `causation_id` | The event that directly caused this one, if any. |
 | `source_kind` | `api`, `worker`, `plugin`, or `system`. |
@@ -51,7 +49,7 @@ Record and value events describe what changed, not the whole record:
 
 ```json
 {
-  "entity_id": "7f1c…",
+  "record_id": "7f1c…",
   "blueprint_id": "a2d4…",
   "blueprint_version": 3,
   "facts": [{
@@ -59,7 +57,7 @@ Record and value events describe what changed, not the whole record:
     "attribute_code": "price",
     "context_id": "00000000-0000-4000-8000-000000000001",
     "context_code": "default",
-    "relationship_target_entity_id": null,
+    "relationship_target_record_id": null,
     "change_kind": "set",
     "before_value": 49.0,
     "after_value": 39.0
@@ -73,11 +71,11 @@ To act on the record's current state, read it; the payload is only a description
 
 `facts` contains one entry per attribute value that actually changed. A save that leaves a value as it was adds no fact for it. [Workflow triggers](/builders/workflows/#react-only-to-specific-attributes) can filter on `attribute_code` with `attributes`.
 
-- **Scalar attributes:** `change_kind` is `set`, `replace`, or `remove`; `restore` on `attribute_value.restored.v1`. `entity.created.v1` lists every initial value, including defaults, as `set`.
-- **Relationship attributes:** each added or removed target is its own fact, with `change_kind` `relationship_add` or `relationship_remove`, `relationship_target_entity_id` set, and the target ID as the value. A save that only changes relationships records `relationship.changed.v1`; one that also changes other values records `entity.updated.v1`.
+- **Scalar attributes:** `change_kind` is `set`, `replace`, or `remove`; `restore` on `attribute_value.restored.v1`. `record.created.v1` lists every initial value, including defaults, as `set`.
+- **Relationship attributes:** each added or removed target is its own fact, with `change_kind` `relationship_add` or `relationship_remove`, `relationship_target_record_id` set, and the target ID as the value. A save that only changes relationships records `relationship.changed.v1`; one that also changes other values records `record.updated.v1`.
 - **File attributes:** uploading, linking, reordering, or removing files is recorded in the audit log but records no event and no fact.
 - System tag and system metadata changes are not attribute values and add no fact.
-- **Migrations:** `entity.migrated.v1` has no `facts`. Its payload names the record, its blueprint, `source_version`, `target_version`, and `migration_id`. When the migration dropped or re-pointed a relationship, `released_relationships` lists the targets the record no longer points to, as `attribute_code` and `target_entity_ids` (at most 100 per relationship and 1,000 per event).
+- **Migrations:** `record.migrated.v1` has no `facts`. Its payload names the record, its blueprint, `source_version`, `target_version`, and `migration_id`. When the migration dropped or re-pointed a relationship, `released_relationships` lists the targets the record no longer points to, as `attribute_code` and `target_record_ids` (at most 100 per relationship and 1,000 per event).
 
 ## Delivery guarantees
 

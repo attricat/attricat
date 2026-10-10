@@ -1,14 +1,14 @@
 import { Button, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import type { Attribute, ComponentReference } from '../entities/api';
-import { ScalarAttributeEditor } from '../entities/components/ScalarAttributeEditor';
-import { attributeLabel } from '../entities/entityDisplay';
-import { attributeValueTypes } from '../entities/valueTypes';
+import type { Attribute, ComponentReference } from '../records/api';
+import { ScalarAttributeEditor } from '../records/components/ScalarAttributeEditor';
+import { attributeLabel } from '../records/recordDisplay';
+import { attributeValueTypes } from '../records/valueTypes';
 
 /**
  * Unsaved input for one attribute in the blueprint view preview sandbox. Scalar
- * attributes use the same editors as the entity form; relationships and files
- * need a saved entity, so the sandbox only shows where they would appear.
+ * attributes use the same editors as the record form; relationships and files
+ * need a saved record, so the sandbox only shows where they would appear.
  */
 export const SandboxAttributeEditor = ({
   attribute,

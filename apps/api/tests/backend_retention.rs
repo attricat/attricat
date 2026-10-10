@@ -17,7 +17,7 @@ async fn history_cleanup_is_batched_concurrent_and_preserves_current_and_recent_
 format_version = 1
 code = "retention_test"
 name = "Retention"
-kind = "entity"
+kind = "record"
 [[attributes]]
 code = "title"
 value_type = "string"
@@ -28,11 +28,11 @@ fields = ["title"]
 "#,
     )
     .await;
-    let entity = create_entity(&owner, &base, &blueprint).await;
-    let id: Uuid = entity["id"].as_str().unwrap().parse().unwrap();
-    sqlx::query("INSERT INTO attribute_value_history (id,workspace_id,entity_id,attribute_id,context_id,active,value_text,created_at,archived_at) SELECT gen_random_uuid(),v.workspace_id,v.entity_id,v.attribute_id,v.context_id,false,'Old',now()-interval '100 days',now()-interval '91 days' FROM attribute_values v CROSS JOIN generate_series(1,1505) WHERE v.entity_id=$1")
+    let record = create_record(&owner, &base, &blueprint).await;
+    let id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
+    sqlx::query("INSERT INTO attribute_value_history (id,workspace_id,record_id,attribute_id,context_id,active,value_text,created_at,archived_at) SELECT gen_random_uuid(),v.workspace_id,v.record_id,v.attribute_id,v.context_id,false,'Old',now()-interval '100 days',now()-interval '91 days' FROM attribute_values v CROSS JOIN generate_series(1,1505) WHERE v.record_id=$1")
         .bind(id).execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO attribute_value_history (id,workspace_id,entity_id,attribute_id,context_id,active,value_text,created_at,archived_at) SELECT gen_random_uuid(),v.workspace_id,v.entity_id,v.attribute_id,v.context_id,false,'Recent',now(),now() FROM attribute_values v WHERE v.entity_id=$1")
+    sqlx::query("INSERT INTO attribute_value_history (id,workspace_id,record_id,attribute_id,context_id,active,value_text,created_at,archived_at) SELECT gen_random_uuid(),v.workspace_id,v.record_id,v.attribute_id,v.context_id,false,'Recent',now(),now() FROM attribute_values v WHERE v.record_id=$1")
         .bind(id).execute(&pool).await.unwrap();
     let repository = CatalogRepository::system(pool.clone());
     let retention = "90".parse().unwrap();
@@ -51,14 +51,14 @@ fields = ["title"]
         0
     );
     let recent: Vec<String> =
-        sqlx::query_scalar("SELECT value_text FROM attribute_value_history WHERE entity_id=$1")
+        sqlx::query_scalar("SELECT value_text FROM attribute_value_history WHERE record_id=$1")
             .bind(id)
             .fetch_all(&pool)
             .await
             .unwrap();
     assert_eq!(recent, vec!["Recent"]);
     let current: String =
-        sqlx::query_scalar("SELECT value_text FROM attribute_values WHERE entity_id=$1")
+        sqlx::query_scalar("SELECT value_text FROM attribute_values WHERE record_id=$1")
             .bind(id)
             .fetch_one(&pool)
             .await

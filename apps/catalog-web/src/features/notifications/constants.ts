@@ -7,7 +7,7 @@ export const unreadCountRefreshMs = 30_000;
 export const maxBadgeCount = 99;
 
 export const inboxRoute = '/inbox';
-export const entityRoute = '/entities/$entityId';
+export const recordRoute = '/records/$recordId';
 export const conversationRoute = '/agents/$conversationId';
 
 export const inboxFilters = ['all', 'unread'] as const;
@@ -15,8 +15,8 @@ export type InboxFilter = (typeof inboxFilters)[number];
 
 /** Notification kinds with a translated message; others show their title. */
 export const notificationKinds = {
-  entityAssigned: 'entity.assigned',
-  entityCommented: 'entity.commented',
+  recordAssigned: 'record.assigned',
+  recordCommented: 'record.commented',
   agentApprovalRequired: 'agent.approval_required',
   agentRunCompleted: 'agent.run_completed',
   agentRunFailed: 'agent.run_failed',

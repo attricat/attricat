@@ -59,10 +59,10 @@ const ToolCall = ({ call }: { call: unknown }) => {
   );
 };
 
-const entityPreviewPath = new RegExp(`^/entities/${uuidPattern}$`, 'i');
+const recordPreviewPath = new RegExp(`^/records/${uuidPattern}$`, 'i');
 const savedSearchPath = new RegExp(`^/\\?savedView=${uuidPattern}$`, 'i');
 const isCatalogLink = (url: string) =>
-  entityPreviewPath.test(url) || savedSearchPath.test(url);
+  recordPreviewPath.test(url) || savedSearchPath.test(url);
 
 const ToolResult = ({ content }: { content: Record<string, unknown> }) => {
   const { t } = useTranslation();
@@ -82,8 +82,8 @@ const ToolResult = ({ content }: { content: Record<string, unknown> }) => {
           <Link href={result.url} target="_blank" rel="noopener noreferrer">
             {typeof result.name === 'string'
               ? result.name
-              : typeof result.entity_id === 'string'
-                ? result.entity_id
+              : typeof result.record_id === 'string'
+                ? result.record_id
                 : result.url}
           </Link>
         )}

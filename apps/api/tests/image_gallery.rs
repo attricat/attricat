@@ -13,7 +13,7 @@ async fn blueprint(client: &Client, base: &str, policy: &str) -> Value {
             r#"format_version = 1
 code = "gallery"
 name = "Gallery"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["photos"]
@@ -52,9 +52,9 @@ async fn gallery_references_are_ordered_conflict_checked_and_archived(pool: PgPo
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let client = authenticated_client();
     let bp = blueprint(&client, &base, "ordered = true").await;
-    let entity = create_entity(&client, &base, &bp).await;
-    let entity_id = entity["id"].as_str().unwrap();
-    let url = format!("{base}/entities/{entity_id}/file-attributes/photos");
+    let record = create_record(&client, &base, &bp).await;
+    let record_id = record["id"].as_str().unwrap();
+    let url = format!("{base}/records/{record_id}/file-attributes/photos");
     let first: Value = upload(&client, &url)
         .await
         .error_for_status()
@@ -96,7 +96,7 @@ async fn gallery_references_are_ordered_conflict_checked_and_archived(pool: PgPo
         StatusCode::OK
     );
     let form: Value = client
-        .get(format!("{base}/v1/entities/{entity_id}"))
+        .get(format!("{base}/v1/records/{record_id}"))
         .send()
         .await
         .unwrap()
@@ -140,7 +140,7 @@ async fn gallery_references_are_ordered_conflict_checked_and_archived(pool: PgPo
         StatusCode::OK
     );
     let form: Value = client
-        .get(format!("{base}/v1/entities/{entity_id}"))
+        .get(format!("{base}/v1/records/{record_id}"))
         .send()
         .await
         .unwrap()
@@ -176,14 +176,14 @@ async fn unordered_gallery_allows_removal_but_not_reordering_or_foreign_referenc
         start_server_with_object_store(pool, Arc::new(FakeObjectStore::available())).await;
     let client = authenticated_client();
     let bp = blueprint(&client, &base, "ordered = false").await;
-    let entity = create_entity(&client, &base, &bp).await;
-    let other = create_entity(&client, &base, &bp).await;
+    let record = create_record(&client, &base, &bp).await;
+    let other = create_record(&client, &base, &bp).await;
     let url = format!(
-        "{base}/entities/{}/file-attributes/photos",
-        entity["id"].as_str().unwrap()
+        "{base}/records/{}/file-attributes/photos",
+        record["id"].as_str().unwrap()
     );
     let other_url = format!(
-        "{base}/entities/{}/file-attributes/photos",
+        "{base}/records/{}/file-attributes/photos",
         other["id"].as_str().unwrap()
     );
     let a: Value = upload(&client, &url).await.json().await.unwrap();
@@ -222,10 +222,10 @@ async fn readonly_file_attributes_reject_uploads_and_reference_changes(pool: PgP
     let (base, server) = start_server_with_object_store(pool, store.clone()).await;
     let client = authenticated_client();
     let bp = blueprint(&client, &base, "readonly = true").await;
-    let entity = create_entity(&client, &base, &bp).await;
+    let record = create_record(&client, &base, &bp).await;
     let url = format!(
-        "{base}/entities/{}/file-attributes/photos",
-        entity["id"].as_str().unwrap()
+        "{base}/records/{}/file-attributes/photos",
+        record["id"].as_str().unwrap()
     );
     let response = upload(&client, &url).await;
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
@@ -248,9 +248,9 @@ async fn gallery_edits_are_local_and_empty_values_stop_inheritance(pool: PgPool)
         start_server_with_object_store(pool, Arc::new(FakeObjectStore::available())).await;
     let client = authenticated_client();
     let bp = blueprint(&client, &base, "ordered = true").await;
-    let entity = create_entity(&client, &base, &bp).await;
-    let id = entity["id"].as_str().unwrap();
-    let url = format!("{base}/entities/{id}/file-attributes/photos");
+    let record = create_record(&client, &base, &bp).await;
+    let id = record["id"].as_str().unwrap();
+    let url = format!("{base}/records/{id}/file-attributes/photos");
     let original: Value = upload(&client, &url)
         .await
         .error_for_status()
@@ -270,7 +270,7 @@ async fn gallery_edits_are_local_and_empty_values_stop_inheritance(pool: PgPool)
         .await
         .unwrap();
     let context = child["id"].as_str().unwrap();
-    let resolved_url = format!("{base}/entities/{id}/resolved-preview?context_id={context}");
+    let resolved_url = format!("{base}/records/{id}/resolved-preview?context_id={context}");
     let inherited: Value = client
         .get(&resolved_url)
         .send()
@@ -320,7 +320,7 @@ async fn gallery_edits_are_local_and_empty_values_stop_inheritance(pool: PgPool)
     let default_id = original["context_id"].as_str().unwrap();
     let unchanged: Value = client
         .get(format!(
-            "{base}/entities/{id}/resolved-preview?context_id={default_id}"
+            "{base}/records/{id}/resolved-preview?context_id={default_id}"
         ))
         .send()
         .await
@@ -343,10 +343,10 @@ async fn default_context_policy_blocks_reference_changes_in_children(pool: PgPoo
         start_server_with_object_store(pool, Arc::new(FakeObjectStore::available())).await;
     let client = authenticated_client();
     let bp = blueprint(&client, &base, "context_editable = \"default\"").await;
-    let entity = create_entity(&client, &base, &bp).await;
+    let record = create_record(&client, &base, &bp).await;
     let url = format!(
-        "{base}/entities/{}/file-attributes/photos",
-        entity["id"].as_str().unwrap()
+        "{base}/records/{}/file-attributes/photos",
+        record["id"].as_str().unwrap()
     );
     let child: Value = client
         .post(format!("{base}/contexts"))
@@ -397,10 +397,10 @@ async fn gallery_changes_return_the_version_an_open_form_saves_against(pool: PgP
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let client = authenticated_client();
     let bp = blueprint(&client, &base, "ordered = true").await;
-    let entity = create_entity(&client, &base, &bp).await;
-    let entity_id = entity["id"].as_str().unwrap();
-    let loaded_version = entity["updated_at"].clone();
-    let url = format!("{base}/entities/{entity_id}/file-attributes/photos");
+    let record = create_record(&client, &base, &bp).await;
+    let record_id = record["id"].as_str().unwrap();
+    let loaded_version = record["updated_at"].clone();
+    let url = format!("{base}/records/{record_id}/file-attributes/photos");
     let uploaded: Value = upload(&client, &url)
         .await
         .error_for_status()
@@ -424,7 +424,7 @@ async fn gallery_changes_return_the_version_an_open_form_saves_against(pool: PgP
         .unwrap();
     let save = |version: &Value| {
         client
-            .put(format!("{base}/v1/entities/{entity_id}"))
+            .put(format!("{base}/v1/records/{record_id}"))
             .json(&json!({"expected_updated_at":version,"values":[]}))
     };
     assert_eq!(
@@ -432,7 +432,7 @@ async fn gallery_changes_return_the_version_an_open_form_saves_against(pool: PgP
         StatusCode::CONFLICT,
         "the version loaded before the gallery change is stale"
     );
-    let saved = save(&changed["entity_updated_at"]).send().await.unwrap();
+    let saved = save(&changed["record_updated_at"]).send().await.unwrap();
     assert_eq!(
         saved.status(),
         StatusCode::OK,
@@ -448,9 +448,9 @@ async fn gallery_writes_archive_history_and_emit_audited_value_changes(pool: PgP
     let (base, server) = start_server_with_object_store(pool.clone(), store).await;
     let client = authenticated_client();
     let bp = blueprint(&client, &base, "ordered = true").await;
-    let entity = create_entity(&client, &base, &bp).await;
-    let entity_id: Uuid = entity["id"].as_str().unwrap().parse().unwrap();
-    let url = format!("{base}/entities/{entity_id}/file-attributes/photos");
+    let record = create_record(&client, &base, &bp).await;
+    let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
+    let url = format!("{base}/records/{record_id}/file-attributes/photos");
     let mut ids = Vec::new();
     for _ in 0..2 {
         let uploaded: Value = upload(&client, &url)
@@ -474,9 +474,9 @@ async fn gallery_writes_archive_history_and_emit_audited_value_changes(pool: PgP
 
     // Appending archives the previous list just like a reorder does.
     let history: Vec<Vec<String>> = sqlx::query_scalar(
-        "SELECT array_agg(r.file_id::text ORDER BY r.position) FROM attribute_value_history h JOIN attribute_file_reference_history r ON r.attribute_value_history_id = h.id AND r.attribute_value_history_archived_at = h.archived_at WHERE h.entity_id = $1 GROUP BY h.id, h.created_at ORDER BY h.created_at",
+        "SELECT array_agg(r.file_id::text ORDER BY r.position) FROM attribute_value_history h JOIN attribute_file_reference_history r ON r.attribute_value_history_id = h.id AND r.attribute_value_history_archived_at = h.archived_at WHERE h.record_id = $1 GROUP BY h.id, h.created_at ORDER BY h.created_at",
     )
-    .bind(entity_id)
+    .bind(record_id)
     .fetch_all(&pool)
     .await
     .unwrap();
@@ -485,7 +485,7 @@ async fn gallery_writes_archive_history_and_emit_audited_value_changes(pool: PgP
     let events: Vec<(String, Value)> = sqlx::query_as(
         "SELECT event_type, payload FROM domain_events WHERE aggregate_id = $1 AND event_type = 'attribute_value.changed.v1' ORDER BY sequence",
     )
-    .bind(entity_id)
+    .bind(record_id)
     .fetch_all(&pool)
     .await
     .unwrap();
@@ -506,9 +506,9 @@ async fn gallery_writes_archive_history_and_emit_audited_value_changes(pool: PgP
         ]
     );
     let audited: Vec<String> = sqlx::query_scalar(
-        "SELECT change_kind FROM audit_event_changes c WHERE c.entity_id = $1 AND c.attribute_code = 'photos' ORDER BY c.created_at",
+        "SELECT change_kind FROM audit_event_changes c WHERE c.record_id = $1 AND c.attribute_code = 'photos' ORDER BY c.created_at",
     )
-    .bind(entity_id)
+    .bind(record_id)
     .fetch_all(&pool)
     .await
     .unwrap();
@@ -522,9 +522,9 @@ async fn duplicating_a_gallery_writes_its_list_once_without_history(pool: PgPool
     let (base, server) = start_server_with_object_store(pool.clone(), store).await;
     let client = authenticated_client();
     let bp = blueprint(&client, &base, "ordered = true").await;
-    let entity = create_entity(&client, &base, &bp).await;
-    let entity_id = entity["id"].as_str().unwrap();
-    let url = format!("{base}/entities/{entity_id}/file-attributes/photos");
+    let record = create_record(&client, &base, &bp).await;
+    let record_id = record["id"].as_str().unwrap();
+    let url = format!("{base}/records/{record_id}/file-attributes/photos");
     let mut ids = Vec::new();
     for _ in 0..3 {
         let uploaded: Value = upload(&client, &url)
@@ -547,7 +547,7 @@ async fn duplicating_a_gallery_writes_its_list_once_without_history(pool: PgPool
         .unwrap();
 
     let copy: Value = client
-        .post(format!("{base}/v1/entities/{entity_id}/duplicate"))
+        .post(format!("{base}/v1/records/{record_id}/duplicate"))
         .send()
         .await
         .unwrap()
@@ -558,7 +558,7 @@ async fn duplicating_a_gallery_writes_its_list_once_without_history(pool: PgPool
         .unwrap();
     let copy_id: Uuid = copy["id"].as_str().unwrap().parse().unwrap();
     let current: Vec<String> = sqlx::query_scalar(
-        "SELECT r.file_id::text FROM attribute_values v JOIN attribute_file_references r ON r.attribute_value_id = v.id WHERE v.entity_id = $1 ORDER BY r.position",
+        "SELECT r.file_id::text FROM attribute_values v JOIN attribute_file_references r ON r.attribute_value_id = v.id WHERE v.record_id = $1 ORDER BY r.position",
     )
     .bind(copy_id)
     .fetch_all(&pool)
@@ -566,7 +566,7 @@ async fn duplicating_a_gallery_writes_its_list_once_without_history(pool: PgPool
     .unwrap();
     assert_eq!(current, reordered);
     let archived: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM attribute_value_history WHERE entity_id = $1")
+        sqlx::query_scalar("SELECT COUNT(*) FROM attribute_value_history WHERE record_id = $1")
             .bind(copy_id)
             .fetch_one(&pool)
             .await

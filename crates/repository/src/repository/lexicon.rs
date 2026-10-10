@@ -239,7 +239,7 @@ impl CatalogRepository {
         .rows_affected())
     }
 
-    /// References used by every non-deleted blueprint revision (entities can
+    /// References used by every non-deleted blueprint revision (records can
     /// stay pinned to older ones), reusable attribute name, and status option
     /// label of a reusable attribute revision.
     pub async fn lexicon_references(&self) -> Result<Vec<UsedReference>, RepositoryError> {

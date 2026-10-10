@@ -11,10 +11,10 @@ trusted, reviewed publisher. Server validation and the publisher's declaration
 that the data is fictional cannot prove that it is safe or was never copied
 from production.
 
-Sample creation uses ordinary entity validation, permissions, audit, and
-`entity.created.v1` events. Enabled workflows or extensions may run and
+Sample creation uses ordinary record validation, permissions, audit, and
+`record.created.v1` events. Enabled workflows or extensions may run and
 cause external effects. Inspect the workspace's automation before applying.
-Values can remain in ordinary entity, audit, and event history even after the
+Values can remain in ordinary record, audit, and event history even after the
 pack's temporary staging copies are removed.
 
 ## Select samples during planning
@@ -49,13 +49,13 @@ members, so a pack that sets them is rejected during inspection. Status
 attributes take their ordinary defaults. Samples of one blueprint also cannot
 share a value of one of its unique keys; inspection compares them the way the
 workspace does (trimmed, whitespace collapsed, and case-insensitive unless the
-key is case-sensitive). An existing entity of a mapped or reused blueprint can
+key is case-sensitive). An existing record of a mapped or reused blueprint can
 still hold the same key, and then the sample's step fails on apply.
 
 Samples can attach files bundled in the archive, such as images, PDFs, or plain
 text documents. Planning uploads each bundled file once to ordinary file storage
-before saving the plan; apply attaches it to the sample entity as an ordinary
-file in the same transaction that creates the entity, and validates the entity
+before saving the plan; apply attaches it to the sample record as an ordinary
+file in the same transaction that creates the record, and validates the record
 again with its files before recording the ordinary audit record and event. The
 file then shows its usual processing status. Inspection reports the
 number of bundled files (`sample_data.file_count`). Attricat checks each file's
@@ -64,7 +64,7 @@ copied or private data; review it with the publisher.
 
 ## Recognize and work with samples
 
-Created sample entities have a visible **Sample** badge. Users with the required
+Created sample records have a visible **Sample** badge. Users with the required
 permissions can edit them, including removing the sample marker. The pack does
 not own them. Application history still records their origin, and later retries
 do not restore removed markers or reset user edits.
@@ -92,7 +92,7 @@ abandoned. Changing the prefix does not reset this reservation.
 acli solution-pack applications abandon <application-id>
 ```
 
-Abandoning an application leaves previously created resources, entities, and the
+Abandoning an application leaves previously created resources, records, and the
 dataset reservation in place. The host also abandons these applications after
 their resumability deadline.
 
@@ -100,26 +100,26 @@ Temporary staged sample values are scrubbed on completion, permanent invalidatio
 or abandonment. Unstarted expired plans lose access to staged values at expiry,
 and housekeeping purges those copies within one hour. Bundled files that were
 uploaded but never attached are released at the same points and removed by
-ordinary upload cleanup. Ordinary entity, audit, and event records remain
+ordinary upload cleanup. Ordinary record, audit, and event records remain
 unchanged.
 
 ## Samples in later releases
 
 For a strictly newer release, an administrator may select one completed earlier
 application with `--from-application`. New sample keys can create records;
-unchanged declarations reuse their recorded entity identities without resetting
+unchanged declarations reuse their recorded record identities without resetting
 live values or sample markers. Changed declarations are blocked, and removed
-ones do not delete records. Missing reused entities cause conflicts rather than
+ones do not delete records. Missing reused records cause conflicts rather than
 automatic recreation.
 
 ## Cleanup limits
 
 There is no pack operation to reset, update, publish, delete, or uninstall a
-sample dataset. Use ordinary authorized entity/resource operations when cleanup
+sample dataset. Use ordinary authorized record/resource operations when cleanup
 is appropriate, and respect relationships, business data, and retention policy.
-Deleting a sample entity through ordinary operations removes it from current
+Deleting a sample record through ordinary operations removes it from current
 reads together with its values in every context and its attached files, like
-any other entity. Attached files are ordinary files and follow ordinary file
+any other record. Attached files are ordinary files and follow ordinary file
 retention: a stored file is removed only once no attribute value, including
 value history, references it. Contexts the pack created stay in place until you
 delete them.

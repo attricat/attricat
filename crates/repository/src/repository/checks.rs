@@ -1,5 +1,5 @@
 //! Host side of the shared predicate engine: loads bounded, context-resolved
-//! records for [`catalog_validation::predicate`] and enforces entity-schema
+//! records for [`catalog_validation::predicate`] and enforces record-schema
 //! checks, status transition conditions and enforcing rules on every write
 //! of values or system tags.
 //!
@@ -9,7 +9,7 @@ use super::record_values::{
     ContextTree, RecordState, RecordValues, Selection, load_record, load_records,
 };
 use super::references::{
-    ReferenceQuery, Referrers, referencing_entity_ids, referencing_entity_ids_by_target,
+    ReferenceQuery, Referrers, referencing_record_ids, referencing_record_ids_by_target,
 };
 use super::status::StatusChange;
 use super::structural_constraints::{
@@ -20,7 +20,7 @@ use super::*;
 use catalog_rules::Severity;
 use catalog_validation::predicate::{
     self, Check, CycleState, Evaluation, Failure, MAX_CYCLE_VISITS, MAX_LINKED_RECORDS,
-    MAX_REFERENCING_RECORDS, Predicate, Record, RecordSet, Related, Requirements,
+    MAX_REFERENCING_RECORDS, Predicate, RecordSet, Related, Requirements, ResolvedRecord,
 };
 use catalog_validation::unique_key::{UNIQUE_PREDICATE_CASE_SENSITIVE, normalize_key_component};
 use chrono::Utc;
@@ -38,14 +38,14 @@ const UNIQUE_CANDIDATE_BATCH: i64 = 500;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckSource {
-    /// An `x-attricat-checks` entry in the blueprint's entity schema.
-    EntityCheck,
+    /// An `x-attricat-checks` entry in the blueprint's record schema.
+    RecordCheck,
     /// A `conditions` entry on a status transition edge.
     TransitionCondition,
     /// An enabled rule, enforcing or required by a publication channel.
     Rule,
-    /// The blueprint's JSON entity schema (publication gates only).
-    EntitySchema,
+    /// The blueprint's JSON record schema (publication gates only).
+    RecordSchema,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -64,7 +64,7 @@ pub struct CheckViolation {
     pub message: String,
     /// Codes of the resolved contexts in which the predicate failed.
     pub contexts: Vec<String>,
-    /// Attributes of the entity involved, for highlighting form fields.
+    /// Attributes of the record involved, for highlighting form fields.
     pub attributes: Vec<String>,
     /// The rule's severity; checks and conditions have none.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -74,7 +74,7 @@ pub struct CheckViolation {
     pub evidence: Value,
 }
 
-/// Whether an entity can be published to an enabled channel right now.
+/// Whether a record can be published to an enabled channel right now.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PublicationReadiness {
     pub context_id: Uuid,
@@ -127,9 +127,9 @@ impl CheckScope {
     }
 }
 
-/// Loads live entities with their current values. Missing or deleted IDs are
+/// Loads live records with their current values. Missing or deleted IDs are
 /// omitted. Reads see the caller's uncommitted writes.
-pub(crate) async fn load_entities(
+pub(crate) async fn load_current_records(
     conn: &mut PgConnection,
     workspace_id: Uuid,
     ids: &[Uuid],
@@ -137,7 +137,7 @@ pub(crate) async fn load_entities(
     load_records(
         conn,
         workspace_id,
-        Selection::Entities(ids),
+        Selection::Records(ids),
         None,
         RecordState::After,
     )
@@ -161,7 +161,7 @@ pub(crate) struct RelatedPrefetch {
     /// IDs whose live records were requested; missing ones are not live.
     requested: std::collections::HashSet<Uuid>,
     records: BTreeMap<Uuid, RecordValues>,
-    /// Referencing entity IDs by subject and `(blueprint, relationship)`.
+    /// Referencing record IDs by subject and `(blueprint, relationship)`.
     referencing: std::collections::HashMap<(Uuid, String, String), Vec<Uuid>>,
 }
 
@@ -207,7 +207,7 @@ pub(crate) async fn prefetch_related(
     }
     let targets: Vec<Uuid> = subjects.keys().copied().collect();
     for (blueprint_code, relationship) in &requirements.referenced_by {
-        let by_target = referencing_entity_ids_by_target(
+        let by_target = referencing_record_ids_by_target(
             conn,
             scope.workspace_id,
             &targets,
@@ -227,7 +227,7 @@ pub(crate) async fn prefetch_related(
     }
     if !ids.is_empty() && ids.len() <= PREFETCH_MAX_RECORDS {
         let ids: Vec<Uuid> = ids.into_iter().collect();
-        prefetch.records = load_entities(conn, scope.workspace_id, &ids).await?;
+        prefetch.records = load_current_records(conn, scope.workspace_id, &ids).await?;
         prefetch.requested = ids.into_iter().collect();
     }
     Ok(prefetch)
@@ -239,7 +239,7 @@ pub(crate) async fn load_related(
     conn: &mut PgConnection,
     scope: &CheckScope,
     subject: &RecordValues,
-    record: &Record,
+    record: &ResolvedRecord,
     context_id: Uuid,
     requirements: &Requirements,
     prefetch: Option<&RelatedPrefetch>,
@@ -266,7 +266,7 @@ pub(crate) async fn load_related(
         let mut ids = match prefetched {
             Some(ids) => ids.clone(),
             None => {
-                referencing_entity_ids(
+                referencing_record_ids(
                     conn,
                     scope.workspace_id,
                     ReferenceQuery {
@@ -297,14 +297,14 @@ pub(crate) async fn load_related(
     let loaded = match prefetch.and_then(|prefetch| prefetch.records(&all_ids)) {
         Some(prefetched) => prefetched,
         None => {
-            fetched = load_entities(conn, scope.workspace_id, &all_ids).await?;
+            fetched = load_current_records(conn, scope.workspace_id, &all_ids).await?;
             fetched.iter().map(|(id, record)| (*id, record)).collect()
         }
     };
-    let records_of = |ids: &[Uuid]| -> Vec<Record> {
+    let records_of = |ids: &[Uuid]| -> Vec<ResolvedRecord> {
         ids.iter()
             .filter_map(|id| loaded.get(id))
-            .map(|entity| entity.record(&path))
+            .map(|record| record.record(&path))
             .collect()
     };
 
@@ -356,7 +356,7 @@ fn key_components(
             let attribute = record
                 .attributes
                 .get(code)
-                .filter(|attribute| !attribute.entity_scoped)?;
+                .filter(|attribute| !attribute.record_scoped)?;
             normalize_key_component(
                 &attribute.value_type,
                 &attribute.resolve(path)?.key_input(),
@@ -366,7 +366,7 @@ fn key_components(
         .collect()
 }
 
-/// Other live entities of the subject's blueprint family whose `key`
+/// Other live records of the subject's blueprint family whose `key`
 /// resolves, in the same context, to the same normalized values. Values are
 /// compared as `[[unique_keys]]` compare them (see
 /// [`normalize_key_component`]); strings ignore case. When a declared key of
@@ -414,7 +414,7 @@ async fn duplicates(
             .map(|position| components[position].clone())
             .collect();
         let others: Vec<Uuid> = sqlx::query_scalar(
-            "SELECT entity_id FROM entity_unique_key_values WHERE workspace_id = $1 AND blueprint_id = $2 AND key_code = $3 AND context_id = $4 AND key_hash = $5 AND entity_id <> $6 ORDER BY entity_id",
+            "SELECT record_id FROM record_unique_key_values WHERE workspace_id = $1 AND blueprint_id = $2 AND key_code = $3 AND context_id = $4 AND key_hash = $5 AND record_id <> $6 ORDER BY record_id",
         )
         .bind(scope.workspace_id)
         .bind(subject.blueprint_id)
@@ -436,15 +436,15 @@ async fn duplicates(
         &components[0],
     );
     let query = format!(
-        r#"SELECT DISTINCT av.entity_id
+        r#"SELECT DISTINCT av.record_id
            FROM attribute_values av
-           JOIN entities e ON e.id = av.entity_id AND e.workspace_id = $1 AND e.deleted_at IS NULL
+           JOIN records e ON e.id = av.record_id AND e.workspace_id = $1 AND e.deleted_at IS NULL
             AND e.blueprint_id = $2 AND e.id <> $3
            JOIN attributes a ON a.id = av.attribute_id AND a.code = $4 AND a.deleted_at IS NULL
             AND a.blueprint_id = e.blueprint_id AND a.blueprint_version = e.blueprint_version
-           WHERE av.workspace_id = $1 AND av.relationship_target_entity_id IS NULL
-             AND av.entity_id > $5 AND {filter}
-           ORDER BY av.entity_id
+           WHERE av.workspace_id = $1 AND av.relationship_target_record_id IS NULL
+             AND av.record_id > $5 AND {filter}
+           ORDER BY av.record_id
            LIMIT $7"#
     );
     let mut others = Vec::new();
@@ -467,7 +467,7 @@ async fn duplicates(
         let loaded = load_records(
             conn,
             scope.workspace_id,
-            Selection::Entities(&batch),
+            Selection::Records(&batch),
             Some(key),
             RecordState::After,
         )
@@ -528,7 +528,7 @@ async fn cycle(
     conn: &mut PgConnection,
     scope: &CheckScope,
     subject: &RecordValues,
-    record: &Record,
+    record: &ResolvedRecord,
     context_id: Uuid,
     relationship: &str,
 ) -> Result<CycleState, RepositoryError> {
@@ -620,7 +620,7 @@ pub(crate) struct EnabledRule {
 }
 
 impl EnabledRule {
-    /// Whether the rule rejects every write that leaves the entity violating it.
+    /// Whether the rule rejects every write that leaves the record violating it.
     fn enforced_on_save(&self) -> bool {
         self.compiled
             .enforcement
@@ -687,11 +687,11 @@ pub(crate) async fn enabled_rule_sets(
     Ok(sets)
 }
 
-/// The `x-attricat-checks` of an entity schema, failing closed when they are
-/// malformed. A blueprint without an entity schema has none.
-pub(crate) fn entity_checks(entity_schema: Option<&Value>) -> Result<Vec<Check>, RepositoryError> {
-    entity_schema
-        .map(predicate::entity_checks)
+/// The `x-attricat-checks` of a record schema, failing closed when they are
+/// malformed. A blueprint without a record schema has none.
+pub(crate) fn record_checks(record_schema: Option<&Value>) -> Result<Vec<Check>, RepositoryError> {
+    record_schema
+        .map(predicate::record_checks)
         .transpose()
         .map_err(RepositoryError::InvalidBlueprintDefinition)
         .map(Option::unwrap_or_default)
@@ -710,7 +710,7 @@ struct Job<'a> {
 impl<'a> Job<'a> {
     fn check(check: &'a Check) -> Self {
         Self {
-            source: CheckSource::EntityCheck,
+            source: CheckSource::RecordCheck,
             code: &check.code,
             message: check.message.as_deref(),
             predicate: &check.predicate,
@@ -784,8 +784,8 @@ fn transition_jobs<'a>(
     jobs
 }
 
-/// Entity checks apply in every context.
-fn entity_check_jobs<'a>(contexts: &[Uuid], checks: &'a [Check]) -> JobsByContext<'a> {
+/// Record checks apply in every context.
+fn record_check_jobs<'a>(contexts: &[Uuid], checks: &'a [Check]) -> JobsByContext<'a> {
     if checks.is_empty() {
         return JobsByContext::new();
     }
@@ -943,9 +943,9 @@ pub(super) async fn transition_unmet(
 }
 
 impl CatalogRepository {
-    /// Enforces entity-schema checks, status transition conditions and
+    /// Enforces record-schema checks, status transition conditions and
     /// enforcing rules on the transaction's final state. Every write that
-    /// changes attribute values calls it through `validate_entity_schema_with`,
+    /// changes attribute values calls it through `validate_record_schema_with`,
     /// with the write's own status `changes`: system transitions (approval
     /// voids) are not guarded. Extension annotation patches, which change
     /// only system tags and metadata, call it through
@@ -956,13 +956,13 @@ impl CatalogRepository {
     pub(super) async fn enforce_declarative_checks(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity_schema: Option<&Value>,
+        record_schema: Option<&Value>,
         tree: &ContextTree,
         subject: &RecordValues,
         changes: &[StatusChange],
     ) -> Result<(), RepositoryError> {
-        // A malformed entity check is reported before a malformed rule.
-        entity_checks(entity_schema)?;
+        // A malformed record check is reported before a malformed rule.
+        record_checks(record_schema)?;
         let rules = enabled_rules(
             transaction,
             self.workspace_id.0,
@@ -972,7 +972,7 @@ impl CatalogRepository {
         .await?;
         self.enforce_declarative_checks_with(
             transaction,
-            entity_schema,
+            record_schema,
             tree,
             subject,
             changes,
@@ -986,7 +986,7 @@ impl CatalogRepository {
     pub(super) async fn enforce_declarative_checks_using(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity_schema: Option<&Value>,
+        record_schema: Option<&Value>,
         rules: Option<&[EnabledRule]>,
         tree: &ContextTree,
         subject: &RecordValues,
@@ -996,7 +996,7 @@ impl CatalogRepository {
             Some(rules) => {
                 self.enforce_declarative_checks_with(
                     transaction,
-                    entity_schema,
+                    record_schema,
                     tree,
                     subject,
                     changes,
@@ -1005,7 +1005,7 @@ impl CatalogRepository {
                 .await
             }
             None => {
-                self.enforce_declarative_checks(transaction, entity_schema, tree, subject, changes)
+                self.enforce_declarative_checks(transaction, record_schema, tree, subject, changes)
                     .await
             }
         }
@@ -1016,13 +1016,13 @@ impl CatalogRepository {
     async fn enforce_declarative_checks_with(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity_schema: Option<&Value>,
+        record_schema: Option<&Value>,
         tree: &ContextTree,
         subject: &RecordValues,
         changes: &[StatusChange],
         rules: &[EnabledRule],
     ) -> Result<(), RepositoryError> {
-        let checks = entity_checks(entity_schema)?;
+        let checks = record_checks(record_schema)?;
         let rules: Vec<EnabledRule> = rules
             .iter()
             .filter(|rule| rule.compiled.enforcement.is_some())
@@ -1041,20 +1041,20 @@ impl CatalogRepository {
         let scope = CheckScope::new(self.workspace_id.0, tree.clone());
         let contexts = scope.context_ids();
         // One evaluation per context; failures keep their precedence:
-        // entity checks, then transition conditions, then rules.
+        // record checks, then transition conditions, then rules.
         let [checks, conditions, rules] = run_job_groups(
             transaction,
             &scope,
             subject,
             [
-                &entity_check_jobs(&contexts, &checks),
+                &record_check_jobs(&contexts, &checks),
                 &transition_condition_jobs(&conditions),
                 &enforcing_rule_jobs(&contexts, &rules, changes),
             ],
         )
         .await?;
         if !checks.is_empty() {
-            return Err(RepositoryError::EntityCheckFailed(checks));
+            return Err(RepositoryError::RecordCheckFailed(checks));
         }
         if !conditions.is_empty() {
             return Err(RepositoryError::TransitionConditionsUnmet(conditions));
@@ -1065,30 +1065,30 @@ impl CatalogRepository {
         Ok(())
     }
 
-    /// Enforces entity checks and on-save enforcing rules after a write that
-    /// changed only the entity's system tags, when any of them reads the
-    /// entity's own tags (`has_tag`, `missing_tag`). Such a write changes no
-    /// value, so it has no status transitions and the JSON entity schema
+    /// Enforces record checks and on-save enforcing rules after a write that
+    /// changed only the record's system tags, when any of them reads the
+    /// record's own tags (`has_tag`, `missing_tag`). Such a write changes no
+    /// value, so it has no status transitions and the JSON record schema
     /// cannot change its verdict.
     pub(super) async fn enforce_tag_checks(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
     ) -> Result<(), RepositoryError> {
-        let entity_schema = sqlx::query_scalar::<_, Option<Value>>(
-            "SELECT entity_schema FROM blueprints WHERE id = $1 AND version = $2 AND workspace_id = $3",
+        let record_schema = sqlx::query_scalar::<_, Option<Value>>(
+            "SELECT record_schema FROM blueprints WHERE id = $1 AND version = $2 AND workspace_id = $3",
         )
-        .bind(entity.blueprint_id)
-        .bind(entity.blueprint_version)
+        .bind(record.blueprint_id)
+        .bind(record.blueprint_version)
         .bind(self.workspace_id.0)
         .fetch_one(&mut **transaction)
         .await?;
-        let checks = entity_checks(entity_schema.as_ref())?;
+        let checks = record_checks(record_schema.as_ref())?;
         let rules = enabled_rules(
             transaction,
             self.workspace_id.0,
-            entity.blueprint_id,
-            entity.blueprint_version,
+            record.blueprint_id,
+            record.blueprint_version,
         )
         .await?;
         let reads_tags = checks
@@ -1104,14 +1104,14 @@ impl CatalogRepository {
         let record = load_record(
             transaction,
             self.workspace_id.0,
-            entity.id,
+            record.id,
             RecordState::After,
         )
         .await?
-        .ok_or(RepositoryError::NotFound("entity"))?;
+        .ok_or(RepositoryError::NotFound("record"))?;
         self.enforce_declarative_checks_with(
             transaction,
-            entity_schema.as_ref(),
+            record_schema.as_ref(),
             &tree,
             &record,
             &[],

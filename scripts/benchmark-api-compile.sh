@@ -31,8 +31,8 @@ measure warm cargo check --locked -p api --all-targets
 
 for source in \
   crates/domain/src/model.rs \
-  crates/repository/src/repository/entity_search.rs \
-  crates/http/src/http/entity_reads.rs \
+  crates/repository/src/repository/record_search.rs \
+  crates/http/src/http/record_reads.rs \
   crates/extension-runtime/src/extension_runtime.rs
 do
   touch "$source"

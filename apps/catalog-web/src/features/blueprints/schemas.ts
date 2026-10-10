@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import {
-  attributeSchema as entityAttributeSchema,
-  blueprintSchema as entityBlueprintSchema,
-} from '../entities/schemas';
+  attributeSchema as recordAttributeSchema,
+  blueprintSchema as recordBlueprintSchema,
+} from '../records/schemas';
 
 const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
   z.union([
@@ -22,8 +22,8 @@ export const blueprintSchema = z.object({
   kind: z.string(),
   version: z.number().int().positive(),
   includes: jsonValueSchema,
-  views: entityBlueprintSchema.shape.views,
-  entity_schema: entityBlueprintSchema.shape.entity_schema,
+  views: recordBlueprintSchema.shape.views,
+  record_schema: recordBlueprintSchema.shape.record_schema,
   status: z.enum(['draft', 'published']),
   published_at: z.string().nullable(),
   created_at: z.string(),
@@ -33,7 +33,7 @@ export const blueprintSchema = z.object({
   definition_hash: z.string(),
 });
 
-export const attributeSchema = entityAttributeSchema.extend({
+export const attributeSchema = recordAttributeSchema.extend({
   id: z.uuid(),
   blueprint_id: z.uuid(),
   blueprint_version: z.number().int().positive(),
@@ -57,8 +57,8 @@ export type BlueprintWithAttributes = z.infer<
   typeof blueprintWithAttributesSchema
 >;
 
-export const blueprintEntityPublicationSummarySchema = z.object({
-  entity_count: z.number().int().nonnegative(),
+export const blueprintRecordPublicationSummarySchema = z.object({
+  record_count: z.number().int().nonnegative(),
   channel_count: z.number().int().nonnegative(),
   publication_count: z.number().int().nonnegative(),
 });
@@ -87,11 +87,11 @@ export type BlueprintMigrationBatch = z.infer<
 
 export const blueprintMigrationBatchStatusSchema =
   blueprintMigrationBatchSchema.extend({
-    total_entities: z.number().int().nonnegative(),
-    processed_entities: z.number().int().nonnegative(),
-    migrated_entities: z.number().int().nonnegative(),
-    needs_input_entities: z.number().int().nonnegative(),
-    failed_entities: z.number().int().nonnegative(),
+    total_records: z.number().int().nonnegative(),
+    processed_records: z.number().int().nonnegative(),
+    migrated_records: z.number().int().nonnegative(),
+    needs_input_records: z.number().int().nonnegative(),
+    failed_records: z.number().int().nonnegative(),
   });
 
 export type BlueprintMigrationBatchStatus = z.infer<
@@ -99,9 +99,9 @@ export type BlueprintMigrationBatchStatus = z.infer<
 >;
 
 export const blueprintMigrationImpactSchema = z.object({
-  eligible_entities: z.number().int().nonnegative(),
+  eligible_records: z.number().int().nonnegative(),
   removed_attribute_codes: z.array(z.string()),
-  entities_with_removed_values: z.number().int().nonnegative(),
+  records_with_removed_values: z.number().int().nonnegative(),
   removed_values: z.number().int().nonnegative(),
   requires_removal_disposition: z.boolean(),
 });

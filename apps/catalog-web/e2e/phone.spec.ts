@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { commitField, createEntityBlueprint, suffix } from './helpers';
+import { commitField, createRecordBlueprint, suffix } from './helpers';
 
 for (const colorScheme of ['light', 'dark'] as const) {
   test(`creates, displays and edits phone values (${colorScheme})`, async ({
@@ -7,7 +7,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
   }) => {
     await page.emulateMedia({ colorScheme });
     const code = `phone_${suffix()}`;
-    await createEntityBlueprint(
+    await createRecordBlueprint(
       code,
       'Phone contacts',
       `
@@ -29,7 +29,7 @@ columns = [{ field = "phone", renderer = { id = "catalog.phone_display", version
 `,
       },
     );
-    await page.goto('/entities/new');
+    await page.goto('/records/new');
     const toggle = page.getByRole('button', {
       name: colorScheme === 'dark' ? 'Dark mode' : 'Light mode',
       exact: true,
@@ -51,10 +51,10 @@ columns = [{ field = "phone", renderer = { id = "catalog.phone_display", version
     await page
       .getByRole('button', { name: 'Create record', exact: true })
       .click();
-    await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
-    const entityUrl = page.url();
-    const entityId = entityUrl.split('/').at(-1)!;
-    // The entity page edits the value in place; the table displays it.
+    await expect(page).toHaveURL(/\/records\/[0-9a-f-]{36}$/);
+    const recordUrl = page.url();
+    const recordId = recordUrl.split('/').at(-1)!;
+    // The record page edits the value in place; the table displays it.
     await expect(input).toHaveValue(number);
     await page.reload();
     await expect(input).toHaveValue(number);
@@ -62,10 +62,10 @@ columns = [{ field = "phone", renderer = { id = "catalog.phone_display", version
     await expect(
       page.getByRole('link', { name: `Call ${number}` }),
     ).toHaveAttribute('href', 'tel:+12025550123;ext=0042');
-    await page.goto(entityUrl);
+    await page.goto(recordUrl);
     await expect(input).toHaveValue(number);
     await input.fill('020 7946 0958');
-    await commitField(page, entityId, input, 'Enter');
+    await commitField(page, recordId, input, 'Enter');
     await page.reload();
     await expect(input).toHaveValue('020 7946 0958');
     await page.goto(`/?blueprint=${code}`);
@@ -73,9 +73,9 @@ columns = [{ field = "phone", renderer = { id = "catalog.phone_display", version
       page.getByText('020 7946 0958', { exact: true }),
     ).toBeVisible();
     await expect(page.locator('a[href^="tel:"]')).toHaveCount(0);
-    await page.goto(entityUrl);
+    await page.goto(recordUrl);
     await input.clear();
-    await commitField(page, entityId, input);
+    await commitField(page, recordId, input);
     await page.reload();
     await expect(input).toHaveValue('');
     await page.goto(`/?blueprint=${code}`);

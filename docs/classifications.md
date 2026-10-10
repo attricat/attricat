@@ -1,27 +1,27 @@
 # Tags, Labels, And Classifications
 
-Use **entities and relationships** for tags, labels, categories, and other
+Use **records and relationships** for tags, labels, categories, and other
 controlled classifications. Do not model them as free-text strings, JSON arrays,
 or a new scalar `tags` type.
 
 A classification is data with a stable identity, can be reused by more than one
-entity type, and often needs its own name, translation, hierarchy, ownership,
-or lifecycle. A target entity provides all of those capabilities while a
-relationship records which classifications apply to a source entity.
+record type, and often needs its own name, translation, hierarchy, ownership,
+or lifecycle. A target record provides all of those capabilities while a
+relationship records which classifications apply to a source record.
 
 ## Model a classification type
 
-Create an entity blueprint for each classification domain whose semantics differ,
+Create a record blueprint for each classification domain whose semantics differ,
 such as `category`, `color`, `material`, `certification`, or `label`. Give it a
 human-readable scalar attribute and configure that attribute as its dropdown
 option display. Use a stable code or external identifier when integrations need
-one; entity UUIDs remain the relationship identity.
+one; record UUIDs remain the relationship identity.
 
 ```toml
 format_version = 1
 code = "label"
 name = "Label"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "name"
@@ -36,7 +36,7 @@ type = "dropdown_option"
 fields = ["name"]
 ```
 
-Then point a relationship attribute from the classified entity to that blueprint:
+Then point a relationship attribute from the classified record to that blueprint:
 
 ```toml
 # On product
@@ -48,7 +48,7 @@ target_blueprint = "label"
 
 The relationship is the assignment. A product can have multiple labels, and a
 label can be assigned to multiple products. Catalog validates that every target
-is a `label` entity and retains current and historical assignments in the same
+is a `label` record and retains current and historical assignments in the same
 way as other relationships.
 
 Use a domain-specific relationship name (`categories`, `certifications`, or
@@ -62,13 +62,13 @@ Both sides are contextual:
 
 - The source-to-classification relationship set can differ by context. For
   example, a product may have a market-specific set of labels.
-- The classification entity's `name` can have contextual scalar overrides. For
+- The classification record's `name` can have contextual scalar overrides. For
   example, write translated names in language contexts and use normal
   `context_fallback` to resolve a display name.
 
 Relationship dropdown labels are rendered from the target blueprint's
 `views.dropdown_option` fields and respect those fields' contextual fallback.
-This keeps a classification's stable entity identity separate from its
+This keeps a classification's stable record identity separate from its
 localized presentation.
 
 Contexts are not inherently languages. Only use a context for translations when

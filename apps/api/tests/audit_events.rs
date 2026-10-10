@@ -27,7 +27,7 @@ async fn catalog_mutation_creates_a_redacted_audit_event(pool: sqlx::PgPool) {
         .header("x-request-id", request_id.to_string())
         .header("x-correlation-id", correlation_id.to_string())
         .json(&support::json!({
-            "definition": "format_version = 1\ncode = 'audit_product'\nname = 'Audit product'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'"
+            "definition": "format_version = 1\ncode = 'audit_product'\nname = 'Audit product'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'"
         }))
         .send()
         .await
@@ -230,7 +230,7 @@ async fn audit_insert_failure_rolls_back_the_mutation(pool: sqlx::PgPool) {
     let response = authenticated_client()
         .post(format!("{base_url}/blueprints"))
         .json(&support::json!({
-            "definition": "format_version = 1\ncode = 'audit_rollback'\nname = 'Audit rollback'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'"
+            "definition": "format_version = 1\ncode = 'audit_rollback'\nname = 'Audit rollback'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'"
         }))
         .send()
         .await

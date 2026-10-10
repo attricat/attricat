@@ -139,7 +139,7 @@ describe('WorkflowDetailPage', () => {
     });
   });
 
-  it('locks the manual entity ID and submits a snapshot of the requested run', async () => {
+  it('locks the manual record ID and submits a snapshot of the requested run', async () => {
     vi.mocked(currentSession).mockResolvedValue({
       capabilities: { workflows_manage: true, workflows_read: true },
     } as Awaited<ReturnType<typeof currentSession>>);
@@ -155,17 +155,17 @@ describe('WorkflowDetailPage', () => {
     vi.mocked(runWorkflowNow).mockImplementation(() => new Promise(() => {}));
     renderPage();
     const user = userEvent.setup();
-    const entityId = await screen.findByRole('textbox', {
+    const recordId = await screen.findByRole('textbox', {
       name: 'Manual run record ID',
     });
-    await user.type(entityId, '  entity-1  ');
+    await user.type(recordId, '  record-1  ');
     await user.click(screen.getByRole('button', { name: 'Run now' }));
     expect(runWorkflowNow).toHaveBeenCalledWith(
       workflow.id,
-      'entity-1',
+      'record-1',
       expect.any(String),
     );
-    expect((entityId as HTMLInputElement).disabled).toBe(true);
+    expect((recordId as HTMLInputElement).disabled).toBe(true);
     expect(
       (screen.getByRole('button', { name: 'Run now' }) as HTMLButtonElement)
         .disabled,

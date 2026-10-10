@@ -4,13 +4,13 @@ import {
   navigateDetailSchema,
   type NotifyDetail,
   notifyDetailSchema,
-  type RefreshEntityDetail,
-  refreshEntityDetailSchema,
+  type RefreshRecordDetail,
+  refreshRecordDetailSchema,
 } from './catalogEvents';
 
 export type CatalogEventBridgeOptions = {
   host: EventTarget;
-  onRefreshEntity: (detail: RefreshEntityDetail) => void;
+  onRefreshRecord: (detail: RefreshRecordDetail) => void;
   onNavigate: (detail: NavigateDetail) => void;
   onNotify: (detail: NotifyDetail) => void;
 };
@@ -38,23 +38,23 @@ const validatedHandler =
  */
 export const installCatalogEventBridge = ({
   host,
-  onRefreshEntity,
+  onRefreshRecord,
   onNavigate,
   onNotify,
 }: CatalogEventBridgeOptions) => {
-  const refreshEntity = validatedHandler(
-    refreshEntityDetailSchema,
-    onRefreshEntity,
+  const refreshRecord = validatedHandler(
+    refreshRecordDetailSchema,
+    onRefreshRecord,
   );
   const navigate = validatedHandler(navigateDetailSchema, onNavigate);
   const notify = validatedHandler(notifyDetailSchema, onNotify);
 
-  host.addEventListener(catalogEventNames.refreshEntity, refreshEntity);
+  host.addEventListener(catalogEventNames.refreshRecord, refreshRecord);
   host.addEventListener(catalogEventNames.navigate, navigate);
   host.addEventListener(catalogEventNames.notify, notify);
 
   return () => {
-    host.removeEventListener(catalogEventNames.refreshEntity, refreshEntity);
+    host.removeEventListener(catalogEventNames.refreshRecord, refreshRecord);
     host.removeEventListener(catalogEventNames.navigate, navigate);
     host.removeEventListener(catalogEventNames.notify, notify);
   };

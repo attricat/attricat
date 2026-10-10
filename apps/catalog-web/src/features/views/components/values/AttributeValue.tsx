@@ -2,13 +2,13 @@ import { Chip, Stack, Typography } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import type { ReactNode } from 'react';
-import type { Attribute } from '../../../entities/api';
+import type { Attribute } from '../../../records/api';
 import { fileDownloadUrl } from '../../../files/api';
 import { ImageGallery } from '../../../files/ImageGallery';
 import { AttributeValueText } from './AttributeValueText';
 import { formatAttributeValue } from './formatAttributeValue';
-import { attributeValueTypes } from '../../../entities/valueTypes';
-import { statusConfiguration } from '../../../entities/status';
+import { attributeValueTypes } from '../../../records/valueTypes';
+import { statusConfiguration } from '../../../records/status';
 import { StatusValue } from '../../controls/values';
 import { principalConfiguration } from '../../../principals/principal';
 import { PrincipalValue } from '../../../principals/PrincipalValue';
@@ -45,13 +45,13 @@ export const AttributeValue = ({
   compact = false,
   renderFilePanel,
   contextId,
-  entityId,
+  recordId,
 }: {
   attribute: Attribute;
   value: unknown;
   compact?: boolean;
   contextId?: string;
-  entityId?: string;
+  recordId?: string;
   renderFilePanel?: (fileId: string) => ReactNode;
 }) => {
   const { t } = useTranslation();
@@ -77,14 +77,14 @@ export const AttributeValue = ({
         {items.map((item) => (
           <Link
             key={item.id}
-            params={{ entityId: item.id }}
-            to="/entities/$entityId"
+            params={{ recordId: item.id }}
+            to="/records/$recordId"
           >
             <Chip label={item.display ?? item.id} clickable />
           </Link>
         ))}
         {value.truncated && (
-          <Chip label={t('views.moreLinkedEntities')} variant="outlined" />
+          <Chip label={t('views.moreLinkedRecords')} variant="outlined" />
         )}
         {!items.length && (
           <Typography color="text.secondary">{t('views.notSet')}</Typography>
@@ -110,7 +110,7 @@ export const AttributeValue = ({
     if (attribute.file_policy?.image_only) {
       return (
         <ImageGallery
-          key={`${entityId ?? ''}:${contextId ?? ''}:${attribute.code}`}
+          key={`${recordId ?? ''}:${contextId ?? ''}:${attribute.code}`}
           files={value}
           renderFilePanel={renderFilePanel}
         />

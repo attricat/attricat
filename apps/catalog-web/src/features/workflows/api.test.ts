@@ -39,7 +39,7 @@ describe('workflow API client', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/workflow-runs');
   });
 
-  it('starts a bounded manual run with only an entity target', async () => {
+  it('starts a bounded manual run with only a record target', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ id: run.id }),
@@ -52,7 +52,7 @@ describe('workflow API client', () => {
       `/api/workflows/${run.workflow_id}/run-now`,
       {
         body: JSON.stringify({
-          entity_id: run.trigger_event_id,
+          record_id: run.trigger_event_id,
           idempotency_key: 'manual-test-key',
         }),
         headers: { 'Content-Type': 'application/json' },

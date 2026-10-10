@@ -42,7 +42,7 @@ const BLUEPRINT: &str = r#"
 format_version = 1
 code = "rt_product"
 name = "Round-trip product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -211,7 +211,7 @@ fn unified_archive() -> (String, Vec<(&'static str, String)>, Vec<u8>) {
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],
         "server": {
-            "event_handlers": [{"id": "on-update", "event_types": ["entity.updated.v1"], "handler": "handle-event"}]
+            "event_handlers": [{"id": "on-update", "event_types": ["record.updated.v1"], "handler": "handle-event"}]
         }
     });
     let manifest = serde_json::to_vec(&manifest).unwrap();
@@ -344,24 +344,24 @@ async fn database_round_trips(pool: PgPool) {
         .unwrap();
     let client = bearer_client(token["secret"].as_str().unwrap());
 
-    let mut entity_ids = Vec::new();
+    let mut record_ids = Vec::new();
     for seed in 0..30 {
-        let entity = create_entity(&owner, &base_url, &blueprint).await;
-        let id = entity["id"].as_str().unwrap().to_owned();
+        let record = create_record(&owner, &base_url, &blueprint).await;
+        let id = record["id"].as_str().unwrap().to_owned();
         owner
-            .put(format!("{base_url}/v1/entities/{id}"))
+            .put(format!("{base_url}/v1/records/{id}"))
             .json(&json!({ "values": values(seed) }))
             .send()
             .await
             .unwrap()
             .error_for_status()
             .unwrap();
-        entity_ids.push(id);
+        record_ids.push(id);
     }
 
     let mut report = Vec::<(String, String)>::new();
 
-    // Explorer entity search with three filters.
+    // Explorer record search with three filters.
     let search = json!({
         "blueprint": { "code": "rt_product" },
         "filters": [
@@ -376,7 +376,7 @@ async fn database_round_trips(pool: PgPool) {
     for run in ["cold", "warm"] {
         let before = Snapshot::take();
         let response = client
-            .post(format!("{base_url}/v1/entities/search"))
+            .post(format!("{base_url}/v1/records/search"))
             .json(&search)
             .send()
             .await
@@ -393,17 +393,17 @@ async fn database_round_trips(pool: PgPool) {
             format!(
                 "{:.0}",
                 after
-                    .mean_since(&before, "POST /v1/entities/search")
+                    .mean_since(&before, "POST /v1/records/search")
                     .unwrap()
             ),
         ));
     }
 
-    // Entity update with ten values.
+    // Record update with ten values.
     for (run, seed) in [("cold", 100), ("warm", 101)] {
         let before = Snapshot::take();
         client
-            .put(format!("{base_url}/v1/entities/{}", entity_ids[0]))
+            .put(format!("{base_url}/v1/records/{}", record_ids[0]))
             .json(&json!({ "values": values(seed) }))
             .send()
             .await
@@ -412,11 +412,11 @@ async fn database_round_trips(pool: PgPool) {
             .unwrap();
         let after = Snapshot::take();
         report.push((
-            format!("entity update, 10 values ({run})"),
+            format!("record update, 10 values ({run})"),
             format!(
                 "{:.0}",
                 after
-                    .mean_since(&before, "PUT /v1/entities/{entity_id}")
+                    .mean_since(&before, "PUT /v1/records/{record_id}")
                     .unwrap()
             ),
         ));
@@ -487,7 +487,7 @@ async fn database_round_trips(pool: PgPool) {
     for (expected, run) in [(1, "cold"), (2, "warm")] {
         let before = Snapshot::take();
         client
-            .put(format!("{base_url}/v1/entities/{}", entity_ids[1]))
+            .put(format!("{base_url}/v1/records/{}", record_ids[1]))
             .json(&json!({ "values": [
                 { "kind": "scalar", "attribute_code": "name", "value": format!("Event {run}") }
             ] }))

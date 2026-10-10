@@ -12,7 +12,7 @@ pub struct BlueprintDefinition {
     pub kind: BlueprintKind,
     pub includes: Vec<IncludeRef>,
     pub views: HashMap<String, ViewDefinition>,
-    pub entity_schema: Option<serde_json::Value>,
+    pub record_schema: Option<serde_json::Value>,
     pub publication: PublicationPolicy,
     pub connector_jobs: Vec<ConnectorJobDefinition>,
     pub rules: Vec<catalog_rules::CompiledRule>,
@@ -28,7 +28,7 @@ pub const RELATIONSHIP_HIERARCHIES: &[&str] = &["acyclic", "tree"];
 /// Attributes a unique key may combine.
 pub const MAX_UNIQUE_KEY_ATTRIBUTES: usize = 8;
 
-/// A business key: no two entities of the blueprint family may share the
+/// A business key: no two records of the blueprint family may share the
 /// normalized values of these attributes.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -87,11 +87,11 @@ pub struct ConnectorJobDefinition {
     pub enabled: bool,
 }
 
-/// Entity-owned outlets whose placement a blueprint `extension_layout` may override.
+/// Record-owned outlets whose placement a blueprint `extension_layout` may override.
 pub const EXTENSION_LAYOUT_OUTLETS: &[&str] = &[
-    "entity_preview_panel",
-    "entity_attribute_decoration",
-    "entity_action",
+    "record_preview_panel",
+    "record_attribute_decoration",
+    "record_action",
 ];
 /// View names with platform meaning, offered to editors as suggestions.
 pub const KNOWN_VIEW_NAMES: &[&str] = &["dropdown_option", "detail", "table", "extension_layout"];
@@ -105,7 +105,7 @@ fn default_connector_enabled() -> bool {
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PublicationPolicy {
-    /// Workspace roles whose edits keep entities published on their channels.
+    /// Workspace roles whose edits keep records published on their channels.
     #[serde(default)]
     #[schemars(extend("x-attricat-reference" = "role"))]
     pub retain_on_edit_roles: Vec<String>,
@@ -159,7 +159,7 @@ pub struct ExtensionOutletLayout {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct IncomingRelationship {
-    /// Blueprint whose entities reference this entity.
+    /// Blueprint whose records reference this record.
     #[schemars(extend("x-attricat-reference" = "blueprint"))]
     pub source_blueprint: String,
     /// Relationship attribute on the source blueprint.
@@ -171,7 +171,7 @@ pub struct IncomingRelationship {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ViewDefinition {
-    /// Label shown for the entity in relationship dropdowns.
+    /// Label shown for the record in relationship dropdowns.
     DropdownOption {
         /// Attributes joined into the label.
         #[schemars(extend("x-attricat-reference" = "attribute"))]
@@ -233,13 +233,13 @@ pub enum ViewDefinition {
         #[serde(default)]
         component: Option<ComponentReference>,
     },
-    /// A versioned layout override for entity-owned extension surfaces.
+    /// A versioned layout override for record-owned extension surfaces.
     ExtensionLayout {
         /// Layout format version. Only `1` is supported.
         #[schemars(extend("const" = 1))]
         version: u32,
-        /// Layouts keyed by entity outlet: `entity_preview_panel`,
-        /// `entity_attribute_decoration`, or `entity_action`.
+        /// Layouts keyed by record outlet: `record_preview_panel`,
+        /// `record_attribute_decoration`, or `record_action`.
         #[schemars(extend("x-attricat-key-suggestions" = EXTENSION_LAYOUT_OUTLETS))]
         outlets: HashMap<String, ExtensionOutletLayout>,
     },
@@ -336,7 +336,7 @@ pub enum ViewNode {
         #[serde(default)]
         component: Option<ComponentReference>,
     },
-    /// A relationship attribute's linked entities.
+    /// A relationship attribute's linked records.
     RelationshipList {
         /// Relationship attribute to render.
         #[schemars(extend("x-attricat-reference" = "relationship_attribute"))]
@@ -345,14 +345,14 @@ pub enum ViewNode {
         #[serde(default)]
         component: Option<ComponentReference>,
     },
-    /// Entities that reference this entity, opened in a paginated dialog.
+    /// Records that reference this record, opened in a paginated dialog.
     IncomingRelationshipList {
         /// Button and dialog label. `{{…}}` references resolve from the
         /// workspace lexicon.
         label: String,
-        /// Source blueprint relationship fields that point at this entity.
+        /// Source blueprint relationship fields that point at this record.
         relationships: Vec<IncomingRelationship>,
-        /// Entities requested per page.
+        /// Records requested per page.
         #[schemars(range(min = 1))]
         page_size: u32,
         /// Registered component that renders this block.
@@ -368,8 +368,8 @@ fn default_display_separator() -> String {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum BlueprintKind {
-    /// Creates entities.
-    Entity,
+    /// Creates records.
+    Record,
     /// Provides attributes for other blueprints to include.
     Mixin,
 }
@@ -377,7 +377,7 @@ pub enum BlueprintKind {
 impl BlueprintKind {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Entity => "entity",
+            Self::Record => "record",
             Self::Mixin => "mixin",
         }
     }
@@ -440,7 +440,7 @@ pub struct LocalAttributeDeclaration {
     pub file_policy: Option<FilePolicy>,
     pub target_blueprint: Option<String>,
     /// Every allowed target blueprint. A single target is also kept in
-    /// `target_blueprint`; empty means any entity blueprint.
+    /// `target_blueprint`; empty means any record blueprint.
     pub target_blueprints: Vec<String>,
     pub cardinality: Option<String>,
     pub target_cardinality: Option<String>,
@@ -483,7 +483,7 @@ pub struct EffectiveAttribute {
     pub default_value: Option<serde_json::Value>,
     pub file_policy: Option<FilePolicy>,
     pub target_blueprint: Option<String>,
-    /// Every allowed target blueprint; empty means any entity blueprint.
+    /// Every allowed target blueprint; empty means any record blueprint.
     pub target_blueprints: Vec<String>,
     pub cardinality: Option<String>,
     pub target_cardinality: Option<String>,
@@ -505,7 +505,7 @@ pub struct CompiledBlueprint {
     pub raw_definition_hash: String,
     pub includes: Vec<IncludeRef>,
     pub views: HashMap<String, ViewDefinition>,
-    pub entity_schema: Option<serde_json::Value>,
+    pub record_schema: Option<serde_json::Value>,
     pub rules: Vec<catalog_rules::CompiledRule>,
     pub unique_keys: Vec<UniqueKeyDefinition>,
     pub attributes: Vec<EffectiveAttribute>,

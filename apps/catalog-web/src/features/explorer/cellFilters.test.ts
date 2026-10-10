@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Attribute } from '../entities/api';
+import type { Attribute } from '../records/api';
 import {
   cellFilterDraft,
   cellFilterValueType,

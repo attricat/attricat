@@ -74,8 +74,8 @@ async fn data_health_sections_return_an_empty_catalog(pool: PgPool) {
     assert!(server_timing.contains("app;dur="));
     assert!(server_timing.contains("cache;desc=BYPASS"));
     let summary: Value = summary_response.json().await.unwrap();
-    assert_eq!(summary["active_entities"], 0);
-    assert_eq!(summary["outdated_entities"], 0);
+    assert_eq!(summary["active_records"], 0);
+    assert_eq!(summary["outdated_records"], 0);
 
     for path in [
         "/data-health/blueprints?stale_after_days=90",
@@ -166,10 +166,10 @@ async fn data_health_completeness_counts_default_values(pool: PgPool) {
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"health_product\"\nname = \"Health product\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+        "format_version = 1\ncode = \"health_product\"\nname = \"Health product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
     )
     .await;
-    create_entity(&client, &base_url, &blueprint).await;
+    create_record(&client, &base_url, &blueprint).await;
 
     let completeness: Value = client
         .get(format!("{base_url}/data-health/completeness"))
@@ -181,10 +181,10 @@ async fn data_health_completeness_counts_default_values(pool: PgPool) {
         .json()
         .await
         .unwrap();
-    assert_eq!(completeness[0]["active_entities"], 1);
+    assert_eq!(completeness[0]["active_records"], 1);
     assert_eq!(completeness[0]["current_version"], 1);
-    assert_eq!(completeness[0]["outdated_entities"], 0);
-    assert_eq!(completeness[0]["default_complete_entities"], 1);
+    assert_eq!(completeness[0]["outdated_records"], 0);
+    assert_eq!(completeness[0]["default_complete_records"], 1);
 
     server.abort();
 }

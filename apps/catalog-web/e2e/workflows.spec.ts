@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
-  createEntity,
-  createEntityBlueprint,
+  createRecord,
+  createRecordBlueprint,
   replaceDefinition,
   scalar,
   suffix,
@@ -13,12 +13,12 @@ test('authors, enables, runs and disables a manual workflow', async ({
   const code = `workflow_${suffix()}`;
   const workflowCode = `review-${suffix()}`;
   const workflowName = `Mark reviewed ${workflowCode}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Workflow product',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "review_state"\nvalue_type = "string"',
   );
-  const entity = await createEntity(blueprint, [
+  const record = await createRecord(blueprint, [
     scalar('title', 'Workflow subject'),
     scalar('review_state', 'pending'),
   ]);
@@ -57,7 +57,7 @@ fixed = "reviewed"
   await page.getByRole('button', { name: 'Enable', exact: true }).click();
   await expect(page.getByText('Enabled revision v1')).toBeVisible();
 
-  await page.getByLabel('Manual run record ID').fill(entity.id);
+  await page.getByLabel('Manual run record ID').fill(record.id);
   await page.getByRole('button', { name: 'Run now' }).click();
   await expect(async () => {
     await page.reload();
@@ -67,7 +67,7 @@ fixed = "reviewed"
     ).toBeVisible({ timeout: 1_000 });
   }).toPass();
 
-  await page.goto(`/entities/${entity.id}`);
+  await page.goto(`/records/${record.id}`);
   await expect(page.getByRole('textbox', { name: 'review state' })).toHaveValue(
     'reviewed',
   );

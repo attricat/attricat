@@ -6,7 +6,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { NewFileAttributeValue } from '../entities/api';
+import type { NewFileAttributeValue } from '../records/api';
 import { uploadStagedFiles } from './api';
 import type { PendingFile } from './usePendingFileUploads';
 
@@ -32,7 +32,7 @@ export const useQueuedFileUploadsContext = () =>
 const noQueuedFiles: Record<string, PendingFile[]> = {};
 
 /**
- * Holds files queued for an entity that does not exist yet. Changing `scope`,
+ * Holds files queued for a record that does not exist yet. Changing `scope`,
  * such as choosing another blueprint, discards the queue.
  */
 export const useQueuedFileUploads = (scope: string | undefined) => {

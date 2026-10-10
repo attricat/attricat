@@ -4,7 +4,7 @@ import type {
   ComponentReference,
   ViewDefinition,
   ViewNode,
-} from '../../entities/api';
+} from '../../records/api';
 
 type Capability = 'display' | 'edit';
 type Placement =
@@ -18,7 +18,7 @@ export type ValueRenderer = ComponentType<{
   attribute: Attribute;
   component?: ComponentReference | null;
   contextId?: string;
-  entityId?: string;
+  recordId?: string;
   value: unknown;
   renderFilePanel?: (fileId: string) => ReactNode;
 }>;
@@ -37,13 +37,13 @@ export type HeadingRenderer = ComponentType<{
   attributes: readonly Attribute[];
   /** Renders a smaller section heading for a panel beside another page. */
   compact?: boolean;
-  entityId: string;
+  recordId: string;
   values: Record<string, { value: unknown }>;
   view?: ViewDefinition;
 }>;
 
 export type IncomingRelationshipRenderer = ComponentType<{
-  entityId: string;
+  recordId: string;
   node: Extract<ViewNode, { type: 'incoming_relationship_list' }>;
 }>;
 
@@ -78,7 +78,7 @@ export type ViewComponentDefinition = {
   /** Submit the edited string verbatim instead of trimming it. */
   preservesWhitespace?: boolean;
   /**
-   * On the entity page, shows a set value with its display component until
+   * On the record page, shows a set value with its display component until
    * the user asks to edit it, for values whose source reads poorly.
    */
   editsOnRequest?: boolean;

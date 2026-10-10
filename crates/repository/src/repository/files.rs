@@ -66,8 +66,8 @@ pub struct FileUploadResult {
     pub attribute_code: String,
     pub context_id: Uuid,
     pub files: Vec<UploadedFile>,
-    /// The entity's new `updated_at`, so an open edit form can adopt it.
-    pub entity_updated_at: chrono::DateTime<chrono::Utc>,
+    /// The record's new `updated_at`, so an open edit form can adopt it.
+    pub record_updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Files uploaded for a blueprint's file attribute before the record exists.
@@ -96,7 +96,7 @@ struct StagedFileRow {
 
 #[derive(Clone, Debug, sqlx::FromRow)]
 pub struct FileReadTarget {
-    pub entity_id: Uuid,
+    pub record_id: Uuid,
     pub blueprint_id: Uuid,
 }
 
@@ -112,26 +112,26 @@ pub struct FileObject {
 }
 
 impl CatalogRepository {
-    /// Validates the immutable entity blueprint and returns its file policy before
-    /// object bytes are accepted. The entity is locked again while persisting,
+    /// Validates the immutable record blueprint and returns its file policy before
+    /// object bytes are accepted. The record is locked again while persisting,
     /// so a concurrent mutation cannot evade the cardinality check.
     pub async fn file_upload_policy(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         attribute_code: &str,
         context_id: Option<Uuid>,
     ) -> Result<FilePolicy, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        let record = self.lock_record(&mut transaction, record_id).await?;
         let (_, policy, context_editable) = self
-            .file_upload_attribute(&mut transaction, &entity, attribute_code)
+            .file_upload_attribute(&mut transaction, &record, attribute_code)
             .await?;
         let context_id = self
             .file_upload_context(&mut transaction, context_id)
             .await?;
         self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
             .await?;
-        self.ensure_attribute_unlocked(&mut transaction, &entity, attribute_code, context_id)
+        self.ensure_attribute_unlocked(&mut transaction, &record, attribute_code, context_id)
             .await?;
         transaction.commit().await?;
         Ok(policy)
@@ -139,26 +139,26 @@ impl CatalogRepository {
 
     pub async fn persist_uploaded_files(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         attribute_code: &str,
         context_id: Option<Uuid>,
         files: Vec<NewUploadedFile>,
     ) -> Result<FileUploadResult, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        let record = self.lock_record(&mut transaction, record_id).await?;
         let (attribute_id, policy, context_editable) = self
-            .file_upload_attribute(&mut transaction, &entity, attribute_code)
+            .file_upload_attribute(&mut transaction, &record, attribute_code)
             .await?;
         let context_id = self
             .file_upload_context(&mut transaction, context_id)
             .await?;
         self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
             .await?;
-        self.ensure_attribute_unlocked(&mut transaction, &entity, attribute_code, context_id)
+        self.ensure_attribute_unlocked(&mut transaction, &record, attribute_code, context_id)
             .await?;
 
         let current = self
-            .current_file_ids(&mut transaction, entity_id, attribute_id, context_id)
+            .current_file_ids(&mut transaction, record_id, attribute_id, context_id)
             .await?;
         if policy.cardinality == "one" && files.len() != 1 {
             return Err(RepositoryError::FileCardinality);
@@ -191,7 +191,7 @@ impl CatalogRepository {
         let updated = self
             .replace_file_value(
                 transaction,
-                &entity,
+                &record,
                 FileValueChange {
                     attribute_id,
                     attribute_code,
@@ -205,7 +205,7 @@ impl CatalogRepository {
             attribute_code: attribute_code.to_owned(),
             context_id,
             files: result,
-            entity_updated_at: updated.updated_at,
+            record_updated_at: updated.updated_at,
         })
     }
 
@@ -265,30 +265,30 @@ impl CatalogRepository {
     /// Removes or reorders existing references only. The expected ordered list
     /// is a compare-and-swap guard against concurrent uploads and edits. Archived
     /// references preserve history; this never deletes shared file objects.
-    /// Returns the entity's new `updated_at`, so an open edit form can adopt
+    /// Returns the record's new `updated_at`, so an open edit form can adopt
     /// its own change instead of treating it as a concurrent edit.
     pub async fn update_file_references(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         attribute_code: &str,
         context_id: Option<Uuid>,
         expected_file_ids: &[Uuid],
         file_ids: &[Uuid],
     ) -> Result<DateTime<Utc>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        let record = self.lock_record(&mut transaction, record_id).await?;
         let (attribute_id, policy, context_editable) = self
-            .file_upload_attribute(&mut transaction, &entity, attribute_code)
+            .file_upload_attribute(&mut transaction, &record, attribute_code)
             .await?;
         let context_id = self
             .file_upload_context(&mut transaction, context_id)
             .await?;
         self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
             .await?;
-        self.ensure_attribute_unlocked(&mut transaction, &entity, attribute_code, context_id)
+        self.ensure_attribute_unlocked(&mut transaction, &record, attribute_code, context_id)
             .await?;
         let current = self
-            .current_file_ids(&mut transaction, entity_id, attribute_id, context_id)
+            .current_file_ids(&mut transaction, record_id, attribute_id, context_id)
             .await?;
         if current != expected_file_ids {
             return Err(RepositoryError::FileReferencesChanged);
@@ -313,14 +313,14 @@ impl CatalogRepository {
         }
         if current == file_ids {
             transaction.commit().await?;
-            return Ok(entity.updated_at);
+            return Ok(record.updated_at);
         }
         // Keep an explicit empty local value: removing every image must not
         // unexpectedly reveal photos inherited from a fallback context.
         let updated = self
             .replace_file_value(
                 transaction,
-                &entity,
+                &record,
                 FileValueChange {
                     attribute_id,
                     attribute_code,
@@ -337,35 +337,35 @@ impl CatalogRepository {
     /// storage bytes or creating another file record.
     pub async fn link_file_to_attribute(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         attribute_code: &str,
         context_id: Option<Uuid>,
         file_id: Uuid,
     ) -> Result<FileMetadata, RepositoryError> {
-        self.link_file_to_attribute_checked(entity_id, attribute_code, context_id, file_id, None)
+        self.link_file_to_attribute_checked(record_id, attribute_code, context_id, file_id, None)
             .await
     }
 
     /// [`Self::link_file_to_attribute`], failing with
-    /// [`RepositoryError::StaleEntity`] when `expected_updated_at` is set and
+    /// [`RepositoryError::StaleRecord`] when `expected_updated_at` is set and
     /// no longer current.
     pub async fn link_file_to_attribute_checked(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         attribute_code: &str,
         context_id: Option<Uuid>,
         file_id: Uuid,
         expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<FileMetadata, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
-        if expected_updated_at.is_some_and(|expected| expected != entity.updated_at) {
-            return Err(RepositoryError::StaleEntity);
+        let record = self.lock_record(&mut transaction, record_id).await?;
+        if expected_updated_at.is_some_and(|expected| expected != record.updated_at) {
+            return Err(RepositoryError::StaleRecord);
         }
         let (change, file_ids) = self
             .prepare_file_link(
                 &mut transaction,
-                &entity,
+                &record,
                 attribute_code,
                 context_id,
                 &[file_id],
@@ -373,7 +373,7 @@ impl CatalogRepository {
             .await?;
         self.replace_file_value(
             transaction,
-            &entity,
+            &record,
             FileValueChange {
                 after: file_ids,
                 ..change
@@ -383,25 +383,25 @@ impl CatalogRepository {
         self.file_metadata(file_id).await
     }
 
-    /// Appends files to a file attribute of `entity`, which the caller has
+    /// Appends files to a file attribute of `record`, which the caller has
     /// locked, in one value write, without revalidating or committing, so the
-    /// transaction that creates the entity can link every file of an
+    /// transaction that creates the record can link every file of an
     /// attribute and context without archiving intermediate lists. Returns
     /// the audit change for the caller's mutation.
     pub(super) async fn link_files_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         attribute_code: &str,
         context_id: Option<Uuid>,
         file_ids: &[Uuid],
     ) -> Result<AuditEventChange, RepositoryError> {
         let (change, file_ids) = self
-            .prepare_file_link(transaction, entity, attribute_code, context_id, file_ids)
+            .prepare_file_link(transaction, record, attribute_code, context_id, file_ids)
             .await?;
         self.write_file_value(
             transaction,
-            entity.id,
+            record.id,
             change.attribute_id,
             change.context_id,
             &file_ids,
@@ -409,7 +409,7 @@ impl CatalogRepository {
         .await?;
         self.file_value_audit_change(
             transaction,
-            entity.id,
+            record.id,
             FileValueChange {
                 after: file_ids,
                 ..change
@@ -418,19 +418,19 @@ impl CatalogRepository {
         .await
     }
 
-    /// Claims files that `uploaded_by` staged for the new `entity`, which the
+    /// Claims files that `uploaded_by` staged for the new `record`, which the
     /// caller has locked along with the files (see
     /// [`Self::lock_files_in_transaction`]). Each file must be live, inside its
-    /// staging window, unclaimed, staged for the entity's blueprint family and
+    /// staging window, unclaimed, staged for the record's blueprint family and
     /// for the value's attribute and context, and accepted by the attribute
-    /// of the entity's revision. Claiming ends the staging window and clears
+    /// of the record's revision. Claiming ends the staging window and clears
     /// the binding, so a file is claimed at most once; the caller then links
     /// the files. Every rejection is the same error, so the response does not
     /// reveal another user's uploads.
     pub(super) async fn claim_staged_files_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         uploaded_by: Uuid,
         values: &[NewFileAttributeValue],
     ) -> Result<(), RepositoryError> {
@@ -447,7 +447,7 @@ impl CatalogRepository {
                 return Err(RepositoryError::InvalidFileReferences);
             }
             let (_, policy, _) = self
-                .file_upload_attribute(transaction, entity, &value.attribute_code)
+                .file_upload_attribute(transaction, record, &value.attribute_code)
                 .await?;
             for file_id in &value.file_ids {
                 if !requested.insert(*file_id) {
@@ -475,7 +475,7 @@ impl CatalogRepository {
         for (file_id, attribute_code, context_id, policy) in expected {
             let claimable = rows.get(&file_id).is_some_and(|row| {
                 row.staged_upload_user_id == Some(uploaded_by)
-                    && row.staged_upload_blueprint_id == Some(entity.blueprint_id)
+                    && row.staged_upload_blueprint_id == Some(record.blueprint_id)
                     && row.staged_upload_attribute_code.as_deref() == Some(attribute_code)
                     && row.staged_upload_context_id == Some(context_id)
                     && u64::try_from(row.byte_size).is_ok_and(|size| {
@@ -526,19 +526,19 @@ impl CatalogRepository {
     async fn prepare_file_link<'a>(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         attribute_code: &'a str,
         context_id: Option<Uuid>,
         file_ids: &[Uuid],
     ) -> Result<(FileValueChange<'a>, Vec<Uuid>), RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let (attribute_id, policy, context_editable) = self
-            .file_upload_attribute(transaction, entity, attribute_code)
+            .file_upload_attribute(transaction, record, attribute_code)
             .await?;
         let context_id = self.file_upload_context(transaction, context_id).await?;
         self.validate_context_editable(transaction, Some(context_id), &context_editable)
             .await?;
-        self.ensure_attribute_unlocked(transaction, entity, attribute_code, context_id)
+        self.ensure_attribute_unlocked(transaction, record, attribute_code, context_id)
             .await?;
         let mut unique = file_ids.to_vec();
         unique.sort_unstable();
@@ -558,7 +558,7 @@ impl CatalogRepository {
             return Err(RepositoryError::NotFound("file"));
         }
         let current = self
-            .current_file_ids(transaction, entity.id, attribute_id, context_id)
+            .current_file_ids(transaction, record.id, attribute_id, context_id)
             .await?;
         let mut linked = if policy.cardinality == "many" {
             current.clone()
@@ -608,7 +608,7 @@ impl CatalogRepository {
     ) -> Result<(FilePolicy, Uuid), RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let revision: Option<i64> = sqlx::query_scalar(
-            "SELECT version FROM blueprints WHERE id = $1 AND workspace_id = $2 AND status = 'published' AND kind = 'entity' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
+            "SELECT version FROM blueprints WHERE id = $1 AND workspace_id = $2 AND status = 'published' AND kind = 'record' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
         )
         .bind(blueprint_id)
         .bind(workspace_id)
@@ -716,7 +716,7 @@ impl CatalogRepository {
         })
     }
 
-    /// Persists files uploaded from a conversation without creating an entity
+    /// Persists files uploaded from a conversation without creating a record
     /// attribute value. A 15-minute attachment window protects them from
     /// reconciliation until the message attachment transaction claims them.
     pub async fn persist_conversation_uploads(
@@ -779,7 +779,7 @@ impl CatalogRepository {
         Ok(result)
     }
 
-    /// Returns active entities that currently reference a file. Deleted entities
+    /// Returns active records that currently reference a file. Deleted records
     /// and archived attribute values cannot authorize a file read.
     pub async fn file_read_targets(
         &self,
@@ -787,7 +787,7 @@ impl CatalogRepository {
     ) -> Result<Vec<FileReadTarget>, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         Ok(sqlx::query_as::<_, FileReadTarget>(
-            "SELECT DISTINCT e.id AS entity_id, e.blueprint_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id JOIN entities e ON e.id = v.entity_id AND e.workspace_id = v.workspace_id JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version AND b.workspace_id = e.workspace_id WHERE r.file_id = $1 AND r.workspace_id = $2 AND v.active AND e.deleted_at IS NULL AND b.deleted_at IS NULL",
+            "SELECT DISTINCT e.id AS record_id, e.blueprint_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id JOIN records e ON e.id = v.record_id AND e.workspace_id = v.workspace_id JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version AND b.workspace_id = e.workspace_id WHERE r.file_id = $1 AND r.workspace_id = $2 AND v.active AND e.deleted_at IS NULL AND b.deleted_at IS NULL",
         )
         .bind(file_id)
         .bind(workspace_id)
@@ -837,18 +837,18 @@ impl CatalogRepository {
     }
 
     /// The file IDs of the local value, in position order. The caller holds
-    /// the entity lock, which serializes every writer of its file values.
+    /// the record lock, which serializes every writer of its file values.
     async fn current_file_ids(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity_id: Uuid,
+        record_id: Uuid,
         attribute_id: Uuid,
         context_id: Uuid,
     ) -> Result<Vec<Uuid>, RepositoryError> {
         Ok(sqlx::query_scalar(
-            "SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id WHERE v.entity_id = $1 AND v.attribute_id = $2 AND v.context_id = $3 AND v.workspace_id = $4 AND v.relationship_target_entity_id IS NULL ORDER BY r.position, r.file_id",
+            "SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id WHERE v.record_id = $1 AND v.attribute_id = $2 AND v.context_id = $3 AND v.workspace_id = $4 AND v.relationship_target_record_id IS NULL ORDER BY r.position, r.file_id",
         )
-        .bind(entity_id)
+        .bind(record_id)
         .bind(attribute_id)
         .bind(context_id)
         .bind(self.workspace_id.0)
@@ -856,41 +856,41 @@ impl CatalogRepository {
         .await?)
     }
 
-    /// Replaces a file attribute's local value and commits the entity
+    /// Replaces a file attribute's local value and commits the record
     /// mutation. Like [`Self::insert_value`], the previous value row and its
     /// references are archived, so history keeps every earlier file list,
     /// even when files are only appended. The change is audited and emitted
-    /// through the shared entity-mutation seam. Returns the stored entity.
+    /// through the shared record-mutation seam. Returns the stored record.
     async fn replace_file_value(
         &self,
         mut transaction: Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         change: FileValueChange<'_>,
-    ) -> Result<Entity, RepositoryError> {
+    ) -> Result<Record, RepositoryError> {
         self.write_file_value(
             &mut transaction,
-            entity.id,
+            record.id,
             change.attribute_id,
             change.context_id,
             &change.after,
         )
         .await?;
-        let stored = self.revalidate_entity(&mut transaction, entity).await?;
+        let stored = self.revalidate_record(&mut transaction, record).await?;
         let changes = vec![
-            self.file_value_audit_change(&mut transaction, entity.id, change)
+            self.file_value_audit_change(&mut transaction, record.id, change)
                 .await?,
         ];
         let event = self.core_event(
             ATTRIBUTE_VALUE_CHANGED_V1,
-            "entity",
-            entity.id,
+            "record",
+            record.id,
             serde_json::to_value(AttributeValueMutationV1 {
-                entity_id: entity.id,
+                record_id: record.id,
                 facts: Self::affected_facts(&changes),
             })
             .expect("attribute-value-changed payload is serializable"),
         );
-        self.commit_entity_mutation(transaction, changes, event)
+        self.commit_record_mutation(transaction, changes, event)
             .await?;
         Ok(stored)
     }
@@ -899,7 +899,7 @@ impl CatalogRepository {
     async fn file_value_audit_change(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity_id: Uuid,
+        record_id: Uuid,
         change: FileValueChange<'_>,
     ) -> Result<AuditEventChange, RepositoryError> {
         let context_code: String = sqlx::query_scalar(
@@ -916,12 +916,12 @@ impl CatalogRepository {
         let before_value = file_list(&change.before);
         let after_value = file_list(&change.after);
         Ok(AuditEventChange {
-            entity_id,
+            record_id,
             attribute_id: change.attribute_id,
             attribute_code: change.attribute_code.to_owned(),
             context_id: Some(change.context_id),
             context_code: Some(context_code),
-            relationship_target_entity_id: None,
+            relationship_target_record_id: None,
             change_kind: match (&before_value, &after_value) {
                 (None, _) => "set",
                 (Some(_), None) => "remove",
@@ -937,16 +937,16 @@ impl CatalogRepository {
     async fn write_file_value(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity_id: Uuid,
+        record_id: Uuid,
         attribute_id: Uuid,
         context_id: Uuid,
         file_ids: &[Uuid],
     ) -> Result<(), RepositoryError> {
-        self.archive_current_value(transaction, entity_id, attribute_id, Some(context_id), None)
+        self.archive_current_value(transaction, record_id, attribute_id, Some(context_id), None)
             .await?;
         let value_id = Uuid::new_v4();
-        sqlx::query("INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true)")
-            .bind(value_id).bind(self.workspace_id.0).bind(entity_id).bind(attribute_id).bind(context_id)
+        sqlx::query("INSERT INTO attribute_values (id, workspace_id, record_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true)")
+            .bind(value_id).bind(self.workspace_id.0).bind(record_id).bind(attribute_id).bind(context_id)
             .execute(&mut **transaction).await?;
         let references: Vec<(Uuid, i32)> = file_ids
             .iter()
@@ -960,13 +960,13 @@ impl CatalogRepository {
     pub(super) async fn file_upload_attribute(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         attribute_code: &str,
     ) -> Result<(Uuid, FilePolicy, String), RepositoryError> {
         let row = sqlx::query_as::<_, (Uuid, String, Option<Value>, String, bool)>(
-            "SELECT id, value_type, file_policy, context_editable, readonly FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND workspace_id = $5 AND deleted_at IS NULL",
+            "SELECT id, value_type, file_policy, context_editable, readonly FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR record_id = $4) AND workspace_id = $5 AND deleted_at IS NULL",
         )
-        .bind(attribute_code).bind(entity.blueprint_id).bind(entity.blueprint_version).bind(entity.id)
+        .bind(attribute_code).bind(record.blueprint_id).bind(record.blueprint_version).bind(record.id)
         .bind(self.workspace_id.0)
         .fetch_optional(&mut **transaction).await?
         .ok_or(RepositoryError::AttributeNotApplicable)?;

@@ -338,7 +338,7 @@ pub(super) fn sanitize_svg(source: &[u8], key: &str) -> Result<Vec<u8>, Solution
     let text = std::str::from_utf8(source).map_err(|_| {
         SolutionPackError::Invalid(format!("presentation asset '{key}' SVG must be UTF-8"))
     })?;
-    if text.contains("<!DOCTYPE") || text.contains("<!ENTITY") {
+    if text.contains("<!DOCTYPE") || text.contains("<!RECORD") {
         return invalid(format!(
             "presentation asset '{key}' SVG contains forbidden declarations"
         ));

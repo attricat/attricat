@@ -4,7 +4,7 @@ use support::*;
 const DEFINITION: &str = r#"format_version = 1
 code = 'task'
 name = 'Task'
-kind = 'entity'
+kind = 'record'
 [views.dropdown_option]
 type = 'dropdown_option'
 fields = ['title']
@@ -116,7 +116,7 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
     assert_eq!(directory["teams"].as_array().unwrap().len(), 2);
 
     create_blueprint(&client, &base, DEFINITION).await;
-    let create = |values: Vec<Value>| post_entity(&client, &base, "task", Value::from(values));
+    let create = |values: Vec<Value>| post_record(&client, &base, "task", Value::from(values));
     for (code, value) in [
         ("assignee", format!("user:{}", Uuid::new_v4())),
         ("assignee", format!("user:{former}")),
@@ -137,7 +137,7 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
         ("my team", format!("team:{team_id}")),
         ("theirs", format!("user:{member}")),
     ] {
-        let entity: Value = create(vec![
+        let record: Value = create(vec![
             scalar("title", title),
             scalar("assignee", assignee.clone()),
         ])
@@ -147,12 +147,12 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
         .json()
         .await
         .unwrap();
-        ids.push(entity["id"].as_str().unwrap().to_owned());
+        ids.push(record["id"].as_str().unwrap().to_owned());
     }
 
     let search = |value: &str| {
         client
-            .post(format!("{base}/v1/entities/search"))
+            .post(format!("{base}/v1/records/search"))
             .json(&json!({
                 "blueprint": {"code": "task"},
                 "filters": [{"field": "assignee", "operator": "eq", "value": value}],
@@ -199,9 +199,9 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
             .status(),
         StatusCode::NO_CONTENT
     );
-    let entity_url = format!("{base}/v1/entities/{}", ids[1]);
-    let entity: Value = client
-        .get(&entity_url)
+    let record_url = format!("{base}/v1/records/{}", ids[1]);
+    let record: Value = client
+        .get(&record_url)
         .send()
         .await
         .unwrap()
@@ -209,9 +209,9 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
         .await
         .unwrap();
     let edited = client
-        .put(&entity_url)
+        .put(&record_url)
         .json(&json!({
-            "expected_updated_at": entity["entity"]["updated_at"],
+            "expected_updated_at": record["record"]["updated_at"],
             "values": [scalar("title", "renamed")],
         }))
         .send()
@@ -258,7 +258,7 @@ async fn reparenting_a_context_keeps_inherited_assignments_of_departed_members(p
         .unwrap();
     let mut local = scalar("assignee", format!("user:{member}"));
     local["context_id"] = polish["id"].clone();
-    post_entity(
+    post_record(
         &client,
         &base,
         "task",

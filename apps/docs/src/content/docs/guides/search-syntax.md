@@ -3,7 +3,7 @@ title: Search syntax
 description: The Explorer query language, from plain terms to qualified relationship paths and wildcards.
 ---
 
-The Explorer search box and the `query` field of `POST /v1/entities/search` share one query language. In the API, records are called entities. Queries are checked against the blueprint before they run. A query that names an attribute or relationship that does not exist fails with a clear error instead of returning nothing.
+The Explorer search box and the `query` field of `POST /v1/records/search` share one query language. Queries are checked against the blueprint before they run. A query that names an attribute or relationship that does not exist fails with a clear error instead of returning nothing.
 
 ## Terms
 

@@ -14,7 +14,7 @@ pub const UNIQUE_PREDICATE_CASE_SENSITIVE: bool = false;
 /// - Numbers compare by value (`1.50` equals `1.5`) and normalize to their
 ///   shortest decimal text. A JSON string holding the exact decimal is
 ///   accepted so hosts can avoid binary floating point.
-/// - Relationships compare by target entity: the value is the sorted array of
+/// - Relationships compare by target record: the value is the sorted array of
 ///   target ID strings and the smallest ID is the component.
 /// - Date-times are expected in one canonical form (UTC), so they compare by
 ///   instant; other types compare by their JSON value. `null` is missing.

@@ -10,7 +10,7 @@ use api::{
 use support::*;
 use tokio::sync::watch;
 
-const DEFINITION: &str = "format_version = 1\ncode = \"tag_new_products\"\nname = \"Tag new products\"\n[[triggers]]\nevent_type = \"entity.created.v1\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"new\"]";
+const DEFINITION: &str = "format_version = 1\ncode = \"tag_new_products\"\nname = \"Tag new products\"\n[[triggers]]\nevent_type = \"record.created.v1\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"new\"]";
 
 #[sqlx::test]
 async fn workflow_lifecycle_keeps_immutable_revisions(pool: PgPool) {
@@ -95,7 +95,7 @@ async fn completion_failure_on_final_attempt_dead_letters_workflow_run_and_repla
 format_version = 1
 code = "workflow_completion_failure_product"
 name = "Workflow completion failure product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -108,8 +108,8 @@ default_value = "untitled"
 "#,
     )
     .await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap();
     let definition = "format_version = 2\ncode = \"completion_failure\"\nname = \"Completion failure\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"completed\"]";
     let workflow: Value = client
         .post(format!("{base_url}/workflows"))
@@ -143,7 +143,7 @@ default_value = "untitled"
         .unwrap();
     let run: Value = client
         .post(format!("{base_url}/workflows/{workflow_id}/run-now"))
-        .json(&json!({"entity_id": entity_id, "idempotency_key": "completion-final-failure"}))
+        .json(&json!({"record_id": record_id, "idempotency_key": "completion-final-failure"}))
         .send()
         .await
         .unwrap()
@@ -235,10 +235,10 @@ async fn wait_for_completed_retry(pool: &PgPool, run_id: Uuid) {
     panic!("workflow run {run_id} was not reclaimed after its action committed");
 }
 
-async fn wait_for_tag(pool: &PgPool, entity_id: Uuid, tag: &str) {
+async fn wait_for_tag(pool: &PgPool, record_id: Uuid, tag: &str) {
     for _ in 0..100 {
-        let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM entities WHERE id=$1")
-            .bind(entity_id)
+        let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM records WHERE id=$1")
+            .bind(record_id)
             .fetch_one(pool)
             .await
             .unwrap();
@@ -266,7 +266,7 @@ async fn sample_marker_is_preserved_by_ordinary_tag_add_automation(pool: PgPool)
 format_version = 1
 code = "sample_workflow_product"
 name = "Sample workflow product"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["title"]
@@ -328,19 +328,19 @@ default_value = "untitled"
     );
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let ordinary = create_entity(&client, &base_url, &blueprint).await;
+    let ordinary = create_record(&client, &base_url, &blueprint).await;
     let ordinary_id = Uuid::parse_str(ordinary["id"].as_str().unwrap()).unwrap();
     let rejected = client
-        .put(format!("{base_url}/v1/entities/{ordinary_id}"))
+        .put(format!("{base_url}/v1/records/{ordinary_id}"))
         .json(&json!({"system_tags":["attricat.sample"]}))
         .send()
         .await
         .unwrap();
     assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-    let sample = create_entity(&client, &base_url, &blueprint).await;
+    let sample = create_record(&client, &base_url, &blueprint).await;
     let sample_id = Uuid::parse_str(sample["id"].as_str().unwrap()).unwrap();
-    sqlx::query("UPDATE entities SET system_tags=ARRAY['attricat.sample']::text[] WHERE id=$1")
+    sqlx::query("UPDATE records SET system_tags=ARRAY['attricat.sample']::text[] WHERE id=$1")
         .bind(sample_id)
         .execute(&pool)
         .await
@@ -358,7 +358,7 @@ default_value = "untitled"
         shutdown_rx,
     );
     wait_for_tag(&pool, sample_id, "new").await;
-    let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM entities WHERE id=$1")
+    let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM records WHERE id=$1")
         .bind(sample_id)
         .fetch_one(&pool)
         .await
@@ -367,14 +367,14 @@ default_value = "untitled"
     assert!(tags.contains(&"new".to_owned()));
 
     let preserved = client
-        .put(format!("{base_url}/v1/entities/{sample_id}"))
+        .put(format!("{base_url}/v1/records/{sample_id}"))
         .json(&json!({"system_tags":["attricat.sample","new","manual"]}))
         .send()
         .await
         .unwrap();
     assert_eq!(preserved.status(), StatusCode::OK);
     let removed = client
-        .put(format!("{base_url}/v1/entities/{sample_id}"))
+        .put(format!("{base_url}/v1/records/{sample_id}"))
         .json(&json!({"system_tags":["new","manual"]}))
         .send()
         .await
@@ -431,7 +431,7 @@ async fn workflow_outbox_dispatcher_and_worker_are_idempotent_and_disable_safe(p
 format_version = 1
 code = "workflow_test_product"
 name = "Workflow test product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -444,9 +444,9 @@ default_value = "untitled"
 "#,
     )
     .await;
-    // This entity predates activation and must never be selected by the
-    // trigger entity's action.
-    let untouched = create_entity(&client, &base_url, &blueprint).await;
+    // This record predates activation and must never be selected by the
+    // trigger record's action.
+    let untouched = create_record(&client, &base_url, &blueprint).await;
     let untouched_id = Uuid::parse_str(untouched["id"].as_str().unwrap()).unwrap();
 
     let created: Value = client
@@ -480,11 +480,11 @@ default_value = "untitled"
         .error_for_status()
         .unwrap();
 
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = Uuid::parse_str(entity["id"].as_str().unwrap()).unwrap();
-    wait_for_tag(&pool, entity_id, "new").await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = Uuid::parse_str(record["id"].as_str().unwrap()).unwrap();
+    wait_for_tag(&pool, record_id, "new").await;
     let untouched_tags: Vec<String> =
-        sqlx::query_scalar("SELECT system_tags FROM entities WHERE id=$1")
+        sqlx::query_scalar("SELECT system_tags FROM records WHERE id=$1")
             .bind(untouched_id)
             .fetch_one(&pool)
             .await
@@ -513,7 +513,7 @@ default_value = "untitled"
     )
     .bind(trigger_event_id)
     .bind(format!("workflow:{workflow_id}"))
-    .bind(entity_id)
+    .bind(record_id)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -564,7 +564,7 @@ default_value = "untitled"
         )
         .bind(trigger_event_id)
         .bind(format!("workflow:{workflow_id}"))
-        .bind(entity_id)
+        .bind(record_id)
         .fetch_one(&pool)
         .await
         .unwrap(),
@@ -624,7 +624,7 @@ default_value = "untitled"
         )
         .bind(trigger_event_id)
         .bind(format!("workflow:{workflow_id}"))
-        .bind(entity_id)
+        .bind(record_id)
         .fetch_one(&pool)
         .await
         .unwrap(),
@@ -670,10 +670,10 @@ default_value = "untitled"
     .unwrap();
     assert_eq!((generation, status.as_str()), (1, "queued"));
 
-    let blocked = create_entity(&client, &base_url, &blueprint).await;
+    let blocked = create_record(&client, &base_url, &blueprint).await;
     let blocked_id = Uuid::parse_str(blocked["id"].as_str().unwrap()).unwrap();
     let blocked_event_id: Uuid = sqlx::query_scalar(
-        "SELECT id FROM domain_events WHERE aggregate_id=$1 AND event_type='entity.created.v1' ORDER BY sequence DESC LIMIT 1",
+        "SELECT id FROM domain_events WHERE aggregate_id=$1 AND event_type='record.created.v1' ORDER BY sequence DESC LIMIT 1",
     )
     .bind(blocked_id)
     .fetch_one(&pool)
@@ -726,7 +726,7 @@ default_value = "untitled"
     .unwrap();
     assert_eq!(status, "cancelled");
     assert_eq!(actions, 0);
-    let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM entities WHERE id=$1")
+    let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM records WHERE id=$1")
         .bind(blocked_id)
         .fetch_one(&pool)
         .await
@@ -761,12 +761,12 @@ async fn enabled_workflow(client: &Client, base_url: &str, definition: &str) -> 
     id.parse().unwrap()
 }
 
-/// Fans out the entity's most recent outbox event and returns the runs created.
-async fn fan_out_latest_event(pool: &PgPool, entity_id: &str) -> (String, u64) {
+/// Fans out the record's most recent outbox event and returns the runs created.
+async fn fan_out_latest_event(pool: &PgPool, record_id: &str) -> (String, u64) {
     let event = sqlx::query_as::<_, api::domain_events::DomainEvent>(
         "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload FROM domain_events WHERE aggregate_id=$1 ORDER BY sequence DESC LIMIT 1",
     )
-    .bind(Uuid::parse_str(entity_id).unwrap())
+    .bind(Uuid::parse_str(record_id).unwrap())
     .fetch_one(pool)
     .await
     .unwrap();
@@ -791,7 +791,7 @@ async fn event_triggers_run_only_when_a_listed_attribute_changed(pool: PgPool) {
 format_version = 1
 code = "reviewed_document"
 name = "Reviewed document"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["title"]
@@ -824,12 +824,12 @@ type = "system_tags_add"
 tags = ["needs-review"]"#,
     )
     .await;
-    let document = create_entity(&client, &base_url, &blueprint).await;
+    let document = create_record(&client, &base_url, &blueprint).await;
     let id = document["id"].as_str().unwrap();
-    let license = create_entity(&client, &base_url, &blueprint).await;
+    let license = create_record(&client, &base_url, &blueprint).await;
     let write = |code: &str, value: &str| {
         client
-            .post(format!("{base_url}/entities/{id}/values"))
+            .post(format!("{base_url}/records/{id}/values"))
             .json(&json!({"values":[scalar(code, value)]}))
     };
 
@@ -863,8 +863,8 @@ tags = ["needs-review"]"#,
         .unwrap();
     assert_eq!(fan_out_latest_event(&pool, id).await.1, 0);
     client
-        .post(format!("{base_url}/entities/{id}/relationships/replace"))
-        .json(&json!({"relationships":[{"attribute_code":"license","target_entity_ids":[license["id"]]}]}))
+        .post(format!("{base_url}/records/{id}/relationships/replace"))
+        .json(&json!({"relationships":[{"attribute_code":"license","target_record_ids":[license["id"]]}]}))
         .send()
         .await
         .unwrap()
@@ -876,8 +876,8 @@ tags = ["needs-review"]"#,
         "adding a relationship target is a change to that attribute"
     );
     client
-        .post(format!("{base_url}/entities/{id}/relationships/remove"))
-        .json(&json!({"relationships":[{"attribute_code":"license","target_entity_ids":[license["id"]]}]}))
+        .post(format!("{base_url}/records/{id}/relationships/remove"))
+        .json(&json!({"relationships":[{"attribute_code":"license","target_record_ids":[license["id"]]}]}))
         .send()
         .await
         .unwrap()
@@ -895,7 +895,7 @@ const LICENSED_PRODUCT: &str = r#"
 format_version = 1
 code = "licensed_product"
 name = "Licensed product"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["title"]
@@ -921,13 +921,13 @@ async fn licensed_product(
     if let Some(license) = license {
         values.push(relationship("license", license));
     }
-    let entity =
-        create_entity_with(client, base_url, "licensed_product", Value::from(values)).await;
-    let id = entity["id"].as_str().unwrap();
+    let record =
+        create_record_with(client, base_url, "licensed_product", Value::from(values)).await;
+    let id = record["id"].as_str().unwrap();
     if status != "draft" {
         client
-            .put(format!("{base_url}/v1/entities/{id}"))
-            .json(&json!({"expected_updated_at":entity["updated_at"],"values":[scalar("status", status)]}))
+            .put(format!("{base_url}/v1/records/{id}"))
+            .json(&json!({"expected_updated_at":record["updated_at"],"values":[scalar("status", status)]}))
             .send()
             .await
             .unwrap()
@@ -939,7 +939,7 @@ async fn licensed_product(
 
 async fn product_state(pool: &PgPool, id: Uuid) -> (Option<String>, bool) {
     let (status, tags): (Option<String>, Vec<String>) = sqlx::query_as(
-        "SELECT e.projections->'preview'->'default'->>'status', e.system_tags FROM entities e WHERE e.id=$1",
+        "SELECT e.projections->'preview'->'default'->>'status', e.system_tags FROM records e WHERE e.id=$1",
     )
     .bind(id)
     .fetch_one(pool)
@@ -990,7 +990,7 @@ async fn referencing_update_validates_each_target_and_retries_only_failures(pool
 format_version = 1
 code = "license_record"
 name = "License"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["title"]
@@ -1001,8 +1001,8 @@ value_type = "string"
     )
     .await;
     create_blueprint(&client, &base_url, LICENSED_PRODUCT).await;
-    let license = create_entity_with(&client, &base_url, "license_record", json!([])).await;
-    let other_license = create_entity_with(&client, &base_url, "license_record", json!([])).await;
+    let license = create_record_with(&client, &base_url, "license_record", json!([])).await;
+    let other_license = create_record_with(&client, &base_url, "license_record", json!([])).await;
     let first = licensed_product(&client, &base_url, Some(&license), "approved").await;
     let second = licensed_product(&client, &base_url, Some(&license), "approved").await;
     let retired = licensed_product(&client, &base_url, Some(&license), "retired").await;
@@ -1018,7 +1018,7 @@ name = "Send licensed products back to review"
 [[triggers]]
 type = "manual"
 [[actions]]
-type = "referencing_entities_update"
+type = "referencing_records_update"
 relationship_attribute = "license"
 max_targets = 10
 [[actions.actions]]
@@ -1032,7 +1032,7 @@ tags = ["needs-review"]"#,
     .await;
     let run: Value = client
         .post(format!("{base_url}/workflows/{workflow_id}/run-now"))
-        .json(&json!({"entity_id": license["id"], "idempotency_key": "license-changed"}))
+        .json(&json!({"record_id": license["id"], "idempotency_key": "license-changed"}))
         .send()
         .await
         .unwrap()
@@ -1073,7 +1073,7 @@ tags = ["needs-review"]"#,
     let target = |id: Uuid| {
         targets
             .iter()
-            .find(|target| target["entity_id"] == id.to_string())
+            .find(|target| target["record_id"] == id.to_string())
             .unwrap()
             .clone()
     };
@@ -1107,7 +1107,7 @@ tags = ["needs-review"]"#,
     let attempts = |id: Uuid| {
         retried
             .iter()
-            .find(|target| target["entity_id"] == id.to_string())
+            .find(|target| target["record_id"] == id.to_string())
             .unwrap()["attempts"]
             .clone()
     };
@@ -1116,8 +1116,8 @@ tags = ["needs-review"]"#,
     // Once the failing record stops referencing the license, the retry settles
     // it as skipped and the action completes.
     client
-        .post(format!("{base_url}/entities/{retired}/relationships/remove"))
-        .json(&json!({"relationships":[{"attribute_code":"license","target_entity_ids":[license["id"]]}]}))
+        .post(format!("{base_url}/records/{retired}/relationships/remove"))
+        .json(&json!({"relationships":[{"attribute_code":"license","target_record_ids":[license["id"]]}]}))
         .send()
         .await
         .unwrap()
@@ -1133,7 +1133,7 @@ tags = ["needs-review"]"#,
     .unwrap();
     assert_eq!((status.as_str(), actions), ("completed", 1));
     let settled: Vec<(Uuid, String)> = sqlx::query_as(
-        "SELECT entity_id,status FROM workflow_run_action_targets WHERE run_id=$1::uuid ORDER BY entity_id",
+        "SELECT record_id,status FROM workflow_run_action_targets WHERE run_id=$1::uuid ORDER BY record_id",
     )
     .bind(run_id)
     .fetch_all(&pool)
@@ -1169,22 +1169,22 @@ async fn referencing_update_refuses_more_targets_than_its_limit(pool: PgPool) {
     let license_blueprint = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"limited_license\"\nname = \"License\"\nkind = \"entity\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+        "format_version = 1\ncode = \"limited_license\"\nname = \"License\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
     )
     .await;
     create_blueprint(&client, &base_url, LICENSED_PRODUCT).await;
-    let license = create_entity(&client, &base_url, &license_blueprint).await;
+    let license = create_record(&client, &base_url, &license_blueprint).await;
     let first = licensed_product(&client, &base_url, Some(&license), "approved").await;
     let second = licensed_product(&client, &base_url, Some(&license), "approved").await;
     let workflow_id = enabled_workflow(
         &client,
         &base_url,
-        "format_version = 2\ncode = \"limited\"\nname = \"Limited\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"referencing_entities_update\"\nrelationship_attribute = \"license\"\nmax_targets = 1\n[[actions.actions]]\ntype = \"system_tags_add\"\ntags = [\"needs-review\"]",
+        "format_version = 2\ncode = \"limited\"\nname = \"Limited\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"referencing_records_update\"\nrelationship_attribute = \"license\"\nmax_targets = 1\n[[actions.actions]]\ntype = \"system_tags_add\"\ntags = [\"needs-review\"]",
     )
     .await;
     client
         .post(format!("{base_url}/workflows/{workflow_id}/run-now"))
-        .json(&json!({"entity_id": license["id"], "idempotency_key": "limited"}))
+        .json(&json!({"record_id": license["id"], "idempotency_key": "limited"}))
         .send()
         .await
         .unwrap()
@@ -1201,7 +1201,7 @@ async fn referencing_update_refuses_more_targets_than_its_limit(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(error.contains("more than 1 entities"), "{error}");
+    assert!(error.contains("more than 1 records"), "{error}");
     server.abort();
 }
 
@@ -1216,7 +1216,7 @@ async fn workflow_writes_withdraw_changed_publications(pool: PgPool) {
 format_version = 1
 code = "published_document"
 name = "Published document"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["title"]
@@ -1244,10 +1244,10 @@ attribute_code = "title"
 fixed = "Reworked""#,
     )
     .await;
-    let document = create_entity(&client, &base_url, &blueprint).await;
+    let document = create_record(&client, &base_url, &blueprint).await;
     let id = document["id"].as_str().unwrap();
     client
-        .post(format!("{base_url}/entities/{id}/values"))
+        .post(format!("{base_url}/records/{id}/values"))
         .json(&json!({"values":[scalar("body", "v1")]}))
         .send()
         .await
@@ -1271,8 +1271,8 @@ fixed = "Reworked""#,
         .unwrap()
         .parse::<Uuid>()
         .unwrap();
-    let entity_id: Uuid = id.parse().unwrap();
-    publish_in_channel(&pool, entity_id, channel).await;
+    let record_id: Uuid = id.parse().unwrap();
+    publish_in_channel(&pool, record_id, channel).await;
     assert_eq!(fan_out_latest_event(&pool, id).await.1, 1);
     let repository = CatalogRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
@@ -1280,15 +1280,15 @@ fixed = "Reworked""#,
         .unwrap();
     assert!(handle_workflow_task_once(&repository).await);
     let title: Option<String> = sqlx::query_scalar(
-        "SELECT projections->'preview'->'default'->>'title' FROM entities WHERE id = $1",
+        "SELECT projections->'preview'->'default'->>'title' FROM records WHERE id = $1",
     )
-    .bind(entity_id)
+    .bind(record_id)
     .fetch_one(&pool)
     .await
     .unwrap();
     assert_eq!(title.as_deref(), Some("Reworked"));
     assert!(
-        !is_published(&pool, entity_id).await,
+        !is_published(&pool, record_id).await,
         "a workflow write withdraws a changed publication"
     );
     server.abort();
@@ -1305,7 +1305,7 @@ async fn manual_run_of_a_disabled_workflow_explains_it_is_not_enabled(pool: PgPo
 format_version = 1
 code = "disabled_workflow_product"
 name = "Disabled workflow product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -1318,7 +1318,7 @@ default_value = "untitled"
 "#,
     )
     .await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let record = create_record(&client, &base_url, &blueprint).await;
     let workflow_id = enabled_workflow(
         &client,
         &base_url,
@@ -1335,7 +1335,7 @@ default_value = "untitled"
 
     let refused = client
         .post(format!("{base_url}/workflows/{workflow_id}/run-now"))
-        .json(&json!({"entity_id": entity["id"], "idempotency_key": "disabled"}))
+        .json(&json!({"record_id": record["id"], "idempotency_key": "disabled"}))
         .send()
         .await
         .unwrap();

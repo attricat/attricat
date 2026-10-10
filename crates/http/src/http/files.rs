@@ -117,20 +117,20 @@ impl TextSniff {
 pub(super) async fn upload(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
-    ApiPath((entity_id, attribute_code)): ApiPath<(Uuid, String)>,
+    ApiPath((record_id, attribute_code)): ApiPath<(Uuid, String)>,
     mut multipart: Multipart,
 ) -> Result<(StatusCode, Json<crate::repository::FileUploadResult>), ApiError> {
-    let span = info_span!("file.upload", %entity_id, attribute_code = %attribute_code);
+    let span = info_span!("file.upload", %record_id, attribute_code = %attribute_code);
     let result = async {
-        authorize(&state, FileAccessOperation::Upload { entity_id }).await?;
+        authorize(&state, FileAccessOperation::Upload { record_id }).await?;
         let (context_id, staged) = read_upload_parts(&state, &mut multipart, true).await?;
         let policy = repository
-            .file_upload_policy(entity_id, &attribute_code, context_id)
+            .file_upload_policy(record_id, &attribute_code, context_id)
             .await?;
         let mimes = attribute_upload_mimes(&staged, &policy)?;
         let records = store_uploads(&state, &repository, &staged, mimes).await?;
         let result = repository
-            .persist_uploaded_files(entity_id, &attribute_code, context_id, records)
+            .persist_uploaded_files(record_id, &attribute_code, context_id, records)
             .await;
         cleanup(&staged).await;
         let result = result?;
@@ -148,7 +148,7 @@ pub(super) async fn upload(
 
 /// Uploads files for a blueprint's file attribute before the record that will
 /// reference them exists. It shares the streaming, signature validation,
-/// object-store and processing pipeline of entity uploads and applies the
+/// object-store and processing pipeline of record uploads and applies the
 /// attribute policy of the blueprint's latest published revision. The files
 /// stay bound to the caller, blueprint, attribute and context until creating
 /// a record claims them, and are reclaimed if none does in time.
@@ -202,13 +202,13 @@ pub(super) struct UpdateFileReferences {
 pub(super) async fn update_references(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
-    ApiPath((entity_id, attribute_code)): ApiPath<(Uuid, String)>,
+    ApiPath((record_id, attribute_code)): ApiPath<(Uuid, String)>,
     ApiJson(input): ApiJson<UpdateFileReferences>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    authorize(&state, FileAccessOperation::UpdateReferences { entity_id }).await?;
-    let entity_updated_at = repository
+    authorize(&state, FileAccessOperation::UpdateReferences { record_id }).await?;
+    let record_updated_at = repository
         .update_file_references(
-            entity_id,
+            record_id,
             &attribute_code,
             input.context_id,
             &input.expected_file_ids,
@@ -217,13 +217,13 @@ pub(super) async fn update_references(
         .await?;
     invalidate_data_health(&state, &repository);
     Ok(Json(
-        serde_json::json!({ "entity_updated_at": entity_updated_at }),
+        serde_json::json!({ "record_updated_at": record_updated_at }),
     ))
 }
 
 /// Stores standalone files for a conversation. It deliberately shares the
 /// streaming, signature validation, object-store, and processing pipeline used
-/// by entity file attributes; only attribute-value persistence is omitted.
+/// by record file attributes; only attribute-value persistence is omitted.
 pub(super) async fn upload_conversation(
     State(state): State<AppState>,
     super::auth::AuthenticatedPrincipal(user_id, _): super::auth::AuthenticatedPrincipal,
@@ -510,9 +510,9 @@ pub(super) async fn metadata(
         principal,
         workspace,
         file_id,
-        |file_id, entity_id, blueprint_id| FileAccessOperation::ReadMetadata {
+        |file_id, record_id, blueprint_id| FileAccessOperation::ReadMetadata {
             file_id,
-            entity_id,
+            record_id,
             blueprint_id,
         },
     )
@@ -534,9 +534,9 @@ pub(super) async fn download_original(
         principal,
         workspace,
         file_id,
-        |file_id, entity_id, blueprint_id| FileAccessOperation::DownloadOriginal {
+        |file_id, record_id, blueprint_id| FileAccessOperation::DownloadOriginal {
             file_id,
-            entity_id,
+            record_id,
             blueprint_id,
         },
     )
@@ -574,9 +574,9 @@ pub(super) async fn download_variant(
         principal,
         workspace,
         file_id,
-        |file_id, entity_id, blueprint_id| FileAccessOperation::DownloadVariant {
+        |file_id, record_id, blueprint_id| FileAccessOperation::DownloadVariant {
             file_id,
-            entity_id,
+            record_id,
             blueprint_id,
         },
     )

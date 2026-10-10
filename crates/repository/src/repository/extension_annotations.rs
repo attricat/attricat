@@ -1,10 +1,10 @@
-//! Extension-owned entity annotations.
+//! Extension-owned record annotations.
 //!
 //! An installed extension owns system tags named `<extension-id>:<local>` and
 //! the object stored at `system_metadata[<extension-id>]` once its namespace
 //! is claimed. Callers name only local tags and keys; Catalog derives the
 //! namespace from the authenticated extension provenance. Claimed namespaces
-//! are protected on every other write path, so a whole-field entity update
+//! are protected on every other write path, so a whole-field record update
 //! cannot overwrite them by round-tripping an older annotation object.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use super::EventPublisher;
 use super::{CatalogRepository, RepositoryError, system_annotations};
-use crate::domain_events::ENTITY_ANNOTATIONS_CHANGED_V1;
+use crate::domain_events::RECORD_ANNOTATIONS_CHANGED_V1;
 
 /// Maximum add/remove/set/delete operations in one patch.
 pub const MAX_ANNOTATION_PATCH_OPERATIONS: usize = 32;
@@ -51,7 +51,7 @@ pub struct ExtensionAnnotationPatch {
     pub expected_revision: Option<i64>,
 }
 
-/// One extension's view of its own annotations on an entity.
+/// One extension's view of its own annotations on a record.
 #[derive(Clone, Debug, Default, Serialize, PartialEq)]
 pub struct ExtensionAnnotations {
     pub tags: Vec<String>,
@@ -66,8 +66,8 @@ pub struct ExtensionAnnotationNamespace {
     pub claimed: bool,
     pub adopted_legacy: bool,
     pub claimed_at: Option<chrono::DateTime<chrono::Utc>>,
-    /// Entities carrying tags or metadata in this namespace.
-    pub annotated_entities: i64,
+    /// Records carrying tags or metadata in this namespace.
+    pub annotated_records: i64,
 }
 
 /// Who is applying a patch. Extensions may only write well-formed local
@@ -162,7 +162,7 @@ impl ExtensionAnnotationPatch {
     }
 }
 
-/// The part of an entity's annotations that belongs to claimed namespaces.
+/// The part of a record's annotations that belongs to claimed namespaces.
 fn protected_slice(
     tags: &[String],
     metadata: &Value,
@@ -214,7 +214,7 @@ fn touched_namespaces(
     keys.chain(prefixes).collect()
 }
 
-/// Reads an extension's local annotations from a stored entity.
+/// Reads an extension's local annotations from a stored record.
 pub(crate) fn own_annotations(
     extension_id: &str,
     tags: &[String],
@@ -250,7 +250,7 @@ impl CatalogRepository {
     }
 
     /// Holds a namespace's claim lock until the transaction ends. Every writer
-    /// takes the entity row lock before any namespace lock, and namespace
+    /// takes the record row lock before any namespace lock, and namespace
     /// locks in sorted order, so these locks cannot deadlock each other.
     async fn lock_annotation_namespace(
         &self,
@@ -306,8 +306,8 @@ impl CatalogRepository {
         Err(RepositoryError::ProtectedAnnotationNamespace(changed))
     }
 
-    /// Removes claimed namespaces from annotations copied to a new entity. An
-    /// extension's facts about one entity never describe a duplicate.
+    /// Removes claimed namespaces from annotations copied to a new record. An
+    /// extension's facts about one record never describe a duplicate.
     pub(crate) async fn without_claimed_annotations(
         &self,
         tags: Vec<String>,
@@ -351,7 +351,7 @@ impl CatalogRepository {
         extension_id: &str,
     ) -> Result<i64, RepositoryError> {
         Ok(sqlx::query_scalar(
-            "SELECT COUNT(*) FROM entities WHERE workspace_id=$1 AND (system_metadata ? $2 OR EXISTS (SELECT 1 FROM unnest(system_tags) AS tag WHERE starts_with(tag, $3)))",
+            "SELECT COUNT(*) FROM records WHERE workspace_id=$1 AND (system_metadata ? $2 OR EXISTS (SELECT 1 FROM unnest(system_tags) AS tag WHERE starts_with(tag, $3)))",
         )
         .bind(self.workspace_id.0)
         .bind(extension_id)
@@ -424,7 +424,7 @@ impl CatalogRepository {
             claimed: claim.is_some(),
             adopted_legacy: claim.as_ref().is_some_and(|claim| claim.0),
             claimed_at: claim.map(|claim| claim.1),
-            annotated_entities: self
+            annotated_records: self
                 .namespace_annotation_count(&mut connection, extension_id)
                 .await?,
         })
@@ -450,31 +450,31 @@ impl CatalogRepository {
     }
 
     /// Applies one extension's namespace patch inside the caller's transaction.
-    /// The entity row lock serializes it with every other entity writer; the
+    /// The record row lock serializes it with every other record writer; the
     /// current state is read under that lock, so disjoint writers never lose
     /// each other's changes.
     pub(crate) async fn apply_extension_annotation_patch(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         extension_id: &str,
-        entity_id: Uuid,
+        record_id: Uuid,
         patch: &ExtensionAnnotationPatch,
         authority: AnnotationPatchAuthority,
     ) -> Result<i64, RepositoryError> {
         patch.validate(authority)?;
         patch.validate_qualified_tags(extension_id)?;
-        self.ensure_actor_may(&mut *transaction, "entities.read", &[entity_id])
+        self.ensure_actor_may(&mut *transaction, "records.read", &[record_id])
             .await?;
-        // Row lock first, as on every generic entity write, then the claim's
+        // Row lock first, as on every generic record write, then the claim's
         // namespace lock.
-        let entity = self.lock_entity(transaction, entity_id).await?;
+        let record = self.lock_record(transaction, record_id).await?;
         self.claim_annotation_namespace(transaction, extension_id, false)
             .await?;
         let revision: i64 = sqlx::query_scalar(
-            "SELECT revision FROM entity_extension_annotation_revisions WHERE workspace_id=$1 AND entity_id=$2 AND extension_id=$3",
+            "SELECT revision FROM record_extension_annotation_revisions WHERE workspace_id=$1 AND record_id=$2 AND extension_id=$3",
         )
         .bind(self.workspace_id.0)
-        .bind(entity_id)
+        .bind(record_id)
         .bind(extension_id)
         .fetch_optional(&mut **transaction)
         .await?
@@ -491,8 +491,8 @@ impl CatalogRepository {
         let qualify = |tags: &[String]| -> Vec<String> {
             tags.iter().map(|tag| format!("{prefix}{tag}")).collect()
         };
-        let mut tags = entity.system_tags.clone();
-        let mut metadata = entity
+        let mut tags = record.system_tags.clone();
+        let mut metadata = record
             .system_metadata
             .as_object()
             .cloned()
@@ -534,29 +534,31 @@ impl CatalogRepository {
         if changes.is_empty() && replaced_value.is_none() {
             return Ok(revision);
         }
-        system_annotations::validate_system_tag_update(&entity.system_tags, &tags)?;
+        system_annotations::validate_system_tag_update(&record.system_tags, &tags)?;
         system_annotations::validate_system_metadata(&metadata)?;
         self.ensure_task_fence(transaction).await?;
         // Annotation bookkeeping is not catalog data. Leaving `updated_at`
         // unchanged keeps extensions from invalidating their own output and
-        // avoids spurious conflicts with concurrent entity editors.
-        sqlx::query("UPDATE entities SET system_tags=$2, system_metadata=$3 WHERE id=$1 AND workspace_id=$4")
-            .bind(entity_id)
-            .bind(&tags)
-            .bind(&metadata)
-            .bind(self.workspace_id.0)
-            .execute(&mut **transaction)
-            .await?;
+        // avoids spurious conflicts with concurrent record editors.
+        sqlx::query(
+            "UPDATE records SET system_tags=$2, system_metadata=$3 WHERE id=$1 AND workspace_id=$4",
+        )
+        .bind(record_id)
+        .bind(&tags)
+        .bind(&metadata)
+        .bind(self.workspace_id.0)
+        .execute(&mut **transaction)
+        .await?;
         // Tags are record data for declarative checks and enforcing rules.
         if !changes.added_tags.is_empty() || !changes.removed_tags.is_empty() {
-            self.enforce_tag_checks(transaction, &entity).await?;
+            self.enforce_tag_checks(transaction, &record).await?;
         }
         let next_revision = revision + 1;
         sqlx::query(
-            "INSERT INTO entity_extension_annotation_revisions(workspace_id,entity_id,extension_id,revision) VALUES($1,$2,$3,$4) ON CONFLICT (workspace_id,entity_id,extension_id) DO UPDATE SET revision=EXCLUDED.revision, updated_at=now()",
+            "INSERT INTO record_extension_annotation_revisions(workspace_id,record_id,extension_id,revision) VALUES($1,$2,$3,$4) ON CONFLICT (workspace_id,record_id,extension_id) DO UPDATE SET revision=EXCLUDED.revision, updated_at=now()",
         )
         .bind(self.workspace_id.0)
-        .bind(entity_id)
+        .bind(record_id)
         .bind(extension_id)
         .bind(next_revision)
         .execute(&mut **transaction)
@@ -577,14 +579,14 @@ impl CatalogRepository {
             && let Some(metadata) = audit.metadata.as_object_mut()
         {
             metadata.insert("annotations".to_owned(), summary.clone());
-            metadata.insert("entity_id".to_owned(), json!(entity_id));
+            metadata.insert("record_id".to_owned(), json!(record_id));
         }
         audited.write_audit_event(transaction).await?;
         let mut payload = summary;
-        payload["entity_id"] = json!(entity_id);
-        payload["blueprint_id"] = json!(entity.blueprint_id);
-        payload["blueprint_version"] = json!(entity.blueprint_version);
-        let event = self.core_event(ENTITY_ANNOTATIONS_CHANGED_V1, "entity", entity_id, payload);
+        payload["record_id"] = json!(record_id);
+        payload["blueprint_id"] = json!(record.blueprint_id);
+        payload["blueprint_version"] = json!(record.blueprint_version);
+        let event = self.core_event(RECORD_ANNOTATIONS_CHANGED_V1, "record", record_id, payload);
         self.enqueue_event(transaction, event).await?;
         Ok(next_revision)
     }
@@ -596,7 +598,7 @@ impl CatalogRepository {
     pub async fn repair_extension_annotations(
         &self,
         extension_id: &str,
-        entity_id: Uuid,
+        record_id: Uuid,
         patch: ExtensionAnnotationPatch,
     ) -> Result<ExtensionAnnotations, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
@@ -609,27 +611,27 @@ impl CatalogRepository {
         self.apply_extension_annotation_patch(
             &mut transaction,
             extension_id,
-            entity_id,
+            record_id,
             &patch,
             AnnotationPatchAuthority::Operator,
         )
         .await?;
         transaction.commit().await?;
-        self.extension_annotations(extension_id, entity_id)
+        self.extension_annotations(extension_id, record_id)
             .await?
-            .ok_or(RepositoryError::NotFound("entity"))
+            .ok_or(RepositoryError::NotFound("record"))
     }
 
-    /// Reads one extension's annotations and current revision for an entity.
+    /// Reads one extension's annotations and current revision for a record.
     pub async fn extension_annotations(
         &self,
         extension_id: &str,
-        entity_id: Uuid,
+        record_id: Uuid,
     ) -> Result<Option<ExtensionAnnotations>, RepositoryError> {
         let row: Option<(Vec<String>, Value, Option<i64>)> = sqlx::query_as(
-            "SELECT e.system_tags, e.system_metadata, r.revision FROM entities e LEFT JOIN entity_extension_annotation_revisions r ON r.workspace_id=e.workspace_id AND r.entity_id=e.id AND r.extension_id=$3 WHERE e.id=$1 AND e.workspace_id=$2 AND e.deleted_at IS NULL",
+            "SELECT e.system_tags, e.system_metadata, r.revision FROM records e LEFT JOIN record_extension_annotation_revisions r ON r.workspace_id=e.workspace_id AND r.record_id=e.id AND r.extension_id=$3 WHERE e.id=$1 AND e.workspace_id=$2 AND e.deleted_at IS NULL",
         )
-        .bind(entity_id)
+        .bind(record_id)
         .bind(self.workspace_id.0)
         .bind(extension_id)
         .fetch_optional(&self.pool)

@@ -3,7 +3,7 @@ title: Data quality rules
 description: Define versioned checks that flag records with missing, stale, or wrongly tagged data, and manage the findings.
 ---
 
-A rule checks records of one blueprint against a simple condition and saves a **finding** for each record that fails. Findings resolve themselves when the record is fixed. Rules only read data; they never change a record. In events, the API and the CLI, records are called entities.
+A rule checks records of one blueprint against a simple condition and saves a **finding** for each record that fails. Findings resolve themselves when the record is fixed. Rules only read data; they never change a record.
 
 Use rules for questions like "which published products have no title?" or "which prices haven't been touched in a year?". To change data automatically, use a [workflow](/builders/workflows/).
 
@@ -24,7 +24,7 @@ timezone = "UTC"
 
 [[triggers]]
 type = "event"
-event_type = "entity.updated.v1"
+event_type = "record.updated.v1"
 
 [[triggers]]
 type = "manual"
@@ -49,7 +49,7 @@ attribute_code = "title"
 | --- | --- | --- |
 | `manual` | | When someone chooses **Run now**. |
 | `schedule` | `cron`, `timezone = "UTC"` | On a six-field cron schedule (seconds first), in UTC. `0 0 6 * * *` is 06:00 every day. |
-| `event` | `event_type` | For the changed record, after one of: `entity.created.v1`, `entity.updated.v1`, `entity.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
+| `event` | `event_type` | For the changed record, after one of: `record.created.v1`, `record.updated.v1`, `record.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
 | `post_import` | | Reserved for future import integration. |
 
 ### Predicates
@@ -123,7 +123,7 @@ A rule attached to a context checks the record's resolved values in that context
 
 ### Changes to linked records
 
-`linked` and `referenced_by` depend on other records. When a linked or referencing record changes, event-triggered rules also re-run for up to 100 records that depend on it, so their findings stay current. That includes a record a referencing record stops pointing to, for example when a corrective action is moved to another nonconformance, as recorded in the event's [facts](/reference/events/#which-changes-produce-facts). A blueprint migration that drops or re-points a relationship records no facts, but its `entity.migrated.v1` event lists the released records, so they re-run too. Rules with only schedule or manual triggers notice the change on their next run.
+`linked` and `referenced_by` depend on other records. When a linked or referencing record changes, event-triggered rules also re-run for up to 100 records that depend on it, so their findings stay current. That includes a record a referencing record stops pointing to, for example when a corrective action is moved to another nonconformance, as recorded in the event's [facts](/reference/events/#which-changes-produce-facts). A blueprint migration that drops or re-points a relationship records no facts, but its `record.migrated.v1` event lists the released records, so they re-run too. Rules with only schedule or manual triggers notice the change on their next run.
 
 The [blueprint reference](/reference/blueprint/#predicates) has the comparison rules for each type and the limits on nesting and linked records.
 
@@ -158,7 +158,7 @@ Enabled rules run on their triggers. You can also run one by hand from the rule'
 
 ```sh
 acli rule run-now <rule-id> --idempotency-key 2026-03-01-audit
-acli rule run-now <rule-id> --idempotency-key check-one --entity-id <uuid>
+acli rule run-now <rule-id> --idempotency-key check-one --record-id <uuid>
 acli rule run-now <rule-id> --idempotency-key preview --dry-run
 ```
 
@@ -178,7 +178,7 @@ severity = "error"
 
 [[triggers]]
 type = "event"
-event_type = "entity.updated.v1"
+event_type = "record.updated.v1"
 
 [predicate]
 type = "required"
@@ -206,7 +206,7 @@ A write that violates an enforcing rule is rejected with `422 rule_violation`, a
 Enforcing a rule on existing data can block people who did nothing wrong. So when the rule's blueprint revision already has records, Attricat needs a completed **full dry run** of the exact revision you are enabling. Otherwise enabling fails with `409 rule_dry_run_required`.
 
 1. Publish the revision.
-2. Run a dry run over all records, without `--entity-id`, and wait for it to complete on the **Runs** tab. A dry run may target a published revision that is not enabled yet.
+2. Run a dry run over all records, without `--record-id`, and wait for it to complete on the **Runs** tab. A dry run may target a published revision that is not enabled yet.
 
    ```sh
    acli rule run-now <rule-id> --idempotency-key enforce-preview --dry-run
@@ -233,7 +233,7 @@ A record that already violates an enforcing rule cannot be saved until a save fi
 **Acknowledge** a finding to record that someone has seen it. It stays until the record passes.
 
 ```sh
-acli rule findings --entity-id <uuid>
+acli rule findings --record-id <uuid>
 acli rule acknowledge <finding-id>
 ```
 

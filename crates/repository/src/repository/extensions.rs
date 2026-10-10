@@ -687,8 +687,8 @@ impl CatalogRepository {
                 .clone(),
             None => load_layout().await?,
         };
-        // A published entity revision overlays only its explicitly declared,
-        // entity-owned outlets. Global and unspecified workspace defaults remain
+        // A published record revision overlays only its explicitly declared,
+        // record-owned outlets. Global and unspecified workspace defaults remain
         // authoritative.
         let mut layout = if layout.get("outlets").is_some_and(Value::is_object) {
             layout
@@ -697,7 +697,7 @@ impl CatalogRepository {
         };
         if let Some((blueprint_id, blueprint_version)) = blueprint {
             let override_layout = sqlx::query_scalar::<_, Option<Value>>(
-                "SELECT views->'extension_layout' FROM blueprints WHERE id = $1 AND version = $2 AND workspace_id = $3 AND kind = 'entity' AND status = 'published' AND deleted_at IS NULL",
+                "SELECT views->'extension_layout' FROM blueprints WHERE id = $1 AND version = $2 AND workspace_id = $3 AND kind = 'record' AND status = 'published' AND deleted_at IS NULL",
             )
             .bind(blueprint_id)
             .bind(blueprint_version)
@@ -714,9 +714,9 @@ impl CatalogRepository {
                     .as_object_mut()
                     .expect("normalized extension layout");
                 for outlet in [
-                    "entity_preview_panel",
-                    "entity_attribute_decoration",
-                    "entity_action",
+                    "record_preview_panel",
+                    "record_attribute_decoration",
+                    "record_action",
                 ] {
                     if let Some(value) = override_outlets.get(outlet) {
                         workspace_outlets.insert(outlet.to_owned(), value.clone());

@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import {
   createContext,
-  createEntity,
-  createEntityBlueprint,
+  createRecord,
+  createRecordBlueprint,
   defaultContext,
   scalar,
   suffix,
@@ -12,13 +12,13 @@ test('shows health sections, custom stale threshold, and refreshes data', async 
   page,
 }) => {
   const code = `health_${suffix()}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Healthy product',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"',
-    { entitySchema: '{"type":"object","required":["title"]}' },
+    { recordSchema: '{"type":"object","required":["title"]}' },
   );
-  await createEntity(blueprint, [scalar('title', 'Health check')]);
+  await createRecord(blueprint, [scalar('title', 'Health check')]);
   const context = await createContext(
     `health_context_${suffix()}`,
     (await defaultContext()).id,

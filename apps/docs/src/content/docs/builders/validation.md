@@ -7,12 +7,12 @@ Attricat validates every write on the server before anything is saved. Validatio
 
 1. **The attribute type.** A `number` attribute rejects `"abc"`; a `date` rejects `2026-13-01`.
 2. **`value_schema`** on an attribute: a JSON Schema for one value.
-3. **`entity_schema`** on a blueprint: a JSON Schema for the whole record.
+3. **`record_schema`** on a blueprint: a JSON Schema for the whole record.
 4. **`unique_keys`** on a blueprint: business identifiers no two records may share. See [Unique keys](#unique-keys).
 5. **Checks** in the record schema's `x-attricat-checks`: comparisons between attributes and checks on linked records.
 6. **Conditions** on status transitions, and **enforcing rules**.
 
-Both schemas use JSON Schema Draft 2020-12. The web app uses the same schemas to warn you while you type, but the server's answer is the one that counts. In blueprint TOML, the API, error codes and the audit log, records are called entities.
+Both schemas use JSON Schema Draft 2020-12. The web app uses the same schemas to warn you while you type, but the server's answer is the one that counts.
 
 ## Constrain one value
 
@@ -35,7 +35,7 @@ value_type = "string"
 value_schema = '{"enum":["XS","S","M","L","XL"]}'
 ```
 
-`value_schema` works on scalar attributes: strings, numbers, integers, booleans, dates, datetimes, and times. Relationships and files cannot have one. Constrain relationships with `entity_schema`.
+`value_schema` works on scalar attributes: strings, numbers, integers, booleans, dates, datetimes, and times. Relationships and files cannot have one. Constrain relationships with `record_schema`.
 
 A value that fails returns `422 attribute_value_schema_mismatch`.
 
@@ -112,7 +112,7 @@ value_schema = '''{
 
 If any condition is unmet, the whole write is rejected with `422 transition_conditions_unmet`, listing every unmet condition. Enforcing rules can guard transitions in the same way; see [Enforce a rule](/builders/rules/#enforce-a-rule).
 
-To find out ahead of time which destinations are available, call `GET /v1/entities/{id}/status-transitions?context_id=<uuid>` (the default context if you leave it out). It returns each declared transition from the saved status with `allowed` and, when blocked, a `denial_code` and `denial_reason`, plus `unmet`: the unmet conditions and enforcing rules, evaluated on the saved record as if the status had changed. Like a save, it checks the selected context and every context that inherits the status from it, and each unmet entry lists the contexts where it fails. Blocked by conditions shows as `denial_code` `transition_conditions_unmet`.
+To find out ahead of time which destinations are available, call `GET /v1/records/{id}/status-transitions?context_id=<uuid>` (the default context if you leave it out). It returns each declared transition from the saved status with `allowed` and, when blocked, a `denial_code` and `denial_reason`, plus `unmet`: the unmet conditions and enforcing rules, evaluated on the saved record as if the status had changed. Like a save, it checks the selected context and every context that inherits the status from it, and each unmet entry lists the contexts where it fails. Blocked by conditions shows as `denial_code` `transition_conditions_unmet`.
 
 ### Control a record's lifecycle
 
@@ -120,9 +120,9 @@ For controlled documents, inspections, or assessments, a status can also decide 
 
 #### Who may make a transition
 
-A transition can name requirements. The person saving must meet all of them, in addition to `entities.write`:
+A transition can name requirements. The person saving must meet all of them, in addition to `records.write`:
 
-- `permission`: a [permission](/reference/permissions/) they must hold for this record, such as `entities.publish`.
+- `permission`: a [permission](/reference/permissions/) they must hold for this record, such as `records.publish`.
 - `roles`: they must hold at least one of these roles (built-in or [custom](/operate/workspaces/#roles)), granted for the whole workspace, the blueprint, or this record.
 - `separate_from`: separation of duties. They must not be the person who most recently made a transition with one of these `code`s on this record, in this context. For example, whoever submitted a document cannot also approve it.
 
@@ -143,7 +143,7 @@ A record cannot be deleted while any of its contexts has a locking status, which
 
 Locks are enforced on the server for every write path: the record page, API, CLI, workflows, extensions, agents, value-history restores, file uploads and reorders, and migrations. A rejected write returns `409 record_locked`. The record page shows locked fields as read-only with the reason.
 
-A status that declares a lock needs an explicit `transitions` list, so leaving it is always a named, restricted transition. To correct a released record, make the correction transition first, and then edit. A correction must change only the status. Unlocking is recorded in the audit log as `entity.record.unlock`.
+A status that declares a lock needs an explicit `transitions` list, so leaving it is always a named, restricted transition. To correct a released record, make the correction transition first, and then edit. A correction must change only the status. Unlocking is recorded in the audit log as `record.unlock`.
 
 Locks apply per context: a record released in one market can still be edited in another market where it is a draft, as long as the change does not reach the locked market through inheritance.
 
@@ -153,7 +153,7 @@ Locks apply per context: a record released in one market can still be edited in 
 
 When covered content later changes, the approval is voided in the same save, and if the record is still in the approved status it moves to `void_to`. For example, editing the title of an approved document can send it back to review. Changes to attributes that are not covered keep the approval.
 
-Approvals and voids appear in the audit log (`entity.approval.record`, `entity.approval.void`) and in the **Record control** panel on the record page.
+Approvals and voids appear in the audit log (`record.approval.record`, `record.approval.void`) and in the **Record control** panel on the record page.
 
 #### Retain released files
 
@@ -161,10 +161,10 @@ Approvals and voids appear in the audit log (`entity.approval.record`, `entity.a
 
 ## Constrain the whole record
 
-`entity_schema` sees the record as one JSON object. Use it for rules that involve more than one attribute:
+`record_schema` sees the record as one JSON object. Use it for rules that involve more than one attribute:
 
 ```toml
-entity_schema = '''
+record_schema = '''
 {
   "type": "object",
   "required": ["title", "price"],
@@ -197,14 +197,14 @@ The object Attricat validates looks like this:
 
 The top-level `required`, `properties`, `dependentRequired`, and `dependentSchemas` may only name attributes the blueprint has, including attributes selected from mixins. A typo there fails compilation.
 
-`entity_schema` is allowed on record blueprints only. A failing record returns `422 entity_schema_mismatch`.
+`record_schema` is allowed on record blueprints only. A failing record returns `422 record_schema_mismatch`.
 
 ## Compare attributes with checks
 
 JSON Schema cannot say "valid until must not be before valid from". Add named checks to the record schema under `x-attricat-checks` instead:
 
 ```toml
-entity_schema = '''
+record_schema = '''
 {
   "type": "object",
   "required": ["title"],
@@ -232,14 +232,14 @@ A blueprint can have at most 32 checks. They are type-checked when the blueprint
 
 A comparison with a missing value passes, so `valid-range` above only applies once both dates are set. Make the attributes required, or add a `required` predicate, when they must be filled in.
 
-Checks run after the JSON Schema, on every write path: the API, the CLI, the web app, workflows, migrations, history restores, and context moves. Like the schema, they are checked in every context. A failing write returns `422 entity_check_failed`, and nothing is saved.
+Checks run after the JSON Schema, on every write path: the API, the CLI, the web app, workflows, migrations, history restores, and context moves. Like the schema, they are checked in every context. A failing write returns `422 record_check_failed`, and nothing is saved.
 
 ## Check linked records
 
 A check can look one relationship hop away. `linked` checks the records the saved record links to, and `referenced_by` counts the records that link to it.
 
 ```toml
-entity_schema = '''
+record_schema = '''
 {
   "type": "object",
   "x-attricat-checks": [
@@ -275,7 +275,7 @@ A [data quality rule](/builders/rules/#enforce-a-rule) with an `enforcement` tab
 
 | Code | Status | Meaning |
 | --- | --- | --- |
-| `entity_check_failed` | 422 | An `x-attricat-checks` check fails in some context. |
+| `record_check_failed` | 422 | An `x-attricat-checks` check fails in some context. |
 | `transition_conditions_unmet` | 422 | A status transition's conditions are not met. |
 | `rule_violation` | 422 | The write leaves the record violating an enforcing rule. |
 | `publication_checks_failed` | 422 | A channel's required checks fail. See [Publishing](/guides/publishing/#require-checks-before-publication). |

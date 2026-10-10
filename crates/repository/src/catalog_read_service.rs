@@ -3,7 +3,7 @@
 use uuid::Uuid;
 
 use crate::{
-    model::{Entity, FormAttributeValue},
+    model::{FormAttributeValue, Record},
     repository::{CatalogRepository, RepositoryError},
 };
 
@@ -16,19 +16,19 @@ impl<'a> CatalogReadService<'a> {
         Self { repository }
     }
 
-    /// Loads the entity and its current form values as one application-level
+    /// Loads the record and its current form values as one application-level
     /// read model. Callers may add presentation-specific data such as the
     /// blueprint definition.
-    pub async fn entity_with_values(
+    pub async fn record_with_values(
         &self,
-        entity_id: Uuid,
-    ) -> Result<(Entity, Vec<FormAttributeValue>), RepositoryError> {
-        let entity = self
+        record_id: Uuid,
+    ) -> Result<(Record, Vec<FormAttributeValue>), RepositoryError> {
+        let record = self
             .repository
-            .get_entity(entity_id)
+            .get_record(record_id)
             .await?
-            .ok_or(RepositoryError::NotFound("entity"))?;
-        let values = self.repository.form_values(entity_id).await?;
-        Ok((entity, values))
+            .ok_or(RepositoryError::NotFound("record"))?;
+        let values = self.repository.form_values(record_id).await?;
+        Ok((record, values))
     }
 }

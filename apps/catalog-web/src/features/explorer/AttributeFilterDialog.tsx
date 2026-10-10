@@ -11,11 +11,11 @@ import { useForm, useStore } from '@tanstack/react-form';
 import type { KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
-import type { Attribute } from '../entities/api';
-import { PRESENCE_FILTER_OPERATOR } from '../entities/constants';
-import { ValueTypeIcon } from '../entities/components/ValueTypeLabel';
-import { attributeLabel } from '../entities/entityDisplay';
-import { statusConfiguration, statusOptionLabel } from '../entities/status';
+import type { Attribute } from '../records/api';
+import { PRESENCE_FILTER_OPERATOR } from '../records/constants';
+import { ValueTypeIcon } from '../records/components/ValueTypeLabel';
+import { attributeLabel } from '../records/recordDisplay';
+import { statusConfiguration, statusOptionLabel } from '../records/status';
 import { CURRENT_USER_FILTER_VALUE } from '../principals/constants';
 import {
   directoryOptions,

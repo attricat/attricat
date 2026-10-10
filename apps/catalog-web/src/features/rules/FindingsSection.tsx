@@ -13,7 +13,7 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { listFindings } from './api';
-import { EntityIdLink, RuleRevisionCell } from './RuleCells';
+import { RecordIdLink, RuleRevisionCell } from './RuleCells';
 import type { RuleRevisions } from './ruleRevisions';
 import {
   ERROR_FINDING_SEVERITIES,
@@ -26,7 +26,7 @@ export const FindingsSection = ({
   canManage,
   error,
   findings,
-  entityLabels,
+  recordLabels,
   onAcknowledge,
   revisions,
 }: {
@@ -34,7 +34,7 @@ export const FindingsSection = ({
   canManage: boolean;
   error: boolean;
   findings: Awaited<ReturnType<typeof listFindings>> | undefined;
-  entityLabels: ReadonlyMap<string, string>;
+  recordLabels: ReadonlyMap<string, string>;
   onAcknowledge: (id: string) => void;
   revisions: RuleRevisions;
 }) => {
@@ -56,7 +56,7 @@ export const FindingsSection = ({
               <TableCell>{t('rules.columns.severity')}</TableCell>
               <TableCell>{t('rules.columns.finding')}</TableCell>
               <TableCell>{t('rules.columns.rule')}</TableCell>
-              <TableCell>{t('rules.columns.entity')}</TableCell>
+              <TableCell>{t('rules.columns.record')}</TableCell>
               <TableCell>{t('rules.columns.state')}</TableCell>
               <TableCell />
             </TableRow>
@@ -88,9 +88,9 @@ export const FindingsSection = ({
                     />
                   </TableCell>
                   <TableCell>
-                    <EntityIdLink
-                      entityId={finding.entity_id}
-                      label={entityLabels.get(finding.entity_id)}
+                    <RecordIdLink
+                      recordId={finding.record_id}
+                      label={recordLabels.get(finding.record_id)}
                     />
                   </TableCell>
                   <TableCell>

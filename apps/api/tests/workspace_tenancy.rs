@@ -92,7 +92,7 @@ async fn workspace_scoped_blueprints_reject_foreign_ids_codes_versions_and_attri
         .await
         .unwrap();
     let other = repository.for_workspace(other_workspace).await.unwrap();
-    let definition = "format_version = 1\ncode = 'shared_code'\nname = 'Shared'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'";
+    let definition = "format_version = 1\ncode = 'shared_code'\nname = 'Shared'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'";
     let other_blueprint = other
         .create_blueprint(CreateBlueprint {
             definition: definition.to_owned(),
@@ -167,34 +167,34 @@ async fn workspace_scoped_blueprints_reject_foreign_ids_codes_versions_and_attri
 }
 
 #[sqlx::test]
-async fn workspace_scoped_entity_commands_reject_foreign_entity_ids(pool: PgPool) {
+async fn workspace_scoped_record_commands_reject_foreign_record_ids(pool: PgPool) {
     let bootstrap_workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let other_workspace = Uuid::new_v4();
     let blueprint = Uuid::new_v4();
-    let entity = Uuid::new_v4();
-    sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'tenant-entity', 'Tenant entity', 'tenant-entity.local')")
+    let record = Uuid::new_v4();
+    sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'tenant-record', 'Tenant record', 'tenant-record.local')")
         .bind(other_workspace).execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO blueprints (id, version, name, definition, definition_hash, workspace_id) VALUES ($1, 1, 'Tenant entity', 'kind = \"entity\"', $2, $3)")
-        .bind(blueprint).bind(format!("tenant-entity-{blueprint}")).bind(other_workspace).execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO entities (id, blueprint_id, blueprint_version, workspace_id) VALUES ($1, $2, 1, $3)")
-        .bind(entity).bind(blueprint).bind(other_workspace).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO blueprints (id, version, name, definition, definition_hash, workspace_id) VALUES ($1, 1, 'Tenant record', 'kind = \"record\"', $2, $3)")
+        .bind(blueprint).bind(format!("tenant-record-{blueprint}")).bind(other_workspace).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO records (id, blueprint_id, blueprint_version, workspace_id) VALUES ($1, $2, 1, $3)")
+        .bind(record).bind(blueprint).bind(other_workspace).execute(&pool).await.unwrap();
 
     let repository = CatalogRepository::system(pool);
     let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
-    assert!(bootstrap.get_entity(entity).await.unwrap().is_none());
-    assert!(bootstrap.delete_entity(entity).await.is_err());
+    assert!(bootstrap.get_record(record).await.unwrap().is_none());
+    assert!(bootstrap.delete_record(record).await.is_err());
 
     repository
         .initialize_workspace(other_workspace)
         .await
         .unwrap();
     let other = repository.for_workspace(other_workspace).await.unwrap();
-    assert_eq!(other.get_entity(entity).await.unwrap().unwrap().id, entity);
-    other.delete_entity(entity).await.unwrap();
+    assert_eq!(other.get_record(record).await.unwrap().unwrap().id, record);
+    other.delete_record(record).await.unwrap();
 }
 
 #[sqlx::test]
-async fn current_values_hides_foreign_entity_values(pool: PgPool) {
+async fn current_values_hides_foreign_record_values(pool: PgPool) {
     use api::model::{CreateBlueprint, NewAttributeValue};
 
     let bootstrap_workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
@@ -213,7 +213,7 @@ async fn current_values_hides_foreign_entity_values(pool: PgPool) {
     let other = repository.for_workspace(other_workspace).await.unwrap();
     let blueprint = other
         .create_blueprint(CreateBlueprint {
-            definition: "format_version = 1\ncode = 'private_values'\nname = 'Private values'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'".to_owned(),
+            definition: "format_version = 1\ncode = 'private_values'\nname = 'Private values'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'".to_owned(),
         })
         .await
         .unwrap();
@@ -221,8 +221,8 @@ async fn current_values_hides_foreign_entity_values(pool: PgPool) {
         .publish_blueprint_revision(blueprint.blueprint.id, 1)
         .await
         .unwrap();
-    let entity = other
-        .create_entity_with_values(
+    let record = other
+        .create_record_with_values(
             blueprint.blueprint.id,
             1,
             vec![NewAttributeValue::Scalar {
@@ -237,10 +237,10 @@ async fn current_values_hides_foreign_entity_values(pool: PgPool) {
         .await
         .unwrap();
 
-    assert_eq!(other.current_values(entity.id).await.unwrap().len(), 1);
+    assert_eq!(other.current_values(record.id).await.unwrap().len(), 1);
     assert!(
         bootstrap
-            .current_values(entity.id)
+            .current_values(record.id)
             .await
             .unwrap()
             .is_empty()
@@ -265,8 +265,8 @@ async fn reachable_search_never_traverses_another_workspace(pool: PgPool) {
         .await
         .unwrap();
     let other = repository.for_workspace(other_workspace).await.unwrap();
-    let target_definition = "format_version = 1\ncode = 'shared_search_target'\nname = 'Shared target'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['name']\n\n[[attributes]]\ncode = 'name'\nvalue_type = 'string'";
-    let source_definition = "format_version = 1\ncode = 'shared_search_source'\nname = 'Shared source'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['name']\n\n[[attributes]]\ncode = 'name'\nvalue_type = 'string'\n\n[[attributes]]\ncode = 'target'\nvalue_type = 'relationship'\ntarget_blueprint = 'shared_search_target'";
+    let target_definition = "format_version = 1\ncode = 'shared_search_target'\nname = 'Shared target'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['name']\n\n[[attributes]]\ncode = 'name'\nvalue_type = 'string'";
+    let source_definition = "format_version = 1\ncode = 'shared_search_source'\nname = 'Shared source'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['name']\n\n[[attributes]]\ncode = 'name'\nvalue_type = 'string'\n\n[[attributes]]\ncode = 'target'\nvalue_type = 'relationship'\ntarget_blueprint = 'shared_search_target'";
 
     for scoped in [&bootstrap, &other] {
         let target = scoped
@@ -302,7 +302,7 @@ async fn reachable_search_never_traverses_another_workspace(pool: PgPool) {
         .unwrap()
         .unwrap();
     let target = other
-        .create_entity_with_values(
+        .create_record_with_values(
             other_target_blueprint.blueprint.id,
             1,
             vec![NewAttributeValue::Scalar {
@@ -317,14 +317,14 @@ async fn reachable_search_never_traverses_another_workspace(pool: PgPool) {
         .await
         .unwrap();
     other
-        .create_entity_with_values(
+        .create_record_with_values(
             other_source_blueprint.blueprint.id,
             1,
             vec![NewAttributeValue::Relationship {
                 attribute_id: None,
                 attribute_code: Some("target".to_owned()),
                 context_id: None,
-                target_entity_id: target.id,
+                target_record_id: target.id,
             }],
             Vec::new(),
             json!({}),

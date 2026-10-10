@@ -98,12 +98,12 @@ async fn compile_source(
     Ok(compiled)
 }
 
-/// Status locks and approvals must name attributes of the effective entity
+/// Status locks and approvals must name attributes of the effective record
 /// blueprint, so a typo cannot silently leave a finalized field editable.
-/// Qualified `namespace:code` reusable attributes are attached per entity and
+/// Qualified `namespace:code` reusable attributes are attached per record and
 /// cannot be checked here.
 fn validate_status_coverage(compiled: &CompiledBlueprint) -> Result<(), RepositoryError> {
-    if compiled.kind != BlueprintKind::Entity {
+    if compiled.kind != BlueprintKind::Record {
         return Ok(());
     }
     let codes: HashSet<&str> = compiled

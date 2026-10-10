@@ -1,10 +1,10 @@
 format_version = 1
 code = "new_blueprint"
 name = "New blueprint"
-kind = "entity"
+kind = "record"
 
 # Required fields are enforced for API writes as well as in the form.
-entity_schema = '{"type":"object","required":["name"]}'
+record_schema = '{"type":"object","required":["name"]}'
 
 # Optional: edits by these workspace roles retain channel publication.
 # [publication]
@@ -17,7 +17,7 @@ fields = ["name"]
 [views.detail]
 type = "stack"
 children = [
-  { type = "stack", component = { id = "catalog.entity_heading", version = 1 }, children = [{ type = "field", field = "name" }] },
+  { type = "stack", component = { id = "catalog.record_heading", version = 1 }, children = [{ type = "field", field = "name" }] },
   { type = "field", field = "notes", component = { id = "catalog.markdown_display", version = 1 } },
 ]
 

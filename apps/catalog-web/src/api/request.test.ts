@@ -41,13 +41,13 @@ describe('API request helper', () => {
       status: 422,
       json: () =>
         Promise.resolve({
-          error: { code: 'entity_check_failed', message: 'Failed', details },
+          error: { code: 'record_check_failed', message: 'Failed', details },
         }),
     });
 
     await expect(
       request('/api/example', z.object({ id: z.string() })),
-    ).rejects.toMatchObject({ code: 'entity_check_failed', details });
+    ).rejects.toMatchObject({ code: 'record_check_failed', details });
   });
 
   it('validates successful JSON responses with the provided schema', async () => {

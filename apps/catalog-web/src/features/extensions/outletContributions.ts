@@ -49,11 +49,11 @@ export type NavigationPolicy = typeof navigationPolicy;
 // select capacity, grouping, or overflow behavior.
 export const outletPolicies = {
   navigation: navigationPolicy,
-  entity_preview_panel: panelPolicy,
+  record_preview_panel: panelPolicy,
   blueprint_attribute_configuration: panelPolicy,
-  entity_attribute_decoration: popoverPolicy,
-  entity_action: actionBarPolicy,
-  entity_header_action: actionBarPolicy,
+  record_attribute_decoration: popoverPolicy,
+  record_action: actionBarPolicy,
+  record_header_action: actionBarPolicy,
   explorer_row_action: popoverPolicy,
   blueprint_detail_panel: panelPolicy,
   blueprint_panel: panelPolicy,
@@ -62,19 +62,19 @@ export const outletPolicies = {
   explorer_bulk_action: actionBarPolicy,
   data_health_card: cardPolicy,
   blueprint_publish_check: panelPolicy,
-  entity_attribute_panel: panelPolicy,
+  record_attribute_panel: panelPolicy,
   file_panel: panelPolicy,
 } as const satisfies Record<OutletName, { kind: string }>;
 
 const embeddedOutlets = new Set<OutletName>([
   'navigation',
-  'entity_preview_panel',
+  'record_preview_panel',
   'blueprint_attribute_configuration',
-  'entity_attribute_decoration',
-  'entity_action',
+  'record_attribute_decoration',
+  'record_action',
 ]);
 const actionOutlets = new Set<OutletName>([
-  'entity_header_action',
+  'record_header_action',
   'explorer_row_action',
   'explorer_action',
   'explorer_bulk_action',
@@ -85,7 +85,7 @@ const panelOutlets = new Set<OutletName>([
   'audit_event_panel',
   'data_health_card',
   'blueprint_publish_check',
-  'entity_attribute_panel',
+  'record_attribute_panel',
   'file_panel',
 ]);
 

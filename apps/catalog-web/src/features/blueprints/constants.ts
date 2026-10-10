@@ -40,7 +40,7 @@ export const blueprintVersionMetadataTabs = {
   attributes: 0,
   views: 1,
   viewDefinition: 2,
-  entitySchema: 3,
+  recordSchema: 3,
   includes: 4,
   publicationPolicy: 5,
 } as const;
@@ -48,7 +48,7 @@ export type BlueprintVersionMetadataTab =
   (typeof blueprintVersionMetadataTabs)[keyof typeof blueprintVersionMetadataTabs];
 
 /**
- * Deprecated view name: entities are edited in place on the detail view, so a
+ * Deprecated view name: records are edited in place on the detail view, so a
  * blueprint's `views.edit` is ignored.
  */
 export const legacyEditViewName = 'edit';

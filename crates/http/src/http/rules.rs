@@ -100,7 +100,7 @@ pub(super) async fn disable(
 }
 #[derive(Deserialize)]
 pub struct FindingsQuery {
-    entity_id: Option<Uuid>,
+    record_id: Option<Uuid>,
     limit: Option<i64>,
     offset: Option<i64>,
 }
@@ -110,7 +110,7 @@ pub(super) async fn findings(
 ) -> Result<Response, ApiError> {
     let (limit, offset) = ArrayPage::new(query.limit, query.offset).bounds()?;
     let page_items = repo
-        .rule_findings_page(query.entity_id, limit, offset)
+        .rule_findings_page(query.record_id, limit, offset)
         .await?;
     Ok(array_response(page_items, (limit, offset)))
 }

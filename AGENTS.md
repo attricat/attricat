@@ -108,6 +108,6 @@ audit behavior, rate limiting, and retention live in Rust repository/application
 code and use explicit transactions.
 
 Blueprint-declared uniqueness (`[[unique_keys]]`) is enforced by the generic
-`entity_unique_key_values` table and its `UNIQUE` constraint, which repository
+`record_unique_key_values` table and its `UNIQUE` constraint, which repository
 transactions keep current. Do not add per-blueprint indexes over attribute
 values; see [Structural constraints](docs/database.md#structural-constraints).

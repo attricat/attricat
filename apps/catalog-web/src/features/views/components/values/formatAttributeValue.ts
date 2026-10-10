@@ -1,7 +1,7 @@
 import i18n from 'i18next';
-import { statusLabel } from '../../../entities/status';
-import { attributeValueTypes } from '../../../entities/valueTypes';
-import type { Attribute } from '../../../entities/api';
+import { statusLabel } from '../../../records/status';
+import { attributeValueTypes } from '../../../records/valueTypes';
+import type { Attribute } from '../../../records/api';
 import { formatCalendarDate } from '../../../../time/instantFormat';
 
 /**

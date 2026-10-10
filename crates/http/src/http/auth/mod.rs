@@ -236,14 +236,14 @@ pub(super) async fn authorize(
     if let Some(policy) = policy::policy(request.method(), matched) {
         let (target_id, target_code) = policy::target(path, policy.target);
         // File reads are authorized in their handlers after resolving active
-        // file-to-entity references. Other routes can authorize from the path.
+        // file-to-record references. Other routes can authorize from the path.
         let handler_authorized = matches!(
             policy.target,
             policy::TargetKind::FileRead
                 | policy::TargetKind::WorkspaceNavigation
                 | policy::TargetKind::ExtensionRun
-                | policy::TargetKind::EntityBatch
-                | policy::TargetKind::EntityList
+                | policy::TargetKind::RecordBatch
+                | policy::TargetKind::RecordList
         );
         if handler_authorized && !is_active_principal().await? {
             return Err(ApiError::forbidden());
@@ -363,16 +363,16 @@ mod route_tests {
                 "/api{route}"
             ))));
         }
-        let entity = Uuid::new_v4();
-        let path = format!("/entities/{entity}");
+        let record = Uuid::new_v4();
+        let path = format!("/records/{record}");
         let alias = format!("/api{path}");
         assert_eq!(
             policy::target(
                 super::super::canonical_route(&alias),
-                policy::TargetKind::EntityId
+                policy::TargetKind::RecordId
             )
             .0,
-            Some(entity)
+            Some(record)
         );
     }
 }

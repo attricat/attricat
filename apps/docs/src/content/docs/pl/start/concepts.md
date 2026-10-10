@@ -21,7 +21,7 @@ Schemat jest zapisany w TOML i zawiera listę **atrybutów**, z których każdy 
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "title"
@@ -54,8 +54,6 @@ Gdy sprzedawca dodaje `care_instructions` w wersji 2, produkty utworzone w wersj
 ## Rekordy
 
 Rekord to jeden element katalogu: jeden produkt, jedna kategoria. Jest tworzony z bieżącej wersji schematu i pozostaje do niej przypięty aż do migracji.
-
-W plikach TOML schematów, API i CLI rekordy występują pod nazwą `entity`, na przykład `kind = "entity"` i `entity_schema`.
 
 Oprócz atrybutów każdy rekord ma **tagi systemowe** i **metadane systemowe** na potrzeby automatyzacji, na przykład tag `needs-review` ustawiany przez przepływ pracy.
 
@@ -96,7 +94,7 @@ Każdy zapis jest walidowany na serwerze:
 
 - typ atrybutu (liczba musi być liczbą);
 - `value_schema` atrybutu (cena nie może być ujemna);
-- `entity_schema` schematu (produkt w promocji musi mieć cenę promocyjną).
+- `record_schema` schematu (produkt w promocji musi mieć cenę promocyjną).
 
 Walidacja obejmuje każdy kontekst, którego dotyczy zmiana. Zmiana, która naruszyłaby którykolwiek kontekst, jest odrzucana w całości.
 

@@ -51,13 +51,13 @@ value_schema = '''{
 - `null` means absence, not a stored string or JSON null. Edges from `null`
   authorize initial values, including defaults. Edges to `null` authorize
   clearing. Clearing is never implicitly enabled by omitting the graph.
-- An unchanged status is allowed. Requiredness remains an entity-schema
+- An unchanged status is allowed. Requiredness remains a record-schema
   constraint; a transition does not override it.
 
 ## Transition conditions
 
 An edge may list `conditions` that must hold for the change to be accepted.
-A condition has the same shape as an [entity check](json-schema-validation.md#declarative-checks):
+A condition has the same shape as an [record check](json-schema-validation.md#declarative-checks):
 a `code`, an optional `message` and a `predicate`.
 
 ```json
@@ -79,14 +79,14 @@ a `code`, an optional `message` and a `predicate`.
   in the same write count: set `root_cause` and `status = "closed"` together.
   They are evaluated in every context where the status changes.
 - Unchanged statuses and graphs without `transitions` have no conditions.
-- Entity checks run first, then conditions, then enforcing rules that guard the
+- Record checks run first, then conditions, then enforcing rules that guard the
   transition ([rules](rules.md#enforcement)). Unmet conditions reject the whole
   write with `422 transition_conditions_unmet`, listing every unmet condition
   in the [violation shape](json-schema-validation.md#error-details).
 
 ### Available destinations
 
-`GET /v1/entities/{id}/status-transitions?context_id=` (described under
+`GET /v1/records/{id}/status-transitions?context_id=` (described under
 [controlled records](#controlled-records)) also evaluates each declared edge's
 conditions and the enforcing rules that guard it, on the saved state plus the
 edge's destination. Each item has `unmet` in the violation shape. When the
@@ -107,10 +107,10 @@ Unsaved form edits are not considered.
 
 ## Display and editing
 
-Entity fields and compact value renderers display a labelled chip. Plain-text
+Record fields and compact value renderers display a labelled chip. Plain-text
 renderers use the same label. Every label is resolved for the user's UI
 language (then `en`, then the key) through `statusOptionLabel` in
-`apps/catalog-web/src/features/entities/status.ts`: chips, the form select,
+`apps/catalog-web/src/features/records/status.ts`: chips, the form select,
 the Explorer attribute-filter value select (status filters offer `eq` only)
 and filter pills. Search requests, saved searches, API payloads, events and
 connector exports carry stable codes; consumers that render labels resolve
@@ -118,7 +118,7 @@ them from the attribute's `value_schema` and `GET /lexicon/entries`. Missing val
 retired values remain visible with an explanation, never silently coerced.
 Editors use a single-select control, with forbidden destinations
 disabled. The saved status—not another unsaved selection—is the starting
-state. On the entity page, choosing a status saves it at once as its own
+state. On the record page, choosing a status saves it at once as its own
 change; in the create and migration forms, Save persists the selection.
 
 Readonly attributes, context restrictions and existing authorization still
@@ -132,8 +132,8 @@ Transitions compare effective values resolved through the context's parent
 chain, unless `context_fallback = "none"`. Removing a local override is a
 transition to the newly inherited value, which may differ from absence.
 Changes to a parent context are also checked for affected descendants.
-Reparenting a context is not an entity edit: entities are revalidated
-structurally (schema, unique keys, hierarchies and entity checks) without
+Reparenting a context is not a record edit: records are revalidated
+structurally (schema, unique keys, hierarchies and record checks) without
 transition enforcement or records, approval voids or retention holds, even if
 an inherited effective status changes.
 
@@ -144,12 +144,12 @@ writes, history restoration and migrations use the same transition validation;
 migrations also honor the source definition's policy. There is no silent
 migration bypass.
 
-For entity updates and value appends that target a status, send
-`expected_updated_at` with the exact timestamp returned by the entity/form
+For record updates and value appends that target a status, send
+`expected_updated_at` with the exact timestamp returned by the record/form
 read. History restoration and migration accept the same field as a query
 parameter; migration previews provide `source_updated_at` for this purpose. Missing
-preconditions return `428 status_precondition_required`; a changed entity
-returns `409 stale_entity`, even if the requested transition is still valid.
+preconditions return `428 status_precondition_required`; a changed record
+returns `409 stale_record`, even if the requested transition is still valid.
 Refresh, review the latest state, and explicitly restore/review a draft before
 retrying. Non-status writes retain their existing API compatibility.
 
@@ -176,7 +176,7 @@ versioned `x-attricat-status` annotation and are validated with it.
     { "from": "review", "to": "approved", "code": "approve",
       "roles": ["reviewer"], "separate_from": ["submit"] },
     { "from": "approved", "to": "released", "code": "release",
-      "permission": "entities.publish" },
+      "permission": "records.publish" },
     { "from": "released", "to": "draft", "code": "correct", "roles": ["owner"] }
   ]
 }
@@ -187,8 +187,8 @@ edge `code`s declared in the same graph; an option with `lock` requires a
 declared `transitions` array, so leaving a lock is always an explicit edge;
 `retention_days` (1–36,600) requires `lock`; `approval.void_to` names another
 option. Plain codes in `lock` and `approval.covers` must be attributes of the
-effective entity blueprint; qualified `namespace:code` reusable attributes are
-attached per entity and are not checked at publication.
+effective record blueprint; qualified `namespace:code` reusable attributes are
+attached per record and are not checked at publication.
 
 Requirements and conditions cannot refer to a
 [user or team assignment](blueprints.md#user-or-team-assignments): `roles`,
@@ -202,13 +202,13 @@ against a literal `user:<uuid>` / `team:<uuid>`).
 `permission`, `roles` and `separate_from` add to the edge check, for every
 effective change in every context:
 
-- `permission`: the acting principal holds the permission for the entity
-  (workspace, blueprint-family or entity grant). A personal API token must also
+- `permission`: the acting principal holds the permission for the record
+  (workspace, blueprint-family or record grant). A personal API token must also
   carry it.
 - `roles`: the actor holds at least one of the role codes (system or
-  workspace-local) through a workspace, blueprint-family or entity grant.
+  workspace-local) through a workspace, blueprint-family or record grant.
 - `separate_from`: the actor is not the `actor_user_id` of the most recent
-  `entity_status_transitions` row for the same entity, attribute and context
+  `record_status_transitions` row for the same record, attribute and context
   whose `edge_code` is one of the listed codes.
 
 The acting principal is the interactive extension initiator, otherwise the
@@ -219,9 +219,9 @@ event handlers. A restricted edge with no identifiable actor is denied.
 Denials return `403 status_transition_forbidden` or
 `403 status_separation_of_duties` and roll back the whole write. Unrestricted
 edges behave as before. Every effective change is recorded in
-`entity_status_transitions` with its edge code, actor and token.
+`record_status_transitions` with its edge code, actor and token.
 
-`GET /v1/entities/{entity_id}/status-transitions?context_id=…` returns the
+`GET /v1/records/{record_id}/status-transitions?context_id=…` returns the
 declared edges from the saved effective status in that context (default context
 when omitted), each with `allowed`, `denial_code` and `denial_reason` for the
 caller, and `unmet` transition conditions and enforcing rules (see
@@ -244,20 +244,20 @@ File uploads, links and reorders, which modify reference rows in place, are
 checked before writing against the written context and every context that
 inherits from it.
 
-The check runs on every path that validates statuses: entity create/update,
+The check runs on every path that validates statuses: record create/update,
 value append and removal, relationship mutations, workflow actions, extension
 catalog batches, file uploads, links and reorders, history restoration,
-reusable attribute attachment and migration (against the source definition). Entity deletion is refused while any
+reusable attribute attachment and migration (against the source definition). Record deletion is refused while any
 context is locked. A violation returns `409 record_locked`.
 
 Locks are evaluated from the starting status, so moving into a locked status may
 carry final edits, while leaving one must be a pure status change. An effective
 change away from a locking status is recorded with `unlocked = true` and audited
-as `entity.record.unlock` with the attribute, context, endpoints and edge code.
+as `record.unlock` with the attribute, context, endpoints and edge code.
 
 ### Approvals
 
-Entering an option with `approval` records an `entity_approvals` row for that
+Entering an option with `approval` records an `record_approvals` row for that
 attribute and context: actor, time, covered attributes (or `covers_all`) and the
 SHA-256 of the covered effective content as canonical JSON. A new approval for
 the same attribute and context supersedes the previous one
@@ -269,8 +269,8 @@ still equals the approved option, the same transaction writes the option's
 `void_to` value in that context (parents first, skipping contexts that already
 inherit the void status) and records an `approval_void` transition. This
 automatic change bypasses edge and permission checks by design. Audit actions
-are `entity.approval.record` and `entity.approval.void`.
-`GET /v1/entities/{entity_id}/approvals` lists approvals newest first.
+are `record.approval.record` and `record.approval.void`.
+`GET /v1/records/{record_id}/approvals` lists approvals newest first.
 
 ### Retention
 
@@ -283,14 +283,14 @@ transaction time plus the period, and audits each as
 ### Agent
 
 Agent mutations run as the approving user and hit the same checks. Tool errors
-carry the stable codes above, and the read-only `get_entity_record_controls`
+carry the stable codes above, and the read-only `get_record_controls`
 tool returns transition access, approvals and holds so the agent can explain a
 denial instead of retrying.
 
-Every single-entity agent edit (values, value removal and restore,
+Every single-record agent edit (values, value removal and restore,
 annotations, relationships, file links, blueprint migration and deletion) and
 each update or delete in an agent batch carries `expected_updated_at`. When the agent omits it, the runner records the
-entity's `updated_at` when the change is proposed, so the approved write
-applies to the state the approver saw and returns `409 stale_entity` if the
-entity changed while it waited for approval. The same precondition lets these
+record's `updated_at` when the change is proposed, so the approved write
+applies to the state the approver saw and returns `409 stale_record` if the
+record changed while it waited for approval. The same precondition lets these
 edits change a status.

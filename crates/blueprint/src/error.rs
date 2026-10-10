@@ -36,7 +36,7 @@ pub enum BlueprintError {
     UnknownIncludedAttribute { alias: String, attribute: String },
     #[error("resolved include '{0}' is missing or does not match its declaration")]
     InvalidResolvedInclude(String),
-    #[error("entity blueprints must define views.dropdown_option")]
+    #[error("record blueprints must define views.dropdown_option")]
     MissingDropdownOptionView,
     #[error("views.dropdown_option must define at least one field")]
     EmptyDropdownOptionFields,
@@ -64,10 +64,10 @@ pub enum BlueprintError {
     InvalidUniqueKey { key: String, message: String },
     #[error("{field} is not valid JSON Schema: {message}")]
     InvalidJsonSchema { field: String, message: String },
-    #[error("only entity blueprints can define an entity schema")]
-    EntitySchemaOnMixin,
-    #[error("entity schema {keyword} references unknown attribute '{attribute}'")]
-    EntitySchemaUnknownAttribute {
+    #[error("only record blueprints can define a record schema")]
+    RecordSchemaOnMixin,
+    #[error("record schema {keyword} references unknown attribute '{attribute}'")]
+    RecordSchemaUnknownAttribute {
         keyword: &'static str,
         attribute: String,
     },

@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import type { ReactElement, ReactNode } from 'react';
-import type { Blueprint, BlueprintWithAttributes } from '../entities/api';
+import type { Blueprint, BlueprintWithAttributes } from '../records/api';
 import { ExplorerSearchForm } from './ExplorerSearchForm';
 
 const revisions = [

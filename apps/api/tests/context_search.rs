@@ -4,7 +4,7 @@ use support::*;
 const CATEGORY: &str = r#"format_version = 1
 code = 'ctx_category'
 name = 'Context category'
-kind = 'entity'
+kind = 'record'
 [views.dropdown_option]
 type = 'dropdown_option'
 fields = ['title']
@@ -16,7 +16,7 @@ value_type = 'string'
 const ITEM: &str = r#"format_version = 1
 code = 'ctx_item'
 name = 'Context item'
-kind = 'entity'
+kind = 'record'
 [views.dropdown_option]
 type = 'dropdown_option'
 fields = ['name']
@@ -67,7 +67,7 @@ async fn create_context(client: &Client, base: &str, code: &str, parent: Option<
 async fn write_in_context(
     client: &Client,
     base: &str,
-    entity: &Value,
+    record: &Value,
     context: &Value,
     value: Value,
 ) {
@@ -76,8 +76,8 @@ async fn write_in_context(
     expect_status(
         client
             .put(format!(
-                "{base}/v1/entities/{}",
-                entity["id"].as_str().unwrap()
+                "{base}/v1/records/{}",
+                record["id"].as_str().unwrap()
             ))
             .json(&json!({ "values": [value] }))
             .send()
@@ -98,7 +98,7 @@ async fn search(client: &Client, base: &str, context: Option<&str>, extra: Value
     }
     expect_status(
         client
-            .post(format!("{base}/v1/entities/search"))
+            .post(format!("{base}/v1/records/search"))
             .json(&body)
             .send()
             .await
@@ -117,16 +117,16 @@ fn ids(response: &Value) -> Vec<String> {
         .collect()
 }
 
-fn id(entity: &Value) -> String {
-    entity["id"].as_str().unwrap().to_owned()
+fn id(record: &Value) -> String {
+    record["id"].as_str().unwrap().to_owned()
 }
 
-fn cell(response: &Value, entity: &Value, field: &str) -> Value {
+fn cell(response: &Value, record: &Value, field: &str) -> Value {
     response["items"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|item| item["id"] == entity["id"])
+        .find(|item| item["id"] == record["id"])
         .unwrap()["table_values"][field]
         .clone()
 }
@@ -141,14 +141,14 @@ async fn search_resolves_filters_sorting_and_table_values_for_the_requested_cont
     // A child without its own values resolves through `pl`.
     create_context(&client, &base, "pl-web", Some(&pl)).await;
 
-    let shoes = create_entity_with(
+    let shoes = create_record_with(
         &client,
         &base,
         "ctx_category",
         json!([scalar("title", "Shoes")]),
     )
     .await;
-    let bags = create_entity_with(
+    let bags = create_record_with(
         &client,
         &base,
         "ctx_category",
@@ -157,7 +157,7 @@ async fn search_resolves_filters_sorting_and_table_values_for_the_requested_cont
     .await;
     write_in_context(&client, &base, &shoes, &pl, scalar("title", "Buty")).await;
     write_in_context(&client, &base, &bags, &pl, scalar("title", "Torby")).await;
-    let alpha = create_entity_with(
+    let alpha = create_record_with(
         &client,
         &base,
         "ctx_item",
@@ -168,7 +168,7 @@ async fn search_resolves_filters_sorting_and_table_values_for_the_requested_cont
         ]),
     )
     .await;
-    let beta = create_entity_with(
+    let beta = create_record_with(
         &client,
         &base,
         "ctx_item",
@@ -250,7 +250,7 @@ async fn search_resolves_filters_sorting_and_table_values_for_the_requested_cont
 
     expect_error(
         client
-            .post(format!("{base}/v1/entities/search"))
+            .post(format!("{base}/v1/records/search"))
             .json(&json!({"blueprint": {"code": "ctx_item"}, "context_code": "missing"}))
             .send()
             .await

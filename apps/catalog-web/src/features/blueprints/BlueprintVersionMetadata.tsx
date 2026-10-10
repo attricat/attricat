@@ -21,8 +21,8 @@ import {
   type BlueprintVersionMetadataTab,
 } from './constants';
 import { JsonMetadata } from './BlueprintMetadata';
-import { isHiddenByDefault } from '../entities/attributeVisibility';
-import { ValueTypeLabel } from '../entities/components/ValueTypeLabel';
+import { isHiddenByDefault } from '../records/attributeVisibility';
+import { ValueTypeLabel } from '../records/components/ValueTypeLabel';
 
 export const BlueprintVersionMetadata = ({
   blueprint,
@@ -63,8 +63,8 @@ export const BlueprintVersionMetadata = ({
           label={t('blueprints.viewDefinition')}
         />
         <Tab
-          {...tabId.tab(tabs.entitySchema)}
-          label={t('blueprints.entitySchema')}
+          {...tabId.tab(tabs.recordSchema)}
+          label={t('blueprints.recordSchema')}
         />
         <Tab {...tabId.tab(tabs.includes)} label={t('blueprints.includes')} />
         <Tab
@@ -101,10 +101,10 @@ export const BlueprintVersionMetadata = ({
             value={blueprint.blueprint.views}
           />
         )}
-        {tab === tabs.entitySchema && (
+        {tab === tabs.recordSchema && (
           <JsonMetadata
-            label={t('blueprints.entitySchema')}
-            value={blueprint.blueprint.entity_schema}
+            label={t('blueprints.recordSchema')}
+            value={blueprint.blueprint.record_schema}
           />
         )}
         {tab === tabs.attributes && (

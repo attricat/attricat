@@ -14,9 +14,9 @@ describe('ConversationMessageContent', () => {
     expect(markup).toContain('<strong>catalog</strong>');
   });
 
-  it('opens entity preview links in a new tab in assistant replies and tool results', () => {
+  it('opens record preview links in a new tab in assistant replies and tool results', () => {
     const id = '123e4567-e89b-12d3-a456-426614174000';
-    const url = `/entities/${id}`;
+    const url = `/records/${id}`;
     const reply = renderToStaticMarkup(
       <ConversationMessageContent
         content={`See [this item](${url})`}
@@ -31,8 +31,8 @@ describe('ConversationMessageContent', () => {
       <ConversationMessageContent
         content={{
           tool_call_id: 'call-1',
-          name: 'get_entity_preview_link',
-          result: { entity_id: id, url },
+          name: 'get_record_preview_link',
+          result: { record_id: id, url },
         }}
         messageRole="tool"
       />,
@@ -63,7 +63,7 @@ describe('ConversationMessageContent', () => {
       <ConversationMessageContent
         content={{
           tool_call_id: 'call-1',
-          name: 'get_entity_preview_link',
+          name: 'get_record_preview_link',
           result: { url: 'https://example.com' },
         }}
         messageRole="tool"

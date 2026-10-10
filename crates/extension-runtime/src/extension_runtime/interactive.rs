@@ -32,10 +32,10 @@ impl OperationState {
         batch: ExtensionCatalogBatch,
     ) -> Result<String, String> {
         for intent in &batch.intents {
-            match intent.target_entity_id() {
-                Some(entity_id) if scope.entity_ids.contains(&entity_id) => {}
-                Some(_) => return Err("intent targets an entity outside the run selection".into()),
-                None => return Err("interactive runs cannot create or upsert entities".into()),
+            match intent.target_record_id() {
+                Some(record_id) if scope.record_ids.contains(&record_id) => {}
+                Some(_) => return Err("intent targets a record outside the run selection".into()),
+                None => return Err("interactive runs cannot create or upsert records".into()),
             }
         }
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
@@ -59,7 +59,7 @@ impl wit::selection::Host for OperationState {
             .await?
             .ok_or_else(|| "this run has no interactive selection".to_owned())?;
         bounded_serialize(&json!({
-            "count": scope.entity_ids.len(),
+            "count": scope.record_ids.len(),
             "blueprint_id": scope.blueprint_id,
             "blueprint_version": scope.blueprint_version,
             "context_id": scope.context_id,

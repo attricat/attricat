@@ -47,7 +47,7 @@ test('loads Monaco and its worker without external network access', async ({
   await expect(input).toBeFocused();
   await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.insertText(
-    'format_version = 1\ncode = "offline"\nname = "Offline"\nkind = "entity"\n',
+    'format_version = 1\ncode = "offline"\nname = "Offline"\nkind = "record"\n',
   );
   expect(errors).toEqual([]);
   await expect(editor).toContainText('offline');

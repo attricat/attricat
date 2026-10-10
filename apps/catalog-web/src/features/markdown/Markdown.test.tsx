@@ -42,7 +42,7 @@ describe('Markdown', () => {
     for (const url of [
       'https://example.com',
       'http://example.com',
-      '/entities',
+      '/records',
       '#section',
       'mailto:team@example.com',
     ]) {

@@ -1,20 +1,20 @@
 # Blueprint Authoring
 
-Blueprints are versioned TOML definitions. Entities remain pinned to the exact
+Blueprints are versioned TOML definitions. Records remain pinned to the exact
 blueprint version used to create them.
 
 ```toml
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 ```
 
-`kind` is either `entity` or `mixin`. Mixins can be included but cannot create
-entities.
+`kind` is either `record` or `mixin`. Mixins can be included but cannot create
+records.
 
 An optional `description`, up to 500 characters, says what the blueprint's
-entities are, such as `description = "Product groupings, such as Basic tools"`.
+records are, such as `description = "Product groupings, such as Basic tools"`.
 Inline attributes accept the same `description` for what they hold; an
 attribute selected with `from` uses the mixin's. The web app does not show
 descriptions yet. The agent reads them in its catalog map, so describe a
@@ -55,7 +55,7 @@ Set `readonly = true` to make an attribute preview-only in the Catalog web app.
 It is intended for values managed through authorized API or CLI operations,
 including agent and extension actions; `readonly` does not restrict those
 server-side writes. Rules evaluate findings and do not write attribute values.
-The default is `false`. Read-only attributes remain visible on the entity page and in entity forms but
+The default is `false`. Read-only attributes remain visible on the record page and in record forms but
 cannot be changed, cleared, linked, or uploaded through the web UI.
 
 ```toml
@@ -90,7 +90,7 @@ hints:
 | --- | --- |
 | `hidden` | Every native default surface listed below |
 | `hidden:form` | Editors added outside the layout (**Other attributes**) and the fallback create form |
-| `hidden:detail` | Fallback entity preview/detail views |
+| `hidden:detail` | Fallback record preview/detail views |
 | `hidden:explorer` | Explorer facet and filter candidates |
 | `hidden:metadata` | The blueprint Attributes metadata table |
 
@@ -109,7 +109,7 @@ tags = ["hidden:form", "hidden:detail"]
 ```
 
 Scalar attributes may set `default_value`. The value is stored in the default
-context when an entity is created, unless the create request supplies a value
+context when a record is created, unless the create request supplies a value
 for that attribute in the default context. Defaults support `string`, `number`,
 `integer`, `boolean`, `date`, `datetime`, and `time`; relationships and files do
 not support defaults.
@@ -148,7 +148,7 @@ value_type = "string"
 value_schema = '''{"type":"string","enum":["draft","released"],"x-attricat-status":{"version":1,
   "options":[{"code":"draft","label":"Draft"},{"code":"released","label":"Released","lock":"all"}],
   "transitions":[{"from":null,"to":"draft"},
-    {"from":"draft","to":"released","code":"release","permission":"entities.publish"},
+    {"from":"draft","to":"released","code":"release","permission":"records.publish"},
     {"from":"released","to":"draft","code":"correct","roles":["owner","admin"]}]}}'''
 ```
 
@@ -185,13 +185,13 @@ value_type = "relationship"
 target_blueprints = ["product", "product_revision", "material", "part"]
 ```
 
-A write linking an entity of any other blueprint returns
+A write linking a record of any other blueprint returns
 `422 relationship_target_type_mismatch`. Compiled attributes expose the complete
 allowed set as `target_blueprint_codes` (empty means any blueprint);
 `target_blueprint_code` is set only when exactly one target is allowed, so
 single-target consumers such as table column paths, Explorer relationship
 filters, and tree facets treat a multi-target relationship like an unrestricted
-one. The entity relationship picker searches one allowed blueprint at a time with a
+one. The record relationship picker searches one allowed blueprint at a time with a
 **Target blueprint** selector, and an `incoming_relationship_list` on any
 allowed target can list the field. A migration preview reports
 `relationship_target_changed` when the allowed set differs between revisions.
@@ -199,12 +199,12 @@ allowed target can list the field. A migration preview reports
 ### Hierarchies
 
 `acyclic = true` rejects relationship writes that would close a cycle through
-the attribute. `tree = true` is an acyclic hierarchy where every entity has at
+the attribute. `tree = true` is an acyclic hierarchy where every record has at
 most one target (its parent): it implies `acyclic` and defaults `cardinality`
 to `"one"` (`"many"` is rejected). Both require `context_editable = "default"`,
 because cycle checks follow direct default-context edges, and the targets must
 include the blueprint itself (any target set is allowed for mixins; a consuming
-entity blueprint must then be among the selected attribute's targets).
+record blueprint must then be among the selected attribute's targets).
 
 ```toml
 [[attributes]]
@@ -216,25 +216,25 @@ context_editable = "default"
 ```
 
 - A write closing a cycle returns `409 relationship_cycle` with
-  `error.details = { attribute, path }`. `path` lists entity IDs from the
-  written entity along the cycle back to it, for example `[c, a, b, c]`; a
+  `error.details = { attribute, path }`. `path` lists record IDs from the
+  written record along the cycle back to it, for example `[c, a, b, c]`; a
   self-link is `[a, a]`.
 - In a tree, a second target returns `409 relationship_cardinality_conflict`,
-  also for entities pinned to a revision that allowed several.
+  also for records pinned to a revision that allowed several.
 - The check walks edges of every revision of the blueprint family's field
   (matched by code), resolved in each context whose value the edge becomes.
   It runs while the edge is inserted, under the workspace relationship lock
   every relationship writer holds, so concurrent writes cannot jointly create
   a cycle.
-- Removing an edge is not checked. For an entity pinned to an older revision
+- Removing an edge is not checked. For a record pinned to an older revision
   that allowed non-default edges, removing its last edge in a context exposes
   the inherited edge there, which can close a cycle. Publishing a revision
   that changes the hierarchy, and moving a context to another parent, recheck
   all edges and report such cycles.
 - The latest published revision decides whether a field is a hierarchy, for
-  every entity in the family.
+  every record in the family.
 - Publishing a revision that adds or changes `acyclic`/`tree` checks existing
-  edges first. Cycles, or tree entities with more than one target, fail
+  edges first. Cycles, or tree records with more than one target, fail
   publication with `409 relationship_hierarchy_violations` and
   `error.details = { attribute, cycles, multiple_parents }` (up to 20 each).
 
@@ -288,7 +288,7 @@ value_schema = '''{
         "conditions": [{ "code": "has-approver",
           "predicate": { "type": "required", "attribute_code": "approver" } }] },
       { "from": "released", "to": "draft", "code": "correct",
-        "permission": "entities.publish" }
+        "permission": "records.publish" }
     ]
   }
 }'''
@@ -299,7 +299,7 @@ value_schema = '''{
   references) are required. Optional: `tone` (`default`, `success`,
   `warning`, `error`, `info`); `lock` (`"all"` or 1–500 attribute codes,
   `namespace:code` for reusable attributes) makes covered content read-only in
-  that status and blocks entity deletion, and requires `transitions`;
+  that status and blocks record deletion, and requires `transitions`;
   `approval` `{covers, void_to}` records an approval bound to a digest of the
   covered content and moves to `void_to` (another option) when it changes;
   `retention_days` (1–36,600, requires `lock`) holds the locked attributes'
@@ -308,8 +308,8 @@ value_schema = '''{
   none. `from`/`to` are option codes or `null` (no value: initial set or
   clear); each pair once; unchanged values are always allowed. Optional
   `code`; `permission` (`area.action`); `roles` (1–20 role codes held through a
-  workspace, blueprint-family or entity grant); `separate_from` (1–20 edge
-  `code`s whose most recent actor on this entity and context may not take this
+  workspace, blueprint-family or record grant); `separate_from` (1–20 edge
+  `code`s whose most recent actor on this record and context may not take this
   edge); `conditions` (≤ 16 checks with the
   [predicate](json-schema-validation.md#predicates) shape, synchronous-safe
   only).
@@ -325,7 +325,7 @@ value_schema = '''{
 
 ### User or team assignments
 
-To store who is responsible for an entity (assignee, owner, reviewer), use a
+To store who is responsible for a record (assignee, owner, reviewer), use a
 `string` attribute with the versioned `x-attricat-principal` annotation instead
 of free text. `kinds` lists what it accepts: `user`, `team`, or both. The
 contract is [`principal-attribute-v1.schema.json`](../contracts/principal-attribute-v1.schema.json).
@@ -373,7 +373,7 @@ value_schema = '''{
 
 ## Unique Keys
 
-Entity blueprints may declare business keys that no two entities of the
+Record blueprints may declare business keys that no two records of the
 blueprint family can share:
 
 ```toml
@@ -397,31 +397,31 @@ case_sensitive = true
   `context_fallback`, separately in every context.
 - Normalization: text is trimmed, whitespace runs collapse to one space, and
   unless `case_sensitive = true` text is lowercased. Numbers compare by value
-  (`1.50` = `1.5`), datetimes by instant, relationships by target entity ID.
-- An entity missing any key attribute in a context (blank text counts as
+  (`1.50` = `1.5`), datetimes by instant, relationships by target record ID.
+- A record missing any key attribute in a context (blank text counts as
   missing) does not participate in that key there. Require the attributes in
-  `entity_schema` when every entity must have the key.
+  `record_schema` when every record must have the key.
 - The latest published revision of the family defines the enforced keys for
-  every entity in the family, including entities pinned to older revisions.
+  every record in the family, including records pinned to older revisions.
   Attributes are matched by code.
 
-A write that gives a second entity the same key value returns
+A write that gives a second record the same key value returns
 `409 unique_key_conflict` with
-`error.details = { key, context, values, conflicting_entity_id }`; `values` are
+`error.details = { key, context, values, conflicting_record_id }`; `values` are
 the normalized components. The database enforces keys inside the write
 transaction, so of two concurrent duplicate writes exactly one commits.
-Recover by updating or reusing the conflicting entity, or by choosing a
+Recover by updating or reusing the conflicting record, or by choosing a
 different value.
 
 Publishing a revision that adds or changes keys re-indexes the family. If
-existing entities already share a value, publication fails with
+existing records already share a value, publication fails with
 `409 unique_key_duplicates` and
-`error.details = { duplicates: [{ key, context, values, entity_ids }], total }`
+`error.details = { duplicates: [{ key, context, values, record_ids }], total }`
 (up to 20 groups). Fix the duplicates and publish again.
 
-## Entity Schema
+## Record Schema
 
-Entity blueprints may define an `entity_schema` JSON Schema contract. Root
+Record blueprints may define an `record_schema` JSON Schema contract. Root
 `required`, `properties`, `dependentRequired`, and `dependentSchemas` entries
 must name attributes materialized by the blueprint, including selected include
 attributes. Nested schema properties describe an attribute's value and are not
@@ -448,7 +448,7 @@ own.
 
 ## Dropdown Options
 
-Entity blueprints must define how they appear in relationship dropdowns:
+Record blueprints must define how they appear in relationship dropdowns:
 
 ```toml
 [views.dropdown_option]
@@ -462,7 +462,7 @@ separator = " / "
 
 ## Views
 
-Entity blueprints can optionally define app views. Existing blueprints without
+Record blueprints can optionally define app views. Existing blueprints without
 views use the platform's schema-order fallback.
 
 ```toml
@@ -547,9 +547,9 @@ scalar leaves reached through relationship paths, as shown above.
 
 ### Incoming Relationships
 
-`incoming_relationship_list` displays entities that reference the current
-entity through configured relationship fields. It opens a modal and does not
-request linked entities until the user opens it. Results are cursor-paginated;
+`incoming_relationship_list` displays records that reference the current
+record through configured relationship fields. It opens a modal and does not
+request linked records until the user opens it. Results are cursor-paginated;
 `page_size` controls each requested page and is bounded by the API's
 `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` setting.
 
@@ -571,11 +571,11 @@ children = [
 ```
 
 Each selector names a source blueprint and one of its relationship fields. A
-source entity matched by multiple selectors appears once. Selecting an item
-opens that source entity. A field with several `target_blueprints` can be
+source record matched by multiple selectors appears once. Selecting an item
+opens that source record. A field with several `target_blueprints` can be
 listed on every allowed target blueprint.
 
-`views.detail` lays out both display and editing: the entity page renders
+`views.detail` lays out both display and editing: the record page renders
 every field the user may change as an editor in its place, and the create and
 migration forms use the same layout. `views.edit` is deprecated; the UI ignores
 it, and the compiler still accepts it (checking its components' `edit`
@@ -656,7 +656,7 @@ Labels follow the user's UI language, independently of the selected attribute
 context.
 
 Labels without a count use separate keys for singular and plural wording
-(`{{Product}}`, `{{Products}}`). Where the app renders a count of entities (the
+(`{{Product}}`, `{{Products}}`). Where the app renders a count of records (the
 Explorer result total), it uses the blueprint name's plural forms: entries for
 each CLDR plural category of the language (`one`/`other` in English;
 `one`/`few`/`many`/`other` in Polish). Forms contain only the noun; the app's
@@ -673,8 +673,8 @@ non-deleted blueprint revision or reusable attribute references.
 
 ## JSON Schema Validation
 
-Blueprint attributes can define scalar `value_schema` contracts and entity
-blueprints can define an `entity_schema` for cross-field validation. Both use
+Blueprint attributes can define scalar `value_schema` contracts and record
+blueprints can define an `record_schema` for cross-field validation. Both use
 JSON Schema Draft 2020-12 and are enforced by the API before values are stored.
 See [JSON Schema Validation](json-schema-validation.md) for authoring syntax,
 context behavior, and error handling.
@@ -686,11 +686,11 @@ One predicate engine (`required`, `has_tag`, `missing_tag`, `compare`,
 rules-only `stale`, `unique`, `acyclic`) is used in three places. Each is
 type-checked against the blueprint's attributes when it is saved.
 
-Entity checks reject saves. Put them in `entity_schema` under
+Record checks reject saves. Put them in `record_schema` under
 `x-attricat-checks` (at most 32; `code`, optional `message`, `predicate`):
 
 ```toml
-entity_schema = '''{
+record_schema = '''{
   "x-attricat-checks": [
     {"code": "valid-range", "message": "Valid until must not be before valid from",
      "predicate": {"type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from"}},
@@ -702,8 +702,8 @@ entity_schema = '''{
 ```
 
 Inside `linked`, `attribute_code` refers to the linked record and
-`subject_attribute_code` to the entity being saved. Changes to a linked record
-are not rejected; event-triggered rules report affected entities as findings.
+`subject_attribute_code` to the record being saved. Changes to a linked record
+are not rejected; event-triggered rules report affected records as findings.
 
 Transition conditions guard status edges. Add `conditions` (at most 16, same
 shape) to an edge in `x-attricat-status.transitions`:
@@ -742,21 +742,21 @@ from = "review"
 to = "released"
 ```
 
-Failures return `422 entity_check_failed`, `transition_conditions_unmet` or
+Failures return `422 record_check_failed`, `transition_conditions_unmet` or
 `rule_violation` with `error.details.violations`. See
 [JSON Schema Validation](json-schema-validation.md#predicates) for every
 predicate field and limit and the `error.details` shape,
 [Status attributes](#status-attributes), and [Rules](rules.md) for the dry run
 required before an enforcing rule is enabled.
 
-## Entity migration status
+## Record migration status
 
-When a published entity blueprint revision is storage-compatible with its
-immediately preceding published revision, **Migrate compatible entities** starts
-a background migration batch. The batch examines every active entity pinned to
-an older version of that blueprint, not only entities on the immediately
-preceding version. Each entity is migrated when its individual preview is
-`ready`; incompatible entities remain available for review. Open the blueprint
+When a published record blueprint revision is storage-compatible with its
+immediately preceding published revision, **Migrate compatible records** starts
+a background migration batch. The batch examines every active record pinned to
+an older version of that blueprint, not only records on the immediately
+preceding version. Each record is migrated when its individual preview is
+`ready`; incompatible records remain available for review. Open the blueprint
 in **Manage → Blueprints** and select the **Migrations** tab to inspect every
 batch for that blueprint. While a batch for the current target version is
 `queued` or `running`, the migration action is disabled so another batch cannot
@@ -775,11 +775,11 @@ Batch statuses are:
 - `draft`: created but not queued (retained for compatibility with older rows),
 - `queued`: persisted and waiting for a worker,
 - `running`: claimed by a migration worker,
-- `completed`: the worker inspected every eligible entity and finished, and
+- `completed`: the worker inspected every eligible record and finished, and
 - `superseded`: replaced by a newer batch.
 
-`completed` describes the batch lifecycle. Individual entities that could not be
-migrated remain recorded in `entity_blueprint_migrations` for separate review.
+`completed` describes the batch lifecycle. Individual records that could not be
+migrated remain recorded in `record_blueprint_migrations` for separate review.
 
 ## Validation
 

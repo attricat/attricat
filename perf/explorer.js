@@ -46,7 +46,7 @@ const headers = {
 };
 const post = (path, body) =>
   http.post(`${server}${path}`, JSON.stringify(body), { headers });
-const search = (body) => post("/v1/entities/search", body);
+const search = (body) => post("/v1/records/search", body);
 const page = { size: 25, cursor: null };
 
 export default function () {
@@ -83,7 +83,7 @@ export default function () {
         })
       : first;
   } else {
-    response = post("/v1/entities/facets/relationship-tree/children", {
+    response = post("/v1/records/facets/relationship-tree/children", {
       blueprint: { code: blueprint },
       source_relationship_field: "category",
       hierarchy_field: "parent_category",

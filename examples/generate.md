@@ -4,9 +4,9 @@
 
 ## Prerequisites
 
-Start the local stack and create a generator-scoped personal access token with an authenticated CLI session. `--generator` grants the least-privilege set required for blueprint, context, and entity creation and publication.
+Start the local stack and create a generator-scoped personal access token with an authenticated CLI session. `--generator` grants the least-privilege set required for blueprint, context, and record creation and publication.
 
-File upload, metadata, and download authorization uses the existing entity permissions; there is intentionally no separate `files.read` personal-token permission.
+File upload, metadata, and download authorization uses the existing record permissions; there is intentionally no separate `files.read` personal-token permission.
 
 Pass the returned token as `CATALOG_TOKEN`. The generator refuses non-local targets unless `ALLOW_NON_LOCAL_GENERATOR_TARGET=1` is explicitly set.
 
@@ -22,7 +22,7 @@ just generate
 
 Profiles preserve the same component types, distributions, and bounded compatibility relationships. They differ only in scale.
 
-| Profile  | Total entities | Use                                           |
+| Profile  | Total records | Use                                           |
 | -------- | -------------: | --------------------------------------------- |
 | `micro`  |          1,022 | Fast API-backed verification and resume tests |
 | `small`  |         10,022 | Normal local demo (the default)               |
@@ -35,11 +35,11 @@ CATALOG_TOKEN=cat_pat_... just generate medium
 CATALOG_TOKEN=cat_pat_... just generate large
 ```
 
-The current industry pack is `pc-components`. It creates fictional manufacturers, hierarchical categories, product families, sellable SKUs, and reference-data entities for product types, interface standards, and form factors. Families relate to those controlled classifications as well as category and manufacturer; sellable SKUs relate to their family and bounded compatibility links, reaching category, manufacturer, and technical classifications through that family. Each generated product image is assigned as a SKU's `main_photo`; the SKU Explorer table uses `catalog.table_image@1` to render it as a thumbnail when files are enabled. A fixed, small set of documentation files is assigned to `product_files`. This does not grow with the selected profile.
+The current industry pack is `pc-components`. It creates fictional manufacturers, hierarchical categories, product families, sellable SKUs, and reference-data records for product types, interface standards, and form factors. Families relate to those controlled classifications as well as category and manufacturer; sellable SKUs relate to their family and bounded compatibility links, reaching category, manufacturer, and technical classifications through that family. Each generated product image is assigned as a SKU's `main_photo`; the SKU Explorer table uses `catalog.table_image@1` to render it as a thumbnail when files are enabled. A fixed, small set of documentation files is assigned to `product_files`. This does not grow with the selected profile.
 
 ## Long-running runs
 
-The generator writes an atomic local checkpoint under `.catalog-generator/`, keyed by industry, schema version, profile, and seed. It prints entity and request progress, rolling throughput, retries, and an ETA. A large run can take a substantial time because every entity and relationship is written through the API.
+The generator writes an atomic local checkpoint under `.catalog-generator/`, keyed by industry, schema version, profile, and seed. It prints record and request progress, rolling throughput, retries, and an ETA. A large run can take a substantial time because every record and relationship is written through the API.
 
 ```sh
 # Preview the exact work plan without contacting the API.
@@ -55,7 +55,7 @@ node examples/generate.mjs --size large --status
 CATALOG_TOKEN=cat_pat_... node examples/generate.mjs --size medium --progress json
 ```
 
-Use `--no-files` for a pure Explorer dataset when file processing is not required. The generator enables the workspace's `default` publication channel, then publishes each completed entity to every enabled channel by default; pass `--no-publish` to leave generated entities unpublished. The generator marks the checkpoint `benchmark_ready` only after all planned writes, file processing (when enabled), and API-level sample verification complete.
+Use `--no-files` for a pure Explorer dataset when file processing is not required. The generator enables the workspace's `default` publication channel, then publishes each completed record to every enabled channel by default; pass `--no-publish` to leave generated records unpublished. The generator marks the checkpoint `benchmark_ready` only after all planned writes, file processing (when enabled), and API-level sample verification complete.
 
 ## Safety and reproducibility
 

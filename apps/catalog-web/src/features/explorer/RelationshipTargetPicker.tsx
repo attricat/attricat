@@ -3,14 +3,14 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
-import { searchEntities } from '../entities/api';
-import { useRelationshipSelectionLabels } from '../entities/components/useRelationshipSelectionLabels';
+import { searchRecords } from '../records/api';
+import { useRelationshipSelectionLabels } from '../records/components/useRelationshipSelectionLabels';
 import {
   scrollRelationshipPickerToTop,
-  useRecentlyPreviewedEntities,
-} from '../entities/components/useRecentlyPreviewedEntities';
-import { dropdownOptionLabel, displayLabel } from '../entities/entityDisplay';
-import { entityQueryKeys } from '../entities/queryKeys';
+  useRecentlyPreviewedRecords,
+} from '../records/components/useRecentlyPreviewedRecords';
+import { dropdownOptionLabel, displayLabel } from '../records/recordDisplay';
+import { recordQueryKeys } from '../records/queryKeys';
 import { RelationshipTargetOption } from './RelationshipTargetOption';
 
 type Props = {
@@ -28,14 +28,14 @@ export const RelationshipTargetPicker = ({
   const [query, setQuery] = useState('');
   const pickerContentRoot = useRef<HTMLDivElement>(null);
   const { isPreviewed, markPreviewed, openPreview, previewHref } =
-    useRecentlyPreviewedEntities((id) => {
+    useRecentlyPreviewedRecords((id) => {
       if (!selectedIds.includes(id)) onSelectedIdsChange([...selectedIds, id]);
       scrollRelationshipPickerToTop(pickerContentRoot.current);
     });
   const targets = useInfiniteQuery({
-    queryKey: entityQueryKeys.relationshipTargets(targetBlueprint, query),
+    queryKey: recordQueryKeys.relationshipTargets(targetBlueprint, query),
     queryFn: ({ pageParam, signal }) =>
-      searchEntities({
+      searchRecords({
         blueprint: targetBlueprint,
         cursor: pageParam,
         query,
@@ -61,7 +61,7 @@ export const RelationshipTargetPicker = ({
     <Stack ref={pickerContentRoot} spacing={1.5}>
       <TextField
         fullWidth
-        label={t('entities.searchRelationshipOptions')}
+        label={t('records.searchRelationshipOptions')}
         onChange={(event) => setQuery(event.target.value)}
         value={query}
       />
@@ -103,7 +103,7 @@ export const RelationshipTargetPicker = ({
         />
       )}
       {targets.isPending && (
-        <Typography variant="body2">{t('entities.loadingOptions')}</Typography>
+        <Typography variant="body2">{t('records.loadingOptions')}</Typography>
       )}
       {targets.isError && (
         <Typography color="error" variant="body2">

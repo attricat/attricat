@@ -33,10 +33,10 @@ const context = explorerTableCellContextSchema.parse({
     },
   },
   primary_value: 12,
-  related_entity: null,
+  related_record: null,
   related_preview: null,
   source_row: {
-    entity_id: '11111111-1111-4111-8111-111111111111',
+    record_id: '11111111-1111-4111-8111-111111111111',
     blueprint_version: 1,
     preview: { default: { price: 12 } },
   },

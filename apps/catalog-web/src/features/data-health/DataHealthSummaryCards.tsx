@@ -12,11 +12,11 @@ export const DataHealthSummaryCards = ({
 }) => {
   const { t } = useTranslation();
   const cards = [
-    [t('dataHealth.outdatedEntities'), summary.outdated_entities],
-    [t('dataHealth.activeEntities'), summary.active_entities],
+    [t('dataHealth.outdatedRecords'), summary.outdated_records],
+    [t('dataHealth.activeRecords'), summary.active_records],
     [
       t('dataHealth.staleAfterDays', { count: staleAfterDays }),
-      summary.stale_entities,
+      summary.stale_records,
     ],
     [
       t('dataHealth.deletedRelationshipTargets'),

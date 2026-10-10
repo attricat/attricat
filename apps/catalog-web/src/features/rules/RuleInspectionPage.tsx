@@ -32,7 +32,7 @@ import { FindingsSection } from './FindingsSection';
 import { ruleQueryKeys } from './queryKeys';
 import { ruleDefinitionsOptions } from './queryOptions';
 import { ruleRevisionsByKey } from './ruleRevisions';
-import { useEntityLabels } from '../entities/useEntityLabels';
+import { useRecordLabels } from '../records/useRecordLabels';
 import { RulesSection } from './RulesSection';
 import { RunsSection } from './RunsSection';
 import { RuleIcon } from '../../components/systemIcons';
@@ -67,15 +67,15 @@ export const RuleInspectionPage = ({
     queryFn: listRuleRuns,
     enabled: canRead && section === RULE_SECTION_RUNS,
   });
-  // Name the entities the visible findings and runs refer to.
-  const entityLabels = useEntityLabels(
+  // Name the records the visible findings and runs refer to.
+  const recordLabels = useRecordLabels(
     section === RULE_SECTION_FINDINGS
       ? (findings.data ?? [])
           .filter((finding) => finding.state !== FINDING_STATE_RESOLVED)
-          .map((finding) => finding.entity_id)
+          .map((finding) => finding.record_id)
       : section === RULE_SECTION_RUNS
         ? (runs.data ?? []).flatMap((run) =>
-            run.scope_entity_id ? [run.scope_entity_id] : [],
+            run.scope_record_id ? [run.scope_record_id] : [],
           )
         : [],
   );
@@ -216,14 +216,14 @@ export const RuleInspectionPage = ({
             acknowledging={acknowledge.isPending}
             canManage={canManage}
             error={findings.isError}
-            entityLabels={entityLabels}
+            recordLabels={recordLabels}
             findings={findings.data}
             revisions={revisions}
           />
         )}
         {section === RULE_SECTION_RUNS && (
           <RunsSection
-            entityLabels={entityLabels}
+            recordLabels={recordLabels}
             error={runs.isError}
             revisions={revisions}
             runs={runs.data}

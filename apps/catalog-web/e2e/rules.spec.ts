@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   commitField,
-  createEntity,
-  createEntityBlueprint,
+  createRecord,
+  createRecordBlueprint,
   scalar,
   suffix,
 } from './helpers';
@@ -36,7 +36,7 @@ test('dry-runs and runs a rule, then acknowledges and resolves its finding', asy
   const attribute = `summary_${suffix()}`;
   const ruleName = `Summary required ${code}`;
   const finding = `'${attribute}' is required`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Ruled product',
     `[[attributes]]
@@ -59,11 +59,11 @@ type = "manual"
 type = "required"
 attribute_code = "${attribute}"`,
   );
-  await createEntity(blueprint, [
+  await createRecord(blueprint, [
     scalar('title', 'Complete product'),
     scalar(attribute, 'Has a summary'),
   ]);
-  const missing = await createEntity(blueprint, [
+  const missing = await createRecord(blueprint, [
     scalar('title', 'Incomplete product'),
   ]);
   // Blueprint rules publish disabled, so a normal run is refused.
@@ -103,14 +103,14 @@ attribute_code = "${attribute}"`,
   await expect(findingRow).toContainText(`${ruleName} v1`);
   await expect(
     findingRow.getByRole('link', { name: 'Incomplete product' }),
-  ).toHaveAttribute('href', `/entities/${missing.id}`);
+  ).toHaveAttribute('href', `/records/${missing.id}`);
   await findingRow.getByRole('button', { name: 'Acknowledge' }).click();
   await expect(findingRow).toContainText('Acknowledged');
   await expect(
     findingRow.getByRole('button', { name: 'Acknowledge' }),
   ).toBeHidden();
 
-  await page.goto(`/entities/${missing.id}`);
+  await page.goto(`/records/${missing.id}`);
   await expect(page.getByText('1 data quality finding')).toBeVisible();
   // Field labels show attribute codes with spaces in place of underscores.
   const summary = page.getByLabel(attribute.replace('_', ' '));
@@ -122,7 +122,7 @@ attribute_code = "${attribute}"`,
   await expectLatestRun(page, ruleName, 'manual Completed 2 0');
   await openFindings(page);
   await expect(findingRow).toBeHidden();
-  await page.goto(`/entities/${missing.id}`);
+  await page.goto(`/records/${missing.id}`);
   await expect(page.getByLabel(attribute.replace('_', ' '))).toHaveValue(
     'Fixed summary',
   );

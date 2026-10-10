@@ -2,7 +2,7 @@
 //!
 //! A write transaction that changes cached state advances the matching
 //! counter before it commits. A reader reads the counters in a query it
-//! already runs (authentication, the entity lock), and only then loads or
+//! already runs (authentication, the record lock), and only then loads or
 //! looks up cached state under that generation, so a cached entry is never
 //! older than the generation it is filed under. Correctness never depends on
 //! cache invalidation messages.
@@ -63,9 +63,9 @@ pub(crate) async fn advance_generation(
     Ok(())
 }
 
-/// Workspace state for an entity write, read from committed data before the
+/// Workspace state for a record write, read from committed data before the
 /// write's transaction opens and filed under the generations it was read
-/// at. A transaction uses it only if the generations its own entity lock
+/// at. A transaction uses it only if the generations its own record lock
 /// reads are the same, which also rules out uncommitted changes of its own.
 #[derive(Clone)]
 pub(crate) struct WritePrefetch {
@@ -147,7 +147,7 @@ impl CatalogRepository {
             .map(Some)
     }
 
-    /// State an entity write in this request can take from the cache.
+    /// State a record write in this request can take from the cache.
     pub(crate) async fn write_prefetch(&self) -> Result<Option<WritePrefetch>, RepositoryError> {
         let Some(generations) = self.generations() else {
             return Ok(None);

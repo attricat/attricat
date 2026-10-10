@@ -36,7 +36,7 @@ or inaccessible configured bucket.
 | `LLM_MAX_TOOL_ROUNDS` | `25` | API only | Model and tool round trips one agent run may take between human approvals, 1–100. A run that exceeds it fails with `tool_limit`. |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | API | Maximum recursive relationship preview depth. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
-| `ENTITY_MAX_PAGE_SIZE` | `100` | API | Maximum page size for relationship browsing. |
+| `RECORD_MAX_PAGE_SIZE` | `100` | API | Maximum page size for relationship browsing. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | API | Data-health response cache lifetime. Any recorded catalog change also makes the next request a miss. |
 | `CACHE_BACKEND` | `memory` | API | Query cache backend: `memory` keeps cached definitions in each process; `redis` also shares cached values and extension network rate limits between replicas. Nothing is invalidated through Redis: correctness never depends on the backend (see [Caching](caching.md)). An unreachable Redis degrades to memory while the API reconnects in the background. |
 | `REDIS_URL` | Unset | API | Redis URL, required when `CACHE_BACKEND=redis`. `redis://` and TLS `rediss://` (rustls, platform root certificates) are supported, as are the `valkey` schemes and the `-cluster` and `-sentinel` forms. `just setup` writes the local development Redis URL. |
@@ -60,8 +60,8 @@ or inaccessible configured bucket.
 | `TASK_WORKER_CONCURRENCY` | `8` | API | Positive maximum number of registered generic-task handlers running at once. |
 | `TASK_WORKER_POLL_MILLIS` | `250` | API | Positive idle delay for the generic task worker. |
 | `TASK_WORKER_SHUTDOWN_GRACE_SECONDS` | `30` | API | Positive bounded drain period; unfinished generic task leases are allowed to expire. |
-| `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | API | Entity migration candidate keyset page size; must be between 1 and 1000. |
-| `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | API | Maximum concurrent entity attempts within one migration batch; must be between 1 and 64. |
+| `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | API | Record migration candidate keyset page size; must be between 1 and 1000. |
+| `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | API | Maximum concurrent record attempts within one migration batch; must be between 1 and 64. |
 | `CATALOG_API_URL` | `http://127.0.0.1:3000/api` | Vite, CLI | API base URL, including `/api`. The web app's development proxy forwards `/api` to its origin. |
 | `EXTENSION_OFFICIAL_REGISTRY` | `attricat/attricat-extensions` | API | Canonical public GitHub `owner/repository` used as every workspace's immutable official extension source. |
 | `EXTENSIONS_MODE` | `enabled` | API | Deployment emergency gate. Set exactly `disabled` to block all new extension execution, artifacts, runtime descriptors, commands, storage, host calls, and event delivery without changing installations or grants. Invalid configured values fail closed. |

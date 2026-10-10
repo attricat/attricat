@@ -9,12 +9,12 @@ use uuid::Uuid;
 use crate::{
     model::{
         AppendAttributeValues, AttachReusableAttribute, AttributeContext, AttributeValue,
-        BlueprintEntityPublicationSummary, BlueprintWithAttributes, CreateAttributeContext,
-        CreateBlueprint, CreateEntityFormRequest, CreateReusableAttribute,
-        CreateReusableAttributeGroup, Entity, EntityBatchRequest, EntityBatchResponse,
-        EntityPublicationStatus, EntityReusableAttribute, MigrateEntityRequest,
+        BlueprintRecordPublicationSummary, BlueprintWithAttributes, CreateAttributeContext,
+        CreateBlueprint, CreateRecordFormRequest, CreateReusableAttribute,
+        CreateReusableAttributeGroup, MigrateRecordRequest, Record, RecordBatchRequest,
+        RecordBatchResponse, RecordPublicationStatus, RecordReusableAttribute,
         RelationshipMutation, ReusableAttribute, ReusableAttributeGroup, SearchBlueprint,
-        UpdateAttributeContext, UpdateEntityFormRequest,
+        UpdateAttributeContext, UpdateRecordFormRequest,
     },
     repository::{
         CatalogRepository, ExtensionCatalogBatch, ExtensionCatalogIntentOutcome, FileMetadata,
@@ -102,34 +102,34 @@ impl<'a> CatalogMutationService<'a> {
 
     pub async fn attach_reusable_attribute(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         input: AttachReusableAttribute,
-    ) -> Result<EntityReusableAttribute, RepositoryError> {
+    ) -> Result<RecordReusableAttribute, RepositoryError> {
         self.repository
-            .attach_reusable_attribute(entity_id, input)
+            .attach_reusable_attribute(record_id, input)
             .await
     }
 
     pub async fn attach_reusable_attribute_group(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         group_id: Uuid,
-    ) -> Result<Vec<EntityReusableAttribute>, RepositoryError> {
+    ) -> Result<Vec<RecordReusableAttribute>, RepositoryError> {
         self.repository
-            .attach_reusable_attribute_group(entity_id, group_id)
+            .attach_reusable_attribute_group(record_id, group_id)
             .await
     }
 
-    /// Creates an entity. `input.files` must be files that `uploaded_by`
+    /// Creates a record. `input.files` must be files that `uploaded_by`
     /// staged for the blueprint; without an uploader none may be given.
-    pub async fn create_entity(
+    pub async fn create_record(
         &self,
-        input: CreateEntityFormRequest,
+        input: CreateRecordFormRequest,
         uploaded_by: Option<Uuid>,
-    ) -> Result<Entity, RepositoryError> {
+    ) -> Result<Record, RepositoryError> {
         let blueprint = self.resolve_published_blueprint(&input.blueprint).await?;
         self.repository
-            .create_entity_with_staged_files(
+            .create_record_with_staged_files(
                 blueprint.blueprint.id,
                 blueprint.blueprint.version,
                 input.values,
@@ -141,32 +141,32 @@ impl<'a> CatalogMutationService<'a> {
             .await
     }
 
-    pub async fn delete_entity(&self, entity_id: Uuid) -> Result<(), RepositoryError> {
-        self.repository.delete_entity(entity_id).await
+    pub async fn delete_record(&self, record_id: Uuid) -> Result<(), RepositoryError> {
+        self.repository.delete_record(record_id).await
     }
 
-    pub async fn delete_entity_checked(
+    pub async fn delete_record_checked(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<(), RepositoryError> {
         self.repository
-            .delete_entity_checked(entity_id, expected_updated_at)
+            .delete_record_checked(record_id, expected_updated_at)
             .await
     }
 
-    pub async fn duplicate_entity(&self, entity_id: Uuid) -> Result<Entity, RepositoryError> {
-        self.repository.duplicate_entity(entity_id).await
+    pub async fn duplicate_record(&self, record_id: Uuid) -> Result<Record, RepositoryError> {
+        self.repository.duplicate_record(record_id).await
     }
 
-    pub async fn update_entity(
+    pub async fn update_record(
         &self,
-        entity_id: Uuid,
-        input: UpdateEntityFormRequest,
-    ) -> Result<Entity, RepositoryError> {
+        record_id: Uuid,
+        input: UpdateRecordFormRequest,
+    ) -> Result<Record, RepositoryError> {
         self.repository
-            .update_entity_with_values_checked(
-                entity_id,
+            .update_record_with_values_checked(
+                record_id,
                 input.values,
                 input.relationships,
                 input.remove_values,
@@ -177,145 +177,145 @@ impl<'a> CatalogMutationService<'a> {
             .await
     }
 
-    /// Applies several entity writes atomically. Callers authorize every
-    /// operation first with `CatalogRepository::is_authorized_for_entity_batch`.
-    pub async fn apply_entity_batch(
+    /// Applies several record writes atomically. Callers authorize every
+    /// operation first with `CatalogRepository::is_authorized_for_record_batch`.
+    pub async fn apply_record_batch(
         &self,
-        request: EntityBatchRequest,
-    ) -> Result<EntityBatchResponse, RepositoryError> {
-        self.repository.apply_entity_batch(request).await
+        request: RecordBatchRequest,
+    ) -> Result<RecordBatchResponse, RepositoryError> {
+        self.repository.apply_record_batch(request).await
     }
 
-    pub async fn publish_entity(
+    pub async fn publish_record(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         context_id: Uuid,
-    ) -> Result<EntityPublicationStatus, RepositoryError> {
-        self.repository.publish_entity(entity_id, context_id).await
+    ) -> Result<RecordPublicationStatus, RepositoryError> {
+        self.repository.publish_record(record_id, context_id).await
     }
 
-    pub async fn publish_entity_all_channels(
+    pub async fn publish_record_all_channels(
         &self,
-        entity_id: Uuid,
-    ) -> Result<Vec<EntityPublicationStatus>, RepositoryError> {
-        self.repository.publish_entity_all_channels(entity_id).await
+        record_id: Uuid,
+    ) -> Result<Vec<RecordPublicationStatus>, RepositoryError> {
+        self.repository.publish_record_all_channels(record_id).await
     }
 
-    pub async fn publish_blueprint_entities(
+    pub async fn publish_blueprint_records(
         &self,
         blueprint_id: Uuid,
         version: i64,
         context_id: Option<Uuid>,
-    ) -> Result<BlueprintEntityPublicationSummary, RepositoryError> {
+    ) -> Result<BlueprintRecordPublicationSummary, RepositoryError> {
         self.repository
-            .publish_blueprint_entities(blueprint_id, version, context_id)
+            .publish_blueprint_records(blueprint_id, version, context_id)
             .await
     }
 
-    pub async fn unpublish_entity(
+    pub async fn unpublish_record(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         context_id: Uuid,
     ) -> Result<(), RepositoryError> {
         self.repository
-            .unpublish_entity(entity_id, context_id)
+            .unpublish_record(record_id, context_id)
             .await
     }
 
-    pub async fn migrate_entity(
+    pub async fn migrate_record(
         &self,
-        entity_id: Uuid,
-        input: MigrateEntityRequest,
-    ) -> Result<Entity, RepositoryError> {
+        record_id: Uuid,
+        input: MigrateRecordRequest,
+    ) -> Result<Record, RepositoryError> {
         self.repository
-            .migrate_entity_to_latest(entity_id, input)
+            .migrate_record_to_latest(record_id, input)
             .await
     }
 
-    pub async fn migrate_entity_checked(
+    pub async fn migrate_record_checked(
         &self,
-        entity_id: Uuid,
-        input: MigrateEntityRequest,
+        record_id: Uuid,
+        input: MigrateRecordRequest,
         expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
-    ) -> Result<Entity, RepositoryError> {
+    ) -> Result<Record, RepositoryError> {
         self.repository
-            .migrate_entity_to_latest_checked(entity_id, input, expected_updated_at)
+            .migrate_record_to_latest_checked(record_id, input, expected_updated_at)
             .await
     }
 
     pub async fn append_values(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         input: AppendAttributeValues,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
-        self.repository.append_values(entity_id, input).await
+        self.repository.append_values(record_id, input).await
     }
 
     pub async fn restore_value(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         history_id: Uuid,
     ) -> Result<AttributeValue, RepositoryError> {
-        self.repository.restore_value(entity_id, history_id).await
+        self.repository.restore_value(record_id, history_id).await
     }
 
     pub async fn restore_value_checked(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         history_id: Uuid,
         expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<AttributeValue, RepositoryError> {
         self.repository
-            .restore_value_checked(entity_id, history_id, expected_updated_at)
+            .restore_value_checked(record_id, history_id, expected_updated_at)
             .await
     }
 
     pub async fn replace_relationships(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         input: RelationshipMutation,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         self.repository
-            .replace_relationships(entity_id, input)
+            .replace_relationships(record_id, input)
             .await
     }
 
     pub async fn remove_relationships(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         input: RelationshipMutation,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
-        self.repository.remove_relationships(entity_id, input).await
+        self.repository.remove_relationships(record_id, input).await
     }
 
     /// Replaces (`replace`) or removes relationship targets with an optional
     /// optimistic-concurrency precondition.
     pub async fn mutate_relationships_checked(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         input: RelationshipMutation,
         replace: bool,
         expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         self.repository
-            .mutate_relationships_checked(entity_id, input, replace, expected_updated_at)
+            .mutate_relationships_checked(record_id, input, replace, expected_updated_at)
             .await
     }
 
     pub async fn link_file(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         attribute_code: &str,
         context_id: Option<Uuid>,
         file_id: Uuid,
     ) -> Result<FileMetadata, RepositoryError> {
-        self.link_file_checked(entity_id, attribute_code, context_id, file_id, None)
+        self.link_file_checked(record_id, attribute_code, context_id, file_id, None)
             .await
     }
 
     pub async fn link_file_checked(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         attribute_code: &str,
         context_id: Option<Uuid>,
         file_id: Uuid,
@@ -323,7 +323,7 @@ impl<'a> CatalogMutationService<'a> {
     ) -> Result<FileMetadata, RepositoryError> {
         self.repository
             .link_file_to_attribute_checked(
-                entity_id,
+                record_id,
                 attribute_code,
                 context_id,
                 file_id,

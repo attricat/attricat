@@ -3,7 +3,7 @@ title: Work with records
 description: Create, edit, and delete records, work with contextual values, files, and relationships, and use the change history.
 ---
 
-A record is one catalog item, such as a product or a category. Its blueprint decides which attributes it has, how they are validated, and how its page is laid out. In the API, the CLI, and permission names, records are called entities.
+A record is one catalog item, such as a product or a category. Its blueprint decides which attributes it has, how they are validated, and how its page is laid out.
 
 ## Create a record
 
@@ -121,16 +121,16 @@ If your workspace uses publication channels, the record page shows its status pe
 
 ## Delete a record
 
-**Delete record** is available with the `entities.delete` permission, from the record's **Actions** menu or the Explorer row menu, and asks for confirmation. A deleted record disappears from search, previews, and relationship pickers. Its history is kept. A record in a locked status cannot be deleted.
+**Delete record** is available with the `records.delete` permission, from the record's **Actions** menu or the Explorer row menu, and asks for confirmation. A deleted record disappears from search, previews, and relationship pickers. Its history is kept. A record in a locked status cannot be deleted.
 
 ## From the command line
 
 Everything on this page is also available through the [CLI](/reference/cli/) and [API](/reference/api/). For example:
 
 ```sh
-acli entity create --blueprint product --values product.toml
-acli entity update <entity-id> --values changes.toml --context-id <context-id>
-acli entity value-history <entity-id>
-acli entity restore-value <entity-id> <history-id>
-acli file upload <entity-id> main_photo --file photo.jpg
+acli record create --blueprint product --values product.toml
+acli record update <record-id> --values changes.toml --context-id <context-id>
+acli record value-history <record-id>
+acli record restore-value <record-id> <history-id>
+acli file upload <record-id> main_photo --file photo.jpg
 ```

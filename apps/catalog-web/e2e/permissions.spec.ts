@@ -2,8 +2,8 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
   commitField,
   createBlueprint,
-  createEntity,
-  createEntityBlueprint,
+  createRecord,
+  createRecordBlueprint,
   replaceDefinition,
   request,
   scalar,
@@ -20,7 +20,7 @@ const refusal = (scope: Page | Locator) =>
 const draftDefinition = (code: string) => `format_version = 1
 code = "${code}"
 name = "Restricted draft"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -52,12 +52,12 @@ test('a viewer can browse the catalog but every write is refused', async ({
 }) => {
   const code = `viewer_${suffix()}`;
   const contextCode = `viewer_ctx_${suffix()}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Viewer product',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"',
   );
-  const entity = await createEntity(blueprint, [
+  const record = await createRecord(blueprint, [
     scalar('title', 'Readable product'),
   ]);
   const draft = await createBlueprint(
@@ -73,11 +73,11 @@ test('a viewer can browse the catalog but every write is refused', async ({
     'You are not authorized to manage members.',
   );
 
-  await page.goto(`/entities/${entity.id}`);
+  await page.goto(`/records/${record.id}`);
   await expect(
     page.getByRole('heading', { level: 1, name: 'Readable product' }),
   ).toBeVisible();
-  // Without write access the entity page shows values, not editable fields.
+  // Without write access the record page shows values, not editable fields.
   await expect(
     page.getByRole('paragraph').filter({ hasText: 'Readable product' }),
   ).toBeVisible();
@@ -88,14 +88,14 @@ test('a viewer can browse the catalog but every write is refused', async ({
     }),
   ).toHaveCount(0);
 
-  await page.goto('/entities/new');
+  await page.goto('/records/new');
   await page.getByLabel('Blueprint').click();
   await page.getByRole('option', { name: `Viewer product (${code})` }).click();
   await page.getByRole('button', { name: 'Load blueprint' }).click();
   await page.getByLabel('title').fill('Unauthorized product');
   await page.getByRole('button', { name: 'Create record' }).click();
   await expect(refusal(page)).toBeVisible();
-  await expect(page).toHaveURL(/\/entities\/new(\?|$)/);
+  await expect(page).toHaveURL(/\/records\/new(\?|$)/);
 
   await page.goto(`/manage/blueprints/${draft.blueprint.id}`);
   await attemptPublish(page);
@@ -113,24 +113,24 @@ test('a viewer can browse the catalog but every write is refused', async ({
   await page.context().close();
 });
 
-test('an editor saves blueprint drafts and entities but cannot publish', async ({
+test('an editor saves blueprint drafts and records but cannot publish', async ({
   browser,
 }) => {
   const code = `editor_${suffix()}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Editor product',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"',
   );
-  const entity = await createEntity(blueprint, [
+  const record = await createRecord(blueprint, [
     scalar('title', 'Original title'),
   ]);
   const page = await signInAsMember(browser, 'editor');
 
-  await page.goto(`/entities/${entity.id}`);
+  await page.goto(`/records/${record.id}`);
   const title = page.getByLabel('title');
   await title.fill('Edited by editor');
-  await commitField(page, entity.id, title);
+  await commitField(page, record.id, title);
   await page.reload();
   await expect(page.getByLabel('title')).toHaveValue('Edited by editor');
 

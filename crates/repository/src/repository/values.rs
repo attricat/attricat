@@ -1,4 +1,4 @@
-use super::entity_commands::Revalidation;
+use super::record_commands::Revalidation;
 use super::write_context::WriteContext;
 use super::*;
 use crate::domain_events::{ATTRIBUTE_VALUE_RESTORED_V1, AttributeValueMutationV1};
@@ -13,7 +13,7 @@ use uuid::Uuid;
 struct FormNativeValueRow {
     attribute_code: String,
     context_id: Option<Uuid>,
-    relationship_target_entity_id: Option<Uuid>,
+    relationship_target_record_id: Option<Uuid>,
     #[sqlx(flatten)]
     native: NativeValueRow,
 }
@@ -21,9 +21,9 @@ struct FormNativeValueRow {
 #[derive(sqlx::FromRow)]
 struct CurrentNativeValueRow {
     id: Uuid,
-    entity_id: Uuid,
+    record_id: Uuid,
     attribute_id: Uuid,
-    relationship_target_entity_id: Option<Uuid>,
+    relationship_target_record_id: Option<Uuid>,
     active: bool,
     context_id: Option<Uuid>,
     created_at: DateTime<Utc>,
@@ -31,19 +31,19 @@ struct CurrentNativeValueRow {
     native: NativeValueRow,
 }
 
-const FORM_VALUES_SQL: &str = r#"SELECT a.code AS attribute_code, av.context_id, av.relationship_target_entity_id,
+const FORM_VALUES_SQL: &str = r#"SELECT a.code AS attribute_code, av.context_id, av.relationship_target_record_id,
                   a.value_type, av.value_text, av.value_number, av.value_integer,
                   av.value_boolean, av.value_date, av.value_datetime, av.value_time,
                   av.value_time_zone, av.value_json
            FROM attribute_values av
            JOIN attributes a ON a.id = av.attribute_id
-           JOIN entities e ON e.id = av.entity_id
-           WHERE av.entity_id = $1
+           JOIN records e ON e.id = av.record_id
+           WHERE av.record_id = $1
              AND a.blueprint_id = e.blueprint_id
              AND a.blueprint_version = e.blueprint_version
              AND a.value_type <> 'file'
-             AND (av.relationship_target_entity_id IS NULL OR av.active)
-           ORDER BY a.position, av.relationship_target_entity_id"#;
+             AND (av.relationship_target_record_id IS NULL OR av.active)
+           ORDER BY a.position, av.relationship_target_record_id"#;
 
 #[derive(sqlx::FromRow)]
 struct FileFormValueRow {
@@ -55,9 +55,9 @@ struct FileFormValueRow {
 #[derive(sqlx::FromRow)]
 struct HistoryNativeValueRow {
     id: Uuid,
-    entity_id: Uuid,
+    record_id: Uuid,
     attribute_id: Uuid,
-    relationship_target_entity_id: Option<Uuid>,
+    relationship_target_record_id: Option<Uuid>,
     active: bool,
     context_id: Option<Uuid>,
     created_at: DateTime<Utc>,
@@ -361,11 +361,11 @@ fn form_attribute_values(
 ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
     rows.into_iter()
         .map(|row| {
-            Ok(match row.relationship_target_entity_id {
-                Some(target_entity_id) => FormAttributeValue::Relationship {
+            Ok(match row.relationship_target_record_id {
+                Some(target_record_id) => FormAttributeValue::Relationship {
                     attribute_code: row.attribute_code,
                     context_id: row.context_id,
-                    target_entity_id,
+                    target_record_id,
                 },
                 None => FormAttributeValue::Scalar {
                     attribute_code: row.attribute_code,
@@ -382,14 +382,14 @@ fn history_attribute_value(
 ) -> Result<AttributeValueHistory, RepositoryError> {
     Ok(AttributeValueHistory {
         id: row.id,
-        entity_id: row.entity_id,
+        record_id: row.record_id,
         attribute_id: row.attribute_id,
-        value: if row.relationship_target_entity_id.is_some() {
+        value: if row.relationship_target_record_id.is_some() {
             Value::Null
         } else {
             native_value_json(row.native)?
         },
-        relationship_target_entity_id: row.relationship_target_entity_id,
+        relationship_target_record_id: row.relationship_target_record_id,
         active: row.active,
         context_id: row.context_id,
         created_at: row.created_at,
@@ -400,34 +400,34 @@ fn history_attribute_value(
 impl CatalogRepository {
     pub async fn form_values(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
     ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
         let rows = sqlx::query_as::<_, FormNativeValueRow>(FORM_VALUES_SQL)
-            .bind(entity_id)
+            .bind(record_id)
             .fetch_all(&self.pool)
             .await?;
         let mut values = form_attribute_values(rows)?;
-        values.extend(self.file_form_values(entity_id).await?);
+        values.extend(self.file_form_values(record_id).await?);
         Ok(values)
     }
 
     pub async fn file_form_values(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
     ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
         let rows = sqlx::query_as::<_, FileFormValueRow>(
             r#"SELECT a.code AS attribute_code, av.context_id, r.file_id
                FROM attribute_values av
                LEFT JOIN attribute_file_references r ON av.id = r.attribute_value_id
                JOIN attributes a ON a.id = av.attribute_id
-               WHERE av.entity_id = $1
+               WHERE av.record_id = $1
                  AND av.workspace_id = $2
                  AND a.value_type = 'file'
-                 AND a.blueprint_id = (SELECT blueprint_id FROM entities WHERE id = $1)
-                 AND a.blueprint_version = (SELECT blueprint_version FROM entities WHERE id = $1)
+                 AND a.blueprint_id = (SELECT blueprint_id FROM records WHERE id = $1)
+                 AND a.blueprint_version = (SELECT blueprint_version FROM records WHERE id = $1)
                ORDER BY a.position, av.context_id, r.position"#,
         )
-        .bind(entity_id)
+        .bind(record_id)
         .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?;
@@ -457,20 +457,20 @@ impl CatalogRepository {
 
     pub async fn reusable_form_values(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
     ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
         let rows = sqlx::query_as::<_, FormNativeValueRow>(
-            r#"SELECT a.code AS attribute_code, av.context_id, av.relationship_target_entity_id,
+            r#"SELECT a.code AS attribute_code, av.context_id, av.relationship_target_record_id,
                   a.value_type, av.value_text, av.value_number, av.value_integer,
                   av.value_boolean, av.value_date, av.value_datetime, av.value_time,
                   av.value_time_zone, av.value_json
            FROM attribute_values av
            JOIN attributes a ON a.id = av.attribute_id
-           WHERE av.entity_id = $1 AND a.entity_id = $1 AND a.value_type <> 'file'
-             AND (av.relationship_target_entity_id IS NULL OR av.active)
-           ORDER BY a.position, av.relationship_target_entity_id"#,
+           WHERE av.record_id = $1 AND a.record_id = $1 AND a.value_type <> 'file'
+             AND (av.relationship_target_record_id IS NULL OR av.active)
+           ORDER BY a.position, av.relationship_target_record_id"#,
         )
-        .bind(entity_id)
+        .bind(record_id)
         .fetch_all(&self.pool)
         .await?;
         let mut values = form_attribute_values(rows)?;
@@ -479,10 +479,10 @@ impl CatalogRepository {
                FROM attribute_values av
                LEFT JOIN attribute_file_references r ON av.id = r.attribute_value_id
                JOIN attributes a ON a.id = av.attribute_id
-               WHERE av.entity_id = $1 AND a.entity_id = $1 AND a.value_type = 'file'
+               WHERE av.record_id = $1 AND a.record_id = $1 AND a.value_type = 'file'
                ORDER BY a.position, av.context_id, r.position"#,
         )
-        .bind(entity_id)
+        .bind(record_id)
         .fetch_all(&self.pool)
         .await?;
         for row in file_rows {
@@ -511,21 +511,21 @@ impl CatalogRepository {
     pub(super) async fn current_blueprint_values_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity_id: Uuid,
+        record_id: Uuid,
         blueprint_id: Uuid,
         blueprint_version: i64,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         let rows = sqlx::query_as::<_, CurrentNativeValueRow>(
-            r#"SELECT av.id, av.entity_id, av.attribute_id, av.relationship_target_entity_id,
+            r#"SELECT av.id, av.record_id, av.attribute_id, av.relationship_target_record_id,
                       av.context_id, av.active, av.created_at, a.value_type, av.value_text,
                       av.value_number, av.value_integer, av.value_boolean, av.value_date,
                       av.value_datetime, av.value_time, av.value_time_zone, av.value_json
                FROM attribute_values av
                JOIN attributes a ON a.id = av.attribute_id
-               WHERE av.entity_id = $1 AND av.workspace_id = $2
+               WHERE av.record_id = $1 AND av.workspace_id = $2
                  AND a.blueprint_id = $3 AND a.blueprint_version = $4"#,
         )
-        .bind(entity_id)
+        .bind(record_id)
         .bind(self.workspace_id.0)
         .bind(blueprint_id)
         .bind(blueprint_version)
@@ -535,14 +535,14 @@ impl CatalogRepository {
             .map(|row| {
                 Ok(AttributeValue {
                     id: row.id,
-                    entity_id: row.entity_id,
+                    record_id: row.record_id,
                     attribute_id: row.attribute_id,
-                    value: if row.relationship_target_entity_id.is_some() {
+                    value: if row.relationship_target_record_id.is_some() {
                         Value::Null
                     } else {
                         native_value_json(row.native)?
                     },
-                    relationship_target_entity_id: row.relationship_target_entity_id,
+                    relationship_target_record_id: row.relationship_target_record_id,
                     active: row.active,
                     context_id: row.context_id,
                     created_at: row.created_at,
@@ -574,20 +574,20 @@ impl CatalogRepository {
 
     pub async fn current_values(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         let rows = sqlx::query_as::<_, CurrentNativeValueRow>(
-            r#"SELECT av.id, av.entity_id, av.attribute_id, av.relationship_target_entity_id,
+            r#"SELECT av.id, av.record_id, av.attribute_id, av.relationship_target_record_id,
                       av.context_id, av.active, av.created_at, a.value_type, av.value_text,
                       av.value_number, av.value_integer, av.value_boolean, av.value_date,
                       av.value_datetime, av.value_time, av.value_time_zone, av.value_json
                 FROM attribute_values av
                 JOIN attributes a ON a.id = av.attribute_id
-                WHERE av.entity_id = $1
+                WHERE av.record_id = $1
                   AND av.workspace_id = $2
-                  AND (av.relationship_target_entity_id IS NULL OR av.active)"#,
+                  AND (av.relationship_target_record_id IS NULL OR av.active)"#,
         )
-        .bind(entity_id)
+        .bind(record_id)
         .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?;
@@ -595,14 +595,14 @@ impl CatalogRepository {
             .map(|row| {
                 Ok(AttributeValue {
                     id: row.id,
-                    entity_id: row.entity_id,
+                    record_id: row.record_id,
                     attribute_id: row.attribute_id,
-                    value: if row.relationship_target_entity_id.is_some() {
+                    value: if row.relationship_target_record_id.is_some() {
                         Value::Null
                     } else {
                         native_value_json(row.native)?
                     },
-                    relationship_target_entity_id: row.relationship_target_entity_id,
+                    relationship_target_record_id: row.relationship_target_record_id,
                     active: row.active,
                     context_id: row.context_id,
                     created_at: row.created_at,
@@ -616,7 +616,7 @@ impl CatalogRepository {
     /// history retention window. All branches retain workspace isolation.
     pub async fn extension_catalog_values_at(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         snapshot_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         if snapshot_at < chrono::Utc::now() - chrono::Duration::days(30) {
@@ -625,19 +625,19 @@ impl CatalogRepository {
             ));
         }
         let rows = sqlx::query_as::<_, CurrentNativeValueRow>(
-            r#"SELECT v.id,v.entity_id,v.attribute_id,v.relationship_target_entity_id,v.context_id,v.active,v.created_at,a.value_type,
+            r#"SELECT v.id,v.record_id,v.attribute_id,v.relationship_target_record_id,v.context_id,v.active,v.created_at,a.value_type,
                 v.value_text,v.value_number,v.value_integer,v.value_boolean,v.value_date,v.value_datetime,v.value_time,v.value_time_zone,v.value_json
               FROM attribute_values v JOIN attributes a ON a.id=v.attribute_id AND a.workspace_id=v.workspace_id
-              WHERE v.entity_id=$1 AND v.workspace_id=$2 AND v.created_at <= $3
-                AND (v.relationship_target_entity_id IS NULL OR v.active)
+              WHERE v.record_id=$1 AND v.workspace_id=$2 AND v.created_at <= $3
+                AND (v.relationship_target_record_id IS NULL OR v.active)
               UNION ALL
-              SELECT h.id,h.entity_id,h.attribute_id,h.relationship_target_entity_id,h.context_id,h.active,h.created_at,a.value_type,
+              SELECT h.id,h.record_id,h.attribute_id,h.relationship_target_record_id,h.context_id,h.active,h.created_at,a.value_type,
                 h.value_text,h.value_number,h.value_integer,h.value_boolean,h.value_date,h.value_datetime,h.value_time,h.value_time_zone,h.value_json
               FROM attribute_value_history h JOIN attributes a ON a.id=h.attribute_id AND a.workspace_id=h.workspace_id
-              WHERE h.entity_id=$1 AND h.workspace_id=$2 AND h.created_at <= $3 AND h.archived_at > $3
-                AND (h.relationship_target_entity_id IS NULL OR h.active)"#,
+              WHERE h.record_id=$1 AND h.workspace_id=$2 AND h.created_at <= $3 AND h.archived_at > $3
+                AND (h.relationship_target_record_id IS NULL OR h.active)"#,
         )
-        .bind(entity_id)
+        .bind(record_id)
         .bind(self.workspace_id.0)
         .bind(snapshot_at)
         .fetch_all(&self.pool)
@@ -646,14 +646,14 @@ impl CatalogRepository {
             .map(|row| {
                 Ok(AttributeValue {
                     id: row.id,
-                    entity_id: row.entity_id,
+                    record_id: row.record_id,
                     attribute_id: row.attribute_id,
-                    value: if row.relationship_target_entity_id.is_some() {
+                    value: if row.relationship_target_record_id.is_some() {
                         Value::Null
                     } else {
                         native_value_json(row.native)?
                     },
-                    relationship_target_entity_id: row.relationship_target_entity_id,
+                    relationship_target_record_id: row.relationship_target_record_id,
                     active: row.active,
                     context_id: row.context_id,
                     created_at: row.created_at,
@@ -664,19 +664,19 @@ impl CatalogRepository {
 
     pub async fn value_history(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
     ) -> Result<Vec<AttributeValueHistory>, RepositoryError> {
         let rows = sqlx::query_as::<_, HistoryNativeValueRow>(
-            r#"SELECT h.id, h.entity_id, h.attribute_id, h.relationship_target_entity_id,
+            r#"SELECT h.id, h.record_id, h.attribute_id, h.relationship_target_record_id,
                       h.active, h.context_id, h.created_at, h.archived_at, a.value_type,
                       h.value_text, h.value_number, h.value_integer, h.value_boolean,
                       h.value_date, h.value_datetime, h.value_time, h.value_time_zone, h.value_json
                FROM attribute_value_history h
                JOIN attributes a ON a.id = h.attribute_id
-               WHERE h.entity_id = $1
+               WHERE h.record_id = $1
                ORDER BY h.archived_at DESC, h.id DESC"#,
         )
-        .bind(entity_id)
+        .bind(record_id)
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter().map(history_attribute_value).collect()
@@ -684,22 +684,22 @@ impl CatalogRepository {
 
     pub async fn value_history_page(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<AttributeValueHistory>, bool), RepositoryError> {
         let rows = sqlx::query_as::<_, HistoryNativeValueRow>(
-            r#"SELECT h.id, h.entity_id, h.attribute_id, h.relationship_target_entity_id,
+            r#"SELECT h.id, h.record_id, h.attribute_id, h.relationship_target_record_id,
                       h.active, h.context_id, h.created_at, h.archived_at, a.value_type,
                       h.value_text, h.value_number, h.value_integer, h.value_boolean,
                       h.value_date, h.value_datetime, h.value_time, h.value_time_zone, h.value_json
                FROM attribute_value_history h
                JOIN attributes a ON a.id = h.attribute_id
-               WHERE h.entity_id = $1
+               WHERE h.record_id = $1
                ORDER BY h.created_at DESC, h.id DESC
                LIMIT $2 OFFSET $3"#,
         )
-        .bind(entity_id)
+        .bind(record_id)
         .bind(limit + 1)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -715,38 +715,38 @@ impl CatalogRepository {
 
     pub async fn restore_value(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         history_id: Uuid,
     ) -> Result<AttributeValue, RepositoryError> {
-        self.restore_value_checked(entity_id, history_id, None)
+        self.restore_value_checked(record_id, history_id, None)
             .await
     }
 
     pub async fn restore_value_checked(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         history_id: Uuid,
         expected_updated_at: Option<DateTime<Utc>>,
     ) -> Result<AttributeValue, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         self.lock_relationship_cardinality_writes(&mut transaction)
             .await?;
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        let record = self.lock_record(&mut transaction, record_id).await?;
         let before = self
-            .entity_audit_snapshot(&mut transaction, entity_id)
+            .record_audit_snapshot(&mut transaction, record_id)
             .await?;
         let history = sqlx::query_as::<_, HistoryNativeValueRow>(
-            r#"SELECT h.id, h.entity_id, h.attribute_id, h.relationship_target_entity_id,
+            r#"SELECT h.id, h.record_id, h.attribute_id, h.relationship_target_record_id,
                       h.active, h.context_id, h.created_at, h.archived_at, a.value_type,
                       h.value_text, h.value_number, h.value_integer, h.value_boolean,
                       h.value_date, h.value_datetime, h.value_time, h.value_time_zone, h.value_json
                FROM attribute_value_history h
                JOIN attributes a ON a.id = h.attribute_id
-               WHERE h.id = $1 AND h.entity_id = $2
+               WHERE h.id = $1 AND h.record_id = $2
                FOR UPDATE"#,
         )
         .bind(history_id)
-        .bind(entity_id)
+        .bind(record_id)
         .fetch_optional(&mut *transaction)
         .await?
         .ok_or(RepositoryError::NotFound("attribute value history"))?;
@@ -757,32 +757,32 @@ impl CatalogRepository {
             context_id: history.context_id,
             value: Value::Null,
         };
-        let write = WriteContext::load(&mut transaction, self.workspace_id.0, &entity).await?;
+        let write = WriteContext::load(&mut transaction, self.workspace_id.0, &record).await?;
         if expected_updated_at.is_some() || Self::has_status_writes(&write, &[selector], &[]) {
-            Self::check_status_precondition(&write, &entity, expected_updated_at)?;
+            Self::check_status_precondition(&write, &record, expected_updated_at)?;
         }
-        let value = match history.relationship_target_entity_id {
-            Some(target_entity_id) if history.active => {
+        let value = match history.relationship_target_record_id {
+            Some(target_record_id) if history.active => {
                 self.insert_value_in(
                     &mut transaction,
                     &write,
-                    &entity,
+                    &record,
                     NewAttributeValue::Relationship {
                         attribute_id: Some(history.attribute_id),
                         attribute_code: None,
                         context_id: history.context_id,
-                        target_entity_id,
+                        target_record_id,
                     },
                 )
                 .await?
             }
-            Some(target_entity_id) => self
+            Some(target_record_id) => self
                 .archive_current_value(
                     &mut transaction,
-                    entity.id,
+                    record.id,
                     history.attribute_id,
                     history.context_id,
-                    Some(target_entity_id),
+                    Some(target_record_id),
                 )
                 .await?
                 .ok_or(RepositoryError::NotFound("current relationship value"))?,
@@ -790,7 +790,7 @@ impl CatalogRepository {
                 self.insert_value_in(
                     &mut transaction,
                     &write,
-                    &entity,
+                    &record,
                     NewAttributeValue::Scalar {
                         attribute_id: Some(history.attribute_id),
                         attribute_code: None,
@@ -801,26 +801,26 @@ impl CatalogRepository {
                 .await?
             }
         };
-        self.validate_entity_schema_in(&mut transaction, &write, &entity, Revalidation::Write)
+        self.validate_record_schema_in(&mut transaction, &write, &record, Revalidation::Write)
             .await?;
-        let preview = write.preview(&mut transaction, entity.id).await?;
-        self.store_preview(&mut transaction, entity.id, preview)
+        let preview = write.preview(&mut transaction, record.id).await?;
+        self.store_preview(&mut transaction, record.id, preview)
             .await?;
         let after = self
-            .entity_audit_snapshot(&mut transaction, entity_id)
+            .record_audit_snapshot(&mut transaction, record_id)
             .await?;
-        let changes = Self::audit_changes(entity_id, before, after, true);
+        let changes = Self::audit_changes(record_id, before, after, true);
         let event = self.core_event(
             ATTRIBUTE_VALUE_RESTORED_V1,
-            "entity",
-            entity_id,
+            "record",
+            record_id,
             serde_json::to_value(AttributeValueMutationV1 {
-                entity_id,
+                record_id,
                 facts: Self::affected_facts(&changes),
             })
             .expect("attribute-value-restored payload is serializable"),
         );
-        self.commit_entity_mutation(transaction, changes, event)
+        self.commit_record_mutation(transaction, changes, event)
             .await?;
         Ok(value)
     }

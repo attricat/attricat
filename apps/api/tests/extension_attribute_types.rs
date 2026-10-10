@@ -13,7 +13,7 @@ async fn json_values_round_trip_through_current_and_history_reads(pool: PgPool) 
 format_version = 1
 code = "json_product"
 name = "JSON product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -26,8 +26,8 @@ value_schema = '{"type":"object","required":["currency"]}'
 "#,
     )
     .await;
-    let entity: Value = client
-        .post(format!("{base_url}/v1/entities"))
+    let record: Value = client
+        .post(format!("{base_url}/v1/records"))
         .json(&json!({
             "blueprint": {
                 "code": blueprint["blueprint"]["code"],
@@ -47,9 +47,9 @@ value_schema = '{"type":"object","required":["currency"]}'
         .json()
         .await
         .unwrap();
-    let entity_id = entity["id"].as_str().unwrap();
+    let record_id = record["id"].as_str().unwrap();
     let values: Vec<Value> = client
-        .get(format!("{base_url}/entities/{entity_id}/values/current"))
+        .get(format!("{base_url}/records/{record_id}/values/current"))
         .send()
         .await
         .unwrap()
@@ -61,7 +61,7 @@ value_schema = '{"type":"object","required":["currency"]}'
     assert_eq!(values[0]["value"], json!({"currency": "USD", "amount": 12}));
 
     let replacement = client
-        .post(format!("{base_url}/entities/{entity_id}/values"))
+        .post(format!("{base_url}/records/{record_id}/values"))
         .json(&json!({"values": [{
             "kind": "scalar", "attribute_code": "metadata",
             "value": {"currency": "EUR", "amount": 14}
@@ -71,7 +71,7 @@ value_schema = '{"type":"object","required":["currency"]}'
         .unwrap();
     assert!(replacement.status().is_success());
     let history: Vec<Value> = client
-        .get(format!("{base_url}/entities/{entity_id}/values/history"))
+        .get(format!("{base_url}/records/{record_id}/values/history"))
         .send()
         .await
         .unwrap()

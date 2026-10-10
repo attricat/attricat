@@ -50,10 +50,10 @@ fn assert_lease_lost<T>(result: Result<T, RepositoryError>) {
     }
 }
 
-async fn entity(owner: &Client, base: &str) -> Uuid {
+async fn record(owner: &Client, base: &str) -> Uuid {
     let blueprint = create_blueprint(owner, base,
-        "format_version = 1\ncode = 'worker_record'\nname = 'Record'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'").await;
-    create_entity(owner, base, &blueprint).await["id"]
+        "format_version = 1\ncode = 'worker_record'\nname = 'Record'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'").await;
+    create_record(owner, base, &blueprint).await["id"]
         .as_str()
         .unwrap()
         .parse()
@@ -63,7 +63,7 @@ async fn entity(owner: &Client, base: &str) -> Uuid {
 #[sqlx::test]
 async fn reclaimed_agent_tasks_cannot_commit_comments_saved_views_or_publications(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
-    let id = entity(&authenticated_client(), &base).await;
+    let id = record(&authenticated_client(), &base).await;
     let owner = BOOTSTRAP_OWNER_ID.parse().unwrap();
     let repository = audited(CatalogRepository::new(
         pool.clone(),
@@ -79,13 +79,13 @@ async fn reclaimed_agent_tasks_cannot_commit_comments_saved_views_or_publication
         .set_publication_channel(context, true)
         .await
         .unwrap();
-    repository.publish_entity(id, context).await.unwrap();
+    repository.publish_record(id, context).await.unwrap();
     repository
-        .create_entity_comment(id, owner, "Original")
+        .create_record_comment(id, owner, "Original")
         .await
         .unwrap();
     let comment = repository
-        .list_entity_comments(id, None)
+        .list_record_comments(id, None)
         .await
         .unwrap()
         .remove(0);
@@ -116,10 +116,10 @@ async fn reclaimed_agent_tasks_cannot_commit_comments_saved_views_or_publication
         .await
         .unwrap();
 
-    assert_lease_lost(stale.create_entity_comment(id, owner, "Stale").await);
+    assert_lease_lost(stale.create_record_comment(id, owner, "Stale").await);
     assert_lease_lost(
         stale
-            .update_entity_comment(id, comment.id, owner, comment.revision, "Stale")
+            .update_record_comment(id, comment.id, owner, comment.revision, "Stale")
             .await,
     );
     assert_lease_lost(
@@ -133,11 +133,11 @@ async fn reclaimed_agent_tasks_cannot_commit_comments_saved_views_or_publication
             .await,
     );
     assert_lease_lost(stale.delete_saved_view(owner, view.id).await);
-    assert_lease_lost(stale.publish_entity(id, context).await);
-    assert_lease_lost(stale.publish_entity_all_channels(id).await);
-    assert_lease_lost(stale.unpublish_entity(id, context).await);
+    assert_lease_lost(stale.publish_record(id, context).await);
+    assert_lease_lost(stale.publish_record_all_channels(id).await);
+    assert_lease_lost(stale.unpublish_record(id, context).await);
 
-    let comments = repository.list_entity_comments(id, None).await.unwrap();
+    let comments = repository.list_record_comments(id, None).await.unwrap();
     assert_eq!(comments.len(), 1);
     assert_eq!(comments[0].body, "Original");
     let views = repository.list_saved_views(owner, "").await.unwrap();
@@ -145,7 +145,7 @@ async fn reclaimed_agent_tasks_cannot_commit_comments_saved_views_or_publication
     assert_eq!(views[0].name.as_deref(), Some("Original"));
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM entity_channel_publications WHERE entity_id=$1"
+            "SELECT count(*) FROM record_channel_publications WHERE record_id=$1"
         )
         .bind(id)
         .fetch_one(&pool)
@@ -170,12 +170,12 @@ async fn reclaimed_agent_tasks_cannot_commit_comments_saved_views_or_publication
     // A current lease must still succeed, including its audit evidence.
     repository
         .for_agent_task(&replacement)
-        .create_entity_comment(id, owner, "Current")
+        .create_record_comment(id, owner, "Current")
         .await
         .unwrap();
     assert_eq!(
         repository
-            .list_entity_comments(id, None)
+            .list_record_comments(id, None)
             .await
             .unwrap()
             .len(),
@@ -401,7 +401,7 @@ async fn decisions_during_provider_delivery_are_not_lost_and_terminal_runs_canno
 #[sqlx::test]
 async fn task_fences_use_wall_clock_after_waiting_for_a_domain_lock(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
-    let id = entity(&authenticated_client(), &base).await;
+    let id = record(&authenticated_client(), &base).await;
     let repository = CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
     let task = agent_task(&repository).await;
     let fenced = repository.for_agent_task(&task);
@@ -410,14 +410,14 @@ async fn task_fences_use_wall_clock_after_waiting_for_a_domain_lock(pool: PgPool
         .fetch_one(&mut *blocker)
         .await
         .unwrap();
-    sqlx::query("SELECT id FROM entities WHERE id=$1 FOR UPDATE")
+    sqlx::query("SELECT id FROM records WHERE id=$1 FOR UPDATE")
         .bind(id)
         .execute(&mut *blocker)
         .await
         .unwrap();
     let writer = tokio::spawn(async move {
         fenced
-            .create_entity_comment(
+            .create_record_comment(
                 id,
                 BOOTSTRAP_OWNER_ID.parse().unwrap(),
                 "Expired in transaction",
@@ -446,7 +446,7 @@ async fn task_fences_use_wall_clock_after_waiting_for_a_domain_lock(pool: PgPool
     assert_lease_lost(writer.await.unwrap());
     assert!(
         repository
-            .list_entity_comments(id, None)
+            .list_record_comments(id, None)
             .await
             .unwrap()
             .is_empty()

@@ -6,20 +6,20 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import '../../i18n';
 import { makeTheme } from '../../app/theme';
-import { attributeSchema, blueprintSchema } from '../entities/schemas';
-import type { ComponentReference } from '../entities/api';
+import { attributeSchema, blueprintSchema } from '../records/schemas';
+import type { ComponentReference } from '../records/api';
 import {
   headingEditableAttributes,
   unplacedEditableAttributes,
-} from '../entities/entityFormAttributes';
-import { EntityView } from '../views/components/EntityView';
-import { entityHeadingComponentId } from '../views/components/blocks/EntityHeadingDefinition';
+} from '../records/recordFormAttributes';
+import { RecordView } from '../views/components/RecordView';
+import { recordHeadingComponentId } from '../views/components/blocks/RecordHeadingDefinition';
 import { resolveEditComponent } from '../views/components/registry';
 import { blueprintTemplates } from './blueprintEditorUtils';
 
-const entityTemplates = blueprintTemplates
+const recordTemplates = blueprintTemplates
   .map(({ definition }) => parse(definition))
-  .filter((definition) => definition.kind === 'entity')
+  .filter((definition) => definition.kind === 'record')
   .map((definition) => ({
     code: definition.code,
     views: blueprintSchema.shape.views.parse(definition.views),
@@ -39,7 +39,7 @@ const entityTemplates = blueprintTemplates
 describe.each(['light', 'dark'] as const)(
   'blueprint templates in %s mode',
   (mode) => {
-    it.each(entityTemplates)(
+    it.each(recordTemplates)(
       '$code edits every attribute through its detail layout',
       ({ views, attributes }) => {
         const renderEditor = (
@@ -52,19 +52,19 @@ describe.each(['light', 'dark'] as const)(
         );
         render(
           <ThemeProvider theme={makeTheme(mode)}>
-            <EntityView
+            <RecordView
               attributes={headingEditableAttributes(attributes, views.detail)}
               values={{}}
               renderEditor={renderEditor}
             />
-            <EntityView
+            <RecordView
               view={views.detail}
               attributes={attributes}
               values={{}}
               renderEditor={renderEditor}
-              skipComponentId={entityHeadingComponentId}
+              skipComponentId={recordHeadingComponentId}
             />
-            <EntityView
+            <RecordView
               attributes={unplacedEditableAttributes(attributes, views.detail)}
               values={{}}
               renderEditor={renderEditor}
@@ -101,10 +101,10 @@ describe.each(['light', 'dark'] as const)(
     );
 
     it('renders product controls and switches preview tabs', () => {
-      const product = entityTemplates.find(({ code }) => code === 'product')!;
+      const product = recordTemplates.find(({ code }) => code === 'product')!;
       render(
         <ThemeProvider theme={makeTheme(mode)}>
-          <EntityView
+          <RecordView
             view={product.views.detail}
             attributes={product.attributes}
             values={{

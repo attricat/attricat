@@ -64,7 +64,7 @@ async fn catalog_routes_distinguish_missing_identity_from_missing_permission(poo
         .post(format!("{base_url}/blueprints"))
         .header("x-catalog-user-id", viewer_id.to_string())
         .header("x-catalog-workspace-id", workspace_id.to_string())
-        .json(&json!({ "definition": "kind = \"entity\"\ncode = \"forbidden\"" }))
+        .json(&json!({ "definition": "kind = \"record\"\ncode = \"forbidden\"" }))
         .send()
         .await
         .unwrap();
@@ -295,30 +295,30 @@ async fn batched_workspace_permissions_match_per_permission_checks(pool: PgPool)
     server.abort();
 }
 
-/// Agent lists authorize entity-bound items in one batched query; it must
+/// Agent lists authorize record-bound items in one batched query; it must
 /// accept exactly the IDs the per-target `is_authorized` check accepts.
 #[sqlx::test]
-async fn batched_entity_authorization_matches_per_target_checks(pool: PgPool) {
+async fn batched_record_authorization_matches_per_target_checks(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
     let definition = |code: &str| {
         format!(
-            "format_version = 1\ncode = \"{code}\"\nname = \"{code}\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"name\"]\n\n[[attributes]]\ncode = \"name\"\nvalue_type = \"string\"\n"
+            "format_version = 1\ncode = \"{code}\"\nname = \"{code}\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"name\"]\n\n[[attributes]]\ncode = \"name\"\nvalue_type = \"string\"\n"
         )
     };
     let blueprint_a = create_blueprint(&owner, &base_url, &definition("batch_a")).await;
     let blueprint_b = create_blueprint(&owner, &base_url, &definition("batch_b")).await;
     let id = |value: &Value| value.as_str().unwrap().parse::<Uuid>().unwrap();
-    let entity_a = id(&create_entity(&owner, &base_url, &blueprint_a).await["id"]);
-    let entity_b = id(&create_entity(&owner, &base_url, &blueprint_b).await["id"]);
+    let record_a = id(&create_record(&owner, &base_url, &blueprint_a).await["id"]);
+    let record_b = id(&create_record(&owner, &base_url, &blueprint_b).await["id"]);
     let missing = Uuid::new_v4();
-    let requested = [entity_a, entity_b, missing];
+    let requested = [record_a, record_b, missing];
 
     let repository = api::repository::CatalogRepository::system(pool.clone());
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let mut principals = vec![BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap()];
     for (email, scope, target, state) in [
-        ("entity-grant@example.test", "entity", entity_a, "active"),
+        ("record-grant@example.test", "record", record_a, "active"),
         (
             "family-grant@example.test",
             "blueprint_family",
@@ -369,32 +369,26 @@ async fn batched_entity_authorization_matches_per_target_checks(pool: PgPool) {
     let mut accepted = Vec::new();
     for user_id in principals {
         let batched = repository
-            .authorized_entity_ids(user_id, workspace_id, "entities.read", &requested)
+            .authorized_record_ids(user_id, workspace_id, "records.read", &requested)
             .await
             .unwrap();
-        for entity_id in requested {
+        for record_id in requested {
             let expected = repository
-                .is_authorized(
-                    user_id,
-                    workspace_id,
-                    "entities.read",
-                    Some(entity_id),
-                    None,
-                )
+                .is_authorized(user_id, workspace_id, "records.read", Some(record_id), None)
                 .await
                 .unwrap();
             assert_eq!(
-                batched.contains(&entity_id),
+                batched.contains(&record_id),
                 expected,
-                "{user_id} {entity_id}"
+                "{user_id} {record_id}"
             );
         }
         accepted.push(batched);
     }
-    // Workspace grants accept every ID; scoped grants only their own entity.
+    // Workspace grants accept every ID; scoped grants only their own record.
     assert_eq!(accepted[0].len(), 3);
-    assert_eq!(accepted[1], [entity_a].into());
-    assert_eq!(accepted[2], [entity_b].into());
+    assert_eq!(accepted[1], [record_a].into());
+    assert_eq!(accepted[2], [record_b].into());
     assert!(accepted[3].is_empty() && accepted[4].is_empty());
     server.abort();
 }
@@ -429,7 +423,7 @@ async fn explore_navigation_lists_only_readable_published_entries(pool: PgPool) 
     let owner = authenticated_client();
     let definition = |code: &str| {
         format!(
-            "format_version = 1\ncode = \"{code}\"\nname = \"Name of {code}\"\nkind = \"entity\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n"
+            "format_version = 1\ncode = \"{code}\"\nname = \"Name of {code}\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n"
         )
     };
     let alpha = create_blueprint(&owner, &base_url, &definition("nav_alpha")).await;

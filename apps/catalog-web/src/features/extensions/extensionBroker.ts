@@ -44,7 +44,7 @@ import {
   operationIdempotencyKeyPattern,
   operationMethodPrefix,
 } from './constants';
-import { refreshCurrentEntity } from './refreshEntity';
+import { refreshCurrentRecord } from './refreshRecord';
 import { jsonByteLength, utf8ByteLength } from './utf8';
 
 type FrameContext = Record<string, unknown>;
@@ -55,7 +55,7 @@ const notificationSchema = z
     severity: z.enum(notificationSeverities).optional(),
   })
   .strict();
-const navigationSchema = z.object({ entity_id: z.uuid() }).strict();
+const navigationSchema = z.object({ record_id: z.uuid() }).strict();
 const runReferenceSchema = z.object({ run_id: z.uuid() }).strict();
 const artifactReferenceSchema = z
   .object({ run_id: z.uuid(), artifact_id: z.uuid() })
@@ -117,7 +117,7 @@ export type BrokerDependencies = {
   initialContext: FrameContext;
   /** Reads the latest host context when the request is handled. */
   currentContext: () => FrameContext;
-  navigateToEntity: (entityId: string) => Promise<void>;
+  navigateToRecord: (recordId: string) => Promise<void>;
   queryClient: QueryClient;
   /** Opens the same extension's host-managed action dialog. */
   openActionDialog: (request: ActionDialogRequest) => void;
@@ -241,7 +241,7 @@ const handleOperation = async (
           blueprint_id: selection.blueprint_id,
           blueprint_version: selection.blueprint_version,
           context_id: selection.context_id,
-          entity_ids: selection.entity_ids,
+          record_ids: selection.record_ids,
         },
       },
     );
@@ -301,11 +301,11 @@ export const handleBrokerRequest = async (
     can(extensionCapabilities.navigation)
   ) {
     const detail = navigationSchema.parse(payload);
-    await dependencies.navigateToEntity(detail.entity_id);
+    await dependencies.navigateToRecord(detail.record_id);
     return null;
   }
   if (method === extensionBrokerMethods.refresh) {
-    await refreshCurrentEntity(
+    await refreshCurrentRecord(
       dependencies.queryClient,
       contribution,
       dependencies.currentContext(),

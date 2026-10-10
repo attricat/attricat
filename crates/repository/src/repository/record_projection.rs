@@ -1,0 +1,801 @@
+use super::record_values::{ContextNode, ContextTree, resolve_on_path};
+use super::values::{ProjectionNativeValueRow, native_value_json};
+use super::*;
+use crate::constants::DEFAULT_PREVIEW_RELATIONSHIP_ITEMS;
+use crate::persistence_rows::{Db, IntoDomain};
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use uuid::Uuid;
+
+// Per-field limits do not bound a branching graph. Cap both fetched edges
+// and path expansions across the entire preview, including depth-zero probes.
+const MAX_PREVIEW_RELATIONSHIP_ROWS: usize = 4096;
+
+/// The value of one value source resolved for the context `path` with the
+/// shared rule, reported with the context it came from.
+fn resolved_value(
+    tree: &ContextTree,
+    path: &[Uuid],
+    inherit: bool,
+    mut direct: impl FnMut(&ContextNode) -> Option<Value>,
+) -> Option<Value> {
+    resolve_on_path(path, inherit, |id| {
+        let context = tree.get(id)?;
+        direct(context).map(|value| (context, value))
+    })
+    .map(|(_, (context, value))| {
+        serde_json::json!({ "value": value, "source_context": { "id": context.id, "code": context.code } })
+    })
+}
+
+/// See [`CatalogRepository::preview_scope`].
+pub(super) struct PreviewScope {
+    requested_context: AttributeContext,
+    tree: std::sync::Arc<ContextTree>,
+}
+
+#[derive(sqlx::FromRow)]
+struct PreviewRelationship {
+    source_id: Uuid,
+    attribute_code: String,
+    context_code: Option<String>,
+    target_id: Uuid,
+    target_projections: Value,
+    target_views: Value,
+    target_context_fallback: Value,
+    relationship_position: i64,
+}
+
+impl CatalogRepository {
+    pub async fn resolved_preview(
+        &self,
+        record_id: Uuid,
+        context_id: Uuid,
+        relationship_depth: u8,
+    ) -> Result<Option<ResolvedRecordPreviewResponse>, RepositoryError> {
+        let record = match self.get_record(record_id).await? {
+            Some(record) => record,
+            None => return Ok(None),
+        };
+        let attributes = self
+            .list_attributes(record.blueprint_id, record.blueprint_version)
+            .await?;
+        let scope = self.preview_scope(context_id).await?;
+        self.resolved_preview_for(&record, &attributes, &scope, relationship_depth)
+            .await
+            .map(Some)
+    }
+
+    /// [`Self::resolved_preview`] for a record and attributes the caller
+    /// already loaded.
+    /// The requested context and the workspace context tree, shared by every
+    /// resolved preview of one read.
+    pub(super) async fn preview_scope(
+        &self,
+        context_id: Uuid,
+    ) -> Result<PreviewScope, RepositoryError> {
+        let requested_context = self
+            .get_context_by_id(context_id)
+            .await?
+            .ok_or(RepositoryError::InvalidContext)?;
+        let tree = match self.cached_context_tree().await? {
+            Some(tree) => tree,
+            None => {
+                let mut connection = self.pool.acquire().await?;
+                Arc::new(ContextTree::load(&mut connection, self.workspace_id.0).await?)
+            }
+        };
+        Ok(PreviewScope {
+            requested_context,
+            tree,
+        })
+    }
+
+    pub(super) async fn resolved_preview_for(
+        &self,
+        record: &Record,
+        attributes: &[Attribute],
+        scope: &PreviewScope,
+        relationship_depth: u8,
+    ) -> Result<ResolvedRecordPreviewResponse, RepositoryError> {
+        let record_id = record.id;
+        let requested_context = scope.requested_context.clone();
+        let preview = record
+            .projections
+            .get("preview")
+            .and_then(Value::as_object)
+            .ok_or(RepositoryError::InvalidPreview)?;
+        let tree = &scope.tree;
+        let path = tree.path(requested_context.id, true)?;
+        let mut values = attributes
+            .iter()
+            .filter(|attribute| attribute.value_type != "file")
+            .filter_map(|attribute| {
+                resolved_value(
+                    tree,
+                    &path,
+                    attribute.context_fallback != "none",
+                    |context| {
+                        preview
+                            .get(&context.code)
+                            .and_then(Value::as_object)
+                            .and_then(|values| values.get(&attribute.code))
+                            .cloned()
+                    },
+                )
+                .map(|value| (attribute.code.clone(), value))
+            })
+            .collect::<Map<_, _>>();
+        let file_values = self.file_form_values(record_id).await?;
+        for attribute in attributes
+            .iter()
+            .filter(|attribute| attribute.value_type == "file")
+        {
+            if let Some(value) = resolved_value(
+                tree,
+                &path,
+                attribute.context_fallback != "none",
+                |context| {
+                    file_values.iter().find_map(|value| match value {
+                        FormAttributeValue::File {
+                            attribute_code,
+                            context_id,
+                            files,
+                        } if attribute_code == &attribute.code
+                            && *context_id == Some(context.id) =>
+                        {
+                            Some(serde_json::json!(files))
+                        }
+                        _ => None,
+                    })
+                },
+            ) {
+                values.insert(attribute.code.clone(), value);
+            }
+        }
+        let enriched_preview = self
+            .build_preview(
+                record.id,
+                &record.projections,
+                relationship_depth,
+                DEFAULT_PREVIEW_RELATIONSHIP_ITEMS.into(),
+                &mut HashSet::new(),
+            )
+            .await?;
+        let relationships = attributes
+            .iter()
+            .filter(|attribute| attribute.value_type == "relationship")
+            .filter_map(|attribute| {
+                resolved_value(
+                    tree,
+                    &path,
+                    attribute.context_fallback != "none",
+                    |context| {
+                        enriched_preview
+                            .get(&context.code)
+                            .and_then(Value::as_object)
+                            .and_then(|values| values.get(&attribute.code))
+                            .filter(|value| value.get("items").is_some())
+                            .cloned()
+                    },
+                )
+                .map(|value| (attribute.code.clone(), value))
+            })
+            .collect::<Map<_, _>>();
+        values.extend(relationships);
+        let reusable_attributes = self.record_reusable_attributes(record.id).await?;
+        let reusable_form_values = self.reusable_form_values(record.id).await?;
+        let reusable_values = reusable_attributes
+            .iter()
+            .filter_map(|attribute| {
+                resolved_value(
+                    tree,
+                    &path,
+                    attribute.context_fallback != "none",
+                    |context| {
+                        reusable_form_values.iter().find_map(|value| match value {
+                            FormAttributeValue::Scalar {
+                                attribute_code,
+                                context_id,
+                                value,
+                            } if attribute_code == &attribute.code
+                                && *context_id == Some(context.id) =>
+                            {
+                                Some(value.clone())
+                            }
+                            FormAttributeValue::Relationship {
+                                attribute_code,
+                                context_id,
+                                target_record_id,
+                            } if attribute_code == &attribute.code
+                                && *context_id == Some(context.id) =>
+                            {
+                                Some(serde_json::json!({ "items": [{ "id": target_record_id }] }))
+                            }
+                            FormAttributeValue::File {
+                                attribute_code,
+                                context_id,
+                                files,
+                            } if attribute_code == &attribute.code
+                                && *context_id == Some(context.id) =>
+                            {
+                                Some(serde_json::json!(files))
+                            }
+                            _ => None,
+                        })
+                    },
+                )
+                .map(|value| (attribute.code.clone(), value))
+            })
+            .collect::<Map<_, _>>();
+        Ok(ResolvedRecordPreviewResponse {
+            record: RecordIdentity {
+                id: record.id,
+                blueprint_id: record.blueprint_id,
+                blueprint_version: record.blueprint_version,
+                is_sample: record.is_sample,
+            },
+            requested_context,
+            values: Value::Object(values),
+            reusable_attributes,
+            reusable_values: Value::Object(reusable_values),
+        })
+    }
+
+    pub async fn hierarchy(
+        &self,
+        record_id: Uuid,
+        context_id: Uuid,
+        field: &str,
+        relationship_depth: u8,
+    ) -> Result<Option<RecordHierarchyResponse>, RepositoryError> {
+        let Some(record) = self.get_record(record_id).await? else {
+            return Ok(None);
+        };
+        let blueprint = self
+            .get_blueprint_revision(record.blueprint_id, record.blueprint_version)
+            .await?
+            .ok_or(RepositoryError::NotFound("blueprint version"))?;
+        let attribute = blueprint
+            .attributes
+            .iter()
+            .find(|attribute| attribute.code == field)
+            .ok_or(RepositoryError::AttributeNotApplicable)?;
+        if attribute.value_type != "relationship"
+            || attribute.target_blueprint_code.as_deref() != Some(&blueprint.blueprint.code)
+        {
+            return Err(RepositoryError::InvalidHierarchyRelationship);
+        }
+
+        let scope = self.preview_scope(context_id).await?;
+        let resolved = self
+            .resolved_preview_for(&record, &blueprint.attributes, &scope, relationship_depth)
+            .await?;
+        let requested_context = resolved.requested_context.code;
+        let current_display = display_label(
+            record.projections.get("preview").unwrap_or(&Value::Null),
+            &blueprint.blueprint.views,
+            &serde_json::json!({}),
+            &requested_context,
+        )
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+        let items = vec![RecordHierarchyItem {
+            id: record.id,
+            display: current_display,
+        }];
+        let relationship = resolved
+            .values
+            .get(field)
+            .and_then(|value| value.get("value"));
+        let mut multiple_parents = false;
+        let mut truncated = false;
+        let mut cycle_detected = false;
+        let mut paths = Vec::new();
+        collect_hierarchy_paths(
+            relationship,
+            field,
+            items.clone(),
+            HashSet::from([record.id]),
+            relationship_depth,
+            &mut paths,
+            &mut multiple_parents,
+            &mut truncated,
+            &mut cycle_detected,
+        );
+        let default_path = paths.first().cloned().unwrap_or(items);
+        Ok(Some(RecordHierarchyResponse {
+            items: default_path,
+            paths,
+            truncated,
+            multiple_parents,
+            cycle_detected,
+        }))
+    }
+    /// The record and its preview with related records expanded.
+    pub async fn preview(
+        &self,
+        record_id: Uuid,
+        relationship_depth: u8,
+        relationship_limit: i64,
+    ) -> Result<Option<(Record, Value)>, RepositoryError> {
+        let Some(record) = self.get_record(record_id).await? else {
+            return Ok(None);
+        };
+        let preview = self
+            .build_preview(
+                record.id,
+                &record.projections,
+                relationship_depth,
+                relationship_limit,
+                &mut HashSet::new(),
+            )
+            .await?;
+        Ok(Some((record, preview)))
+    }
+
+    /// Expands `projections`' preview with related records up to
+    /// `relationship_depth` hops. Relationship rows are fetched breadth first,
+    /// one query per depth for every record reached at it; the preview is
+    /// then assembled in memory. A record already on the expansion path
+    /// (`path`) is not expanded again.
+    async fn build_preview(
+        &self,
+        record_id: Uuid,
+        projections: &Value,
+        relationship_depth: u8,
+        relationship_limit: i64,
+        path: &mut HashSet<Uuid>,
+    ) -> Result<Value, RepositoryError> {
+        let mut rows: HashMap<(Uuid, u8), Vec<PreviewRelationship>> = HashMap::new();
+        let mut frontier = vec![(record_id, path.iter().copied().collect::<Vec<_>>())];
+        let mut depth = relationship_depth;
+        let mut remaining_rows = MAX_PREVIEW_RELATIONSHIP_ROWS;
+        let mut expansions = 0usize;
+        while !frontier.is_empty() {
+            let expanding: Vec<(Uuid, Vec<Uuid>)> = frontier
+                .into_iter()
+                .filter(|(id, ancestors)| !ancestors.contains(id))
+                .collect();
+            expansions += expanding.len();
+            if expansions > MAX_PREVIEW_RELATIONSHIP_ROWS {
+                return Err(RepositoryError::PreviewExpansionLimit);
+            }
+            let ids: Vec<Uuid> = expanding
+                .iter()
+                .map(|(id, _)| *id)
+                .filter(|id| !rows.contains_key(&(*id, depth)))
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            if !ids.is_empty() {
+                // Fetch one extra edge to report truncation without a separate
+                // count. At depth zero one edge is still enough to indicate
+                // that data exists.
+                let fetch_limit = if depth == 0 {
+                    1
+                } else {
+                    relationship_limit + 1
+                };
+                for id in &ids {
+                    rows.entry((*id, depth)).or_default();
+                }
+                let related = self
+                    .preview_relationships(&ids, fetch_limit, remaining_rows + 1)
+                    .await?;
+                if related.len() > remaining_rows {
+                    return Err(RepositoryError::PreviewExpansionLimit);
+                }
+                remaining_rows -= related.len();
+                let targets = related.iter().map(|row| row.target_id).collect::<Vec<_>>();
+                let readable = self.actor_readable_record_ids(&targets).await?;
+                for mut row in related {
+                    if readable
+                        .as_ref()
+                        .is_some_and(|ids| !ids.contains(&row.target_id))
+                    {
+                        // Keep only a truncation marker. Never traverse or
+                        // serialize this target, and do not claim the visible
+                        // relationship set is complete after hiding a row.
+                        row.relationship_position = relationship_limit + 1;
+                    }
+                    rows.get_mut(&(row.source_id, depth))
+                        .expect("every fetched source was requested")
+                        .push(row);
+                }
+            }
+            if depth == 0 {
+                break;
+            }
+            frontier = expanding
+                .iter()
+                .flat_map(|(id, ancestors)| {
+                    let rows = &rows[&(*id, depth)];
+                    rows.iter()
+                        .filter(|row| row.relationship_position <= relationship_limit)
+                        .map(|row| {
+                            let mut ancestors = ancestors.clone();
+                            ancestors.push(*id);
+                            (row.target_id, ancestors)
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .take(MAX_PREVIEW_RELATIONSHIP_ROWS + 1)
+                .collect();
+            if frontier.len() > MAX_PREVIEW_RELATIONSHIP_ROWS {
+                return Err(RepositoryError::PreviewExpansionLimit);
+            }
+            depth -= 1;
+        }
+        assemble_preview(
+            record_id,
+            projections,
+            relationship_depth,
+            relationship_limit,
+            path,
+            &rows,
+        )
+    }
+
+    /// Relationship edges of every source in `record_ids`, at most `limit`
+    /// per source, attribute and context, with a global row budget.
+    async fn preview_relationships(
+        &self,
+        record_ids: &[Uuid],
+        limit: i64,
+        row_budget: usize,
+    ) -> Result<Vec<PreviewRelationship>, RepositoryError> {
+        Ok(sqlx::query_as::<_, PreviewRelationship>(
+            r#"WITH relationships AS (
+                    SELECT av.record_id AS source_id, a.code AS attribute_code, c.code AS context_code,
+                           target.id AS target_id, target.projections AS target_projections,
+                           b.views AS target_views, target.blueprint_id AS target_blueprint_id,
+                           target.blueprint_version AS target_blueprint_version,
+                           ROW_NUMBER() OVER (PARTITION BY av.record_id, a.id, av.context_id ORDER BY target.id)
+                               AS relationship_position
+                    FROM attribute_values av
+                    JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                    JOIN records target ON target.id = av.relationship_target_record_id AND target.deleted_at IS NULL
+                    JOIN blueprints b ON b.id = target.blueprint_id AND b.version = target.blueprint_version
+                    LEFT JOIN attribute_contexts c ON c.id = av.context_id
+                    WHERE av.record_id = ANY($1)
+                      AND av.relationship_target_record_id IS NOT NULL
+                      AND av.active
+                ), selected AS (
+                    SELECT * FROM relationships WHERE relationship_position <= $2
+                ), fallbacks AS (
+                    -- Context fallback per attribute, once per distinct target revision.
+                    SELECT revision.blueprint_id, revision.blueprint_version,
+                           COALESCE(
+                               jsonb_object_agg(attribute.code, attribute.context_fallback)
+                                   FILTER (WHERE attribute.code IS NOT NULL),
+                               '{}'::jsonb
+                           ) AS context_fallback
+                    FROM (SELECT DISTINCT target_blueprint_id AS blueprint_id,
+                                 target_blueprint_version AS blueprint_version
+                          FROM selected) revision
+                    LEFT JOIN attributes attribute ON attribute.blueprint_id = revision.blueprint_id
+                     AND attribute.blueprint_version = revision.blueprint_version
+                     AND attribute.deleted_at IS NULL
+                    GROUP BY revision.blueprint_id, revision.blueprint_version
+                )
+               SELECT selected.source_id, selected.attribute_code, selected.context_code,
+                      selected.target_id, selected.target_projections, selected.target_views,
+                      fallbacks.context_fallback AS target_context_fallback,
+                      selected.relationship_position
+               FROM selected
+               JOIN fallbacks ON fallbacks.blueprint_id = selected.target_blueprint_id
+                AND fallbacks.blueprint_version = selected.target_blueprint_version
+               ORDER BY selected.source_id, selected.attribute_code,
+                        selected.context_code NULLS FIRST, selected.relationship_position
+               LIMIT $3"#,
+        )
+        .bind(record_ids)
+        .bind(limit)
+        .bind(row_budget as i64)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub(super) async fn store_preview(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+        preview: Value,
+    ) -> Result<Record, RepositoryError> {
+        Ok(sqlx::query_as::<_, Db<Record>>(
+            r#"UPDATE records
+               SET projections = jsonb_set(projections, '{preview}', $2, true), updated_at = now()
+               WHERE id = $1
+                RETURNING id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at"#,
+        )
+        .bind(record_id)
+        .bind(preview)
+        .fetch_one(&mut **transaction)
+        .await?
+        .into_domain())
+    }
+
+    pub(super) async fn build_preview_projection(
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+    ) -> Result<Value, RepositoryError> {
+        let values = sqlx::query_as::<_, ProjectionNativeValueRow>(
+            r#"SELECT a.code AS attribute_code, c.code AS context_code,
+                      a.value_type, av.value_text, av.value_number, av.value_integer,
+                      av.value_boolean, av.value_date, av.value_datetime, av.value_time,
+                      av.value_time_zone, av.value_json
+                FROM attribute_values av
+                JOIN records e ON e.id = av.record_id
+                JOIN attributes a ON a.id = av.attribute_id
+                 AND ((a.blueprint_id = e.blueprint_id
+                 AND a.blueprint_version = e.blueprint_version)
+                 OR (a.record_id = e.id AND a.value_schema ?| ARRAY['x-attricat-status', 'x-attricat-principal']))
+                JOIN attribute_contexts c ON c.id = av.context_id
+                WHERE av.record_id = $1
+                  AND av.relationship_target_record_id IS NULL
+                  AND a.deleted_at IS NULL
+                ORDER BY a.position, c.code"#,
+        )
+        .bind(record_id)
+        .fetch_all(&mut **transaction)
+        .await?;
+        let mut default = Map::new();
+        let mut contexts = Map::new();
+        for value in values {
+            let values = if value.context_code == "default" {
+                &mut default
+            } else {
+                contexts
+                    .entry(value.context_code)
+                    .or_insert_with(|| Value::Object(Map::new()))
+                    .as_object_mut()
+                    .expect("projection contexts are objects")
+            };
+            values.insert(value.attribute_code, native_value_json(value.native)?);
+        }
+        let mut preview = Map::new();
+        preview.insert("default".to_owned(), Value::Object(default));
+        preview.extend(contexts);
+        Ok(Value::Object(preview))
+    }
+}
+const MAX_HIERARCHY_PATHS: usize = 20;
+
+#[allow(clippy::too_many_arguments)]
+fn collect_hierarchy_paths(
+    relationship: Option<&Value>,
+    field: &str,
+    path: Vec<RecordHierarchyItem>,
+    visited: HashSet<Uuid>,
+    remaining_depth: u8,
+    paths: &mut Vec<Vec<RecordHierarchyItem>>,
+    multiple_parents: &mut bool,
+    truncated: &mut bool,
+    cycle_detected: &mut bool,
+) {
+    if paths.len() == MAX_HIERARCHY_PATHS {
+        *truncated = true;
+        return;
+    }
+    let Some(relationship) = relationship else {
+        let mut path = path;
+        path.reverse();
+        paths.push(path);
+        return;
+    };
+    if relationship.get("truncated").and_then(Value::as_bool) == Some(true) {
+        *truncated = true;
+    }
+    let Some(targets) = relationship.get("items").and_then(Value::as_array) else {
+        let mut path = path;
+        path.reverse();
+        paths.push(path);
+        return;
+    };
+    if targets.len() > 1 {
+        *multiple_parents = true;
+    }
+    if targets.is_empty() {
+        let mut path = path;
+        path.reverse();
+        paths.push(path);
+        return;
+    }
+    if remaining_depth == 0 {
+        *truncated = true;
+        let mut path = path;
+        path.reverse();
+        paths.push(path);
+        return;
+    }
+
+    for target in targets {
+        let Some(id) = target
+            .get("id")
+            .and_then(Value::as_str)
+            .and_then(|id| Uuid::parse_str(id).ok())
+        else {
+            *truncated = true;
+            continue;
+        };
+        if visited.contains(&id) {
+            *cycle_detected = true;
+            let mut path = path.clone();
+            path.reverse();
+            paths.push(path);
+            continue;
+        }
+        let mut next_path = path.clone();
+        next_path.push(RecordHierarchyItem {
+            id,
+            display: target
+                .get("display")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+        });
+        let mut next_visited = visited.clone();
+        next_visited.insert(id);
+        collect_hierarchy_paths(
+            target.get(field),
+            field,
+            next_path,
+            next_visited,
+            remaining_depth - 1,
+            paths,
+            multiple_parents,
+            truncated,
+            cycle_detected,
+        );
+    }
+}
+
+pub(super) fn display_labels(preview: &Value, views: &Value, context_fallback: &Value) -> Value {
+    let contexts = preview.as_object().cloned().unwrap_or_default();
+    Value::Object(
+        contexts
+            .keys()
+            .map(|context| {
+                (
+                    context.clone(),
+                    display_label(preview, views, context_fallback, context),
+                )
+            })
+            .collect(),
+    )
+}
+
+pub(super) fn display_label(
+    preview: &Value,
+    views: &Value,
+    context_fallback: &Value,
+    context_code: &str,
+) -> Value {
+    let Some(definition) = views.get("dropdown_option") else {
+        return Value::String(String::new());
+    };
+    let Some(fields) = definition.get("fields").and_then(Value::as_array) else {
+        return Value::String(String::new());
+    };
+    let separator = definition
+        .get("separator")
+        .and_then(Value::as_str)
+        .unwrap_or(" · ");
+    let current = preview.get(context_code).and_then(Value::as_object);
+    let default = preview.get("default").and_then(Value::as_object);
+    Value::String(
+        fields
+            .iter()
+            .filter_map(Value::as_str)
+            .filter_map(|field| {
+                current.and_then(|values| values.get(field)).or_else(|| {
+                    (context_code == "default"
+                        || context_fallback.get(field).and_then(Value::as_str) != Some("none"))
+                    .then(|| default.and_then(|values| values.get(field)))
+                    .flatten()
+                })
+            })
+            .filter(|value| !value.is_null())
+            .map(display_value)
+            .collect::<Vec<_>>()
+            .join(separator),
+    )
+}
+
+fn display_value(value: &Value) -> String {
+    value
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| value.to_string())
+}
+
+/// Builds one record's expanded preview from prefetched relationship rows,
+/// following exactly the rules the per-record recursion applied.
+fn assemble_preview(
+    record_id: Uuid,
+    projections: &Value,
+    relationship_depth: u8,
+    relationship_limit: i64,
+    path: &mut HashSet<Uuid>,
+    rows: &HashMap<(Uuid, u8), Vec<PreviewRelationship>>,
+) -> Result<Value, RepositoryError> {
+    let mut preview = projections
+        .get("preview")
+        .cloned()
+        .ok_or(RepositoryError::InvalidPreview)?;
+    if !path.insert(record_id) {
+        return Ok(preview);
+    }
+    if !preview.is_object() {
+        return Err(RepositoryError::InvalidPreview);
+    }
+    let relationships = rows
+        .get(&(record_id, relationship_depth))
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    for relationship in relationships {
+        let context_code = relationship
+            .context_code
+            .clone()
+            .unwrap_or_else(|| "default".to_owned());
+        let context = preview
+            .as_object_mut()
+            .expect("preview was validated as an object")
+            .entry(context_code.clone())
+            .or_insert_with(|| Value::Object(Map::new()))
+            .as_object_mut()
+            .ok_or(RepositoryError::InvalidPreview)?;
+        let relationship_preview = context
+            .entry(relationship.attribute_code.clone())
+            .or_insert_with(|| serde_json::json!({ "items": [], "truncated": false }))
+            .as_object_mut()
+            .ok_or(RepositoryError::InvalidPreview)?;
+        if relationship_depth == 0 || relationship.relationship_position > relationship_limit {
+            relationship_preview.insert("truncated".to_owned(), Value::Bool(true));
+            continue;
+        }
+
+        let target_preview = assemble_preview(
+            relationship.target_id,
+            &relationship.target_projections,
+            relationship_depth - 1,
+            relationship_limit,
+            path,
+            rows,
+        )?;
+        let mut target_values = target_preview
+            .get(&context_code)
+            .or_else(|| target_preview.get("default"))
+            .cloned()
+            .unwrap_or_else(|| Value::Object(Map::new()));
+        let target_values = target_values
+            .as_object_mut()
+            .ok_or(RepositoryError::InvalidPreview)?;
+        target_values.retain(|_, value| value.get("items").is_some());
+        target_values.insert(
+            "id".to_owned(),
+            Value::String(relationship.target_id.to_string()),
+        );
+        target_values.insert(
+            "display".to_owned(),
+            display_label(
+                &target_preview,
+                &relationship.target_views,
+                &relationship.target_context_fallback,
+                &context_code,
+            ),
+        );
+
+        let targets = relationship_preview
+            .entry("items".to_owned())
+            .or_insert_with(|| Value::Array(Vec::new()))
+            .as_array_mut()
+            .ok_or(RepositoryError::InvalidPreview)?;
+        targets.push(Value::Object(target_values.clone()));
+    }
+    path.remove(&record_id);
+    Ok(preview)
+}

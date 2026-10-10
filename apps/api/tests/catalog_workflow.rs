@@ -44,7 +44,7 @@ value_type = "string"
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -80,7 +80,7 @@ context_editable = "default"
         .parse()
         .unwrap();
     assert_eq!(blueprint["blueprint"]["code"], "product");
-    assert_eq!(blueprint["blueprint"]["kind"], "entity");
+    assert_eq!(blueprint["blueprint"]["kind"], "record");
     assert_eq!(
         blueprint["blueprint"]["views"]["dropdown_option"],
         json!({ "type": "dropdown_option", "fields": ["title"], "separator": " · " })
@@ -138,7 +138,7 @@ context_editable = "default"
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -253,10 +253,10 @@ tags = ["searchable"]
         );
     }
 
-    let source = create_entity(&client, &base_url, &blueprint).await;
+    let source = create_record(&client, &base_url, &blueprint).await;
     let default_only_write = client
         .post(format!(
-            "{base_url}/entities/{}/values",
+            "{base_url}/records/{}/values",
             source["id"].as_str().unwrap()
         ))
         .json(&json!({ "values": [{
@@ -281,11 +281,11 @@ tags = ["searchable"]
         json!({ "preview": { "default": {} } })
     );
 
-    let target = create_entity(&client, &base_url, &blueprint).await;
+    let target = create_record(&client, &base_url, &blueprint).await;
 
     let response = client
         .post(format!(
-            "{base_url}/entities/{}/values",
+            "{base_url}/records/{}/values",
             source["id"].as_str().unwrap()
         ))
         .json(&json!({
@@ -306,7 +306,7 @@ tags = ["searchable"]
                     "kind": "relationship",
                     "attribute_code": "related_products",
                     "context_id": null,
-                    "target_entity_id": target["id"]
+                    "target_record_id": target["id"]
                 }
             ]
         }))
@@ -318,7 +318,7 @@ tags = ["searchable"]
     assert_eq!(
         client
             .get(format!(
-                "{base_url}/entities/{}/values/current",
+                "{base_url}/records/{}/values/current",
                 source["id"].as_str().unwrap()
             ))
             .send()
@@ -335,7 +335,7 @@ tags = ["searchable"]
 
     let preview: Value = client
         .get(format!(
-            "{base_url}/entities/{}/preview",
+            "{base_url}/records/{}/preview",
             source["id"].as_str().unwrap()
         ))
         .send()
@@ -359,19 +359,19 @@ tags = ["searchable"]
             "en_GB": { "title": "Blue shirt (UK)" }
         })
     );
-    assert_eq!(preview["entity"]["id"], source["id"]);
+    assert_eq!(preview["record"]["id"], source["id"]);
     assert_eq!(
-        preview["entity"]["blueprint_id"],
+        preview["record"]["blueprint_id"],
         blueprint["blueprint"]["id"]
     );
     assert_eq!(
-        preview["entity"]["blueprint_version"],
+        preview["record"]["blueprint_version"],
         blueprint["blueprint"]["version"]
     );
 
     let replacement = client
         .post(format!(
-            "{base_url}/entities/{}/values",
+            "{base_url}/records/{}/values",
             source["id"].as_str().unwrap()
         ))
         .json(&json!({
@@ -395,7 +395,7 @@ tags = ["searchable"]
 
     let current_values: Vec<Value> = client
         .get(format!(
-            "{base_url}/entities/{}/values/current",
+            "{base_url}/records/{}/values/current",
             source["id"].as_str().unwrap()
         ))
         .send()
@@ -418,7 +418,7 @@ tags = ["searchable"]
 
     let current_preview: Value = client
         .get(format!(
-            "{base_url}/entities/{}/preview?relationship_depth=0",
+            "{base_url}/records/{}/preview?relationship_depth=0",
             source["id"].as_str().unwrap()
         ))
         .send()
@@ -435,7 +435,7 @@ tags = ["searchable"]
     let title_attribute_id: Uuid = title_attribute_id.parse().unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_entity_id IS NULL"
+            "SELECT COUNT(*) FROM attribute_values WHERE record_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_record_id IS NULL"
         )
         .bind(source_id)
         .bind(title_attribute_id)
@@ -447,7 +447,7 @@ tags = ["searchable"]
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM attribute_value_history WHERE entity_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_entity_id IS NULL"
+            "SELECT COUNT(*) FROM attribute_value_history WHERE record_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_record_id IS NULL"
         )
         .bind(source_id)
         .bind(title_attribute_id)
@@ -459,7 +459,7 @@ tags = ["searchable"]
     );
 
     let search_page: Value = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({
             "blueprint": { "code": "product", "version": 1 },
             "query": "red shirt",
@@ -484,7 +484,7 @@ tags = ["searchable"]
     assert!(search_page["next_cursor"].is_null());
 
     let created_from_form: Value = client
-        .post(format!("{base_url}/v1/entities"))
+        .post(format!("{base_url}/v1/records"))
         .json(&json!({
             "blueprint": { "code": "product", "version": 1 },
             "values": [{
@@ -501,9 +501,9 @@ tags = ["searchable"]
         .json()
         .await
         .unwrap();
-    let form_entity_id = created_from_form["id"].as_str().unwrap();
+    let form_record_id = created_from_form["id"].as_str().unwrap();
     let form: Value = client
-        .get(format!("{base_url}/v1/entities/{form_entity_id}"))
+        .get(format!("{base_url}/v1/records/{form_record_id}"))
         .send()
         .await
         .unwrap()
@@ -519,7 +519,7 @@ tags = ["searchable"]
     assert_eq!(form["context"]["default"]["title"], "Created from form");
 
     let updated: Value = client
-        .put(format!("{base_url}/v1/entities/{form_entity_id}"))
+        .put(format!("{base_url}/v1/records/{form_record_id}"))
         .json(&json!({
             "values": [{
                 "kind": "scalar",
@@ -542,14 +542,14 @@ tags = ["searchable"]
 
     client
         .put(format!(
-            "{base_url}/v1/entities/{}",
+            "{base_url}/v1/records/{}",
             source["id"].as_str().unwrap()
         ))
         .json(&json!({
             "values": [],
             "relationships": [{
                 "attribute_code": "related_products",
-                "target_entity_ids": []
+                "target_record_ids": []
             }]
         }))
         .send()
@@ -559,7 +559,7 @@ tags = ["searchable"]
         .unwrap();
     let removed_relationship_preview: Value = client
         .get(format!(
-            "{base_url}/entities/{}/preview",
+            "{base_url}/records/{}/preview",
             source["id"].as_str().unwrap()
         ))
         .send()

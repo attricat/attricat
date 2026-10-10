@@ -30,13 +30,13 @@ Declare a handler and subscribe to exact event types:
 "server": {
   "event_handlers": [{
     "id": "recalculate",
-    "event_types": ["entity.updated.v1"],
+    "event_types": ["record.updated.v1"],
     "handler": "handle-event"
   }]
 }
 ```
 
-The component's `handle-event` export receives the event: its ID, type, aggregate kind and ID, correlation and causation IDs, and a JSON payload. In event types and host calls, records are called entities. Record events carry the record ID, its blueprint and revision, and a list of facts describing each changed attribute. See the [event reference](/reference/events/).
+The component's `handle-event` export receives the event: its ID, type, aggregate kind and ID, correlation and causation IDs, and a JSON payload. The `catalog:host@1.0.0` WIT interface keeps its original names, so host reads and writes identify a record with `entity-id`. Record events carry the record ID, its blueprint and revision, and a list of facts describing each changed attribute. See the [event reference](/reference/events/).
 
 Delivery rules:
 
@@ -57,7 +57,7 @@ A write made while handling an event is attributed to the user or token behind t
 
 The JSON `catalog.read.v1` and `catalog.command.v1` calls add paged reads, change feeds, single-attribute lookups, and batches of `create`, `update`, `relationships`, and `upsert` intents. An upsert matches on a declared business key attribute, creates only when no record matches, and fails if more than one does. Its relationship sets apply whether it updates a match or creates the record.
 
-A lookup resolves exactly like an upsert. If the attribute alone is a declared unique key on a string attribute, the lookup uses that key's normalized values across every revision of the blueprint family; otherwise it matches the exact text among records of the requested revision. A value that matches more than one record fails with `lookup matched multiple entities` instead of returning one of them.
+A lookup resolves exactly like an upsert. If the attribute alone is a declared unique key on a string attribute, the lookup uses that key's normalized values across every revision of the blueprint family; otherwise it matches the exact text among records of the requested revision. A value that matches more than one record fails with `lookup matched multiple records` instead of returning one of them.
 
 ## Storage
 

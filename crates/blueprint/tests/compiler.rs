@@ -8,8 +8,8 @@ fn compiles_only_explicitly_selected_mixin_attributes_in_local_order() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
-entity_schema = '{"type":"object","required":["meta_title"]}'
+kind = "record"
+record_schema = '{"type":"object","required":["meta_title"]}'
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -99,7 +99,7 @@ fn compiles_optional_attribute_names() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -134,7 +134,7 @@ fn rejects_blank_attribute_names() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "title"
@@ -153,7 +153,7 @@ fn rejects_names_on_selected_attributes() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [[includes]]
 alias = "seo"
@@ -178,7 +178,7 @@ format_version = 1
 code = "category"
 name = "Category"
 description = "Product groupings, such as Basic tools"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "title"
@@ -208,7 +208,7 @@ value_type = "string"
 fn rejects_blank_long_and_selected_descriptions() {
     let with = |description: &str| {
         format!(
-            "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"entity\"\n\n[[attributes]]\ncode = \"title\"\ndescription = \"{description}\"\nvalue_type = \"string\"\n"
+            "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"record\"\n\n[[attributes]]\ncode = \"title\"\ndescription = \"{description}\"\nvalue_type = \"string\"\n"
         )
     };
     assert!(matches!(
@@ -226,7 +226,7 @@ fn rejects_blank_long_and_selected_descriptions() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [[includes]]
 alias = "seo"
@@ -250,7 +250,7 @@ fn compiles_scalar_attribute_default_values() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -274,7 +274,7 @@ fn rejects_default_values_on_non_scalar_attributes() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "related"
@@ -293,7 +293,7 @@ fn supports_context_fallback_on_all_attribute_types() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -324,7 +324,7 @@ fn supports_readonly_attributes() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -350,7 +350,7 @@ fn supports_default_only_context_editing() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -376,7 +376,7 @@ fn rejects_unknown_fields_and_invalid_selections() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -393,7 +393,7 @@ value_type = "string"
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "title"
@@ -408,7 +408,7 @@ fn validates_reference_codes_with_the_shared_character_set() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -444,7 +444,7 @@ fn validates_include_aliases_with_the_shared_character_set() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [[includes]]
 alias = "seo-metadata"
@@ -467,7 +467,7 @@ fn compiles_relationship_target_blueprint() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -499,7 +499,7 @@ fn requires_valid_dropdown_option_view_and_preserves_generic_tags() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "title"
@@ -542,7 +542,7 @@ fn compiles_optional_recursive_views_with_component_references() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -586,7 +586,7 @@ fn compiles_incoming_relationship_lists() {
 format_version = 1
 code = "category"
 name = "Category"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -621,7 +621,7 @@ fn rejects_invalid_view_fields_and_component_references() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -687,7 +687,7 @@ fn validates_component_manifest_applicability() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -726,7 +726,7 @@ fn validates_phone_components() {
 format_version = 1
 code = "contact"
 name = "Contact"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -769,7 +769,7 @@ fn validates_url_components() {
 format_version = 1
 code = "website"
 name = "Website"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["url"]
@@ -804,7 +804,7 @@ fn validates_color_components() {
 format_version = 1
 code = "color"
 name = "Color"
-kind = "entity"
+kind = "record"
 attributes = [{ code = "hex", value_type = "string" }]
 [views.dropdown_option]
 type = "dropdown_option"
@@ -838,8 +838,8 @@ fn compiles_json_schema_contracts() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
-entity_schema = '{"type":"object","required":["price"]}'
+kind = "record"
+record_schema = '{"type":"object","required":["price"]}'
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -855,7 +855,7 @@ value_type = "number"
 value_schema = '{"type":"number","minimum":0}'
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
-    assert_eq!(compiled.entity_schema.unwrap()["required"][0], "price");
+    assert_eq!(compiled.record_schema.unwrap()["required"][0], "price");
     assert_eq!(
         compiled.attributes[1].value_schema.as_ref().unwrap()["minimum"],
         0
@@ -863,13 +863,13 @@ value_schema = '{"type":"number","minimum":0}'
 }
 
 #[test]
-fn rejects_entity_schema_references_to_unknown_attributes() {
+fn rejects_record_schema_references_to_unknown_attributes() {
     let source = r#"
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
-entity_schema = '__SCHEMA__'
+kind = "record"
+record_schema = '__SCHEMA__'
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -899,7 +899,7 @@ value_type = "string"
         let error = compile(parse(&blueprint).unwrap(), &[], &blueprint).unwrap_err();
         assert!(matches!(
             error,
-            BlueprintError::EntitySchemaUnknownAttribute {
+            BlueprintError::RecordSchemaUnknownAttribute {
                 keyword: actual_keyword,
                 attribute,
             } if actual_keyword == keyword && attribute == "unknown"
@@ -908,13 +908,13 @@ value_type = "string"
 }
 
 #[test]
-fn allows_nested_entity_schema_value_properties() {
+fn allows_nested_record_schema_value_properties() {
     let source = r#"
 format_version = 1
 code = "schedule"
 name = "Schedule"
-kind = "entity"
-entity_schema = '{"type":"object","properties":{"cutoff":{"type":"object","required":["time"],"properties":{"time":{"type":"string"}}}}}'
+kind = "record"
+record_schema = '{"type":"object","properties":{"cutoff":{"type":"object","required":["time"],"properties":{"time":{"type":"string"}}}}}'
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -938,7 +938,7 @@ fn rejects_invalid_json_schema_contracts() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -954,8 +954,8 @@ value_type = "string"
             "value_type = \"string\"\nvalue_schema = \"not json\"",
         ),
         source.replace(
-            "kind = \"entity\"",
-            "kind = \"mixin\"\nentity_schema = '{\"type\":\"object\"}'",
+            "kind = \"record\"",
+            "kind = \"mixin\"\nrecord_schema = '{\"type\":\"object\"}'",
         ),
         source.replace(
             "value_type = \"string\"",
@@ -967,12 +967,12 @@ value_type = "string"
 }
 
 #[test]
-fn validates_entity_heading_stack_component() {
+fn validates_record_heading_stack_component() {
     let source = r#"
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -980,7 +980,7 @@ fields = ["title"]
 
 [views.detail]
 type = "stack"
-component = { id = "catalog.entity_heading", version = 1 }
+component = { id = "catalog.record_heading", version = 1 }
 children = [
   { type = "field", field = "title" },
   { type = "text", text = "SKU" },
@@ -1004,7 +1004,7 @@ value_type = "relationship"
     for invalid in [
         source.replace("[views.detail]", "[views.edit]"),
         source.replace(
-            "component = { id = \"catalog.entity_heading\", version = 1 }",
+            "component = { id = \"catalog.record_heading\", version = 1 }",
             "component = { id = \"catalog.field_display\", version = 1 }",
         ),
         source.replace(
@@ -1031,7 +1031,7 @@ fn validates_self_referential_hierarchy_component() {
 format_version = 1
 code = "category"
 name = "Category"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -1080,7 +1080,7 @@ fn rejects_empty_legacy_table_fields() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -1101,12 +1101,12 @@ value_type = "string"
 }
 
 #[test]
-fn extension_layout_is_entity_only_and_rejects_ambiguous_keys() {
+fn extension_layout_is_record_only_and_rejects_ambiguous_keys() {
     let source = r#"
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -1116,7 +1116,7 @@ fields = ["title"]
 type = "extension_layout"
 version = 1
 
-[views.extension_layout.outlets.entity_preview_panel]
+[views.extension_layout.outlets.record_preview_panel]
 order = ["acme.inventory:summary"]
 hidden = ["acme.legacy:panel"]
 
@@ -1131,19 +1131,19 @@ value_type = "string"
     ));
 
     for invalid in [
-        source.replace("kind = \"entity\"", "kind = \"mixin\""),
+        source.replace("kind = \"record\"", "kind = \"mixin\""),
         source.replace(
             "version = 1\n\n[views.extension_layout.outlets",
             "version = 2\n\n[views.extension_layout.outlets",
         ),
-        source.replace("entity_preview_panel", "navigation"),
+        source.replace("record_preview_panel", "navigation"),
         source.replace("acme.inventory:summary", "malformed"),
         source.replace(
             "hidden = [\"acme.legacy:panel\"]",
             "hidden = [\"acme.inventory:summary\"]",
         ),
         format!(
-            "{source}\n[views.extension_layout.outlets.entity_action]\norder = [\"acme.inventory:summary\"]\nhidden = []\n"
+            "{source}\n[views.extension_layout.outlets.record_action]\norder = [\"acme.inventory:summary\"]\nhidden = []\n"
         ),
     ] {
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
@@ -1156,7 +1156,7 @@ fn table_columns_preserve_legacy_fields_and_reject_invalid_paths() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -1236,7 +1236,7 @@ fn parses_extension_type_reference_and_json_primitive() {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -1262,15 +1262,15 @@ value_type = "json"
 
 #[test]
 fn deprecated_edit_view_has_no_placement_requirements() {
-    // Entities are edited in place on the detail view; a legacy `views.edit`
+    // Records are edited in place on the detail view; a legacy `views.edit`
     // is accepted for compatibility but no longer has to place required
     // attributes.
     let source = r#"
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
-entity_schema = '{"type":"object","required":["title","price"]}'
+kind = "record"
+record_schema = '{"type":"object","required":["title","price"]}'
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -1299,7 +1299,7 @@ const STRUCTURAL_BLUEPRINT: &str = r#"
 format_version = 1
 code = "part"
 name = "Part"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -1463,7 +1463,7 @@ acyclic = true"#,
 format_version = 1
 code = "note"
 name = "Note"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -1497,6 +1497,6 @@ value_type = "string"
         compile_source(mixin_key)
             .unwrap_err()
             .to_string()
-            .contains("only entity blueprints")
+            .contains("only record blueprints")
     );
 }

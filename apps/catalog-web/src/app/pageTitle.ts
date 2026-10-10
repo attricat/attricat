@@ -15,15 +15,15 @@ const agentsTitle = (t: TFunction, [conversation]: Segments) => {
     : t('agents.agentConversations');
 };
 
-const entitiesTitle = (t: TFunction, [entityId, subpage]: Segments) => {
-  if (entityId === 'new') return t('entities.createEntity');
-  const entity = `${t('workspace.entity')} ${entityId ? shortId(entityId) : ''}`;
+const recordsTitle = (t: TFunction, [recordId, subpage]: Segments) => {
+  if (recordId === 'new') return t('records.createRecord');
+  const record = `${t('workspace.record')} ${recordId ? shortId(recordId) : ''}`;
   const subpageKeys: Record<string, string> = {
-    changes: 'entities.changes',
-    migrate: 'entities.upgradeEntity',
+    changes: 'records.changes',
+    migrate: 'records.upgradeRecord',
   };
   const subpageKey = subpage ? subpageKeys[subpage] : undefined;
-  return subpageKey ? joinTitle(t(subpageKey), entity) : entity;
+  return subpageKey ? joinTitle(t(subpageKey), record) : record;
 };
 
 const blueprintsTitle = (t: TFunction, [blueprintId, subpage]: Segments) => {
@@ -110,7 +110,7 @@ const sectionTitle = (t: TFunction, [section, ...rest]: Segments) => {
   const [group] = rest;
   switch (section) {
     case undefined:
-      return t('navigation.entityExplorer');
+      return t('navigation.recordExplorer');
     case 'login':
       return t('auth.signIn');
     case 'password-reset':
@@ -129,8 +129,8 @@ const sectionTitle = (t: TFunction, [section, ...rest]: Segments) => {
       return agentsTitle(t, rest);
     case 'inbox':
       return t('navigation.inbox');
-    case 'entities':
-      return entitiesTitle(t, rest);
+    case 'records':
+      return recordsTitle(t, rest);
     case 'extensions':
       return rest[1] && group
         ? joinTitle(t('navigation.apps'), group)

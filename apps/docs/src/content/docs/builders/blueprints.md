@@ -26,7 +26,7 @@ You need `blueprints.write` to create drafts and `blueprints.publish` to publish
 format_version = 1
 code = "category"
 name = "Category"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "name"
@@ -38,7 +38,7 @@ fields = ["name"]
 ```
 
 - `code` identifies the blueprint for its whole life. Pick it carefully; it cannot change in later revisions.
-- `kind = "entity"` means people can create records from it. In blueprint TOML, the API and the CLI, records are called entities.
+- `kind = "record"` means people can create records from it.
 - Every record blueprint needs `views.dropdown_option`. It tells Attricat how to label a category wherever one is shown in a list: relationship pickers, filter pills, search results.
 
 Save this as a draft. A draft can be edited freely and cannot hold records yet.
@@ -61,7 +61,7 @@ To change a published blueprint, create a new revision. The next section explain
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "title"
@@ -180,7 +180,7 @@ type = "stack"
 
 [[views.detail.children]]
 type = "stack"
-component = { id = "catalog.entity_heading", version = 1 }
+component = { id = "catalog.record_heading", version = 1 }
 
 [[views.detail.children.children]]
 type = "field"
@@ -233,16 +233,16 @@ label = "Brand"
 field = "price"
 ```
 
-The `catalog.entity_heading` stack turns its first field into the page title and the rest into a subtitle. The table column `brand.name` follows the `brand` relationship and shows the brand's `name`. Because `brand` has `cardinality = "one"`, that column can also be sorted.
+The `catalog.record_heading` stack turns its first field into the page title and the rest into a subtitle. The table column `brand.name` follows the `brand` relationship and shows the brand's `name`. Because `brand` has `cardinality = "one"`, that column can also be sorted.
 
 [Views and layouts](/builders/views/) covers every block and component.
 
 ## Step 8: validation across fields
 
-A `value_schema` checks one value. An `entity_schema` checks the whole record, so it can express rules like "a product on sale needs a sale price". This example assumes the blueprint also has an `on_sale` boolean and a `sale_price` number:
+A `value_schema` checks one value. An `record_schema` checks the whole record, so it can express rules like "a product on sale needs a sale price". This example assumes the blueprint also has an `on_sale` boolean and a `sale_price` number:
 
 ```toml
-entity_schema = '''
+record_schema = '''
 {
   "type": "object",
   "required": ["title", "sku"],
@@ -252,14 +252,14 @@ entity_schema = '''
 '''
 ```
 
-Put `entity_schema` with the other top-level keys, before the first `[[attributes]]`. In TOML, a key written after a table header belongs to that table.
+Put `record_schema` with the other top-level keys, before the first `[[attributes]]`. In TOML, a key written after a table header belongs to that table.
 
-Attricat checks the schema in every context after every change. A write that would leave any context invalid is rejected with `422 entity_schema_mismatch` and nothing is saved.
+Attricat checks the schema in every context after every change. A write that would leave any context invalid is rejected with `422 record_schema_mismatch` and nothing is saved.
 
 JSON Schema cannot compare two attributes. For rules like "a sale price must be lower than the price", add a named check to the same schema under `x-attricat-checks`:
 
 ```toml
-entity_schema = '''
+record_schema = '''
 {
   "type": "object",
   "required": ["title", "sku"],
@@ -271,7 +271,7 @@ entity_schema = '''
 '''
 ```
 
-A failing check is rejected with `422 entity_check_failed`. Checks can also look at linked records. See [Validation](/builders/validation/#compare-attributes-with-checks).
+A failing check is rejected with `422 record_check_failed`. Checks can also look at linked records. See [Validation](/builders/validation/#compare-attributes-with-checks).
 
 ## Step 9: share attributes with a mixin
 
@@ -338,7 +338,7 @@ value_schema = '''{
       { "from": "review", "to": "approved", "code": "approve",
         "roles": ["reviewer"], "separate_from": ["submit"] },
       { "from": "approved", "to": "released", "code": "release",
-        "permission": "entities.publish" },
+        "permission": "records.publish" },
       { "from": "released", "to": "draft", "code": "correct",
         "roles": ["owner", "admin"] }
     ]
@@ -348,7 +348,7 @@ value_schema = '''{
 
 Here:
 
-- Whoever submitted a document for review cannot also approve it, and only `reviewer`s can approve. Releasing needs `entities.publish`.
+- Whoever submitted a document for review cannot also approve it, and only `reviewer`s can approve. Releasing needs `records.publish`.
 - Editing the title or procedure of an approved document voids the approval and sends it back to review.
 - A released document is read-only, cannot be deleted, and keeps its files for ten years. Owners and admins correct it with the `correct` transition, then edit it.
 

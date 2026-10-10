@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "A workspace attribute that entity blueprints can attach by reference.",
+  "description": "A workspace attribute that record blueprints can attach by reference.",
   "properties": {
     "cardinality": {
       "default": null,
@@ -44,7 +44,7 @@
     },
     "default_value": {
       "default": null,
-      "description": "Value stored in the default context when an entity is created.\nNot supported for relationships and files."
+      "description": "Value stored in the default context when a record is created.\nNot supported for relationships and files."
     },
     "facetable": {
       "default": false,

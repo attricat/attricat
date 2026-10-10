@@ -34,19 +34,19 @@ impl Guest for Component {
         let cursor = checkpoint["cursor"].as_str().unwrap_or_default().to_owned();
         let described = parse(&selection::describe()?)?;
         let page = parse(&selection::page(&cursor, 1)?)?;
-        let member = &page["entities"][0];
-        let entity_id = member["entity_id"].as_str().unwrap_or_default().to_owned();
+        let member = &page["records"][0];
+        let record_id = member["record_id"].as_str().unwrap_or_default().to_owned();
         let status = member["status"].as_str().unwrap_or_default().to_owned();
         if status == "available" {
-            let line = format!("{entity_id}\n");
+            let line = format!("{record_id}\n");
             artifacts::append_output(OUTPUT, "text/plain", &request.batch_key, line.as_bytes())?;
             let batch = json!({"operation": "batch", "batch": {
                 "batch_key": request.batch_key,
                 "dry_run": false,
                 "intents": [{
                     "kind": "annotate",
-                    "intent_key": format!("processed-{entity_id}"),
-                    "entity_id": entity_id,
+                    "intent_key": format!("processed-{record_id}"),
+                    "record_id": record_id,
                     "add_tags": ["processed"],
                     "set_metadata": {"run_id": request.run_id, "cleared": null}
                 }]
@@ -55,18 +55,18 @@ impl Guest for Component {
             checkpoint["annotation_status"] = outcomes[0]["status"].clone();
         }
         let generic_read = catalog_data::read(
-            &json!({"operation": "lookup", "blueprint_id": described["blueprint_id"], "blueprint_version": described["blueprint_version"], "attribute_id": entity_id, "value": "x"}).to_string(),
+            &json!({"operation": "lookup", "blueprint_id": described["blueprint_id"], "blueprint_version": described["blueprint_version"], "attribute_id": record_id, "value": "x"}).to_string(),
         );
         let outside = catalog_data::batch(
             &json!({"operation": "batch", "batch": {
                 "batch_key": request.batch_key,
                 "dry_run": false,
-                "intents": [{"kind": "annotate", "intent_key": "outside", "entity_id": "00000000-0000-4000-8000-00000000ffff", "add_tags": ["x"]}]
+                "intents": [{"kind": "annotate", "intent_key": "outside", "record_id": "00000000-0000-4000-8000-00000000ffff", "add_tags": ["x"]}]
             }})
             .to_string(),
         );
         let mut seen = checkpoint["seen"].as_array().cloned().unwrap_or_default();
-        seen.push(json!({"entity_id": entity_id, "status": status}));
+        seen.push(json!({"record_id": record_id, "status": status}));
         checkpoint["seen"] = Value::Array(seen.clone());
         checkpoint["generic_read_rejected"] = json!(generic_read.is_err());
         checkpoint["outside_rejected"] = json!(outside.is_err());

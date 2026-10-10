@@ -15,7 +15,7 @@ async fn search_resolves_three_hop_table_query_filter_and_sort_paths(pool: PgPoo
         r#"format_version = 1
 code = "deep_kind"
 name = "Deep kind"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -30,7 +30,7 @@ value_type = "string""#,
         r#"format_version = 1
 code = "deep_class"
 name = "Deep class"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -50,7 +50,7 @@ cardinality = "one""#,
         r#"format_version = 1
 code = "deep_family"
 name = "Deep family"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -70,7 +70,7 @@ cardinality = "one""#,
         r#"format_version = 1
 code = "deep_sku"
 name = "Deep SKU"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["sku"]
@@ -91,18 +91,18 @@ cardinality = "one""#,
     )
     .await;
 
-    let kind_entity = create_entity(&client, &base_url, &kind).await;
-    let class_entity = create_entity(&client, &base_url, &class).await;
-    let family_entity = create_entity(&client, &base_url, &family).await;
-    let sku_entity = create_entity(&client, &base_url, &sku).await;
-    for (entity, attribute, value) in [
-        (&kind_entity, "name", "Graphics Card"),
-        (&class_entity, "name", "Component"),
-        (&family_entity, "name", "Arc"),
-        (&sku_entity, "sku", "ARC-1"),
+    let kind_record = create_record(&client, &base_url, &kind).await;
+    let class_record = create_record(&client, &base_url, &class).await;
+    let family_record = create_record(&client, &base_url, &family).await;
+    let sku_record = create_record(&client, &base_url, &sku).await;
+    for (record, attribute, value) in [
+        (&kind_record, "name", "Graphics Card"),
+        (&class_record, "name", "Component"),
+        (&family_record, "name", "Arc"),
+        (&sku_record, "sku", "ARC-1"),
     ] {
         client
-            .post(format!("{base_url}/entities/{}/values", entity["id"].as_str().unwrap()))
+            .post(format!("{base_url}/records/{}/values", record["id"].as_str().unwrap()))
             .json(&json!({"values": [{"kind": "scalar", "attribute_code": attribute, "value": value}]}))
             .send()
             .await
@@ -111,18 +111,18 @@ cardinality = "one""#,
             .unwrap();
     }
     for (source, field, target) in [
-        (&class_entity, "kind", &kind_entity),
-        (&family_entity, "class", &class_entity),
-        (&sku_entity, "family", &family_entity),
+        (&class_record, "kind", &kind_record),
+        (&family_record, "class", &class_record),
+        (&sku_record, "family", &family_record),
     ] {
         client
             .post(format!(
-                "{base_url}/entities/{}/relationships/replace",
+                "{base_url}/records/{}/relationships/replace",
                 source["id"].as_str().unwrap()
             ))
             .json(&json!({"relationships": [{
                 "attribute_code": field,
-                "target_entity_ids": [target["id"]]
+                "target_record_ids": [target["id"]]
             }]}))
             .send()
             .await
@@ -149,7 +149,7 @@ cardinality = "one""#,
         }),
     ] {
         let raw = client
-            .post(format!("{base_url}/v1/entities/search"))
+            .post(format!("{base_url}/v1/records/search"))
             .json(&body)
             .send()
             .await
@@ -182,7 +182,7 @@ cardinality = "one""#,
         &repository,
         BOOTSTRAP_OWNER_ID.parse().unwrap(),
         workspace,
-        "search_entities",
+        "search_records",
         json!({
             "blueprint": {"code": "deep_sku"},
             "sort": {"field": "family.class.kind.name", "direction": "asc"},
@@ -206,7 +206,7 @@ cardinality = "one""#,
         ),
         (
             json!([{"field":"sku","operator":"eq","value":"ARC-1"}]),
-            json!([{"field":"family.class.kind","selected_target_ids":[kind_entity["id"]]}]),
+            json!([{"field":"family.class.kind","selected_target_ids":[kind_record["id"]]}]),
             1,
         ),
         (
@@ -219,7 +219,7 @@ cardinality = "one""#,
             &repository,
             actor,
             workspace,
-            "search_entities",
+            "search_records",
             json!({
                 "blueprint":{"code":"deep_sku"}, "filters":filters,
                 "relationship_filters":relationship_filters,
@@ -232,7 +232,7 @@ cardinality = "one""#,
     let saved = agent_tools::execute_mutation(&repository, actor, "create_saved_search", json!({
         "name":"Graphics SKUs", "blueprint":"deep_sku",
         "attributeFilters":[{"field":"family.class.kind.name","operator":"eq","value":"Graphics Card"}],
-        "relationshipFacets":[{"field":"family.class.kind","selectedIds":[kind_entity["id"]]}],
+        "relationshipFacets":[{"field":"family.class.kind","selectedIds":[kind_record["id"]]}],
     })).await.unwrap();
     let saved_id = saved["id"].as_str().unwrap().parse().unwrap();
     let loaded = repository
@@ -246,7 +246,7 @@ cardinality = "one""#,
     );
     assert_eq!(
         loaded.state["relationshipFacets"][0]["selectedIds"][0],
-        kind_entity["id"]
+        kind_record["id"]
     );
     assert!(
         agent_tools::execute_mutation(
@@ -289,7 +289,7 @@ cardinality = "one""#,
     .unwrap();
     assert_eq!(
         before["state"]["relationshipFacets"][0]["selectedIds"][0],
-        kind_entity["id"]
+        kind_record["id"]
     );
     let mut browser_state = loaded.state.clone();
     browser_state["sort"] = json!({"field":"sku","direction":"asc"});
@@ -353,7 +353,7 @@ cardinality = "one""#,
         .json(&json!({"definition": r#"format_version = 1
 code = "deep_kind"
 name = "Deep kind"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -394,7 +394,7 @@ value_type = "integer""#}))
         .error_for_status()
         .unwrap();
     let incompatible: Value = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({
             "blueprint": {"code": "deep_sku"},
             "page": {"size": 25}
@@ -431,7 +431,7 @@ async fn relationship_sort_requires_one_effective_source_version(pool: PgPool) {
         r#"format_version = 1
 code = "versioned_sort_leaf"
 name = "Versioned sort leaf"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -446,7 +446,7 @@ value_type = "string""#,
         r#"format_version = 1
 code = "versioned_sort_middle"
 name = "Versioned sort middle"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -463,7 +463,7 @@ cardinality = "one""#,
     let source_v1_definition = r#"format_version = 1
 code = "versioned_sort_source"
 name = "Versioned sort source"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -478,13 +478,13 @@ code = "middle"
 value_type = "relationship"
 target_blueprint = "versioned_sort_middle""#;
     let source_v1 = create_blueprint(&client, &base_url, source_v1_definition).await;
-    let leaf_entity = create_entity(&client, &base_url, &leaf).await;
-    let middle_entity = create_entity(&client, &base_url, &middle).await;
-    let old_source = create_entity(&client, &base_url, &source_v1).await;
+    let leaf_record = create_record(&client, &base_url, &leaf).await;
+    let middle_record = create_record(&client, &base_url, &middle).await;
+    let old_source = create_record(&client, &base_url, &source_v1).await;
     client
         .post(format!(
-            "{base_url}/entities/{}/values",
-            leaf_entity["id"].as_str().unwrap()
+            "{base_url}/records/{}/values",
+            leaf_record["id"].as_str().unwrap()
         ))
         .json(&json!({"values": [{"kind": "scalar", "attribute_code": "name", "value": "Alpha"}]}))
         .send()
@@ -493,12 +493,12 @@ target_blueprint = "versioned_sort_middle""#;
         .error_for_status()
         .unwrap();
     for (source, field, target) in [
-        (&middle_entity, "leaf", &leaf_entity),
-        (&old_source, "middle", &middle_entity),
+        (&middle_record, "leaf", &leaf_record),
+        (&old_source, "middle", &middle_record),
     ] {
         client
-            .post(format!("{base_url}/entities/{}/relationships/replace", source["id"].as_str().unwrap()))
-            .json(&json!({"relationships": [{"attribute_code": field, "target_entity_ids": [target["id"]]}]}))
+            .post(format!("{base_url}/records/{}/relationships/replace", source["id"].as_str().unwrap()))
+            .json(&json!({"relationships": [{"attribute_code": field, "target_record_ids": [target["id"]]}]}))
             .send().await.unwrap().error_for_status().unwrap();
     }
 
@@ -530,14 +530,14 @@ target_blueprint = "versioned_sort_middle""#;
         .json()
         .await
         .unwrap();
-    let current_source = create_entity(&client, &base_url, &source_v2).await;
+    let current_source = create_record(&client, &base_url, &source_v2).await;
     client
-        .post(format!("{base_url}/entities/{}/relationships/replace", current_source["id"].as_str().unwrap()))
-        .json(&json!({"relationships": [{"attribute_code": "middle", "target_entity_ids": [middle_entity["id"]]}]}))
+        .post(format!("{base_url}/records/{}/relationships/replace", current_source["id"].as_str().unwrap()))
+        .json(&json!({"relationships": [{"attribute_code": "middle", "target_record_ids": [middle_record["id"]]}]}))
         .send().await.unwrap().error_for_status().unwrap();
 
     let historical_sort = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({
             "blueprint": {"code": "versioned_sort_source", "version": 1},
             "sort": {"field": "middle.leaf.name", "direction": "asc"},
@@ -549,7 +549,7 @@ target_blueprint = "versioned_sort_middle""#;
     assert_eq!(historical_sort.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let all_versions: Value = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({
             "blueprint": {"code": "versioned_sort_source"},
             "page": {"size": 25}
@@ -565,7 +565,7 @@ target_blueprint = "versioned_sort_middle""#;
     assert_eq!(all_versions["result_version_scope"]["kind"], "multiple");
 
     let all_version_sort = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({
             "blueprint": {"code": "versioned_sort_source"},
             "sort": {"field": "middle.leaf.name", "direction": "asc"},
@@ -582,7 +582,7 @@ target_blueprint = "versioned_sort_middle""#;
     );
 
     let current_only: Value = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({
             "blueprint": {"code": "versioned_sort_source", "version": version},
             "sort": {"field": "middle.leaf.name", "direction": "asc"},
@@ -603,7 +603,7 @@ target_blueprint = "versioned_sort_middle""#;
 
     client
         .delete(format!(
-            "{base_url}/entities/{}",
+            "{base_url}/records/{}",
             old_source["id"].as_str().unwrap()
         ))
         .send()
@@ -611,15 +611,15 @@ target_blueprint = "versioned_sort_middle""#;
         .unwrap()
         .error_for_status()
         .unwrap();
-    let second_current = create_entity(&client, &base_url, &source_v2).await;
+    let second_current = create_record(&client, &base_url, &source_v2).await;
     client
         .post(format!(
-            "{base_url}/entities/{}/relationships/replace",
+            "{base_url}/records/{}/relationships/replace",
             second_current["id"].as_str().unwrap()
         ))
         .json(&json!({"relationships": [{
             "attribute_code": "middle",
-            "target_entity_ids": [middle_entity["id"]]
+            "target_record_ids": [middle_record["id"]]
         }]}))
         .send()
         .await
@@ -627,7 +627,7 @@ target_blueprint = "versioned_sort_middle""#;
         .error_for_status()
         .unwrap();
     let single_version_page: Value = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({
             "blueprint": {"code": "versioned_sort_source"},
             "sort": {"field": "middle.leaf.name", "direction": "asc"},
@@ -647,9 +647,9 @@ target_blueprint = "versioned_sort_middle""#;
     );
     let stale_cursor = single_version_page["next_cursor"]
         .as_str()
-        .expect("two current entities produce a cursor");
+        .expect("two current records produce a cursor");
     let shared_target_next_page: Value = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({
             "blueprint": {"code": "versioned_sort_source"},
             "sort": {"field": "middle.leaf.name", "direction": "asc"},
@@ -700,10 +700,10 @@ target_blueprint = "versioned_sort_middle""#;
         .json()
         .await
         .unwrap();
-    create_entity(&client, &base_url, &source_v3).await;
+    create_record(&client, &base_url, &source_v3).await;
 
     let stale = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({
             "blueprint": {"code": "versioned_sort_source"},
             "sort": {"field": "middle.leaf.name", "direction": "asc"},

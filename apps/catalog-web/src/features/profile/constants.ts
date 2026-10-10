@@ -8,20 +8,20 @@ export const tokenPermissionPresets = [
       'blueprints.publish',
       'contexts.read',
       'contexts.write',
-      'entities.read',
-      'entities.write',
-      'entities.publish',
+      'records.read',
+      'records.write',
+      'records.publish',
     ],
   },
   {
     nameKey: 'profile.readOnlyCatalog',
     descriptionKey: 'profile.readOnlyCatalogDescription',
-    permissions: ['blueprints.read', 'contexts.read', 'entities.read'],
+    permissions: ['blueprints.read', 'contexts.read', 'records.read'],
   },
   {
-    nameKey: 'profile.entityImporter',
-    descriptionKey: 'profile.entityImporterDescription',
-    permissions: ['blueprints.read', 'contexts.read', 'entities.write'],
+    nameKey: 'profile.recordImporter',
+    descriptionKey: 'profile.recordImporterDescription',
+    permissions: ['blueprints.read', 'contexts.read', 'records.write'],
   },
 ];
 

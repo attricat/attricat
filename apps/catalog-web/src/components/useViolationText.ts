@@ -6,7 +6,7 @@ export const useViolationText = () => {
   const { t } = useTranslation();
   return (violation: CheckViolation) =>
     violation.contexts.length > 0
-      ? t('entities.checks.violationInContexts', {
+      ? t('records.checks.violationInContexts', {
           message: violation.message,
           contexts: violation.contexts.join(', '),
         })

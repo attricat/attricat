@@ -1,7 +1,7 @@
 format_version = 1
 code = "color"
 name = "Color"
-kind = "entity"
+kind = "record"
 
 attributes = [
   { code = "name", value_type = "string" },

@@ -1,8 +1,8 @@
 import type { TFunction } from 'i18next';
-import type { Attribute } from '../entities/api';
-import { PRESENCE_FILTER_OPERATOR } from '../entities/constants';
-import { attributeLabel } from '../entities/entityDisplay';
-import { statusConfiguration, statusLabel } from '../entities/status';
+import type { Attribute } from '../records/api';
+import { PRESENCE_FILTER_OPERATOR } from '../records/constants';
+import { attributeLabel } from '../records/recordDisplay';
+import { statusConfiguration, statusLabel } from '../records/status';
 import { CURRENT_USER_FILTER_VALUE } from '../principals/constants';
 import {
   principalConfiguration,

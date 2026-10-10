@@ -30,14 +30,14 @@ const legacyContext = {
   context_version: 1,
   blueprint_id: '22222222-2222-4222-8222-222222222222',
   blueprint_version: 3,
-  entity_ids: ['33333333-3333-4333-8333-333333333333'],
+  record_ids: ['33333333-3333-4333-8333-333333333333'],
 };
 const selection = {
   source: selectionSources.explorerSelection,
   blueprintId: legacyContext.blueprint_id,
   blueprintVersion: 3,
   contextId: null,
-  entityIds: [
+  recordIds: [
     '33333333-3333-4333-8333-333333333333',
     '44444444-4444-4444-8444-444444444444',
   ],
@@ -59,7 +59,7 @@ describe('selection-aware contribution contexts', () => {
       blueprint_id: legacyContext.blueprint_id,
       blueprint_version: 3,
       context_id: null,
-      entity_ids: selection.entityIds,
+      record_ids: selection.recordIds,
     });
   });
 
@@ -83,7 +83,7 @@ describe('selection-aware contribution contexts', () => {
   it('rejects selections the host contract does not allow', () => {
     const tooLarge = {
       ...selection,
-      entityIds: Array.from(
+      recordIds: Array.from(
         { length: 51 },
         (_, index) =>
           `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,

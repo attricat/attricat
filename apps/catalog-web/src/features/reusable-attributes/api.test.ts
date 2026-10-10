@@ -82,7 +82,7 @@ describe('reusable attribute API client', () => {
     );
   });
 
-  it('creates groups and attaches published revisions to entities', async () => {
+  it('creates groups and attaches published revisions to records', async () => {
     respond({
       id,
       code: 'dimensions',
@@ -113,7 +113,7 @@ describe('reusable attribute API client', () => {
     respond({});
     await attachReusableAttribute(id, id);
     expect(fetchMock).toHaveBeenLastCalledWith(
-      `/api/v1/entities/${id}/reusable-attributes`,
+      `/api/v1/records/${id}/reusable-attributes`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -124,7 +124,7 @@ describe('reusable attribute API client', () => {
     respond([]);
     await attachReusableAttributeGroup(id, id);
     expect(fetchMock).toHaveBeenLastCalledWith(
-      `/api/v1/entities/${id}/reusable-attribute-groups/${id}`,
+      `/api/v1/records/${id}/reusable-attribute-groups/${id}`,
       { method: 'POST' },
     );
   });

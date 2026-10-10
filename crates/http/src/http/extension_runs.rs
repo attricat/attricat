@@ -2,7 +2,7 @@
 //!
 //! These routes are deliberately separate from the operator management API.
 //! A run is visible to its initiator while that user can still read every
-//! selected entity, and to workspace operators holding `extensions.manage`.
+//! selected record, and to workspace operators holding `extensions.manage`.
 //! Requests with `scope=own` (all extension frame requests) see only the
 //! caller's own runs.
 
@@ -55,7 +55,7 @@ pub(super) struct SelectionRequest {
     blueprint_id: Uuid,
     blueprint_version: i64,
     context_id: Option<Uuid>,
-    entity_ids: Vec<Uuid>,
+    record_ids: Vec<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -224,7 +224,7 @@ pub(super) async fn start(
             operation_id: input.operation_id,
             input: input.input,
             idempotency_key: input.idempotency_key,
-            entity_ids: input.selection.entity_ids,
+            record_ids: input.selection.record_ids,
             blueprint_id: input.selection.blueprint_id,
             blueprint_version: input.selection.blueprint_version,
             context_id: input.selection.context_id,
@@ -438,13 +438,13 @@ pub(super) async fn adopt_annotation_namespace(
 }
 
 /// Privileged operator repair or cleanup of one extension namespace on an
-/// entity. Requires `extensions.manage` plus `entities.write` on the entity.
+/// record. Requires `extensions.manage` plus `records.write` on the record.
 pub(super) async fn repair_annotations(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
     principal: AuthenticatedPrincipal,
     workspace: ActiveWorkspace,
-    ApiPath((extension_id, entity_id)): ApiPath<(String, Uuid)>,
+    ApiPath((extension_id, record_id)): ApiPath<(String, Uuid)>,
     ApiJson(patch): ApiJson<ExtensionAnnotationPatch>,
 ) -> Result<Json<ExtensionAnnotations>, ApiError> {
     let may_write = state
@@ -452,8 +452,8 @@ pub(super) async fn repair_annotations(
         .principal_may(
             principal.actor(),
             workspace.0,
-            "entities.write",
-            Some(entity_id),
+            "records.write",
+            Some(record_id),
             None,
         )
         .await?;
@@ -462,7 +462,7 @@ pub(super) async fn repair_annotations(
     }
     Ok(Json(
         repository
-            .repair_extension_annotations(&extension_id, entity_id, patch)
+            .repair_extension_annotations(&extension_id, record_id, patch)
             .await?,
     ))
 }

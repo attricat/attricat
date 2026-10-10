@@ -5,9 +5,9 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { Paper } from '@mui/material';
 import { lazy, Suspense, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
-import { DeleteEntityDialog } from '../entities/components/DeleteEntityDialog';
-import { DuplicateEntityDialog } from '../entities/components/DuplicateEntityDialog';
+import type { BlueprintWithAttributes, RecordItem } from '../records/api';
+import { DeleteRecordDialog } from '../records/components/DeleteRecordDialog';
+import { DuplicateRecordDialog } from '../records/components/DuplicateRecordDialog';
 import { getExtensionRuntime } from '../extensions/api';
 import { extensionRuntimeRefetchInterval } from '../extensions/constants';
 import { extensionQueryKeys } from '../extensions/queryKeys';
@@ -17,14 +17,14 @@ import {
   loadMoreRowKey,
   resultRowOverscan,
 } from './constants';
-import { EntityActionsMenu } from './EntityActionsMenu';
+import { RecordActionsMenu } from './RecordActionsMenu';
 import { ExplorerExtensionActions } from './ExplorerExtensionActions';
 import {
   arrangeExplorerColumns,
   buildExplorerColumnDefinitions,
 } from './ExplorerResultColumns';
 import { ExplorerResultsToolbar } from './ExplorerResultsToolbar';
-import type { ActionMenuPosition, OpenEntityPanel } from './ExplorerTableCells';
+import type { ActionMenuPosition, OpenRecordPanel } from './ExplorerTableCells';
 import {
   buildExplorerTableColumns,
   configurableColumnIds,
@@ -35,7 +35,7 @@ import type { AttributeFilterDraft } from './attributeFilterValues';
 import type { ExplorerSort } from './search';
 import { SearchInfoDialog } from './SearchInfoDialog';
 import { SendSelectedToAgentDialog } from './SendSelectedToAgentDialog';
-import { useEntityPublicationActions } from './useEntityPublicationActions';
+import { useRecordPublicationActions } from './useRecordPublicationActions';
 import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
 import { useExplorerColumnPreferences } from './useExplorerColumnPreferences';
 import type { ExplorerSelection } from './useExplorerSelection';
@@ -43,7 +43,7 @@ import { VirtualizedExplorerTable } from './VirtualizedExplorerTable';
 import { useTimeZone } from '../../time/useInstantFormat';
 import { lexiconText } from '../lexicon/lexicon';
 import { EmptyState } from '../../components/EmptyState';
-import { EntityIcon } from '../../components/systemIcons';
+import { RecordIcon } from '../../components/systemIcons';
 
 // The column dialog carries drag-and-drop; load it when first opened so it
 // stays out of the Explorer's startup bundle.
@@ -60,15 +60,15 @@ type Props = {
   hasNextPage: boolean;
   isFetching: boolean;
   isFetchingNextPage: boolean;
-  items: EntityItem[];
+  items: RecordItem[];
   onLoadMore: () => void;
   onSortChange: (field: string) => void;
   onFilterCell?: (draft: AttributeFilterDraft) => void;
-  onSaveSelectionAsSearch: (entities: EntityItem[]) => void;
-  /** Opens a result in the entity panel instead of navigating to its page. */
-  onOpenPanel?: OpenEntityPanel;
-  /** The result open in the entity panel. */
-  panelEntityId?: string;
+  onSaveSelectionAsSearch: (records: RecordItem[]) => void;
+  /** Opens a result in the record panel instead of navigating to its page. */
+  onOpenPanel?: OpenRecordPanel;
+  /** The result open in the record panel. */
+  panelRecordId?: string;
   /** The selected context followed by its ancestors. */
   contextCodes: readonly string[];
   publicationContextCode: string;
@@ -95,7 +95,7 @@ export const ExplorerResultsTable = ({
   onFilterCell,
   onSaveSelectionAsSearch,
   onOpenPanel,
-  panelEntityId,
+  panelRecordId,
   contextCodes,
   publicationContextCode,
   publicationContextId,
@@ -111,18 +111,18 @@ export const ExplorerResultsTable = ({
 }: Props) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [deleteEntityId, setDeleteEntityId] = useState<string | null>(null);
-  const [duplicateEntityId, setDuplicateEntityId] = useState<string | null>(
+  const [deleteRecordId, setDeleteRecordId] = useState<string | null>(null);
+  const [duplicateRecordId, setDuplicateRecordId] = useState<string | null>(
     null,
   );
-  const [agentSelection, setAgentSelection] = useState<EntityItem[] | null>(
+  const [agentSelection, setAgentSelection] = useState<RecordItem[] | null>(
     null,
   );
-  const [searchInfoEntity, setSearchInfoEntity] = useState<EntityItem | null>(
+  const [searchInfoRecord, setSearchInfoRecord] = useState<RecordItem | null>(
     null,
   );
   const [actionMenu, setActionMenu] = useState<{
-    entityId: string;
+    recordId: string;
     position: ActionMenuPosition;
   } | null>(null);
   const [columnPreferencesOpen, setColumnPreferencesOpen] = useState(false);
@@ -146,16 +146,16 @@ export const ExplorerResultsTable = ({
       items[index] ? [[items[index].id, items[index]] as const] : [],
     ),
   );
-  const activeActionEntity = actionMenu
-    ? items.find((item) => item.id === actionMenu.entityId)
+  const activeActionRecord = actionMenu
+    ? items.find((item) => item.id === actionMenu.recordId)
     : undefined;
-  if (activeActionEntity)
-    publicationItems.set(activeActionEntity.id, activeActionEntity);
-  const { error, publicationsByEntityId, publish, readiness, unpublish } =
-    useEntityPublicationActions(
+  if (activeActionRecord)
+    publicationItems.set(activeActionRecord.id, activeActionRecord);
+  const { error, publicationsByRecordId, publish, readiness, unpublish } =
+    useRecordPublicationActions(
       [...publicationItems.values()],
       publicationContextId,
-      canPublish ? activeActionEntity?.id : undefined,
+      canPublish ? activeActionRecord?.id : undefined,
     );
   const tableColumns = buildExplorerTableColumns(
     blueprint,
@@ -183,13 +183,13 @@ export const ExplorerResultsTable = ({
     contextCodes,
     publicationContextCode,
     publicationSortAvailable,
-    publicationsByEntityId,
+    publicationsByRecordId,
     runtime: runtime.data,
     sort,
     onSortChange,
     onFilterCell,
-    onOpenActions: (entityId, position) =>
-      setActionMenu({ entityId, position }),
+    onOpenActions: (recordId, position) =>
+      setActionMenu({ recordId, position }),
     onOpenPanel,
     takeCellFrame,
     t,
@@ -209,7 +209,7 @@ export const ExplorerResultsTable = ({
     data: items,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getRowId: (entity) => entity.id,
+    getRowId: (record) => record.id,
   });
   const paddingTop = virtualRows[0]?.start ?? 0;
   const paddingBottom =
@@ -226,7 +226,7 @@ export const ExplorerResultsTable = ({
         selectionMode={selection.selectionMode}
         selectedItems={selection.selectedItems}
         onClearSelection={selection.clearSelection}
-        onRemoveSelected={selection.removeEntity}
+        onRemoveSelected={selection.removeRecord}
         onSaveSelectionAsSearch={() =>
           onSaveSelectionAsSearch([...selection.selectedItems])
         }
@@ -259,61 +259,58 @@ export const ExplorerResultsTable = ({
         isFetching={isFetching}
         isFetchingNextPage={isFetchingNextPage}
         onLoadMore={onLoadMore}
-        panelEntityId={panelEntityId}
+        panelRecordId={panelRecordId}
       />
       {items.length === 0 && (
-        <EmptyState
-          icon={EntityIcon}
-          title={t('explorer.noMatchingEntities')}
-        />
+        <EmptyState icon={RecordIcon} title={t('explorer.noMatchingRecords')} />
       )}
-      {actionMenu && activeActionEntity && (
-        <EntityActionsMenu
+      {actionMenu && activeActionRecord && (
+        <RecordActionsMenu
           blueprintId={blueprint.blueprint.id}
           canPublish={canPublish}
           canDelete={canDelete}
-          entity={activeActionEntity}
+          record={activeActionRecord}
           onClose={() => setActionMenu(null)}
-          onDelete={() => setDeleteEntityId(activeActionEntity.id)}
-          onSearchInfo={setSearchInfoEntity}
+          onDelete={() => setDeleteRecordId(activeActionRecord.id)}
+          onSearchInfo={setSearchInfoRecord}
           position={actionMenu.position}
-          publication={publicationsByEntityId.get(activeActionEntity.id)}
+          publication={publicationsByRecordId.get(activeActionRecord.id)}
           publicationContextId={publicationContextId}
-          publish={() => publish.mutate(activeActionEntity.id)}
+          publish={() => publish.mutate(activeActionRecord.id)}
           publishing={publish.isPending}
           readiness={readiness}
-          duplicate={() => setDuplicateEntityId(activeActionEntity.id)}
-          unpublish={() => unpublish.mutate(activeActionEntity.id)}
+          duplicate={() => setDuplicateRecordId(activeActionRecord.id)}
+          unpublish={() => unpublish.mutate(activeActionRecord.id)}
           unpublishing={unpublish.isPending}
         />
       )}
-      {duplicateEntityId && (
-        <DuplicateEntityDialog
-          entityId={duplicateEntityId}
-          onClose={() => setDuplicateEntityId(null)}
+      {duplicateRecordId && (
+        <DuplicateRecordDialog
+          recordId={duplicateRecordId}
+          onClose={() => setDuplicateRecordId(null)}
           onDuplicated={(copy) => {
-            setDuplicateEntityId(null);
+            setDuplicateRecordId(null);
             void navigate({
-              params: { entityId: copy.id },
-              to: '/entities/$entityId',
+              params: { recordId: copy.id },
+              to: '/records/$recordId',
             });
           }}
         />
       )}
-      {deleteEntityId && (
-        <DeleteEntityDialog
-          entityId={deleteEntityId}
-          onClose={() => setDeleteEntityId(null)}
+      {deleteRecordId && (
+        <DeleteRecordDialog
+          recordId={deleteRecordId}
+          onClose={() => setDeleteRecordId(null)}
           onDeleted={() => {
-            selection.removeEntity(deleteEntityId);
-            setDeleteEntityId(null);
+            selection.removeRecord(deleteRecordId);
+            setDeleteRecordId(null);
           }}
         />
       )}
       {agentSelection && (
         <SendSelectedToAgentDialog
           blueprintName={lexiconText(blueprint.blueprint.name)}
-          entities={agentSelection}
+          records={agentSelection}
           onClose={() => setAgentSelection(null)}
           onSuccess={() => {
             setAgentSelection(null);
@@ -334,8 +331,8 @@ export const ExplorerResultsTable = ({
         </Suspense>
       )}
       <SearchInfoDialog
-        entity={searchInfoEntity}
-        onClose={() => setSearchInfoEntity(null)}
+        record={searchInfoRecord}
+        onClose={() => setSearchInfoRecord(null)}
       />
     </Paper>
   );

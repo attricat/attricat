@@ -4,7 +4,7 @@ const SOURCE: &str = r#"
 format_version = 1
 code = "contact"
 name = "Contact"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["email"]

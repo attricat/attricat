@@ -40,16 +40,16 @@ The durable envelope has these fields:
 | `id` | Immutable event UUID. Use it as the deduplication key for one consumer. |
 | `sequence` | Database-assigned outbox sequence; scoped inspection/order aid only. |
 | `workspace_id`, `occurred_at` | Event tenancy and timestamp. |
-| `event_type` | Versioned routing contract, such as `entity.updated.v1`. |
+| `event_type` | Versioned routing contract, such as `record.updated.v1`. |
 | `aggregate_kind`, `aggregate_id` | The affected aggregate's kind and UUID. |
 | `correlation_id`, `causation_id` | Trace an operation and, for follow-on work, its direct triggering event. |
 | `source_kind`, `source_name` | Producer identity (`api`, `worker`, `plugin`, or `system`) and stable name. |
 | `metadata`, `payload` | JSON objects containing non-routing facts. Each is at most 64 KiB. |
 
 Routing and operational facts are normalized columns, not payload JSON. Event
-payloads describe the smallest useful affected facts; they are not entity
-snapshots or projections. In particular, entity and value mutations identify
-the entity (and, when applicable, its blueprint), while `facts` contains
+payloads describe the smallest useful affected facts; they are not record
+snapshots or projections. In particular, record and value mutations identify
+the record (and, when applicable, its blueprint), while `facts` contains
 attribute/context IDs and codes, relationship target IDs, a change kind, and
 before/after values. A consumer needing current state must read and authorize
 that state itself.
@@ -66,11 +66,11 @@ System tags and metadata are not attribute values and produce no facts.
 Workflow event triggers can filter on these facts' `attribute_code` values; see
 [Workflows](workflows.md#changed-attribute-filters).
 
-`entity.migrated.v1` carries no facts: its payload is `entity_id`,
+`record.migrated.v1` carries no facts: its payload is `record_id`,
 `blueprint_id`, `source_version`, `target_version` and `migration_id`, plus
 `released_relationships` when the migration dropped or re-pointed a
 relationship. Each entry has an `attribute_code` and the ascending
-`target_entity_ids` the entity stopped pointing to, at most 100 per
+`target_record_ids` the record stopped pointing to, at most 100 per
 relationship and 1,000 across the event (attributes in code order), and at
 most 48 KiB of JSON however long the codes are, so the payload stays within
 its size limit. Rule fan-out uses it
@@ -78,32 +78,32 @@ to re-evaluate `referenced_by` dependents the migration released.
 
 Core types are constants in `api::domain_events` and currently include:
 
-- `entity.created.v1`, `entity.updated.v1`, `entity.deleted.v1`,
-  `entity.migrated.v1`, `entity.published.v1`, and `entity.unpublished.v1`.
-  Publication payloads carry `entity_id`, `context_id` (the channel),
+- `record.created.v1`, `record.updated.v1`, `record.deleted.v1`,
+  `record.migrated.v1`, `record.published.v1`, and `record.unpublished.v1`.
+  Publication payloads carry `record_id`, `context_id` (the channel),
   `published_at`, `published_by_user_id` and an optional `reason`.
-  `entity.published.v1` has `reason = "blueprint_bulk"` when it comes from
-  publishing a blueprint revision's entities, and no reason otherwise.
-  `entity.unpublished.v1` always has one of these reasons:
-  - `manual`: a person unpublished the entity from the channel.
-  - `entity_changed`: an entity edit withdrew every publication, because the
+  `record.published.v1` has `reason = "blueprint_bulk"` when it comes from
+  publishing a blueprint revision's records, and no reason otherwise.
+  `record.unpublished.v1` always has one of these reasons:
+  - `manual`: a person unpublished the record from the channel.
+  - `record_changed`: a record edit withdrew every publication, because the
     actor holds no `[publication].retain_on_edit_roles` role.
-  - `checks_failed`: a retained edit left the entity failing the channel's
-    required rules or `require_valid_entity`, so only that channel's
+  - `checks_failed`: a retained edit left the record failing the channel's
+    required rules or `require_valid_record`, so only that channel's
     publication was withdrawn.
   - `context_changed`: the channel context was changed or deleted.
-  - `entity_deleted`: the entity was deleted.
+  - `record_deleted`: the record was deleted.
 
-  An entity edit also records its publication outcome under `publication` in
+  A record edit also records its publication outcome under `publication` in
   the edit event's `metadata` and in its audit row's metadata. It is either
-  `{"disposition": "withdrawn", "reason": "entity_changed"}` or
+  `{"disposition": "withdrawn", "reason": "record_changed"}` or
   `{"disposition": "retained", "role_code": …, "withdrawn_context_ids": [...]}`,
   where `role_code` is the actor's retaining role and `withdrawn_context_ids`
   lists, in ascending order, the channels whose publication the edit withdrew
   with `checks_failed` (empty when every publication was kept).
-- `entity.annotations_changed.v1`, emitted when an extension (or an operator
+- `record.annotations_changed.v1`, emitted when an extension (or an operator
   repair) changes one extension's annotation namespace. Its payload names the
-  entity, blueprint revision, `extension_id`, new `revision`, and the tags and
+  record, blueprint revision, `extension_id`, new `revision`, and the tags and
   metadata keys that changed, never their values.
 - `attribute_value.changed.v1` and `attribute_value.restored.v1`
 - `relationship.changed.v1`
@@ -111,7 +111,7 @@ Core types are constants in `api::domain_events` and currently include:
   `blueprint.published.v1`
 - `context.created.v1`, `context.updated.v1`, and `context.deleted.v1`
 
-Core namespaces (`entity`, `attribute_value`, `relationship`, `blueprint`, and
+Core namespaces (`record`, `attribute_value`, `relationship`, `blueprint`, and
 `context`) are reserved. A plugin producer must use
 `plugin.<publisher>.<name>.v<version>`—for example,
 `plugin.acme.score_recomputed.v1`. Every dot-separated identifier must be
@@ -126,7 +126,7 @@ filter the exact versions they understand and ignore other versions.
 Use one correlation ID for the request or job that initiated a change. An
 initial event normally has no `causation_id`. A worker event retains the
 triggering event's `correlation_id` and sets `causation_id` to the triggering
-event ID. Do not repurpose either ID as an entity ID or an arbitrary request
+event ID. Do not repurpose either ID as a record ID or an arbitrary request
 label.
 
 The `EventPublisher::enqueue_event` boundary accepts a `NewDomainEvent` and the
@@ -157,7 +157,7 @@ impl EventHandler for SearchIndexHandler {
     fn name(&self) -> &'static str { "acme.search_index" }
 
     fn event_types(&self) -> &'static [&'static str] {
-        &["entity.updated.v1", "entity.deleted.v1"]
+        &["record.updated.v1", "record.deleted.v1"]
     }
 
     async fn handle(
@@ -268,4 +268,4 @@ event facts.
 
 ## Workflow consumer
 
-`catalog.workflows` is an internal consumer of the supported entity v1 events. Its delivery handler is intentionally limited to durable workflow-run fan-out; independent workflow-run leases perform mutations. Delivery and worker attempts are at-least-once and unordered, but each run/action key, entity mutation, audit record, and emitted outbox event commit in one transaction, so lease reclaim cannot duplicate effects. Workflow emitted events retain correlation/direct causation and persisted root/depth lineage, use `workflow:<id>` as source, and are not fed back into workflows by default (depth is capped at 8). Disabling cancels queued and leased runs; diagnostics expose no domain-event payloads.
+`catalog.workflows` is an internal consumer of the supported record v1 events. Its delivery handler is intentionally limited to durable workflow-run fan-out; independent workflow-run leases perform mutations. Delivery and worker attempts are at-least-once and unordered, but each run/action key, record mutation, audit record, and emitted outbox event commit in one transaction, so lease reclaim cannot duplicate effects. Workflow emitted events retain correlation/direct causation and persisted root/depth lineage, use `workflow:<id>` as source, and are not fed back into workflows by default (depth is capped at 8). Disabling cancels queued and leased runs; diagnostics expose no domain-event payloads.

@@ -1,11 +1,11 @@
 //! Workflow action execution. Every workflow write, whether to the trigger
-//! entity or to an entity that references it, goes through
+//! record or to a record that references it, goes through
 //! [`CatalogRepository::apply_workflow_actions`], which uses the ordinary
-//! entity update seam, so it is validated, audited and published exactly like
-//! any other entity write.
+//! record update seam, so it is validated, audited and published exactly like
+//! any other record write.
 use super::system_annotations::{TagMetadataPatch, apply_tag_metadata_patch};
 use super::*;
-use crate::model::UpdateEntityFormRequest;
+use crate::model::UpdateRecordFormRequest;
 use sqlx::{Postgres, Transaction};
 use std::collections::HashSet;
 
@@ -27,48 +27,48 @@ fn bounded_error(message: &str) -> String {
     message[..message.floor_char_boundary(MAX_TARGET_ERROR_BYTES)].to_owned()
 }
 
-/// The accumulated effect of one or more local actions on one locked entity.
+/// The accumulated effect of one or more local actions on one locked record.
 #[derive(Default)]
-struct WorkflowEntityChange {
+struct WorkflowRecordChange {
     values: Vec<NewAttributeValue>,
     system_tags: Option<Vec<String>>,
     system_metadata: Option<Value>,
 }
 
-impl WorkflowEntityChange {
+impl WorkflowRecordChange {
     /// Derives desired tags/metadata from current state: event payloads
     /// intentionally contain only immutable facts and are unordered.
     fn stage(
         &mut self,
-        entity: &Entity,
+        record: &Record,
         action: &catalog_workflow::Action,
         event: &crate::domain_events::DomainEvent,
     ) -> Result<(), RepositoryError> {
         use catalog_workflow::Action;
         match action {
             Action::SystemTagsAdd { tags } => self.patch_tags(
-                entity,
+                record,
                 TagMetadataPatch {
                     add_tags: tags.clone(),
                     ..TagMetadataPatch::default()
                 },
             ),
             Action::SystemTagsRemove { tags } => self.patch_tags(
-                entity,
+                record,
                 TagMetadataPatch {
                     remove_tags: tags.clone(),
                     ..TagMetadataPatch::default()
                 },
             ),
             Action::SystemMetadataMerge { values } => self.patch_metadata(
-                entity,
+                record,
                 TagMetadataPatch {
                     set_metadata: values.clone(),
                     ..TagMetadataPatch::default()
                 },
             )?,
             Action::SystemMetadataDelete { keys } => self.patch_metadata(
-                entity,
+                record,
                 TagMetadataPatch {
                     remove_metadata: keys.clone(),
                     ..TagMetadataPatch::default()
@@ -83,31 +83,31 @@ impl WorkflowEntityChange {
                 context_id: None,
                 value: scalar_source_value(value, event)?,
             }),
-            Action::ReferencingEntitiesUpdate { .. } => {
+            Action::ReferencingRecordsUpdate { .. } => {
                 return Err(RepositoryError::InvalidWorkflowDefinition(
-                    "referencing_entities_update is not a local entity action".into(),
+                    "referencing_records_update is not a local record action".into(),
                 ));
             }
         }
         Ok(())
     }
 
-    fn patch_tags(&mut self, entity: &Entity, patch: TagMetadataPatch) {
+    fn patch_tags(&mut self, record: &Record, patch: TagMetadataPatch) {
         let tags = self
             .system_tags
-            .get_or_insert_with(|| entity.system_tags.clone());
+            .get_or_insert_with(|| record.system_tags.clone());
         apply_tag_metadata_patch(tags, &mut Map::new(), &patch);
     }
 
     fn patch_metadata(
         &mut self,
-        entity: &Entity,
+        record: &Record,
         patch: TagMetadataPatch,
     ) -> Result<(), RepositoryError> {
         let mut metadata = self
             .system_metadata
             .as_ref()
-            .unwrap_or(&entity.system_metadata)
+            .unwrap_or(&record.system_metadata)
             .as_object()
             .cloned()
             .ok_or(RepositoryError::InvalidSystemMetadata)?;
@@ -140,8 +140,8 @@ fn scalar_source_value(
     Ok(value)
 }
 
-/// One `referencing_entities_update` action of a claimed run, applied to
-/// each entity that references the trigger entity.
+/// One `referencing_records_update` action of a claimed run, applied to
+/// each record that references the trigger record.
 struct ReferencingAction<'a> {
     run: &'a super::ClaimedWorkflowRun,
     action_index: i32,
@@ -152,7 +152,7 @@ struct ReferencingAction<'a> {
 
 impl CatalogRepository {
     /// Executes one workflow action. A local action records its idempotency key
-    /// in the same transaction as the locked entity mutation, audit, and outbox
+    /// in the same transaction as the locked record mutation, audit, and outbox
     /// event, so a reclaimed run observes the key and cannot repeat effects.
     pub async fn execute_workflow_action(
         &self,
@@ -161,7 +161,7 @@ impl CatalogRepository {
         action: &catalog_workflow::Action,
         event: &crate::domain_events::DomainEvent,
     ) -> Result<super::WorkflowActionResult, RepositoryError> {
-        if let catalog_workflow::Action::ReferencingEntitiesUpdate {
+        if let catalog_workflow::Action::ReferencingRecordsUpdate {
             relationship_attribute,
             max_targets,
             actions,
@@ -191,12 +191,12 @@ impl CatalogRepository {
             transaction.commit().await?;
             return Ok(super::WorkflowActionResult::AlreadyCompleted);
         }
-        let entity = self
-            .lock_entity(&mut transaction, event.aggregate_id)
+        let record = self
+            .lock_record(&mut transaction, event.aggregate_id)
             .await?;
         self.apply_workflow_actions(
             &mut transaction,
-            entity,
+            record,
             std::slice::from_ref(action),
             event,
         )
@@ -257,36 +257,36 @@ impl CatalogRepository {
         Ok(true)
     }
 
-    /// Applies local actions to one locked entity as a single ordinary entity
-    /// update through [`Self::update_entity_in_transaction`]: schema, status
+    /// Applies local actions to one locked record as a single ordinary record
+    /// update through [`Self::update_record_in_transaction`]: schema, status
     /// transition, check and annotation validation, preview rebuild, audit
-    /// evidence, publication reconciliation and one `entity.updated.v1`
+    /// evidence, publication reconciliation and one `record.updated.v1`
     /// outbox event. Like every server-side write, it does not enforce an
     /// attribute's `readonly` flag, which only marks the field read-only in
     /// the editing UI.
     async fn apply_workflow_actions(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: Entity,
+        record: Record,
         actions: &[catalog_workflow::Action],
         event: &crate::domain_events::DomainEvent,
     ) -> Result<(), RepositoryError> {
-        let mut change = WorkflowEntityChange::default();
+        let mut change = WorkflowRecordChange::default();
         for action in actions {
-            change.stage(&entity, action, event)?;
+            change.stage(&record, action, event)?;
         }
-        let WorkflowEntityChange {
+        let WorkflowRecordChange {
             values,
             system_tags,
             system_metadata,
         } = change;
-        // The caller holds the row lock, so the entity cannot have changed.
+        // The caller holds the row lock, so the record cannot have changed.
         let (_, changes, event) = self
-            .update_entity_in_transaction(
+            .update_record_in_transaction(
                 transaction,
-                entity.id,
-                UpdateEntityFormRequest {
-                    expected_updated_at: Some(entity.updated_at),
+                record.id,
+                UpdateRecordFormRequest {
+                    expected_updated_at: Some(record.updated_at),
                     values,
                     relationships: Vec::new(),
                     remove_values: Vec::new(),
@@ -297,14 +297,14 @@ impl CatalogRepository {
             .await?;
         // Revalidates the task fence immediately before the durable effect's
         // audit/outbox completion boundary.
-        self.stage_entity_mutation(transaction, changes, event)
+        self.stage_record_mutation(transaction, changes, event)
             .await
     }
 
-    /// Live entities whose `relationship_attribute` (of their current blueprint
+    /// Live records whose `relationship_attribute` (of their current blueprint
     /// revision or their own additional attributes) actively targets `target`
-    /// in any context, in stable ID order. `only` narrows the check to one entity.
-    async fn referencing_entities(
+    /// in any context, in stable ID order. `only` narrows the check to one record.
+    async fn referencing_records(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         target: Uuid,
@@ -312,7 +312,7 @@ impl CatalogRepository {
         only: Option<Uuid>,
         limit: i64,
     ) -> Result<Vec<Uuid>, RepositoryError> {
-        super::references::referencing_entity_ids(
+        super::references::referencing_record_ids(
             transaction,
             self.workspace_id.0,
             super::references::ReferenceQuery {
@@ -327,8 +327,8 @@ impl CatalogRepository {
         .await
     }
 
-    /// Updates every entity that references the trigger entity. Each target is
-    /// its own transaction with its own `(run, action, entity)` key, so a retry
+    /// Updates every record that references the trigger record. Each target is
+    /// its own transaction with its own `(run, action, record)` key, so a retry
     /// re-attempts only targets that failed or were not reached. The action's
     /// own marker is written only after every current target has settled.
     async fn execute_workflow_referencing_action(
@@ -359,7 +359,7 @@ impl CatalogRepository {
             return Ok(super::WorkflowActionResult::AlreadyCompleted);
         }
         let targets = self
-            .referencing_entities(
+            .referencing_records(
                 &mut transaction,
                 action.event.aggregate_id,
                 relationship_attribute,
@@ -368,7 +368,7 @@ impl CatalogRepository {
             )
             .await?;
         let recorded: Vec<(Uuid, String)> = sqlx::query_as(
-            "SELECT entity_id,status FROM workflow_run_action_targets WHERE run_id=$1 AND action_index=$2 ORDER BY entity_id",
+            "SELECT record_id,status FROM workflow_run_action_targets WHERE run_id=$1 AND action_index=$2 ORDER BY record_id",
         )
         .bind(run.run.id)
         .bind(action_index)
@@ -377,23 +377,23 @@ impl CatalogRepository {
         transaction.commit().await?;
         if targets.len() > max_targets as usize {
             return Err(RepositoryError::InvalidWorkflowDefinition(format!(
-                "more than {max_targets} entities reference the trigger entity through '{relationship_attribute}'; raise max_targets or narrow the relationship"
+                "more than {max_targets} records reference the trigger record through '{relationship_attribute}'; raise max_targets or narrow the relationship"
             )));
         }
         let settled: HashSet<Uuid> = recorded
             .iter()
             .filter(|(_, status)| status != "failed")
-            .map(|(entity_id, _)| *entity_id)
+            .map(|(record_id, _)| *record_id)
             .collect();
         // Previously failed targets are always revisited, even if they stopped
-        // referencing the trigger entity; they then settle as `skipped`.
+        // referencing the trigger record; they then settle as `skipped`.
         let mut pending: Vec<Uuid> = targets
             .into_iter()
             .chain(
                 recorded
                     .into_iter()
                     .filter(|(_, status)| status == "failed")
-                    .map(|(entity_id, _)| entity_id),
+                    .map(|(record_id, _)| record_id),
             )
             .filter(|target| !settled.contains(target))
             .collect();
@@ -401,7 +401,7 @@ impl CatalogRepository {
         pending.dedup();
         let mut failures = Vec::new();
         for target in &pending {
-            match self.update_referencing_entity(action, *target).await {
+            match self.update_referencing_record(action, *target).await {
                 Ok(true) => {}
                 Ok(false) => return Ok(super::WorkflowActionResult::Cancelled),
                 // A lost task lease is not a target failure: stop immediately.
@@ -414,9 +414,9 @@ impl CatalogRepository {
                 }
             }
         }
-        if let Some((entity_id, message)) = failures.first() {
+        if let Some((record_id, message)) = failures.first() {
             return Err(RepositoryError::InvalidWorkflowDefinition(format!(
-                "referencing_entities_update action {action_index} failed for {} of {} pending target entities; first failure {entity_id}: {message}",
+                "referencing_records_update action {action_index} failed for {} of {} pending target records; first failure {record_id}: {message}",
                 failures.len(),
                 pending.len()
             )));
@@ -436,12 +436,12 @@ impl CatalogRepository {
     }
 
     /// Returns `false` when the run was cancelled or disabled. A target that no
-    /// longer exists or no longer references the trigger entity is recorded as
+    /// longer exists or no longer references the trigger record is recorded as
     /// `skipped`; it is never written.
-    async fn update_referencing_entity(
+    async fn update_referencing_record(
         &self,
         action: &ReferencingAction<'_>,
-        entity_id: Uuid,
+        record_id: Uuid,
     ) -> Result<bool, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         if !self
@@ -452,19 +452,19 @@ impl CatalogRepository {
             return Ok(false);
         }
         // Lock before rechecking the reference: relationship writes lock the
-        // same entity row, so the reference cannot change underneath us.
-        let entity = match self.lock_entity(&mut transaction, entity_id).await {
-            Ok(entity) => Some(entity),
+        // same record row, so the reference cannot change underneath us.
+        let record = match self.lock_record(&mut transaction, record_id).await {
+            Ok(record) => Some(record),
             Err(RepositoryError::NotFound(_)) => None,
             Err(error) => return Err(error),
         };
-        let references = match &entity {
+        let references = match &record {
             Some(_) => !self
-                .referencing_entities(
+                .referencing_records(
                     &mut transaction,
                     action.event.aggregate_id,
                     action.relationship_attribute,
-                    Some(entity_id),
+                    Some(record_id),
                     1,
                 )
                 .await?
@@ -473,23 +473,23 @@ impl CatalogRepository {
         };
         let status = if references { "completed" } else { "skipped" };
         let marker = sqlx::query(
-            r#"INSERT INTO workflow_run_action_targets AS t (run_id, action_index, entity_id, workspace_id, status)
+            r#"INSERT INTO workflow_run_action_targets AS t (run_id, action_index, record_id, workspace_id, status)
                VALUES ($1, $2, $3, $4, $5)
-               ON CONFLICT (run_id, action_index, entity_id) DO UPDATE
+               ON CONFLICT (run_id, action_index, record_id) DO UPDATE
                SET status = EXCLUDED.status, attempts = t.attempts + 1, last_error = NULL, updated_at = clock_timestamp()
                WHERE t.status = 'failed'"#,
         )
         .bind(action.run.run.id)
         .bind(action.action_index)
-        .bind(entity_id)
+        .bind(record_id)
         .bind(self.workspace_id.0)
         .bind(status)
         .execute(&mut *transaction)
         .await?;
         if marker.rows_affected() == 1
-            && let Some(entity) = entity.filter(|_| references)
+            && let Some(record) = record.filter(|_| references)
         {
-            self.apply_workflow_actions(&mut transaction, entity, action.actions, action.event)
+            self.apply_workflow_actions(&mut transaction, record, action.actions, action.event)
                 .await?;
         } else {
             self.ensure_task_fence(&mut transaction).await?;
@@ -503,21 +503,21 @@ impl CatalogRepository {
     async fn record_referencing_target_failure(
         &self,
         action: &ReferencingAction<'_>,
-        entity_id: Uuid,
+        record_id: Uuid,
         message: &str,
     ) -> Result<(), RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         self.ensure_task_fence(&mut transaction).await?;
         sqlx::query(
-            r#"INSERT INTO workflow_run_action_targets AS t (run_id, action_index, entity_id, workspace_id, status, last_error)
+            r#"INSERT INTO workflow_run_action_targets AS t (run_id, action_index, record_id, workspace_id, status, last_error)
                VALUES ($1, $2, $3, $4, 'failed', $5)
-               ON CONFLICT (run_id, action_index, entity_id) DO UPDATE
+               ON CONFLICT (run_id, action_index, record_id) DO UPDATE
                SET attempts = t.attempts + 1, last_error = EXCLUDED.last_error, updated_at = clock_timestamp()
                WHERE t.status = 'failed'"#,
         )
         .bind(action.run.run.id)
         .bind(action.action_index)
-        .bind(entity_id)
+        .bind(record_id)
         .bind(self.workspace_id.0)
         .bind(message)
         .execute(&mut *transaction)

@@ -24,7 +24,7 @@ const SYNC_BLUEPRINT: &str = r#"
 format_version = 1
 code = "extension_sync_item"
 name = "Extension sync item"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["external_id"]
@@ -302,7 +302,7 @@ fn storage_client_release_archive(version: &str) -> Vec<u8> {
         "permissions": ["storage.extension"],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [{"id": "client", "kind": "client_component", "path": "client.js"}],
-        "ui": [{"id": "panel", "version": 1, "kind": "embedded", "artifact": "client", "outlet": "entity_preview_panel"}]
+        "ui": [{"id": "panel", "version": 1, "kind": "embedded", "artifact": "client", "outlet": "record_preview_panel"}]
     }))
     .unwrap();
     let mut tar_bytes = Vec::new();
@@ -359,7 +359,7 @@ fn client_release_archive_for_outlet(
 }
 
 fn client_release_archive(extension_id: &str) -> Vec<u8> {
-    client_release_archive_for_outlet(extension_id, "panel", "entity_preview_panel")
+    client_release_archive_for_outlet(extension_id, "panel", "record_preview_panel")
 }
 
 fn client_release_archive_with_navigation(extension_id: &str) -> Vec<u8> {
@@ -401,7 +401,7 @@ async fn extension_catalog_upsert_create_writes_declared_relationships(pool: sql
 format_version = 1
 code = "extension_linked_item"
 name = "Extension linked item"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["external_id"]
@@ -440,7 +440,7 @@ target_blueprint = "extension_linked_item"
                 attribute_id: None,
                 attribute_code: Some("related".into()),
                 context_id: None,
-                target_entity_ids: related,
+                target_record_ids: related,
             }],
             system_tags: vec![],
             system_metadata: json!({}),
@@ -456,7 +456,7 @@ target_blueprint = "extension_linked_item"
         .execute_extension_catalog_batch(upsert("target", Vec::new()))
         .await
         .unwrap()[0]
-        .entity_id
+        .record_id
         .unwrap();
     let created = repository
         .execute_extension_catalog_batch(upsert("source", vec![target, target]))
@@ -469,9 +469,9 @@ target_blueprint = "extension_linked_item"
         created[0].error
     );
     let targets: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT relationship_target_entity_id FROM attribute_values WHERE entity_id = $1 AND active AND relationship_target_entity_id IS NOT NULL",
+        "SELECT relationship_target_record_id FROM attribute_values WHERE record_id = $1 AND active AND relationship_target_record_id IS NOT NULL",
     )
-    .bind(created[0].entity_id.unwrap())
+    .bind(created[0].record_id.unwrap())
     .fetch_all(&pool)
     .await
     .unwrap();
@@ -539,7 +539,7 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
         "{:?}",
         created[0].error
     );
-    let entity_id = created[0].entity_id.unwrap();
+    let record_id = created[0].record_id.unwrap();
     let replay = repository
         .execute_extension_catalog_batch(batch("batch-1", "first"))
         .await
@@ -548,15 +548,15 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
         replay[0].status,
         ExtensionCatalogIntentStatus::AlreadyApplied
     );
-    assert_eq!(replay[0].entity_id, Some(entity_id));
+    assert_eq!(replay[0].record_id, Some(record_id));
     let updated = repository
         .execute_extension_catalog_batch(batch("batch-2", "second"))
         .await
         .unwrap();
-    assert_eq!(updated[0].entity_id, Some(entity_id));
+    assert_eq!(updated[0].record_id, Some(record_id));
 
-    let entity_version = repository
-        .get_entity(entity_id)
+    let record_version = repository
+        .get_record(record_id)
         .await
         .unwrap()
         .unwrap()
@@ -564,7 +564,7 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
     let snapshot = repository
         .extension_catalog_page(api::repository::ExtensionCatalogPageRequest {
             blueprint_id: blueprint.blueprint.id,
-            blueprint_version: entity_version,
+            blueprint_version: record_version,
             context_id: None,
             publication_context_id: None,
             cursor: None,
@@ -572,7 +572,7 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
         })
         .await
         .unwrap();
-    assert_eq!(snapshot.entities.len(), 1);
+    assert_eq!(snapshot.records.len(), 1);
     // An export filter must never include withdrawn approvals. A channel is
     // only exportable while explicitly enabled by the workspace.
     let channel = repository
@@ -588,7 +588,7 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
     let page_for_channel = || {
         repository.extension_catalog_page(api::repository::ExtensionCatalogPageRequest {
             blueprint_id: blueprint.blueprint.id,
-            blueprint_version: entity_version,
+            blueprint_version: record_version,
             context_id: Some(channel_id),
             publication_context_id: Some(channel_id),
             cursor: None,
@@ -607,7 +607,7 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
     .execute(&pool)
     .await
     .unwrap();
-    assert!(page_for_channel().await.unwrap().entities.is_empty());
+    assert!(page_for_channel().await.unwrap().records.is_empty());
     let publisher_id = Uuid::new_v4();
     sqlx::query("INSERT INTO users(id,email) VALUES($1,$2)")
         .bind(publisher_id)
@@ -615,12 +615,12 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO entity_channel_publications(workspace_id,entity_id,context_id,published_at,published_by_user_id) VALUES($1,$2,$3,now(),$4)")
-        .bind(workspace_id).bind(entity_id).bind(channel_id).bind(publisher_id).execute(&pool).await.unwrap();
-    assert_eq!(page_for_channel().await.unwrap().entities.len(), 1);
-    sqlx::query("UPDATE entity_channel_publications SET published_at=NULL,published_by_user_id=NULL WHERE workspace_id=$1 AND entity_id=$2 AND context_id=$3")
-        .bind(workspace_id).bind(entity_id).bind(channel_id).execute(&pool).await.unwrap();
-    assert!(page_for_channel().await.unwrap().entities.is_empty());
+    sqlx::query("INSERT INTO record_channel_publications(workspace_id,record_id,context_id,published_at,published_by_user_id) VALUES($1,$2,$3,now(),$4)")
+        .bind(workspace_id).bind(record_id).bind(channel_id).bind(publisher_id).execute(&pool).await.unwrap();
+    assert_eq!(page_for_channel().await.unwrap().records.len(), 1);
+    sqlx::query("UPDATE record_channel_publications SET published_at=NULL,published_by_user_id=NULL WHERE workspace_id=$1 AND record_id=$2 AND context_id=$3")
+        .bind(workspace_id).bind(record_id).bind(channel_id).execute(&pool).await.unwrap();
+    assert!(page_for_channel().await.unwrap().records.is_empty());
     sqlx::query(
         "UPDATE publication_channels SET enabled=false WHERE workspace_id=$1 AND context_id=$2",
     )
@@ -634,11 +634,11 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
         "disabled channel must be rejected"
     );
     let changes = repository
-        .extension_catalog_changes(blueprint.blueprint.id, entity_version, None, 1)
+        .extension_catalog_changes(blueprint.blueprint.id, record_version, None, 1)
         .await
         .unwrap();
     assert_eq!(changes.events.len(), 1);
-    assert_eq!(changes.events[0].aggregate_id, entity_id);
+    assert_eq!(changes.events[0].aggregate_id, record_id);
     let cursor = changes
         .next_cursor
         .expect("the initial create and update are paged");
@@ -647,7 +647,7 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
         .await
         .unwrap();
     let stable_tail = repository
-        .extension_catalog_changes(blueprint.blueprint.id, entity_version, Some(cursor), 1)
+        .extension_catalog_changes(blueprint.blueprint.id, record_version, Some(cursor), 1)
         .await
         .unwrap();
     assert_eq!(stable_tail.events.len(), 1);
@@ -657,7 +657,7 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
     );
     assert_eq!(
         repository
-            .extension_catalog_changes(blueprint.blueprint.id, entity_version, None, 10)
+            .extension_catalog_changes(blueprint.blueprint.id, record_version, None, 10)
             .await
             .unwrap()
             .events
@@ -670,7 +670,7 @@ const KEYED_SYNC_BLUEPRINT: &str = r#"
 format_version = 1
 code = "extension_keyed_item"
 name = "Extension keyed item"
-kind = "entity"
+kind = "record"
 [[unique_keys]]
 code = "external_id"
 attributes = ["external_id"]
@@ -748,9 +748,9 @@ async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx:
         "{:?}",
         created[0].error
     );
-    let entity_id = created[0].entity_id.unwrap();
+    let record_id = created[0].record_id.unwrap();
 
-    // Publish the entity in a channel; any later content change withdraws it.
+    // Publish the record in a channel; any later content change withdraws it.
     let channel = repository
         .create_context(api::model::CreateAttributeContext {
             code: format!("export_{}", Uuid::new_v4().simple()),
@@ -759,11 +759,11 @@ async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx:
         })
         .await
         .unwrap();
-    publish_in_channel(&pool, entity_id, channel.id).await;
-    assert!(is_published(&pool, entity_id).await);
+    publish_in_channel(&pool, record_id, channel.id).await;
+    assert!(is_published(&pool, record_id).await);
 
     // The declared key resolves the lookup with its normalization, so a
-    // differently cased and spaced value updates the same entity.
+    // differently cased and spaced value updates the same record.
     let updated = repository
         .execute_extension_catalog_batch(upsert("u2", "  ext-1 ", "second"))
         .await
@@ -774,15 +774,15 @@ async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx:
         "{:?}",
         updated[0].error
     );
-    assert_eq!(updated[0].entity_id, Some(entity_id));
+    assert_eq!(updated[0].record_id, Some(record_id));
     assert!(
-        !is_published(&pool, entity_id).await,
+        !is_published(&pool, record_id).await,
         "an extension update withdraws publication"
     );
     let title: String = sqlx::query_scalar(
-        "SELECT v.value_text FROM attribute_values v JOIN attributes a ON a.id=v.attribute_id WHERE v.entity_id=$1 AND a.code='title' AND v.active",
+        "SELECT v.value_text FROM attribute_values v JOIN attributes a ON a.id=v.attribute_id WHERE v.record_id=$1 AND a.code='title' AND v.active",
     )
-    .bind(entity_id)
+    .bind(record_id)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -1017,7 +1017,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "entity_preview_panel": {
+                "record_preview_panel": {
                     "order": [],
                     "hidden": ["acme.client:panel"]
                 }
@@ -1036,7 +1036,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "entity_preview_panel": { "order": [], "hidden": [] }
+                "record_preview_panel": { "order": [], "hidden": [] }
             }
         }))
         .await
@@ -1178,7 +1178,7 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "entity_preview_panel": {
+                "record_preview_panel": {
                     "order": ["acme.zebra:panel"],
                     "hidden": []
                 }
@@ -1199,7 +1199,7 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
         json!({
             "version": 1,
             "outlets": {
-                "entity_preview_panel": {
+                "record_preview_panel": {
                     "order": ["acme.alpha:panel"],
                     "hidden": ["acme.alpha:panel"]
                 }
@@ -1214,14 +1214,14 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
         json!({
             "version": 1,
             "outlets": {
-                "entity_action": {"order": ["malformed"], "hidden": []}
+                "record_action": {"order": ["malformed"], "hidden": []}
             }
         }),
         json!({
             "version": 1,
             "outlets": {
-                "entity_action": {"order": ["acme.shared:item"], "hidden": []},
-                "entity_preview_panel": {"order": ["acme.shared:item"], "hidden": []}
+                "record_action": {"order": ["acme.shared:item"], "hidden": []},
+                "record_preview_panel": {"order": ["acme.shared:item"], "hidden": []}
             }
         }),
         json!({
@@ -1242,7 +1242,7 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
                     "hidden": [],
                     "promoted": ["acme.shared:item"]
                 },
-                "entity_action": {
+                "record_action": {
                     "order": ["acme.shared:item"],
                     "hidden": []
                 }
@@ -1324,7 +1324,7 @@ async fn blueprint_layout_overlays_owned_outlets_and_preserves_global_workspace_
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "entity_preview_panel": {
+                "record_preview_panel": {
                     "order": ["acme.alpha:panel", "acme.zebra:panel"],
                     "hidden": []
                 },
@@ -1341,7 +1341,7 @@ async fn blueprint_layout_overlays_owned_outlets_and_preserves_global_workspace_
 format_version = 1
 code = "extension_layout_product"
 name = "Extension layout product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -1351,7 +1351,7 @@ fields = ["title"]
 type = "extension_layout"
 version = 1
 
-[views.extension_layout.outlets.entity_preview_panel]
+[views.extension_layout.outlets.record_preview_panel]
 order = ["acme.zebra:panel"]
 hidden = ["acme.alpha:panel"]
 
@@ -1715,7 +1715,7 @@ async fn extension_attribute_types_are_pinned_and_survive_provider_disable(pool:
 format_version = 1
 code = "extension_type_product"
 name = "Extension type product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -1792,7 +1792,7 @@ async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(poo
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "entity_preview_panel": {
+                "record_preview_panel": {
                     "order": [],
                     "hidden": ["acme.client:panel"]
                 }
@@ -1822,7 +1822,7 @@ async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(poo
 format_version = 1
 code = "invalid_extension_layout"
 name = "Invalid extension layout"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -1832,7 +1832,7 @@ fields = ["title"]
 type = "extension_layout"
 version = 1
 
-[views.extension_layout.outlets.entity_action]
+[views.extension_layout.outlets.record_action]
 order = ["acme.client:panel"]
 hidden = []
 
@@ -3425,7 +3425,7 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
             .unwrap();
     assert_eq!(status, "completed");
     assert_eq!(batches, 2);
-    let created: i64 = sqlx::query_scalar("SELECT count(*) FROM entities WHERE workspace_id=$1 AND blueprint_id=$2 AND deleted_at IS NULL")
+    let created: i64 = sqlx::query_scalar("SELECT count(*) FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND deleted_at IS NULL")
         .bind(Uuid::from_u128(0x00000000000040008000000000000002)).bind(blueprint.blueprint.id).fetch_one(&pool).await.unwrap();
     assert_eq!(created, 17);
     let second_profile = json!({"version":1,"blueprint_id":blueprint.blueprint.id.to_string(),"blueprint_version":blueprint.blueprint.version,"context_id":context.id.to_string(),"columns":[{"header":"ID","attribute":"external_id","kind":"string"}]});
@@ -3750,7 +3750,7 @@ async fn extension_lookup_resolves_like_an_upsert(pool: sqlx::PgPool) {
     for external_id in ["EXT-9", "EXT-10"] {
         created.push(
             repository
-                .create_entity_with_values(
+                .create_record_with_values(
                     blueprint.blueprint.id,
                     blueprint.blueprint.version,
                     vec![
@@ -3791,6 +3791,6 @@ async fn extension_lookup_resolves_like_an_upsert(pool: sqlx::PgPool) {
             .id,
         created[0].id
     );
-    // A value shared by several entities names none of them.
+    // A value shared by several records names none of them.
     assert!(lookup(attribute("title"), "shared title").await.is_err());
 }

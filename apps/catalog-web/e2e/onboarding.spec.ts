@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createEntityBlueprint, suffix } from './helpers.ts';
+import { createRecordBlueprint, suffix } from './helpers.ts';
 
 test('guides an administrator from onboarding to the explorer', async ({
   page,
@@ -28,7 +28,7 @@ test('guides an administrator from onboarding to the explorer', async ({
 
   await page.unroute('**/api/blueprints/catalogue');
   const id = suffix();
-  await createEntityBlueprint(
+  await createRecordBlueprint(
     `onboarding_${id}`,
     `Onboarding ${id}`,
     '[[attributes]]\ncode = "title"\nvalue_type = "string"',

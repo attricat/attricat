@@ -14,16 +14,16 @@ import { MAX_REQUIRED_RULE_CODES } from './constants';
 type Props = {
   disabled: boolean;
   requiredRuleCodes: readonly string[];
-  requireValidEntity: boolean;
+  requireValidRecord: boolean;
   ruleCodes: readonly string[];
   onChange: (checks: PublicationChannelChecks) => void;
 };
 
-/** Edits the checks an entity must pass before publication to a channel. */
+/** Edits the checks a record must pass before publication to a channel. */
 export const ChannelChecksEditor = ({
   disabled,
   requiredRuleCodes,
-  requireValidEntity,
+  requireValidRecord,
   ruleCodes,
   onChange,
 }: Props) => {
@@ -35,14 +35,14 @@ export const ChannelChecksEditor = ({
       <FormControlLabel
         control={
           <Switch
-            checked={requireValidEntity}
+            checked={requireValidRecord}
             disabled={disabled}
             onChange={(_, checked) =>
-              onChange({ require_valid_entity: checked })
+              onChange({ require_valid_record: checked })
             }
           />
         }
-        label={t('exports.requireValidEntity')}
+        label={t('exports.requireValidRecord')}
       />
       <Autocomplete
         disabled={disabled}

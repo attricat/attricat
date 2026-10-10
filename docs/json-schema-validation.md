@@ -18,16 +18,16 @@ value_schema = '{"type":"number","minimum":0}'
 ```
 
 Attribute schemas apply to direct and computed writes. They currently apply to
-scalar values only; relationship constraints belong in the entity schema.
+scalar values only; relationship constraints belong in the record schema.
 
-## Entity Schemas
+## Record Schemas
 
-`entity_schema` validates the complete resolved entity document. It supports
+`record_schema` validates the complete resolved record document. It supports
 cross-field JSON Schema rules such as `required`, `if`/`then`/`else`, and
 dependencies.
 
 ```toml
-entity_schema = '''
+record_schema = '''
 {
   "type": "object",
   "required": ["title", "price"],
@@ -43,7 +43,7 @@ entity_schema = '''
 ```
 
 The validation document contains scalar values in their native JSON form and
-relationships as sorted arrays of target entity UUID strings and files as
+relationships as sorted arrays of target record UUID strings and files as
 ordered arrays of `{"id", "sha256"}` references (an explicitly emptied file
 value is `[]` and is not inherited). Missing values are
 omitted. It does not use preview labels or relationship display objects.
@@ -51,13 +51,13 @@ omitted. It does not use preview labels or relationship display objects.
 ## Declarative Checks
 
 JSON Schema cannot compare two attributes or look at linked records. The
-entity schema's `x-attricat-checks` array adds named checks that use the
+record schema's `x-attricat-checks` array adds named checks that use the
 declarative [predicate](#predicates) engine shared with status transition
 conditions, rules and publication channel gates. A check *holds* when the
 data is acceptable; a write that leaves any check failing is rejected.
 
 ```toml
-entity_schema = '''
+record_schema = '''
 {
   "required": ["valid_from"],
   "x-attricat-checks": [
@@ -110,11 +110,11 @@ saved (`422 invalid_blueprint_definition` or `invalid_rule_definition`).
 | --- | --- | --- |
 | `required` | `attribute_code` | The attribute has a value; a relationship has at least one target. |
 | `stale` | `attribute_code`, `max_age_seconds` (1–31536000) | The current value changed within the age limit. Rules only. |
-| `has_tag` / `missing_tag` | `tag` | The entity has / does not have the system tag. |
+| `has_tag` / `missing_tag` | `tag` | The record has / does not have the system tag. |
 | `compare` | `attribute_code`, `op`, exactly one of `other_attribute_code`, `subject_attribute_code`, `value` | The comparison is true. |
 | `one_of` | `attribute_code`, `values` (1–100) | The value is one of the listed values, such as status codes. Not for relationships or files. |
 | `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` (−36500–36500, default 0) | A date/datetime compares with now + `offset_days`. |
-| `unique` | `attribute_codes` (1–4) | No other live entity of the same blueprint family (any revision, attributes matched by code) has the same values in the evaluated context. Values compare as [unique keys](database.md#structural-constraints) do: strings trimmed, whitespace collapsed and case-insensitive; numbers by value. String, number, integer, boolean, date and datetime only. Rules only. |
+| `unique` | `attribute_codes` (1–4) | No other live record of the same blueprint family (any revision, attributes matched by code) has the same values in the evaluated context. Values compare as [unique keys](database.md#structural-constraints) do: strings trimmed, whitespace collapsed and case-insensitive; numbers by value. String, number, integer, boolean, date and datetime only. Rules only. |
 | `linked` | `relationship_code`, `quantifier` (`all` default, `any`, `none`), `predicate` | `all`: every linked record satisfies the predicate (holds with no links); `any`: at least one does; `none`: none does. |
 | `referenced_by` | `blueprint_code`, `relationship_code`, optional `predicate`, `min` and/or `max` (≤ 1000) | The number of `blueprint_code` records whose `relationship_code` targets this record and that match `predicate` is within the bounds. |
 | `acyclic` | `relationship_code` | Following the relationship never returns to the record. Rules only. |
@@ -133,7 +133,7 @@ saved (`422 invalid_blueprint_definition` or `invalid_rule_definition`).
   `referenced_by` and names an attribute of the record being checked.
 - Predicates nest at most 4 deep with at most 32 parts.
 - `stale`, `unique` and `acyclic` are *rules only*: they are not safe for
-  synchronous evaluation and cannot be used by enforcing rules, entity checks or
+  synchronous evaluation and cannot be used by enforcing rules, record checks or
   transition conditions.
 - User or team assignment values are plain strings to predicates: `required`,
   `compare` `eq`/`ne` and `one_of` work against a literal `user:<uuid>` or
@@ -144,9 +144,9 @@ saved (`422 invalid_blueprint_definition` or `invalid_rule_definition`).
 `linked` evaluates the records reached through one relationship attribute:
 `quantifier` is `all` (default; holds with no links), `any` or `none`. Inside
 it, `attribute_code` names an attribute of the linked record and
-`subject_attribute_code` names an attribute of the entity being saved.
+`subject_attribute_code` names an attribute of the record being saved.
 `referenced_by` counts live records of `blueprint_code` whose
-`relationship_code` targets the entity in the same context and that match the
+`relationship_code` targets the record in the same context and that match the
 optional nested `predicate`; set `min`, `max` or both (at most 1000), for
 example `max = 0` for "no open corrective actions".
 
@@ -154,21 +154,21 @@ example `max = 0` for "no open corrective actions".
   `referenced_by`, `unique`, `acyclic` or `stale`.
 - Attributes that a linked record does not declare are treated as missing.
 - More than 200 linked records per relationship, or more than 1000 referencing
-  records, fail the check. `acyclic` stops after 1000 visited entities.
+  records, fail the check. `acyclic` stops after 1000 visited records.
 - Changes to the linked or referencing record are **not** rejected because of
-  another entity's checks. Event-triggered rules with the same predicate report
+  another record's checks. Event-triggered rules with the same predicate report
   affected dependents as findings, and the dependent's next save is rejected
   until the check holds again.
 
 ## Contexts And Errors
 
-After a mutation, the API validates every resolved context for the entity.
-Reparenting a context validates all active entities before the context change is
+After a mutation, the API validates every resolved context for the record.
+Reparenting a context validates all active records before the context change is
 committed. This prevents an inherited value from making a descendant context
 invalid.
 
 Schema violations return `422` with either
-`attribute_value_schema_mismatch` or `entity_schema_mismatch`. No value or
+`attribute_value_schema_mismatch` or `record_schema_mismatch`. No value or
 preview change is committed on failure.
 
 ### Evaluation order
@@ -177,9 +177,9 @@ Every write path (API create/update/value writes, workflow writes,
 migrations, history restoration and context reparenting) runs, on the
 transaction's final state:
 
-1. JSON Schema (`value_schema`, then `entity_schema`).
+1. JSON Schema (`value_schema`, then `record_schema`).
 2. `x-attricat-checks` in every context, with inherited values resolved:
-   `422 entity_check_failed`.
+   `422 record_check_failed`.
 3. Status transition conditions for each changed status: `conditions` on the
    taken edge of an `x-attricat-status` `transitions` entry, at most 16 checks
    of the same shape as `x-attricat-checks`
@@ -200,12 +200,12 @@ These errors and `publication_checks_failed` include `error.details`:
 ```json
 {
   "error": {
-    "code": "entity_check_failed",
-    "message": "entity checks failed: Valid until must not be before valid from (valid-range)",
+    "code": "record_check_failed",
+    "message": "record checks failed: Valid until must not be before valid from (valid-range)",
     "details": {
       "violations": [
         {
-          "source": "entity_check",
+          "source": "record_check",
           "code": "valid-range",
           "message": "Valid until must not be before valid from",
           "contexts": ["default"],
@@ -222,18 +222,18 @@ These errors and `publication_checks_failed` include `error.details`:
 }
 ```
 
-- `source`: `entity_check`, `transition_condition`, `rule` or `entity_schema`
-  (publication gates only, with `code = "entity_schema"`).
+- `source`: `record_check`, `transition_condition`, `rule` or `record_schema`
+  (publication gates only, with `code = "record_schema"`).
 - `code`: the check, condition or rule code. `message`: the custom message or a
   generated one.
 - `contexts`: codes of the contexts in which it failed. One violation is
   reported per declaration.
-- `attributes`: attributes of the saved entity involved, for highlighting form
+- `attributes`: attributes of the saved record involved, for highlighting form
   fields.
 - `severity`: present for rules. `transition`: `{attribute_code, from, to}` for
   conditions and transition-guarding rules.
-- `evidence`: predicate-specific data, such as `failing_entity_ids` for
-  `linked` or `count` and `matching_entity_ids` for `referenced_by`.
+- `evidence`: predicate-specific data, such as `failing_record_ids` for
+  `linked` or `count` and `matching_record_ids` for `referenced_by`.
 - At most 50 violations are reported. Publication errors add
   `details.context`, the channel's context code.
 
@@ -241,5 +241,5 @@ To recover, fix the listed `attributes` (or the linked or referencing records
 named in `evidence`) in the listed contexts and retry.
 
 Schemas are persisted with blueprint and attribute revisions and returned by
-existing blueprint API responses as `blueprint.entity_schema` and
+existing blueprint API responses as `blueprint.record_schema` and
 `attributes[].value_schema`.

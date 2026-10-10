@@ -84,7 +84,7 @@
         </article>
         <article class="card foundation">
           <div class="priority">P0</div>
-          <h3>Entity lifecycle and channel publication approval</h3>
+          <h3>Record lifecycle and channel publication approval</h3>
           <p>Model draft, approved, published, archived, effective dates, and channel publication separately from value history.</p>
           <p class="why">Append-only facts do not define the exact approved state that a channel is allowed to consume.</p>
         </article>
@@ -98,12 +98,12 @@
         <article class="card pim"><div class="priority">P1</div><h3>Business identifiers</h3><p>Support schema-declared external IDs such as SKU, GTIN, supplier ID, and uniqueness policies. UUID remains internal identity.</p></article>
         <article class="card pim"><div class="priority">P1</div><h3>Reference data</h3><p>Make option sets, controlled vocabularies, units, taxonomies, and classifications first-class versioned definitions.</p></article>
         <article class="card pim"><div class="priority">P2</div><h3>Validation and computed values</h3><p>Add a completeness/rule engine per context and channel, then computed attributes with dependency tracking and rollups.</p></article>
-          <article class="card pim"><div class="priority">Implemented baseline</div><h3>Entity schema migration</h3><p>A validated, explicit entity migration process between blueprint revisions is available, including projection rebuild and migration reporting. Future work can expand migration transforms and richer reporting.</p></article>
+          <article class="card pim"><div class="priority">Implemented baseline</div><h3>Record schema migration</h3><p>A validated, explicit record migration process between blueprint revisions is available, including projection rebuild and migration reporting. Future work can expand migration transforms and richer reporting.</p></article>
       </section>
 
       <h2>DAM primitives</h2>
       <section class="grid">
-        <article class="card dam"><div class="priority">P0 if DAM is a target</div><h3>Asset aggregate and blob storage</h3><p>Store immutable original identity, object-storage locator, checksum, MIME type, byte size, dimensions/duration, and ingestion state. Do not represent media as only a URL or generic entity.</p></article>
+        <article class="card dam"><div class="priority">P0 if DAM is a target</div><h3>Asset aggregate and blob storage</h3><p>Store immutable original identity, object-storage locator, checksum, MIME type, byte size, dimensions/duration, and ingestion state. Do not represent media as only a URL or generic record.</p></article>
         <article class="card dam"><div class="priority">P1</div><h3>Asset versions and renditions</h3><p>Model original files, revisions, transformations, thumbnails, crops, transcoding, focal points, and channel-specific rendition selection.</p></article>
         <article class="card dam"><div class="priority">P1</div><h3>Asset usage edges</h3><p>Attach assets with role, order, context, crop/focal-point metadata, and usage state. This depends on relationship edge metadata and ordering.</p></article>
         <article class="card dam"><div class="priority">P1</div><h3>Extraction and enrichment</h3><p>Capture EXIF/IPTC/XMP, OCR/transcripts, technical metadata, generated labels, and the source/confidence of machine-generated metadata.</p></article>
@@ -124,7 +124,7 @@
       <table>
         <thead><tr><th>Area</th><th>Current position</th><th>Implication</th></tr></thead>
         <tbody>
-          <tr><td>Schema</td><td>Versioned blueprints, mixins, and entities pinned to exact revisions.</td><td>Strong base; add an explicit entity migration primitive before revisions become routine.</td></tr>
+          <tr><td>Schema</td><td>Versioned blueprints, mixins, and records pinned to exact revisions.</td><td>Strong base; add an explicit record migration primitive before revisions become routine.</td></tr>
           <tr><td>Values</td><td>Typed native scalar storage, contextual values, relationships, and immutable history.</td><td>Extend the type system, collection semantics, and validation metadata.</td></tr>
           <tr><td>Context</td><td>Persisted <code>default</code> root, one parent per named scope, and required context IDs on facts.</td><td>Resolved previews use nearest-ancestor fallback with source-context provenance for scalar values and relationship sets.</td></tr>
           <tr><td>Read model</td><td><code>preview</code> is a derived JSONB cache rebuilt transactionally.</td><td>Good pattern; generalize into versioned projection definitions and rebuild jobs.</td></tr>

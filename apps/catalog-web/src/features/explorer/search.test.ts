@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  entitySelectionSearch,
+  recordSelectionSearch,
   inlineExplorerSearchParams,
   parseExplorerRouteSearch,
   parseExplorerSearch,
@@ -122,10 +122,10 @@ describe('parseExplorerSearch', () => {
   });
 });
 
-describe('entitySelectionSearch', () => {
-  it('matches only the selected entities within the same scope', () => {
+describe('recordSelectionSearch', () => {
+  it('matches only the selected records within the same scope', () => {
     expect(
-      entitySelectionSearch(
+      recordSelectionSearch(
         {
           blueprint: 'product',
           allVersions: true,
@@ -153,18 +153,18 @@ describe('entitySelectionSearch', () => {
 });
 
 describe('parseExplorerRouteSearch', () => {
-  it('keeps the panel entity outside the Explorer search', () => {
-    const entity = 'b67f5d16-d2be-4669-9870-b5a73282a26e';
-    expect(parseExplorerRouteSearch({ blueprint: 'product', entity })).toEqual({
+  it('keeps the panel record outside the Explorer search', () => {
+    const record = 'b67f5d16-d2be-4669-9870-b5a73282a26e';
+    expect(parseExplorerRouteSearch({ blueprint: 'product', record })).toEqual({
       blueprint: 'product',
-      entity,
+      record,
     });
-    expect(parseExplorerSearch({ blueprint: 'product', entity })).toEqual({
+    expect(parseExplorerSearch({ blueprint: 'product', record })).toEqual({
       blueprint: 'product',
     });
   });
 
-  it('drops a malformed panel entity', () => {
-    expect(parseExplorerRouteSearch({ entity: 'invalid' })).toEqual({});
+  it('drops a malformed panel record', () => {
+    expect(parseExplorerRouteSearch({ record: 'invalid' })).toEqual({});
   });
 });

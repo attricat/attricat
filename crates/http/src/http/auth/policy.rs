@@ -12,17 +12,17 @@ pub(super) enum TargetKind {
     None,
     BlueprintId,
     BlueprintCode,
-    EntityId,
+    RecordId,
     FileRead,
     /// Interactive extension runs: the handler authorizes every selected
-    /// entity, so entity- and blueprint-scoped grants work as for entity reads.
+    /// record, so record- and blueprint-scoped grants work as for record reads.
     ExtensionRun,
-    /// Entity batches: the handler authorizes every operation against its own
-    /// entity, so entity-scoped grants work as for single-entity writes.
-    EntityBatch,
-    /// Entity label lookups: the handler keeps only the requested entities
-    /// the caller may read, so entity- and blueprint-scoped grants work.
-    EntityList,
+    /// Record batches: the handler authorizes every operation against its own
+    /// record, so record-scoped grants work as for single-record writes.
+    RecordBatch,
+    /// Record label lookups: the handler keeps only the requested records
+    /// the caller may read, so record- and blueprint-scoped grants work.
+    RecordList,
     WorkspaceNavigation,
     ContextId,
     ContextCode,
@@ -43,11 +43,11 @@ pub(super) fn additional_permission(path: &str) -> Option<&'static str> {
 
 pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     let read = |target| Policy {
-        permission: "entities.read",
+        permission: "records.read",
         target,
     };
     let write = |target| Policy {
-        permission: "entities.write",
+        permission: "records.write",
         target,
     };
     let blueprint = if method == Method::GET {
@@ -57,17 +57,17 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
-    // This POST carries read selectors in its body; it is not an entity edit.
-    if method == Method::POST && path == "/v1/entities/{entity_id}/incoming-relationships" {
-        return Some(read(TargetKind::EntityId));
+    // This POST carries read selectors in its body; it is not a record edit.
+    if method == Method::POST && path == "/v1/records/{record_id}/incoming-relationships" {
+        return Some(read(TargetKind::RecordId));
     }
-    // Commenting is available to every entity reader, including viewers.
+    // Commenting is available to every record reader, including viewers.
     // Editing additionally enforces authorship in the repository transaction.
-    if path == "/v1/entities/{entity_id}/comments"
-        || path == "/v1/entities/{entity_id}/comments/count"
-        || path == "/v1/entities/{entity_id}/comments/{comment_id}"
+    if path == "/v1/records/{record_id}/comments"
+        || path == "/v1/records/{record_id}/comments/count"
+        || path == "/v1/records/{record_id}/comments/{comment_id}"
     {
-        return Some(read(TargetKind::EntityId));
+        return Some(read(TargetKind::RecordId));
     }
     // Every catalog reader needs translations to render labels; editing them
     // is part of maintaining the catalog model.
@@ -145,19 +145,19 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         });
     }
     // Interactive runs are user-scoped. Handlers additionally authorize every
-    // selected entity and restrict run access to the initiator or operators.
+    // selected record and restrict run access to the initiator or operators.
     if path == "/extensions/{extension_id}/{contribution_id}/operations"
         || path == "/extension-runs"
         || path.starts_with("/extension-runs/")
     {
         return Some(Policy {
-            permission: "entities.read",
+            permission: "records.read",
             target: TargetKind::ExtensionRun,
         });
     }
     if path == "/extensions/{extension_id}/{contribution_id}/command" {
         return Some(Policy {
-            permission: "entities.write",
+            permission: "records.write",
             target: TargetKind::None,
         });
     }
@@ -166,7 +166,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         || path == "/extensions/{extension_id}/{contribution_id}/storage/{release_id}"
     {
         return Some(Policy {
-            permission: "entities.read",
+            permission: "records.read",
             target: TargetKind::None,
         });
     }
@@ -263,7 +263,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     }
     if path == "/workspace/navigation/sidebar" {
         return Some(Policy {
-            permission: "entities.read",
+            permission: "records.read",
             target: TargetKind::WorkspaceNavigation,
         });
     }
@@ -327,21 +327,21 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
-    if path == "/v1/entities/{entity_id}/reusable-attributes"
-        || path == "/v1/entities/{entity_id}/reusable-attribute-groups/{group_id}"
+    if path == "/v1/records/{record_id}/reusable-attributes"
+        || path == "/v1/records/{record_id}/reusable-attribute-groups/{group_id}"
     {
-        return Some(write(TargetKind::EntityId));
+        return Some(write(TargetKind::RecordId));
     }
-    if path == "/blueprints/{blueprint_id}/versions/{version}/entity-publications"
-        || path == "/blueprints/{blueprint_id}/versions/{version}/entity-publications/publish-all"
+    if path == "/blueprints/{blueprint_id}/versions/{version}/record-publications"
+        || path == "/blueprints/{blueprint_id}/versions/{version}/record-publications/publish-all"
     {
         return Some(Policy {
-            permission: "entities.publish",
+            permission: "records.publish",
             target: TargetKind::BlueprintId,
         });
     }
     // Files uploaded before their record exists are part of creating it, so
-    // they need the same permission as `POST /v1/entities`.
+    // they need the same permission as `POST /v1/records`.
     if path == "/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads" {
         return Some(write(TargetKind::None));
     }
@@ -410,7 +410,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         });
     }
     // Placing or releasing a hold changes retention for every referencing
-    // record, so it is a workspace-level permission rather than entity write.
+    // record, so it is a workspace-level permission rather than record write.
     if path.starts_with("/files/{file_id}/retention-holds") && method != Method::GET {
         return Some(Policy {
             permission: "files.hold",
@@ -420,36 +420,36 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path.starts_with("/files/{file_id}") {
         return Some(read(TargetKind::FileRead));
     }
-    if path.starts_with("/v1/entities/{entity_id}/publications") && method != Method::GET {
+    if path.starts_with("/v1/records/{record_id}/publications") && method != Method::GET {
         return Some(Policy {
-            permission: "entities.publish",
-            target: TargetKind::EntityId,
+            permission: "records.publish",
+            target: TargetKind::RecordId,
         });
     }
-    if path.starts_with("/v1/entities/{entity_id}") || path.starts_with("/entities/{entity_id}") {
+    if path.starts_with("/v1/records/{record_id}") || path.starts_with("/records/{record_id}") {
         return Some(if method == Method::DELETE {
             Policy {
-                permission: "entities.delete",
-                target: TargetKind::EntityId,
+                permission: "records.delete",
+                target: TargetKind::RecordId,
             }
         } else if method == Method::GET {
-            read(TargetKind::EntityId)
+            read(TargetKind::RecordId)
         } else {
-            write(TargetKind::EntityId)
+            write(TargetKind::RecordId)
         });
     }
-    if path == "/v1/entities" {
+    if path == "/v1/records" {
         return Some(write(TargetKind::None));
     }
-    if path == "/v1/entities/batch" {
-        return Some(write(TargetKind::EntityBatch));
+    if path == "/v1/records/batch" {
+        return Some(write(TargetKind::RecordBatch));
     }
-    if path == "/v1/entities/labels" {
-        return Some(read(TargetKind::EntityList));
+    if path == "/v1/records/labels" {
+        return Some(read(TargetKind::RecordList));
     }
-    if path == "/v1/entities/search"
-        || path == "/v1/entities/facets/relationship-tree/children"
-        || path == "/entities"
+    if path == "/v1/records/search"
+        || path == "/v1/records/facets/relationship-tree/children"
+        || path == "/records"
     {
         return Some(read(TargetKind::None));
     }
@@ -468,9 +468,9 @@ pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<Stri
         TargetKind::FileRead
         | TargetKind::WorkspaceNavigation
         | TargetKind::ExtensionRun
-        | TargetKind::EntityBatch
-        | TargetKind::EntityList => (None, None),
-        TargetKind::EntityId => {
+        | TargetKind::RecordBatch
+        | TargetKind::RecordList => (None, None),
+        TargetKind::RecordId => {
             let index = if segments.first() == Some(&"v1") {
                 2
             } else {
@@ -495,23 +495,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn incoming_relationship_queries_are_entity_reads() {
+    fn incoming_relationship_queries_are_record_reads() {
         let policy = policy(
             &Method::POST,
-            "/v1/entities/{entity_id}/incoming-relationships",
+            "/v1/records/{record_id}/incoming-relationships",
         )
         .unwrap();
-        assert_eq!(policy.permission, "entities.read");
-        assert!(matches!(policy.target, TargetKind::EntityId));
+        assert_eq!(policy.permission, "records.read");
+        assert!(matches!(policy.target, TargetKind::RecordId));
     }
 
     #[test]
-    fn entity_labels_are_reads_filtered_by_the_handler() {
-        let labels = policy(&Method::POST, "/v1/entities/labels").unwrap();
-        assert_eq!(labels.permission, "entities.read");
-        assert!(matches!(labels.target, TargetKind::EntityList));
+    fn record_labels_are_reads_filtered_by_the_handler() {
+        let labels = policy(&Method::POST, "/v1/records/labels").unwrap();
+        assert_eq!(labels.permission, "records.read");
+        assert!(matches!(labels.target, TargetKind::RecordList));
         assert_eq!(
-            target("/v1/entities/labels", TargetKind::EntityList),
+            target("/v1/records/labels", TargetKind::RecordList),
             (None, None)
         );
     }
@@ -534,7 +534,7 @@ mod tests {
     fn directory_is_readable_and_teams_need_member_management() {
         assert_eq!(
             policy(&Method::GET, "/directory").unwrap().permission,
-            "entities.read"
+            "records.read"
         );
         for (method, path) in [
             (Method::GET, "/workspace/teams"),
@@ -596,67 +596,67 @@ mod tests {
     }
 
     #[test]
-    fn entity_batches_are_authorized_per_operation_by_their_handler() {
-        let batch = policy(&Method::POST, "/v1/entities/batch").unwrap();
-        assert_eq!(batch.permission, "entities.write");
-        assert!(matches!(batch.target, TargetKind::EntityBatch));
+    fn record_batches_are_authorized_per_operation_by_their_handler() {
+        let batch = policy(&Method::POST, "/v1/records/batch").unwrap();
+        assert_eq!(batch.permission, "records.write");
+        assert!(matches!(batch.target, TargetKind::RecordBatch));
         assert_eq!(
-            target("/v1/entities/batch", TargetKind::EntityBatch),
+            target("/v1/records/batch", TargetKind::RecordBatch),
             (None, None)
         );
     }
 
     #[test]
-    fn staged_uploads_require_the_entity_create_permission() {
+    fn staged_uploads_require_the_record_create_permission() {
         let staged = policy(
             &Method::POST,
             "/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads",
         )
         .unwrap();
-        let create = policy(&Method::POST, "/v1/entities").unwrap();
+        let create = policy(&Method::POST, "/v1/records").unwrap();
         assert_eq!(staged.permission, create.permission);
         assert!(matches!(staged.target, TargetKind::None));
         assert!(matches!(create.target, TargetKind::None));
     }
 
     #[test]
-    fn blueprint_entity_publication_routes_require_publish_permission() {
+    fn blueprint_record_publication_routes_require_publish_permission() {
         assert_eq!(
             policy(
                 &Method::POST,
-                "/blueprints/{blueprint_id}/versions/{version}/entity-publications"
+                "/blueprints/{blueprint_id}/versions/{version}/record-publications"
             )
             .unwrap()
             .permission,
-            "entities.publish"
+            "records.publish"
         );
         assert_eq!(
             policy(
                 &Method::POST,
-                "/blueprints/{blueprint_id}/versions/{version}/entity-publications/publish-all"
+                "/blueprints/{blueprint_id}/versions/{version}/record-publications/publish-all"
             )
             .unwrap()
             .permission,
-            "entities.publish"
+            "records.publish"
         );
     }
 
     #[test]
-    fn entity_publication_routes_require_publish_permission() {
+    fn record_publication_routes_require_publish_permission() {
         assert_eq!(
-            policy(&Method::POST, "/v1/entities/{entity_id}/publications")
+            policy(&Method::POST, "/v1/records/{record_id}/publications")
                 .unwrap()
                 .permission,
-            "entities.publish"
+            "records.publish"
         );
         assert_eq!(
             policy(
                 &Method::POST,
-                "/v1/entities/{entity_id}/publications/publish-all"
+                "/v1/records/{record_id}/publications/publish-all"
             )
             .unwrap()
             .permission,
-            "entities.publish"
+            "records.publish"
         );
     }
 
@@ -713,7 +713,7 @@ mod tests {
                 "/extension-runs/{run_id}/artifacts/{artifact_id}/download",
             ),
         ] {
-            assert_eq!(policy(&method, path).unwrap().permission, "entities.read");
+            assert_eq!(policy(&method, path).unwrap().permission, "records.read");
         }
         assert_eq!(
             policy(
@@ -726,7 +726,7 @@ mod tests {
         );
         for path in [
             "/extensions/{extension_id}/annotation-namespace",
-            "/extensions/{extension_id}/annotation-namespace/entities/{entity_id}",
+            "/extensions/{extension_id}/annotation-namespace/records/{record_id}",
         ] {
             assert_eq!(
                 policy(&Method::POST, path).unwrap().permission,
@@ -795,7 +795,7 @@ mod tests {
             )
             .unwrap()
             .permission,
-            "entities.read"
+            "records.read"
         );
         assert_eq!(
             policy(
@@ -804,7 +804,7 @@ mod tests {
             )
             .unwrap()
             .permission,
-            "entities.read"
+            "records.read"
         );
         assert_eq!(
             policy(
@@ -813,7 +813,7 @@ mod tests {
             )
             .unwrap()
             .permission,
-            "entities.write"
+            "records.write"
         );
     }
 }

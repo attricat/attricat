@@ -6,7 +6,7 @@ use crate::agent_tools::ToolError;
 use crate::{
     model::{BlueprintWithAttributes, RelationshipFilter, SearchFilter},
     repository::{
-        CatalogRepository, EntityRelationshipFilter, EntitySearchFilter, RepositoryError,
+        CatalogRepository, RecordRelationshipFilter, RecordSearchFilter, RepositoryError,
     },
 };
 
@@ -71,7 +71,7 @@ pub(crate) async fn resolve_agent_filter(
     blueprint: &BlueprintWithAttributes,
     filter: &SearchFilter,
     actor: Uuid,
-) -> Result<EntitySearchFilter, ToolError> {
+) -> Result<RecordSearchFilter, ToolError> {
     let parts: Vec<_> = filter.field.split('.').collect();
     if parts.len() > 4 || parts.iter().any(|part| part.is_empty()) {
         return Err(invalid(
@@ -154,7 +154,7 @@ pub(crate) async fn resolve_agent_filter(
         )
         .await?
     {
-        return Ok(EntitySearchFilter {
+        return Ok(RecordSearchFilter {
             field: filter.field.clone(),
             relationship_path,
             leaf_field: attribute_code,
@@ -216,7 +216,7 @@ pub(crate) async fn resolve_agent_filter(
             value_type, filter.field
         ))
     })?;
-    Ok(EntitySearchFilter {
+    Ok(RecordSearchFilter {
         field: filter.field.clone(),
         relationship_path,
         leaf_field: attribute_code,
@@ -231,7 +231,7 @@ pub(crate) async fn resolve_agent_relationship_filter(
     repository: &CatalogRepository,
     blueprint: &BlueprintWithAttributes,
     filter: &RelationshipFilter,
-) -> Result<EntityRelationshipFilter, ToolError> {
+) -> Result<RecordRelationshipFilter, ToolError> {
     if filter.selected_target_ids.is_empty() || filter.selected_target_ids.len() > 100 {
         return Err(invalid(
             "relationship_filters.selected_target_ids must contain 1–100 IDs",
@@ -270,7 +270,7 @@ pub(crate) async fn resolve_agent_relationship_filter(
             .await?
             .ok_or(RepositoryError::NotFound("target blueprint"))?;
     }
-    Ok(EntityRelationshipFilter {
+    Ok(RecordRelationshipFilter {
         field: filter.field.clone(),
         relationship_path,
         selected_target_ids: filter.selected_target_ids.clone(),

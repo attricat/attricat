@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { entitySearchFilterSchema } from '../entities/schemas';
+import { recordSearchFilterSchema } from '../records/schemas';
 import { maximumAttributeFilters, sortDirections } from './constants';
-import { entityIdsQuery } from './queryLanguage';
+import { recordIdsQuery } from './queryLanguage';
 
-const attributeFilterSearchSchema = entitySearchFilterSchema.safeExtend({
+const attributeFilterSearchSchema = recordSearchFilterSchema.safeExtend({
   field: z.string().trim().min(1),
 });
 
@@ -72,11 +72,11 @@ export const parseExplorerSearch = (
 ): ExplorerSearch => explorerSearchSchema.parse(input);
 
 /**
- * The Explorer route's URL: the search plus the entity open in the side
+ * The Explorer route's URL: the search plus the record open in the side
  * panel. The panel is not part of the search, so saved views never store it.
  */
 const explorerRouteSearchSchema = explorerSearchSchema.extend({
-  entity: z.uuid().optional().catch(undefined),
+  record: z.uuid().optional().catch(undefined),
 });
 
 export type ExplorerRouteSearch = z.infer<typeof explorerRouteSearchSchema>;
@@ -89,11 +89,11 @@ export type ExplorerSort = NonNullable<ExplorerSearch['sort']>;
 
 /**
  * A fresh search of the same blueprint and version scope that matches only
- * the given entities; filters and facets are dropped so none can hide them.
+ * the given records; filters and facets are dropped so none can hide them.
  */
-export const entitySelectionSearch = (
+export const recordSelectionSearch = (
   search: ExplorerSearch,
-  entityIds: string[],
+  recordIds: string[],
 ): ExplorerSearch => ({
   blueprint: search.blueprint,
   version: search.version,
@@ -101,5 +101,5 @@ export const entitySelectionSearch = (
   context: search.context,
   locked: search.locked,
   sort: search.sort,
-  query: entityIdsQuery(entityIds),
+  query: recordIdsQuery(recordIds),
 });

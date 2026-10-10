@@ -50,7 +50,7 @@ pub(super) struct InspectionResponse {
 struct SampleDataInspectionSummary {
     key: String,
     classification: &'static str,
-    entity_count: usize,
+    record_count: usize,
     scalar_fact_count: usize,
     relationship_fact_count: usize,
     file_count: usize,
@@ -282,7 +282,7 @@ pub(super) async fn inspect(
             .map(|sample| SampleDataInspectionSummary {
                 key: "sample-data/default".to_owned(),
                 classification: "synthetic",
-                entity_count: sample.declaration.entities.len(),
+                record_count: sample.declaration.records.len(),
                 scalar_fact_count: sample.scalar_fact_count,
                 relationship_fact_count: sample.relationship_fact_count,
                 file_count: sample.files.len(),

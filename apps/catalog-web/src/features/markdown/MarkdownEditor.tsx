@@ -68,7 +68,7 @@ export const MarkdownEditor = ({
         aria-labelledby={`${id}-tab-1`}
         sx={{ pt: 2 }}
       >
-        {tab === 1 && <MarkdownContent value={value || t('entities.notSet')} />}
+        {tab === 1 && <MarkdownContent value={value || t('records.notSet')} />}
       </Box>
     </Box>
   );

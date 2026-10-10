@@ -1,13 +1,13 @@
 export const catalogEventNames = {
-  entityUpdated: 'catalog:entity-updated.v1',
+  recordUpdated: 'catalog:record-updated.v1',
   contextChanged: 'catalog:context-changed.v1',
-  refreshEntity: 'catalog:refresh-entity.v1',
+  refreshRecord: 'catalog:refresh-record.v1',
   navigate: 'catalog:navigate.v1',
   notify: 'catalog:notify.v1',
 } as const;
 
-export const entityChangeHints = [
-  'entity',
+export const recordChangeHints = [
+  'record',
   'attribute_values',
   'relationships',
   'blueprint',

@@ -5,7 +5,7 @@ import { IconLabel } from '../../components/IconLabel';
 import {
   BlueprintIcon,
   ContextIcon,
-  EntityIcon,
+  RecordIcon,
   WorkspaceIcon,
 } from '../../components/systemIcons';
 import { listGrantTargets, selectedScopeTarget, type ScopeType } from './api';
@@ -56,8 +56,8 @@ export const ScopeFields = ({
             {t('workspace.contextSubtree')}
           </IconLabel>
         </MenuItem>
-        <MenuItem value="entity">
-          <IconLabel icon={EntityIcon}>{t('workspace.entity')}</IconLabel>
+        <MenuItem value="record">
+          <IconLabel icon={RecordIcon}>{t('workspace.record')}</IconLabel>
         </MenuItem>
       </TextField>
       <ScopeTargetField
@@ -89,7 +89,7 @@ const ScopeTargetField = ({
       ? t('workspace.blueprintFamily')
       : scope === 'context_subtree'
         ? t('workspace.contextSubtree')
-        : t('workspace.entity');
+        : t('workspace.record');
   return (
     <>
       {targets.isError && (

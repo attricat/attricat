@@ -1,6 +1,6 @@
 import { Autocomplete, Stack, TextField, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { attributeLabel } from '../entities/entityDisplay';
+import { attributeLabel } from '../records/recordDisplay';
 import type { ValueEditorProps } from '../views/components/componentTypes';
 import { assignableOptions, isAssignable, resolvePrincipal } from './principal';
 import { PrincipalKindIcon } from './PrincipalValue';

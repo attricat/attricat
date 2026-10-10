@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { EntityItem } from '../entities/api';
+import type { RecordItem } from '../records/api';
 import { useExplorerSelection } from './useExplorerSelection';
 
-const first = { id: 'first' } as EntityItem;
-const second = { id: 'second' } as EntityItem;
+const first = { id: 'first' } as RecordItem;
+const second = { id: 'second' } as RecordItem;
 
 describe('useExplorerSelection', () => {
   it('keeps selection when loaded results change and clears it on exit', () => {
@@ -35,7 +35,7 @@ describe('useExplorerSelection', () => {
       { initialProps: { scope: 'product' } },
     );
     act(() => result.current.toggleSelectionMode());
-    act(() => result.current.toggleEntity(first));
+    act(() => result.current.toggleRecord(first));
     rerender({ scope: 'category' });
     expect(result.current.selectionMode).toBe(false);
     expect(result.current.selectedItems).toEqual([]);

@@ -24,11 +24,11 @@ async fn changed_role_is_not_delegable(pool: PgPool, invite: bool) {
     let authority = create_role(
         &pool,
         "limited-granter",
-        &["members.manage", "roles.grant", "entities.read"],
+        &["members.manage", "roles.grant", "records.read"],
     )
     .await;
     grant_role(&pool, membership, authority, GrantScope::Workspace).await;
-    let role = create_role(&pool, "changing-role", &["entities.read"]).await;
+    let role = create_role(&pool, "changing-role", &["records.read"]).await;
     let mut editor = pool.begin().await.unwrap();
     let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
         .fetch_one(&mut *editor)
@@ -41,13 +41,11 @@ async fn changed_role_is_not_delegable(pool: PgPool, invite: bool) {
         .execute(&mut *editor)
         .await
         .unwrap();
-    sqlx::query(
-        "INSERT INTO role_permissions(role_id,permission_code) VALUES($1,'entities.write')",
-    )
-    .bind(role)
-    .execute(&mut *editor)
-    .await
-    .unwrap();
+    sqlx::query("INSERT INTO role_permissions(role_id,permission_code) VALUES($1,'records.write')")
+        .bind(role)
+        .execute(&mut *editor)
+        .await
+        .unwrap();
     let operation = tokio::spawn(async move {
         if invite {
             repository
@@ -209,9 +207,9 @@ async fn role_edit_cannot_restore_permissions_removed_during_its_lock_wait(pool:
     let (_, server) = start_server(pool.clone()).await;
     let repository = CatalogRepository::system(pool.clone());
     let (user, member) = add_workspace_user(&pool).await;
-    let manager = create_role(&pool, "role-manager", &["roles.manage", "entities.read"]).await;
+    let manager = create_role(&pool, "role-manager", &["roles.manage", "records.read"]).await;
     grant_role(&pool, member, manager, GrantScope::Workspace).await;
-    let writer = create_role(&pool, "writer", &["entities.write"]).await;
+    let writer = create_role(&pool, "writer", &["records.write"]).await;
     grant_role(&pool, member, writer, GrantScope::Workspace).await;
     let mut removal = pool.begin().await.unwrap();
     let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
@@ -241,7 +239,7 @@ async fn role_edit_cannot_restore_permissions_removed_during_its_lock_wait(pool:
                 bootstrap_workspace_id(),
                 writer,
                 "writer",
-                &["entities.write".into()],
+                &["records.write".into()],
             )
             .await
     });
@@ -256,7 +254,7 @@ async fn role_edit_cannot_restore_permissions_removed_during_its_lock_wait(pool:
     );
     assert!(
         !repository
-            .is_authorized(user, bootstrap_workspace_id(), "entities.write", None, None)
+            .is_authorized(user, bootstrap_workspace_id(), "records.write", None, None)
             .await
             .unwrap()
     );
@@ -267,7 +265,7 @@ async fn role_edit_cannot_restore_permissions_removed_during_its_lock_wait(pool:
             bootstrap_workspace_id(),
             writer,
             "writer",
-            &["entities.read".into()],
+            &["records.read".into()],
         )
         .await
         .unwrap();
@@ -281,7 +279,7 @@ async fn role_retirement_cannot_grant_owner_after_a_concurrent_transfer(pool: Pg
     let owner = BOOTSTRAP_OWNER_ID.parse().unwrap();
     let (_, successor) = add_workspace_user(&pool).await;
     let (_, recipient) = add_workspace_user(&pool).await;
-    let role = create_role(&pool, "retiring-role", &["entities.read"]).await;
+    let role = create_role(&pool, "retiring-role", &["records.read"]).await;
     let grant = grant_role(&pool, recipient, role, GrantScope::Workspace).await;
     let mut transfer = pool.begin().await.unwrap();
     let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")

@@ -62,13 +62,13 @@ Czytaj propozycje uważnie. Zastąpienie relacji ustawia pełną listę dla dane
 
 ### Zmiany w kilku rekordach
 
-Gdy jedna prośba zmienia kilka rekordów, np. wydanie nowej wersji i zastąpienie poprzedniej, agent proponuje jeden **wsad** (`apply_entity_batch`; w nazwach narzędzi agenta i kodach błędów rekordy występują pod nazwą `entity`). Podsumowanie do zatwierdzenia wymienia wszystkie kroki po kolei. Zatwierdzasz wsad raz i zostaje on zapisany w całości albo wcale: jeśli jeden krok się nie powiedzie, np. dlatego, że rekord w międzyczasie się zmienił, nic nie zostaje zapisane, a agent dowiaduje się, który krok zawiódł.
+Gdy jedna prośba zmienia kilka rekordów, np. wydanie nowej wersji i zastąpienie poprzedniej, agent proponuje jeden **wsad** (`apply_record_batch`). Podsumowanie do zatwierdzenia wymienia wszystkie kroki po kolei. Zatwierdzasz wsad raz i zostaje on zapisany w całości albo wcale: jeśli jeden krok się nie powiedzie, np. dlatego, że rekord w międzyczasie się zmienił, nic nie zostaje zapisane, a agent dowiaduje się, który krok zawiódł.
 
 ## Gdy zmiana zostaje odrzucona
 
 Zmiany wprowadzone przez agenta przechodzą tę samą walidację co Twoje edycje, a serwer odrzuca je z tych samych powodów. Gdy zatwierdzona zmiana zostaje odrzucona, nic nie zostaje zapisane. Agent wyjaśnia przyczynę zamiast ponawiać próbę i, jeśli to ma sens, proponuje poprawioną zmianę, która ponownie wymaga Twojego zatwierdzenia.
 
-- **Kontrole i reguły.** Zmianę odrzuca kontrola (`entity_check_failed`), warunek przejścia statusu (`transition_conditions_unmet`), egzekwowana reguła (`rule_violation`) lub kontrole wymagane przez kanał (`publication_checks_failed`), które nie przeszły. Agent wyjaśnia, które kontrole nie przeszły. Aby wyjaśnić, dlaczego opcja statusu jest zablokowana lub rekordu nie można jeszcze opublikować, może odczytać przejścia statusu i gotowość rekordu do publikacji.
+- **Kontrole i reguły.** Zmianę odrzuca kontrola (`record_check_failed`), warunek przejścia statusu (`transition_conditions_unmet`), egzekwowana reguła (`rule_violation`) lub kontrole wymagane przez kanał (`publication_checks_failed`), które nie przeszły. Agent wyjaśnia, które kontrole nie przeszły. Aby wyjaśnić, dlaczego opcja statusu jest zablokowana lub rekordu nie można jeszcze opublikować, może odczytać przejścia statusu i gotowość rekordu do publikacji.
 - **Klucze unikalne.** Jeśli inny rekord ma już ten sam numer części lub dokumentu, zmiana zostaje odrzucona, a agent dowiaduje się, który rekord go ma. Powinien pokazać Ci ten rekord i zapytać, czy go zaktualizować, czy użyć innej wartości, zamiast ponawiać próbę.
 - **Hierarchie.** Powiązanie, które uczyniłoby rekord własnym przodkiem, np. lokalizację wewnątrz niej samej, zostaje odrzucone wraz ze ścieżką pętli.
 - **Dozwolone cele.** Relacja może wskazywać tylko wymienione w niej schematy.

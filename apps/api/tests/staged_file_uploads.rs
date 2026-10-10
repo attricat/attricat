@@ -7,7 +7,7 @@ use support::*;
 
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\ncontents";
 
-/// A blueprint whose entity schema requires a single PNG `image` and that
+/// A blueprint whose record schema requires a single PNG `image` and that
 /// also has an optional many-valued `gallery`.
 async fn required_image_blueprint(client: &Client, base_url: &str, code: &str) -> Value {
     create_blueprint(
@@ -17,8 +17,8 @@ async fn required_image_blueprint(client: &Client, base_url: &str, code: &str) -
             r#"format_version = 1
 code = "{code}"
 name = "Required image"
-kind = "entity"
-entity_schema = '''{{"required": ["image"]}}'''
+kind = "record"
+record_schema = '''{{"required": ["image"]}}'''
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -105,7 +105,7 @@ async fn create_with_files(
     files: Value,
 ) -> reqwest::Response {
     client
-        .post(format!("{base_url}/v1/entities"))
+        .post(format!("{base_url}/v1/records"))
         .json(&json!({
             "blueprint": {"code": blueprint["blueprint"]["code"]},
             "values": [],
@@ -116,11 +116,11 @@ async fn create_with_files(
         .unwrap()
 }
 
-async fn linked_files(pool: &PgPool, entity_id: &str) -> Vec<Uuid> {
+async fn linked_files(pool: &PgPool, record_id: &str) -> Vec<Uuid> {
     sqlx::query_scalar(
-        "SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id WHERE v.entity_id = $1 AND v.active ORDER BY r.position",
+        "SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id WHERE v.record_id = $1 AND v.active ORDER BY r.position",
     )
-    .bind(entity_id.parse::<Uuid>().unwrap())
+    .bind(record_id.parse::<Uuid>().unwrap())
     .fetch_all(pool)
     .await
     .unwrap()
@@ -135,7 +135,7 @@ async fn a_staged_file_satisfies_a_required_file_attribute(pool: PgPool) {
     expect_error(
         create_with_files(&client, &base_url, &blueprint, json!([])).await,
         StatusCode::UNPROCESSABLE_ENTITY,
-        "entity_schema_mismatch",
+        "record_schema_mismatch",
     )
     .await;
 
@@ -149,7 +149,7 @@ async fn a_staged_file_satisfies_a_required_file_attribute(pool: PgPool) {
         .await,
         1
     );
-    let entity = expect_status(
+    let record = expect_status(
         create_with_files(
             &client,
             &base_url,
@@ -160,9 +160,9 @@ async fn a_staged_file_satisfies_a_required_file_attribute(pool: PgPool) {
         StatusCode::CREATED,
     )
     .await;
-    let entity_id = entity["id"].as_str().unwrap();
+    let record_id = record["id"].as_str().unwrap();
     assert_eq!(
-        linked_files(&pool, entity_id).await,
+        linked_files(&pool, record_id).await,
         vec![file_id.parse::<Uuid>().unwrap()]
     );
     // Claiming ends the staging window and clears the binding.
@@ -176,9 +176,9 @@ async fn a_staged_file_satisfies_a_required_file_attribute(pool: PgPool) {
     );
     // The creation audit records the file value like any other value.
     let audited: Vec<serde_json::Value> = sqlx::query_scalar(
-        "SELECT c.after_value FROM audit_event_changes c WHERE c.entity_id = $1 AND c.attribute_code = 'image'",
+        "SELECT c.after_value FROM audit_event_changes c WHERE c.record_id = $1 AND c.attribute_code = 'image'",
     )
-    .bind(entity_id.parse::<Uuid>().unwrap())
+    .bind(record_id.parse::<Uuid>().unwrap())
     .fetch_all(&pool)
     .await
     .unwrap();
@@ -192,7 +192,7 @@ async fn a_staged_file_is_claimed_only_once_by_its_uploader_for_its_binding(pool
     let client = authenticated_client();
     let blueprint = required_image_blueprint(&client, &base_url, "claim_once").await;
     let other_blueprint = required_image_blueprint(&client, &base_url, "claim_other").await;
-    let writer = create_role(&pool, "staged_writer", &["entities.read", "entities.write"]).await;
+    let writer = create_role(&pool, "staged_writer", &["records.read", "records.write"]).await;
     let other_user = client_for(member_with_role(&pool, writer).await);
     let image = |file_id: &str| json!([{"attribute_code": "image", "file_ids": [file_id]}]);
     let rejected = |response| async move {
@@ -258,7 +258,7 @@ async fn a_staged_file_cannot_be_linked_to_an_existing_record(pool: PgPool) {
     let client = authenticated_client();
     let blueprint = required_image_blueprint(&client, &base_url, "staged_link").await;
     let first = stage_png(&client, &base_url, &blueprint, "image").await;
-    let entity = expect_status(
+    let record = expect_status(
         create_with_files(
             &client,
             &base_url,
@@ -269,7 +269,7 @@ async fn a_staged_file_cannot_be_linked_to_an_existing_record(pool: PgPool) {
         StatusCode::CREATED,
     )
     .await;
-    let entity_id: Uuid = entity["id"].as_str().unwrap().parse().unwrap();
+    let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
     let staged: Uuid = stage_png(&client, &base_url, &blueprint, "gallery")
         .await
         .parse()
@@ -278,7 +278,7 @@ async fn a_staged_file_cannot_be_linked_to_an_existing_record(pool: PgPool) {
         api::repository::CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
     assert!(
         repository
-            .link_file_to_attribute(entity_id, "gallery", None, staged)
+            .link_file_to_attribute(record_id, "gallery", None, staged)
             .await
             .is_err()
     );
@@ -347,7 +347,7 @@ async fn staged_uploads_follow_the_attribute_cardinality_and_policy(pool: PgPool
         "file_too_large",
     )
     .await;
-    // Only file attributes of a published entity blueprint accept uploads.
+    // Only file attributes of a published record blueprint accept uploads.
     expect_error(
         stage(
             &client,
@@ -392,7 +392,7 @@ async fn staged_uploads_follow_the_attribute_cardinality_and_policy(pool: PgPool
         stage_png(&client, &base_url, &blueprint, "gallery").await,
         stage_png(&client, &base_url, &blueprint, "gallery").await,
     ];
-    let entity = expect_status(
+    let record = expect_status(
         create_with_files(
             &client,
             &base_url,
@@ -406,7 +406,7 @@ async fn staged_uploads_follow_the_attribute_cardinality_and_policy(pool: PgPool
         StatusCode::CREATED,
     )
     .await;
-    let linked = linked_files(&pool, entity["id"].as_str().unwrap()).await;
+    let linked = linked_files(&pool, record["id"].as_str().unwrap()).await;
     assert_eq!(linked.len(), 3);
     assert!(linked.contains(&first.parse().unwrap()));
     server.abort();
@@ -417,7 +417,7 @@ async fn staged_uploads_require_permission_to_create_records(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = required_image_blueprint(&client, &base_url, "staged_permission").await;
-    let reader = create_role(&pool, "staged_reader", &["entities.read"]).await;
+    let reader = create_role(&pool, "staged_reader", &["records.read"]).await;
     let reader = client_for(member_with_role(&pool, reader).await);
     let response = stage(
         &reader,
@@ -437,7 +437,7 @@ async fn duplicating_a_record_whose_schema_requires_a_file_succeeds(pool: PgPool
     let client = authenticated_client();
     let blueprint = required_image_blueprint(&client, &base_url, "duplicate_required").await;
     let file_id = stage_png(&client, &base_url, &blueprint, "image").await;
-    let entity = expect_status(
+    let record = expect_status(
         create_with_files(
             &client,
             &base_url,
@@ -451,8 +451,8 @@ async fn duplicating_a_record_whose_schema_requires_a_file_succeeds(pool: PgPool
     let copy = expect_status(
         client
             .post(format!(
-                "{base_url}/v1/entities/{}/duplicate",
-                entity["id"].as_str().unwrap()
+                "{base_url}/v1/records/{}/duplicate",
+                record["id"].as_str().unwrap()
             ))
             .send()
             .await

@@ -10,8 +10,8 @@ import {
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import type { Attribute } from '../entities/api';
-import { ScalarAttributeEditor } from '../entities/components/ScalarAttributeEditor';
+import type { Attribute } from '../records/api';
+import { ScalarAttributeEditor } from '../records/components/ScalarAttributeEditor';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import { getDirectory } from './api';
 

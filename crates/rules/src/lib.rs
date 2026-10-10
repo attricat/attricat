@@ -74,7 +74,7 @@ pub use catalog_validation::predicate::{CompareOp, Predicate, Quantifier};
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Enforcement {
-    /// Reject every write that leaves the entity violating the rule.
+    /// Reject every write that leaves the record violating the rule.
     #[serde(default)]
     pub on_save: bool,
     /// Reject the listed status transitions while the rule is violated.
@@ -146,7 +146,7 @@ pub struct CompiledRule {
     pub raw_definition_hash: String,
 }
 
-/// A data-health rule that reports findings for entities matching its predicate.
+/// A data-health rule that reports findings for records matching its predicate.
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct Raw {
@@ -180,10 +180,10 @@ enum RawTrigger {
         #[schemars(extend("enum" = ["UTC"]))]
         timezone: String,
     },
-    /// Evaluated when an entity event occurs.
+    /// Evaluated when a record event occurs.
     Event {
-        /// Entity event that evaluates the rule.
-        #[schemars(extend("enum" = ENTITY_EVENTS))]
+        /// Record event that evaluates the rule.
+        #[schemars(extend("enum" = RECORD_EVENTS))]
         event_type: String,
     },
     /// Evaluated after an import finishes.
@@ -207,7 +207,7 @@ pub fn parse(source: &str) -> Result<RuleDefinition, RuleError> {
             RawTrigger::Manual => Ok(Trigger::Manual),
             RawTrigger::PostImport => Ok(Trigger::PostImport),
             RawTrigger::Event { event_type } => {
-                if !ENTITY_EVENTS.contains(&event_type.as_str()) {
+                if !RECORD_EVENTS.contains(&event_type.as_str()) {
                     return Err(RuleError::Invalid(format!(
                         "unsupported rule event type '{event_type}'"
                     )));
@@ -370,10 +370,10 @@ fn non_empty(value: &str, name: &str) -> Result<(), RuleError> {
         Ok(())
     }
 }
-const ENTITY_EVENTS: &[&str] = &[
-    "entity.created.v1",
-    "entity.updated.v1",
-    "entity.migrated.v1",
+const RECORD_EVENTS: &[&str] = &[
+    "record.created.v1",
+    "record.updated.v1",
+    "record.migrated.v1",
     "attribute_value.changed.v1",
     "attribute_value.restored.v1",
     "relationship.changed.v1",

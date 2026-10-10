@@ -8,7 +8,7 @@ import { definitionDiagnostics } from './definitionDiagnostics';
 const header = `format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 `;
 const attribute = `
 [[attributes]]
@@ -54,10 +54,10 @@ describe('definitionDiagnostics', () => {
   });
 
   it('flags invalid values on the value key', () => {
-    expect(diagnose(header.replace('"entity"', '"thing"') + attribute)).toEqual(
+    expect(diagnose(header.replace('"record"', '"thing"') + attribute)).toEqual(
       [
         {
-          message: 'Expected one of: "entity", "mixin".',
+          message: 'Expected one of: "record", "mixin".',
           source: 'kind',
         },
       ],

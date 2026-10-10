@@ -5,11 +5,11 @@ use api::{
     agents::AgentProviderConfig,
     blueprint_migration_worker,
     constants::{
-        DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS, DEFAULT_ENTITY_PAGE_SIZE,
-        DEFAULT_FILE_UPLOAD_MAX_BYTES, DEFAULT_FILE_UPLOAD_MAX_FILES,
-        DEFAULT_HTTP_DEFAULT_BODY_BYTES, DEFAULT_HTTP_MAX_CONCURRENT_REQUESTS,
-        DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS, DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE,
-        DEFAULT_PREVIEW_RELATIONSHIP_DEPTH, DEFAULT_PREVIEW_RELATIONSHIP_ITEMS,
+        DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS, DEFAULT_FILE_UPLOAD_MAX_BYTES,
+        DEFAULT_FILE_UPLOAD_MAX_FILES, DEFAULT_HTTP_DEFAULT_BODY_BYTES,
+        DEFAULT_HTTP_MAX_CONCURRENT_REQUESTS, DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS,
+        DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE, DEFAULT_PREVIEW_RELATIONSHIP_DEPTH,
+        DEFAULT_PREVIEW_RELATIONSHIP_ITEMS, DEFAULT_RECORD_PAGE_SIZE,
         DEFAULT_RELATIONSHIP_FACET_NODES, MAINTENANCE_POOL_CONNECTIONS, REQUEST_POOL_CONNECTIONS,
         TASK_POOL_CONNECTIONS,
     },
@@ -87,8 +87,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let max_preview_relationship_items = std::env::var("PREVIEW_MAX_RELATIONSHIP_ITEMS")
         .unwrap_or_else(|_| DEFAULT_PREVIEW_RELATIONSHIP_ITEMS.to_string())
         .parse()?;
-    let max_entity_page_size = std::env::var("ENTITY_MAX_PAGE_SIZE")
-        .unwrap_or_else(|_| DEFAULT_ENTITY_PAGE_SIZE.to_string())
+    let max_record_page_size = std::env::var("RECORD_MAX_PAGE_SIZE")
+        .unwrap_or_else(|_| DEFAULT_RECORD_PAGE_SIZE.to_string())
         .parse()?;
     let max_incoming_relationship_page_size = std::env::var("INCOMING_RELATIONSHIP_MAX_PAGE_SIZE")
         .unwrap_or_else(|_| DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE.to_string())
@@ -161,7 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .ensure_audit_permissions()
         .await?;
     CatalogRepository::system(maintenance_pool.clone())
-        .ensure_entity_publication_permissions()
+        .ensure_record_publication_permissions()
         .await?;
     CatalogRepository::system(maintenance_pool.clone())
         .ensure_retention_hold_permissions()
@@ -432,7 +432,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             metrics,
             max_preview_relationship_depth,
             max_preview_relationship_items,
-            max_entity_page_size,
+            max_record_page_size,
             max_incoming_relationship_page_size,
             max_relationship_facet_nodes,
             max_upload_file_bytes: std::env::var("FILE_UPLOAD_MAX_BYTES")

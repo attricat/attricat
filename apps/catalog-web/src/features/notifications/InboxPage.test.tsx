@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { currentSession } from '../auth/api';
-import { getEntityLabels } from '../entities/api';
+import { getRecordLabels } from '../records/api';
 import {
   deleteNotification,
   listNotifications,
@@ -33,7 +33,7 @@ vi.mock('../../components/RouterLink', () => ({
   ),
 }));
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
-vi.mock('../entities/api', () => ({ getEntityLabels: vi.fn() }));
+vi.mock('../records/api', () => ({ getRecordLabels: vi.fn() }));
 vi.mock('./api', () => ({
   deleteNotification: vi.fn(),
   listNotifications: vi.fn(),
@@ -41,16 +41,16 @@ vi.mock('./api', () => ({
   setNotificationRead: vi.fn(),
 }));
 
-const entityId = '00000000-0000-4000-8000-000000000010';
+const recordId = '00000000-0000-4000-8000-000000000010';
 const item = (id: string, overrides: Partial<Notification>): Notification => ({
   id,
-  kind: 'entity.assigned',
+  kind: 'record.assigned',
   title: 'Ada assigned you to a Task record',
   body: null,
   actor_user_id: '00000000-0000-4000-8000-000000000002',
   actor_display_name: 'Ada',
   actor_email: 'ada@example.test',
-  subject: { kind: 'entity', id: entityId },
+  subject: { kind: 'record', id: recordId },
   data: { blueprint_name: 'Task' },
   read: false,
   read_at: null,
@@ -85,10 +85,10 @@ describe('InboxPage', () => {
       user_id: '00000000-0000-4000-8000-000000000020',
       workspace_id: '00000000-0000-4000-8000-000000000021',
     } as never);
-    vi.mocked(getEntityLabels).mockResolvedValue({
+    vi.mocked(getRecordLabels).mockResolvedValue({
       items: [
         {
-          id: entityId,
+          id: recordId,
           blueprint_code: 'task',
           display: { default: 'Review' },
         },

@@ -237,7 +237,7 @@ async fn execute(
     task: &ClaimedTask,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let event: DomainEvent = serde_json::from_value(run.trigger_event.clone())?;
-    if event.aggregate_kind != "entity"
+    if event.aggregate_kind != "record"
         || (run.run.source == "event" && event.source_name.starts_with("workflow:"))
         || (run.run.source == "event" && causal_depth(&event) >= MAX_CAUSAL_DEPTH)
         || run.run.causal_depth as usize >= MAX_CAUSAL_DEPTH

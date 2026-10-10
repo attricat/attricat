@@ -38,7 +38,7 @@ async fn custom_roles_are_managed_by_the_repository(pool: PgPool) {
             owner,
             workspace,
             "catalog-reader",
-            &["entities.read".to_owned()],
+            &["records.read".to_owned()],
         )
         .await
         .unwrap();
@@ -52,7 +52,7 @@ async fn custom_roles_are_managed_by_the_repository(pool: PgPool) {
             workspace,
             writer,
             "catalog-writer",
-            &["entities.read".to_owned(), "entities.write".to_owned()],
+            &["records.read".to_owned(), "records.write".to_owned()],
         )
         .await
         .unwrap();
@@ -89,7 +89,7 @@ async fn retiring_a_role_into_owner_keeps_owner_grants_workspace_scoped(pool: Pg
             owner,
             workspace,
             "scoped-reader",
-            &["entities.read".to_owned()],
+            &["records.read".to_owned()],
         )
         .await
         .unwrap();

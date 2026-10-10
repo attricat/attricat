@@ -14,8 +14,8 @@ export const draftWriteDelayMs = 500;
 export const draftEditors = {
   blueprintCreate: 'blueprint-create',
   blueprintRevision: 'blueprint-revision',
-  entityCreate: 'entity-create',
-  entityComment: 'entity-comment',
+  recordCreate: 'record-create',
+  recordComment: 'record-comment',
   reusableAttributeCreate: 'reusable-attribute-create',
   reusableAttributeRevision: 'reusable-attribute-revision',
   workflowCreate: 'workflow-create',

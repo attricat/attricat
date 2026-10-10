@@ -8,7 +8,7 @@ use support::*;
 const DEFINITION: &str = r#"format_version = 1
 code = 'task'
 name = 'Task'
-kind = 'entity'
+kind = 'record'
 [views.dropdown_option]
 type = 'dropdown_option'
 fields = ['title']
@@ -100,7 +100,7 @@ async fn system_events_reach_the_inbox_of_each_affected_member(pool: PgPool) {
     create_blueprint(&owner_client, &base, DEFINITION).await;
 
     // Direct assignment notifies the assignee, never the person assigning.
-    let entity: Value = post_entity(
+    let record: Value = post_record(
         &owner_client,
         &base,
         "task",
@@ -115,13 +115,13 @@ async fn system_events_reach_the_inbox_of_each_affected_member(pool: PgPool) {
     .json()
     .await
     .unwrap();
-    let entity_id = entity["id"].as_str().unwrap().to_owned();
+    let record_id = record["id"].as_str().unwrap().to_owned();
     let page = inbox(&member_client, &base, "").await;
-    assert_eq!(kinds(&page), ["entity.assigned"]);
+    assert_eq!(kinds(&page), ["record.assigned"]);
     let assigned = &page["items"][0];
     assert_eq!(
         assigned["subject"],
-        json!({"kind": "entity", "id": entity_id})
+        json!({"kind": "record", "id": record_id})
     );
     assert_eq!(assigned["actor_user_id"], json!(owner));
     assert_eq!(assigned["data"]["blueprint_code"], "task");
@@ -140,7 +140,7 @@ async fn system_events_reach_the_inbox_of_each_affected_member(pool: PgPool) {
 
     // Saving the record again without changing the assignee is silent.
     let current: Value = owner_client
-        .get(format!("{base}/v1/entities/{entity_id}"))
+        .get(format!("{base}/v1/records/{record_id}"))
         .send()
         .await
         .unwrap()
@@ -148,9 +148,9 @@ async fn system_events_reach_the_inbox_of_each_affected_member(pool: PgPool) {
         .await
         .unwrap();
     owner_client
-        .put(format!("{base}/v1/entities/{entity_id}"))
+        .put(format!("{base}/v1/records/{record_id}"))
         .json(&json!({
-            "expected_updated_at": current["entity"]["updated_at"],
+            "expected_updated_at": current["record"]["updated_at"],
             "values": [scalar("title", "Review again")],
         }))
         .send()
@@ -161,7 +161,7 @@ async fn system_events_reach_the_inbox_of_each_affected_member(pool: PgPool) {
     assert_eq!(inbox(&member_client, &base, "").await["unread_count"], 1);
 
     // Someone who cannot read the record is not told about it.
-    post_entity(
+    post_record(
         &owner_client,
         &base,
         "task",
@@ -185,7 +185,7 @@ async fn system_events_reach_the_inbox_of_each_affected_member(pool: PgPool) {
         .json()
         .await
         .unwrap();
-    post_entity(
+    post_record(
         &owner_client,
         &base,
         "task",
@@ -200,14 +200,14 @@ async fn system_events_reach_the_inbox_of_each_affected_member(pool: PgPool) {
     let page = inbox(&member_client, &base, "").await;
     assert_eq!(
         kinds(&page),
-        ["entity.assigned", "team.member_added", "entity.assigned"]
+        ["record.assigned", "team.member_added", "record.assigned"]
     );
     assert_eq!(page["items"][1]["subject"], Value::Null);
     assert_eq!(page["items"][1]["data"]["team_name"], "Quality");
     assert_eq!(page["items"][0]["data"]["team_name"], "Quality");
 
     // Comments reach assignees and earlier commenters, except the author.
-    let comments = format!("{base}/v1/entities/{entity_id}/comments");
+    let comments = format!("{base}/v1/records/{record_id}/comments");
     owner_client
         .post(&comments)
         .json(&json!({"body": "Please check the **totals**."}))
@@ -217,7 +217,7 @@ async fn system_events_reach_the_inbox_of_each_affected_member(pool: PgPool) {
         .error_for_status()
         .unwrap();
     let page = inbox(&member_client, &base, "?unread_only=true").await;
-    assert_eq!(page["items"][0]["kind"], "entity.commented");
+    assert_eq!(page["items"][0]["kind"], "record.commented");
     assert_eq!(page["items"][0]["body"], "Please check the **totals**.");
     assert_eq!(page["unread_count"], 4);
     member_client
@@ -230,7 +230,7 @@ async fn system_events_reach_the_inbox_of_each_affected_member(pool: PgPool) {
         .unwrap();
     assert_eq!(
         kinds(&inbox(&owner_client, &base, "").await),
-        ["entity.commented"]
+        ["record.commented"]
     );
     assert_eq!(inbox(&member_client, &base, "").await["unread_count"], 4);
 }
@@ -242,7 +242,7 @@ async fn comments_notify_current_assignees_not_earlier_ones(pool: PgPool) {
     let (ada, ada_client) = add_member(&pool, "ada@example.test", "Ada", true).await;
     let (bob, bob_client) = add_member(&pool, "bob@example.test", "Bob", true).await;
     create_blueprint(&owner_client, &base, DEFINITION).await;
-    let entity: Value = post_entity(
+    let record: Value = post_record(
         &owner_client,
         &base,
         "task",
@@ -254,9 +254,9 @@ async fn comments_notify_current_assignees_not_earlier_ones(pool: PgPool) {
     .json()
     .await
     .unwrap();
-    let id = entity["id"].as_str().unwrap();
+    let id = record["id"].as_str().unwrap();
     let current: Value = owner_client
-        .get(format!("{base}/v1/entities/{id}"))
+        .get(format!("{base}/v1/records/{id}"))
         .send()
         .await
         .unwrap()
@@ -264,9 +264,9 @@ async fn comments_notify_current_assignees_not_earlier_ones(pool: PgPool) {
         .await
         .unwrap();
     owner_client
-        .put(format!("{base}/v1/entities/{id}"))
+        .put(format!("{base}/v1/records/{id}"))
         .json(&json!({
-            "expected_updated_at": current["entity"]["updated_at"],
+            "expected_updated_at": current["record"]["updated_at"],
             "values": [scalar("assignee", format!("user:{bob}"))],
         }))
         .send()
@@ -275,7 +275,7 @@ async fn comments_notify_current_assignees_not_earlier_ones(pool: PgPool) {
         .error_for_status()
         .unwrap();
     owner_client
-        .post(format!("{base}/v1/entities/{id}/comments"))
+        .post(format!("{base}/v1/records/{id}/comments"))
         .json(&json!({"body": "Over to you."}))
         .send()
         .await
@@ -284,11 +284,11 @@ async fn comments_notify_current_assignees_not_earlier_ones(pool: PgPool) {
         .unwrap();
     assert_eq!(
         kinds(&inbox(&bob_client, &base, "").await),
-        ["entity.commented", "entity.assigned"]
+        ["record.commented", "record.assigned"]
     );
     assert_eq!(
         kinds(&inbox(&ada_client, &base, "").await),
-        ["entity.assigned"]
+        ["record.assigned"]
     );
 }
 
@@ -300,7 +300,7 @@ async fn members_read_mark_and_delete_only_their_own_notifications(pool: PgPool)
     let (_, other_client) = add_member(&pool, "bob@example.test", "Bob", true).await;
     create_blueprint(&owner_client, &base, DEFINITION).await;
     for title in ["one", "two", "three"] {
-        post_entity(
+        post_record(
             &owner_client,
             &base,
             "task",
@@ -455,7 +455,7 @@ async fn agent_tools_act_on_the_initiating_users_inbox(pool: PgPool) {
     let (member, _) = add_member(&pool, "ada@example.test", "Ada", true).await;
     create_blueprint(&owner_client, &base, DEFINITION).await;
     for title in ["one", "two"] {
-        post_entity(
+        post_record(
             &owner_client,
             &base,
             "task",

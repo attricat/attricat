@@ -4,7 +4,7 @@ const BLUEPRINT: &str = r#"
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [[rules]]
 code = "title-required"
@@ -41,8 +41,8 @@ const CHECKED: &str = r#"
 format_version = 1
 code = "contract"
 name = "Contract"
-kind = "entity"
-entity_schema = '''{"x-attricat-checks": [
+kind = "record"
+record_schema = '''{"x-attricat-checks": [
   {"code": "range", "predicate": {"type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from"}}
 ]}'''
 
@@ -92,7 +92,7 @@ fn compile(
 }
 
 #[test]
-fn type_checks_entity_checks_conditions_and_enforcement() {
+fn type_checks_record_checks_conditions_and_enforcement() {
     let compiled = compile(CHECKED).expect("declarative checks compile");
     assert!(compiled.rules[0].enforcement.is_some());
     for (from, to) in [

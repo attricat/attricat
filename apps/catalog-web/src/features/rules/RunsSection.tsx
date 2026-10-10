@@ -11,16 +11,16 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { listRuleRuns } from './api';
-import { EntityIdLink, RuleRevisionCell } from './RuleCells';
+import { RecordIdLink, RuleRevisionCell } from './RuleCells';
 import type { RuleRevisions } from './ruleRevisions';
 
 export const RunsSection = ({
-  entityLabels,
+  recordLabels,
   error,
   revisions,
   runs,
 }: {
-  entityLabels: ReadonlyMap<string, string>;
+  recordLabels: ReadonlyMap<string, string>;
   error: boolean;
   revisions: RuleRevisions;
   runs: Awaited<ReturnType<typeof listRuleRuns>> | undefined;
@@ -59,13 +59,13 @@ export const RunsSection = ({
                   />
                 </TableCell>
                 <TableCell>
-                  {item.scope_entity_id ? (
-                    <EntityIdLink
-                      entityId={item.scope_entity_id}
-                      label={entityLabels.get(item.scope_entity_id)}
+                  {item.scope_record_id ? (
+                    <RecordIdLink
+                      recordId={item.scope_record_id}
+                      label={recordLabels.get(item.scope_record_id)}
                     />
                   ) : (
-                    t('rules.allEntities')
+                    t('rules.allRecords')
                   )}
                 </TableCell>
                 <TableCell>

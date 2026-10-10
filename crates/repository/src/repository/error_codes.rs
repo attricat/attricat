@@ -3,7 +3,7 @@
 //! status class, a client-safe message and optional structured details.
 //!
 //! The status classes follow one rule for write failures: `Conflict` (409)
-//! means the current state of other data blocks the write (another entity
+//! means the current state of other data blocks the write (another record
 //! holds the key, a lock, a stale revision), while `Unprocessable` (422) means
 //! the submitted content itself fails declared checks or schemas. Check
 //! failures carry `details.violations[]`; every other code that has details
@@ -49,10 +49,10 @@ error_codes! {
     BlueprintNotPublished = "blueprint_not_published",
     CommentConflict = "comment_conflict",
     Conflict = "conflict",
-    EntityBlueprintCurrent = "entity_blueprint_current",
-    EntityCheckFailed = "entity_check_failed",
-    EntityIdTaken = "entity_id_taken",
-    EntitySchemaMismatch = "entity_schema_mismatch",
+    RecordBlueprintCurrent = "record_blueprint_current",
+    RecordCheckFailed = "record_check_failed",
+    RecordIdTaken = "record_id_taken",
+    RecordSchemaMismatch = "record_schema_mismatch",
     ExtensionAlreadyInstalled = "extension_already_installed",
     FileAttributeReadonly = "file_attribute_readonly",
     FileCardinalityExceeded = "file_cardinality_exceeded",
@@ -94,7 +94,7 @@ error_codes! {
     SolutionPackPlanExpired = "solution_pack_plan_expired",
     SolutionPackPlanNotReady = "solution_pack_plan_not_ready",
     SolutionPackPlanStale = "solution_pack_plan_stale",
-    StaleEntity = "stale_entity",
+    StaleRecord = "stale_record",
     StatusPreconditionRequired = "status_precondition_required",
     StatusSeparationOfDuties = "status_separation_of_duties",
     StatusTransitionForbidden = "status_transition_forbidden",
@@ -195,8 +195,8 @@ impl RepositoryError {
         let message = self.to_string();
         let plain = |class, code| ErrorDescription::new(class, code, message.clone());
         match self {
-            Self::EntityCheckFailed(violations) => {
-                check_failure(Code::EntityCheckFailed, message, violations, None)
+            Self::RecordCheckFailed(violations) => {
+                check_failure(Code::RecordCheckFailed, message, violations, None)
             }
             Self::TransitionConditionsUnmet(violations) => {
                 check_failure(Code::TransitionConditionsUnmet, message, violations, None)
@@ -220,7 +220,7 @@ impl RepositoryError {
                 plain(Conflict, Code::RuleHasExistingViolations)
                     .with_details(json!({ "existing_violations": count }))
             }
-            Self::StaleEntity => plain(Conflict, Code::StaleEntity),
+            Self::StaleRecord => plain(Conflict, Code::StaleRecord),
             Self::StatusPreconditionRequired => {
                 plain(PreconditionRequired, Code::StatusPreconditionRequired)
             }
@@ -253,7 +253,7 @@ impl RepositoryError {
             })),
             Self::InvalidRetentionHold(_)
             | Self::InvalidComment
-            | Self::InvalidEntityBatch(_)
+            | Self::InvalidRecordBatch(_)
             | Self::InvalidReusableAttributeCode
             | Self::InvalidLexiconEntry(_)
             | Self::InvalidReusableAttributeDefinition(_)
@@ -319,15 +319,15 @@ impl RepositoryError {
                 "attribute": attribute,
                 "instance_path": instance_path,
             })),
-            Self::EntitySchemaMismatch {
+            Self::RecordSchemaMismatch {
                 context,
                 instance_path,
                 ..
-            } => plain(Unprocessable, Code::EntitySchemaMismatch).with_details(json!({
+            } => plain(Unprocessable, Code::RecordSchemaMismatch).with_details(json!({
                 "context": context,
                 "instance_path": instance_path,
             })),
-            Self::EntityBlueprintCurrent => plain(Conflict, Code::EntityBlueprintCurrent),
+            Self::RecordBlueprintCurrent => plain(Conflict, Code::RecordBlueprintCurrent),
             Self::MigrationTargetChanged => plain(Conflict, Code::MigrationTargetChanged),
             Self::MigrationNotApplicable => plain(Unprocessable, Code::MigrationNotApplicable),
             Self::BlueprintMigrationNotSafe => plain(Conflict, Code::BlueprintMigrationNotSafe),
@@ -359,13 +359,13 @@ impl RepositoryError {
             Self::RelationshipTargetTypeMismatch => {
                 plain(Unprocessable, Code::RelationshipTargetTypeMismatch)
             }
-            Self::EntityBatchOperationFailed {
+            Self::RecordBatchOperationFailed {
                 index,
-                entity_id,
+                record_id,
                 source,
             } => {
                 // Keep the failing operation's own class and code so clients
-                // recover exactly as for the single-entity request.
+                // recover exactly as for the single-record request.
                 let mut inner = source.describe();
                 inner.message = format!("operation {index}: {}", inner.message);
                 let mut details = match inner.details.take() {
@@ -373,23 +373,23 @@ impl RepositoryError {
                     _ => Map::new(),
                 };
                 details.insert("operation_index".to_owned(), json!(index));
-                details.insert("entity_id".to_owned(), json!(entity_id));
+                details.insert("record_id".to_owned(), json!(record_id));
                 inner.details = Some(Value::Object(details));
                 inner
             }
-            Self::EntityIdTaken(entity_id) => {
-                plain(Conflict, Code::EntityIdTaken).with_details(json!({ "entity_id": entity_id }))
+            Self::RecordIdTaken(record_id) => {
+                plain(Conflict, Code::RecordIdTaken).with_details(json!({ "record_id": record_id }))
             }
             Self::UniqueKeyConflict {
                 key,
                 context,
                 values,
-                conflicting_entity_id,
+                conflicting_record_id,
             } => plain(Conflict, Code::UniqueKeyConflict).with_details(json!({
                 "key": key,
                 "context": context,
                 "values": values,
-                "conflicting_entity_id": conflicting_entity_id,
+                "conflicting_record_id": conflicting_record_id,
             })),
             Self::UniqueKeyDuplicates { duplicates, total } => {
                 plain(Conflict, Code::UniqueKeyDuplicates).with_details(json!({
@@ -411,15 +411,15 @@ impl RepositoryError {
             Self::RelationshipCardinalityConflict {
                 attribute,
                 context_id,
-                source_entity_id,
-                target_entity_id,
-                conflicting_source_entity_id,
+                source_record_id,
+                target_record_id,
+                conflicting_source_record_id,
             } => plain(Conflict, Code::RelationshipCardinalityConflict).with_details(json!({
                 "attribute": attribute,
                 "context_id": context_id,
-                "source_entity_id": source_entity_id,
-                "target_entity_id": target_entity_id,
-                "conflicting_source_entity_id": conflicting_source_entity_id,
+                "source_record_id": source_record_id,
+                "target_record_id": target_record_id,
+                "conflicting_source_record_id": conflicting_source_record_id,
             })),
             Self::PublicationChannelDisabled => {
                 plain(Unprocessable, Code::PublicationChannelDisabled)
@@ -489,7 +489,7 @@ mod tests {
 
     fn violation() -> CheckViolation {
         CheckViolation {
-            source: CheckSource::EntityCheck,
+            source: CheckSource::RecordCheck,
             code: "has-owner".into(),
             message: "An owner is required".into(),
             contexts: vec!["default".into()],
@@ -502,23 +502,23 @@ mod tests {
 
     #[test]
     fn batch_failures_keep_the_operation_code_and_details() {
-        let entity_id = Uuid::new_v4();
-        let described = RepositoryError::EntityBatchOperationFailed {
+        let record_id = Uuid::new_v4();
+        let described = RepositoryError::RecordBatchOperationFailed {
             index: 2,
-            entity_id: Some(entity_id),
-            source: Box::new(RepositoryError::EntityCheckFailed(vec![violation()])),
+            record_id: Some(record_id),
+            source: Box::new(RepositoryError::RecordCheckFailed(vec![violation()])),
         }
         .describe();
         assert_eq!(described.class, ErrorClass::Unprocessable);
-        assert_eq!(described.code, ErrorCode::EntityCheckFailed);
+        assert_eq!(described.code, ErrorCode::RecordCheckFailed);
         assert!(
             described
                 .message
-                .starts_with("operation 2: entity checks failed")
+                .starts_with("operation 2: record checks failed")
         );
         let details = described.details.unwrap();
         assert_eq!(details["operation_index"], 2);
-        assert_eq!(details["entity_id"], json!(entity_id));
+        assert_eq!(details["record_id"], json!(record_id));
         assert_eq!(details["violations"][0]["code"], "has-owner");
     }
 

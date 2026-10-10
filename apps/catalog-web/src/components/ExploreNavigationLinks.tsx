@@ -18,14 +18,14 @@ type ExploreShortcut = Awaited<
 >[number];
 
 type ExploreNavigationLinksProps = {
-  allEntitiesSelected: boolean;
+  allRecordsSelected: boolean;
   onNavigate?: () => void;
   selectedBlueprintCode?: string;
   shortcuts: readonly ExploreShortcut[] | undefined;
 };
 
 export const ExploreNavigationLinks = ({
-  allEntitiesSelected,
+  allRecordsSelected,
   onNavigate,
   selectedBlueprintCode,
   shortcuts,
@@ -36,13 +36,13 @@ export const ExploreNavigationLinks = ({
       <ListItemButton
         component={Link}
         onClick={onNavigate}
-        selected={allEntitiesSelected}
+        selected={allRecordsSelected}
         to={navigationRoutes.explore}
       >
         <ListItemIcon>
           <NavigationIcon icon={ExplorerIcon} />
         </ListItemIcon>
-        <ListItemText primary={t('navigation.allEntities')} />
+        <ListItemText primary={t('navigation.allRecords')} />
       </ListItemButton>
       {shortcuts?.length ? (
         <ListSubheader disableSticky>{t('navigation.shortcuts')}</ListSubheader>

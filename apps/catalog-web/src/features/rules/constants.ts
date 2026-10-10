@@ -21,5 +21,5 @@ export const ERROR_FINDING_SEVERITIES: readonly string[] = [
 ];
 export const RULE_STATUS_PUBLISHED = 'published';
 export const RULE_HAS_EXISTING_VIOLATIONS = 'rule_has_existing_violations';
-/** Characters of an entity ID shown where no display label is loaded. */
-export const SHORT_ENTITY_ID_LENGTH = 8;
+/** Characters of a record ID shown where no display label is loaded. */
+export const SHORT_RECORD_ID_LENGTH = 8;

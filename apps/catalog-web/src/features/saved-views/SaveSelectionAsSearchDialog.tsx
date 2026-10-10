@@ -1,22 +1,22 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import type { EntityItem } from '../entities/api';
-import { entitySelectionSearch, type ExplorerSearch } from '../explorer/search';
+import type { RecordItem } from '../records/api';
+import { recordSelectionSearch, type ExplorerSearch } from '../explorer/search';
 import { createSavedView } from './api';
 import { savedViewQueryKeys } from './queryKeys';
 import { SaveSearchDialog, type SaveSearchValues } from './SaveSearchDialog';
 
 type Props = {
-  entities: EntityItem[];
+  records: RecordItem[];
   onClose: () => void;
   onSuccess: () => void;
   search: ExplorerSearch;
 };
 
-/** Saves a search that matches exactly the selected entities by ID. */
+/** Saves a search that matches exactly the selected records by ID. */
 export const SaveSelectionAsSearchDialog = ({
-  entities,
+  records,
   onClose,
   onSuccess,
   search,
@@ -30,9 +30,9 @@ export const SaveSelectionAsSearchDialog = ({
         name,
         description,
         visibility,
-        entitySelectionSearch(
+        recordSelectionSearch(
           search,
-          entities.map((entity) => entity.id),
+          records.map((record) => record.id),
         ),
       ),
     onSuccess: (view) => {

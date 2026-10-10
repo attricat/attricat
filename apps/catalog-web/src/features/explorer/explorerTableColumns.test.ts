@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { BlueprintWithAttributes } from '../entities/api';
-import { attributeSchema } from '../entities/schemas';
+import type { BlueprintWithAttributes } from '../records/api';
+import { attributeSchema } from '../records/schemas';
 import {
   buildExplorerTableColumns,
   configuredColumnLabel,

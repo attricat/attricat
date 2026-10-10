@@ -6,7 +6,7 @@ import type { ComponentProps } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ToastProvider } from '../../components/ToastProvider';
-import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
+import type { BlueprintWithAttributes, RecordItem } from '../records/api';
 import { extensionQueryKeys } from '../extensions/queryKeys';
 import { ExplorerResultsTable } from './ExplorerResultsTable';
 import { useExplorerSelection } from './useExplorerSelection';
@@ -43,10 +43,10 @@ vi.mock('@tanstack/react-virtual', () => ({
     measureElement: vi.fn(),
   }),
 }));
-vi.mock('../entities/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../entities/api')>()),
-  deleteEntity: vi.fn(),
-  getEntityPublications: vi.fn().mockResolvedValue([]),
+vi.mock('../records/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../records/api')>()),
+  deleteRecord: vi.fn(),
+  getRecordPublications: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('../extensions/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../extensions/api')>()),
@@ -66,7 +66,7 @@ vi.mock('../agents/api', () => ({
 }));
 
 import { createConversation, sendMessage } from '../agents/api';
-import { deleteEntity, getEntityPublications } from '../entities/api';
+import { deleteRecord, getRecordPublications } from '../records/api';
 
 const blueprint = {
   blueprint: {
@@ -81,7 +81,7 @@ const blueprint = {
   table_path_attributes: [],
 } as unknown as BlueprintWithAttributes;
 
-const item: EntityItem = {
+const item: RecordItem = {
   blueprint_version: 1,
   display: { default: 'Sample product' },
   id: '123e4567-e89b-12d3-a456-426614174001',
@@ -92,7 +92,7 @@ const item: EntityItem = {
   schema_outdated: false,
   table_values: {},
 };
-const secondItem: EntityItem = {
+const secondItem: RecordItem = {
   ...item,
   id: '123e4567-e89b-12d3-a456-426614174002',
   display: { default: 'Second product' },
@@ -132,7 +132,7 @@ const renderTable = (
   queryClient.setQueryData(extensionQueryKeys.runtime(), {
     contributions: [],
   });
-  const tree = (tableItems: EntityItem[], key: string) => (
+  const tree = (tableItems: RecordItem[], key: string) => (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <TableWithSelection
@@ -163,14 +163,14 @@ const renderTable = (
   return {
     ...view,
     queryClient,
-    search: (nextItems: EntityItem[], key: string) =>
+    search: (nextItems: RecordItem[], key: string) =>
       view.rerender(tree(nextItems, key)),
   };
 };
 
 describe('ExplorerResultsTable', () => {
   it('bounds publication requests to virtual rows and reuses fresh results when scrolling back', async () => {
-    vi.mocked(getEntityPublications).mockResolvedValue([]);
+    vi.mocked(getRecordPublications).mockResolvedValue([]);
     virtualWindow.size = 5;
     const items = Array.from({ length: 1000 }, (_, index) => ({
       ...item,
@@ -187,11 +187,11 @@ describe('ExplorerResultsTable', () => {
       vi.fn(),
       'context',
     );
-    await waitFor(() => expect(getEntityPublications).toHaveBeenCalledTimes(5));
+    await waitFor(() => expect(getRecordPublications).toHaveBeenCalledTimes(5));
     expect(
-      vi.mocked(getEntityPublications).mock.calls.map(([id]) => id),
+      vi.mocked(getRecordPublications).mock.calls.map(([id]) => id),
     ).toEqual(items.slice(0, 5).map(({ id }) => id));
-    expect(vi.mocked(getEntityPublications).mock.calls[0][1]).toBeInstanceOf(
+    expect(vi.mocked(getRecordPublications).mock.calls[0][1]).toBeInstanceOf(
       AbortSignal,
     );
     await waitFor(() => expect(view.queryClient.isFetching()).toBe(0));
@@ -203,7 +203,7 @@ describe('ExplorerResultsTable', () => {
     virtualWindow.start = 200;
     view.search(items, 'initial');
     await waitFor(() =>
-      expect(getEntityPublications).toHaveBeenCalledTimes(10),
+      expect(getRecordPublications).toHaveBeenCalledTimes(10),
     );
     await waitFor(() => expect(view.queryClient.isFetching()).toBe(0));
     expect(screen.getByRole('menu')).toBeTruthy();
@@ -214,7 +214,7 @@ describe('ExplorerResultsTable', () => {
         screen.getAllByRole('row', { hidden: true }).length,
       ).toBeGreaterThan(1),
     );
-    expect(getEntityPublications).toHaveBeenCalledTimes(10);
+    expect(getRecordPublications).toHaveBeenCalledTimes(10);
   });
 
   it('offers revision-scoped Explorer actions only for single-version results', () => {
@@ -278,15 +278,15 @@ describe('ExplorerResultsTable', () => {
     ).toBeNull();
     unmount();
 
-    vi.mocked(deleteEntity).mockResolvedValue(undefined);
+    vi.mocked(deleteRecord).mockResolvedValue(undefined);
     renderTable([item], true);
     await user.click(
       screen.getByRole('button', { name: `Record actions for ${item.id}` }),
     );
     await user.click(screen.getByRole('menuitem', { name: 'Delete record' }));
-    expect(deleteEntity).not.toHaveBeenCalled();
+    expect(deleteRecord).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(deleteEntity).not.toHaveBeenCalled();
+    expect(deleteRecord).not.toHaveBeenCalled();
     await user.click(
       screen.getByRole('button', { name: `Record actions for ${item.id}` }),
     );
@@ -296,13 +296,13 @@ describe('ExplorerResultsTable', () => {
         name: 'Delete record',
       }),
     );
-    await waitFor(() => expect(deleteEntity).toHaveBeenCalledWith(item.id));
+    await waitFor(() => expect(deleteRecord).toHaveBeenCalledWith(item.id));
   });
 
   it('keeps the confirmation open with an error when deletion fails', async () => {
     const user = userEvent.setup();
-    vi.mocked(deleteEntity).mockRejectedValueOnce(
-      new Error('Cannot delete entity'),
+    vi.mocked(deleteRecord).mockRejectedValueOnce(
+      new Error('Cannot delete record'),
     );
     renderTable([item], true);
     await user.click(
@@ -314,7 +314,7 @@ describe('ExplorerResultsTable', () => {
         name: 'Delete record',
       }),
     );
-    expect(await screen.findByText('Cannot delete entity')).toBeTruthy();
+    expect(await screen.findByText('Cannot delete record')).toBeTruthy();
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
@@ -339,7 +339,7 @@ describe('ExplorerResultsTable', () => {
         context_version: 1,
         blueprint_id: blueprint.blueprint.id,
         blueprint_version: blueprint.blueprint.version,
-        entity_ids: [item.id],
+        record_ids: [item.id],
       },
       runtimeScope: {
         blueprintId: blueprint.blueprint.id,
@@ -349,7 +349,7 @@ describe('ExplorerResultsTable', () => {
       selection: expect.objectContaining({
         source: 'explorer_selection',
         blueprintId: blueprint.blueprint.id,
-        entityIds: [item.id],
+        recordIds: [item.id],
       }),
     });
     await user.click(selectAll);
@@ -401,7 +401,7 @@ describe('ExplorerResultsTable', () => {
     expect(screen.getByText('1 selected')).toBeTruthy();
   });
 
-  it('limits bulk selection to 50 loaded entities', async () => {
+  it('limits bulk selection to 50 loaded records', async () => {
     const user = userEvent.setup();
     const items = Array.from({ length: 51 }, (_, index) => ({
       ...item,
@@ -428,7 +428,7 @@ describe('ExplorerResultsTable', () => {
     ).toBe(true);
   });
 
-  it('sends only selected entity references to a new conversation', async () => {
+  it('sends only selected record references to a new conversation', async () => {
     const user = userEvent.setup();
     vi.mocked(createConversation).mockResolvedValue({
       id: '123e4567-e89b-12d3-a456-426614174003',
@@ -460,7 +460,7 @@ describe('ExplorerResultsTable', () => {
     expect(createConversation).toHaveBeenCalledWith('Review 1 Product records');
     expect(sendMessage).toHaveBeenCalledWith(
       '123e4567-e89b-12d3-a456-426614174003',
-      expect.stringContaining(`entity_id: ${item.id}`),
+      expect.stringContaining(`record_id: ${item.id}`),
     );
     expect(vi.mocked(sendMessage).mock.calls[0][1]).not.toContain(
       secondItem.id,
@@ -473,7 +473,7 @@ describe('ExplorerResultsTable', () => {
     );
   });
 
-  it('creates a saved search from the selected entities', async () => {
+  it('creates a saved search from the selected records', async () => {
     const user = userEvent.setup();
     const onSaveSelectionAsSearch = vi.fn();
     renderTable(

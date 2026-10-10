@@ -11,8 +11,8 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon } from 'lucide-react';
-import { listEntityBlueprints } from '../entities/api';
-import { entityQueryKeys } from '../entities/queryKeys';
+import { listRecordBlueprints } from '../records/api';
+import { recordQueryKeys } from '../records/queryKeys';
 import {
   listExploreNavigation,
   listRoles,
@@ -41,8 +41,8 @@ export const WorkspaceNavigationSection = ({
     enabled: canManage,
   });
   const blueprints = useQuery({
-    queryKey: entityQueryKeys.blueprints(),
-    queryFn: ({ signal }) => listEntityBlueprints(signal),
+    queryKey: recordQueryKeys.blueprints(),
+    queryFn: ({ signal }) => listRecordBlueprints(signal),
     enabled: canManage,
   });
   const [entries, setEntries] = useState<

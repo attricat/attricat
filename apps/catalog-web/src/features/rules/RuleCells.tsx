@@ -1,7 +1,7 @@
 import { Box } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import { SHORT_ENTITY_ID_LENGTH } from './constants';
+import { SHORT_RECORD_ID_LENGTH } from './constants';
 import { ruleRevisionKey, type RuleRevisions } from './ruleRevisions';
 
 export const RuleRevisionCell = ({
@@ -18,29 +18,29 @@ export const RuleRevisionCell = ({
   return rule
     ? t('rules.ruleRevision', { name: rule.name, version })
     : t('rules.unknownRule', {
-        id: ruleId.slice(0, SHORT_ENTITY_ID_LENGTH),
+        id: ruleId.slice(0, SHORT_RECORD_ID_LENGTH),
         version,
       });
 };
 
-/** Links an entity by its display label, or by a short ID until one loads. */
-export const EntityIdLink = ({
-  entityId,
+/** Links a record by its display label, or by a short ID until one loads. */
+export const RecordIdLink = ({
+  recordId,
   label,
 }: {
-  entityId: string;
+  recordId: string;
   label: string | undefined;
 }) => {
   const { t } = useTranslation();
   return (
-    <Link params={{ entityId }} title={entityId} to="/entities/$entityId">
+    <Link params={{ recordId }} title={recordId} to="/records/$recordId">
       {label ?? (
         <Box
-          aria-label={t('rules.entityWithoutLabel', { id: entityId })}
+          aria-label={t('rules.recordWithoutLabel', { id: recordId })}
           component="span"
           sx={{ fontFamily: 'monospace' }}
         >
-          {entityId.slice(0, SHORT_ENTITY_ID_LENGTH)}
+          {recordId.slice(0, SHORT_RECORD_ID_LENGTH)}
         </Box>
       )}
     </Link>

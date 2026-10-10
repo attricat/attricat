@@ -3,7 +3,7 @@ mod support;
 use support::*;
 
 #[sqlx::test]
-async fn validates_attribute_and_entity_json_schemas(pool: PgPool) {
+async fn validates_attribute_and_record_json_schemas(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(
@@ -12,8 +12,8 @@ async fn validates_attribute_and_entity_json_schemas(pool: PgPool) {
         r#"format_version = 1
 code = "schema_product"
 name = "Schema product"
-kind = "entity"
-entity_schema = '{"type":"object","required":["title","price"]}'
+kind = "record"
+record_schema = '{"type":"object","required":["title","price"]}'
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -44,7 +44,7 @@ value_schema = '{"type":"number","minimum":0}'"#,
         .unwrap()["id"]
         .clone();
     let create = |values: Value| {
-        client.post(format!("{base_url}/v1/entities")).json(&json!({
+        client.post(format!("{base_url}/v1/records")).json(&json!({
             "blueprint": {
                 "code": blueprint["blueprint"]["code"],
                 "version": blueprint["blueprint"]["version"],
@@ -74,7 +74,7 @@ value_schema = '{"type":"number","minimum":0}'"#,
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(
         response.json::<Value>().await.unwrap()["error"]["code"],
-        "entity_schema_mismatch"
+        "record_schema_mismatch"
     );
 
     let response = create(json!([
@@ -85,9 +85,9 @@ value_schema = '{"type":"number","minimum":0}'"#,
     .await
     .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
-    let entity: Value = response.json().await.unwrap();
+    let record: Value = response.json().await.unwrap();
     let response = client
-        .put(format!("{base_url}/v1/entities/{}", entity["id"].as_str().unwrap()))
+        .put(format!("{base_url}/v1/records/{}", record["id"].as_str().unwrap()))
         .json(&json!({
             "values": [{ "kind": "scalar", "attribute_code": "price", "context_id": context_id, "value": -1 }]
         }))

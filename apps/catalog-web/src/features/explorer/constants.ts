@@ -3,7 +3,7 @@ export const maximumAttributeFilters = 20;
 export const maximumAgentSelection = 50;
 export const maximumAgentInstructionsLength = 1_000;
 export const maximumAgentConversationBlueprintNameLength = 120;
-export const maximumAgentEntityLabelLength = 60;
+export const maximumAgentRecordLabelLength = 60;
 
 // Storage keys.
 export const lastBlueprintStorageKey = 'catalog.explorer.last-blueprint';
@@ -83,10 +83,10 @@ export const estimatedResultRowHeight = 53;
 export const resultRowOverscan = 10;
 
 // Layout dimensions.
-/** The entity panel floats over the results; keep most of them visible. */
-export const entityPanelWidth = 'clamp(420px, 36vw, 680px)';
+/** The record panel floats over the results; keep most of them visible. */
+export const recordPanelWidth = 'clamp(420px, 36vw, 680px)';
 /** Marks links that switch the panel to another record, so clicking one does not close it. */
-export const entityPanelOpenerAttribute = 'data-entity-panel-opener';
+export const recordPanelOpenerAttribute = 'data-record-panel-opener';
 export const resultsTableHeight = {
   xs: 'calc(100dvh - 220px)',
   md: 'calc(100dvh - 165px)',
@@ -98,9 +98,9 @@ export const searchScopePopoverWidth = 280;
 export const searchSyntaxPopoverMaxWidth = 440;
 export const resultsLoadingIndicatorSize = 80;
 export const columnPreferencesListMaxHeight = 480;
-export const agentEntityListMaxHeight = 140;
-export const selectedEntityListMaxHeight = 360;
-export const selectedEntityListWidth = 360;
+export const agentRecordListMaxHeight = 140;
+export const selectedRecordListMaxHeight = 360;
+export const selectedRecordListWidth = 360;
 export const agentInstructionsRows = 3;
 export const pendingVersionPlaceholder = '…';
 export const emptyValuePlaceholder = '—';

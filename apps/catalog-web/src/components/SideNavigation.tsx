@@ -100,7 +100,7 @@ export const SideNavigation = ({
     session.data?.capabilities?.extensions_read === true;
   const exploreActive = pathname === navigationRoutes.explore;
   const exploreLinkProps = {
-    allEntitiesSelected: exploreActive && !search.locked,
+    allRecordsSelected: exploreActive && !search.locked,
     selectedBlueprintCode: exploreActive ? search.blueprint : undefined,
     shortcuts: pinnedExplore.data,
   };
@@ -177,7 +177,7 @@ export const SideNavigation = ({
             ariaExpanded={false}
             compact={false}
             icon={<NavigationIcon icon={ExplorerIcon} />}
-            label={t('navigation.entityExplorer')}
+            label={t('navigation.recordExplorer')}
             onClick={() => setMobileSection('explore')}
             trailing={<ChevronRightIcon />}
           />
@@ -198,7 +198,7 @@ export const SideNavigation = ({
                 }
                 selected={
                   item.to === navigationRoutes.explore
-                    ? exploreLinkProps.allEntitiesSelected
+                    ? exploreLinkProps.allRecordsSelected
                     : pathname.startsWith(item.to)
                 }
                 to={item.to}
@@ -215,7 +215,7 @@ export const SideNavigation = ({
         )}
         {!compact && mobileSection === 'explore' && (
           <Box
-            aria-label={t('navigation.entityExplorer')}
+            aria-label={t('navigation.recordExplorer')}
             component="nav"
             id={mobileExplorePanelId}
           >
@@ -310,7 +310,7 @@ export const SideNavigation = ({
         </NavigationFlyout>
       )}
       {compact && panels.isOpen('explore') && (
-        <NavigationFlyout title={t('navigation.entityExplorer')}>
+        <NavigationFlyout title={t('navigation.recordExplorer')}>
           <ExploreNavigationLinks {...exploreLinkProps} />
         </NavigationFlyout>
       )}

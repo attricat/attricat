@@ -3,8 +3,8 @@ code = "seo"
 name = "SEO"
 kind = "mixin"
 
-# Select these attributes through a version-pinned include in an entity blueprint.
-# The consuming entity owns views and requiredness; these constraints travel
+# Select these attributes through a version-pinned include in a record blueprint.
+# The consuming record owns views and requiredness; these constraints travel
 # with each selected attribute. Length limits are editorial guidelines.
 
 [[attributes]]
@@ -23,7 +23,7 @@ value_schema = '{"type":"string","minLength":1,"maxLength":160}'
 code = "canonical_url"
 name = "{{Canonical URL}}"
 value_type = "string"
-# Use catalog.url_edit / catalog.url_display in the consuming entity's views.
+# Use catalog.url_edit / catalog.url_display in the consuming record's views.
 value_schema = '{"type":"string","format":"uri","pattern":"^https?://"}'
 # Do not inherit a different locale's canonical URL.
 context_fallback = "none"

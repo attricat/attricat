@@ -81,10 +81,10 @@ Users see their runs under **Profile → Extension runs**. Only the user who sta
 
 ## Record annotations
 
-With `catalog.annotations.write`, add `annotate` intents to a batch to store facts on a record in your own namespace: tags `<extension-id>:<tag>` and the object at `system_metadata[<extension-id>]`. Intents identify the record by `entity_id`.
+With `catalog.annotations.write`, add `annotate` intents to a batch to store facts on a record in your own namespace: tags `<extension-id>:<tag>` and the object at `system_metadata[<extension-id>]`. Intents identify the record by `record_id`.
 
 ```json
-{"kind": "annotate", "intent_key": "doc-<run>-<entity>", "entity_id": "…",
+{"kind": "annotate", "intent_key": "doc-<run>-<record>", "record_id": "…",
  "add_tags": ["document-generated"], "set_metadata": {"last_document": {"template_version": 2}},
  "remove_tags": [], "remove_metadata": [], "expected_revision": null}
 ```

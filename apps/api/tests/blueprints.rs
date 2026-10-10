@@ -9,7 +9,7 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
     let first: Value = client
         .post(format!("{base_url}/blueprints"))
         .json(&json!({
-            "definition": "format_version = 1\ncode = \"catalogued_entity\"\nname = \"Catalogued entity revision two\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
+            "definition": "format_version = 1\ncode = \"catalogued_record\"\nname = \"Catalogued record revision two\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
         }))
         .send()
         .await
@@ -23,7 +23,7 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
     client
         .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
         .json(&json!({
-            "definition": "format_version = 1\ncode = \"catalogued_entity\"\nname = \"Catalogued entity\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
+            "definition": "format_version = 1\ncode = \"catalogued_record\"\nname = \"Catalogued record\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
         }))
         .send()
         .await
@@ -48,7 +48,7 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
         .await
         .unwrap();
     assert!(catalogue.as_array().unwrap().iter().any(|blueprint| {
-        blueprint["code"] == "catalogued_entity"
+        blueprint["code"] == "catalogued_record"
             && blueprint["version"] == 2
             && blueprint["status"] == "draft"
     }));
@@ -94,7 +94,7 @@ async fn persists_readonly_attribute_metadata(pool: PgPool) {
 format_version = 1
 code = "system_managed_product"
 name = "System managed product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -145,7 +145,7 @@ value_type = "string"
 format_version = 1
 code = "named_product"
 name = "Named product"
-kind = "entity"
+kind = "record"
 
 [[includes]]
 alias = "seo"
@@ -197,14 +197,14 @@ from = "seo.meta_title"
 }
 
 #[sqlx::test]
-async fn rejects_invalid_toml_and_mixin_entity_creation(pool: PgPool) {
+async fn rejects_invalid_toml_and_mixin_record_creation(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
 
     let invalid = client
         .post(format!("{base_url}/blueprints"))
         .json(&json!({
-            "definition": "format_version = 1\ncode = 'bad'\nname = 'Bad'\nkind = 'entity'"
+            "definition": "format_version = 1\ncode = 'bad'\nname = 'Bad'\nkind = 'record'"
         }))
         .send()
         .await
@@ -230,8 +230,8 @@ value_type = "boolean"
 "#,
     )
     .await;
-    let entity = client
-        .post(format!("{base_url}/v1/entities"))
+    let record = client
+        .post(format!("{base_url}/v1/records"))
         .json(&json!({
             "blueprint": {
                 "code": mixin["blueprint"]["code"],
@@ -242,7 +242,7 @@ value_type = "boolean"
         .send()
         .await
         .unwrap();
-    assert_eq!(entity.status(), StatusCode::NOT_FOUND);
+    assert_eq!(record.status(), StatusCode::NOT_FOUND);
 
     server.abort();
 }
@@ -258,7 +258,7 @@ async fn saves_rich_table_columns_with_resolved_relationship_targets(pool: PgPoo
 format_version = 1
 code = "table_category"
 name = "Table category"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -277,7 +277,7 @@ value_type = "string"
 format_version = 1
 code = "table_product"
 name = "Table product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -317,7 +317,7 @@ fn blueprint_with_rule(code: &str) -> String {
         r#"format_version = 1
 code = "{code}"
 name = "{code}"
-kind = "entity"
+kind = "record"
 
 [[rules]]
 code = "title-required"

@@ -7,18 +7,18 @@ Każda zmiana w katalogu zapisuje zdarzenie w tej samej transakcji bazy danych c
 
 Zdarzenia napędzają [przepływy pracy](/pl/builders/workflows/), [reguły](/pl/builders/rules/) i [procedury obsługi zdarzeń w rozszerzeniach](/pl/extensions/server/#obsługuj-zdarzenia-katalogu). Nie są udostępniane jako publiczny strumień.
 
-W typach i ładunkach zdarzeń rekordy występują pod nazwą `entity`, np. `entity.updated.v1`.
+`record.updated.v1`.
 
 ## Typy zdarzeń
 
 | Typ | Rejestrowane, gdy |
 | --- | --- |
-| `entity.created.v1` | Rekord zostaje utworzony. |
-| `entity.updated.v1` | Zmieniają się wartości, relacje lub adnotacje rekordu. |
-| `entity.deleted.v1` | Rekord zostaje usunięty. |
-| `entity.migrated.v1` | Rekord przechodzi na nowszą wersję schematu. |
-| `entity.published.v1` | Rekord zostaje opublikowany w kanale. |
-| `entity.unpublished.v1` | Publikacja rekordu zostaje wycofana. |
+| `record.created.v1` | Rekord zostaje utworzony. |
+| `record.updated.v1` | Zmieniają się wartości, relacje lub adnotacje rekordu. |
+| `record.deleted.v1` | Rekord zostaje usunięty. |
+| `record.migrated.v1` | Rekord przechodzi na nowszą wersję schematu. |
+| `record.published.v1` | Rekord zostaje opublikowany w kanale. |
+| `record.unpublished.v1` | Publikacja rekordu zostaje wycofana. |
 | `attribute_value.changed.v1` | Wartość atrybutu zostaje ustawiona, zastąpiona lub usunięta. |
 | `attribute_value.restored.v1` | Wartość zostaje przywrócona z historii. |
 | `relationship.changed.v1` | Cele relacji zostają dodane lub usunięte. |
@@ -27,7 +27,7 @@ W typach i ładunkach zdarzeń rekordy występują pod nazwą `entity`, np. `ent
 | `blueprint.published.v1` | Wersja schematu zostaje opublikowana. |
 | `context.created.v1`, `context.updated.v1`, `context.deleted.v1` | Kontekst się zmienia. |
 
-Rozszerzenia publikują własne typy o nazwach `plugin.<extension-id>.<name>.vN`. Przestrzenie nazw `entity`, `attribute_value`, `relationship`, `blueprint` i `context` są zarezerwowane.
+Rozszerzenia publikują własne typy o nazwach `plugin.<extension-id>.<name>.vN`. Przestrzenie nazw `record`, `attribute_value`, `relationship`, `blueprint` i `context` są zarezerwowane.
 
 Przyrostek wersji nigdy nie zmienia znaczenia. Niezgodny ładunek otrzymuje nowy typ `.vN`, a konsumenci subskrybują dokładnie te wersje, które rozumieją.
 
@@ -36,9 +36,9 @@ Przyrostek wersji nigdy nie zmienia znaczenia. Niezgodny ładunek otrzymuje nowy
 | Pole | Opis |
 | --- | --- |
 | `id` | UUID zdarzenia. Używaj go do deduplikacji. |
-| `event_type` | Na przykład `entity.updated.v1`. |
+| `event_type` | Na przykład `record.updated.v1`. |
 | `occurred_at` | Kiedy zmiana została zapisana. |
-| `aggregate_kind`, `aggregate_id` | Co się zmieniło, np. `entity` i jego UUID. |
+| `aggregate_kind`, `aggregate_id` | Co się zmieniło, np. `record` i jego UUID. |
 | `correlation_id` | Wspólny dla wszystkiego, co wynikło z jednego żądania lub zadania. |
 | `causation_id` | Zdarzenie, które bezpośrednio spowodowało to zdarzenie, jeśli istnieje. |
 | `source_kind` | `api`, `worker`, `plugin` lub `system`. |
@@ -51,7 +51,7 @@ Zdarzenia rekordów i wartości opisują, co się zmieniło, a nie cały rekord:
 
 ```json
 {
-  "entity_id": "7f1c…",
+  "record_id": "7f1c…",
   "blueprint_id": "a2d4…",
   "blueprint_version": 3,
   "facts": [{
@@ -59,7 +59,7 @@ Zdarzenia rekordów i wartości opisują, co się zmieniło, a nie cały rekord:
     "attribute_code": "price",
     "context_id": "00000000-0000-4000-8000-000000000001",
     "context_code": "default",
-    "relationship_target_entity_id": null,
+    "relationship_target_record_id": null,
     "change_kind": "set",
     "before_value": 49.0,
     "after_value": 39.0
@@ -73,11 +73,11 @@ Aby działać na bieżącym stanie rekordu, odczytaj go; ładunek jest wyłączn
 
 `facts` zawiera po jednym wpisie dla każdej wartości atrybutu, która faktycznie się zmieniła. Zapis, który pozostawia wartość bez zmian, nie dodaje dla niej faktu. [Wyzwalacze przepływów pracy](/pl/builders/workflows/#reaguj-tylko-na-wybrane-atrybuty) mogą filtrować po `attribute_code` za pomocą `attributes`.
 
-- **Atrybuty skalarne:** `change_kind` to `set`, `replace` lub `remove`; `restore` w `attribute_value.restored.v1`. `entity.created.v1` wymienia każdą wartość początkową, łącznie z domyślnymi, jako `set`.
-- **Atrybuty relacji:** każdy dodany lub usunięty cel to osobny fakt z `change_kind` równym `relationship_add` lub `relationship_remove`, ustawionym `relationship_target_entity_id` i identyfikatorem celu jako wartością. Zapis zmieniający tylko relacje tworzy `relationship.changed.v1`; zapis zmieniający też inne wartości tworzy `entity.updated.v1`.
+- **Atrybuty skalarne:** `change_kind` to `set`, `replace` lub `remove`; `restore` w `attribute_value.restored.v1`. `record.created.v1` wymienia każdą wartość początkową, łącznie z domyślnymi, jako `set`.
+- **Atrybuty relacji:** każdy dodany lub usunięty cel to osobny fakt z `change_kind` równym `relationship_add` lub `relationship_remove`, ustawionym `relationship_target_record_id` i identyfikatorem celu jako wartością. Zapis zmieniający tylko relacje tworzy `relationship.changed.v1`; zapis zmieniający też inne wartości tworzy `record.updated.v1`.
 - **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików trafia do dziennika audytu, ale nie tworzy zdarzenia ani faktu.
 - Zmiany tagów i metadanych systemowych nie są wartościami atrybutów i nie dodają faktów.
-- **Migracje:** `entity.migrated.v1` nie zawiera `facts`. Jego ładunek wskazuje rekord, jego schemat, `source_version`, `target_version` i `migration_id`. Jeśli migracja usunęła relację lub zmieniła jej cele, `released_relationships` wymienia cele, których rekord już nie wskazuje, jako `attribute_code` i `target_entity_ids` (najwyżej 100 na relację i 1000 na zdarzenie).
+- **Migracje:** `record.migrated.v1` nie zawiera `facts`. Jego ładunek wskazuje rekord, jego schemat, `source_version`, `target_version` i `migration_id`. Jeśli migracja usunęła relację lub zmieniła jej cele, `released_relationships` wymienia cele, których rekord już nie wskazuje, jako `attribute_code` i `target_record_ids` (najwyżej 100 na relację i 1000 na zdarzenie).
 
 ## Gwarancje dostarczania
 

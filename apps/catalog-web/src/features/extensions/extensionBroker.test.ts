@@ -47,7 +47,7 @@ const dependencies = (capabilities: string[]) => ({
     blueprint_version: 1,
   },
   currentContext: () => ({}),
-  navigateToEntity: vi.fn(),
+  navigateToRecord: vi.fn(),
   queryClient: new QueryClient(),
   openActionDialog: vi.fn(),
   closeActionDialog: vi.fn(),
@@ -61,7 +61,7 @@ const selection = {
   blueprint_id: '22222222-2222-4222-8222-222222222222',
   blueprint_version: 3,
   context_id: null,
-  entity_ids: [
+  record_ids: [
     '33333333-3333-4333-8333-333333333333',
     '44444444-4444-4444-8444-444444444444',
   ],
@@ -91,12 +91,12 @@ describe('extension broker', () => {
       handleBrokerRequest(
         {
           method: 'navigate',
-          payload: { entity_id: '33333333-3333-4333-8333-333333333333' },
+          payload: { record_id: '33333333-3333-4333-8333-333333333333' },
         },
         deps,
       ),
     ).rejects.toThrow('Request denied');
-    expect(deps.navigateToEntity).not.toHaveBeenCalled();
+    expect(deps.navigateToRecord).not.toHaveBeenCalled();
   });
 
   it('denies commands from panel contributions', async () => {
@@ -164,7 +164,7 @@ describe('extension broker', () => {
           blueprint_id: selection.blueprint_id,
           blueprint_version: 3,
           context_id: null,
-          entity_ids: selection.entity_ids,
+          record_ids: selection.record_ids,
         },
       }),
     );
@@ -177,7 +177,7 @@ describe('extension broker', () => {
             operation_id: 'generate',
             input: {},
             idempotency_key: 'generate-2',
-            entity_ids: ['66666666-6666-4666-8666-666666666666'],
+            record_ids: ['66666666-6666-4666-8666-666666666666'],
           },
         },
         deps,

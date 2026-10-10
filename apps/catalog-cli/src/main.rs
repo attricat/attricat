@@ -27,9 +27,9 @@ const GENERATOR_TOKEN_PERMISSIONS: &[&str] = &[
     "blueprints.publish",
     "contexts.read",
     "contexts.write",
-    "entities.read",
-    "entities.write",
-    "entities.publish",
+    "records.read",
+    "records.write",
+    "records.publish",
 ];
 
 #[derive(Parser)]
@@ -79,9 +79,9 @@ enum Command {
         #[command(subcommand)]
         command: ContextCommand,
     },
-    Entity {
+    Record {
         #[command(subcommand)]
-        command: EntityCommand,
+        command: RecordCommand,
     },
     /// List workspace users and teams that assignment attributes can reference.
     Directory,
@@ -418,13 +418,13 @@ enum BlueprintCommand {
     RevisionList {
         blueprint_id: Uuid,
     },
-    PublishEntities {
+    PublishRecords {
         blueprint_id: Uuid,
         version: i64,
         #[arg(long)]
         context_id: Uuid,
     },
-    PublishEntitiesAll {
+    PublishRecordsAll {
         blueprint_id: Uuid,
         version: i64,
     },
@@ -478,7 +478,7 @@ enum ContextCommand {
 }
 
 #[derive(Subcommand)]
-enum EntityCommand {
+enum RecordCommand {
     Create {
         #[arg(long)]
         blueprint: String,
@@ -496,12 +496,12 @@ enum EntityCommand {
         system_metadata: Option<String>,
     },
     Get {
-        entity_id: Uuid,
+        record_id: Uuid,
     },
     Delete {
-        entity_id: Uuid,
+        record_id: Uuid,
     },
-    /// Apply create, update and delete operations to several entities
+    /// Apply create, update and delete operations to several records
     /// atomically: all succeed or none do.
     Batch {
         /// JSON array of batch operations, or a file containing it.
@@ -521,14 +521,14 @@ enum EntityCommand {
         cursor: Option<Uuid>,
     },
     Preview {
-        entity_id: Uuid,
+        record_id: Uuid,
         #[arg(long)]
         relationship_depth: Option<u8>,
         #[arg(long)]
         relationship_limit: Option<u32>,
     },
     ResolvedPreview {
-        entity_id: Uuid,
+        record_id: Uuid,
         #[arg(long)]
         context_id: Uuid,
     },
@@ -543,7 +543,7 @@ enum EntityCommand {
         size: u32,
         #[arg(long)]
         cursor: Option<String>,
-        /// JSON array; return entities containing every requested system tag.
+        /// JSON array; return records containing every requested system tag.
         #[arg(long)]
         system_tags: Option<String>,
         /// JSON array of structured search filters, or a file containing it.
@@ -562,10 +562,10 @@ enum EntityCommand {
         sort_direction: Option<String>,
     },
     Form {
-        entity_id: Uuid,
+        record_id: Uuid,
     },
     Update {
-        entity_id: Uuid,
+        record_id: Uuid,
         #[arg(long)]
         values: Option<PathBuf>,
         #[arg(long)]
@@ -582,7 +582,7 @@ enum EntityCommand {
         system_metadata: Option<String>,
     },
     Migrate {
-        entity_id: Uuid,
+        record_id: Uuid,
         /// JSON array or file of scalar migration values.
         #[arg(long)]
         values: Option<String>,
@@ -594,14 +594,14 @@ enum EntityCommand {
         discard_attributes: Option<String>,
     },
     Hierarchy {
-        entity_id: Uuid,
+        record_id: Uuid,
         #[arg(long)]
         context_id: Uuid,
         #[arg(long)]
         field: String,
     },
     IncomingRelationships {
-        entity_id: Uuid,
+        record_id: Uuid,
         #[arg(long)]
         relationships: String,
         #[arg(long)]
@@ -631,16 +631,16 @@ enum EntityCommand {
     },
     Publication {
         #[command(subcommand)]
-        command: EntityPublicationCommand,
+        command: RecordPublicationCommand,
     },
     Changes {
-        entity_id: Uuid,
+        record_id: Uuid,
     },
     ValueHistory {
-        entity_id: Uuid,
+        record_id: Uuid,
     },
     RestoreValue {
-        entity_id: Uuid,
+        record_id: Uuid,
         history_id: Uuid,
     },
     MigrateBulk {
@@ -718,22 +718,22 @@ enum PublicationChannelCommand {
     },
 }
 #[derive(Subcommand)]
-enum EntityPublicationCommand {
+enum RecordPublicationCommand {
     List {
-        entity_id: Uuid,
+        record_id: Uuid,
     },
     Publish {
-        entity_id: Uuid,
+        record_id: Uuid,
         #[arg(long)]
         context_id: Uuid,
     },
     Unpublish {
-        entity_id: Uuid,
+        record_id: Uuid,
         #[arg(long)]
         context_id: Uuid,
     },
     PublishAll {
-        entity_id: Uuid,
+        record_id: Uuid,
     },
 }
 
@@ -964,12 +964,12 @@ enum WorkflowCommand {
     RunNow {
         workflow_id: Uuid,
         #[arg(long)]
-        entity_id: Uuid,
+        record_id: Uuid,
         #[arg(long)]
         idempotency_key: String,
     },
     RunList,
-    /// Per-target outcomes of `referencing_entities_update` actions in a run.
+    /// Per-target outcomes of `referencing_records_update` actions in a run.
     RunTargets {
         run_id: Uuid,
     },
@@ -1026,7 +1026,7 @@ enum RuleCommand {
         rule_id: Uuid,
         version: i64,
         /// Enable an enforcing rule although its completed dry run found
-        /// existing violations; those entities cannot be saved until fixed.
+        /// existing violations; those records cannot be saved until fixed.
         #[arg(long)]
         accept_existing_violations: bool,
     },
@@ -1038,7 +1038,7 @@ enum RuleCommand {
         #[arg(long)]
         idempotency_key: String,
         #[arg(long)]
-        entity_id: Option<Uuid>,
+        record_id: Option<Uuid>,
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
@@ -1048,7 +1048,7 @@ enum RuleCommand {
     },
     Findings {
         #[arg(long)]
-        entity_id: Option<Uuid>,
+        record_id: Option<Uuid>,
     },
     Acknowledge {
         finding_id: Uuid,
@@ -1155,10 +1155,10 @@ enum ExtensionCommand {
         #[arg(long)]
         adopt: bool,
     },
-    /// Operator repair or cleanup of one extension's annotations on an entity.
+    /// Operator repair or cleanup of one extension's annotations on a record.
     RepairAnnotations {
         extension_id: String,
-        entity_id: Uuid,
+        record_id: Uuid,
         /// Annotation patch JSON object or path to a JSON file.
         #[arg(long)]
         patch: String,
@@ -1363,7 +1363,7 @@ enum SolutionPackCommand {
         /// Reuse unchanged resources from one completed application.
         #[arg(long, conflicts_with_all = ["blueprint_maps", "asset_maps", "context_maps"])]
         from_application: Option<Uuid>,
-        /// Explicitly select the pack's optional synthetic sample entities.
+        /// Explicitly select the pack's optional synthetic sample records.
         #[arg(long)]
         include_sample_data: bool,
     },
@@ -1402,7 +1402,7 @@ enum PresentationAssetCommand {
 #[derive(Subcommand)]
 enum FileCommand {
     Upload {
-        entity_id: Uuid,
+        record_id: Uuid,
         attribute_code: String,
         #[arg(long = "file", required = true)]
         files: Vec<PathBuf>,
@@ -1440,24 +1440,24 @@ enum MetricsCommand {
 #[derive(Subcommand)]
 enum ValueCommand {
     Append {
-        entity_id: Uuid,
+        record_id: Uuid,
         #[arg(long)]
         file: PathBuf,
         #[arg(long)]
         context_id: Option<Uuid>,
     },
     Current {
-        entity_id: Uuid,
+        record_id: Uuid,
     },
     Replace {
-        entity_id: Uuid,
+        record_id: Uuid,
         #[arg(long)]
         file: PathBuf,
         #[arg(long)]
         context_id: Option<Uuid>,
     },
     Remove {
-        entity_id: Uuid,
+        record_id: Uuid,
         #[arg(long)]
         file: PathBuf,
         #[arg(long)]
@@ -1547,7 +1547,7 @@ struct ValueInput {
     attribute_code: Option<String>,
     context_id: Option<Uuid>,
     value: Option<toml::Value>,
-    target_entity_id: Option<Uuid>,
+    target_record_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -1575,7 +1575,7 @@ struct RelationshipInput {
     attribute_id: Option<Uuid>,
     attribute_code: Option<String>,
     context_id: Option<Uuid>,
-    target_entity_ids: Vec<Uuid>,
+    target_record_ids: Vec<Uuid>,
 }
 
 #[tokio::main]
@@ -1881,8 +1881,8 @@ async fn run(cli: Cli) -> Result<String, CliError> {
             }
             BlueprintCommand::Catalogue => request(&client, &server, Method::GET, "/blueprints/catalogue", None).await,
             BlueprintCommand::RevisionList { blueprint_id } => request(&client, &server, Method::GET, &format!("/blueprints/{}/versions", segment(blueprint_id)), None).await,
-            BlueprintCommand::PublishEntities { blueprint_id, version, context_id } => request(&client, &server, Method::POST, &format!("/blueprints/{}/versions/{version}/entity-publications", segment(blueprint_id)), Some(json!({"context_id": context_id}))).await,
-            BlueprintCommand::PublishEntitiesAll { blueprint_id, version } => request(&client, &server, Method::POST, &format!("/blueprints/{}/versions/{version}/entity-publications/publish-all", segment(blueprint_id)), None).await,
+            BlueprintCommand::PublishRecords { blueprint_id, version, context_id } => request(&client, &server, Method::POST, &format!("/blueprints/{}/versions/{version}/record-publications", segment(blueprint_id)), Some(json!({"context_id": context_id}))).await,
+            BlueprintCommand::PublishRecordsAll { blueprint_id, version } => request(&client, &server, Method::POST, &format!("/blueprints/{}/versions/{version}/record-publications/publish-all", segment(blueprint_id)), None).await,
             BlueprintCommand::SafeMigrationBatch { blueprint_id, version } => request(&client, &server, Method::POST, &format!("/blueprints/{}/versions/{version}/safe-migration-batches", segment(blueprint_id)), None).await,
             BlueprintCommand::Resolve {
                 code,
@@ -1967,8 +1967,8 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 .await
             }
         },
-        Command::Entity { command } => match command {
-            EntityCommand::Create {
+        Command::Record { command } => match command {
+            RecordCommand::Create {
                 blueprint,
                 version,
                 values,
@@ -1986,39 +1986,39 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 if let Some(metadata) = system_metadata {
                     body["system_metadata"] = json_object_argument(&metadata)?;
                 }
-                request(&client, &server, Method::POST, "/v1/entities", Some(body)).await
+                request(&client, &server, Method::POST, "/v1/records", Some(body)).await
             }
-            EntityCommand::Get { entity_id } => {
+            RecordCommand::Get { record_id } => {
                 request(
                     &client,
                     &server,
                     Method::GET,
-                    &format!("/entities/{}", segment(entity_id)),
+                    &format!("/records/{}", segment(record_id)),
                     None,
                 )
                 .await
             }
-            EntityCommand::Delete { entity_id } => {
+            RecordCommand::Delete { record_id } => {
                 request(
                     &client,
                     &server,
                     Method::DELETE,
-                    &format!("/entities/{}", segment(entity_id)),
+                    &format!("/records/{}", segment(record_id)),
                     None,
                 )
                 .await
             }
-            EntityCommand::Batch { operations } => {
+            RecordCommand::Batch { operations } => {
                 request(
                     &client,
                     &server,
                     Method::POST,
-                    "/v1/entities/batch",
+                    "/v1/records/batch",
                     Some(json!({ "operations": json_array_input(&operations, "--operations")? })),
                 )
                 .await
             }
-            EntityCommand::List {
+            RecordCommand::List {
                 blueprint,
                 related_from,
                 relationship,
@@ -2039,13 +2039,13 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::GET,
-                    &format!("/entities?{}", query.finish()),
+                    &format!("/records?{}", query.finish()),
                     None,
                 )
                 .await
             }
-            EntityCommand::Preview {
-                entity_id,
+            RecordCommand::Preview {
+                record_id,
                 relationship_depth,
                 relationship_limit,
             } => {
@@ -2058,8 +2058,8 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 }
                 let query = query.finish();
                 let path = format!(
-                    "/entities/{}/preview{}",
-                    segment(entity_id),
+                    "/records/{}/preview{}",
+                    segment(record_id),
                     if query.is_empty() {
                         String::new()
                     } else {
@@ -2068,8 +2068,8 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 );
                 request(&client, &server, Method::GET, &path, None).await
             }
-            EntityCommand::ResolvedPreview {
-                entity_id,
+            RecordCommand::ResolvedPreview {
+                record_id,
                 context_id,
             } => {
                 request(
@@ -2077,15 +2077,15 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &server,
                     Method::GET,
                     &format!(
-                        "/entities/{}/resolved-preview?context_id={}",
-                        segment(entity_id),
+                        "/records/{}/resolved-preview?context_id={}",
+                        segment(record_id),
                         segment(context_id)
                     ),
                     None,
                 )
                 .await
             }
-            EntityCommand::Search {
+            RecordCommand::Search {
                 blueprint,
                 version,
                 query,
@@ -2118,23 +2118,23 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::POST,
-                    "/v1/entities/search",
+                    "/v1/records/search",
                     Some(body),
                 )
                 .await
             }
-            EntityCommand::Form { entity_id } => {
+            RecordCommand::Form { record_id } => {
                 request(
                     &client,
                     &server,
                     Method::GET,
-                    &format!("/v1/entities/{}", segment(entity_id)),
+                    &format!("/v1/records/{}", segment(record_id)),
                     None,
                 )
                 .await
             }
-            EntityCommand::Update {
-                entity_id,
+            RecordCommand::Update {
+                record_id,
                 values,
                 relationships,
                 remove_values,
@@ -2158,28 +2158,28 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::PUT,
-                    &format!("/v1/entities/{}", segment(entity_id)),
+                    &format!("/v1/records/{}", segment(record_id)),
                     Some(body),
                 )
                 .await
             }
-            EntityCommand::Hierarchy { entity_id, context_id, field } => request(&client, &server, Method::GET, &format!("/entities/{}/hierarchy?context_id={}&field={}", segment(entity_id), segment(context_id), segment(&field)), None).await,
-            EntityCommand::IncomingRelationships { entity_id, relationships, size, cursor } => request(&client, &server, Method::POST, &format!("/v1/entities/{}/incoming-relationships", segment(entity_id)), Some(json!({"relationships": json_array_input(&relationships, "--relationships")?, "page": {"size": size, "cursor": cursor}}))).await,
-            EntityCommand::FacetChildren { blueprint, version, query, source_relationship_field, hierarchy_field, context_id, parent_id, cursor, selected_target_ids } => request(&client, &server, Method::POST, "/v1/entities/facets/relationship-tree/children", Some(json!({"blueprint":{"code": blueprint, "version":version}, "query":query, "source_relationship_field":source_relationship_field, "hierarchy_field":hierarchy_field, "context_id":context_id, "parent_id":parent_id, "cursor":cursor, "selected_target_ids":json_array_argument(selected_target_ids.as_deref(), "--selected-target-ids")?}))).await,
-            EntityCommand::Publication { command } => entity_publication_command(&client, &server, command).await,
-            EntityCommand::Changes { entity_id } => request(&client, &server, Method::GET, &format!("/entities/{}/changes", segment(entity_id)), None).await,
-            EntityCommand::ValueHistory { entity_id } => request(&client, &server, Method::GET, &format!("/entities/{}/values/history", segment(entity_id)), None).await,
-            EntityCommand::RestoreValue { entity_id, history_id } => request(&client, &server, Method::POST, &format!("/entities/{}/values/history/{}/restore", segment(entity_id), segment(history_id)), None).await,
-            EntityCommand::Migrate { entity_id, values, relationships, discard_attributes } => {
-                let result = migrate_entity(&client, &server, entity_id, false, values.as_deref(), relationships.as_deref(), discard_attributes.as_deref()).await?;
+            RecordCommand::Hierarchy { record_id, context_id, field } => request(&client, &server, Method::GET, &format!("/records/{}/hierarchy?context_id={}&field={}", segment(record_id), segment(context_id), segment(&field)), None).await,
+            RecordCommand::IncomingRelationships { record_id, relationships, size, cursor } => request(&client, &server, Method::POST, &format!("/v1/records/{}/incoming-relationships", segment(record_id)), Some(json!({"relationships": json_array_input(&relationships, "--relationships")?, "page": {"size": size, "cursor": cursor}}))).await,
+            RecordCommand::FacetChildren { blueprint, version, query, source_relationship_field, hierarchy_field, context_id, parent_id, cursor, selected_target_ids } => request(&client, &server, Method::POST, "/v1/records/facets/relationship-tree/children", Some(json!({"blueprint":{"code": blueprint, "version":version}, "query":query, "source_relationship_field":source_relationship_field, "hierarchy_field":hierarchy_field, "context_id":context_id, "parent_id":parent_id, "cursor":cursor, "selected_target_ids":json_array_argument(selected_target_ids.as_deref(), "--selected-target-ids")?}))).await,
+            RecordCommand::Publication { command } => record_publication_command(&client, &server, command).await,
+            RecordCommand::Changes { record_id } => request(&client, &server, Method::GET, &format!("/records/{}/changes", segment(record_id)), None).await,
+            RecordCommand::ValueHistory { record_id } => request(&client, &server, Method::GET, &format!("/records/{}/values/history", segment(record_id)), None).await,
+            RecordCommand::RestoreValue { record_id, history_id } => request(&client, &server, Method::POST, &format!("/records/{}/values/history/{}/restore", segment(record_id), segment(history_id)), None).await,
+            RecordCommand::Migrate { record_id, values, relationships, discard_attributes } => {
+                let result = migrate_record(&client, &server, record_id, false, values.as_deref(), relationships.as_deref(), discard_attributes.as_deref()).await?;
                 serde_json::to_string(&result).map_err(|_| CliError::InvalidResponse)
             }
-            EntityCommand::MigrateBulk {
+            RecordCommand::MigrateBulk {
                 blueprint,
                 from_version,
                 size,
                 dry_run,
-            } => migrate_entities(&client, &server, &blueprint, from_version, size, dry_run).await,
+            } => migrate_records(&client, &server, &blueprint, from_version, size, dry_run).await,
         },
         Command::Workspace { command } => workspace_command(&client, &server, command).await,
         Command::Token { command } => token_command(&client, &server, command).await,
@@ -2203,7 +2203,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         Command::Metrics { command: MetricsCommand::Get { output } } => raw_download(&client, &server, "/metrics", &output, None).await,
         Command::Value { command } => match command {
             ValueCommand::Append {
-                entity_id,
+                record_id,
                 file,
                 context_id,
             } => {
@@ -2211,23 +2211,23 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::POST,
-                    &format!("/entities/{}/values", segment(entity_id)),
+                    &format!("/records/{}/values", segment(record_id)),
                     Some(values_body_from_file(&file, context_id)?),
                 )
                 .await
             }
-            ValueCommand::Current { entity_id } => {
+            ValueCommand::Current { record_id } => {
                 request(
                     &client,
                     &server,
                     Method::GET,
-                    &format!("/entities/{}/values/current", segment(entity_id)),
+                    &format!("/records/{}/values/current", segment(record_id)),
                     None,
                 )
                 .await
             }
             ValueCommand::Replace {
-                entity_id,
+                record_id,
                 file,
                 context_id,
             } => {
@@ -2235,13 +2235,13 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::POST,
-                    &format!("/entities/{}/relationships/replace", segment(entity_id)),
+                    &format!("/records/{}/relationships/replace", segment(record_id)),
                     Some(relationships_body_from_file(&file, context_id)?),
                 )
                 .await
             }
             ValueCommand::Remove {
-                entity_id,
+                record_id,
                 file,
                 context_id,
             } => {
@@ -2249,7 +2249,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::POST,
-                    &format!("/entities/{}/relationships/remove", segment(entity_id)),
+                    &format!("/records/{}/relationships/remove", segment(record_id)),
                     Some(relationships_body_from_file(&file, context_id)?),
                 )
                 .await
@@ -2783,7 +2783,7 @@ async fn workflow_command(
         }
         WorkflowCommand::RunNow {
             workflow_id,
-            entity_id,
+            record_id,
             idempotency_key,
         } => {
             request(
@@ -2791,7 +2791,7 @@ async fn workflow_command(
                 server,
                 Method::POST,
                 &format!("/workflows/{}/run-now", segment(workflow_id)),
-                Some(json!({"entity_id":entity_id,"idempotency_key":idempotency_key})),
+                Some(json!({"record_id":record_id,"idempotency_key":idempotency_key})),
             )
             .await
         }
@@ -2942,7 +2942,7 @@ async fn rule_command(
         RuleCommand::RunNow {
             rule_id,
             idempotency_key,
-            entity_id,
+            record_id,
             dry_run,
         } => request(
             client,
@@ -2950,7 +2950,7 @@ async fn rule_command(
             Method::POST,
             &format!("/rules/{rule_id}/run-now"),
             Some(
-                json!({"idempotency_key":idempotency_key,"entity_id":entity_id,"dry_run":dry_run}),
+                json!({"idempotency_key":idempotency_key,"record_id":record_id,"dry_run":dry_run}),
             ),
         )
         .await,
@@ -2965,9 +2965,9 @@ async fn rule_command(
             )
             .await
         }
-        RuleCommand::Findings { entity_id } => {
-            let path = match entity_id {
-                Some(id) => format!("/rule-findings?entity_id={id}"),
+        RuleCommand::Findings { record_id } => {
+            let path = match record_id {
+                Some(id) => format!("/rule-findings?record_id={id}"),
                 None => "/rule-findings".to_owned(),
             };
             request(client, server, Method::GET, &path, None).await
@@ -3075,7 +3075,7 @@ async fn extension_command(
     ExtensionCommand::Artifact { extension_id, contribution_id, output } => raw_download(client,server,&format!("/extensions/{}/{}/artifact",segment(&extension_id),segment(&contribution_id)),&output,None).await,
     ExtensionCommand::Storage { extension_id, contribution_id, release_id, body } => request(client,server,Method::POST,&format!("/extensions/{}/{}/storage/{}",segment(&extension_id),segment(&contribution_id),segment(release_id)),Some(json_input(&body,"--body")?)).await,
     ExtensionCommand::AnnotationNamespace { extension_id, adopt } => request(client,server,if adopt { Method::POST } else { Method::GET },&format!("/extensions/{}/annotation-namespace",segment(&extension_id)),None).await,
-    ExtensionCommand::RepairAnnotations { extension_id, entity_id, patch } => request(client,server,Method::POST,&format!("/extensions/{}/annotation-namespace/entities/{entity_id}",segment(&extension_id)),Some(json_object_argument(&patch)?)).await,
+    ExtensionCommand::RepairAnnotations { extension_id, record_id, patch } => request(client,server,Method::POST,&format!("/extensions/{}/annotation-namespace/records/{record_id}",segment(&extension_id)),Some(json_object_argument(&patch)?)).await,
     ExtensionCommand::Command { extension_id, contribution_id, release_id, command_id, payload } => request(client,server,Method::POST,&format!("/extensions/{}/{}/command",segment(&extension_id),segment(&contribution_id)),Some(json!({"release_id":release_id,"command_id":command_id,"payload":json_input(&payload,"--payload")?}))).await,
 }
 }
@@ -3386,56 +3386,56 @@ async fn solution_pack_command(
     }
 }
 
-async fn entity_publication_command(
+async fn record_publication_command(
     client: &Client,
     server: &Url,
-    command: EntityPublicationCommand,
+    command: RecordPublicationCommand,
 ) -> Result<String, CliError> {
     match command {
-        EntityPublicationCommand::List { entity_id } => {
+        RecordPublicationCommand::List { record_id } => {
             request(
                 client,
                 server,
                 Method::GET,
-                &format!("/v1/entities/{}/publications", segment(entity_id)),
+                &format!("/v1/records/{}/publications", segment(record_id)),
                 None,
             )
             .await
         }
-        EntityPublicationCommand::Publish {
-            entity_id,
+        RecordPublicationCommand::Publish {
+            record_id,
             context_id,
         } => {
             request(
                 client,
                 server,
                 Method::POST,
-                &format!("/v1/entities/{}/publications", segment(entity_id)),
+                &format!("/v1/records/{}/publications", segment(record_id)),
                 Some(json!({"context_id":context_id})),
             )
             .await
         }
-        EntityPublicationCommand::Unpublish {
-            entity_id,
+        RecordPublicationCommand::Unpublish {
+            record_id,
             context_id,
         } => {
             request(
                 client,
                 server,
                 Method::POST,
-                &format!("/v1/entities/{}/publications/unpublish", segment(entity_id)),
+                &format!("/v1/records/{}/publications/unpublish", segment(record_id)),
                 Some(json!({"context_id":context_id})),
             )
             .await
         }
-        EntityPublicationCommand::PublishAll { entity_id } => {
+        RecordPublicationCommand::PublishAll { record_id } => {
             request(
                 client,
                 server,
                 Method::POST,
                 &format!(
-                    "/v1/entities/{}/publications/publish-all",
-                    segment(entity_id)
+                    "/v1/records/{}/publications/publish-all",
+                    segment(record_id)
                 ),
                 None,
             )
@@ -3490,7 +3490,7 @@ async fn file_command(
 ) -> Result<String, CliError> {
     match command {
         FileCommand::Upload {
-            entity_id,
+            record_id,
             attribute_code,
             files,
             context_id,
@@ -3499,8 +3499,8 @@ async fn file_command(
                 client,
                 server,
                 &format!(
-                    "/entities/{}/file-attributes/{}/uploads",
-                    segment(entity_id),
+                    "/records/{}/file-attributes/{}/uploads",
+                    segment(record_id),
                     segment(&attribute_code)
                 ),
                 files,
@@ -3983,10 +3983,10 @@ fn read_secret_stdin(label: &str) -> Result<String, CliError> {
     Ok(secret.to_owned())
 }
 
-async fn migrate_entity(
+async fn migrate_record(
     client: &Client,
     server: &Url,
-    entity_id: Uuid,
+    record_id: Uuid,
     dry_run: bool,
     values: Option<&str>,
     relationships: Option<&str>,
@@ -3997,8 +3997,8 @@ async fn migrate_entity(
         server,
         Method::POST,
         &format!(
-            "/v1/entities/{}/blueprint-migration/preview",
-            segment(entity_id)
+            "/v1/records/{}/blueprint-migration/preview",
+            segment(record_id)
         ),
         None,
     )
@@ -4017,7 +4017,7 @@ async fn migrate_entity(
             && discard_attributes.is_none())
     {
         return Ok(json!({
-            "entity_id": entity_id,
+            "record_id": record_id,
             "status": status,
             "issues": preview["issues"],
         }));
@@ -4032,7 +4032,7 @@ async fn migrate_entity(
         client,
         server,
         Method::POST,
-        &format!("/v1/entities/{}/blueprint-migration", segment(entity_id)),
+        &format!("/v1/records/{}/blueprint-migration", segment(record_id)),
         Some(json!({
             "migration_id": migration_id,
             "expected_target_version": target_version,
@@ -4044,7 +4044,7 @@ async fn migrate_entity(
     .await
 }
 
-async fn migrate_entities(
+async fn migrate_records(
     client: &Client,
     server: &Url,
     blueprint: &str,
@@ -4077,7 +4077,7 @@ async fn migrate_entities(
             client,
             server,
             Method::POST,
-            "/v1/entities/search",
+            "/v1/records/search",
             Some(json!({
                 "blueprint": { "code": blueprint, "version": from_version },
                 "query": "",
@@ -4088,12 +4088,12 @@ async fn migrate_entities(
         .await?;
         let items = page["items"].as_array().ok_or(CliError::InvalidResponse)?;
         for item in items {
-            let entity_id = item["id"]
+            let record_id = item["id"]
                 .as_str()
                 .ok_or(CliError::InvalidResponse)?
                 .parse::<Uuid>()
                 .map_err(|_| CliError::InvalidResponse)?;
-            match migrate_entity(client, server, entity_id, dry_run, None, None, None).await {
+            match migrate_record(client, server, record_id, dry_run, None, None, None).await {
                 Ok(result) => match result["status"].as_str() {
                     Some("ready") => ready += 1,
                     Some("needs_input") => needs_input.push(result),
@@ -4101,7 +4101,7 @@ async fn migrate_entities(
                     _ => migrated += 1,
                 },
                 Err(error) => failed.push(json!({
-                    "entity_id": entity_id,
+                    "record_id": record_id,
                     "error": error.json()["error"],
                 })),
             }
@@ -4176,9 +4176,9 @@ fn values_body(input: ValueFile, default_context_id: Option<Uuid>) -> Result<Val
 
             match value.kind.as_str() {
                 "scalar" => {
-                    if value.target_entity_id.is_some() {
+                    if value.target_record_id.is_some() {
                         return Err(CliError::Input(
-                            "scalar values must not include target_entity_id".to_owned(),
+                            "scalar values must not include target_record_id".to_owned(),
                         ));
                     }
                     let payload = value
@@ -4198,13 +4198,13 @@ fn values_body(input: ValueFile, default_context_id: Option<Uuid>) -> Result<Val
                             "relationship values must not include value".to_owned(),
                         ));
                     }
-                    let target_entity_id = value.target_entity_id.ok_or_else(|| {
-                        CliError::Input("relationship values require target_entity_id".to_owned())
+                    let target_record_id = value.target_record_id.ok_or_else(|| {
+                        CliError::Input("relationship values require target_record_id".to_owned())
                     })?;
                     let mut output = json!({
                         "kind": "relationship",
                         "context_id": value.context_id.or(default_context_id),
-                        "target_entity_id": target_entity_id,
+                        "target_record_id": target_record_id,
                     });
                     output[attribute_key] = attribute_value;
                     Ok(output)
@@ -4246,7 +4246,7 @@ fn relationships_body(
                 };
             let mut output = json!({
                 "context_id": relationship.context_id.or(default_context_id),
-                "target_entity_ids": relationship.target_entity_ids,
+                "target_record_ids": relationship.target_record_ids,
             });
             output[attribute_key] = attribute_value;
             Ok(output)
@@ -4924,7 +4924,7 @@ value = "Blue shirt"
 [[values]]
 kind = "relationship"
 attribute_code = "related_products"
-target_entity_id = "00000000-0000-0000-0000-000000000002"
+target_record_id = "00000000-0000-0000-0000-000000000002"
 "#;
         let input: ValueFile = toml::from_str(source).unwrap();
         assert_eq!(
@@ -4934,7 +4934,7 @@ target_entity_id = "00000000-0000-0000-0000-000000000002"
                     "kind": "relationship",
                     "attribute_code": "related_products",
                     "context_id": null,
-                    "target_entity_id": "00000000-0000-0000-0000-000000000002"
+                    "target_record_id": "00000000-0000-0000-0000-000000000002"
                 }]
             })
         );
@@ -4970,7 +4970,7 @@ value = 2026-08-12T14:30:00Z
         let source = r#"
 [[relationships]]
 attribute_code = "categories"
-target_entity_ids = [
+target_record_ids = [
   "00000000-0000-0000-0000-000000000002",
   "00000000-0000-0000-0000-000000000003",
 ]
@@ -4982,7 +4982,7 @@ target_entity_ids = [
                 "relationships": [{
                     "attribute_code": "categories",
                     "context_id": null,
-                    "target_entity_ids": [
+                    "target_record_ids": [
                         "00000000-0000-0000-0000-000000000002",
                         "00000000-0000-0000-0000-000000000003"
                     ]
@@ -4992,7 +4992,7 @@ target_entity_ids = [
     }
 
     #[test]
-    fn combines_entity_update_files_into_the_form_contract() {
+    fn combines_record_update_files_into_the_form_contract() {
         let values = tempfile::NamedTempFile::new().unwrap();
         fs::write(
             values.path(),
@@ -5034,7 +5034,7 @@ target_entity_ids = [
 [[values]]
 kind = "relationship"
 attribute_id = "00000000-0000-0000-0000-000000000001"
-target_entity_id = "00000000-0000-0000-0000-000000000002"
+target_record_id = "00000000-0000-0000-0000-000000000002"
 value = "ignored before this validation"
 "#;
         let input: ValueFile = toml::from_str(relationship_with_value).unwrap();
@@ -5064,8 +5064,8 @@ value = "Blue shirt"
     #[test]
     fn accepts_only_a_json_string_array_or_file_for_permissions() {
         assert_eq!(
-            permissions_input("[\"entities.read\"]").unwrap(),
-            json!(["entities.read"])
+            permissions_input("[\"records.read\"]").unwrap(),
+            json!(["records.read"])
         );
         let file = tempfile::NamedTempFile::new().unwrap();
         fs::write(file.path(), "[\"members.manage\"]").unwrap();
@@ -5074,8 +5074,8 @@ value = "Blue shirt"
             json!(["members.manage"])
         );
         assert!(permissions_input("not-json").is_err());
-        assert!(permissions_input("{\"permission\": \"entities.read\"}").is_err());
-        assert!(permissions_input("[\"entities.read\", 1]").is_err());
+        assert!(permissions_input("{\"permission\": \"records.read\"}").is_err());
+        assert!(permissions_input("[\"records.read\", 1]").is_err());
     }
 
     #[test]
@@ -5089,7 +5089,7 @@ value = "Blue shirt"
                 "--label",
                 "manual",
                 "--permissions",
-                "[\"entities.read\"]"
+                "[\"records.read\"]"
             ])
             .is_ok()
         );
@@ -5100,7 +5100,7 @@ value = "Blue shirt"
                 "token",
                 "create",
                 "--permissions",
-                "[\"entities.read\"]"
+                "[\"records.read\"]"
             ])
             .is_err()
         );
@@ -5122,7 +5122,7 @@ value = "Blue shirt"
                 "create",
                 "--generator",
                 "--permissions",
-                "[\"entities.read\"]"
+                "[\"records.read\"]"
             ])
             .is_err()
         );
@@ -5135,9 +5135,9 @@ value = "Blue shirt"
                 "blueprints.publish",
                 "contexts.read",
                 "contexts.write",
-                "entities.read",
-                "entities.write",
-                "entities.publish",
+                "records.read",
+                "records.write",
+                "records.publish",
             ]
         );
     }
@@ -5185,10 +5185,10 @@ value = "Blue shirt"
             status: reqwest::StatusCode::CONFLICT.as_u16(),
             code: "unique_key_conflict".to_owned(),
             message: "taken".to_owned(),
-            details: Some(json!({ "conflicting_entity_id": "e" })),
+            details: Some(json!({ "conflicting_record_id": "e" })),
         };
         assert_eq!(
-            conflict.json()["error"]["details"]["conflicting_entity_id"],
+            conflict.json()["error"]["details"]["conflicting_record_id"],
             "e"
         );
     }
@@ -5356,7 +5356,7 @@ value = "Blue shirt"
             RuleCommand::RunNow {
                 rule_id: id,
                 idempotency_key: "check".into(),
-                entity_id: Some(id),
+                record_id: Some(id),
                 dry_run: true,
             },
         )
@@ -5364,7 +5364,7 @@ value = "Blue shirt"
         .unwrap();
         assert_eq!(
             serde_json::from_str::<Value>(&result).unwrap(),
-            json!({"idempotency_key":"check","entity_id":id,"dry_run":true})
+            json!({"idempotency_key":"check","record_id":id,"dry_run":true})
         );
         let result = rule_command(
             &client,
@@ -5385,14 +5385,14 @@ value = "Blue shirt"
             &client,
             &url,
             RuleCommand::Findings {
-                entity_id: Some(id),
+                record_id: Some(id),
             },
         )
         .await
         .unwrap();
         assert_eq!(
             serde_json::from_str::<Value>(&result).unwrap()["query"],
-            format!("entity_id={id}")
+            format!("record_id={id}")
         );
         server.abort();
     }
@@ -5771,16 +5771,16 @@ value = "Blue shirt"
             let migrations = migrations.clone();
             async move {
                 let app = axum::Router::new()
-                    .route("/v1/entities/search", axum::routing::post(|| async {
+                    .route("/v1/records/search", axum::routing::post(|| async {
                         axum::Json(json!({
                             "items": [{ "id": "00000000-0000-0000-0000-000000000001" }],
                             "next_cursor": null,
                         }))
                     }))
-                    .route("/v1/entities/{entity_id}/blueprint-migration/preview", axum::routing::post(|| async {
+                    .route("/v1/records/{record_id}/blueprint-migration/preview", axum::routing::post(|| async {
                         axum::Json(json!({ "status": "needs_input", "issues": [{ "code": "required" }] }))
                     }))
-                    .route("/v1/entities/{entity_id}/blueprint-migration", axum::routing::post(move || {
+                    .route("/v1/records/{record_id}/blueprint-migration", axum::routing::post(move || {
                         let migrations = migrations.clone();
                         async move {
                             migrations.fetch_add(1, Ordering::SeqCst);
@@ -5791,7 +5791,7 @@ value = "Blue shirt"
             }
         });
         let client = Client::builder().build().unwrap();
-        let body = migrate_entities(
+        let body = migrate_records(
             &client,
             &Url::parse(&format!("http://{address}")).unwrap(),
             "product",
@@ -5826,7 +5826,7 @@ value = "Blue shirt"
             let requests = requests.clone();
             async move {
                 let app = axum::Router::new().route(
-                    "/v1/entities/search",
+                    "/v1/records/search",
                     axum::routing::post(move || {
                         let requests = requests.clone();
                         async move {
@@ -5838,7 +5838,7 @@ value = "Blue shirt"
                 axum::serve(listener, app).await.unwrap();
             }
         });
-        let result = migrate_entities(
+        let result = migrate_records(
             &Client::new(),
             &Url::parse(&format!("http://{address}")).unwrap(),
             "product",
@@ -5858,7 +5858,7 @@ value = "Blue shirt"
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
             let app = axum::Router::new().route(
-                "/v1/entities/search",
+                "/v1/records/search",
                 axum::routing::post(|| async {
                     axum::Json(json!({ "items": [], "next_cursor": true }))
                 }),
@@ -5866,7 +5866,7 @@ value = "Blue shirt"
             axum::serve(listener, app).await.unwrap();
         });
         let client = Client::new();
-        let result = migrate_entities(
+        let result = migrate_records(
             &client,
             &Url::parse(&format!("http://{address}")).unwrap(),
             "product",

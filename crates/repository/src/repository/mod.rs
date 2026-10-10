@@ -2,7 +2,7 @@
 //!
 //! # Lock order
 //!
-//! Transactions that write entities take their locks in this order, skipping
+//! Transactions that write records take their locks in this order, skipping
 //! any they do not need, so concurrent writers cannot deadlock:
 //!
 //! 1. Workflow execution only: the workflow lifecycle row, then the run row.
@@ -11,25 +11,25 @@
 //!    by every write that changes relationship values and by context
 //!    reparenting.
 //! 3. A legacy extension upsert's lookup lock.
-//! 4. Entity rows. A transaction that locks several takes them in ID order.
+//! 4. Record rows. A transaction that locks several takes them in ID order.
 //! 5. Extension annotation namespace locks, in sorted name order.
 //!
-//! Entity writers take the workspace's entity-writer advisory lock shared
-//! right before their first entity row lock (inside `lock_entity`,
-//! `lock_entity_with_generations`, entity insertion, batch pre-locking, bulk
+//! Record writers take the workspace's record-writer advisory lock shared
+//! right before their first record row lock (inside `lock_record`,
+//! `lock_record_with_generations`, record insertion, batch pre-locking, bulk
 //! publication and extension upsert lookups), and the per-family unique-key locks shared while they
-//! validate, after their entity rows. Blueprint publication takes the
+//! validate, after their record rows. Blueprint publication takes the
 //! workspace row (by advancing a generation) and then its family's key lock
 //! exclusively. Context creation and reparenting take the workspace row
 //! first, then (reparenting only) the relationship lock, then the
-//! entity-writer lock exclusively, which waits for that workspace's
-//! in-flight entity writers only, and then the family key locks
+//! record-writer lock exclusively, which waits for that workspace's
+//! in-flight record writers only, and then the family key locks
 //! exclusively. Context deletion also takes the workspace row before the
 //! context row. Solution-pack blueprint and context steps lock the
 //! workspace row before their `attribute_contexts` share lock.
 //!
-//! The entity seams (`create_entity_in_transaction`,
-//! `update_entity_in_transaction`, `delete_entity_in_transaction`) take the
+//! The record seams (`create_record_in_transaction`,
+//! `update_record_in_transaction`, `delete_record_in_transaction`) take the
 //! locks they need themselves; re-taking a lock the transaction already
 //! holds is a no-op, so a caller that pre-locks must only respect the order.
 
@@ -49,16 +49,16 @@ use crate::{
     model::{
         AppendAttributeValues, AttachReusableAttribute, Attribute, AttributeContext,
         AttributeValue, AttributeValueHistory, AttributeValueSelector, Blueprint,
-        BlueprintEntityPublicationSummary, BlueprintWithAttributes, CreateBlueprint,
-        CreateReusableAttribute, CreateReusableAttributeGroup, Entity, EntityAuditChange,
-        EntityHierarchyItem, EntityHierarchyResponse, EntityIdentity, EntityLabel,
-        EntityMigrationPreview, EntityPreview, EntityPreviewPage, EntityPublicationStatus,
-        EntityReusableAttribute, FormAttributeValue, IncomingRelationshipField,
-        IncomingRelationshipItem, IncomingRelationshipSelector, IncomingRelationshipsPage,
-        MatchExplanation, MatchPathEdge, MigrateEntityRequest, MigrationIssue, NewAttributeValue,
-        PublicationChannel, RelatedEntityPreview, RelationshipMutation, RelationshipTargets,
+        BlueprintRecordPublicationSummary, BlueprintWithAttributes, CreateBlueprint,
+        CreateReusableAttribute, CreateReusableAttributeGroup, FormAttributeValue,
+        IncomingRelationshipField, IncomingRelationshipItem, IncomingRelationshipSelector,
+        IncomingRelationshipsPage, MatchExplanation, MatchPathEdge, MigrateRecordRequest,
+        MigrationIssue, NewAttributeValue, PublicationChannel, Record, RecordAuditChange,
+        RecordHierarchyItem, RecordHierarchyResponse, RecordIdentity, RecordLabel,
+        RecordMigrationPreview, RecordPreview, RecordPreviewPage, RecordPublicationStatus,
+        RecordReusableAttribute, RelatedRecordPreview, RelationshipMutation, RelationshipTargets,
         RelationshipTreeFacetChildItem, RelationshipTreeFacetChildrenResponse,
-        RelationshipTreeFacetItem, RelationshipTreeFacetResponse, ResolvedEntityPreviewResponse,
+        RelationshipTreeFacetItem, RelationshipTreeFacetResponse, ResolvedRecordPreviewResponse,
         ReusableAttribute, ReusableAttributeGroup,
     },
 };
@@ -73,13 +73,6 @@ mod bootstrap;
 mod checks;
 mod contexts;
 mod domain_events;
-mod entity_batches;
-mod entity_commands;
-mod entity_comments;
-mod entity_migration;
-mod entity_projection;
-mod entity_publications;
-mod entity_search;
 mod error_codes;
 mod extension_annotations;
 mod extension_catalog_commands;
@@ -102,6 +95,13 @@ mod lexicon;
 mod members;
 mod notifications;
 mod presentation_assets;
+mod record_batches;
+mod record_commands;
+mod record_comments;
+mod record_migration;
+mod record_projection;
+mod record_publications;
+mod record_search;
 mod record_values;
 mod references;
 mod retention_holds;
@@ -138,7 +138,6 @@ fn summarize_violations(violations: &[CheckViolation]) -> String {
 pub use checks::{
     CheckSource, CheckTransition, CheckViolation, MAX_REPORTED_VIOLATIONS, PublicationReadiness,
 };
-pub use entity_comments::{COMMENT_PAGE_SIZE, EntityComment};
 pub use error_codes::{ErrorClass, ErrorCode, ErrorDescription};
 pub use lexicon::{LexiconEntry, LexiconImportMode, LexiconImportSummary};
 pub use notifications::{
@@ -146,6 +145,7 @@ pub use notifications::{
     NewNotification, Notification, NotificationCursor, NotificationSubject,
     NotificationSubjectKind, kinds as notification_kinds, notification_excerpt,
 };
+pub use record_comments::{COMMENT_PAGE_SIZE, RecordComment};
 pub use saved_views::SavedView;
 pub use structural_constraints::UniqueKeyDuplicate;
 
@@ -159,10 +159,6 @@ pub use catalog_cache::QueryCache;
 pub use catalog_domain::model::{FileMetadata, FileVariantMetadata};
 pub use domain_events::{
     EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery, MaterializeScope,
-};
-pub use entity_search::{
-    EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, SEARCH_FILTER_EQ_ANY,
-    SearchContext, decode_search_cursor,
 };
 pub use extension_annotations::{
     ExtensionAnnotationNamespace, ExtensionAnnotationPatch, ExtensionAnnotations,
@@ -205,6 +201,10 @@ pub use generations::WorkspaceGenerations;
 pub use leadership::CoordinatorLeadership;
 pub use members::{WorkspaceInvitation, WorkspaceMember};
 pub use presentation_assets::{MAX_PRESENTATION_ASSET_PAGE_SIZE, PresentationAsset};
+pub use record_search::{
+    RecordRelationshipFilter, RecordSearchFilter, RecordSearchSort, SEARCH_FILTER_EQ_ANY,
+    SearchContext, decode_search_cursor,
+};
 pub use retention_holds::FileRetentionHold;
 pub use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub use rules::{ClaimedRuleRun, RuleCandidateResult};
@@ -214,7 +214,7 @@ pub use solution_packs::{
     SolutionPackApplicationSummary, SolutionPackCheckRun, SolutionPackCheckRunSummary,
     SolutionPackPlan,
 };
-pub use status::{EntityApproval, StatusTransitionAccess};
+pub use status::{RecordApproval, StatusTransitionAccess};
 pub use tasks::{
     BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary, bounded_task_error_message,
 };
@@ -340,12 +340,12 @@ pub struct AuditContext {
 /// stored in normalized audit columns, not reconstructed from metadata.
 #[derive(Clone)]
 pub struct AuditEventChange {
-    pub entity_id: Uuid,
+    pub record_id: Uuid,
     pub attribute_id: Uuid,
     pub attribute_code: String,
     pub context_id: Option<Uuid>,
     pub context_code: Option<String>,
-    pub relationship_target_entity_id: Option<Uuid>,
+    pub relationship_target_record_id: Option<Uuid>,
     pub change_kind: &'static str,
     pub before_value: Option<Value>,
     pub after_value: Option<Value>,
@@ -401,9 +401,9 @@ pub enum RepositoryError {
     InvalidComment,
     #[error("comment changed; reload before saving again")]
     CommentConflict,
-    #[error("entity changed since it was loaded; refresh before saving")]
-    StaleEntity,
-    #[error("status edits require expected_updated_at from the entity form")]
+    #[error("record changed since it was loaded; refresh before saving")]
+    StaleRecord,
+    #[error("status edits require expected_updated_at from the record form")]
     StatusPreconditionRequired,
     #[error(
         "status transition of '{}' from {} to {} is not permitted (context: {}): {}",
@@ -430,7 +430,7 @@ pub enum RepositoryError {
     InvalidRetentionHold(String),
     #[error("{0} was not found")]
     NotFound(&'static str),
-    #[error("the initiating user is no longer authorized for this entity")]
+    #[error("the initiating user is no longer authorized for this record")]
     ActorNotAuthorized,
     #[error("annotation namespace '{0}' is reserved")]
     ReservedAnnotationNamespace(String),
@@ -478,7 +478,7 @@ pub enum RepositoryError {
     ContextInUse,
     #[error("attribute can only be edited in the default context")]
     DefaultContextOnly,
-    #[error("attribute does not belong to the entity blueprint version")]
+    #[error("attribute does not belong to the record blueprint version")]
     AttributeNotApplicable,
     #[error(
         "reusable attribute namespace and code must each contain only ASCII letters, numbers, hyphens, and underscores"
@@ -490,7 +490,7 @@ pub enum RepositoryError {
         "reusable attribute revisions must be published before they can be attached or added to a group"
     )]
     ReusableAttributeNotPublished,
-    #[error("the entity already has an attachment for this reusable attribute definition")]
+    #[error("the record already has an attachment for this reusable attribute definition")]
     ReusableAttributeAlreadyAttached,
     #[error("file attribute policy is invalid")]
     InvalidFilePolicy,
@@ -517,15 +517,15 @@ pub enum RepositoryError {
         message: String,
     },
     #[error(
-        "resolved entity values for context '{context}' do not match the entity schema at '{instance_path}': {message}"
+        "resolved record values for context '{context}' do not match the record schema at '{instance_path}': {message}"
     )]
-    EntitySchemaMismatch {
+    RecordSchemaMismatch {
         context: String,
         instance_path: String,
         message: String,
     },
-    #[error("entity checks failed: {}", summarize_violations(.0))]
-    EntityCheckFailed(Vec<CheckViolation>),
+    #[error("record checks failed: {}", summarize_violations(.0))]
+    RecordCheckFailed(Vec<CheckViolation>),
     #[error("status transition conditions are not met: {}", summarize_violations(.0))]
     TransitionConditionsUnmet(Vec<CheckViolation>),
     #[error("enforcing rules are violated: {}", summarize_violations(.0))]
@@ -538,7 +538,7 @@ pub enum RepositoryError {
     #[error("an enforcing rule needs a completed dry run of this revision before it is enabled")]
     RuleDryRunRequired,
     #[error(
-        "the latest dry run stopped at its candidate limit before checking every entity; enable with accept_existing_violations to accept the entities it did not check"
+        "the latest dry run stopped at its candidate limit before checking every record; enable with accept_existing_violations to accept the records it did not check"
     )]
     RuleDryRunTruncated(i64),
     #[error(
@@ -553,21 +553,21 @@ pub enum RepositoryError {
     RelationshipCardinalityConflict {
         attribute: String,
         context_id: Option<Uuid>,
-        source_entity_id: Uuid,
-        target_entity_id: Uuid,
-        conflicting_source_entity_id: Option<Uuid>,
+        source_record_id: Uuid,
+        target_record_id: Uuid,
+        conflicting_source_record_id: Option<Uuid>,
     },
     #[error(
-        "unique key '{key}' already has values {values} on entity {conflicting_entity_id} in context '{context}'"
+        "unique key '{key}' already has values {values} on record {conflicting_record_id} in context '{context}'"
     )]
     UniqueKeyConflict {
         key: String,
         context: String,
         values: Value,
-        conflicting_entity_id: Uuid,
+        conflicting_record_id: Uuid,
     },
     #[error(
-        "{total} unique key value(s) are already shared by more than one entity; resolve the duplicates first: {}",
+        "{total} unique key value(s) are already shared by more than one record; resolve the duplicates first: {}",
         structural_constraints::describe_duplicates(.duplicates)
     )]
     UniqueKeyDuplicates {
@@ -580,7 +580,7 @@ pub enum RepositoryError {
     )]
     RelationshipCycle { attribute: String, path: Vec<Uuid> },
     #[error(
-        "existing '{attribute}' relationships contain {} cycle(s) and {} entities with more than one parent; resolve them before publishing: {}",
+        "existing '{attribute}' relationships contain {} cycle(s) and {} records with more than one parent; resolve them before publishing: {}",
         .cycles.len(),
         .multiple_parents.len(),
         structural_constraints::describe_hierarchy_violations(.cycles, .multiple_parents)
@@ -590,20 +590,20 @@ pub enum RepositoryError {
         cycles: Vec<Vec<Uuid>>,
         multiple_parents: Vec<Uuid>,
     },
-    #[error("invalid entity batch: {0}")]
-    InvalidEntityBatch(String),
-    #[error("entity {0} already exists")]
-    EntityIdTaken(Uuid),
+    #[error("invalid record batch: {0}")]
+    InvalidRecordBatch(String),
+    #[error("record {0} already exists")]
+    RecordIdTaken(Uuid),
     #[error("batch operation {index} failed; no changes were applied: {source}")]
-    EntityBatchOperationFailed {
+    RecordBatchOperationFailed {
         index: usize,
-        entity_id: Option<Uuid>,
+        record_id: Option<Uuid>,
         source: Box<RepositoryError>,
     },
-    #[error("entity preview must be a JSON object organized by context")]
+    #[error("record preview must be a JSON object organized by context")]
     InvalidPreview,
     #[error(
-        "entity relationship preview exceeds the expansion limit; reduce relationship depth or item limit"
+        "record relationship preview exceeds the expansion limit; reduce relationship depth or item limit"
     )]
     PreviewExpansionLimit,
     #[error("hierarchy field must be a self-targeting relationship")]
@@ -656,11 +656,11 @@ pub enum RepositoryError {
     WorkflowNotEnabled,
     #[error("blueprint revision is not published")]
     BlueprintNotPublished,
-    #[error("entity is already on the latest blueprint revision")]
-    EntityBlueprintCurrent,
+    #[error("record is already on the latest blueprint revision")]
+    RecordBlueprintCurrent,
     #[error("the latest blueprint revision changed; refresh the migration preview")]
     MigrationTargetChanged,
-    #[error("migration does not apply to this entity")]
+    #[error("migration does not apply to this record")]
     MigrationNotApplicable,
     #[error("this blueprint revision is not eligible for safe automatic migration")]
     BlueprintMigrationNotSafe,
@@ -678,7 +678,7 @@ pub enum RepositoryError {
     InvalidDomainEvent(#[from] crate::domain_events::EventContractError),
     #[error("publication context is not an enabled channel")]
     PublicationChannelDisabled,
-    #[error("an authenticated user is required to publish an entity")]
+    #[error("an authenticated user is required to publish a record")]
     PublicationActorRequired,
     #[error("requested token permissions are not available to the current user")]
     TokenPermissionsUnavailable,
@@ -869,7 +869,7 @@ impl CatalogRepository {
         repository
     }
 
-    /// Attaches a blueprint migration task lease to batch and per-entity
+    /// Attaches a blueprint migration task lease to batch and per-record
     /// checkpoints. A reclaimed task cannot advance an old batch execution.
     /// Fences extension operation checkpoints with the shared envelope token.
     pub fn for_extension_operation_task(&self, task: &ClaimedTask) -> Self {
@@ -1040,7 +1040,7 @@ impl CatalogRepository {
         self
     }
 
-    /// Bounds subsequent user-initiated operations and related-entity reads
+    /// Bounds subsequent user-initiated operations and related-record reads
     /// by this principal's current grants and personal-token permissions.
     pub fn with_authorization_actor(mut self, actor: AuthorizationActor) -> Self {
         self.authorization_actor = Some(actor);
@@ -1051,46 +1051,46 @@ impl CatalogRepository {
         self.authorization_actor
     }
 
-    /// Filters related-entity hydration without changing unrestricted system
-    /// reads. The caller still authorizes the root entity separately.
-    pub(crate) async fn actor_readable_entity_ids(
+    /// Filters related-record hydration without changing unrestricted system
+    /// reads. The caller still authorizes the root record separately.
+    pub(crate) async fn actor_readable_record_ids(
         &self,
-        entity_ids: &[Uuid],
+        record_ids: &[Uuid],
     ) -> Result<Option<HashSet<Uuid>>, RepositoryError> {
         let Some(actor) = self.authorization_actor else {
             return Ok(None);
         };
         let mut connection = self.pool.acquire().await?;
-        Self::principal_entity_ids_on(
+        Self::principal_record_ids_on(
             &mut connection,
             actor,
             self.workspace_id.0,
-            "entities.read",
-            entity_ids,
+            "records.read",
+            record_ids,
         )
         .await
         .map(Some)
     }
 
     /// Rechecks the interactive actor's live membership, grant scope and token
-    /// permission for every entity; see [`Self::ensure_principal_may`].
+    /// permission for every record; see [`Self::ensure_principal_may`].
     /// Repositories without an actor are governed by their caller's
     /// authorization and are not restricted here.
     pub(crate) async fn ensure_actor_may(
         &self,
         connection: &mut sqlx::PgConnection,
         permission: &str,
-        entity_ids: &[Uuid],
+        record_ids: &[Uuid],
     ) -> Result<(), RepositoryError> {
         let Some(actor) = self.authorization_actor else {
             return Ok(());
         };
-        self.ensure_principal_may(connection, actor, permission, entity_ids)
+        self.ensure_principal_may(connection, actor, permission, record_ids)
             .await
     }
 
     /// Checks, in one query, that a principal's current grants and, for a
-    /// token, its live token permission cover every entity. A workspace
+    /// token, its live token permission cover every record. A workspace
     /// grant authorizes IDs that do not exist, so callers still verify
     /// existence themselves.
     pub(crate) async fn ensure_principal_may(
@@ -1098,17 +1098,17 @@ impl CatalogRepository {
         connection: &mut sqlx::PgConnection,
         actor: AuthorizationActor,
         permission: &str,
-        entity_ids: &[Uuid],
+        record_ids: &[Uuid],
     ) -> Result<(), RepositoryError> {
-        let permitted = Self::principal_entity_ids_on(
+        let permitted = Self::principal_record_ids_on(
             connection,
             actor,
             self.workspace_id.0,
             permission,
-            entity_ids,
+            record_ids,
         )
         .await?;
-        if entity_ids.iter().all(|id| permitted.contains(id)) {
+        if record_ids.iter().all(|id| permitted.contains(id)) {
             Ok(())
         } else {
             Err(RepositoryError::ActorNotAuthorized)
@@ -1259,7 +1259,7 @@ impl CatalogRepository {
                 attribute_code: change.attribute_code.clone(),
                 context_id: change.context_id,
                 context_code: change.context_code.clone(),
-                relationship_target_entity_id: change.relationship_target_entity_id,
+                relationship_target_record_id: change.relationship_target_record_id,
                 change_kind: change.change_kind.to_owned(),
                 before_value: change.before_value.clone(),
                 after_value: change.after_value.clone(),
@@ -1267,19 +1267,19 @@ impl CatalogRepository {
             .collect()
     }
 
-    pub(crate) async fn commit_entity_mutation(
+    pub(crate) async fn commit_record_mutation(
         &self,
         mut transaction: Transaction<'_, Postgres>,
         changes: Vec<AuditEventChange>,
         event: NewDomainEvent,
     ) -> Result<(), RepositoryError> {
-        self.stage_entity_mutation(&mut transaction, changes, event)
+        self.stage_record_mutation(&mut transaction, changes, event)
             .await?;
         transaction.commit().await?;
         Ok(())
     }
 
-    pub(in crate::repository) async fn stage_entity_mutation(
+    pub(in crate::repository) async fn stage_record_mutation(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         changes: Vec<AuditEventChange>,
@@ -1287,7 +1287,7 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         self.ensure_task_fence(transaction).await?;
         let retained = self
-            .reconcile_entity_publication(transaction, event.aggregate_id, "entity_changed")
+            .reconcile_record_publication(transaction, event.aggregate_id, "record_changed")
             .await?;
         let publication_metadata = match retained {
             Some(retained) => serde_json::json!({
@@ -1297,7 +1297,7 @@ impl CatalogRepository {
             }),
             None => serde_json::json!({
                 "disposition": "withdrawn",
-                "reason": "entity_changed",
+                "reason": "record_changed",
             }),
         };
         event.metadata["publication"] = publication_metadata.clone();
@@ -1307,7 +1307,7 @@ impl CatalogRepository {
             && !changes.is_empty()
         {
             let mut ids = Vec::with_capacity(changes.len());
-            let mut entity_ids = Vec::with_capacity(changes.len());
+            let mut record_ids = Vec::with_capacity(changes.len());
             let mut attribute_ids = Vec::with_capacity(changes.len());
             let mut attribute_codes = Vec::with_capacity(changes.len());
             let mut context_ids = Vec::with_capacity(changes.len());
@@ -1317,7 +1317,7 @@ impl CatalogRepository {
             let mut after_values = Vec::with_capacity(changes.len());
             for change in changes {
                 ids.push(Uuid::new_v4());
-                entity_ids.push(change.entity_id);
+                record_ids.push(change.record_id);
                 attribute_ids.push(change.attribute_id);
                 attribute_codes.push(change.attribute_code);
                 context_ids.push(change.context_id);
@@ -1326,11 +1326,11 @@ impl CatalogRepository {
                 before_values.push(change.before_value);
                 after_values.push(change.after_value);
             }
-            sqlx::query("INSERT INTO audit_event_changes (id, audit_event_id, workspace_id, entity_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value) SELECT id, $2, $3, entity_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value FROM UNNEST($1::uuid[], $4::uuid[], $5::uuid[], $6::text[], $7::uuid[], $8::text[], $9::text[], $10::jsonb[], $11::jsonb[]) AS change(id, entity_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value)")
+            sqlx::query("INSERT INTO audit_event_changes (id, audit_event_id, workspace_id, record_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value) SELECT id, $2, $3, record_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value FROM UNNEST($1::uuid[], $4::uuid[], $5::uuid[], $6::text[], $7::uuid[], $8::text[], $9::text[], $10::jsonb[], $11::jsonb[]) AS change(id, record_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value)")
                 .bind(ids)
                 .bind(audit_event_id)
                 .bind(self.workspace_id.0)
-                .bind(entity_ids)
+                .bind(record_ids)
                 .bind(attribute_ids)
                 .bind(attribute_codes)
                 .bind(context_ids)
@@ -1641,26 +1641,26 @@ impl<S: RepositoryScope> CatalogRepository<S> {
         Ok(rows.into_iter().collect())
     }
 
-    /// The subset of `entity_ids` one principal may access with `permission`:
+    /// The subset of `record_ids` one principal may access with `permission`:
     /// the user's grants and, for a token, its live token permission.
-    pub(crate) async fn principal_entity_ids_on(
+    pub(crate) async fn principal_record_ids_on(
         connection: &mut sqlx::PgConnection,
         actor: AuthorizationActor,
         workspace_id: Uuid,
         permission: &str,
-        entity_ids: &[Uuid],
+        record_ids: &[Uuid],
     ) -> Result<HashSet<Uuid>, RepositoryError> {
-        if entity_ids.is_empty()
+        if record_ids.is_empty()
             || !Self::token_permits_on(connection, actor, workspace_id, permission).await?
         {
             return Ok(HashSet::new());
         }
-        Self::authorized_entity_ids_on(
+        Self::authorized_record_ids_on(
             connection,
             actor.user_id,
             workspace_id,
             permission,
-            entity_ids,
+            record_ids,
         )
         .await
     }
@@ -1740,51 +1740,51 @@ impl<S: RepositoryScope> CatalogRepository<S> {
         .await?)
     }
 
-    /// Returns the subset of `entity_ids` the user may access with
+    /// Returns the subset of `record_ids` the user may access with
     /// `permission`, in one query. Equivalent to calling
     /// [`Self::is_authorized`] with each ID as the target: a workspace grant
-    /// authorizes every ID, while entity and blueprint-family grants require
-    /// the entity to exist in this workspace.
-    pub async fn authorized_entity_ids(
+    /// authorizes every ID, while record and blueprint-family grants require
+    /// the record to exist in this workspace.
+    pub async fn authorized_record_ids(
         &self,
         user_id: Uuid,
         workspace_id: Uuid,
         permission: &str,
-        entity_ids: &[Uuid],
+        record_ids: &[Uuid],
     ) -> Result<HashSet<Uuid>, RepositoryError> {
-        if entity_ids.is_empty() {
+        if record_ids.is_empty() {
             return Ok(HashSet::new());
         }
         let mut connection = self.pool.acquire().await?;
-        Self::authorized_entity_ids_on(
+        Self::authorized_record_ids_on(
             &mut connection,
             user_id,
             workspace_id,
             permission,
-            entity_ids,
+            record_ids,
         )
         .await
     }
 
-    async fn authorized_entity_ids_on(
+    async fn authorized_record_ids_on(
         connection: &mut sqlx::PgConnection,
         user_id: Uuid,
         workspace_id: Uuid,
         permission: &str,
-        entity_ids: &[Uuid],
+        record_ids: &[Uuid],
     ) -> Result<HashSet<Uuid>, RepositoryError> {
-        if entity_ids.is_empty() {
+        if record_ids.is_empty() {
             return Ok(HashSet::new());
         }
         let sql = format!(
-            "WITH {} SELECT requested.id FROM unnest($4::uuid[]) AS requested(id) LEFT JOIN entities e ON e.id = requested.id AND e.workspace_id = $2 WHERE EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (e.id IS NOT NULL AND ((g.scope_type = 'entity' AND g.scope_target_id = e.id) OR (g.scope_type = 'blueprint_family' AND g.scope_target_id = e.blueprint_id))))",
+            "WITH {} SELECT requested.id FROM unnest($4::uuid[]) AS requested(id) LEFT JOIN records e ON e.id = requested.id AND e.workspace_id = $2 WHERE EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (e.id IS NOT NULL AND ((g.scope_type = 'record' AND g.scope_target_id = e.id) OR (g.scope_type = 'blueprint_family' AND g.scope_target_id = e.blueprint_id))))",
             GrantCodes::Permission(permission).grant_set_sql()
         );
         let rows: Vec<Uuid> = sqlx::query_scalar(&sql)
             .bind(user_id)
             .bind(workspace_id)
             .bind(GrantCodes::Permission(permission).codes())
-            .bind(entity_ids)
+            .bind(record_ids)
             .fetch_all(connection)
             .await?;
         Ok(rows.into_iter().collect())
@@ -1860,7 +1860,7 @@ impl<S: RepositoryScope> CatalogRepository<S> {
     }
 
     /// Whether the user holds a matching grant whose scope covers the
-    /// target: the workspace, a blueprint family, an entity (directly or
+    /// target: the workspace, a blueprint family, a record (directly or
     /// through its blueprint family) or a context subtree (through the
     /// context's ancestors).
     pub(crate) async fn is_granted_on(
@@ -1874,7 +1874,7 @@ impl<S: RepositoryScope> CatalogRepository<S> {
         // Resolve grant scope in the application-owned repository query. A
         // non-workspace grant can only authorize the requested tenant target.
         let sql = format!(
-            "WITH RECURSIVE {}, target AS (SELECT 'blueprint'::text kind, id FROM blueprints WHERE workspace_id = $2 AND (id = $4 OR code = $5) UNION ALL SELECT 'entity', id FROM entities WHERE workspace_id = $2 AND id = $4 UNION ALL SELECT 'context', id FROM attribute_contexts WHERE workspace_id = $2 AND (id = $4 OR code = $5)), ancestors AS (SELECT c.id, c.parent_id FROM attribute_contexts c JOIN target t ON t.kind = 'context' AND t.id = c.id UNION ALL SELECT p.id, p.parent_id FROM attribute_contexts p JOIN ancestors a ON a.parent_id = p.id WHERE p.workspace_id = $2) SELECT EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (($4 IS NOT NULL OR $5 IS NOT NULL) AND ((g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM target WHERE kind = 'blueprint' AND id = g.scope_target_id)) OR (g.scope_type = 'entity' AND EXISTS (SELECT 1 FROM target WHERE kind = 'entity' AND id = g.scope_target_id)) OR (g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM entities e JOIN target t ON t.kind = 'entity' AND t.id = e.id WHERE e.workspace_id = $2 AND e.blueprint_id = g.scope_target_id)) OR (g.scope_type = 'context_subtree' AND EXISTS (SELECT 1 FROM ancestors WHERE id = g.scope_target_id)) OR ($5 = '__context_list__' AND g.scope_type = 'context_subtree'))))",
+            "WITH RECURSIVE {}, target AS (SELECT 'blueprint'::text kind, id FROM blueprints WHERE workspace_id = $2 AND (id = $4 OR code = $5) UNION ALL SELECT 'record', id FROM records WHERE workspace_id = $2 AND id = $4 UNION ALL SELECT 'context', id FROM attribute_contexts WHERE workspace_id = $2 AND (id = $4 OR code = $5)), ancestors AS (SELECT c.id, c.parent_id FROM attribute_contexts c JOIN target t ON t.kind = 'context' AND t.id = c.id UNION ALL SELECT p.id, p.parent_id FROM attribute_contexts p JOIN ancestors a ON a.parent_id = p.id WHERE p.workspace_id = $2) SELECT EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (($4 IS NOT NULL OR $5 IS NOT NULL) AND ((g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM target WHERE kind = 'blueprint' AND id = g.scope_target_id)) OR (g.scope_type = 'record' AND EXISTS (SELECT 1 FROM target WHERE kind = 'record' AND id = g.scope_target_id)) OR (g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM records e JOIN target t ON t.kind = 'record' AND t.id = e.id WHERE e.workspace_id = $2 AND e.blueprint_id = g.scope_target_id)) OR (g.scope_type = 'context_subtree' AND EXISTS (SELECT 1 FROM ancestors WHERE id = g.scope_target_id)) OR ($5 = '__context_list__' AND g.scope_type = 'context_subtree'))))",
             codes.grant_set_sql()
         );
         Ok(sqlx::query_scalar(&sql)

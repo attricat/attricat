@@ -1,6 +1,6 @@
 import { Timestamp } from '../../../../time/Timestamp';
-import type { Attribute } from '../../../entities/api';
-import { attributeValueTypes } from '../../../entities/valueTypes';
+import type { Attribute } from '../../../records/api';
+import { attributeValueTypes } from '../../../records/valueTypes';
 import { principalConfiguration } from '../../../principals/principal';
 import { PrincipalText } from '../../../principals/PrincipalValue';
 import { formatAttributeValue } from './formatAttributeValue';

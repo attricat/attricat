@@ -60,8 +60,8 @@ acli blueprint create --stdin
 acli blueprint revision <blueprint-id> --file product-v2.toml
 acli blueprint revision-list <blueprint-id>
 acli blueprint publish <blueprint-id> <version>
-acli blueprint publish-entities <blueprint-id> <version> --context-id <context-id>
-acli blueprint publish-entities-all <blueprint-id> <version>
+acli blueprint publish-records <blueprint-id> <version> --context-id <context-id>
+acli blueprint publish-records-all <blueprint-id> <version>
 acli blueprint safe-migration-batch <blueprint-id> <version>
 acli blueprint get <blueprint-id>
 acli blueprint get-version <blueprint-id> <version>
@@ -75,30 +75,30 @@ acli context get en_GB
 acli context update <context-id> --parent-id <context-id> --data '{"language":"en-GB"}'
 acli context delete <context-id>
 
-acli entity create --blueprint product --values values.toml [--version <version>] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
-acli entity get|delete|form <entity-id>
-acli entity batch --operations <json-or-file>
-acli entity list --blueprint <code> --related-from <entity-id> --relationship <attribute-code> [--limit <limit>] [--cursor <cursor>]
-acli entity preview <entity-id> [--relationship-depth <depth>] [--relationship-limit <limit>]
-acli entity resolved-preview <entity-id> --context-id <context-id>
-acli entity hierarchy <entity-id> --context-id <context-id> --field <relationship-field>
-acli entity incoming-relationships <entity-id> --relationships <json-or-file> [--size <size>] [--cursor <opaque-cursor>]
-acli entity facet-children --blueprint <code> --source-relationship-field <field> --context-id <context-id> [--version <version>] [--query <text>] [--hierarchy-field <field>] [--parent-id <entity-id>] [--cursor <entity-id>] [--selected-target-ids <json-or-file>]
-acli entity search --blueprint <code> [--version <version>] [--query <text>] [--size <size>] [--cursor <cursor>] [--system-tags <json>] [--filters <json-or-file>] [--outdated] [--include-total] [--relationship-tree-facets <json-or-file>] [--sort-field <field> --sort-direction asc|desc]
-acli entity update <entity-id> [--values values.toml] [--relationships relationships.toml] [--remove-values removals.toml] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
-acli entity changes|value-history <entity-id>
-acli entity restore-value <entity-id> <history-id>
-acli entity publication list <entity-id>
-acli entity publication publish <entity-id> --context-id <context-id>
-acli entity publication unpublish <entity-id> --context-id <context-id>
-acli entity publication publish-all <entity-id>
-acli entity migrate <entity-id> [--values <json-or-file>] [--relationships <json-or-file>] [--discard-attributes <json-or-file>]
-acli entity migrate-bulk --blueprint <code> --from-version <version> [--size <size>] [--dry-run]
+acli record create --blueprint product --values values.toml [--version <version>] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
+acli record get|delete|form <record-id>
+acli record batch --operations <json-or-file>
+acli record list --blueprint <code> --related-from <record-id> --relationship <attribute-code> [--limit <limit>] [--cursor <cursor>]
+acli record preview <record-id> [--relationship-depth <depth>] [--relationship-limit <limit>]
+acli record resolved-preview <record-id> --context-id <context-id>
+acli record hierarchy <record-id> --context-id <context-id> --field <relationship-field>
+acli record incoming-relationships <record-id> --relationships <json-or-file> [--size <size>] [--cursor <opaque-cursor>]
+acli record facet-children --blueprint <code> --source-relationship-field <field> --context-id <context-id> [--version <version>] [--query <text>] [--hierarchy-field <field>] [--parent-id <record-id>] [--cursor <record-id>] [--selected-target-ids <json-or-file>]
+acli record search --blueprint <code> [--version <version>] [--query <text>] [--size <size>] [--cursor <cursor>] [--system-tags <json>] [--filters <json-or-file>] [--outdated] [--include-total] [--relationship-tree-facets <json-or-file>] [--sort-field <field> --sort-direction asc|desc]
+acli record update <record-id> [--values values.toml] [--relationships relationships.toml] [--remove-values removals.toml] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
+acli record changes|value-history <record-id>
+acli record restore-value <record-id> <history-id>
+acli record publication list <record-id>
+acli record publication publish <record-id> --context-id <context-id>
+acli record publication unpublish <record-id> --context-id <context-id>
+acli record publication publish-all <record-id>
+acli record migrate <record-id> [--values <json-or-file>] [--relationships <json-or-file>] [--discard-attributes <json-or-file>]
+acli record migrate-bulk --blueprint <code> --from-version <version> [--size <size>] [--dry-run]
 
-acli value append <entity-id> --file values.toml --context-id <context-id>
-acli value current <entity-id>
-acli value replace <entity-id> --file relationships.toml --context-id <context-id>
-acli value remove <entity-id> --file relationships.toml --context-id <context-id>
+acli value append <record-id> --file values.toml --context-id <context-id>
+acli value current <record-id>
+acli value replace <record-id> --file relationships.toml --context-id <context-id>
+acli value remove <record-id> --file relationships.toml --context-id <context-id>
 
 acli workflow validate|create --file workflow.toml
 acli workflow validate|create --stdin
@@ -109,7 +109,7 @@ acli workflow version-get <workflow-id> <version>
 acli workflow revision <workflow-id> --file workflow-v2.toml
 acli workflow publish|enable <workflow-id> <version>
 acli workflow disable <workflow-id>
-acli workflow run-now <workflow-id> --entity-id <entity-id> --idempotency-key <key>
+acli workflow run-now <workflow-id> --record-id <record-id> --idempotency-key <key>
 acli workflow run-list
 acli workflow run-targets <run-id>
 acli workflow run-replay <run-id>
@@ -122,10 +122,10 @@ acli rule revision <rule-id> --blueprint-id <uuid> --blueprint-version <version>
 acli rule publish <rule-id> <version>
 acli rule enable <rule-id> <version> [--accept-existing-violations]
 acli rule disable <rule-id>
-acli rule run-now <rule-id> --idempotency-key <key> [--entity-id <uuid>] [--dry-run]
+acli rule run-now <rule-id> --idempotency-key <key> [--record-id <uuid>] [--dry-run]
 acli rule run-list
 acli rule run-replay <run-id>
-acli rule findings [--entity-id <uuid>]
+acli rule findings [--record-id <uuid>]
 acli rule acknowledge <finding-id>
 
 acli workspace navigation get|sidebar
@@ -183,7 +183,7 @@ acli extension-run list [--extension-id <id>]
 acli extension-run show|cancel <run-id>
 acli extension-run download <run-id> <artifact-id> --output <path>
 acli extension annotation-namespace <extension-id> [--adopt]
-acli extension repair-annotations <extension-id> <entity-id> --patch <json-object-or-file>
+acli extension repair-annotations <extension-id> <record-id> --patch <json-object-or-file>
 acli extension-schedule list
 acli extension-schedule create <extension-id> --operation-id <id> --input <json-object-or-file> --interval-seconds <60-2592000> [--input-file-id <uuid>]
 acli extension-schedule update <schedule-id> --enabled true|false --interval-seconds <60-2592000>
@@ -204,7 +204,7 @@ acli presentation-asset list [--limit 25 --offset 0]
 acli presentation-asset show <asset-id>
 acli presentation-asset download <asset-id> --output <path>
 
-acli file upload <entity-id> <attribute-code> --file first.png [--file second.png] [--context-id <context-id>]
+acli file upload <record-id> <attribute-code> --file first.png [--file second.png] [--context-id <context-id>]
 acli file metadata <file-id>
 acli file download-original <file-id> --output original.bin [--range 'bytes=0-1023']
 acli file download-variant <file-id> <kind> --output preview.webp [--range 'bytes=0-1023']
@@ -221,10 +221,10 @@ acli team update <team-id> [--name "QA"] [--member <user-id> … | --clear-membe
 acli team delete <team-id>
 ```
 
-Team commands require `members.manage`; `directory` requires `entities.read`.
+Team commands require `members.manage`; `directory` requires `records.read`.
 Assignment values are `user:<id>` or `team:<id>`
 ([user or team assignments](blueprints.md#user-or-team-assignments)); filter
-with `"value": "@me"` to find entities assigned to the caller or their teams.
+with `"value": "@me"` to find records assigned to the caller or their teams.
 
 ## Notifications
 
@@ -266,7 +266,7 @@ format as JSON, or as TOML when the file ends in `.toml`. It upserts entries
 and reports `created`, `updated`, `unchanged`, and `deleted` counts;
 `--replace` also deletes the language's entries missing from the file.
 `report` defaults to `en` plus every language with entries. Reads need
-`entities.read` (`list`) or `blueprints.read` (`export`, `report`); changes
+`records.read` (`list`) or `blueprints.read` (`export`, `report`); changes
 need `blueprints.write`.
 
 ## Saved searches
@@ -278,7 +278,7 @@ acli saved-view create --name 'Active assets' --visibility workspace \
   --state '{"blueprint":"asset","attributeFilters":[{"field":"status","operator":"eq","value":"active"}]}'
 ```
 
-The CLI returns JSON with an `id`; set `CATALOG_WEB_URL` (or `WEB_PORT` from `.worktree`) to also include a short Explorer `url`. The link command creates an unnamed shareable snapshot. Both commands require workspace access and `entities.read` (a link does not grant catalog permissions). See [saved views](saved-views.md).
+The CLI returns JSON with an `id`; set `CATALOG_WEB_URL` (or `WEB_PORT` from `.worktree`) to also include a short Explorer `url`. The link command creates an unnamed shareable snapshot. Both commands require workspace access and `records.read` (a link does not grant catalog permissions). See [saved views](saved-views.md).
 
 ## JSON, workflow, and binary inputs
 
@@ -296,7 +296,7 @@ and version; `--context-id` is optional.
 
 `rule enable` of an enforcing rule fails with `rule_has_existing_violations`
 when its latest dry run found violations. `--accept-existing-violations`
-enables it anyway; the violating entities cannot be saved until they are
+enables it anyway; the violating records cannot be saved until they are
 fixed.
 
 ## Browser authentication
@@ -357,7 +357,7 @@ published revisions; asset mappings accept only immutable same-workspace
 presentation assets; context mappings select an existing same-workspace context
 that the pack's context, publication channel, rules, saved searches, and sample
 values use instead of a newly created one. `--include-sample-data` explicitly selects the pack's
-optional synthetic sample entities and is omitted by default.
+optional synthetic sample records and is omitted by default.
 `solution-pack plan --from-application <uuid>` is mutually exclusive with all
 mapping flag types and keeps the archive as raw `application/zstd`. It explicitly
 selects one completed same-workspace application of the same pack for a strictly
@@ -401,7 +401,7 @@ for the retry lifecycle and safe replay procedure.
 Pass a personal API token with `CATALOG_TOKEN`, `--token-stdin`, or (for backwards compatibility)
 `--token`. Workspace commands always operate on the workspace selected by that bearer credential; they never
 accept a workspace ID or tenant header. `--permissions` accepts either a JSON
-array (for example, `'["entities.read"]'`) or a path to a JSON file. Personal
+array (for example, `'["records.read"]'`) or a path to a JSON file. Personal
 API-token secrets are emitted only in their successful JSON response. Workspace
 invitation and onboarding links are delivered by the configured mail adapter and
 are never emitted by the CLI. Use `acli workspace invitation accept --secret-stdin`
@@ -414,59 +414,59 @@ printf '%s' "$CATALOG_INVITATION_SECRET" | CATALOG_TOKEN="$CATALOG_TOKEN" acli w
 printf '%s\n%s\n%s\n' "$ONBOARDING_SECRET" "$INVITATION_SECRET" "$PASSWORD" | acli workspace user set-password --onboarding-secret-stdin --invitation-secret-stdin --password-stdin
 ```
 
-`entity preview` calls `/entities/{id}/preview` and resolves active relationship
-targets inline by default to one level. Its response contains `entity` metadata
+`record preview` calls `/records/{id}/preview` and resolves active relationship
+targets inline by default to one level. Its response contains `record` metadata
 and a context-keyed preview under `context`. Set `--relationship-depth 0` for
 scalar values only, or request deeper traversal up to the API's configured
 maximum. `--relationship-limit` bounds inline targets per relationship; use
-`entity list` for paginated browsing.
+`record list` for paginated browsing.
 
-`entity resolved-preview` resolves attributes for one requested context, including
+`record resolved-preview` resolves attributes for one requested context, including
 enriched relationship sets, and includes the context that supplied each value.
-`entity form` returns the pinned
-blueprint, current direct facts, and form context. `entity update` uses the v1
+`record form` returns the pinned
+blueprint, current direct facts, and form context. `record update` uses the v1
 atomic form endpoint: scalar values append history, relationship files replace
 the supplied relationship sets, and removal files remove scalar overrides.
-`entity delete` soft-deletes the entity. Its value and relationship history are
+`record delete` soft-deletes the record. Its value and relationship history are
 retained, while normal reads and relationship previews no longer expose it.
 
-`entity batch --operations <json-or-file>` sends a JSON array of create,
-update, and delete operations to `POST /v1/entities/batch`. They are applied in
+`record batch --operations <json-or-file>` sends a JSON array of create,
+update, and delete operations to `POST /v1/records/batch`. They are applied in
 order in one transaction: all succeed or none do, and a failure names the
-operation index. See [Entity batches](api.md#entity-batches) for the operation
+operation index. See [Record batches](api.md#record-batches) for the operation
 shapes.
 
 ```sh
-acli entity batch --operations release-revision-b.json
+acli record batch --operations release-revision-b.json
 ```
 
 ## Blueprint Migrations
 
-`entity migrate` previews an entity against the latest published revision of its
+`record migrate` previews a record against the latest published revision of its
 blueprint and migrates it when all current values are compatible. The API copies
 current values to the target revision, validates them, rebuilds projections, and
 records the migration atomically.
 
-`entity migrate-bulk` pages entities pinned to `--from-version` and runs that
-same operation for each entity. It never chooses a target revision: every
-entity targets the latest published revision. Use `--dry-run` to classify entities
+`record migrate-bulk` pages records pinned to `--from-version` and runs that
+same operation for each record. It never chooses a target revision: every
+record targets the latest published revision. Use `--dry-run` to classify records
 without migrating them. The command returns a JSON summary with `ready`,
 `needs_input`, `blocked`, and `failed` entries. It skips `needs_input` and
-`blocked` entities. Resolve missing, incompatible, or conditionally required
-values through the entity upgrade page before rerunning the bulk command.
+`blocked` records. Resolve missing, incompatible, or conditionally required
+values through the record upgrade page before rerunning the bulk command.
 
 For example, after creating `seed_product` v2:
 
 ```sh
-acli entity migrate-bulk --blueprint seed_product --from-version 1 --dry-run
-acli entity migrate-bulk --blueprint seed_product --from-version 1
+acli record migrate-bulk --blueprint seed_product --from-version 1 --dry-run
+acli record migrate-bulk --blueprint seed_product --from-version 1
 ```
 
 Blueprint files are sent unchanged as the API's TOML `definition`, preserving
 the raw-source hash. See [Blueprint Authoring](blueprints.md) for the grammar.
 
 Blueprint creation and revision commands create drafts. Publish a revision
-explicitly before using it for entities or migrations:
+explicitly before using it for records or migrations:
 
 ```sh
 acli blueprint publish <blueprint-id> <version>
@@ -500,7 +500,7 @@ value = "Blue shirt"
 [[values]]
 kind = "relationship"
 attribute_code = "related_products"
-target_entity_id = "00000000-0000-0000-0000-000000000004"
+target_record_id = "00000000-0000-0000-0000-000000000004"
 ```
 
 Scalar payloads must match the blueprint attribute type. TOML maps naturally to
@@ -517,7 +517,7 @@ value = { time = "09:30:00", time_zone = "America/New_York" }
 ```
 
 Each value must provide exactly one of `attribute_code` or `attribute_id`. Codes
-are resolved against the source entity's pinned blueprint version.
+are resolved against the source record's pinned blueprint version.
 
 Every value and relationship needs a context. Supply `--context-id` to use it
 for all entries in a file, or set `context_id` on an individual TOML entry. Use
@@ -533,10 +533,10 @@ listed currently linked targets.
 ```toml
 [[relationships]]
 attribute_code = "categories"
-target_entity_ids = ["00000000-0000-0000-0000-000000000004"]
+target_record_ids = ["00000000-0000-0000-0000-000000000004"]
 ```
 
-Scalar removals used by `entity update --remove-values` use:
+Scalar removals used by `record update --remove-values` use:
 
 ```toml
 [[remove_values]]

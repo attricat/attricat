@@ -379,7 +379,7 @@ async fn start_configured_server(
         .await
         .unwrap();
     CatalogRepository::system(pool.clone())
-        .ensure_entity_publication_permissions()
+        .ensure_record_publication_permissions()
         .await
         .unwrap();
     CatalogRepository::system(pool.clone())
@@ -414,7 +414,7 @@ async fn start_configured_server(
         metrics: init_metrics().unwrap(),
         max_preview_relationship_depth: 3,
         max_preview_relationship_items: 10,
-        max_entity_page_size: 100,
+        max_record_page_size: 100,
         max_incoming_relationship_page_size: 50,
         max_relationship_facet_nodes: 100,
         max_upload_file_bytes: 50 * 1024 * 1024,
@@ -488,9 +488,9 @@ pub async fn create_blueprint(client: &Client, base_url: &str, definition: &str)
         .unwrap()
 }
 
-pub async fn create_entity(client: &Client, base_url: &str, blueprint: &Value) -> Value {
+pub async fn create_record(client: &Client, base_url: &str, blueprint: &Value) -> Value {
     client
-        .post(format!("{base_url}/v1/entities"))
+        .post(format!("{base_url}/v1/records"))
         .json(&json!({
             "blueprint": {
                 "code": blueprint["blueprint"]["code"],

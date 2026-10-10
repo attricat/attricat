@@ -62,13 +62,13 @@ Read proposals carefully. Replacing relationships sets the complete list for tha
 
 ### Changes to several records
 
-When one request changes several records, such as releasing a new revision and superseding the previous one, the agent proposes a single **batch** (`apply_entity_batch`; agent tool names and error codes call records entities). The approval summary lists every step in order. You approve the batch once, and it is saved completely or not at all: if one step fails, for example because a record changed in the meantime, nothing is saved and the agent is told which step failed.
+When one request changes several records, such as releasing a new revision and superseding the previous one, the agent proposes a single **batch** (`apply_record_batch`). The approval summary lists every step in order. You approve the batch once, and it is saved completely or not at all: if one step fails, for example because a record changed in the meantime, nothing is saved and the agent is told which step failed.
 
 ## When a change is refused
 
 Changes made through the agent go through the same validation as your own edits, and the server refuses them for the same reasons. When an approved change is refused, nothing is saved. The agent explains why rather than retrying, and proposes a corrected change if one makes sense, which needs your approval again.
 
-- **Checks and rules.** A failing check (`entity_check_failed`), status transition condition (`transition_conditions_unmet`), enforcing rule (`rule_violation`), or channel's required checks (`publication_checks_failed`) refuse the change. The agent explains which checks failed. To explain why a status option is blocked or a record cannot be published yet, it can read the record's status transitions and publication readiness.
+- **Checks and rules.** A failing check (`record_check_failed`), status transition condition (`transition_conditions_unmet`), enforcing rule (`rule_violation`), or channel's required checks (`publication_checks_failed`) refuse the change. The agent explains which checks failed. To explain why a status option is blocked or a record cannot be published yet, it can read the record's status transitions and publication readiness.
 - **Unique keys.** If another record already has the same part number or document number, the change is refused and the agent is told which record holds it. It should show you that record and ask whether to update it or use a different value, not retry.
 - **Hierarchies.** A link that would make a record its own ancestor, such as a location inside itself, is refused with the path of the loop.
 - **Allowed targets.** A relationship can only link to the blueprints it lists.

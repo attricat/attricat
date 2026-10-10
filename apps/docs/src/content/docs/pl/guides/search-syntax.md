@@ -3,7 +3,7 @@ title: Składnia wyszukiwania
 description: Język zapytań Przeglądarki, od zwykłych terminów po kwalifikowane ścieżki relacji i symbole wieloznaczne.
 ---
 
-Pole wyszukiwania Przeglądarki i pole `query` w `POST /v1/entities/search` korzystają z tego samego języka zapytań. W API rekordy występują pod nazwą `entity`. Zapytania są sprawdzane względem schematu przed uruchomieniem. Zapytanie, które odwołuje się do nieistniejącego atrybutu lub relacji, kończy się czytelnym błędem, zamiast zwracać pusty wynik.
+Pole wyszukiwania Przeglądarki i pole `query` w `POST /v1/records/search` korzystają z tego samego języka zapytań. Zapytania są sprawdzane względem schematu przed uruchomieniem. Zapytanie, które odwołuje się do nieistniejącego atrybutu lub relacji, kończy się czytelnym błędem, zamiast zwracać pusty wynik.
 
 ## Terminy
 

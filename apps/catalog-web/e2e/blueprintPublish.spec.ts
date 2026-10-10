@@ -4,7 +4,7 @@ import { replaceDefinition, suffix } from './helpers';
 const definition = (code: string, extraAttributes = '') => `format_version = 1
 code = "${code}"
 name = "Authored product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -45,18 +45,18 @@ test('authors, publishes, revises and migrates a blueprint in the browser', asyn
   ).toBeVisible();
   await publishDraft(page, 1);
 
-  await page.goto('/entities/new');
+  await page.goto('/records/new');
   await page.getByLabel('Blueprint').click();
   await page
     .getByRole('option', { name: `Authored product (${code})` })
     .click();
   await page.getByRole('button', { name: 'Load blueprint' }).click();
-  await page.getByLabel('title').fill('Authored entity');
+  await page.getByLabel('title').fill('Authored record');
   await page.getByRole('button', { name: 'Create record' }).click();
-  await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
-  const entityUrl = page.url();
+  await expect(page).toHaveURL(/\/records\/[0-9a-f-]{36}$/);
+  const recordUrl = page.url();
   await expect(page.getByRole('textbox', { name: 'title' })).toHaveValue(
-    'Authored entity',
+    'Authored record',
   );
 
   await page.goto(blueprintUrl);
@@ -92,9 +92,9 @@ test('authors, publishes, revises and migrates a blueprint in the browser', asyn
   }).toPass();
   await expect(batches.getByText('1 of 1')).toBeVisible();
 
-  await page.goto(entityUrl);
+  await page.goto(recordUrl);
   await expect(page.getByLabel('Matches current schema')).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'title' })).toHaveValue(
-    'Authored entity',
+    'Authored record',
   );
 });

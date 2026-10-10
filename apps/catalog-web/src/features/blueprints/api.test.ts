@@ -6,8 +6,8 @@ import {
   getBlueprintRevision,
   listBlueprintMigrationBatches,
   listBlueprintRevisions,
-  publishBlueprintEntities,
-  publishBlueprintEntitiesAllChannels,
+  publishBlueprintRecords,
+  publishBlueprintRecordsAllChannels,
   publishBlueprintRevision,
   startSafeBlueprintMigrationBatch,
   listBlueprints,
@@ -18,12 +18,12 @@ const blueprint = {
   id: blueprintId,
   code: 'product',
   name: 'Product',
-  kind: 'entity',
+  kind: 'record',
   version: 2,
   includes: [],
   display: {},
   views: {},
-  entity_schema: null,
+  record_schema: null,
   status: 'published',
   published_at: '2026-08-19T12:00:00Z',
   created_at: '2026-08-19T11:00:00Z',
@@ -81,14 +81,14 @@ describe('blueprint API client', () => {
     );
 
     const publicationSummary = {
-      entity_count: 2,
+      record_count: 2,
       channel_count: 1,
       publication_count: 2,
     };
     respond(publicationSummary);
-    await publishBlueprintEntities(blueprintId, 2, blueprintId);
+    await publishBlueprintRecords(blueprintId, 2, blueprintId);
     expect(fetchMock).toHaveBeenLastCalledWith(
-      `/api/blueprints/${blueprintId}/versions/2/entity-publications`,
+      `/api/blueprints/${blueprintId}/versions/2/record-publications`,
       {
         body: JSON.stringify({ context_id: blueprintId }),
         headers: { 'Content-Type': 'application/json' },
@@ -97,9 +97,9 @@ describe('blueprint API client', () => {
     );
 
     respond(publicationSummary);
-    await publishBlueprintEntitiesAllChannels(blueprintId, 2);
+    await publishBlueprintRecordsAllChannels(blueprintId, 2);
     expect(fetchMock).toHaveBeenLastCalledWith(
-      `/api/blueprints/${blueprintId}/versions/2/entity-publications/publish-all`,
+      `/api/blueprints/${blueprintId}/versions/2/record-publications/publish-all`,
       { method: 'POST' },
     );
 
@@ -115,17 +115,17 @@ describe('blueprint API client', () => {
     respond([
       {
         ...migrationBatch,
-        total_entities: 10_000,
-        processed_entities: 42,
-        migrated_entities: 40,
-        needs_input_entities: 1,
-        failed_entities: 1,
+        total_records: 10_000,
+        processed_records: 42,
+        migrated_records: 40,
+        needs_input_records: 1,
+        failed_records: 1,
       },
     ]);
     await expect(
       listBlueprintMigrationBatches(blueprintId),
     ).resolves.toMatchObject([
-      { status: 'queued', total_entities: 10_000, processed_entities: 42 },
+      { status: 'queued', total_records: 10_000, processed_records: 42 },
     ]);
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/blueprints/${blueprintId}/migration-batches`,

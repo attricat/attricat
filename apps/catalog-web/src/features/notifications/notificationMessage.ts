@@ -34,11 +34,11 @@ export const notificationMessage = (
     dataText(notification, 'conversation_title') ??
     t('agents.untitledConversation');
   switch (notification.kind) {
-    case notificationKinds.entityAssigned:
+    case notificationKinds.recordAssigned:
       return team
         ? t('inbox.messages.teamAssigned', { actor, record, team })
         : t('inbox.messages.assigned', { actor, record });
-    case notificationKinds.entityCommented:
+    case notificationKinds.recordCommented:
       return t('inbox.messages.commented', { actor, record });
     case notificationKinds.agentApprovalRequired:
       return t('inbox.messages.approvalRequired', { conversation });

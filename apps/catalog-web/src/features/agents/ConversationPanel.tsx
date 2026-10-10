@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box } from '@mui/material';
 import { decideApproval } from './api';
-import { smartFillEntityForm } from '../entities/api';
+import { smartFillRecordForm } from '../records/api';
 import { thinkingRunStatuses } from './constants';
 import { ConversationComposer } from './ConversationComposer';
 import { ConversationTranscript } from './ConversationTranscript';
@@ -16,7 +16,7 @@ import {
 import { useConversationLiveUpdates } from './useConversationLiveUpdates';
 
 export type DraftContext = {
-  entityId: string;
+  recordId: string;
   contextId: string | null;
   defaultContextId: string | null;
   getDraftValues: () => Record<string, string>;
@@ -96,8 +96,8 @@ export const ConversationPanel = ({
         sendDraft={
           draft
             ? (content, id, attachmentIds) =>
-                smartFillEntityForm({
-                  entity_id: draft.entityId,
+                smartFillRecordForm({
+                  record_id: draft.recordId,
                   context_id: draft.contextId,
                   is_default_context:
                     draft.contextId === draft.defaultContextId,

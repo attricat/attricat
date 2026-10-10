@@ -14,12 +14,12 @@ use reqwest::header::SET_COOKIE;
 use sha2::{Digest, Sha256};
 use support::*;
 
-const SAMPLE: &[u8] = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/navy-shirt","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":"Sample Navy Shirt"}],"relationships":[]}]}"#;
+const SAMPLE: &[u8] = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[{"key":"sample-records/navy-shirt","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":"Sample Navy Shirt"}],"relationships":[]}]}"#;
 const PRODUCT_BLUEPRINT: &[u8] = br#"
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -35,7 +35,7 @@ const CATEGORY_BLUEPRINT: &[u8] = br#"
 format_version = 1
 code = "category"
 name = "Category"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -49,7 +49,7 @@ const CHANGED_CATEGORY_BLUEPRINT: &[u8] = br#"
 format_version = 1
 code = "category"
 name = "Changed category"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -67,7 +67,7 @@ const LEGACY_BLUEPRINT: &[u8] = br#"
 format_version = 1
 code = "legacy"
 name = "Legacy"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -81,7 +81,7 @@ const ACCESSORY_BLUEPRINT: &[u8] = br#"
 format_version = 1
 code = "accessory"
 name = "Accessory"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -247,7 +247,7 @@ fn archive_with_reverse_order_dependency() -> Vec<u8> {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -412,7 +412,7 @@ fn archive_with_blueprint_extension_layout() -> Vec<u8> {
 [views.extension_layout]
 type = "extension_layout"
 version = 1
-[views.extension_layout.outlets.entity_action]
+[views.extension_layout.outlets.record_action]
 order = ["acme.layout:action"]
 hidden = []
 "#
@@ -425,7 +425,7 @@ hidden = []
         "id": "attricat.blueprint-layout",
         "name": "Blueprint extension layout",
         "version": "1.0.0",
-        "description": "Entity blueprint contribution defaults",
+        "description": "Record blueprint contribution defaults",
         "catalog": {"host_api": "^1.0"},
         "resources": {
             "blueprints": [{
@@ -687,7 +687,7 @@ async fn install_layout_extension(pool: &PgPool) -> Uuid {
                 "version": 1,
                 "kind": "action",
                 "artifact": "client",
-                "outlet": "entity_action"
+                "outlet": "record_action"
             }
         ]
     });
@@ -1203,7 +1203,7 @@ async fn sample_matcher_rejects_an_omitted_effective_default(pool: PgPool) {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -1254,9 +1254,9 @@ async fn matcher_substrings_cover_explicit_defaulted_and_encoded_values(pool: Pg
         for candidate in variants {
             let default_json = serde_json::to_string(&candidate).unwrap();
             let blueprint = format!(
-                "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"entity\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"contact\"]\n[[attributes]]\ncode = \"contact\"\nvalue_type = \"string\"\ndefault_value = {default_json}\n"
+                "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"contact\"]\n[[attributes]]\ncode = \"contact\"\nvalue_type = \"string\"\ndefault_value = {default_json}\n"
             );
-            let omitted = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[],"relationships":[]}] }"#;
+            let omitted = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[],"relationships":[]}] }"#;
             assert_eq!(
                 inspect(
                     &client,
@@ -1273,7 +1273,7 @@ async fn matcher_substrings_cover_explicit_defaulted_and_encoded_values(pool: Pg
                 "format_version":1,
                 "kind":"solution_pack_sample_data",
                 "classification":"synthetic",
-                "entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":candidate}],"relationships":[]}]
+                "records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":candidate}],"relationships":[]}]
             })).unwrap();
             assert_eq!(
                 inspect(
@@ -1293,7 +1293,7 @@ async fn matcher_substrings_cover_explicit_defaulted_and_encoded_values(pool: Pg
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["contact"]
@@ -1302,7 +1302,7 @@ code = "contact"
 value_type = "string"
 default_value = "Jane@example.com"
 "#;
-    let safe_override = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/contact","value":"Sample contact"}],"relationships":[]}]}"#;
+    let safe_override = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/contact","value":"Sample contact"}],"relationships":[]}]}"#;
     assert_eq!(
         inspect(
             &client,
@@ -1324,14 +1324,13 @@ default_value = "Jane@example.com"
         "{}",
         plan.text().await.unwrap()
     );
-    let canonical: Value = sqlx::query_scalar(
-        "SELECT canonical_input FROM solution_pack_plan_sample_entities LIMIT 1",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let canonical: Value =
+        sqlx::query_scalar("SELECT canonical_input FROM solution_pack_plan_sample_records LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(canonical["effective_defaults"], json!([]));
-    assert_eq!(canonical["entity"]["facts"][0]["value"], "Sample contact");
+    assert_eq!(canonical["record"]["facts"][0]["value"], "Sample contact");
     server.abort();
 }
 
@@ -1341,7 +1340,7 @@ async fn sample_temporal_values_are_type_aware_and_strict(pool: PgPool) {
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["available_on"]
@@ -1349,7 +1348,7 @@ fields = ["available_on"]
 code = "available_on"
 value_type = "date"
 "#;
-    const VALID_DATE: &[u8] = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/available_on","value":"2026-09-18"}],"relationships":[]}]}"#;
+    const VALID_DATE: &[u8] = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/available_on","value":"2026-09-18"}],"relationships":[]}]}"#;
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let valid_date = inspect(
@@ -1364,7 +1363,7 @@ value_type = "date"
         "{}",
         valid_date.text().await.unwrap()
     );
-    let invalid_adjacent_native_date = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/available_on","value":"000000002026-09-18"}],"relationships":[]}] }"#;
+    let invalid_adjacent_native_date = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/available_on","value":"000000002026-09-18"}],"relationships":[]}] }"#;
     assert_eq!(
         inspect(
             &client,
@@ -1377,10 +1376,10 @@ value_type = "date"
         "native-date exemption must follow strict native parsing"
     );
 
-    let time_blueprint = b"format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"entity\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"temporal\"]\n[[attributes]]\ncode = \"temporal\"\nvalue_type = \"time\"\n";
+    let time_blueprint = b"format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"temporal\"]\n[[attributes]]\ncode = \"temporal\"\nvalue_type = \"time\"\n";
     let valid_time = serde_json::to_vec(&json!({
         "format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic",
-        "entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/temporal","value":{"time":"12:34:56","time_zone":"America/New_York"}}],"relationships":[]}]
+        "records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/temporal","value":{"time":"12:34:56","time_zone":"America/New_York"}}],"relationships":[]}]
     })).unwrap();
     let response = inspect(
         &client,
@@ -1415,7 +1414,7 @@ value_type = "date"
     ] {
         let sample = serde_json::to_vec(&json!({
             "format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic",
-            "entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/temporal","value":invalid_time}],"relationships":[]}]
+            "records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/temporal","value":invalid_time}],"relationships":[]}]
         })).unwrap();
         assert_eq!(
             inspect(
@@ -1430,7 +1429,7 @@ value_type = "date"
     }
     let time_on_string = serde_json::to_vec(&json!({
         "format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic",
-        "entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":{"time":"12:34:56","time_zone":"UTC"}}],"relationships":[]}]
+        "records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":{"time":"12:34:56","time_zone":"UTC"}}],"relationships":[]}]
     })).unwrap();
     assert_eq!(
         inspect(
@@ -1443,7 +1442,7 @@ value_type = "date"
         StatusCode::UNPROCESSABLE_ENTITY
     );
 
-    let string_date = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":"2026-09-18"}],"relationships":[]}]}"#;
+    let string_date = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":"2026-09-18"}],"relationships":[]}]}"#;
     assert_eq!(
         inspect(
             &client,
@@ -1461,13 +1460,13 @@ value_type = "date"
         ("datetime", "not-a-datetime"),
     ] {
         let blueprint = format!(
-            "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"entity\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"temporal\"]\n[[attributes]]\ncode = \"temporal\"\nvalue_type = \"{value_type}\"\n"
+            "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"temporal\"]\n[[attributes]]\ncode = \"temporal\"\nvalue_type = \"{value_type}\"\n"
         );
         let sample = serde_json::to_vec(&json!({
             "format_version":1,
             "kind":"solution_pack_sample_data",
             "classification":"synthetic",
-            "entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/temporal","value":invalid}],"relationships":[]}]
+            "records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/temporal","value":invalid}],"relationships":[]}]
         })).unwrap();
         assert_eq!(
             inspect(
@@ -1488,9 +1487,9 @@ value_type = "date"
         ("datetime", "\"not-a-datetime\""),
     ] {
         let blueprint = format!(
-            "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"entity\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"temporal\"]\n[[attributes]]\ncode = \"temporal\"\nvalue_type = \"{value_type}\"\ndefault_value = {default_value}\n"
+            "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"temporal\"]\n[[attributes]]\ncode = \"temporal\"\nvalue_type = \"{value_type}\"\ndefault_value = {default_value}\n"
         );
-        let empty = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[],"relationships":[]}]}"#;
+        let empty = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[],"relationships":[]}]}"#;
         assert_eq!(
             inspect(
                 &client,
@@ -1514,7 +1513,7 @@ async fn sample_data_requires_opt_in_and_applies_with_ordinary_audit_and_event(p
     let inspection = inspect(&client, &base_url, archive_with_sample_data()).await;
     assert_eq!(inspection.status(), StatusCode::OK);
     let inspection = inspection.json::<Value>().await.unwrap();
-    assert_eq!(inspection["sample_data"]["entity_count"], 1);
+    assert_eq!(inspection["sample_data"]["record_count"], 1);
     assert!(
         inspection["warnings"][0]
             .as_str()
@@ -1539,7 +1538,7 @@ async fn sample_data_requires_opt_in_and_applies_with_ordinary_audit_and_event(p
             .as_array()
             .unwrap()
             .iter()
-            .all(|action| action["resource_kind"] != "sample_entity")
+            .all(|action| action["resource_kind"] != "sample_record")
     );
 
     let selected = client.post(format!("{base_url}/solution-packs/plans?prefix=samples&blueprint_publication=publish&include_sample_data=true"))
@@ -1551,7 +1550,7 @@ async fn sample_data_requires_opt_in_and_applies_with_ordinary_audit_and_event(p
         selected["sample_automation_warning"]
             .as_str()
             .unwrap()
-            .contains("entity.created.v1")
+            .contains("record.created.v1")
     );
     assert!(!selected.to_string().contains("Sample Navy Shirt"));
     let duplicate = client.post(format!("{base_url}/solution-packs/plans?prefix=samples_again&blueprint_publication=publish&include_sample_data=true"))
@@ -1567,42 +1566,42 @@ async fn sample_data_requires_opt_in_and_applies_with_ordinary_audit_and_event(p
     let resumable_until =
         chrono::DateTime::parse_from_rfc3339(applied["resumable_until"].as_str().unwrap()).unwrap();
     assert_eq!(resumable_until - started_at, chrono::Duration::days(30));
-    let entity_id: Uuid =
-        sqlx::query_scalar("SELECT id FROM entities WHERE 'attricat.sample'=ANY(system_tags)")
+    let record_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM records WHERE 'attricat.sample'=ANY(system_tags)")
             .fetch_one(&pool)
             .await
             .unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM audit_events WHERE target->>'type'='entity' AND target->>'id'=$1"
+            "SELECT count(*) FROM audit_events WHERE target->>'type'='record' AND target->>'id'=$1"
         )
-        .bind(entity_id.to_string())
+        .bind(record_id.to_string())
         .fetch_one(&pool)
         .await
         .unwrap(),
         1
     );
-    assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM domain_events WHERE aggregate_id=$1 AND event_type='entity.created.v1'")
-        .bind(entity_id).fetch_one(&pool).await.unwrap(), 1);
+    assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM domain_events WHERE aggregate_id=$1 AND event_type='record.created.v1'")
+        .bind(record_id).fetch_one(&pool).await.unwrap(), 1);
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM solution_pack_plan_sample_entities")
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM solution_pack_plan_sample_records")
             .fetch_one(&pool)
             .await
             .unwrap(),
         0
     );
     let retained_audit_value: Value = sqlx::query_scalar(
-        "SELECT after_value FROM audit_event_changes WHERE entity_id=$1 AND attribute_code='name'",
+        "SELECT after_value FROM audit_event_changes WHERE record_id=$1 AND attribute_code='name'",
     )
-    .bind(entity_id)
+    .bind(record_id)
     .fetch_one(&pool)
     .await
     .unwrap();
     assert_eq!(retained_audit_value, json!("Sample Navy Shirt"));
     let retained_event: Value = sqlx::query_scalar(
-        "SELECT payload FROM domain_events WHERE aggregate_id=$1 AND event_type='entity.created.v1'",
+        "SELECT payload FROM domain_events WHERE aggregate_id=$1 AND event_type='record.created.v1'",
     )
-    .bind(entity_id)
+    .bind(record_id)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -1611,17 +1610,17 @@ async fn sample_data_requires_opt_in_and_applies_with_ordinary_audit_and_event(p
         "Sample Navy Shirt"
     );
     let detail = client
-        .get(format!("{base_url}/v1/entities/{entity_id}"))
+        .get(format!("{base_url}/v1/records/{record_id}"))
         .send()
         .await
         .unwrap();
     assert_eq!(detail.status(), StatusCode::OK);
     assert_eq!(
-        detail.json::<Value>().await.unwrap()["entity"]["is_sample"],
+        detail.json::<Value>().await.unwrap()["record"]["is_sample"],
         true
     );
     let search = client
-        .post(format!("{base_url}/v1/entities/search"))
+        .post(format!("{base_url}/v1/records/search"))
         .json(&json!({"blueprint":{"code":"samples_product"},"page":{"size":25}}))
         .send()
         .await
@@ -1632,7 +1631,7 @@ async fn sample_data_requires_opt_in_and_applies_with_ordinary_audit_and_event(p
         true
     );
     let edited = client
-        .put(format!("{base_url}/v1/entities/{entity_id}"))
+        .put(format!("{base_url}/v1/records/{record_id}"))
         .json(&json!({"values":[],"relationships":[],"remove_values":[],"system_tags":[]}))
         .send()
         .await
@@ -1702,19 +1701,19 @@ async fn sample_dataset_reservation_survives_every_plan_and_application_state(po
 
 #[sqlx::test(migrations = "./migrations")]
 async fn later_sample_releases_create_reuse_conflict_and_record_removals(pool: PgPool) {
-    let sample = |entities: Value| {
+    let sample = |records: Value| {
         serde_json::to_vec(&json!({
             "format_version":1,
             "kind":"solution_pack_sample_data",
             "classification":"synthetic",
-            "entities":entities
+            "records":records
         }))
         .unwrap()
     };
-    let entity = |key: &str, name: &str| json!({"key":format!("sample-entities/{key}"),"blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":name}],"relationships":[]});
+    let record = |key: &str, name: &str| json!({"key":format!("sample-records/{key}"),"blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":name}],"relationships":[]});
     let initial_sample = sample(json!([
-        entity("navy-shirt", "Sample Navy Shirt"),
-        entity("cap", "Sample Cap")
+        record("navy-shirt", "Sample Navy Shirt"),
+        record("cap", "Sample Cap")
     ]));
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -1735,18 +1734,18 @@ async fn later_sample_releases_create_reuse_conflict_and_record_removals(pool: P
         .as_array()
         .unwrap()
         .iter()
-        .find(|step| step["logical_key"] == "sample-entities/navy-shirt")
+        .find(|step| step["logical_key"] == "sample-records/navy-shirt")
         .unwrap()["target_id"]
         .as_str()
         .unwrap()
         .parse::<Uuid>()
         .unwrap();
-    let entity_count_before: i64 = sqlx::query_scalar("SELECT count(*) FROM entities")
+    let record_count_before: i64 = sqlx::query_scalar("SELECT count(*) FROM records")
         .fetch_one(&pool)
         .await
         .unwrap();
     let edited = client
-        .put(format!("{base_url}/v1/entities/{navy_id}"))
+        .put(format!("{base_url}/v1/records/{navy_id}"))
         .json(&json!({"values":[{"kind":"scalar","attribute_code":"name","value":"Locally edited sample"}],"relationships":[],"remove_values":[],"system_tags":[]}))
         .send()
         .await
@@ -1771,21 +1770,21 @@ async fn later_sample_releases_create_reuse_conflict_and_record_removals(pool: P
         .as_array()
         .unwrap()
         .iter()
-        .find(|action| action["logical_key"] == "sample-entities/navy-shirt")
+        .find(|action| action["logical_key"] == "sample-records/navy-shirt")
         .unwrap();
     assert_eq!(reuse["action"], "map");
     assert_eq!(reuse["reason_code"], "unchanged_from_prior_application");
     let reapplied = apply_plan(&client, &base_url, unchanged["id"].as_str().unwrap()).await;
     assert_eq!(reapplied.status(), StatusCode::OK);
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM entities")
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM records")
             .fetch_one(&pool)
             .await
             .unwrap(),
-        entity_count_before
+        record_count_before
     );
     let (name, tags): (String, Vec<String>) = sqlx::query_as(
-        "SELECT av.value_text,e.system_tags FROM entities e JOIN attributes a ON a.blueprint_id=e.blueprint_id AND a.blueprint_version=e.blueprint_version AND a.code='name' JOIN attribute_values av ON av.entity_id=e.id AND av.attribute_id=a.id AND av.active WHERE e.id=$1",
+        "SELECT av.value_text,e.system_tags FROM records e JOIN attributes a ON a.blueprint_id=e.blueprint_id AND a.blueprint_version=e.blueprint_version AND a.code='name' JOIN attribute_values av ON av.record_id=e.id AND av.attribute_id=a.id AND av.active WHERE e.id=$1",
     )
     .bind(navy_id)
     .fetch_one(&pool)
@@ -1795,8 +1794,8 @@ async fn later_sample_releases_create_reuse_conflict_and_record_removals(pool: P
     assert!(!tags.contains(&"attricat.sample".to_owned()));
 
     let changed_sample = sample(json!([
-        entity("navy-shirt", "Changed Sample Shirt"),
-        entity("cap", "Sample Cap")
+        record("navy-shirt", "Changed Sample Shirt"),
+        record("cap", "Sample Cap")
     ]));
     let changed = create_sample_plan_from_application(
         &client,
@@ -1810,15 +1809,15 @@ async fn later_sample_releases_create_reuse_conflict_and_record_removals(pool: P
     let changed = changed.json::<Value>().await.unwrap();
     assert_eq!(changed["ready"], false);
     assert!(changed["actions"].as_array().unwrap().iter().any(|action| {
-        action["logical_key"] == "sample-entities/navy-shirt"
+        action["logical_key"] == "sample-records/navy-shirt"
             && action["action"] == "conflict"
             && action["reason_code"] == "update_not_supported"
     }));
 
     let added_sample = sample(json!([
-        entity("navy-shirt", "Sample Navy Shirt"),
-        entity("cap", "Sample Cap"),
-        entity("belt", "Sample Belt")
+        record("navy-shirt", "Sample Navy Shirt"),
+        record("cap", "Sample Cap"),
+        record("belt", "Sample Belt")
     ]));
     let added = create_sample_plan_from_application(
         &client,
@@ -1836,11 +1835,11 @@ async fn later_sample_releases_create_reuse_conflict_and_record_removals(pool: P
             .unwrap()
             .iter()
             .any(|change| {
-                change["logical_key"] == "sample-entities/belt" && change["change_kind"] == "added"
+                change["logical_key"] == "sample-records/belt" && change["change_kind"] == "added"
             })
     );
 
-    let removed_sample = sample(json!([entity("navy-shirt", "Sample Navy Shirt")]));
+    let removed_sample = sample(json!([record("navy-shirt", "Sample Navy Shirt")]));
     let removed = create_sample_plan_from_application(
         &client,
         &base_url,
@@ -1857,11 +1856,11 @@ async fn later_sample_releases_create_reuse_conflict_and_record_removals(pool: P
             .unwrap()
             .iter()
             .any(|change| {
-                change["logical_key"] == "sample-entities/cap" && change["change_kind"] == "removed"
+                change["logical_key"] == "sample-records/cap" && change["change_kind"] == "removed"
             })
     );
 
-    sqlx::query("UPDATE entities SET deleted_at=clock_timestamp() WHERE id=$1")
+    sqlx::query("UPDATE records SET deleted_at=clock_timestamp() WHERE id=$1")
         .bind(navy_id)
         .execute(&pool)
         .await
@@ -1878,7 +1877,7 @@ async fn later_sample_releases_create_reuse_conflict_and_record_removals(pool: P
     let missing = missing.json::<Value>().await.unwrap();
     assert_eq!(missing["ready"], false);
     assert!(missing["actions"].as_array().unwrap().iter().any(|action| {
-        action["logical_key"] == "sample-entities/navy-shirt"
+        action["logical_key"] == "sample-records/navy-shirt"
             && action["reason_code"] == "prior_sample_target_missing_or_changed"
     }));
     server.abort();
@@ -2377,7 +2376,7 @@ async fn inspection_rejects_missing_or_wrong_media_type_and_invalid_archives(poo
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 leaked = "SENSITIVE_MARKER"
 
 [views.dropdown_option]
@@ -4058,7 +4057,7 @@ async fn explicit_exact_blueprint_mapping_reuses_without_mutation_and_revalidate
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO blueprints (id,workspace_id,code,name,kind,version,includes,views,entity_schema,status,published_at,definition,definition_hash) SELECT $1,$2,'foreign_product',name,kind,version,includes,views,entity_schema,status,published_at,definition,definition_hash FROM blueprints WHERE workspace_id=$3 AND code='shared_product' AND version=1")
+    sqlx::query("INSERT INTO blueprints (id,workspace_id,code,name,kind,version,includes,views,record_schema,status,published_at,definition,definition_hash) SELECT $1,$2,'foreign_product',name,kind,version,includes,views,record_schema,status,published_at,definition,definition_hash FROM blueprints WHERE workspace_id=$3 AND code='shared_product' AND version=1")
         .bind(Uuid::new_v4())
         .bind(foreign_workspace)
         .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
@@ -4649,7 +4648,7 @@ async fn apply_merges_extension_layout_without_enabling_or_replacing_settings(po
             "extension_layout": {
                 "version":1,
                 "outlets": {
-                    "entity_action": {
+                    "record_action": {
                         "order":["other.extension:action"],
                         "hidden":[]
                     }
@@ -4720,7 +4719,7 @@ async fn apply_merges_extension_layout_without_enabling_or_replacing_settings(po
         .unwrap();
     assert_eq!(settings["theme"], "dark");
     assert_eq!(
-        settings["extension_layout"]["outlets"]["entity_action"]["order"][0],
+        settings["extension_layout"]["outlets"]["record_action"]["order"][0],
         "other.extension:action"
     );
     assert_eq!(
@@ -5264,7 +5263,7 @@ async fn concurrent_ordinary_layout_replacement_and_pack_append_do_not_lose_upda
             .update_workspace_extension_layout(json!({
                 "version":1,
                 "outlets": {
-                    "entity_action": {
+                    "record_action": {
                         "order":["other.extension:action"],
                         "hidden":[]
                     }
@@ -5289,7 +5288,7 @@ async fn concurrent_ordinary_layout_replacement_and_pack_append_do_not_lose_upda
             .await
             .unwrap();
     assert_eq!(
-        layout["outlets"]["entity_action"]["order"],
+        layout["outlets"]["record_action"]["order"],
         json!(["other.extension:action"])
     );
     assert_eq!(

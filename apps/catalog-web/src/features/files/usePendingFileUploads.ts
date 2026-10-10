@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import type { Attribute } from '../entities/api';
-import { invalidateEntity } from '../entities/invalidateEntity';
+import type { Attribute } from '../records/api';
+import { invalidateRecord } from '../records/invalidateRecord';
 import { uploadFiles, updateFileReferences } from './api';
 import { fileCardinalities } from './constants';
 import { acceptsFile, pendingFileId } from './fileAcceptance';
@@ -22,20 +22,20 @@ type Options = {
   attribute: Attribute;
   contextId: string | null;
   disabled: boolean;
-  entityId?: string;
+  recordId?: string;
   files: FileMetadata[];
-  /** Called with the entity version produced by this editor's own change. */
-  onEntityUpdated?: (updatedAt: string) => void;
+  /** Called with the record version produced by this editor's own change. */
+  onRecordUpdated?: (updatedAt: string) => void;
 };
 
 /** Files save separately from scalar form values. Never persist file inputs in drafts. */
 export const usePendingFileUploads = (options: Options) => {
-  const { attribute, contextId, disabled, entityId, files } = options;
+  const { attribute, contextId, disabled, recordId, files } = options;
   const { t } = useTranslation();
   const client = useQueryClient();
-  // Before the entity exists, files wait in the creating page's queue.
+  // Before the record exists, files wait in the creating page's queue.
   const queue = useQueuedFileUploadsContext();
-  const deferred = !entityId && queue !== null;
+  const deferred = !recordId && queue !== null;
   const [localPending, setLocalPending] = useState<PendingFile[]>([]);
   const pending: readonly PendingFile[] = deferred
     ? (queue.pending[attribute.code] ?? [])
@@ -66,17 +66,17 @@ export const usePendingFileUploads = (options: Options) => {
     attribute.file_policy?.cardinality === fileCardinalities.one;
   const canQueueFile =
     !singleFile || (uploaded.length === 0 && pending.length === 0);
-  const canUpload = !disabled && Boolean(entityId) && !busy;
+  const canUpload = !disabled && Boolean(recordId) && !busy;
   const canQueue = canUpload || (!disabled && deferred);
   const permitted = () =>
     active.current &&
     !current.current.disabled &&
-    Boolean(current.current.entityId);
+    Boolean(current.current.recordId);
   const queuePermitted = () =>
     active.current && !current.current.disabled && (deferred || permitted());
   const refresh = async () => {
-    if (!entityId) return;
-    await invalidateEntity(client, entityId);
+    if (!recordId) return;
+    await invalidateRecord(client, recordId);
   };
   const add = (candidates: FileList | File[]) => {
     if (!canQueue || !canQueueFile || lock.current || !queuePermitted()) return;
@@ -111,7 +111,7 @@ export const usePendingFileUploads = (options: Options) => {
         updatePending(item.id, { error: undefined, progress: 1 });
         try {
           const result = await uploadFiles({
-            entityId: entityId!,
+            recordId: recordId!,
             attributeCode: attribute.code,
             contextId,
             files: [item.file],
@@ -121,7 +121,7 @@ export const usePendingFileUploads = (options: Options) => {
               updatePending(item.id, { progress: Math.max(1, progress) }),
           });
           next = [...next, ...result.files];
-          current.current.onEntityUpdated?.(result.entity_updated_at);
+          current.current.onRecordUpdated?.(result.record_updated_at);
           if (active.current) {
             setSaved({ source: current.current.files, value: next });
             setPending((queue) =>
@@ -151,12 +151,12 @@ export const usePendingFileUploads = (options: Options) => {
     setBusy(true);
     setErrors([]);
     try {
-      const result = await updateFileReferences(entityId!, attribute.code, {
+      const result = await updateFileReferences(recordId!, attribute.code, {
         context_id: contextId,
         expected_file_ids: uploaded.map((file) => file.id),
         file_ids: fileIds,
       });
-      current.current.onEntityUpdated?.(result.entity_updated_at);
+      current.current.onRecordUpdated?.(result.record_updated_at);
       if (active.current)
         setSaved({
           source: current.current.files,

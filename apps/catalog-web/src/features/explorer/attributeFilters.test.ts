@@ -1,7 +1,7 @@
 import i18n from 'i18next';
 import { describe, expect, it } from 'vitest';
 import '../../i18n';
-import type { Attribute } from '../entities/api';
+import type { Attribute } from '../records/api';
 import {
   attributeFilterLabel,
   operatorsForAttribute,

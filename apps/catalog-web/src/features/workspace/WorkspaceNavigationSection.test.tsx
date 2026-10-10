@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import { listEntityBlueprints } from '../entities/api';
+import { listRecordBlueprints } from '../records/api';
 import {
   listExploreNavigation,
   listRoles,
@@ -11,9 +11,9 @@ import {
 } from './api';
 import { WorkspaceNavigationSection } from './WorkspaceNavigationSection';
 
-vi.mock('../entities/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../entities/api')>()),
-  listEntityBlueprints: vi.fn(),
+vi.mock('../records/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../records/api')>()),
+  listRecordBlueprints: vi.fn(),
 }));
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
@@ -27,7 +27,7 @@ describe('WorkspaceNavigationSection', () => {
     vi.mocked(listExploreNavigation).mockResolvedValue([
       { blueprint_code: 'product', visible_to_role_codes: [] },
     ]);
-    vi.mocked(listEntityBlueprints).mockResolvedValue([
+    vi.mocked(listRecordBlueprints).mockResolvedValue([
       { code: 'product', name: 'Product' },
     ] as never);
     vi.mocked(listRoles).mockResolvedValue([]);
@@ -50,7 +50,7 @@ describe('WorkspaceNavigationSection', () => {
       { blueprint_code: 'product', visible_to_role_codes: [] },
       { blueprint_code: 'other', visible_to_role_codes: [] },
     ]);
-    vi.mocked(listEntityBlueprints).mockResolvedValue([
+    vi.mocked(listRecordBlueprints).mockResolvedValue([
       { code: 'product', name: 'Product' },
       { code: 'other', name: 'Other' },
     ] as never);
@@ -75,7 +75,7 @@ describe('WorkspaceNavigationSection', () => {
     vi.mocked(listExploreNavigation).mockResolvedValue([
       { blueprint_code: 'product', visible_to_role_codes: [] },
     ]);
-    vi.mocked(listEntityBlueprints).mockResolvedValue([
+    vi.mocked(listRecordBlueprints).mockResolvedValue([
       { code: 'product', name: 'Product' },
       { code: 'other', name: 'Other' },
     ] as never);

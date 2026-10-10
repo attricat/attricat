@@ -6,7 +6,7 @@ import { makeTheme } from '../../../app/theme';
 import '../../../i18n';
 import { EmailEditor } from './editors';
 import { EmailValue } from './values';
-import { EntityView } from '../components/EntityView';
+import { RecordView } from '../components/RecordView';
 import { BlueprintViewsPreview } from '../../blueprints/BlueprintViewsPreview';
 
 const emailDisplay = { id: 'catalog.email_display', version: 1, props: {} };
@@ -47,7 +47,7 @@ describe('email components', () => {
   );
   it('renders a configured field without an editor', () => {
     render(
-      <EntityView
+      <RecordView
         attributes={[attribute]}
         values={{ contact: { value: 'a@example.test' } }}
         view={{

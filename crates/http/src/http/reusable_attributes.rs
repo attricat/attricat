@@ -7,7 +7,7 @@ use crate::{
     catalog_service::CatalogMutationService,
     model::{
         AttachReusableAttribute, CreateReusableAttribute, CreateReusableAttributeGroup,
-        EntityReusableAttribute, ReusableAttribute, ReusableAttributeGroup,
+        RecordReusableAttribute, ReusableAttribute, ReusableAttributeGroup,
     },
 };
 use axum::{Json, extract::State, http::StatusCode};
@@ -101,14 +101,14 @@ pub(super) async fn create_group(
 pub(super) async fn attach(
     State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
-    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiPath(record_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<AttachReusableAttribute>,
-) -> Result<(StatusCode, Json<EntityReusableAttribute>), ApiError> {
+) -> Result<(StatusCode, Json<RecordReusableAttribute>), ApiError> {
     Ok((
         StatusCode::CREATED,
         Json(
             CatalogMutationService::new(&repository)
-                .attach_reusable_attribute(entity_id, input)
+                .attach_reusable_attribute(record_id, input)
                 .await?,
         ),
     ))
@@ -117,13 +117,13 @@ pub(super) async fn attach(
 pub(super) async fn attach_group(
     State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
-    ApiPath((entity_id, group_id)): ApiPath<(Uuid, Uuid)>,
-) -> Result<(StatusCode, Json<Vec<EntityReusableAttribute>>), ApiError> {
+    ApiPath((record_id, group_id)): ApiPath<(Uuid, Uuid)>,
+) -> Result<(StatusCode, Json<Vec<RecordReusableAttribute>>), ApiError> {
     Ok((
         StatusCode::CREATED,
         Json(
             CatalogMutationService::new(&repository)
-                .attach_reusable_attribute_group(entity_id, group_id)
+                .attach_reusable_attribute_group(record_id, group_id)
                 .await?,
         ),
     ))

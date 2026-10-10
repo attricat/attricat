@@ -234,7 +234,7 @@ pub struct SolutionPackSampleDataResource {
     pub key: String,
     pub path: String,
     pub sha256: String,
-    /// Bundled files that sample entities attach through ordinary file storage.
+    /// Bundled files that sample records attach through ordinary file storage.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<SolutionPackFileRef>,
 }
@@ -1212,12 +1212,12 @@ fn validate_effective_sample_facts(
     blueprints: &BTreeMap<String, SolutionPackBlueprint>,
     files: &BTreeMap<String, Vec<u8>>,
 ) -> Result<(), SolutionPackError> {
-    for entity in &sample.declaration.entities {
-        let blueprint = &blueprints[&entity.blueprint];
-        if blueprint.kind() != BlueprintKind::Entity {
+    for record in &sample.declaration.records {
+        let blueprint = &blueprints[&record.blueprint];
+        if blueprint.kind() != BlueprintKind::Record {
             return invalid(format!(
-                "sample entity '{}' must reference an entity blueprint",
-                entity.key
+                "sample record '{}' must reference a record blueprint",
+                record.key
             ));
         }
         let attributes = blueprint
@@ -1225,7 +1225,7 @@ fn validate_effective_sample_facts(
             .iter()
             .map(|attribute| (attribute.code.as_str(), attribute))
             .collect::<HashMap<_, _>>();
-        let explicit_attributes = explicit_fact_attribute_codes(entity);
+        let explicit_attributes = explicit_fact_attribute_codes(record);
         for attribute in blueprint.effective_attributes() {
             prohibited_attribute_code(&attribute.code).map_err(SolutionPackError::Invalid)?;
             if let Some(default) = attribute
@@ -1236,7 +1236,7 @@ fn validate_effective_sample_facts(
                 validate_sample_value_for_attribute(default, attribute, true)?;
             }
         }
-        for fact in &entity.facts {
+        for fact in &record.facts {
             let code = fact
                 .attribute
                 .rsplit('/')
@@ -1244,16 +1244,16 @@ fn validate_effective_sample_facts(
                 .expect("validated attribute reference");
             let attribute = attributes.get(code).ok_or_else(|| {
                 SolutionPackError::Invalid(format!(
-                    "sample entity '{}' references unknown attribute '{}'",
-                    entity.key, fact.attribute
+                    "sample record '{}' references unknown attribute '{}'",
+                    record.key, fact.attribute
                 ))
             })?;
             if attribute.readonly
                 || matches!(attribute.value_type.as_str(), "relationship" | "file")
             {
                 return invalid(format!(
-                    "sample entity '{}' fact '{}' is read-only or non-scalar",
-                    entity.key, fact.attribute
+                    "sample record '{}' fact '{}' is read-only or non-scalar",
+                    record.key, fact.attribute
                 ));
             }
             // Status values follow workspace transitions and principals name
@@ -1265,14 +1265,14 @@ fn validate_effective_sample_facts(
                         .is_some()
             }) {
                 return invalid(format!(
-                    "sample entity '{}' cannot set status or principal attribute '{}'",
-                    entity.key, fact.attribute
+                    "sample record '{}' cannot set status or principal attribute '{}'",
+                    record.key, fact.attribute
                 ));
             }
-            validate_sample_context_editable(&entity.key, fact.context.as_ref(), attribute)?;
+            validate_sample_context_editable(&record.key, fact.context.as_ref(), attribute)?;
             validate_sample_value_for_attribute(&fact.value, attribute, false)?;
         }
-        for relationship in &entity.relationships {
+        for relationship in &record.relationships {
             let code = relationship
                 .attribute
                 .rsplit('/')
@@ -1280,29 +1280,29 @@ fn validate_effective_sample_facts(
                 .expect("validated attribute reference");
             let attribute = attributes.get(code).ok_or_else(|| {
                 SolutionPackError::Invalid(format!(
-                    "sample entity '{}' references unknown relationship '{}'",
-                    entity.key, relationship.attribute
+                    "sample record '{}' references unknown relationship '{}'",
+                    record.key, relationship.attribute
                 ))
             })?;
             if attribute.readonly || attribute.value_type != "relationship" {
                 return invalid(format!(
-                    "sample entity '{}' relationship '{}' is not writable relationship data",
-                    entity.key, relationship.attribute
+                    "sample record '{}' relationship '{}' is not writable relationship data",
+                    record.key, relationship.attribute
                 ));
             }
             if attribute.cardinality.as_deref() == Some("one") && relationship.targets.len() != 1 {
                 return invalid(format!(
-                    "sample entity '{}' relationship '{}' exceeds cardinality one",
-                    entity.key, relationship.attribute
+                    "sample record '{}' relationship '{}' exceeds cardinality one",
+                    record.key, relationship.attribute
                 ));
             }
             validate_sample_context_editable(
-                &entity.key,
+                &record.key,
                 relationship.context.as_ref(),
                 attribute,
             )?;
         }
-        for value in &entity.files {
+        for value in &record.files {
             let code = value
                 .attribute
                 .rsplit('/')
@@ -1310,8 +1310,8 @@ fn validate_effective_sample_facts(
                 .expect("validated attribute reference");
             let attribute = attributes.get(code).ok_or_else(|| {
                 SolutionPackError::Invalid(format!(
-                    "sample entity '{}' references unknown file attribute '{}'",
-                    entity.key, value.attribute
+                    "sample record '{}' references unknown file attribute '{}'",
+                    record.key, value.attribute
                 ))
             })?;
             let policy = attribute
@@ -1320,17 +1320,17 @@ fn validate_effective_sample_facts(
                 .filter(|_| attribute.value_type == "file" && !attribute.readonly)
                 .ok_or_else(|| {
                     SolutionPackError::Invalid(format!(
-                        "sample entity '{}' attribute '{}' is not a writable file attribute",
-                        entity.key, value.attribute
+                        "sample record '{}' attribute '{}' is not a writable file attribute",
+                        record.key, value.attribute
                     ))
                 })?;
             if policy.cardinality == "one" && value.files.len() != 1 {
                 return invalid(format!(
-                    "sample entity '{}' file attribute '{}' accepts one file",
-                    entity.key, value.attribute
+                    "sample record '{}' file attribute '{}' accepts one file",
+                    record.key, value.attribute
                 ));
             }
-            validate_sample_context_editable(&entity.key, value.context.as_ref(), attribute)?;
+            validate_sample_context_editable(&record.key, value.context.as_ref(), attribute)?;
             for file in &value.files {
                 if !policy.allows(
                     &file.media_type,
@@ -1349,13 +1349,13 @@ fn validate_effective_sample_facts(
 }
 
 fn validate_sample_context_editable(
-    entity: &str,
+    record: &str,
     context: Option<&String>,
     attribute: &catalog_blueprint::EffectiveAttribute,
 ) -> Result<(), SolutionPackError> {
     if context.is_some() && attribute.context_editable == "default" {
         return invalid(format!(
-            "sample entity '{entity}' sets attribute '{}' outside the default context",
+            "sample record '{record}' sets attribute '{}' outside the default context",
             attribute.code
         ));
     }
@@ -1494,9 +1494,9 @@ fn validate_explore_navigation(
                 entry.blueprint
             ));
         };
-        if blueprint.kind() != BlueprintKind::Entity {
+        if blueprint.kind() != BlueprintKind::Record {
             return invalid(format!(
-                "workspace Explore navigation blueprint '{}' must be an entity blueprint",
+                "workspace Explore navigation blueprint '{}' must be a record blueprint",
                 entry.blueprint
             ));
         }

@@ -1,4 +1,4 @@
-//! User-initiated extension operations bound to an explicit entity selection.
+//! User-initiated extension operations bound to an explicit record selection.
 //!
 //! The initiating principal, release, operation, validated input, context and
 //! ordered membership are frozen in one transaction. Membership is not an
@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 
-use catalog_domain::model::{Attribute, Entity};
+use catalog_domain::model::{Attribute, Record};
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -44,7 +44,7 @@ pub struct StartInteractiveOperation {
     pub operation_id: String,
     pub input: Value,
     pub idempotency_key: String,
-    pub entity_ids: Vec<Uuid>,
+    pub record_ids: Vec<Uuid>,
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
     pub context_id: Option<Uuid>,
@@ -55,7 +55,7 @@ pub struct StartInteractiveOperation {
 #[derive(Clone, Debug)]
 pub struct InteractiveRunScope {
     pub actor: AuthorizationActor,
-    pub entity_ids: Vec<Uuid>,
+    pub record_ids: Vec<Uuid>,
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
     pub context_id: Option<Uuid>,
@@ -196,14 +196,14 @@ type RunScopeRow = (
     Option<Uuid>,
 );
 
-const RUN_COLUMNS: &str = "r.id,r.extension_id,r.contribution_id,r.operation_id,r.actor_user_id,r.status,r.cancellation_requested,r.lifecycle_started,r.attempts,r.progress,r.last_error_code,r.outputs_expired,r.selection_blueprint_id,r.selection_blueprint_version,r.selection_context_id,(SELECT COUNT(*) FROM extension_operation_run_entities m WHERE m.operation_run_id=r.id) AS selection_count,r.created_at,r.completed_at,r.cancelled_at";
+const RUN_COLUMNS: &str = "r.id,r.extension_id,r.contribution_id,r.operation_id,r.actor_user_id,r.status,r.cancellation_requested,r.lifecycle_started,r.attempts,r.progress,r.last_error_code,r.outputs_expired,r.selection_blueprint_id,r.selection_blueprint_version,r.selection_context_id,(SELECT COUNT(*) FROM extension_operation_run_records m WHERE m.operation_run_id=r.id) AS selection_count,r.created_at,r.completed_at,r.cancelled_at";
 
 fn request_digest(input: &StartInteractiveOperation) -> String {
     let canonical = json!({
         "contribution_id": input.contribution_id,
         "operation_id": input.operation_id,
         "input": input.input,
-        "entity_ids": input.entity_ids,
+        "record_ids": input.record_ids,
         "blueprint_id": input.blueprint_id,
         "blueprint_version": input.blueprint_version,
         "context_id": input.context_id,
@@ -243,7 +243,7 @@ impl CatalogRepository {
     }
 
     /// Starts, or returns the identical retry of, an interactive run. The whole
-    /// selection is rejected if the actor cannot read any one entity.
+    /// selection is rejected if the actor cannot read any one record.
     pub async fn start_interactive_extension_operation(
         &self,
         input: StartInteractiveOperation,
@@ -322,13 +322,13 @@ impl CatalogRepository {
         let interactive = operation.interactive.as_ref().ok_or_else(|| {
             RepositoryError::InvalidExtension("operation is not exposed for interactive use".into())
         })?;
-        let unique = input.entity_ids.iter().collect::<HashSet<_>>().len();
-        if input.entity_ids.is_empty()
-            || input.entity_ids.len() > interactive.max_selection as usize
-            || unique != input.entity_ids.len()
+        let unique = input.record_ids.iter().collect::<HashSet<_>>().len();
+        if input.record_ids.is_empty()
+            || input.record_ids.len() > interactive.max_selection as usize
+            || unique != input.record_ids.len()
         {
             return Err(RepositoryError::InvalidExtension(format!(
-                "selection must contain 1-{} unique entities",
+                "selection must contain 1-{} unique records",
                 interactive.max_selection
             )));
         }
@@ -355,26 +355,26 @@ impl CatalogRepository {
             }
         }
         let members: Vec<(Uuid, Uuid, i64)> = sqlx::query_as(
-            "SELECT id, blueprint_id, blueprint_version FROM entities WHERE workspace_id=$1 AND id = ANY($2) AND deleted_at IS NULL",
+            "SELECT id, blueprint_id, blueprint_version FROM records WHERE workspace_id=$1 AND id = ANY($2) AND deleted_at IS NULL",
         )
         .bind(self.workspace_id.0)
-        .bind(&input.entity_ids)
+        .bind(&input.record_ids)
         .fetch_all(&mut *transaction)
         .await?;
-        if members.len() != input.entity_ids.len()
+        if members.len() != input.record_ids.len()
             || members.iter().any(|(_, blueprint_id, version)| {
                 *blueprint_id != input.blueprint_id || *version != input.blueprint_version
             })
         {
             return Err(RepositoryError::InvalidExtension(
-                "selection must contain saved entities from one blueprint revision".into(),
+                "selection must contain saved records from one blueprint revision".into(),
             ));
         }
         self.ensure_principal_may(
             &mut transaction,
             input.actor,
-            "entities.read",
-            &input.entity_ids,
+            "records.read",
+            &input.record_ids,
         )
         .await?;
         let id = Uuid::new_v4();
@@ -412,11 +412,11 @@ impl CatalogRepository {
         };
         // Positions are zero-based, in request order.
         sqlx::query(
-            "INSERT INTO extension_operation_run_entities(operation_run_id,workspace_id,position,entity_id) SELECT $1,$2,(selection.ordinality-1)::int,selection.entity_id FROM unnest($3::uuid[]) WITH ORDINALITY AS selection(entity_id,ordinality)",
+            "INSERT INTO extension_operation_run_records(operation_run_id,workspace_id,position,record_id) SELECT $1,$2,(selection.ordinality-1)::int,selection.record_id FROM unnest($3::uuid[]) WITH ORDINALITY AS selection(record_id,ordinality)",
         )
         .bind(run_id)
         .bind(self.workspace_id.0)
-        .bind(&input.entity_ids)
+        .bind(&input.record_ids)
         .execute(&mut *transaction)
         .await?;
         self.enqueue_task(
@@ -463,29 +463,29 @@ impl CatalogRepository {
         let run_ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
         let mut connection = self.pool.acquire().await?;
         let members: Vec<(Uuid, Uuid)> = sqlx::query_as(
-            "SELECT operation_run_id, entity_id FROM extension_operation_run_entities WHERE workspace_id=$1 AND operation_run_id = ANY($2)",
+            "SELECT operation_run_id, record_id FROM extension_operation_run_records WHERE workspace_id=$1 AND operation_run_id = ANY($2)",
         )
         .bind(self.workspace_id.0)
         .bind(&run_ids)
         .fetch_all(&mut *connection)
         .await?;
-        let entity_ids: Vec<Uuid> = members
+        let record_ids: Vec<Uuid> = members
             .iter()
-            .map(|(_, entity_id)| *entity_id)
+            .map(|(_, record_id)| *record_id)
             .collect::<HashSet<_>>()
             .into_iter()
             .collect();
-        let readable = Self::principal_entity_ids_on(
+        let readable = Self::principal_record_ids_on(
             &mut connection,
             actor,
             self.workspace_id.0,
-            "entities.read",
-            &entity_ids,
+            "records.read",
+            &record_ids,
         )
         .await?;
         let hidden: HashSet<Uuid> = members
             .iter()
-            .filter(|(_, entity_id)| !readable.contains(entity_id))
+            .filter(|(_, record_id)| !readable.contains(record_id))
             .map(|(run_id, _)| *run_id)
             .collect();
         Ok(rows
@@ -533,13 +533,13 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         let mut connection = self.pool.acquire().await?;
         let members: Vec<Uuid> = sqlx::query_scalar(
-            "SELECT entity_id FROM extension_operation_run_entities WHERE operation_run_id=$1 AND workspace_id=$2 ORDER BY position",
+            "SELECT record_id FROM extension_operation_run_records WHERE operation_run_id=$1 AND workspace_id=$2 ORDER BY position",
         )
         .bind(run_id)
         .bind(self.workspace_id.0)
         .fetch_all(&mut *connection)
         .await?;
-        self.ensure_principal_may(&mut connection, actor, "entities.read", &members)
+        self.ensure_principal_may(&mut connection, actor, "records.read", &members)
             .await
     }
 
@@ -569,8 +569,8 @@ impl CatalogRepository {
         if invocation != "interactive" {
             return Ok(None);
         }
-        let entity_ids = sqlx::query_scalar(
-            "SELECT entity_id FROM extension_operation_run_entities WHERE operation_run_id=$1 AND workspace_id=$2 ORDER BY position",
+        let record_ids = sqlx::query_scalar(
+            "SELECT record_id FROM extension_operation_run_records WHERE operation_run_id=$1 AND workspace_id=$2 ORDER BY position",
         )
         .bind(run_id)
         .bind(self.workspace_id.0)
@@ -578,7 +578,7 @@ impl CatalogRepository {
         .await?;
         Ok(Some(InteractiveRunScope {
             actor: AuthorizationActor { user_id, token_id },
-            entity_ids,
+            record_ids,
             blueprint_id,
             blueprint_version,
             context_id,
@@ -666,7 +666,7 @@ impl CatalogRepository {
             cursor
                 .parse()
                 .ok()
-                .filter(|start| *start < scope.entity_ids.len())
+                .filter(|start| *start < scope.record_ids.len())
                 .ok_or_else(|| {
                     RepositoryError::InvalidExtension("selection cursor is invalid".into())
                 })?
@@ -685,43 +685,43 @@ impl CatalogRepository {
             .fetch_one(&self.pool)
             .await?;
         // One authorization query for the page; the connection is released
-        // before the entity reads below, which acquire their own, so a run
+        // before the record reads below, which acquire their own, so a run
         // never holds two pool connections.
         let readable = {
             let page: Vec<Uuid> = scope
-                .entity_ids
+                .record_ids
                 .iter()
                 .skip(start)
                 .take(limit as usize)
                 .copied()
                 .collect();
             let mut connection = self.pool.acquire().await?;
-            Self::principal_entity_ids_on(
+            Self::principal_record_ids_on(
                 &mut connection,
                 scope.actor,
                 self.workspace_id.0,
-                "entities.read",
+                "records.read",
                 &page,
             )
             .await?
         };
-        // The page's readable entities, annotation revisions, attributes per
+        // The page's readable records, annotation revisions, attributes per
         // revision and preview scope are loaded once for the page.
         let readable_ids: Vec<Uuid> = scope
-            .entity_ids
+            .record_ids
             .iter()
             .skip(start)
             .take(limit as usize)
-            .filter(|entity_id| readable.contains(entity_id))
+            .filter(|record_id| readable.contains(record_id))
             .copied()
             .collect();
-        let mut loaded: HashMap<Uuid, Entity> = HashMap::new();
+        let mut loaded: HashMap<Uuid, Record> = HashMap::new();
         let mut revisions: HashMap<Uuid, i64> = HashMap::new();
         let mut attributes: HashMap<(Uuid, i64), Vec<Attribute>> = HashMap::new();
         let mut preview_scope = None;
         if !readable_ids.is_empty() {
-            loaded = sqlx::query_as::<_, Db<Entity>>(
-                "SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at FROM entities WHERE id = ANY($1) AND workspace_id = $2 AND deleted_at IS NULL",
+            loaded = sqlx::query_as::<_, Db<Record>>(
+                "SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at FROM records WHERE id = ANY($1) AND workspace_id = $2 AND deleted_at IS NULL",
             )
             .bind(&readable_ids)
             .bind(self.workspace_id.0)
@@ -729,12 +729,12 @@ impl CatalogRepository {
             .await?
             .into_iter()
             .map(|row| {
-                let entity: Entity = row.into_domain();
-                (entity.id, entity)
+                let record: Record = row.into_domain();
+                (record.id, record)
             })
             .collect();
             revisions = sqlx::query_as::<_, (Uuid, i64)>(
-                "SELECT entity_id, revision FROM entity_extension_annotation_revisions WHERE workspace_id=$1 AND entity_id = ANY($2) AND extension_id=$3",
+                "SELECT record_id, revision FROM record_extension_annotation_revisions WHERE workspace_id=$1 AND record_id = ANY($2) AND extension_id=$3",
             )
             .bind(self.workspace_id.0)
             .bind(&readable_ids)
@@ -743,8 +743,8 @@ impl CatalogRepository {
             .await?
             .into_iter()
             .collect();
-            for entity in loaded.values() {
-                let revision = (entity.blueprint_id, entity.blueprint_version);
+            for record in loaded.values() {
+                let revision = (record.blueprint_id, record.blueprint_version);
                 if let Entry::Vacant(entry) = attributes.entry(revision) {
                     entry.insert(self.list_attributes(revision.0, revision.1).await?);
                 }
@@ -753,64 +753,64 @@ impl CatalogRepository {
                 preview_scope = Some(self.preview_scope(context_id).await?);
             }
         }
-        let mut entities = Vec::new();
+        let mut records = Vec::new();
         let mut bytes = 0;
         let mut next = None;
-        for (position, entity_id) in scope
-            .entity_ids
+        for (position, record_id) in scope
+            .record_ids
             .iter()
             .enumerate()
             .skip(start)
             .take(limit as usize)
         {
-            let item = if !readable.contains(entity_id) {
-                json!({"position": position, "entity_id": entity_id, "status": "unavailable"})
+            let item = if !readable.contains(record_id) {
+                json!({"position": position, "record_id": record_id, "status": "unavailable"})
             } else {
-                match (loaded.get(entity_id), preview_scope.as_ref()) {
-                    (Some(entity), Some(preview_scope)) => {
+                match (loaded.get(record_id), preview_scope.as_ref()) {
+                    (Some(record), Some(preview_scope)) => {
                         let resolved = self
                             .resolved_preview_for(
-                                entity,
-                                &attributes[&(entity.blueprint_id, entity.blueprint_version)],
+                                record,
+                                &attributes[&(record.blueprint_id, record.blueprint_version)],
                                 preview_scope,
                                 0,
                             )
                             .await?;
-                        let revision = revisions.get(entity_id).copied().unwrap_or(0);
+                        let revision = revisions.get(record_id).copied().unwrap_or(0);
                         json!({
                             "position": position,
-                            "entity_id": entity_id,
+                            "record_id": record_id,
                             "status": "available",
-                            "blueprint_id": entity.blueprint_id,
-                            "blueprint_version": entity.blueprint_version,
-                            "updated_at": entity.updated_at,
+                            "blueprint_id": record.blueprint_id,
+                            "blueprint_version": record.blueprint_version,
+                            "updated_at": record.updated_at,
                             "values": resolved.values,
-                            "annotations": own_annotations(extension_id, &entity.system_tags, &entity.system_metadata, revision),
+                            "annotations": own_annotations(extension_id, &record.system_tags, &record.system_metadata, revision),
                         })
                     }
-                    _ => json!({"position": position, "entity_id": entity_id, "status": "deleted"}),
+                    _ => json!({"position": position, "record_id": record_id, "status": "deleted"}),
                 }
             };
             let mut size = serde_json::to_vec(&item).map_or(usize::MAX, |value| value.len());
             let item = if size > SELECTION_PAGE_BUDGET_BYTES {
                 let truncated =
-                    json!({"position": position, "entity_id": entity_id, "status": "too_large"});
+                    json!({"position": position, "record_id": record_id, "status": "too_large"});
                 size = serde_json::to_vec(&truncated).map_or(0, |value| value.len());
                 truncated
             } else {
                 item
             };
-            if !entities.is_empty() && bytes + size > SELECTION_PAGE_BUDGET_BYTES {
+            if !records.is_empty() && bytes + size > SELECTION_PAGE_BUDGET_BYTES {
                 next = Some(position);
                 break;
             }
             bytes += size;
-            entities.push(item);
+            records.push(item);
         }
-        let consumed = start + entities.len();
-        let next = next.or((consumed < scope.entity_ids.len()).then_some(consumed));
+        let consumed = start + records.len();
+        let next = next.or((consumed < scope.record_ids.len()).then_some(consumed));
         Ok(json!({
-            "entities": entities,
+            "records": records,
             "context_id": context_id,
             "read_at": read_at,
             "next_cursor": next.map(|position| position.to_string()),

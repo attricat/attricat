@@ -1,17 +1,17 @@
 import { ListItemText, MenuItem, Stack, TextField } from '@mui/material';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
-import { attributeLabel } from '../../entities/entityDisplay';
+import { attributeLabel } from '../../records/recordDisplay';
 import {
   statusCodeLabel,
   statusOptionLabel,
   statusTransitionDenial,
   type StatusConfiguration,
-} from '../../entities/status';
-import { useStatusTransitionDenialText } from '../../entities/useStatusTransitionDenialText';
+} from '../../records/status';
+import { useStatusTransitionDenialText } from '../../records/useStatusTransitionDenialText';
 import { MarkdownEditor } from '../../markdown/MarkdownEditor';
 import type { ValueEditorProps } from '../components/componentTypes';
-import type { StatusTransitionAccess } from '../../entities/api';
+import type { StatusTransitionAccess } from '../../records/api';
 import { COLOR_PICKER_SEED, parseColor, validateColor } from './color';
 import { emailHref, validateEmail } from './email';
 import { phoneHref } from './phone';
@@ -144,7 +144,7 @@ export const MarkdownFieldEditor = ({
  * Single select for a status attribute. Destinations the transition graph
  * forbids from the saved `baseline` are disabled; an empty selection inherits
  * `inheritedValue` (or clears the status when nothing is inherited). For a
- * saved entity, `destinations` from the API also disables destinations whose
+ * saved record, `destinations` from the API also disables destinations whose
  * transition conditions are unmet and explains why.
  */
 export const StatusEditor = ({
@@ -200,12 +200,12 @@ export const StatusEditor = ({
       helperText={
         error ??
         (!known
-          ? t('entities.statusUnknown', { value })
+          ? t('records.statusUnknown', { value })
           : [
               helperText,
               terminal
-                ? t('entities.statusTerminal')
-                : t('entities.statusTransitions'),
+                ? t('records.statusTerminal')
+                : t('records.statusTransitions'),
             ]
               .filter(Boolean)
               .join(' '))
@@ -217,10 +217,10 @@ export const StatusEditor = ({
     >
       <MenuItem value="" disabled={!allowed('')}>
         {inheritedValue
-          ? t('entities.statusInherit', {
+          ? t('records.statusInherit', {
               value: statusCodeLabel(config, inheritedValue) ?? inheritedValue,
             })
-          : t('entities.notSet')}
+          : t('records.notSet')}
       </MenuItem>
       {!known && (
         <MenuItem value={value} disabled>

@@ -11,17 +11,17 @@ import { ChevronDownIcon, XIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
-import type { EntityItem } from '../entities/api';
-import { displayLabel } from '../entities/entityDisplay';
+import type { RecordItem } from '../records/api';
+import { displayLabel } from '../records/recordDisplay';
 import {
-  selectedEntityListMaxHeight,
-  selectedEntityListWidth,
+  selectedRecordListMaxHeight,
+  selectedRecordListWidth,
 } from './constants';
 
 type Props = {
-  selectedItems: EntityItem[];
+  selectedItems: RecordItem[];
   onClear: () => void;
-  onRemove: (entityId: string) => void;
+  onRemove: (recordId: string) => void;
 };
 
 export const ExplorerSelectionSummary = ({
@@ -67,29 +67,29 @@ export const ExplorerSelectionSummary = ({
         open={open}
         slotProps={{
           paper: {
-            'aria-label': t('explorer.selectedEntities'),
+            'aria-label': t('explorer.selectedRecords'),
             role: 'dialog',
             sx: {
-              maxHeight: selectedEntityListMaxHeight,
-              width: selectedEntityListWidth,
+              maxHeight: selectedRecordListMaxHeight,
+              width: selectedRecordListWidth,
             },
           },
         }}
         transformOrigin={{ horizontal: 'left', vertical: 'top' }}
       >
         <List dense>
-          {selectedItems.map((entity) => {
-            const label = displayLabel(entity.display, entity.id);
+          {selectedItems.map((record) => {
+            const label = displayLabel(record.display, record.id);
             return (
               <ListItem
-                key={entity.id}
+                key={record.id}
                 secondaryAction={
                   <IconButton
                     aria-label={t('explorer.removeFromSelection', {
-                      entity: label,
+                      record: label,
                     })}
                     edge="end"
-                    onClick={() => onRemove(entity.id)}
+                    onClick={() => onRemove(record.id)}
                     size="small"
                   >
                     <XIcon size={compactIconSize} />

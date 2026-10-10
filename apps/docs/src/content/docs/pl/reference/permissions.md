@@ -5,7 +5,7 @@ description: Wszystkie uprawnienia obszaru roboczego, na co pozwalają i które 
 
 Uprawnienia przyznaje się przez role. Role i zakresy opisuje [Administracja obszarem roboczym](/pl/operate/workspaces/#role).
 
-Uprawnienia do rekordów mają nazwy `entities.*`, tak jak w API.
+Uprawnienia do rekordów mają nazwy `records.*`, tak jak w API.
 
 Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnienia otrzymuje `403`, a odpowiedź nie ujawnia, czy obiekt docelowy istnieje.
 
@@ -21,10 +21,10 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 | `blueprints.read` | Schematy i atrybuty wielokrotnego użytku. | ✓ | ✓ | ✓ | ✓ |
 | `blueprints.write` | Tworzenie szkiców i wersji schematów; atrybuty wielokrotnego użytku. | ✓ | ✓ | ✓ | |
 | `blueprints.publish` | Publikowanie wersji schematów. | ✓ | ✓ | | |
-| `entities.read` | Rekordy, wyszukiwanie, zapisane wyszukiwania, pliki i historia; katalog użytkowników i zespołów do przypisań (`GET /directory`, `acli directory`), który pokazuje imiona i nazwiska oraz adresy e-mail członków. | ✓ | ✓ | ✓ | ✓ |
-| `entities.write` | Tworzenie i edytowanie rekordów, przesyłanie plików, migrowanie rekordów, dołączanie atrybutów wielokrotnego użytku, uruchamianie poleceń rozszerzeń z interfejsu. | ✓ | ✓ | ✓ | |
-| `entities.delete` | Usuwanie rekordów. | ✓ | ✓ | ✓ | |
-| `entities.publish` | Publikowanie rekordów w kanałach i wycofywanie ich publikacji. | ✓ | ✓ | | |
+| `records.read` | Rekordy, wyszukiwanie, zapisane wyszukiwania, pliki i historia; katalog użytkowników i zespołów do przypisań (`GET /directory`, `acli directory`), który pokazuje imiona i nazwiska oraz adresy e-mail członków. | ✓ | ✓ | ✓ | ✓ |
+| `records.write` | Tworzenie i edytowanie rekordów, przesyłanie plików, migrowanie rekordów, dołączanie atrybutów wielokrotnego użytku, uruchamianie poleceń rozszerzeń z interfejsu. | ✓ | ✓ | ✓ | |
+| `records.delete` | Usuwanie rekordów. | ✓ | ✓ | ✓ | |
+| `records.publish` | Publikowanie rekordów w kanałach i wycofywanie ich publikacji. | ✓ | ✓ | | |
 | `contexts.read` | Konteksty i kanały eksportu. | ✓ | ✓ | ✓ | ✓ |
 | `contexts.write` | Tworzenie, zmienianie i usuwanie kontekstów; włączanie kanałów eksportu. | ✓ | ✓ | ✓ | |
 | `data_health.read` | Stan danych, przetwarzanie w tle, metryki i listy martwych wiadomości zdarzeń. | ✓ | ✓ | ✓ | ✓ |
@@ -40,13 +40,13 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 
 ## Przejścia statusów
 
-Status w schemacie może wymagać do przejścia uprawnienia lub roli albo innej osoby niż ta, która wykonała wcześniejsze przejście, dodatkowo do `entities.write` i dla każdego, kto zapisuje dane; zablokowane rekordy odrzucają zmiany niezależnie od uprawnień zapisującego. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/validation/#kontroluj-cykl-życia-rekordu).
+Status w schemacie może wymagać do przejścia uprawnienia lub roli albo innej osoby niż ta, która wykonała wcześniejsze przejście, dodatkowo do `records.write` i dla każdego, kto zapisuje dane; zablokowane rekordy odrzucają zmiany niezależnie od uprawnień zapisującego. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/validation/#kontroluj-cykl-życia-rekordu).
 
 ## Widoczność atrybutów
 
 Uprawnienia dotyczą całych rekordów. Kto może odczytać rekord, może odczytać każdą wartość jego atrybutów we wszystkich kontekstach, także historię wartości i pokazywane w niej zmiany. Te same wartości widzą wyszukiwanie, filtry, etykiety wyświetlania, narzędzia agenta i rozszerzenia. Nie da się ukryć pojedynczych atrybutów, takich jak wycena czy uwagi o pochodzeniu, przed osobami, które mogą odczytać resztę rekordu.
 
-Aby ukryć poufne dane przed częścią osób, zapisz je w osobnym schemacie powiązanym z rekordem i nadaj `entities.read` dla tego schematu tylko osobom, które ich potrzebują. Pamiętaj, że:
+Aby ukryć poufne dane przed częścią osób, zapisz je w osobnym schemacie powiązanym z rekordem i nadaj `records.read` dla tego schematu tylko osobom, które ich potrzebują. Pamiętaj, że:
 
 - Przydział dla pojedynczego schematu nie obejmuje wyszukiwania, filtrów ani zapisanych wyszukiwań. Wymagają one przydziału na cały obszar roboczy, a taki przydział pozwala czytać wszystkie schematy.
 - Listy i podglądy relacji w dostępnym rekordzie mogą pokazywać etykietę i wartości powiązanego rekordu. Nie umieszczaj pól poufnego schematu w widokach dostępnego schematu ani w jego etykiecie `dropdown_option`.

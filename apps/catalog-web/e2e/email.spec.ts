@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import {
   commitField,
-  createEntity,
-  createEntityBlueprint,
+  createRecord,
+  createRecordBlueprint,
   scalar,
   suffix,
 } from './helpers';
@@ -13,7 +13,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
     const code = `email_${suffix()}`;
     if (colorScheme === 'dark')
       await page.setViewportSize({ width: 390, height: 844 });
-    const blueprint = await createEntityBlueprint(
+    const blueprint = await createRecordBlueprint(
       code,
       'Email contact',
       `
@@ -37,21 +37,21 @@ columns = [{ field = "title" }, { field = "contact", renderer = { id = "catalog.
       },
     );
     await expect(
-      createEntity(blueprint, [
+      createRecord(blueprint, [
         scalar('title', 'Invalid contact'),
         scalar('contact', 'not an email'),
       ]),
     ).rejects.toThrow(/422/);
-    const entity = await createEntity(blueprint, [
+    const record = await createRecord(blueprint, [
       scalar('title', 'Contact'),
       scalar('contact', 'Name+tag@Example.com'),
     ]);
-    // The entity page edits the value in place; the table displays it.
+    // The record page edits the value in place; the table displays it.
     await page.goto(`/?blueprint=${code}`);
     await expect(
       page.getByRole('link', { name: 'Name+tag@Example.com' }),
     ).toHaveAttribute('href', 'mailto:Name%2Btag@Example.com');
-    await page.goto(`/entities/${entity.id}`);
+    await page.goto(`/records/${record.id}`);
     const input = page.getByRole('textbox', { name: 'contact' });
     await expect(input).toHaveAttribute('type', 'email');
     await expect(input).toHaveValue('Name+tag@Example.com');
@@ -67,7 +67,7 @@ columns = [{ field = "title" }, { field = "contact", renderer = { id = "catalog.
     expect(saves).toEqual([]);
     await input.fill('Other+tag@Example.com');
     // Tab would move to the field's mail button; Enter commits in place.
-    await commitField(page, entity.id, input, 'Enter');
+    await commitField(page, record.id, input, 'Enter');
     await expect(input).not.toHaveAttribute('aria-invalid', 'true');
     await page.reload();
     await expect(input).toHaveValue('Other+tag@Example.com');
@@ -75,9 +75,9 @@ columns = [{ field = "title" }, { field = "contact", renderer = { id = "catalog.
     await expect(
       page.getByRole('link', { name: 'Other+tag@Example.com' }),
     ).toBeVisible();
-    await page.goto(`/entities/${entity.id}`);
+    await page.goto(`/records/${record.id}`);
     await input.clear();
-    await commitField(page, entity.id, input, 'Enter');
+    await commitField(page, record.id, input, 'Enter');
     await page.reload();
     await expect(input).toHaveValue('');
     await page.goto(`/?blueprint=${code}`);

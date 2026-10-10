@@ -44,7 +44,7 @@ Design with that in mind: your extension asks for capabilities; an administrator
       "version": 1,
       "kind": "embedded",
       "artifact": "panel",
-      "outlet": "entity_preview_panel"
+      "outlet": "record_preview_panel"
     }
   ]
 }
@@ -53,13 +53,11 @@ Design with that in mind: your extension asks for capabilities; an administrator
 ```js
 // dist/panel.js
 export const mount = async (root, catalog) => {
-  const form = await catalog.request(`/api/v1/entities/${catalog.context.entity_id}`);
-  root.textContent = `${form.blueprint.blueprint.name} v${form.entity.blueprint_version}`;
+  const form = await catalog.request(`/api/v1/records/${catalog.context.record_id}`);
+  root.textContent = `${form.blueprint.blueprint.name} v${form.record.blueprint_version}`;
   return () => root.replaceChildren();
 };
 ```
-
-In API paths, outlet names, and context fields, records are called entities.
 
 The full manifest format is in the [manifest reference](/extensions/manifest/).
 

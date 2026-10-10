@@ -3,7 +3,7 @@ title: Praca z rekordami
 description: Twórz, edytuj i usuwaj rekordy, pracuj z wartościami kontekstowymi, plikami i relacjami oraz korzystaj z historii zmian.
 ---
 
-Rekord to jeden element katalogu, na przykład produkt lub kategoria. Jego schemat określa, jakie ma atrybuty, jak są one walidowane i jak wygląda układ jego strony. W API, CLI i nazwach uprawnień rekordy występują pod nazwą `entity`.
+Rekord to jeden element katalogu, na przykład produkt lub kategoria. Jego schemat określa, jakie ma atrybuty, jak są one walidowane i jak wygląda układ jego strony.
 
 ## Tworzenie rekordu
 
@@ -121,16 +121,16 @@ Jeśli obszar roboczy korzysta z kanałów publikacji, strona rekordu pokazuje j
 
 ## Usuwanie rekordu
 
-**Usuń rekord** jest dostępne z uprawnieniem `entities.delete` w menu **Akcje** rekordu lub w menu wiersza w Przeglądarce i wymaga potwierdzenia. Usunięty rekord znika z wyszukiwania, podglądów i okien wyboru relacji. Jego historia zostaje zachowana. Rekordu w zablokowanym statusie nie można usunąć.
+**Usuń rekord** jest dostępne z uprawnieniem `records.delete` w menu **Akcje** rekordu lub w menu wiersza w Przeglądarce i wymaga potwierdzenia. Usunięty rekord znika z wyszukiwania, podglądów i okien wyboru relacji. Jego historia zostaje zachowana. Rekordu w zablokowanym statusie nie można usunąć.
 
 ## Z wiersza poleceń
 
 Wszystko, co opisuje ta strona, jest też dostępne przez [CLI](/pl/reference/cli/) i [API](/pl/reference/api/). Na przykład:
 
 ```sh
-acli entity create --blueprint product --values product.toml
-acli entity update <entity-id> --values changes.toml --context-id <context-id>
-acli entity value-history <entity-id>
-acli entity restore-value <entity-id> <history-id>
-acli file upload <entity-id> main_photo --file photo.jpg
+acli record create --blueprint product --values product.toml
+acli record update <record-id> --values changes.toml --context-id <context-id>
+acli record value-history <record-id>
+acli record restore-value <record-id> <history-id>
+acli file upload <record-id> main_photo --file photo.jpg
 ```

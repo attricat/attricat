@@ -17,7 +17,7 @@ export const explorerTableCellContextSchema = z
       })
       .strict(),
     primary_value: z.unknown(),
-    related_entity: z
+    related_record: z
       .object({
         id: z.uuid(),
         blueprint_id: z.uuid(),
@@ -30,7 +30,7 @@ export const explorerTableCellContextSchema = z
     related_preview: z.record(z.string(), z.unknown()).nullable(),
     source_row: z
       .object({
-        entity_id: z.uuid(),
+        record_id: z.uuid(),
         blueprint_version: z.number().int().positive(),
         preview: z.record(z.string(), z.unknown()),
       })

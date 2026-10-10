@@ -13,12 +13,12 @@ const blueprintRevisionContextSchema = z
   })
   .strict();
 
-const entityRevisionContextSchema = z
+const recordRevisionContextSchema = z
   .object({
     blueprint_id: z.uuid(),
     blueprint_version: blueprintVersion,
     context_version: contextVersion,
-    entity_id: z.uuid(),
+    record_id: z.uuid(),
   })
   .strict();
 
@@ -29,16 +29,16 @@ export const outletContextSchemas = {
     .object({
       context_version: contextVersion,
       file_id: z.uuid(),
-      entity_id: z.uuid(),
+      record_id: z.uuid(),
       attribute_id: z.uuid(),
       blueprint_id: z.uuid(),
       blueprint_version: blueprintVersion,
     })
     .strict(),
-  entity_attribute_panel: z
+  record_attribute_panel: z
     .object({
       context_version: contextVersion,
-      entity_id: z.uuid(),
+      record_id: z.uuid(),
       attribute_id: z.uuid(),
       blueprint_id: z.uuid(),
       blueprint_version: blueprintVersion,
@@ -52,7 +52,7 @@ export const outletContextSchemas = {
       context_version: contextVersion,
       blueprint_id: z.uuid(),
       blueprint_version: blueprintVersion,
-      entity_ids: z
+      record_ids: z
         .array(z.uuid())
         .min(1)
         .max(maximumAgentSelection)
@@ -66,8 +66,8 @@ export const outletContextSchemas = {
       event_id: z.uuid(),
     })
     .strict(),
-  entity_header_action: entityRevisionContextSchema,
-  explorer_row_action: entityRevisionContextSchema,
+  record_header_action: recordRevisionContextSchema,
+  explorer_row_action: recordRevisionContextSchema,
   blueprint_panel: blueprintRevisionContextSchema,
   blueprint_detail_panel: blueprintRevisionContextSchema,
 };

@@ -20,9 +20,9 @@ For local setup, migrations, and E2E testing, see [Getting Started](index.md#get
 | `WorkspaceMembership` | `workspace_memberships` | A user's single membership in a workspace.              |
 | `RoleGrant`        | `role_grants`        | Additive role assignment at one authorization scope.        |
 | `AuditEvent`       | `audit_events`       | Redacted, immutable security and catalog write evidence.    |
-| `Blueprint`        | `blueprints`         | A versioned entity-type definition.                         |
+| `Blueprint`        | `blueprints`         | A versioned record-type definition.                         |
 | `Attribute`        | `attributes`         | An attribute definition belonging to one blueprint version. |
-| `Entity`           | `entities`           | A catalog item bound to a blueprint version.                |
+| `Record`           | `records`           | A catalog item bound to a blueprint version.                |
 | `AttributeContext` | `attribute_contexts` | A named catalog scope in a rooted fallback tree.            |
 | `AttributeValue`   | `attribute_values`   | The current canonical EAV fact.                             |
 | `SolutionPackPlan` | `solution_pack_plans` | Immutable, expiring workspace dry-run metadata.             |
@@ -52,7 +52,7 @@ so a request never uses cached state older than what it read:
 | `contexts_generation` | creating, updating, and deleting an attribute context |
 | `extensions_generation` | extension installation, upgrade, lifecycle, grant, configuration, and layout changes, and the workspace extensions mode |
 
-Catalog tables carry a required `workspace_id`. Composite foreign keys keep blueprint revisions, attributes, entities, contexts, values, history, relationships, and migration records in the same workspace. Every repository query and mutation binds the server-derived workspace ID explicitly; the application never accepts a tenant ID from a client body or header as authorization input.
+Catalog tables carry a required `workspace_id`. Composite foreign keys keep blueprint revisions, attributes, records, contexts, values, history, relationships, and migration records in the same workspace. Every repository query and mutation binds the server-derived workspace ID explicitly; the application never accepts a tenant ID from a client body or header as authorization input.
 
 ### Identity and seeded RBAC
 
@@ -60,7 +60,7 @@ Catalog tables carry a required `workspace_id`. Composite foreign keys keep blue
 
 `local_password_credentials` has one optional row per user. It stores an Argon2id PHC hash, timestamps, and a monotonically increasing credential version; plaintext passwords are never persisted. `external_identities` maps an explicitly chosen user to a unique provider `issuer` and `subject` pair; it deliberately contains no provider email or other mutable claims. `user_lifecycle_action_tokens` stores only a SHA-256 digest of an opaque, delivered secret. Tokens are purpose-bound (`email_verification`, `password_setup`, or `password_reset`), expire, are consumed once, and are invalidated by relevant security or credential changes. See [Local Account Lifecycle](authentication.md) for the security contract and deferred transport boundaries.
 
-A user can have one `workspace_memberships` row per workspace and may belong to many workspaces. The central `permissions` catalog is mapped to immutable system roles: `owner`, `admin`, `editor`, and `viewer`. `role_grants` attach a role to a membership; their permissions are additive and each grant has exactly one scope: the workspace itself, a blueprint family, an entity, or an attribute-context subtree. Repository transactions reject malformed scopes and targets from another workspace.
+A user can have one `workspace_memberships` row per workspace and may belong to many workspaces. The central `permissions` catalog is mapped to immutable system roles: `owner`, `admin`, `editor`, and `viewer`. `role_grants` attach a role to a membership; their permissions are additive and each grant has exactly one scope: the workspace itself, a blueprint family, a record, or an attribute-context subtree. Repository transactions reject malformed scopes and targets from another workspace.
 
 An owner grant must be workspace-scoped, and repository transactions preserve at least one active owner per workspace with explicit row locking. Startup consumes the configured bootstrap-owner email after migrations to create that initial user, membership, and owner grant idempotently.
 
@@ -147,19 +147,19 @@ file processing, which continues to use `file_processing_jobs`.
 
 ### `blueprints`
 
-Blueprints define entity types and reusable mixins. A blueprint family is
+Blueprints define record types and reusable mixins. A blueprint family is
 identified by `id`; every revision has a positive `version`, and `(id, version)`
 is the primary key.
 
 - `definition` stores the authored TOML definition and is the source of truth.
-- `code`, `name`, `kind`, `includes`, `views`, `entity_schema`, `definition_hash`, and generated attributes
+- `code`, `name`, `kind`, `includes`, `views`, `record_schema`, `definition_hash`, and generated attributes
   are compiler output derived from TOML.
 - `code` is repository-enforced as stable across revisions in one blueprint family.
-- `kind` is either `entity` or `mixin`; only entity blueprints can be instantiated.
+- `kind` is either `record` or `mixin`; only record blueprints can be instantiated.
 - `includes` is a generated direct-dependency JSONB cache, in TOML order.
 - `views` is generated JSONB view metadata keyed by view name.
-- `entity_schema` is an optional JSON Schema Draft 2020-12 contract for the
-  fully resolved entity document. It is versioned with the blueprint.
+- `record_schema` is an optional JSON Schema Draft 2020-12 contract for the
+  fully resolved record document. It is versioned with the blueprint.
 - `definition_hash` is the SHA-256 hash of the exact raw TOML source.
 - `deleted_at` implements soft deletion.
 - `unique_keys` is the compiled JSONB array of `[[unique_keys]]`. The latest
@@ -205,7 +205,7 @@ they are never independently authored or edited.
 - `name` is the optional human-readable label from the attribute TOML, or from
   the mixin attribute for `from` selections. It is presentation-only: a blank
   value is rejected, `NULL` means clients humanize `code`, and changing it does
-  not affect entity migration compatibility.
+  not affect record migration compatibility.
 - `value_type` is one of `string`, `number`, `integer`, `boolean`, `date`,
   `datetime`, `time`, `relationship`, or `file`. Scalar types map to native
   PostgreSQL columns; `relationship` and `file` have dedicated reference
@@ -213,7 +213,7 @@ they are never independently authored or edited.
 - `value_schema` is an optional JSON Schema Draft 2020-12 contract for one
   normalized scalar value. It is versioned with the attribute definition.
 - Relationship attributes may declare `target_blueprint` in TOML. Its compiled
-  `target_blueprint_code` restricts targets to that entity blueprint family.
+  `target_blueprint_code` restricts targets to that record blueprint family.
   `target_blueprints` with more than one entry is stored in
   `target_blueprint_codes` (`'{}'` otherwise) and `target_blueprint_code` stays
   null; repository writes accept any listed family.
@@ -227,41 +227,41 @@ they are never independently authored or edited.
   non-empty metadata; `hidden` and `hidden:<surface>` are native UI omission
   hints, not access controls (see [attribute tags](blueprints.md#attribute-tags)).
 
-### `entities`
+### `records`
 
-Entities are catalog items.
+Records are catalog items.
 
-- Each entity references the exact blueprint version under which it was created.
+- Each record references the exact blueprint version under which it was created.
 - Every value mutation validates the target attribute schema and the resolved
-  entity schema before it commits. This includes values written by server-side
+  record schema before it commits. This includes values written by server-side
   computation.
 - `projections` holds the derived `preview` cache; EAV values remain the source
   of truth. Other named projections may be added separately.
 - `system_tags` and `system_metadata` are operator/automation-owned annotations,
   rather than blueprint attributes. They are not versioned, schema-validated as
-  entity data, or included in projections. Tags use a GIN index so a workflow
-  can find entities marked with all requested tags.
+  record data, or included in projections. Tags use a GIN index so a workflow
+  can find records marked with all requested tags.
 
-### Entity publication
+### Record publication
 
-Publication is per channel/context approval metadata separate from mutable entity
+Publication is per channel/context approval metadata separate from mutable record
 values. A `publication_channels` row explicitly designates a context as exportable;
-not every context is a channel. `entity_channel_publications` holds one row for an
-entity/context pair with nullable `published_at` and `published_by_user_id` fields.
+not every context is a channel. `record_channel_publications` holds one row for a
+record/context pair with nullable `published_at` and `published_by_user_id` fields.
 A populated pair is published; a null pair is not published.
 
-Publishing records the current actor and timestamp. Entity-content changes withdraw
-approval in every channel by clearing those fields, unless the entity's pinned
+Publishing records the current actor and timestamp. Record-content changes withdraw
+approval in every channel by clearing those fields, unless the record's pinned
 blueprint revision names one of the actor's workspace role codes in
 `[publication].retain_on_edit_roles`. The exemption retains approval only; it does
 not grant mutation or publication authority, and it never bypasses a channel's
 checks: after a retained edit the repository re-evaluates the gate of every
-channel the entity is published to and withdraws the publications that now fail
+channel the record is published to and withdraws the publications that now fail
 (`reason = "checks_failed"`). Context changes and deletion always withdraw
-approval for their channel, and entity deletion withdraws every channel's
+approval for their channel, and record deletion withdraws every channel's
 approval before the rows are removed. Publication has no effect on internal catalog reads or
 relationships. A channel exporter can select only rows with a populated
-`published_at` and resolve the entity's current values at export time; the database
+`published_at` and resolve the record's current values at export time; the database
 does not retain publication snapshots or relationship dependencies.
 
 ### `attribute_contexts`
@@ -290,7 +290,7 @@ removed rows are synchronously copied to `attribute_value_history` in the same
 transaction, so a successful current-state mutation always has a restorable
 prior state.
 
-- Each row references one entity and one attribute.
+- Each row references one record and one attribute.
 - `context_id` is required and applies to scalar values and relationships alike.
   Default-scope facts reference the persisted `default` context ID.
 - Scalar values are stored in their matching native typed column. The API
@@ -298,7 +298,7 @@ prior state.
 - `value_json` is reserved for future structured attribute types. It is nullable
   but currently must remain null; no application path reads or writes it.
   Native scalar columns remain the only supported scalar storage.
-- `relationship_target_entity_id` is nullable and references another entity when
+- `relationship_target_record_id` is nullable and references another record when
   the attribute is a relationship type.
 - All current rows are active. Removing a scalar override or relationship edge
   deletes its current row after archiving it.
@@ -309,20 +309,20 @@ monthly `attribute_value_history` range partitions keyed by `archived_at`.
 The API drops whole expired monthly partitions on startup; set
 `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` (default `90`) to configure the
 retention window.
-`GET /entities/{entity_id}/values/history` lists restorable states, and
-`POST /entities/{entity_id}/values/history/{history_id}/restore` applies one as
+`GET /records/{record_id}/values/history` lists restorable states, and
+`POST /records/{record_id}/values/history/{history_id}/restore` applies one as
 a new mutation, which archives the value it replaces.
 
 For scalar values, the logical history key is:
 
 ```text
-entity_id, attribute_id, context_id
+record_id, attribute_id, context_id
 ```
 
 For relationship edges, the logical history key is:
 
 ```text
-entity_id, attribute_id, context_id, relationship_target_entity_id
+record_id, attribute_id, context_id, relationship_target_record_id
 ```
 
 The latter supports one-to-one, one-to-many, many-to-one, and many-to-many
@@ -337,7 +337,7 @@ object key, status, and optional image dimensions. `file_variants` stores
 worker-produced variant metadata and object keys. File bytes are not stored in
 PostgreSQL, and original object keys are not returned by the API.
 
-`attribute_file_references` binds a file to its file attribute, entity, and
+`attribute_file_references` binds a file to its file attribute, record, and
 context in display order. A live file stays alive while any of these still
 references it (the `FILE_UNREFERENCED` predicate in
 `crates/repository/src/repository/files.rs` is the single definition, and a new
@@ -361,9 +361,9 @@ must therefore first lock the live file row with `SELECT … FOR UPDATE` (checki
 `deleted_at IS NULL`) in the same transaction: reconciliation then skips the
 file until the reference commits, and a reference attempted after the file was
 marked deleted fails its own live-file check. `files.purpose` is
-`attachment` for uploads that can be linked to entities or conversations and
+`attachment` for uploads that can be linked to records or conversations and
 `avatar` for member avatars, which the worker turns into one square `avatar`
-variant and which cannot be linked to entity attributes. `file_processing_jobs` is a durable work queue owned by the file
+variant and which cannot be linked to record attributes. `file_processing_jobs` is a durable work queue owned by the file
 worker: it records attempts, availability, locks, worker identity, and a safe
 last error. Jobs are claimed with `SKIP LOCKED`; processing writes stable
 variant keys and is idempotent across retries.
@@ -379,20 +379,20 @@ purging are safe to run repeatedly.
 ## Integrity and Indexes
 
 - Primary keys use UUIDs, except the versioned blueprint composite key.
-- Foreign keys protect blueprint, entity, attribute, context, and relationship
+- Foreign keys protect blueprint, record, attribute, context, and relationship
   target references.
 - Soft-deleted rows remain referentially valid for historical data.
 - Partial unique indexes enforce one current scalar value and one current
   relationship edge per logical key.
 - Typed current-value indexes support scalar filtering without scanning
   retained history.
-- JSONB GIN indexes exist for entity projections and context data.
+- JSONB GIN indexes exist for record projections and context data.
 
 `updated_at` is application-managed. No trigger updates timestamps.
 
 ### Structural constraints
 
-`entity_unique_key_values` is the unique-key index. Each row holds one entity's
+`record_unique_key_values` is the unique-key index. Each row holds one record's
 normalized value for one enforced key in one context (`key_values` plus its
 SHA-256 `key_hash`; workspace-scoped keys use the default context). The
 constraint `UNIQUE (workspace_id, blueprint_id, key_code, context_id,
@@ -402,17 +402,17 @@ repository reports as `409 unique_key_conflict` naming the committed holder.
 
 Repository code owns everything else, inside the write transaction:
 
-- Every value write rebuilds the written entity's rows from the entity
-  validation step every write path runs (`validate_entity_schema_in`), after
-  taking a shared per-family advisory lock. Entity deletion removes its rows.
+- Every value write rebuilds the written record's rows from the record
+  validation step every write path runs (`validate_record_schema_in`), after
+  taking a shared per-family advisory lock. Record deletion removes its rows.
 - Publication takes the same lock exclusively, then re-indexes the family when
   the latest published revision's keys changed, reporting existing duplicates
   instead of failing on the constraint.
 - Context creation and reparenting first lock the workspace row (by
   advancing the contexts generation), the same row publication locks first,
   so they serialize with publication. They then take the workspace's
-  entity-writer advisory lock exclusively. Every entity writer holds it
-  shared from before its first entity row lock, so this waits for the
+  record-writer advisory lock exclusively. Every record writer holds it
+  shared from before its first record row lock, so this waits for the
   workspace's in-flight writers only; other workspaces are unaffected. Only
   then do they take the family lock exclusively for every family with
   context-scoped keys, in ID order. They see every committed row, no writer
@@ -421,10 +421,10 @@ Repository code owns everything else, inside the write transaction:
   indexes the new context from the family's values (as in the parent, except
   that `context_fallback = "none"` attributes are missing there). Reparenting
   re-indexes those families as a whole, reporting real duplicates as
-  `409 unique_key_duplicates`, then revalidates every entity structurally
+  `409 unique_key_duplicates`, then revalidates every record structurally
   (see [Status control](status-control.md)) and rechecks every hierarchy.
   Context deletion cascades.
-- Key values are the entity's values resolved per context like every other
+- Key values are the record's values resolved per context like every other
   read (nearest context with a value; `context_fallback = "none"` stops
   inheritance) and normalized: strings trimmed, whitespace collapsed and
   lowercased unless `case_sensitive`, blank strings missing, numbers by value,
@@ -438,10 +438,10 @@ Repository code owns everything else, inside the write transaction:
   Publication checks existing edges, resolved in every context, with the same
   lock.
 - Revision policy: keys and hierarchies follow the family's latest published
-  revision, whichever revision an entity is pinned to, because they constrain
-  the family as a whole (two entities on different revisions must not share a
-  key or form a cycle). Entity checks, transition conditions and rules use the
-  entity's pinned revision, because they validate that revision's own
+  revision, whichever revision a record is pinned to, because they constrain
+  the family as a whole (two records on different revisions must not share a
+  key or form a cycle). Record checks, transition conditions and rules use the
+  record's pinned revision, because they validate that revision's own
   definition of the record.
 
 Declare new structural constraints as data (blueprint columns and index
@@ -450,15 +450,15 @@ tables with `UNIQUE`/`CHECK`), never as triggers or functions.
 ## Projections
 
 `CatalogRepository` is the sole application boundary for catalog persistence.
-Only repository code reads or writes EAV facts, blueprint metadata, and entity
+Only repository code reads or writes EAV facts, blueprint metadata, and record
 projections. Projection rebuilds run in the same repository transaction as the
 EAV mutation. Direct catalog-table SQL is limited to migrations and storage
 assertions in tests.
 
 The web client accesses catalog data only through feature API modules. Within
-the entity feature, `api.ts` owns HTTP request and response contracts,
+the record feature, `api.ts` owns HTTP request and response contracts,
 `attributeValues.ts` owns typed scalar field formatting and parsing, and
-`entityForm.ts` coordinates scalar values with relationship target sets.
+`recordForm.ts` coordinates scalar values with relationship target sets.
 Components render those feature helpers rather than constructing catalog
 payloads or interpreting EAV values directly.
 
@@ -470,14 +470,14 @@ and [Configuration Reference](configuration.md).
 
 Every blueprint revision begins as a draft, including version 1. A draft is
 available for exact-revision inspection and may include pinned draft mixins, but
-it cannot create entities or become an entity migration target. Publish it with
+it cannot create records or become a record migration target. Publish it with
 `POST /blueprints/{blueprint_id}/versions/{version}/publish` once every pinned
 include is already published.
 
 The current revision is the highest published version. Publishing a new revision
-does not change existing entities: they remain pinned to their prior published
+does not change existing records: they remain pinned to their prior published
 revision until migrated explicitly. Data-health current-version calculations,
-entity creation, search resolution, and migration previews all use the highest
+record creation, search resolution, and migration previews all use the highest
 published revision.
 
 Errors use this JSON shape:
@@ -486,13 +486,13 @@ Errors use this JSON shape:
 {
   "error": {
     "code": "attribute_not_applicable",
-    "message": "The attribute does not belong to this entity's blueprint version."
+    "message": "The attribute does not belong to this record's blueprint version."
   }
 }
 ```
 
-`entities.projections` is a JSONB map of named projections. `preview` is reserved
-for the automatic builder and is initialized for every entity. API responses
+`records.projections` is a JSONB map of named projections. `preview` is reserved
+for the automatic builder and is initialized for every record. API responses
 expose this projection as `context`:
 
 ```json
@@ -518,7 +518,7 @@ the scalar `preview` cache. Every direct key under `preview` is a context code:
 `default` represents direct values in the persisted root context. Other keys are
 `attribute_contexts.code` values. The builder includes each current scalar value
 under its direct attribute context and excludes relationship values. It preserves
-other named projections. Attribute-value writes lock the entity row, append
+other named projections. Attribute-value writes lock the record row, append
 history, rebuild `preview`, and commit atomically.
 
 `preview` retains direct facts so it can be rebuilt from EAV history. Use the
@@ -573,12 +573,12 @@ use an envelope rather than a count:
 At depth `0`, relationship envelopes contain no items but remain truncated when
 an active edge exists, so clients know more data is available.
 
-`GET /entities/{entity_id}/preview` returns the entity's pinned blueprint
+`GET /records/{record_id}/preview` returns the record's pinned blueprint
 identity alongside the contextual preview:
 
 ```json
 {
-  "entity": {
+  "record": {
     "id": "...",
     "blueprint_id": "...",
     "blueprint_version": 3
@@ -590,21 +590,21 @@ identity alongside the contextual preview:
 }
 ```
 
-`GET /v1/entities/{entity_id}` returns the pinned blueprint revision, editable
+`GET /v1/records/{record_id}` returns the pinned blueprint revision, editable
 values (including `context_id`), and the same scalar-only `context` shape.
 
 See [Blueprint Authoring](blueprints.md) for attribute context fallback and edit
-policies. `PUT /v1/entities/{entity_id}` accepts `remove_values` selectors to
+policies. `PUT /v1/records/{record_id}` accepts `remove_values` selectors to
 atomically remove scalar overrides; relationship sets are removed by submitting
 an empty context-scoped target list.
 
-## Paginated Entity Previews
+## Paginated Record Previews
 
-Use `GET /entities` to browse a high-cardinality relationship rather than
+Use `GET /records` to browse a high-cardinality relationship rather than
 increasing the inline preview limit. `blueprint`, `related_from`, and
 `relationship` are required. `limit` defaults to `20` and is capped by
-`ENTITY_MAX_PAGE_SIZE`, which defaults to `100`. The cursor is the final target
-entity ID from the preceding page.
+`RECORD_MAX_PAGE_SIZE`, which defaults to `100`. The cursor is the final target
+record ID from the preceding page.
 
 ```json
 {
@@ -621,15 +621,15 @@ entity ID from the preceding page.
 
 No count is returned. A null `next_cursor` means the final page was reached.
 
-## V1 Entity Search
+## V1 Record Search
 
-`POST /v1/entities/search` resolves the supplied blueprint code to its current
+`POST /v1/records/search` resolves the supplied blueprint code to its current
 revision for response metadata. When `blueprint.version` is provided, results
-include only entities pinned to that revision; otherwise, results span all
-published revisions. Set `outdated` to `true` to include only entities not
+include only records pinned to that revision; otherwise, results span all
+published revisions. Set `outdated` to `true` to include only records not
 pinned to the latest published revision. Bare text search is case-insensitive across current scalar values on the
 selected blueprint. Explicit relationship selectors and `*:` can search
-connected entities; see [Relationship-aware search](relationship-aware-search.md).
+connected records; see [Relationship-aware search](relationship-aware-search.md).
 
 ```json
 {

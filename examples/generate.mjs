@@ -21,7 +21,7 @@ Options:
   --status                Print matching checkpoint status without writing
   --dry-run               Print the work plan without contacting the API
   --no-files              Skip the fixed demo asset bundle
-  --no-publish            Leave generated entities unpublished
+  --no-publish            Leave generated records unpublished
   --progress <tty|json>   Progress format (default: tty when interactive)
   --checkpoint <path>     Override checkpoint location
   --help                  Show this help
@@ -110,26 +110,26 @@ class Progress {
   constructor(options, plan) {
     this.options = options;
     this.plan = plan;
-    this.completedEntities = 0;
+    this.completedRecords = 0;
     this.completedRequests = 0;
     this.failedRequests = 0;
     this.retriedRequests = 0;
     this.phase = "preflight";
     this.lastRender = 0;
-    this.lastSample = { at: Date.now(), entities: 0 };
+    this.lastSample = { at: Date.now(), records: 0 };
     this.rate = 0;
   }
 
   event(event, extra = {}) {
     const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.001);
-    const remaining = Math.max(this.plan.entities - this.completedEntities, 0);
+    const remaining = Math.max(this.plan.records - this.completedRecords, 0);
     const etaSeconds = this.rate > 0 ? Math.ceil(remaining / this.rate) : null;
     const payload = {
       event,
       phase: this.phase,
-      entities: {
-        completed: this.completedEntities,
-        total: this.plan.entities,
+      records: {
+        completed: this.completedRecords,
+        total: this.plan.records,
       },
       requests: {
         completed: this.completedRequests,
@@ -137,7 +137,7 @@ class Progress {
         retried: this.retriedRequests,
       },
       elapsed_seconds: Number(elapsedSeconds.toFixed(1)),
-      entities_per_second: Number(this.rate.toFixed(2)),
+      records_per_second: Number(this.rate.toFixed(2)),
       eta_seconds: etaSeconds,
       ...extra,
     };
@@ -145,30 +145,30 @@ class Progress {
       process.stdout.write(`${JSON.stringify(payload)}\n`);
     else if (event === "progress" || event === "complete") {
       const percent = (
-        (this.completedEntities / this.plan.entities) *
+        (this.completedRecords / this.plan.records) *
         100
       ).toFixed(1);
       const eta =
         etaSeconds === null ? "calculating" : `${Math.ceil(etaSeconds / 60)}m`;
       process.stdout.write(
-        `\r[${this.phase}] ${pad(this.completedEntities, 7)}/${this.plan.entities} entities (${percent}%) · ${this.rate.toFixed(1)}/s · ETA ${eta} · retries ${this.retriedRequests}`,
+        `\r[${this.phase}] ${pad(this.completedRecords, 7)}/${this.plan.records} records (${percent}%) · ${this.rate.toFixed(1)}/s · ETA ${eta} · retries ${this.retriedRequests}`,
       );
       if (event === "complete") process.stdout.write("\n");
     } else process.stdout.write(`[${this.phase}] ${event}\n`);
   }
 
-  tick({ entities = 0, requests = 0, retries = 0 } = {}) {
-    this.completedEntities += entities;
+  tick({ records = 0, requests = 0, retries = 0 } = {}) {
+    this.completedRecords += records;
     this.completedRequests += requests;
     this.retriedRequests += retries;
     const sampleNow = Date.now();
     const deltaSeconds = (sampleNow - this.lastSample.at) / 1000;
     if (deltaSeconds >= 2) {
       const sampleRate =
-        (this.completedEntities - this.lastSample.entities) / deltaSeconds;
+        (this.completedRecords - this.lastSample.records) / deltaSeconds;
       this.rate =
         this.rate === 0 ? sampleRate : this.rate * 0.7 + sampleRate * 0.3;
-      this.lastSample = { at: sampleNow, entities: this.completedEntities };
+      this.lastSample = { at: sampleNow, records: this.completedRecords };
     }
     if (sampleNow - this.lastRender >= 1000) {
       this.lastRender = sampleNow;
@@ -235,8 +235,8 @@ const createClient = (server, token, progress) => {
   };
   return {
     request,
-    createEntity: (blueprint, values, metadata, tag) =>
-      request("/v1/entities", {
+    createRecord: (blueprint, values, metadata, tag) =>
+      request("/v1/records", {
         method: "POST",
         body: JSON.stringify({
           blueprint: { code: blueprint },
@@ -246,12 +246,12 @@ const createClient = (server, token, progress) => {
         }),
       }),
     replaceRelationships: (id, relationships) =>
-      request(`/entities/${id}/relationships/replace`, {
+      request(`/records/${id}/relationships/replace`, {
         method: "POST",
         body: JSON.stringify({ relationships }),
       }),
     publishAll: (id) =>
-      request(`/v1/entities/${id}/publications/publish-all`, {
+      request(`/v1/records/${id}/publications/publish-all`, {
         method: "POST",
       }),
     enablePublicationChannel: (contextId) =>
@@ -311,7 +311,7 @@ const countPlan = (profile, includeFiles, pack) => {
     0,
   );
   return {
-    entities:
+    records:
       Object.values(profile).reduce((total, value) => total + value, 0) +
       classifications,
     requests:
@@ -394,8 +394,8 @@ const run = async () => {
     );
   const progress = new Progress(options, plan);
   const client = createClient(server, token, progress);
-  const publish = async (entityId) => {
-    if (options.publish) await client.publishAll(entityId);
+  const publish = async (recordId) => {
+    if (options.publish) await client.publishAll(recordId);
   };
   let checkpoint = existsSync(checkpointPath)
     ? await readCheckpoint(checkpointPath)
@@ -412,7 +412,7 @@ const run = async () => {
         classification_ids: {},
         family_cursor: 0,
         file_targets: [],
-        counts: { entities: 0 },
+        counts: { records: 0 },
         files: options.files,
       };
   if (checkpoint.dataset_id !== datasetId)
@@ -421,8 +421,8 @@ const run = async () => {
     );
   const defaultContext = await client.request("/contexts/default");
   await client.enablePublicationChannel(defaultContext.id);
-  progress.completedEntities = checkpoint.counts.entities;
-  progress.lastSample.entities = checkpoint.counts.entities;
+  progress.completedRecords = checkpoint.counts.records;
+  progress.lastSample.records = checkpoint.counts.records;
   const persist = async () => atomicJson(checkpointPath, checkpoint);
   const tag = `generator:${options.industry}:v${pack.schemaVersion}`;
   const metadata = (kind, ordinal) => ({
@@ -494,7 +494,7 @@ const run = async () => {
       for (const [kind, values] of Object.entries(pack.classificationValues)) {
         const ids = (checkpoint.classification_ids[kind] ??= []);
         for (let index = ids.length; index < values.length; index += 1) {
-          const entity = await client.createEntity(
+          const record = await client.createRecord(
             codes[kind],
             [
               scalar("name", values[index]),
@@ -503,10 +503,10 @@ const run = async () => {
             metadata(kind, index),
             tag,
           );
-          await publish(entity.id);
-          ids.push(entity.id);
-          checkpoint.counts.entities += 1;
-          progress.tick({ entities: 1 });
+          await publish(record.id);
+          ids.push(record.id);
+          checkpoint.counts.records += 1;
+          progress.tick({ records: 1 });
           await persist();
           if (await stopIfRequested()) return;
         }
@@ -522,7 +522,7 @@ const run = async () => {
         index += 1
       ) {
         const manufacturer = pack.manufacturerFor(index);
-        const entity = await client.createEntity(
+        const record = await client.createRecord(
           codes.manufacturer,
           [
             scalar("name", manufacturer.name),
@@ -531,10 +531,10 @@ const run = async () => {
           metadata("manufacturer", index),
           tag,
         );
-        await publish(entity.id);
-        checkpoint.manufacturer_ids.push(entity.id);
-        checkpoint.counts.entities += 1;
-        progress.tick({ entities: 1 });
+        await publish(record.id);
+        checkpoint.manufacturer_ids.push(record.id);
+        checkpoint.counts.records += 1;
+        progress.tick({ records: 1 });
         await persist();
         if (await stopIfRequested()) return;
       }
@@ -549,26 +549,26 @@ const run = async () => {
         index += 1
       ) {
         const category = pack.categoryFor(index);
-        const entity = await client.createEntity(
+        const record = await client.createRecord(
           codes.category,
           [scalar("name", category.name), scalar("slug", category.slug)],
           metadata("category", index),
           tag,
         );
         if (category.parentIndex !== null)
-          await client.replaceRelationships(entity.id, [
+          await client.replaceRelationships(record.id, [
             {
               attribute_code: fields.categoryParent,
               context_id: rootContextId,
-              target_entity_ids: [
+              target_record_ids: [
                 checkpoint.category_ids[category.parentIndex],
               ],
             },
           ]);
-        await publish(entity.id);
-        checkpoint.category_ids.push(entity.id);
-        checkpoint.counts.entities += 1;
-        progress.tick({ entities: 1 });
+        await publish(record.id);
+        checkpoint.category_ids.push(record.id);
+        checkpoint.counts.records += 1;
+        progress.tick({ records: 1 });
         await persist();
         if (await stopIfRequested()) return;
       }
@@ -592,7 +592,7 @@ const run = async () => {
               checkpoint.manufacturer_ids[
                 index % checkpoint.manufacturer_ids.length
               ];
-            const familyEntity = await client.createEntity(
+            const familyRecord = await client.createRecord(
               codes.family,
               pack
                 .familyValues(family)
@@ -606,44 +606,44 @@ const run = async () => {
                 throw new Error(`Missing ${kind} classification for ${value}`);
               return checkpoint.classification_ids[kind][valueIndex];
             };
-            await client.replaceRelationships(familyEntity.id, [
+            await client.replaceRelationships(familyRecord.id, [
               {
                 attribute_code: fields.familyProductType,
                 context_id: rootContextId,
-                target_entity_ids: [
+                target_record_ids: [
                   classificationId("product_type", family.type),
                 ],
               },
               {
                 attribute_code: fields.familyInterfaceStandard,
                 context_id: rootContextId,
-                target_entity_ids: [
+                target_record_ids: [
                   classificationId("interface_standard", family.interfaceName),
                 ],
               },
               {
                 attribute_code: fields.familyFormFactor,
                 context_id: rootContextId,
-                target_entity_ids: [
+                target_record_ids: [
                   classificationId("form_factor", family.formFactor),
                 ],
               },
               {
                 attribute_code: fields.familyCategory,
                 context_id: rootContextId,
-                target_entity_ids: [categoryId],
+                target_record_ids: [categoryId],
               },
               {
                 attribute_code: fields.familyManufacturer,
                 context_id: rootContextId,
-                target_entity_ids: [manufacturerId],
+                target_record_ids: [manufacturerId],
               },
             ]);
-            await publish(familyEntity.id);
-            const skuEntities = [];
+            await publish(familyRecord.id);
+            const skuRecords = [];
             for (let variant = 0; variant < 4; variant += 1) {
               const sku = pack.skuFor(family, index, variant, options.seed);
-              const entity = await client.createEntity(
+              const record = await client.createRecord(
                 codes.sku,
                 pack
                   .skuValues(sku, family)
@@ -651,35 +651,35 @@ const run = async () => {
                 metadata("sku", index * 4 + variant),
                 tag,
               );
-              skuEntities.push(entity);
+              skuRecords.push(record);
             }
             // Relationship replacement mutates current-value history. Keep the four
             // variant writes serial so a normal seed does not manufacture avoidable
             // transient database conflicts and retries.
-            for (const [variant, entity] of skuEntities.entries()) {
-              await client.replaceRelationships(entity.id, [
+            for (const [variant, record] of skuRecords.entries()) {
+              await client.replaceRelationships(record.id, [
                 {
                   attribute_code: fields.skuFamily,
                   context_id: rootContextId,
-                  target_entity_ids: [familyEntity.id],
+                  target_record_ids: [familyRecord.id],
                 },
                 {
                   attribute_code: fields.skuCompatible,
                   context_id: rootContextId,
-                  target_entity_ids: [
-                    skuEntities[(variant + 1) % skuEntities.length].id,
+                  target_record_ids: [
+                    skuRecords[(variant + 1) % skuRecords.length].id,
                   ],
                 },
               ]);
             }
-            for (const entity of skuEntities) await publish(entity.id);
+            for (const record of skuRecords) await publish(record.id);
             if (index < pack.assets.length)
-              checkpoint.file_targets[index] = skuEntities[0].id;
-            progress.tick({ entities: 5 });
+              checkpoint.file_targets[index] = skuRecords[0].id;
+            progress.tick({ records: 5 });
           },
         );
         checkpoint.family_cursor = end;
-        checkpoint.counts.entities =
+        checkpoint.counts.records =
           Object.values(pack.classificationValues).reduce(
             (total, values) => total + values.length,
             0,
@@ -711,7 +711,7 @@ const run = async () => {
           ? fields.skuMainPhoto
           : fields.skuFiles;
         const uploaded = await client.request(
-          `/entities/${checkpoint.file_targets[index]}/file-attributes/${attributeCode}/uploads`,
+          `/records/${checkpoint.file_targets[index]}/file-attributes/${attributeCode}/uploads`,
           { method: "POST", body: form },
         );
         const file = uploaded.files?.[0];
@@ -731,7 +731,7 @@ const run = async () => {
           } catch (error) {
             if (error.message.includes("(403)"))
               throw new Error(
-                "File verification requires entities.read for the uploaded entity; recreate CATALOG_TOKEN with entities.read and entities.write, or rerun a clean dataset with --no-files.",
+                "File verification requires records.read for the uploaded record; recreate CATALOG_TOKEN with records.read and records.write, or rerun a clean dataset with --no-files.",
               );
             throw error;
           }
@@ -753,7 +753,7 @@ const run = async () => {
         checkpoint.category_ids.at(-1),
         checkpoint.file_targets[0],
       ].filter(Boolean);
-      for (const id of sampleIds) await client.request(`/entities/${id}`);
+      for (const id of sampleIds) await client.request(`/records/${id}`);
       checkpoint.phase = "complete";
       checkpoint.completed_at = now();
       checkpoint.benchmark_ready = true;

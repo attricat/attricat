@@ -2,9 +2,9 @@ import { useQueries, type UseQueryResult } from '@tanstack/react-query';
 import {
   getBlueprintByCode,
   type BlueprintWithAttributes,
-} from '../entities/api';
-import { isHiddenByDefault } from '../entities/attributeVisibility';
-import { entityQueryKeys } from '../entities/queryKeys';
+} from '../records/api';
+import { isHiddenByDefault } from '../records/attributeVisibility';
+import { recordQueryKeys } from '../records/queryKeys';
 import {
   explorerVisibilityScope,
   relationshipPathSeparator,
@@ -19,7 +19,7 @@ const targetBlueprintQueries = (
   enabled: boolean,
 ) =>
   relationships.map((attribute) => ({
-    queryKey: entityQueryKeys.blueprintByCode(
+    queryKey: recordQueryKeys.blueprintByCode(
       attribute.target_blueprint_code,
       undefined,
     ),

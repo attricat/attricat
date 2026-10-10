@@ -21,7 +21,7 @@ A blueprint is written in TOML and lists **attributes**, each with a type:
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "title"
@@ -54,8 +54,6 @@ When the retailer adds `care_instructions` in revision 2, the products created u
 ## Records
 
 A record is one catalog item: one product, one category. It is created from a blueprint's current revision and stays pinned to that revision until migrated.
-
-In blueprint TOML, the API, and the CLI, records are called entities, as in `kind = "entity"` and `entity_schema`.
 
 Besides its attributes, every record has **system tags** and **system metadata** for automation, such as a `needs-review` tag set by a workflow.
 
@@ -96,7 +94,7 @@ Every write is validated on the server:
 
 - the attribute type (a number must be a number);
 - the attribute's `value_schema` (a price must not be negative);
-- the blueprint's `entity_schema` (a product on sale must have a sale price).
+- the blueprint's `record_schema` (a product on sale must have a sale price).
 
 Validation runs for every context the change affects. A change that would break any context is rejected as a whole.
 

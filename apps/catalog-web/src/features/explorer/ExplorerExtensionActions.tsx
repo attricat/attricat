@@ -1,4 +1,4 @@
-import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
+import type { BlueprintWithAttributes, RecordItem } from '../records/api';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { selectionSources } from '../extensions/constants';
 import {
@@ -10,7 +10,7 @@ type Props = {
   blueprint: BlueprintWithAttributes['blueprint'];
   /** The Explorer's value-resolution context, when one is selected. */
   contextId: string | undefined;
-  selectedItems: EntityItem[] | null;
+  selectedItems: RecordItem[] | null;
 };
 
 /**
@@ -49,7 +49,7 @@ export const ExplorerExtensionActions = ({
         <ExtensionOutlet
           context={{
             ...revisionContext,
-            entity_ids: bulkSelection.map((item) => item.id),
+            record_ids: bulkSelection.map((item) => item.id),
           }}
           outlet={explorerExtensionOutlets.bulkAction}
           runtimeScope={runtimeScope}
@@ -58,7 +58,7 @@ export const ExplorerExtensionActions = ({
             blueprintId: blueprint.id,
             blueprintVersion: blueprint.version,
             contextId: contextId ?? null,
-            entityIds: bulkSelection.map((item) => item.id),
+            recordIds: bulkSelection.map((item) => item.id),
           }}
         />
       )}

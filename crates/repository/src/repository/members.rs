@@ -274,7 +274,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         let target_ok: bool = match scope_type {
             "workspace" => target == workspace_id,
             "blueprint_family" => sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM blueprints WHERE id = $1 AND workspace_id = $2)").bind(target).bind(workspace_id).fetch_one(&mut *connection).await?,
-            "entity" => sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM entities WHERE id = $1 AND workspace_id = $2)").bind(target).bind(workspace_id).fetch_one(&mut *connection).await?,
+            "record" => sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM records WHERE id = $1 AND workspace_id = $2)").bind(target).bind(workspace_id).fetch_one(&mut *connection).await?,
             "context_subtree" => sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)").bind(target).bind(workspace_id).fetch_one(&mut *connection).await?,
             _ => false,
         };

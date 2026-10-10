@@ -1,5 +1,5 @@
-import type { Attribute } from '../entities/api';
-import { PRESENCE_FILTER_OPERATOR } from '../entities/constants';
+import type { Attribute } from '../records/api';
+import { PRESENCE_FILTER_OPERATOR } from '../records/constants';
 import type { AttributeFilterOperator } from './attributeFilters';
 import { defaultAttributeFilterOperator } from './constants';
 import {

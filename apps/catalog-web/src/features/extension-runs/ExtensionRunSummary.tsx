@@ -46,7 +46,7 @@ export const ExtensionRunStatusChip = ({
 
 /**
  * The operation, extension and status of a run, then when it started and on
- * how many entities. `heading` is the operation title in its page outline.
+ * how many records. `heading` is the operation title in its page outline.
  */
 export const ExtensionRunHeader = ({
   heading,
@@ -82,7 +82,7 @@ export const ExtensionRunHeader = ({
         <ExtensionRunStatusChip status={run.status} />
       </Stack>
       <Typography color="text.secondary" variant="body2">
-        {t('extensionRuns.entityCount', { count: run.selection_count })}
+        {t('extensionRuns.recordCount', { count: run.selection_count })}
         {' · '}
         <Timestamp style="dateTime" value={run.created_at} />
       </Typography>
@@ -92,7 +92,7 @@ export const ExtensionRunHeader = ({
 
 /**
  * Progress and the extension-reported outcome. A completed run can still
- * report per-entity failures; that is shown separately from its status.
+ * report per-record failures; that is shown separately from its status.
  */
 export const ExtensionRunProgress = ({ run }: { run: ExtensionRun }) => {
   const { t } = useTranslation();

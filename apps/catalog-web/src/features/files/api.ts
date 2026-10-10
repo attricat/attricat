@@ -20,13 +20,13 @@ export const fileDownloadUrl = (fileId: string, variant?: string) =>
   `/api/files/${encodeURIComponent(z.uuid().parse(fileId))}${variant ? `/variants/${encodeURIComponent(variant)}/download` : '/download'}`;
 
 export const uploadFiles = async ({
-  entityId,
+  recordId,
   attributeCode,
   contextId,
   files,
   onProgress,
 }: {
-  entityId: string;
+  recordId: string;
   attributeCode: string;
   contextId?: string | null;
   files: File[];
@@ -41,7 +41,7 @@ export const uploadFiles = async ({
       file,
     ),
   );
-  const path = `/api/entities/${encodeURIComponent(z.uuid().parse(entityId))}/file-attributes/${encodeURIComponent(attributeCode)}/uploads`;
+  const path = `/api/records/${encodeURIComponent(z.uuid().parse(recordId))}/file-attributes/${encodeURIComponent(attributeCode)}/uploads`;
   return requestUpload(path, data, fileUploadResultSchema, onProgress);
 };
 
@@ -76,12 +76,12 @@ export const uploadStagedFiles = async ({
 };
 
 export const updateFileReferences = (
-  entityId: string,
+  recordId: string,
   attributeCode: string,
   input: z.infer<typeof updateFileReferencesSchema>,
 ) =>
   request(
-    `/api/entities/${encodeURIComponent(z.uuid().parse(entityId))}/file-attributes/${encodeURIComponent(attributeCode)}/references`,
+    `/api/records/${encodeURIComponent(z.uuid().parse(recordId))}/file-attributes/${encodeURIComponent(attributeCode)}/references`,
     fileReferencesUpdateResultSchema,
     {
       method: 'PUT',

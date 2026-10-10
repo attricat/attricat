@@ -13,7 +13,7 @@ const DEFINITION: &str = r#"
 format_version = 1
 code = "batch_product"
 name = "Batch product"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -24,7 +24,7 @@ code = "title"
 value_type = "string"
 "#;
 
-async fn batch_with_two_old_entities(
+async fn batch_with_two_old_records(
     repository: &CatalogRepository,
     pool: &PgPool,
 ) -> (uuid::Uuid, uuid::Uuid, uuid::Uuid) {
@@ -38,9 +38,9 @@ async fn batch_with_two_old_entities(
         .publish_blueprint_revision(source.blueprint.id, 1)
         .await
         .unwrap();
-    let version_one_entity = uuid::Uuid::new_v4();
-    sqlx::query("INSERT INTO entities (id, blueprint_id, blueprint_version) VALUES ($1, $2, 1)")
-        .bind(version_one_entity)
+    let version_one_record = uuid::Uuid::new_v4();
+    sqlx::query("INSERT INTO records (id, blueprint_id, blueprint_version) VALUES ($1, $2, 1)")
+        .bind(version_one_record)
         .bind(source.blueprint.id)
         .execute(pool)
         .await
@@ -58,9 +58,9 @@ async fn batch_with_two_old_entities(
         .publish_blueprint_revision(source.blueprint.id, 2)
         .await
         .unwrap();
-    let version_two_entity = uuid::Uuid::new_v4();
-    sqlx::query("INSERT INTO entities (id, blueprint_id, blueprint_version) VALUES ($1, $2, 2)")
-        .bind(version_two_entity)
+    let version_two_record = uuid::Uuid::new_v4();
+    sqlx::query("INSERT INTO records (id, blueprint_id, blueprint_version) VALUES ($1, $2, 2)")
+        .bind(version_two_record)
         .bind(source.blueprint.id)
         .execute(pool)
         .await
@@ -82,7 +82,7 @@ async fn batch_with_two_old_entities(
         .start_safe_blueprint_migration_batch(source.blueprint.id, 3)
         .await
         .unwrap();
-    (batch.id, version_one_entity, version_two_entity)
+    (batch.id, version_one_record, version_two_record)
 }
 
 #[sqlx::test]
@@ -130,7 +130,7 @@ async fn safe_batch_uses_the_nearest_published_ancestor_when_drafts_intervene(po
         .safe_blueprint_migration_impact(source.blueprint.id, 3)
         .await
         .unwrap();
-    assert_eq!(impact.eligible_entities, 0);
+    assert_eq!(impact.eligible_records, 0);
     assert!(impact.removed_attribute_codes.is_empty());
 
     let batch = repository
@@ -158,8 +158,8 @@ async fn safe_batch_rejects_an_unsafe_older_source_revision(pool: PgPool) {
         .publish_blueprint_revision(source.blueprint.id, 1)
         .await
         .unwrap();
-    let old_entity = repository
-        .create_entity_with_values(
+    let old_record = repository
+        .create_record_with_values(
             source.blueprint.id,
             1,
             vec![NewAttributeValue::Scalar {
@@ -213,8 +213,8 @@ async fn safe_batch_rejects_an_unsafe_older_source_revision(pool: PgPool) {
         Err(api::repository::RepositoryError::BlueprintMigrationNotSafe)
     ));
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT blueprint_version FROM entities WHERE id=$1")
-            .bind(old_entity.id)
+        sqlx::query_scalar::<_, i64>("SELECT blueprint_version FROM records WHERE id=$1")
+            .bind(old_record.id)
             .fetch_one(&pool)
             .await
             .unwrap(),
@@ -223,24 +223,24 @@ async fn safe_batch_rejects_an_unsafe_older_source_revision(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn safe_batch_task_is_transactional_and_migrates_each_entity_once(pool: PgPool) {
+async fn safe_batch_task_is_transactional_and_migrates_each_record_once(pool: PgPool) {
     let repository = CatalogRepository::new(
         pool.clone(),
         uuid::Uuid::from_u128(0x00000000000040008000000000000002),
     );
-    let (batch_id, version_one_entity, version_two_entity) =
-        batch_with_two_old_entities(&repository, &pool).await;
-    sqlx::query("UPDATE entities SET created_at = '2026-01-01 00:00:00+00' WHERE id IN ($1, $2)")
-        .bind(version_one_entity)
-        .bind(version_two_entity)
+    let (batch_id, version_one_record, version_two_record) =
+        batch_with_two_old_records(&repository, &pool).await;
+    sqlx::query("UPDATE records SET created_at = '2026-01-01 00:00:00+00' WHERE id IN ($1, $2)")
+        .bind(version_one_record)
+        .bind(version_two_record)
         .execute(&pool)
         .await
         .unwrap();
     let expected_order = sqlx::query_scalar::<_, uuid::Uuid>(
-        "SELECT id FROM entities WHERE id IN ($1, $2) ORDER BY created_at DESC, id DESC",
+        "SELECT id FROM records WHERE id IN ($1, $2) ORDER BY created_at DESC, id DESC",
     )
-    .bind(version_one_entity)
-    .bind(version_two_entity)
+    .bind(version_one_record)
+    .bind(version_two_record)
     .fetch_all(&pool)
     .await
     .unwrap();
@@ -264,16 +264,16 @@ async fn safe_batch_task_is_transactional_and_migrates_each_entity_once(pool: Pg
         .unwrap();
 
     let versions =
-        sqlx::query_scalar::<_, i64>("SELECT blueprint_version FROM entities WHERE id IN ($1, $2)")
-            .bind(version_one_entity)
-            .bind(version_two_entity)
+        sqlx::query_scalar::<_, i64>("SELECT blueprint_version FROM records WHERE id IN ($1, $2)")
+            .bind(version_one_record)
+            .bind(version_two_record)
             .fetch_all(&pool)
             .await
             .unwrap();
     assert_eq!(versions, vec![3, 3]);
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM entity_blueprint_migrations WHERE batch_id = $1",
+            "SELECT count(*) FROM record_blueprint_migrations WHERE batch_id = $1",
         )
         .bind(batch_id)
         .fetch_one(&pool)
@@ -282,7 +282,7 @@ async fn safe_batch_task_is_transactional_and_migrates_each_entity_once(pool: Pg
         2
     );
     let migrated_order = sqlx::query_scalar::<_, uuid::Uuid>(
-        "SELECT aggregate_id FROM domain_events WHERE event_type = 'entity.migrated.v1' ORDER BY sequence",
+        "SELECT aggregate_id FROM domain_events WHERE event_type = 'record.migrated.v1' ORDER BY sequence",
     )
     .fetch_all(&pool)
     .await
@@ -299,8 +299,8 @@ async fn safe_batch_processes_multiple_scalar_candidates_in_one_concurrent_page(
         pool.clone(),
         uuid::Uuid::from_u128(0x00000000000040008000000000000002),
     );
-    let (batch_id, version_one_entity, version_two_entity) =
-        batch_with_two_old_entities(&repository, &pool).await;
+    let (batch_id, version_one_record, version_two_record) =
+        batch_with_two_old_records(&repository, &pool).await;
     let task = repository
         .claim_task("concurrent-worker", std::time::Duration::from_secs(30))
         .await
@@ -317,10 +317,10 @@ async fn safe_batch_processes_multiple_scalar_candidates_in_one_concurrent_page(
 
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM entities WHERE id IN ($1, $2) AND blueprint_version = 3",
+            "SELECT count(*) FROM records WHERE id IN ($1, $2) AND blueprint_version = 3",
         )
-        .bind(version_one_entity)
-        .bind(version_two_entity)
+        .bind(version_one_record)
+        .bind(version_two_record)
         .fetch_one(&pool)
         .await
         .unwrap(),
@@ -328,7 +328,7 @@ async fn safe_batch_processes_multiple_scalar_candidates_in_one_concurrent_page(
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM entity_blueprint_migrations WHERE batch_id = $1 AND status = 'migrated'",
+            "SELECT count(*) FROM record_blueprint_migrations WHERE batch_id = $1 AND status = 'migrated'",
         )
         .bind(batch_id)
         .fetch_one(&pool)
@@ -339,38 +339,38 @@ async fn safe_batch_processes_multiple_scalar_candidates_in_one_concurrent_page(
 }
 
 #[sqlx::test]
-async fn batch_restart_from_newest_edge_finds_entity_inserted_between_pages(pool: PgPool) {
+async fn batch_restart_from_newest_edge_finds_record_inserted_between_pages(pool: PgPool) {
     let repository = CatalogRepository::new(
         pool.clone(),
         uuid::Uuid::from_u128(0x00000000000040008000000000000002),
     );
-    let (batch_id, _, _) = batch_with_two_old_entities(&repository, &pool).await;
-    let newest_entity: uuid::Uuid = sqlx::query_scalar(
-        "SELECT id FROM entities WHERE blueprint_version < 3 ORDER BY created_at DESC, id DESC LIMIT 1",
+    let (batch_id, _, _) = batch_with_two_old_records(&repository, &pool).await;
+    let newest_record: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM records WHERE blueprint_version < 3 ORDER BY created_at DESC, id DESC LIMIT 1",
     )
     .fetch_one(&pool)
     .await
     .unwrap();
     let (blueprint_id, source_version): (uuid::Uuid, i64) =
-        sqlx::query_as("SELECT blueprint_id, blueprint_version FROM entities WHERE id = $1")
-            .bind(newest_entity)
+        sqlx::query_as("SELECT blueprint_id, blueprint_version FROM records WHERE id = $1")
+            .bind(newest_record)
             .fetch_one(&pool)
             .await
             .unwrap();
     sqlx::query(
-        "INSERT INTO entity_blueprint_migrations (id, batch_id, entity_id, blueprint_id, source_version, target_version, status, issues, task_owned) VALUES ($1, $2, $3, $4, $5, 3, 'pending', '[]'::jsonb, true)",
+        "INSERT INTO record_blueprint_migrations (id, batch_id, record_id, blueprint_id, source_version, target_version, status, issues, task_owned) VALUES ($1, $2, $3, $4, $5, 3, 'pending', '[]'::jsonb, true)",
     )
     .bind(uuid::Uuid::new_v4())
     .bind(batch_id)
-    .bind(newest_entity)
+    .bind(newest_record)
     .bind(blueprint_id)
     .bind(source_version)
     .execute(&pool)
     .await
     .unwrap();
     let mut blocker = pool.begin().await.unwrap();
-    sqlx::query("SELECT id FROM entities WHERE id = $1 FOR UPDATE")
-        .bind(newest_entity)
+    sqlx::query("SELECT id FROM records WHERE id = $1 FOR UPDATE")
+        .bind(newest_record)
         .execute(&mut *blocker)
         .await
         .unwrap();
@@ -390,10 +390,10 @@ async fn batch_restart_from_newest_edge_finds_entity_inserted_between_pages(pool
     let mut first_page_started = false;
     for _ in 0..500 {
         let migrating = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM entity_blueprint_migrations WHERE batch_id = $1 AND entity_id = $2 AND status = 'migrating')",
+            "SELECT EXISTS (SELECT 1 FROM record_blueprint_migrations WHERE batch_id = $1 AND record_id = $2 AND status = 'migrating')",
         )
         .bind(batch_id)
-        .bind(newest_entity)
+        .bind(newest_record)
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -404,11 +404,11 @@ async fn batch_restart_from_newest_edge_finds_entity_inserted_between_pages(pool
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
     assert!(first_page_started, "the first candidate reached migration");
-    let inserted_entity = uuid::Uuid::new_v4();
+    let inserted_record = uuid::Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO entities (id, blueprint_id, blueprint_version, created_at) VALUES ($1, $2, 1, '2100-01-01 00:00:00+00')",
+        "INSERT INTO records (id, blueprint_id, blueprint_version, created_at) VALUES ($1, $2, 1, '2100-01-01 00:00:00+00')",
     )
-    .bind(inserted_entity)
+    .bind(inserted_record)
     .bind(blueprint_id)
     .execute(&pool)
     .await
@@ -417,8 +417,8 @@ async fn batch_restart_from_newest_edge_finds_entity_inserted_between_pages(pool
     running.await.unwrap().unwrap();
 
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT blueprint_version FROM entities WHERE id = $1")
-            .bind(inserted_entity)
+        sqlx::query_scalar::<_, i64>("SELECT blueprint_version FROM records WHERE id = $1")
+            .bind(inserted_record)
             .fetch_one(&pool)
             .await
             .unwrap(),
@@ -426,7 +426,7 @@ async fn batch_restart_from_newest_edge_finds_entity_inserted_between_pages(pool
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM entity_blueprint_migrations WHERE batch_id = $1",
+            "SELECT count(*) FROM record_blueprint_migrations WHERE batch_id = $1",
         )
         .bind(batch_id)
         .fetch_one(&pool)
@@ -442,7 +442,7 @@ async fn expired_batch_task_cannot_checkpoint_and_reclaim_reuses_migration_rows(
         pool.clone(),
         uuid::Uuid::from_u128(0x00000000000040008000000000000002),
     );
-    let (batch_id, _, _) = batch_with_two_old_entities(&repository, &pool).await;
+    let (batch_id, _, _) = batch_with_two_old_records(&repository, &pool).await;
     let first = repository
         .claim_task("worker-a", std::time::Duration::from_secs(30))
         .await
@@ -451,7 +451,7 @@ async fn expired_batch_task_cannot_checkpoint_and_reclaim_reuses_migration_rows(
     let handler = BlueprintMigrationBatchTaskHandler::new(repository.clone());
 
     // Simulate a crash after the domain batch committed but before generic task
-    // acknowledgement. Reclaiming must not create a second batch/entity row.
+    // acknowledgement. Reclaiming must not create a second batch/record row.
     handler.handle(first.clone()).await.unwrap();
     sqlx::query("UPDATE tasks SET lease_until = now() - interval '1 second' WHERE id = $1")
         .bind(first.id)
@@ -482,14 +482,14 @@ async fn expired_batch_task_cannot_checkpoint_and_reclaim_reuses_migration_rows(
 
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM entity_blueprint_migrations WHERE batch_id = $1",
+            "SELECT count(*) FROM record_blueprint_migrations WHERE batch_id = $1",
         )
         .bind(batch_id)
         .fetch_one(&pool)
         .await
         .unwrap(),
         2,
-        "the unique batch/entity reservation survives a reclaimed task"
+        "the unique batch/record reservation survives a reclaimed task"
     );
     assert_eq!(
         sqlx::query_scalar::<_, String>(
@@ -522,11 +522,11 @@ async fn safe_batch_archives_explicitly_approved_removed_values(pool: PgPool) {
         .await
         .unwrap();
     let empty = repository
-        .create_entity_with_values(source.blueprint.id, 1, Vec::new(), Vec::new(), json!({}))
+        .create_record_with_values(source.blueprint.id, 1, Vec::new(), Vec::new(), json!({}))
         .await
         .unwrap();
     let populated = repository
-        .create_entity_with_values(
+        .create_record_with_values(
             source.blueprint.id,
             1,
             vec![NewAttributeValue::Scalar {
@@ -559,7 +559,7 @@ async fn safe_batch_archives_explicitly_approved_removed_values(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(impact.removed_attribute_codes, vec!["obsolete"]);
-    assert_eq!(impact.entities_with_removed_values, 1);
+    assert_eq!(impact.records_with_removed_values, 1);
     assert_eq!(impact.removed_values, 1);
     assert!(impact.requires_removal_disposition);
     assert!(
@@ -589,7 +589,7 @@ async fn safe_batch_archives_explicitly_approved_removed_values(pool: PgPool) {
 
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM entities WHERE id IN ($1, $2) AND blueprint_version = 2",
+            "SELECT count(*) FROM records WHERE id IN ($1, $2) AND blueprint_version = 2",
         )
         .bind(empty.id)
         .bind(populated.id)
@@ -600,7 +600,7 @@ async fn safe_batch_archives_explicitly_approved_removed_values(pool: PgPool) {
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM attribute_value_history WHERE entity_id = $1",
+            "SELECT count(*) FROM attribute_value_history WHERE record_id = $1",
         )
         .bind(populated.id)
         .fetch_one(&pool)

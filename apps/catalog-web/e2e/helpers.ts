@@ -33,7 +33,7 @@ const authenticatedHeaders = async () => {
 export type Blueprint = {
   blueprint: { id: string; code: string; version: number };
 };
-export type Entity = { id: string };
+export type CatalogRecord = { id: string };
 export type Context = { id: string; code: string };
 export type NewValue = Record<string, unknown>;
 
@@ -67,14 +67,14 @@ export const createBlueprint = (definition: string) =>
     body: JSON.stringify({ definition }),
   });
 
-export const createEntityBlueprint = async (
+export const createRecordBlueprint = async (
   code: string,
   name: string,
   attributes: string,
-  options: { entitySchema?: string; views?: string } = {},
+  options: { recordSchema?: string; views?: string } = {},
 ) => {
   const blueprint = await createBlueprint(
-    `format_version = 1\ncode = "${code}"\nname = "${name}"\nkind = "entity"${options.entitySchema ? `\nentity_schema = '${options.entitySchema}'` : ''}\n\n[views.dropdown_option]\ntype = "dropdown_option"\nfields = ["title"]\n\n${attributes}${options.views ? `\n\n${options.views}` : ''}`,
+    `format_version = 1\ncode = "${code}"\nname = "${name}"\nkind = "record"${options.recordSchema ? `\nrecord_schema = '${options.recordSchema}'` : ''}\n\n[views.dropdown_option]\ntype = "dropdown_option"\nfields = ["title"]\n\n${attributes}${options.views ? `\n\n${options.views}` : ''}`,
   );
   return publishRevision(blueprint);
 };
@@ -106,12 +106,12 @@ export const createContext = (code: string, parentId: string, data = {}) =>
     body: JSON.stringify({ code, parent_id: parentId, data }),
   });
 
-export const createEntity = async (
+export const createRecord = async (
   blueprint: Blueprint,
   values: NewValue[] = [],
 ) => {
   const context = await defaultContext();
-  return request<Entity>('/v1/entities', {
+  return request<CatalogRecord>('/v1/records', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -132,15 +132,15 @@ export const scalar = (attributeCode: string, value: unknown) => ({
 
 export const relationship = (
   attributeCode: string,
-  targetEntityId: string,
+  targetRecordId: string,
 ) => ({
   kind: 'relationship',
   attribute_code: attributeCode,
-  target_entity_id: targetEntityId,
+  target_record_id: targetRecordId,
 });
 
-export const appendValues = (entityId: string, values: NewValue[]) =>
-  request<void>(`/entities/${entityId}/values`, {
+export const appendValues = (recordId: string, values: NewValue[]) =>
+  request<void>(`/records/${recordId}/values`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ values }),
@@ -242,25 +242,25 @@ export const signInAsMember = async (browser: Browser, roleCode: string) => {
   return page;
 };
 
-/** Resolves with the entity page's next inline field save of `entityId`. */
-export const entitySave = (page: Page, entityId: string) =>
+/** Resolves with the record page's next inline field save of `recordId`. */
+export const recordSave = (page: Page, recordId: string) =>
   page.waitForResponse(
     (response) =>
       response.request().method() === 'PUT' &&
-      new URL(response.url()).pathname === `/api/v1/entities/${entityId}`,
+      new URL(response.url()).pathname === `/api/v1/records/${recordId}`,
   );
 
 /**
- * Commits an inline entity field by pressing `key` in it (Tab leaves the
+ * Commits an inline record field by pressing `key` in it (Tab leaves the
  * field, Enter commits a single-line input) and waits for the save to succeed.
  */
 export const commitField = async (
   page: Page,
-  entityId: string,
+  recordId: string,
   field: Locator,
   key: 'Tab' | 'Enter' = 'Tab',
 ) => {
-  const saved = entitySave(page, entityId);
+  const saved = recordSave(page, recordId);
   await field.press(key);
   expect((await saved).ok()).toBe(true);
 };

@@ -159,14 +159,14 @@ pub async fn published_blueprint(repository: &CatalogRepository, definition: &st
     (blueprint.blueprint.id, blueprint.blueprint.version)
 }
 
-/// Creates an entity whose `title` attribute is `title`.
-pub async fn titled_entity(
+/// Creates a record whose `title` attribute is `title`.
+pub async fn titled_record(
     repository: &CatalogRepository,
     blueprint: (Uuid, i64),
     title: &str,
 ) -> Uuid {
     repository
-        .create_entity_with_values(
+        .create_record_with_values(
             blueprint.0,
             blueprint.1,
             vec![NewAttributeValue::Scalar {

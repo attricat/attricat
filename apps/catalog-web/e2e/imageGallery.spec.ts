@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import {
-  createEntity,
-  createEntityBlueprint,
-  entitySave,
+  createRecord,
+  createRecordBlueprint,
+  recordSave,
   scalar,
   signInAsMember,
   suffix,
@@ -22,7 +22,7 @@ for (const mode of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: mode });
     if (mode === 'dark')
       await page.setViewportSize({ width: 390, height: 844 });
-    const blueprint = await createEntityBlueprint(
+    const blueprint = await createRecordBlueprint(
       `photos_${suffix()}`,
       'Gallery example',
       `
@@ -39,14 +39,14 @@ allowed_mime_groups = ["image"]
 max_bytes = 1048576
 `,
     );
-    const entity = await createEntity(blueprint, [
+    const record = await createRecord(blueprint, [
       scalar('title', 'Gallery test'),
     ]);
-    await page.goto(`/entities/${entity.id}`);
+    await page.goto(`/records/${record.id}`);
     const title = page.getByLabel('title', { exact: true });
     // Leaving the edited title for the upload saves it without losing the click.
     await title.fill('Edited title');
-    const titleSaved = entitySave(page, entity.id);
+    const titleSaved = recordSave(page, record.id);
     await page.locator('input[type="file"]').setInputFiles([
       { name: 'front.png', mimeType: 'image/png', buffer: png },
       { name: 'back.png', mimeType: 'image/png', buffer: png },
@@ -63,7 +63,7 @@ max_bytes = 1048576
     const reordered = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname ===
-        `/api/entities/${entity.id}/file-attributes/photos/references`,
+        `/api/records/${record.id}/file-attributes/photos/references`,
     );
     await page.getByRole('button', { name: 'Move front.png later' }).click();
     expect((await reordered).ok()).toBe(true);
@@ -74,7 +74,7 @@ max_bytes = 1048576
     const dragged = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname ===
-        `/api/entities/${entity.id}/file-attributes/photos/references`,
+        `/api/records/${record.id}/file-attributes/photos/references`,
     );
     const handle = await page
       .getByRole('button', { name: 'Drag to reorder front.png' })
@@ -115,7 +115,7 @@ max_bytes = 1048576
     await viewer.emulateMedia({ colorScheme: mode });
     if (mode === 'dark')
       await viewer.setViewportSize({ width: 390, height: 844 });
-    await viewer.goto(`/entities/${entity.id}`);
+    await viewer.goto(`/records/${record.id}`);
     await expect(
       viewer.getByRole('button', { name: 'Preview back.png' }),
     ).toBeVisible();

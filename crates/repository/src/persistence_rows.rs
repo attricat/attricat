@@ -91,7 +91,7 @@ domain_row!(Blueprint {
     version,
     includes,
     views,
-    entity_schema,
+    record_schema,
     status,
     published_at,
     created_at,
@@ -162,7 +162,7 @@ domain_row!(ReusableAttribute {
     published_at,
     definition,
 });
-domain_row!(EntityReusableAttribute {
+domain_row!(RecordReusableAttribute {
     attachment_id,
     attribute_id,
     definition_id,
@@ -186,7 +186,7 @@ domain_row!(EntityReusableAttribute {
     facetable,
     position,
 });
-domain_row!(Entity {
+domain_row!(Record {
     id,
     blueprint_id,
     blueprint_version,
@@ -206,10 +206,10 @@ domain_row!(AttributeContext {
 });
 domain_row!(AttributeValue {
     id,
-    entity_id,
+    record_id,
     attribute_id,
     value,
-    relationship_target_entity_id,
+    relationship_target_record_id,
     active,
     context_id,
     created_at,
@@ -219,16 +219,16 @@ domain_row!(PublicationChannel {
     context_code,
     enabled,
     required_rule_codes,
-    require_valid_entity,
+    require_valid_record,
 });
-domain_row!(EntityPublicationStatus {
+domain_row!(RecordPublicationStatus {
     context_id,
     context_code,
     status,
     published_at,
     published_by_user_id,
 });
-domain_row!(EntityAuditChange {
+domain_row!(RecordAuditChange {
     audit_event_id,
     occurred_at,
     actor_user_id,
@@ -276,34 +276,34 @@ domain_row!(BlueprintMigrationBatchStatus {
     created_at,
     started_at,
     completed_at,
-    total_entities,
-    processed_entities,
-    migrated_entities,
-    needs_input_entities,
-    failed_entities,
+    total_records,
+    processed_records,
+    migrated_records,
+    needs_input_records,
+    failed_records,
 });
 domain_row!(DataHealthSummary {
-    active_entities,
-    entity_blueprints,
+    active_records,
+    record_blueprints,
     contexts,
-    outdated_entities,
-    stale_entities,
+    outdated_records,
+    stale_records,
     deleted_relationship_targets,
 });
 domain_row!(BlueprintHealth {
     code,
     name,
     current_version,
-    active_entities,
-    outdated_entities,
-    stale_entities,
+    active_records,
+    outdated_records,
+    stale_records,
     oldest_updated_at,
     newest_updated_at,
 });
-domain_row!(FreshnessBand { label, entities });
+domain_row!(FreshnessBand { label, records });
 domain_row!(ContextHealth {
     code,
-    direct_entities,
+    direct_records,
     direct_values
 });
 domain_row!(RelationshipHealth {
@@ -317,9 +317,9 @@ domain_row!(CompletenessHealth {
     code,
     name,
     current_version,
-    active_entities,
-    outdated_entities,
-    default_complete_entities,
+    active_records,
+    outdated_records,
+    default_complete_records,
 });
 domain_row!(Workflow {
     id,
@@ -357,7 +357,7 @@ domain_row!(RuleRun {
     rule_version,
     source,
     dry_run,
-    scope_entity_id,
+    scope_record_id,
     status,
     candidate_cursor,
     candidates_evaluated,
@@ -373,7 +373,7 @@ domain_row!(RuleFinding {
     id,
     rule_id,
     rule_version,
-    entity_id,
+    record_id,
     context_id,
     severity,
     message,

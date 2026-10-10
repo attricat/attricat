@@ -32,7 +32,7 @@ const REUSABLE_ATTRIBUTE_VALUE_TYPES: &[&str] = &[
     "file",
 ];
 
-/// A workspace attribute that entity blueprints can attach by reference.
+/// A workspace attribute that record blueprints can attach by reference.
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[schemars(title = "Attricat reusable attribute definition")]
@@ -51,7 +51,7 @@ struct ReusableAttributeDefinition {
     #[serde(default)]
     #[schemars(with = "Option<serde_json::Value>")]
     value_schema: Option<toml::Value>,
-    /// Value stored in the default context when an entity is created.
+    /// Value stored in the default context when a record is created.
     /// Not supported for relationships and files.
     #[serde(default)]
     #[schemars(with = "Option<serde_json::Value>")]
@@ -308,8 +308,8 @@ impl CatalogRepository {
         .into_domain())
     }
 
-    /// Resolves a reusable field from entity attachments, never from a newer
-    /// registry revision that an existing entity has not pinned.
+    /// Resolves a reusable field from record attachments, never from a newer
+    /// registry revision that an existing record has not pinned.
     pub async fn attached_reusable_attribute_for_blueprint(
         &self,
         blueprint_id: Uuid,
@@ -317,8 +317,8 @@ impl CatalogRepository {
         qualified_code: &str,
     ) -> Result<Option<ReusableAttribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Db<ReusableAttribute>>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at, r.definition
-            FROM entities e
-            JOIN attributes a ON a.entity_id = e.id AND a.deleted_at IS NULL
+            FROM records e
+            JOIN attributes a ON a.record_id = e.id AND a.deleted_at IS NULL
             JOIN reusable_attribute_revisions r ON r.id = a.reusable_attribute_revision_id
             JOIN reusable_attribute_definitions d ON d.id = r.definition_id
             WHERE e.workspace_id = $1 AND e.blueprint_id = $2 AND e.blueprint_version = $3
@@ -435,24 +435,24 @@ impl CatalogRepository {
 
     pub async fn attach_reusable_attribute(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         input: AttachReusableAttribute,
-    ) -> Result<EntityReusableAttribute, RepositoryError> {
+    ) -> Result<RecordReusableAttribute, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        let record = self.lock_record(&mut transaction, record_id).await?;
         let before = self
-            .entity_audit_snapshot(&mut transaction, entity_id)
+            .record_audit_snapshot(&mut transaction, record_id)
             .await?;
         let attachment_id = self
             .attach_reusable_attribute_in_transaction(
                 &mut transaction,
-                &entity,
+                &record,
                 input.reusable_attribute_revision_id,
             )
             .await?;
-        self.commit_reusable_attachment(transaction, &entity, before)
+        self.commit_reusable_attachment(transaction, &record, before)
             .await?;
-        self.entity_reusable_attributes(entity_id)
+        self.record_reusable_attributes(record_id)
             .await?
             .into_iter()
             .find(|item| item.attachment_id == attachment_id)
@@ -461,72 +461,72 @@ impl CatalogRepository {
 
     pub async fn attach_reusable_attribute_group(
         &self,
-        entity_id: Uuid,
+        record_id: Uuid,
         group_id: Uuid,
-    ) -> Result<Vec<EntityReusableAttribute>, RepositoryError> {
+    ) -> Result<Vec<RecordReusableAttribute>, RepositoryError> {
         let group = self
             .get_reusable_attribute_group(group_id)
             .await?
             .ok_or(RepositoryError::NotFound("reusable attribute group"))?;
         let mut transaction = self.pool.begin().await?;
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        let record = self.lock_record(&mut transaction, record_id).await?;
         let before = self
-            .entity_audit_snapshot(&mut transaction, entity_id)
+            .record_audit_snapshot(&mut transaction, record_id)
             .await?;
         let mut attachment_ids = Vec::with_capacity(group.reusable_attribute_revision_ids.len());
         for revision_id in group.reusable_attribute_revision_ids {
             attachment_ids.push(
                 self.attach_reusable_attribute_in_transaction(
                     &mut transaction,
-                    &entity,
+                    &record,
                     revision_id,
                 )
                 .await?,
             );
         }
-        self.commit_reusable_attachment(transaction, &entity, before)
+        self.commit_reusable_attachment(transaction, &record, before)
             .await?;
         Ok(self
-            .entity_reusable_attributes(entity_id)
+            .record_reusable_attributes(record_id)
             .await?
             .into_iter()
             .filter(|item| attachment_ids.contains(&item.attachment_id))
             .collect())
     }
 
-    /// Commits attachments as an entity update: a default value they set is
-    /// audited, the entity's publications are reconciled and the task fence is
-    /// checked, like any other write to the entity's attributes.
+    /// Commits attachments as a record update: a default value they set is
+    /// audited, the record's publications are reconciled and the task fence is
+    /// checked, like any other write to the record's attributes.
     async fn commit_reusable_attachment(
         &self,
         mut transaction: Transaction<'_, Postgres>,
-        entity: &Entity,
-        before: Vec<super::entity_commands::AuditValueSnapshot>,
+        record: &Record,
+        before: Vec<super::record_commands::AuditValueSnapshot>,
     ) -> Result<(), RepositoryError> {
         let after = self
-            .entity_audit_snapshot(&mut transaction, entity.id)
+            .record_audit_snapshot(&mut transaction, record.id)
             .await?;
-        let changes = Self::audit_changes(entity.id, before, after, false);
+        let changes = Self::audit_changes(record.id, before, after, false);
         let event = self.core_event(
-            crate::domain_events::ENTITY_UPDATED_V1,
-            "entity",
-            entity.id,
-            serde_json::to_value(crate::domain_events::EntityMutationV1 {
-                entity_id: entity.id,
-                blueprint_id: entity.blueprint_id,
-                blueprint_version: entity.blueprint_version,
+            crate::domain_events::RECORD_UPDATED_V1,
+            "record",
+            record.id,
+            serde_json::to_value(crate::domain_events::RecordMutationV1 {
+                record_id: record.id,
+                blueprint_id: record.blueprint_id,
+                blueprint_version: record.blueprint_version,
                 facts: Self::affected_facts(&changes),
             })
-            .expect("entity-updated payload is serializable"),
+            .expect("record-updated payload is serializable"),
         );
-        self.commit_entity_mutation(transaction, changes, event)
+        self.commit_record_mutation(transaction, changes, event)
             .await
     }
 
     async fn attach_reusable_attribute_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+        record: &Record,
         revision_id: Uuid,
     ) -> Result<Uuid, RepositoryError> {
         let ws = workspace(self);
@@ -537,18 +537,18 @@ impl CatalogRepository {
         if revision.status != "published" {
             return Err(RepositoryError::ReusableAttributeNotPublished);
         }
-        let position: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(position), -1) + 1 FROM entity_reusable_attribute_attachments WHERE workspace_id = $1 AND entity_id = $2")
-            .bind(ws).bind(entity.id).fetch_one(&mut **transaction).await?;
+        let position: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(position), -1) + 1 FROM record_reusable_attribute_attachments WHERE workspace_id = $1 AND record_id = $2")
+            .bind(ws).bind(record.id).fetch_one(&mut **transaction).await?;
         let attachment_id = Uuid::new_v4();
-        let attached = sqlx::query("INSERT INTO entity_reusable_attribute_attachments (id, workspace_id, entity_id, reusable_attribute_definition_id, reusable_attribute_revision_id, position) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (workspace_id, entity_id, reusable_attribute_definition_id) DO NOTHING")
-            .bind(attachment_id).bind(ws).bind(entity.id).bind(revision.definition_id).bind(revision.id).bind(position).execute(&mut **transaction).await?;
+        let attached = sqlx::query("INSERT INTO record_reusable_attribute_attachments (id, workspace_id, record_id, reusable_attribute_definition_id, reusable_attribute_revision_id, position) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (workspace_id, record_id, reusable_attribute_definition_id) DO NOTHING")
+            .bind(attachment_id).bind(ws).bind(record.id).bind(revision.definition_id).bind(revision.id).bind(position).execute(&mut **transaction).await?;
         if attached.rows_affected() == 0 {
             return Err(RepositoryError::ReusableAttributeAlreadyAttached);
         }
         let attribute_id = Uuid::new_v4();
-        sqlx::query(r#"INSERT INTO attributes (id, workspace_id, entity_id, reusable_attribute_revision_id, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position)
+        sqlx::query(r#"INSERT INTO attributes (id, workspace_id, record_id, reusable_attribute_revision_id, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)"#)
-            .bind(attribute_id).bind(ws).bind(entity.id).bind(revision.id).bind(format!("{}:{}", revision.namespace, revision.code))
+            .bind(attribute_id).bind(ws).bind(record.id).bind(revision.id).bind(format!("{}:{}", revision.namespace, revision.code))
             .bind(&revision.value_type).bind(&revision.value_schema).bind(&revision.default_value).bind(&revision.file_policy)
             .bind(&revision.target_blueprint_code).bind(&revision.cardinality).bind(&revision.target_cardinality).bind(&revision.tags)
             .bind(&revision.context_fallback).bind(&revision.context_editable).bind(revision.readonly).bind(position).execute(&mut **transaction).await?;
@@ -556,7 +556,7 @@ impl CatalogRepository {
             let context_id = self.resolve_context_id(transaction, None).await?;
             self.insert_value(
                 transaction,
-                entity,
+                record,
                 NewAttributeValue::Scalar {
                     attribute_id: Some(attribute_id),
                     attribute_code: None,
@@ -566,21 +566,21 @@ impl CatalogRepository {
             )
             .await?;
         }
-        self.revalidate_entity(transaction, entity).await?;
+        self.revalidate_record(transaction, record).await?;
         Ok(attachment_id)
     }
 
-    pub async fn entity_reusable_attributes(
+    pub async fn record_reusable_attributes(
         &self,
-        entity_id: Uuid,
-    ) -> Result<Vec<EntityReusableAttribute>, RepositoryError> {
-        Ok(sqlx::query_as::<_, Db<EntityReusableAttribute>>(r#"SELECT aat.id AS attachment_id, a.id AS attribute_id, d.id AS definition_id, r.id AS revision_id, d.namespace, d.namespace || ':' || d.code AS code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, aat.position
-          FROM entity_reusable_attribute_attachments aat
+        record_id: Uuid,
+    ) -> Result<Vec<RecordReusableAttribute>, RepositoryError> {
+        Ok(sqlx::query_as::<_, Db<RecordReusableAttribute>>(r#"SELECT aat.id AS attachment_id, a.id AS attribute_id, d.id AS definition_id, r.id AS revision_id, d.namespace, d.namespace || ':' || d.code AS code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, aat.position
+          FROM record_reusable_attribute_attachments aat
           JOIN reusable_attribute_revisions r ON r.id = aat.reusable_attribute_revision_id
           JOIN reusable_attribute_definitions d ON d.id = r.definition_id
-          JOIN attributes a ON a.entity_id = aat.entity_id AND a.reusable_attribute_revision_id = r.id AND a.workspace_id = aat.workspace_id
-          WHERE aat.workspace_id = $1 AND aat.entity_id = $2 AND a.deleted_at IS NULL
-          ORDER BY aat.position"#).bind(workspace(self)).bind(entity_id).fetch_all(&self.pool).await?
+          JOIN attributes a ON a.record_id = aat.record_id AND a.reusable_attribute_revision_id = r.id AND a.workspace_id = aat.workspace_id
+          WHERE aat.workspace_id = $1 AND aat.record_id = $2 AND a.deleted_at IS NULL
+          ORDER BY aat.position"#).bind(workspace(self)).bind(record_id).fetch_all(&self.pool).await?
         .into_domain())
     }
 

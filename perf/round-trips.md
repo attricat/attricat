@@ -24,7 +24,7 @@ request route, background tick, or task kind) and
 | Scenario | Round trips |
 | --- | ---: |
 | Explorer search, 3 filters (cold / warm) | 17 / 16 |
-| Entity update, 10 values (cold / warm) | 83 / 85 |
+| Record update, 10 values (cold / warm) | 83 / 85 |
 | Extension event task, unified no-op handler | 9 |
 | Extension event task, example extension | 23 / 22 |
 | Idle round trips per second, 1 workspace | 261 |
@@ -40,7 +40,7 @@ Measured on the same harness after Phases 1–9 (in-memory cache backend).
 | Scenario | Before | After |
 | --- | ---: | ---: |
 | Explorer search, 3 filters (cold / warm) | 17 / 16 | 8 / 6 |
-| Entity update, 10 values (cold / warm) | 83 / 85 | 23 / 23 |
+| Record update, 10 values (cold / warm) | 83 / 85 | 23 / 23 |
 | Extension event task, unified no-op handler | 9 | 4 |
 | Extension event task, example extension (cold / warm) | 23 / 22 | 12 / 10 |
 | Idle round trips per second, 1 workspace | 261 | 37.4 |

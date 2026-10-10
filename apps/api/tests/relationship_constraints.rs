@@ -6,7 +6,7 @@ const LOCATION: &str = r#"
 format_version = 1
 code = "rc_location"
 name = "Location"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -31,8 +31,8 @@ acyclic = true
 context_editable = "default"
 "#;
 
-async fn entity(client: &Client, base_url: &str, blueprint: &str) -> String {
-    create_entity_with(client, base_url, blueprint, json!([])).await["id"]
+async fn record(client: &Client, base_url: &str, blueprint: &str) -> String {
+    create_record_with(client, base_url, blueprint, json!([])).await["id"]
         .as_str()
         .unwrap()
         .to_owned()
@@ -46,8 +46,8 @@ async fn link(
     targets: &[&str],
 ) -> reqwest::Response {
     client
-        .post(format!("{base_url}/entities/{source}/relationships/replace"))
-        .json(&json!({ "relationships": [{ "attribute_code": field, "target_entity_ids": targets }] }))
+        .post(format!("{base_url}/records/{source}/relationships/replace"))
+        .json(&json!({ "relationships": [{ "attribute_code": field, "target_record_ids": targets }] }))
         .send()
         .await
         .unwrap()
@@ -59,9 +59,9 @@ async fn hierarchies_reject_writes_that_close_a_cycle(pool: PgPool) {
     let client = authenticated_client();
     create_blueprint(&client, &base_url, LOCATION).await;
     let [a, b, c] = [
-        entity(&client, &base_url, "rc_location").await,
-        entity(&client, &base_url, "rc_location").await,
-        entity(&client, &base_url, "rc_location").await,
+        record(&client, &base_url, "rc_location").await,
+        record(&client, &base_url, "rc_location").await,
+        record(&client, &base_url, "rc_location").await,
     ];
 
     for (source, target) in [(&a, &b), (&b, &c)] {
@@ -93,7 +93,7 @@ async fn hierarchies_reject_writes_that_close_a_cycle(pool: PgPool) {
     );
 
     // Acyclic many-to-many: diamonds are allowed, closing a loop is not.
-    let d = entity(&client, &base_url, "rc_location").await;
+    let d = record(&client, &base_url, "rc_location").await;
     for (source, targets) in [
         (&a, vec![b.as_str(), c.as_str()]),
         (&b, vec![&d]),
@@ -113,11 +113,11 @@ async fn hierarchies_reject_writes_that_close_a_cycle(pool: PgPool) {
     assert_eq!(path[1], json!(a));
     assert_eq!(path.as_array().unwrap().last(), Some(&json!(d)));
 
-    // Entity creation applies the same check.
+    // Record creation applies the same check.
     let created = client
-        .post(format!("{base_url}/v1/entities"))
+        .post(format!("{base_url}/v1/records"))
         .json(&json!({ "blueprint": { "code": "rc_location" }, "values": [
-            {"kind": "relationship", "attribute_code": "parent", "context_id": null, "target_entity_id": a},
+            {"kind": "relationship", "attribute_code": "parent", "context_id": null, "target_record_id": a},
         ] }))
         .send()
         .await
@@ -133,8 +133,8 @@ async fn concurrent_writes_cannot_jointly_create_a_cycle(pool: PgPool) {
     let client = authenticated_client();
     create_blueprint(&client, &base_url, LOCATION).await;
     for _ in 0..5 {
-        let a = entity(&client, &base_url, "rc_location").await;
-        let b = entity(&client, &base_url, "rc_location").await;
+        let a = record(&client, &base_url, "rc_location").await;
+        let b = record(&client, &base_url, "rc_location").await;
         let mut writes = tokio::task::JoinSet::new();
         for (source, target) in [(a.clone(), b.clone()), (b.clone(), a.clone())] {
             let client = client.clone();
@@ -162,9 +162,9 @@ async fn publishing_a_hierarchy_reports_existing_cycles_and_extra_parents(pool: 
     let blueprint = create_blueprint(&client, &base_url, &unconstrained).await;
     let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap().to_owned();
     let [a, b, c] = [
-        entity(&client, &base_url, "rc_location").await,
-        entity(&client, &base_url, "rc_location").await,
-        entity(&client, &base_url, "rc_location").await,
+        record(&client, &base_url, "rc_location").await,
+        record(&client, &base_url, "rc_location").await,
+        record(&client, &base_url, "rc_location").await,
     ];
     link(&client, &base_url, &a, "parent", &[&b, &c])
         .await
@@ -234,7 +234,7 @@ async fn publishing_a_hierarchy_reports_existing_cycles_and_extra_parents(pool: 
         .await
         .error_for_status()
         .unwrap();
-    // Entities pinned to revision 1 now follow the family's hierarchy.
+    // Records pinned to revision 1 now follow the family's hierarchy.
     let pinned = link(&client, &base_url, &b, "parent", &[&a]).await;
     assert_eq!(pinned.status(), StatusCode::CONFLICT);
     let pinned_second_parent = link(&client, &base_url, &c, "parent", &[&a, &b]).await;
@@ -252,11 +252,9 @@ async fn link_in(
     targets: &[&str],
 ) -> reqwest::Response {
     client
-        .post(format!(
-            "{base_url}/entities/{source}/relationships/replace"
-        ))
+        .post(format!("{base_url}/records/{source}/relationships/replace"))
         .json(&json!({ "relationships": [{
-            "attribute_code": field, "context_id": context_id, "target_entity_ids": targets,
+            "attribute_code": field, "context_id": context_id, "target_record_ids": targets,
         }] }))
         .send()
         .await
@@ -267,8 +265,8 @@ async fn link_in(
 async fn hierarchies_follow_edges_inherited_from_parent_contexts(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
-    // Revision 1 lets entities set the field per context; revision 2 makes it
-    // a hierarchy, which entities pinned to revision 1 must still respect.
+    // Revision 1 lets records set the field per context; revision 2 makes it
+    // a hierarchy, which records pinned to revision 1 must still respect.
     let contextual = LOCATION
         .replace("tree = true\n", "")
         .replace("acyclic = true\ncontext_editable = \"default\"\n", "");
@@ -287,8 +285,8 @@ async fn hierarchies_follow_edges_inherited_from_parent_contexts(pool: PgPool) {
         .unwrap();
     let fr = french["id"].as_str().unwrap();
     let [a, b] = [
-        entity(&client, &base_url, "rc_location").await,
-        entity(&client, &base_url, "rc_location").await,
+        record(&client, &base_url, "rc_location").await,
+        record(&client, &base_url, "rc_location").await,
     ];
     // a -> b in default, b -> a only in fr: fr inherits a -> b.
     link(&client, &base_url, &a, "depends_on", &[&b])
@@ -345,7 +343,7 @@ async fn hierarchies_follow_edges_inherited_from_parent_contexts(pool: PgPool) {
     assert_eq!(body["error"]["details"]["path"], json!([b, a, b]));
 
     // A local fr edge of a overrides the inherited one, so no cycle forms.
-    let c = entity(&client, &base_url, "rc_location").await;
+    let c = record(&client, &base_url, "rc_location").await;
     link_in(&client, &base_url, &a, "depends_on", fr, &[&c])
         .await
         .error_for_status()
@@ -373,7 +371,7 @@ async fn relationships_accept_only_listed_target_blueprints(pool: PgPool) {
 format_version = 1
 code = "{code}"
 name = "{code}"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -392,7 +390,7 @@ value_type = "string"
 format_version = 1
 code = "rc_assessment"
 name = "Assessment"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -418,10 +416,10 @@ target_blueprints = ["rc_product", "rc_material"]
         json!(["rc_product", "rc_material"])
     );
 
-    let product = entity(&client, &base_url, "rc_product").await;
-    let material = entity(&client, &base_url, "rc_material").await;
-    let supplier = entity(&client, &base_url, "rc_supplier").await;
-    let source = entity(&client, &base_url, "rc_assessment").await;
+    let product = record(&client, &base_url, "rc_product").await;
+    let material = record(&client, &base_url, "rc_material").await;
+    let supplier = record(&client, &base_url, "rc_supplier").await;
+    let source = record(&client, &base_url, "rc_assessment").await;
     assert_eq!(
         link(
             &client,
@@ -441,9 +439,9 @@ target_blueprints = ["rc_product", "rc_material"]
         "relationship_target_type_mismatch"
     );
     let rejected_create = client
-        .post(format!("{base_url}/v1/entities"))
+        .post(format!("{base_url}/v1/records"))
         .json(&json!({ "blueprint": { "code": "rc_assessment" }, "values": [
-            {"kind": "relationship", "attribute_code": "subject", "context_id": null, "target_entity_id": supplier},
+            {"kind": "relationship", "attribute_code": "subject", "context_id": null, "target_record_id": supplier},
         ] }))
         .send()
         .await
@@ -454,7 +452,7 @@ target_blueprints = ["rc_product", "rc_material"]
     for target in [&product, &material] {
         let incoming: Value = client
             .post(format!(
-                "{base_url}/v1/entities/{target}/incoming-relationships"
+                "{base_url}/v1/records/{target}/incoming-relationships"
             ))
             .json(&json!({
                 "relationships": [{ "source_blueprint": "rc_assessment", "field": "subject" }],

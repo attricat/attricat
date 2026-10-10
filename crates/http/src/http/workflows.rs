@@ -82,7 +82,7 @@ pub(super) async fn run_now(
     ApiJson(input): ApiJson<CreateManualWorkflowRun>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
     let run_id = repo
-        .create_manual_workflow_run(id, input.entity_id, &input.idempotency_key)
+        .create_manual_workflow_run(id, input.record_id, &input.idempotency_key)
         .await?;
     Ok((
         StatusCode::ACCEPTED,
@@ -117,7 +117,7 @@ pub(super) async fn replay_run(
     }
 }
 
-/// Per-target outcomes of `referencing_entities_update` actions in one run.
+/// Per-target outcomes of `referencing_records_update` actions in one run.
 pub(super) async fn list_run_targets(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
     ApiPath(id): ApiPath<Uuid>,

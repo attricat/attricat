@@ -1,4 +1,4 @@
-import type { Attribute, ComponentReference } from '../../entities/api';
+import type { Attribute, ComponentReference } from '../../records/api';
 import { stringControlComponents } from '../controls/definitions';
 import { fieldDisplayComponent } from './FieldDisplay';
 import { fieldEditComponent } from './FieldEdit';
@@ -8,7 +8,7 @@ import { incomingRelationshipListDisplayComponent } from './IncomingRelationship
 import { tableDisplayComponent } from './TableDisplay';
 import { tableImageComponent } from './TableImage';
 import { tableEditComponent } from './TableEdit';
-import { entityHeadingComponent } from './blocks/EntityHeadingConfig';
+import { recordHeadingComponent } from './blocks/RecordHeadingConfig';
 import { relationshipHierarchyComponent } from './RelationshipHierarchy';
 import type {
   HeadingRenderer,
@@ -27,7 +27,7 @@ export const viewComponents: readonly ViewComponentDefinition[] = [
   tableDisplayComponent,
   tableImageComponent,
   tableEditComponent,
-  entityHeadingComponent,
+  recordHeadingComponent,
   relationshipHierarchyComponent,
 ] satisfies readonly ViewComponentDefinition[];
 

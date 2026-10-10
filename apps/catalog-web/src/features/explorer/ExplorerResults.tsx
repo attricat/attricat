@@ -1,11 +1,11 @@
 import { Alert, Box } from '@mui/material';
 import { useState } from 'react';
-import type { EntityItem } from '../entities/api';
+import type { RecordItem } from '../records/api';
 import { SaveSelectionAsSearchDialog } from '../saved-views/SaveSelectionAsSearchDialog';
 import { ExplorerResultsTable } from './ExplorerResultsTable';
 import { HiddenOutdatedNotice } from './HiddenOutdatedNotice';
 import type { AttributeFilterDraft } from './attributeFilterValues';
-import type { OpenEntityPanel } from './ExplorerTableCells';
+import type { OpenRecordPanel } from './ExplorerTableCells';
 import type { ExplorerSearch } from './search';
 import type { ExplorerData } from './useExplorerData';
 import { useExplorerSelection } from './useExplorerSelection';
@@ -13,10 +13,10 @@ import { useExplorerSelection } from './useExplorerSelection';
 type Props = {
   data: ExplorerData;
   onFilterCell: (draft: AttributeFilterDraft) => void;
-  onOpenPanel?: OpenEntityPanel;
+  onOpenPanel?: OpenRecordPanel;
   onShowAllVersions: () => void;
   onSortChange: (field: string) => void;
-  panelEntityId?: string;
+  panelRecordId?: string;
   search: ExplorerSearch;
 };
 
@@ -26,7 +26,7 @@ export const ExplorerResults = ({
   onOpenPanel,
   onShowAllVersions,
   onSortChange,
-  panelEntityId,
+  panelRecordId,
   search,
 }: Props) => {
   const {
@@ -53,7 +53,7 @@ export const ExplorerResults = ({
   // The table remounts for every search; selection outlives it.
   const selection = useExplorerSelection(search.blueprint, items);
   const [savedSearchSelection, setSavedSearchSelection] = useState<
-    EntityItem[] | null
+    RecordItem[] | null
   >(null);
 
   return (
@@ -87,8 +87,8 @@ export const ExplorerResults = ({
                 search.attributeFilters,
                 relationshipFilters,
               ])}
-              canPublish={capabilities?.entities_publish === true}
-              canDelete={capabilities?.entities_delete === true}
+              canPublish={capabilities?.records_publish === true}
+              canDelete={capabilities?.records_delete === true}
               hasNextPage={results.hasNextPage}
               isFetching={results.isFetching}
               isFetchingNextPage={results.isFetchingNextPage}
@@ -110,7 +110,7 @@ export const ExplorerResults = ({
               }
               onFilterCell={onFilterCell}
               onOpenPanel={onOpenPanel}
-              panelEntityId={panelEntityId}
+              panelRecordId={panelRecordId}
               onSaveSelectionAsSearch={setSavedSearchSelection}
               onSortChange={onSortChange}
               sort={search.sort}
@@ -120,7 +120,7 @@ export const ExplorerResults = ({
       )}
       {savedSearchSelection && (
         <SaveSelectionAsSearchDialog
-          entities={savedSearchSelection}
+          records={savedSearchSelection}
           onClose={() => setSavedSearchSelection(null)}
           onSuccess={() => {
             setSavedSearchSelection(null);

@@ -1,7 +1,7 @@
-//! The one loader and resolution rule for entity values per context.
+//! The one loader and resolution rule for record values per context.
 //!
-//! Every consumer that needs "the value of attribute X in context C" (entity
-//! checks, transition conditions and rules, unique keys, the JSON entity
+//! Every consumer that needs "the value of attribute X in context C" (record
+//! checks, transition conditions and rules, unique keys, the JSON record
 //! schema, publication gates, record locks and approval digests) loads
 //! [`RecordValues`] and resolves them through [`ContextTree::path`] with
 //! [`resolve_on_path`], so they cannot disagree.
@@ -19,7 +19,7 @@
 //! `context_fallback = "none"` only looks at the requested context.
 use super::RepositoryError;
 use super::values::{NativeValueRow, native_value_json};
-use catalog_validation::predicate::Record;
+use catalog_validation::predicate::ResolvedRecord;
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 use sqlx::PgConnection;
@@ -131,7 +131,7 @@ pub(crate) fn resolve_on_path<T>(
         .find_map(|context| direct(*context).map(|value| (*context, value)))
 }
 
-/// Which snapshot of an entity's values to load.
+/// Which snapshot of a record's values to load.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RecordState {
     /// The state at the start of the current transaction.
@@ -160,15 +160,15 @@ impl DirectValue {
     }
 }
 
-/// One attribute's direct values of an entity, by context.
+/// One attribute's direct values of a record, by context.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct AttributeValues {
     pub value_type: String,
     /// `context_fallback` is not `none`.
     pub inherit: bool,
-    /// One of the entity's own additional (reusable) attributes rather than a
+    /// One of the record's own additional (reusable) attributes rather than a
     /// field of its blueprint revision.
-    pub entity_scoped: bool,
+    pub record_scoped: bool,
     pub by_context: HashMap<Uuid, DirectValue>,
 }
 
@@ -179,7 +179,7 @@ impl AttributeValues {
     }
 }
 
-/// One live entity's direct values in every context.
+/// One live record's direct values in every context.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct RecordValues {
     pub id: Uuid,
@@ -205,11 +205,11 @@ impl RecordValues {
     }
 
     /// Every resolved attribute, as the predicate engine reads a record.
-    pub(crate) fn record(&self, path: &[Uuid]) -> Record {
-        let mut record = Record {
+    pub(crate) fn record(&self, path: &[Uuid]) -> ResolvedRecord {
+        let mut record = ResolvedRecord {
             id: self.id.to_string(),
             tags: self.tags.clone(),
-            ..Record::default()
+            ..ResolvedRecord::default()
         };
         for (code, attribute) in &self.attributes {
             if let Some(direct) = attribute.resolve(path) {
@@ -220,13 +220,13 @@ impl RecordValues {
         record
     }
 
-    /// The document validated by the blueprint's JSON entity schema: resolved
-    /// values of the blueprint revision's fields (not the entity's own
+    /// The document validated by the blueprint's JSON record schema: resolved
+    /// values of the blueprint revision's fields (not the record's own
     /// additional attributes). Missing values are omitted.
     pub(crate) fn schema_document(&self, path: &[Uuid]) -> Map<String, Value> {
         self.attributes
             .iter()
-            .filter(|(_, attribute)| !attribute.entity_scoped)
+            .filter(|(_, attribute)| !attribute.record_scoped)
             .filter_map(|(code, attribute)| {
                 attribute
                     .resolve(path)
@@ -242,23 +242,23 @@ impl RecordValues {
     }
 }
 
-/// Which entities to load.
+/// Which records to load.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Selection<'a> {
-    /// These entities, of any blueprint family.
-    Entities(&'a [Uuid]),
-    /// Every live entity of a blueprint family.
+    /// These records, of any blueprint family.
+    Records(&'a [Uuid]),
+    /// Every live record of a blueprint family.
     Family(Uuid),
 }
 
 #[derive(sqlx::FromRow)]
 struct ValueRow {
-    entity_id: Uuid,
+    record_id: Uuid,
     attribute_code: String,
     context_fallback: String,
-    entity_scoped: bool,
+    record_scoped: bool,
     context_id: Uuid,
-    relationship_target_entity_id: Option<Uuid>,
+    relationship_target_record_id: Option<Uuid>,
     active: bool,
     created_at: DateTime<Utc>,
     files: Option<Value>,
@@ -266,11 +266,11 @@ struct ValueRow {
     native: NativeValueRow,
 }
 
-const VALUE_COLUMNS: &str = "v.entity_id, a.code AS attribute_code, a.value_type, a.context_fallback, (a.entity_id IS NOT NULL) AS entity_scoped, v.context_id, v.relationship_target_entity_id, v.active, v.created_at, v.value_text, v.value_number, v.value_integer, v.value_boolean, v.value_date, v.value_datetime, v.value_time, v.value_time_zone, v.value_json";
+const VALUE_COLUMNS: &str = "v.record_id, a.code AS attribute_code, a.value_type, a.context_fallback, (a.record_id IS NOT NULL) AS record_scoped, v.context_id, v.relationship_target_record_id, v.active, v.created_at, v.value_text, v.value_number, v.value_integer, v.value_boolean, v.value_date, v.value_datetime, v.value_time, v.value_time_zone, v.value_json";
 const CURRENT_FILES: &str = "(SELECT COALESCE(jsonb_agg(jsonb_build_object('id', f.id, 'sha256', f.sha256) ORDER BY r.position), '[]'::jsonb) FROM attribute_file_references r JOIN files f ON f.id = r.file_id AND f.workspace_id = r.workspace_id WHERE r.attribute_value_id = v.id AND r.workspace_id = v.workspace_id)";
 const ARCHIVED_FILES: &str = "(SELECT COALESCE(jsonb_agg(jsonb_build_object('id', f.id, 'sha256', f.sha256) ORDER BY r.position), '[]'::jsonb) FROM attribute_file_reference_history r JOIN files f ON f.id = r.file_id AND f.workspace_id = r.workspace_id WHERE r.attribute_value_history_id = v.id AND r.attribute_value_history_archived_at = v.archived_at)";
-/// `$1` workspace, `$2` entity IDs, `$3` optional attribute codes.
-const VALUE_FILTER: &str = "JOIN attributes a ON a.id = v.attribute_id AND a.deleted_at IS NULL WHERE v.workspace_id = $1 AND v.entity_id = ANY($2) AND ($3::text[] IS NULL OR a.code = ANY($3))";
+/// `$1` workspace, `$2` record IDs, `$3` optional attribute codes.
+const VALUE_FILTER: &str = "JOIN attributes a ON a.id = v.attribute_id AND a.deleted_at IS NULL WHERE v.workspace_id = $1 AND v.record_id = ANY($2) AND ($3::text[] IS NULL OR a.code = ANY($3))";
 
 fn value_query(state: RecordState) -> String {
     let select = |table: &str, files: &str| {
@@ -291,7 +291,7 @@ fn value_query(state: RecordState) -> String {
     }
 }
 
-/// Loads live entities with their direct values. Missing or deleted IDs are
+/// Loads live records with their direct values. Missing or deleted IDs are
 /// omitted. `codes` restricts the attributes loaded. Reads see the caller's
 /// uncommitted writes.
 pub(crate) async fn load_records(
@@ -302,13 +302,13 @@ pub(crate) async fn load_records(
     state: RecordState,
 ) -> Result<BTreeMap<Uuid, RecordValues>, RepositoryError> {
     let (ids, family) = match selection {
-        Selection::Entities([]) => return Ok(BTreeMap::new()),
-        Selection::Entities(ids) => (Some(ids), None),
+        Selection::Records([]) => return Ok(BTreeMap::new()),
+        Selection::Records(ids) => (Some(ids), None),
         Selection::Family(blueprint_id) => (None, Some(blueprint_id)),
     };
     let mut records: BTreeMap<Uuid, RecordValues> =
         sqlx::query_as::<_, (Uuid, Uuid, i64, Vec<String>)>(
-            "SELECT id, blueprint_id, blueprint_version, system_tags FROM entities WHERE workspace_id = $1 AND deleted_at IS NULL AND ($2::uuid[] IS NULL OR id = ANY($2)) AND ($3::uuid IS NULL OR blueprint_id = $3)",
+            "SELECT id, blueprint_id, blueprint_version, system_tags FROM records WHERE workspace_id = $1 AND deleted_at IS NULL AND ($2::uuid[] IS NULL OR id = ANY($2)) AND ($3::uuid IS NULL OR blueprint_id = $3)",
         )
         .bind(workspace_id)
         .bind(ids)
@@ -340,29 +340,29 @@ pub(crate) async fn load_records(
         .fetch_all(&mut *conn)
         .await?;
     for row in rows {
-        if let Some(record) = records.get_mut(&row.entity_id) {
+        if let Some(record) = records.get_mut(&row.record_id) {
             add_row(record, row)?;
         }
     }
     Ok(records)
 }
 
-/// Loads one live entity, or `None` when it is missing or deleted.
+/// Loads one live record, or `None` when it is missing or deleted.
 pub(crate) async fn load_record(
     conn: &mut PgConnection,
     workspace_id: Uuid,
-    entity_id: Uuid,
+    record_id: Uuid,
     state: RecordState,
 ) -> Result<Option<RecordValues>, RepositoryError> {
     Ok(load_records(
         conn,
         workspace_id,
-        Selection::Entities(&[entity_id]),
+        Selection::Records(&[record_id]),
         None,
         state,
     )
     .await?
-    .remove(&entity_id))
+    .remove(&record_id))
 }
 
 fn add_row(record: &mut RecordValues, row: ValueRow) -> Result<(), RepositoryError> {
@@ -372,11 +372,11 @@ fn add_row(record: &mut RecordValues, row: ValueRow) -> Result<(), RepositoryErr
         .or_insert_with(|| AttributeValues {
             value_type: row.native.value_type.clone(),
             inherit: row.context_fallback != "none",
-            entity_scoped: row.entity_scoped,
+            record_scoped: row.record_scoped,
             by_context: HashMap::new(),
         });
     if row.native.value_type == "relationship" {
-        let (Some(target), true) = (row.relationship_target_entity_id, row.active) else {
+        let (Some(target), true) = (row.relationship_target_record_id, row.active) else {
             return Ok(());
         };
         let direct = attribute
@@ -465,7 +465,7 @@ mod tests {
         AttributeValues {
             value_type: value_type.into(),
             inherit,
-            entity_scoped: false,
+            record_scoped: false,
             by_context: values
                 .iter()
                 .map(|(context, value)| (Uuid::from_u128(*context), direct(value.clone())))
@@ -534,14 +534,14 @@ mod tests {
     }
 
     #[test]
-    fn schema_documents_exclude_entity_scoped_attributes() {
+    fn schema_documents_exclude_record_scoped_attributes() {
         let mut record = RecordValues::empty(Uuid::from_u128(10), Uuid::nil(), 1);
         record.attributes.insert(
             "title".into(),
             attribute("string", true, &[(1, json!("A"))]),
         );
         let mut own = attribute("string", true, &[(1, json!("B"))]);
-        own.entity_scoped = true;
+        own.record_scoped = true;
         record.attributes.insert("acme:note".into(), own);
         let path = [Uuid::from_u128(1)];
         assert_eq!(
@@ -555,12 +555,12 @@ mod tests {
     fn relationship_rows_keep_sorted_active_targets_only() {
         let mut record = RecordValues::empty(Uuid::from_u128(10), Uuid::nil(), 1);
         let row = |target: u128, context: u128, active: bool| ValueRow {
-            entity_id: Uuid::from_u128(10),
+            record_id: Uuid::from_u128(10),
             attribute_code: "parts".into(),
             context_fallback: "inherit".into(),
-            entity_scoped: false,
+            record_scoped: false,
             context_id: Uuid::from_u128(context),
-            relationship_target_entity_id: Some(Uuid::from_u128(target)),
+            relationship_target_record_id: Some(Uuid::from_u128(target)),
             active,
             created_at: DateTime::<Utc>::MIN_UTC,
             files: None,

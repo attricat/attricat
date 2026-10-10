@@ -113,7 +113,7 @@ pub struct PlanningWorkspaceSnapshot {
     pub extension_layout: Value,
     pub extension_layout_valid: bool,
     pub role_codes: BTreeSet<String>,
-    pub published_entity_codes: BTreeSet<String>,
+    pub published_record_codes: BTreeSet<String>,
     pub seed: SeedWorkspaceSnapshot,
 }
 
@@ -131,7 +131,7 @@ pub enum PlanResourceKind {
     Rule,
     Workflow,
     SavedSearch,
-    SampleEntity,
+    SampleRecord,
 }
 
 impl PlanResourceKind {
@@ -146,7 +146,7 @@ impl PlanResourceKind {
             Self::Rule => "rule",
             Self::Workflow => "workflow",
             Self::SavedSearch => "saved_search",
-            Self::SampleEntity => "sample_entity",
+            Self::SampleRecord => "sample_record",
         }
     }
 }
@@ -161,7 +161,7 @@ pub enum MappingKind {
     Create,
     /// A workspace-wide setting.
     Workspace,
-    /// A sample entity an earlier application created.
+    /// A sample record an earlier application created.
     Reuse,
 }
 
@@ -1238,7 +1238,7 @@ fn plan_explore_navigation_action(
                 visibility_conflict = true;
                 ("conflict", "visibility_mismatch")
             } else if workspace
-                .published_entity_codes
+                .published_record_codes
                 .contains(&mapping.target_code)
             {
                 ("satisfied", "exact_match")
@@ -1425,7 +1425,7 @@ fn plan_extension_layout_action(
 
 fn blueprint_kind_name(kind: BlueprintKind) -> &'static str {
     match kind {
-        BlueprintKind::Entity => "entity",
+        BlueprintKind::Record => "record",
         BlueprintKind::Mixin => "mixin",
     }
 }

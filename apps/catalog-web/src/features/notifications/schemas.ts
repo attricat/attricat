@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const notificationSubjectSchema = z.object({
-  kind: z.enum(['entity', 'agent_conversation']),
+  kind: z.enum(['record', 'agent_conversation']),
   id: z.uuid(),
 });
 

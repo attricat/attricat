@@ -5,7 +5,7 @@ fn definition(value_type: &str, schema: serde_json::Value) -> String {
         r#"format_version = 1
 code = "status_item"
 name = "Status item"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["status"]

@@ -16,7 +16,7 @@ export type StartExtensionRunInput = {
     blueprint_id: string;
     blueprint_version: number;
     context_id: string | null;
-    entity_ids: string[];
+    record_ids: string[];
   };
 };
 

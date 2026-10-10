@@ -25,9 +25,7 @@ describe('CreatePersonalTokenPage', () => {
   it('submits only once while token creation is pending', async () => {
     const client = new QueryClient();
     const session = { capabilities: { tokens_manage: true } };
-    const permissions = [
-      { code: 'entities.read', description: 'Read entities' },
-    ];
+    const permissions = [{ code: 'records.read', description: 'Read records' }];
     vi.mocked(currentSession).mockResolvedValue(session as never);
     vi.mocked(listTokenPermissions).mockResolvedValue(permissions);
     client.setQueryData(authQueryKeys.session(), session);
@@ -43,7 +41,7 @@ describe('CreatePersonalTokenPage', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Label' }), {
       target: { value: 'My token' },
     });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'entities.read' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'records.read' }));
     const form = view.container.querySelector('form')!;
     fireEvent.submit(form);
     fireEvent.submit(form);

@@ -99,7 +99,7 @@ fn schema_rejects_unknown_keys_and_values() {
         r#"format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 colour = "red"
 [[attributes]]
 code = "name"
@@ -108,7 +108,7 @@ value_type = "string"
         r#"format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 [[attributes]]
 code = "name"
 value_type = "text"
@@ -116,7 +116,7 @@ value_type = "text"
         r#"format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
+kind = "record"
 [views.detail]
 type = "stack"
 children = [{ type = "field", field = "name", label = "Name" }]

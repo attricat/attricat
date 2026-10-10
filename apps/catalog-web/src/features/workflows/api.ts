@@ -85,7 +85,7 @@ export const enableWorkflowRevision = (
 
 export const runWorkflowNow = (
   id: string,
-  entityId: string,
+  recordId: string,
   idempotencyKey: string,
 ): Promise<{ id: string }> =>
   request(
@@ -93,7 +93,7 @@ export const runWorkflowNow = (
     z.object({ id: z.uuid() }),
     {
       body: JSON.stringify({
-        entity_id: z.uuid().parse(entityId),
+        record_id: z.uuid().parse(recordId),
         idempotency_key: z.string().min(1).max(128).parse(idempotencyKey),
       }),
       headers: { 'Content-Type': 'application/json' },

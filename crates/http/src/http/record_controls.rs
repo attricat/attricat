@@ -6,7 +6,7 @@ use super::{
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
-use crate::repository::{EntityApproval, FileRetentionHold, StatusTransitionAccess};
+use crate::repository::{FileRetentionHold, RecordApproval, StatusTransitionAccess};
 use axum::{Json, extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -32,38 +32,38 @@ pub(super) struct PlaceHold {
 pub(super) async fn status_transitions(
     ScopedRepository(repository): ScopedRepository,
     principal: AuthenticatedPrincipal,
-    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiPath(record_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<TransitionQuery>,
 ) -> Result<Json<Items<StatusTransitionAccess>>, ApiError> {
     let items = repository
-        .status_transition_access(entity_id, query.context_id, principal.actor())
+        .status_transition_access(record_id, query.context_id, principal.actor())
         .await?;
     Ok(Json(Items { items }))
 }
 
 pub(super) async fn approvals(
     ScopedRepository(repository): ScopedRepository,
-    ApiPath(entity_id): ApiPath<Uuid>,
-) -> Result<Json<Items<EntityApproval>>, ApiError> {
+    ApiPath(record_id): ApiPath<Uuid>,
+) -> Result<Json<Items<RecordApproval>>, ApiError> {
     repository
-        .get_entity(entity_id)
+        .get_record(record_id)
         .await?
-        .ok_or(ApiError::not_found("entity"))?;
+        .ok_or(ApiError::not_found("record"))?;
     Ok(Json(Items {
-        items: repository.entity_approvals(entity_id).await?,
+        items: repository.record_approvals(record_id).await?,
     }))
 }
 
-pub(super) async fn entity_holds(
+pub(super) async fn record_holds(
     ScopedRepository(repository): ScopedRepository,
-    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiPath(record_id): ApiPath<Uuid>,
 ) -> Result<Json<Items<FileRetentionHold>>, ApiError> {
     repository
-        .get_entity(entity_id)
+        .get_record(record_id)
         .await?
-        .ok_or(ApiError::not_found("entity"))?;
+        .ok_or(ApiError::not_found("record"))?;
     Ok(Json(Items {
-        items: repository.entity_retention_holds(entity_id).await?,
+        items: repository.record_retention_holds(record_id).await?,
     }))
 }
 
@@ -80,9 +80,9 @@ pub(super) async fn file_holds(
         user_id,
         workspace_id,
         file_id,
-        |file_id, entity_id, blueprint_id| crate::file_access::FileAccessOperation::ReadMetadata {
+        |file_id, record_id, blueprint_id| crate::file_access::FileAccessOperation::ReadMetadata {
             file_id,
-            entity_id,
+            record_id,
             blueprint_id,
         },
     )

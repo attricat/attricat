@@ -7,10 +7,10 @@ import { getSavedView } from './api';
 import { savedViewQueryKeys } from './queryKeys';
 
 export const SavedExplorer = ({
-  panelEntityId,
+  panelRecordId,
   search,
 }: {
-  panelEntityId?: string;
+  panelRecordId?: string;
   search: ExplorerSearch;
 }) => {
   const { t } = useTranslation();
@@ -21,13 +21,13 @@ export const SavedExplorer = ({
     queryFn: ({ signal }) => getSavedView(id, link, signal),
     enabled: Boolean(id),
   });
-  if (!id) return <Explorer panelEntityId={panelEntityId} search={search} />;
+  if (!id) return <Explorer panelRecordId={panelRecordId} search={search} />;
   if (view.isPending)
     return <CircularProgress aria-label={t('explorer.loadingSavedSearch')} />;
   if (view.isError) return <Alert severity="error">{view.error.message}</Alert>;
   return (
     <Explorer
-      panelEntityId={panelEntityId}
+      panelRecordId={panelRecordId}
       search={{ ...view.data.state, sourceView: link ? undefined : id }}
       savedView={link ? undefined : view.data}
     />

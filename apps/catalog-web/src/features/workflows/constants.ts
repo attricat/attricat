@@ -40,7 +40,7 @@ code = "example-workflow"
 name = "Example workflow"
 
 [[triggers]]
-event_type = "entity.created.v1"
+event_type = "record.created.v1"
 
 [[actions]]
 type = "system_tags_add"

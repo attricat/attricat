@@ -45,7 +45,7 @@ async fn drain_rule_tasks(pool: &PgPool) {
 const DEFINITION: &str = r#"format_version = 1
 code = "generation_item"
 name = "Generation item"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -108,12 +108,12 @@ async fn published_versions_contexts_and_rules_apply_to_the_next_request(pool: P
     assert_eq!(latest["blueprint"]["version"], 2);
     assert_eq!(latest["blueprint"]["name"], "Generation item v2");
 
-    // An entity written before and after a new context exists.
-    let entity = create_entity(&client, &base, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap().to_owned();
+    // A record written before and after a new context exists.
+    let record = create_record(&client, &base, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap().to_owned();
     let update = |values: Value| {
         client
-            .put(format!("{base}/v1/entities/{entity_id}"))
+            .put(format!("{base}/v1/records/{record_id}"))
             .json(&json!({ "values": values }))
     };
     let (status, body) = send(update(json!([

@@ -18,7 +18,7 @@ const DOCUMENT_BLUEPRINT: &str = r#"
 format_version = 1
 code = "interactive_document_item"
 name = "Interactive document item"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["title"]
@@ -30,7 +30,7 @@ const OTHER_BLUEPRINT: &str = r#"
 format_version = 1
 code = "interactive_other_item"
 name = "Interactive other item"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["title"]
@@ -109,7 +109,7 @@ async fn install(
     .await
 }
 
-fn start_body(release: Uuid, key: &str, blueprint: (Uuid, i64), entities: &[Uuid]) -> Value {
+fn start_body(release: Uuid, key: &str, blueprint: (Uuid, i64), records: &[Uuid]) -> Value {
     json!({
         "release_id": release,
         "operation_id": "summarize",
@@ -119,7 +119,7 @@ fn start_body(release: Uuid, key: &str, blueprint: (Uuid, i64), entities: &[Uuid
             "blueprint_id": blueprint.0,
             "blueprint_version": blueprint.1,
             "context_id": null,
-            "entity_ids": entities
+            "record_ids": records
         }
     })
 }
@@ -130,14 +130,14 @@ struct ScopedViewer {
     grant: Uuid,
 }
 
-/// Adds a member whose only grant is a viewer role scoped to one entity.
-async fn entity_scoped_viewer(pool: &sqlx::PgPool, entity_id: Uuid) -> ScopedViewer {
+/// Adds a member whose only grant is a viewer role scoped to one record.
+async fn record_scoped_viewer(pool: &sqlx::PgPool, record_id: Uuid) -> ScopedViewer {
     let (user, membership) = add_workspace_user(pool).await;
     let grant = grant_role(
         pool,
         membership,
         VIEWER_ROLE_ID,
-        GrantScope::Entity(entity_id),
+        GrantScope::Record(record_id),
     )
     .await;
     ScopedViewer {
@@ -158,8 +158,8 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
     let store = Arc::new(FakeObjectStore::available());
     let release = install(&repository, store.clone(), &interactive_component()).await;
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
-    let first = titled_entity(&repository, blueprint, "First").await;
-    let second = titled_entity(&repository, blueprint, "Second").await;
+    let first = titled_record(&repository, blueprint, "First").await;
+    let second = titled_record(&repository, blueprint, "Second").await;
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let start_url = format!("{base}/extensions/{EXTENSION}/bulk/operations");
 
@@ -310,7 +310,7 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
     assert_eq!(checkpoint["outside_rejected"], true);
 
     let (tags, metadata): (Vec<String>, Value) =
-        sqlx::query_as("SELECT system_tags, system_metadata FROM entities WHERE id=$1")
+        sqlx::query_as("SELECT system_tags, system_metadata FROM records WHERE id=$1")
             .bind(first)
             .fetch_one(&pool)
             .await
@@ -325,7 +325,7 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
             .contains_key("cleared")
     );
     let events: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM domain_events WHERE event_type='entity.annotations_changed.v1' AND aggregate_id IN ($1,$2) AND source_name=$3",
+        "SELECT COUNT(*) FROM domain_events WHERE event_type='record.annotations_changed.v1' AND aggregate_id IN ($1,$2) AND source_name=$3",
     )
     .bind(first)
     .bind(second)
@@ -357,7 +357,7 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::PgPool) {
+async fn interactive_runs_are_authorized_per_record_and_fail_closed(pool: sqlx::PgPool) {
     let repository = CatalogRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
@@ -366,10 +366,10 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
     let release = install(&repository, store.clone(), &interactive_component()).await;
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
     let other_blueprint = published_blueprint(&repository, OTHER_BLUEPRINT).await;
-    let visible = titled_entity(&repository, blueprint, "Visible").await;
-    let hidden = titled_entity(&repository, blueprint, "Hidden").await;
-    let foreign = titled_entity(&repository, other_blueprint, "Foreign").await;
-    let scoped_viewer = entity_scoped_viewer(&pool, visible).await;
+    let visible = titled_record(&repository, blueprint, "Visible").await;
+    let hidden = titled_record(&repository, blueprint, "Hidden").await;
+    let foreign = titled_record(&repository, other_blueprint, "Foreign").await;
+    let scoped_viewer = record_scoped_viewer(&pool, visible).await;
     let viewer = scoped_viewer.user;
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let start_url = format!("{base}/extensions/{EXTENSION}/bulk/operations");
@@ -569,7 +569,7 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
     assert_eq!(cancelled.status(), StatusCode::NO_CONTENT);
     repository.delete_context(context.id).await.unwrap();
 
-    // Frozen membership is not permission: losing the entity grant hides the run.
+    // Frozen membership is not permission: losing the record grant hides the run.
     sqlx::query("DELETE FROM role_grants WHERE id=$1")
         .bind(scoped_viewer.grant)
         .execute(&pool)
@@ -642,7 +642,7 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
         .unwrap();
     assert_eq!(cancelled.status, InteractiveRunStatus::Cancelled);
     let annotated: bool =
-        sqlx::query_scalar("SELECT system_metadata ? $2 FROM entities WHERE id=$1")
+        sqlx::query_scalar("SELECT system_metadata ? $2 FROM records WHERE id=$1")
             .bind(visible)
             .bind(EXTENSION)
             .fetch_one(&pool)
@@ -652,10 +652,10 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
     server.abort();
 }
 
-fn annotate(key: &str, entity_id: Uuid, expected_revision: Option<i64>) -> ExtensionCatalogIntent {
+fn annotate(key: &str, record_id: Uuid, expected_revision: Option<i64>) -> ExtensionCatalogIntent {
     ExtensionCatalogIntent::Annotate {
         intent_key: key.into(),
-        entity_id,
+        record_id,
         add_tags: vec!["generated".into()],
         remove_tags: vec![],
         set_metadata: [("template".to_owned(), json!(2))].into(),
@@ -676,8 +676,8 @@ const TAG_CHECKED_BLUEPRINT: &str = r#"
 format_version = 1
 code = "tag_checked_item"
 name = "Tag checked item"
-kind = "entity"
-entity_schema = '''{
+kind = "record"
+record_schema = '''{
   "x-attricat-checks": [
     {"code": "not-blocked", "predicate": {"type": "missing_tag", "tag": "acme.docs:blocked"}}
   ]
@@ -698,10 +698,10 @@ async fn annotation_tag_changes_run_tag_checks(pool: sqlx::PgPool) {
         .unwrap();
     let extension = repository.for_extension("acme.docs");
     let blueprint = published_blueprint(&repository, TAG_CHECKED_BLUEPRINT).await;
-    let item = titled_entity(&repository, blueprint, "Item").await;
+    let item = titled_record(&repository, blueprint, "Item").await;
     let tag = |key: &str, tag: &str| ExtensionCatalogIntent::Annotate {
         intent_key: key.into(),
-        entity_id: item,
+        record_id: item,
         add_tags: vec![tag.into()],
         remove_tags: vec![],
         set_metadata: Default::default(),
@@ -722,7 +722,7 @@ async fn annotation_tag_changes_run_tag_checks(pool: sqlx::PgPool) {
         .await
         .unwrap();
     assert_eq!(blocked[0].status, ExtensionCatalogIntentStatus::Rejected);
-    let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM entities WHERE id = $1")
+    let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM records WHERE id = $1")
         .bind(item)
         .fetch_one(&pool)
         .await
@@ -740,7 +740,7 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
         .unwrap();
     let extension = repository.for_extension("acme.docs");
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
-    let first = titled_entity(&repository, blueprint, "First").await;
+    let first = titled_record(&repository, blueprint, "First").await;
 
     let applied = extension
         .execute_extension_catalog_batch(batch("b1", vec![annotate("a1", first, Some(0))]))
@@ -778,7 +778,7 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
             "b3",
             vec![ExtensionCatalogIntent::Annotate {
                 intent_key: "a3".into(),
-                entity_id: first,
+                record_id: first,
                 add_tags: vec!["x".into()],
                 remove_tags: vec!["x".into()],
                 set_metadata: Default::default(),
@@ -801,7 +801,7 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
         .unwrap();
     assert_eq!(applied[0].status, ExtensionCatalogIntentStatus::Applied);
     let (tags, metadata): (Vec<String>, Value) =
-        sqlx::query_as("SELECT system_tags, system_metadata FROM entities WHERE id=$1")
+        sqlx::query_as("SELECT system_tags, system_metadata FROM records WHERE id=$1")
             .bind(first)
             .fetch_one(&pool)
             .await
@@ -829,10 +829,10 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
 
     let (base, server) =
         start_server_with_object_store(pool.clone(), Arc::new(FakeObjectStore::available())).await;
-    let entity_url = format!("{base}/v1/entities/{first}");
+    let record_url = format!("{base}/v1/records/{first}");
     // Whole-field writes that drop or alter a protected namespace are rejected.
     let dropped = authenticated_client()
-        .put(&entity_url)
+        .put(&record_url)
         .json(&json!({"system_tags": ["editor"]}))
         .send()
         .await
@@ -843,7 +843,7 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
         "protected_annotation_namespace"
     );
     let forged = authenticated_client()
-        .put(&entity_url)
+        .put(&record_url)
         .json(&json!({"system_metadata": {"acme.docs": {"template": 9}, "acme.other": {"template": 2}}}))
         .send()
         .await
@@ -855,15 +855,15 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
     let mut metadata_with_note = metadata.clone();
     metadata_with_note["note"] = json!("ok");
     let unrelated = authenticated_client()
-        .put(&entity_url)
+        .put(&record_url)
         .json(&json!({"system_tags": kept, "system_metadata": metadata_with_note}))
         .send()
         .await
         .unwrap();
     assert_eq!(unrelated.status(), StatusCode::OK);
 
-    // A duplicate does not inherit facts about the source entity.
-    let copy = repository.duplicate_entity(first).await.unwrap();
+    // A duplicate does not inherit facts about the source record.
+    let copy = repository.duplicate_record(first).await.unwrap();
     assert!(copy.system_tags.contains(&"editor".to_owned()));
     assert!(!copy.system_tags.iter().any(|tag| tag.starts_with("acme.")));
     assert!(copy.system_metadata.get("acme.docs").is_none());
@@ -872,7 +872,7 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
     // Operator repair uses the same audited patch path.
     let repaired = authenticated_client()
         .post(format!(
-            "{base}/extensions/acme.docs/annotation-namespace/entities/{first}"
+            "{base}/extensions/acme.docs/annotation-namespace/records/{first}"
         ))
         .json(&json!({"remove_tags": ["generated"], "remove_metadata": ["template"], "expected_revision": 1}))
         .send()
@@ -894,7 +894,7 @@ async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPo
     install(&repository, store.clone(), b"server").await;
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
     let legacy = repository
-        .create_entity_with_values(
+        .create_record_with_values(
             blueprint.0,
             blueprint.1,
             vec![],
@@ -924,7 +924,7 @@ async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPo
         .await
         .unwrap();
     assert_eq!(inventory["claimed"], false);
-    assert_eq!(inventory["annotated_entities"], 1);
+    assert_eq!(inventory["annotated_records"], 1);
     let adopted = authenticated_client()
         .post(format!(
             "{base}/extensions/{EXTENSION}/annotation-namespace"
@@ -944,7 +944,7 @@ async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPo
         .await
         .unwrap();
     assert_eq!(not_object[0].status, ExtensionCatalogIntentStatus::Rejected);
-    let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM entities WHERE id=$1")
+    let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM records WHERE id=$1")
         .bind(legacy)
         .fetch_one(&pool)
         .await
@@ -957,7 +957,7 @@ async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPo
     // non-object value, after which the extension can write again.
     let repaired = authenticated_client()
         .post(format!(
-            "{base}/extensions/{EXTENSION}/annotation-namespace/entities/{legacy}"
+            "{base}/extensions/{EXTENSION}/annotation-namespace/records/{legacy}"
         ))
         .json(&json!({"remove_tags": ["Old Tag"], "set_metadata": {"migrated": true}}))
         .send()
@@ -998,7 +998,7 @@ async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
         .await
         .unwrap();
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
-    let entity = titled_entity(&repository, blueprint, "Race").await;
+    let record = titled_record(&repository, blueprint, "Race").await;
     // Stand in for a first claim of `acme.race` that is still counting
     // existing data under that name.
     let mut claim = pool.begin().await.unwrap();
@@ -1014,8 +1014,8 @@ async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
     // Writes that do not touch the name are not held up.
     tokio::time::timeout(
         Duration::from_secs(10),
-        repository.update_entity_with_values(
-            entity,
+        repository.update_record_with_values(
+            record,
             vec![],
             vec![],
             vec![],
@@ -1031,8 +1031,8 @@ async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
     let writer = repository.clone();
     let touching = tokio::spawn(async move {
         writer
-            .update_entity_with_values(
-                entity,
+            .update_record_with_values(
+                record,
                 vec![],
                 vec![],
                 vec![],
@@ -1072,8 +1072,8 @@ async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) 
     let store = Arc::new(FakeObjectStore::available());
     let release = install(&repository, store.clone(), &interactive_component()).await;
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
-    let member = titled_entity(&repository, blueprint, "Replay").await;
-    let viewer = entity_scoped_viewer(&pool, member).await.user;
+    let member = titled_record(&repository, blueprint, "Replay").await;
+    let viewer = record_scoped_viewer(&pool, member).await.user;
     let context = repository
         .create_context(CreateAttributeContext {
             code: "replay_context".into(),
@@ -1137,9 +1137,9 @@ async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
         .await
         .unwrap();
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
-    let first = titled_entity(&repository, blueprint, "First").await;
-    let second = titled_entity(&repository, blueprint, "Second").await;
-    let viewer = entity_scoped_viewer(&pool, first).await.user;
+    let first = titled_record(&repository, blueprint, "First").await;
+    let second = titled_record(&repository, blueprint, "Second").await;
+    let viewer = record_scoped_viewer(&pool, first).await.user;
     // With a single connection, holding one while acquiring another would
     // wait for the acquire timeout and fail.
     let bounded = sqlx::postgres::PgPoolOptions::new()
@@ -1157,7 +1157,7 @@ async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
             user_id: viewer,
             token_id: None,
         },
-        entity_ids: vec![first, second],
+        record_ids: vec![first, second],
         blueprint_id: blueprint.0,
         blueprint_version: blueprint.1,
         context_id: None,
@@ -1166,11 +1166,11 @@ async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
         .interactive_selection_page(EXTENSION, &scope, "", 10)
         .await
         .unwrap();
-    let statuses: Vec<&str> = page["entities"]
+    let statuses: Vec<&str> = page["records"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|entity| entity["status"].as_str().unwrap())
+        .map(|record| record["status"].as_str().unwrap())
         .collect();
     assert_eq!(statuses, ["available", "unavailable"]);
 }
@@ -1179,7 +1179,7 @@ const LINKING_BLUEPRINT: &str = r#"
 format_version = 1
 code = "interactive_linking_item"
 name = "Interactive linking item"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["title"]
@@ -1203,24 +1203,24 @@ async fn interactive_links_require_read_access_to_every_target(pool: sqlx::PgPoo
     install(&repository, store, b"server").await;
     let targets = published_blueprint(&repository, OTHER_BLUEPRINT).await;
     let linking = published_blueprint(&repository, LINKING_BLUEPRINT).await;
-    let source = titled_entity(&repository, linking, "Source").await;
-    let readable = titled_entity(&repository, targets, "Readable").await;
-    let hidden = titled_entity(&repository, targets, "Hidden").await;
+    let source = titled_record(&repository, linking, "Source").await;
+    let readable = titled_record(&repository, targets, "Readable").await;
+    let hidden = titled_record(&repository, targets, "Hidden").await;
     let ScopedViewer {
         user, membership, ..
-    } = entity_scoped_viewer(&pool, source).await;
+    } = record_scoped_viewer(&pool, source).await;
     grant_role(
         &pool,
         membership,
         EDITOR_ROLE_ID,
-        GrantScope::Entity(source),
+        GrantScope::Record(source),
     )
     .await;
     grant_role(
         &pool,
         membership,
         VIEWER_ROLE_ID,
-        GrantScope::Entity(readable),
+        GrantScope::Record(readable),
     )
     .await;
     let scope = InteractiveRunScope {
@@ -1228,7 +1228,7 @@ async fn interactive_links_require_read_access_to_every_target(pool: sqlx::PgPoo
             user_id: user,
             token_id: None,
         },
-        entity_ids: vec![source],
+        record_ids: vec![source],
         blueprint_id: linking.0,
         blueprint_version: linking.1,
         context_id: None,
@@ -1236,12 +1236,12 @@ async fn interactive_links_require_read_access_to_every_target(pool: sqlx::PgPoo
     let run = repository.for_interactive_run(EXTENSION, Uuid::new_v4(), &scope);
     let link = |key: &str, target: Uuid| ExtensionCatalogIntent::Relationships {
         intent_key: key.into(),
-        entity_id: source,
+        record_id: source,
         relationships: vec![RelationshipTargets {
             attribute_id: None,
             attribute_code: Some("related".into()),
             context_id: None,
-            target_entity_ids: vec![target],
+            target_record_ids: vec![target],
         }],
     };
 

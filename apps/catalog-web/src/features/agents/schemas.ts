@@ -9,7 +9,7 @@ export const conversationSchema = z.object({
   created_by_user_id: id.nullable(),
   title: z.string(),
   title_source: z.enum(['manual', 'pending', 'generated']),
-  entity_id: id.nullable(),
+  record_id: id.nullable(),
   context_id: id.nullable(),
   created_at: dateTime,
   updated_at: dateTime,

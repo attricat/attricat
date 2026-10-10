@@ -98,7 +98,7 @@ pub(crate) fn validate_view(
         ViewDefinition::ExtensionLayout { version, outlets } => {
             if view != "extension_layout"
                 || *version != 1
-                || *blueprint_kind != BlueprintKind::Entity
+                || *blueprint_kind != BlueprintKind::Record
             {
                 return Err(BlueprintError::InvalidExtensionLayout);
             }

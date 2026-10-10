@@ -8,7 +8,7 @@ import {
   ShareSearchButton,
 } from '../saved-views/SavedSearchControls';
 import type { SavedView } from '../saved-views/schemas';
-import { ExplorerEntityPanel } from './ExplorerEntityPanel';
+import { ExplorerRecordPanel } from './ExplorerRecordPanel';
 import { ExplorerFilterBar } from './ExplorerFilterBar';
 import { ExplorerLoadErrors } from './ExplorerLoadErrors';
 import { ExplorerLoadingIndicator } from './ExplorerLoadingIndicator';
@@ -25,21 +25,21 @@ import {
 } from './explorerSearchState';
 import { getLastBlueprint, setLastBlueprint } from './lastBlueprint';
 import type { ExplorerSearch } from './search';
-import type { OpenEntityPanel } from './ExplorerTableCells';
+import type { OpenRecordPanel } from './ExplorerTableCells';
 import { useExplorerData } from './useExplorerData';
 import { useSavedSearchActions } from '../saved-views/useSavedSearchActions';
 import { useExplorerSearchActions } from './useExplorerSearchActions';
 import { lexiconText } from '../lexicon/lexicon';
 
 type Props = {
-  /** The result open in the entity panel on wide screens. */
-  panelEntityId?: string;
+  /** The result open in the record panel on wide screens. */
+  panelRecordId?: string;
   search: ExplorerSearch;
   savedView?: SavedView;
 };
 
 export const Explorer = ({
-  panelEntityId,
+  panelRecordId,
   search: urlSearch,
   savedView,
 }: Props) => {
@@ -104,16 +104,16 @@ export const Explorer = ({
       selectedBlueprint.isFetching ||
       (canSearch && results.isPending && !results.data));
   // Narrower screens open results on their own page.
-  const panelOpen = isWideDesktop && panelEntityId !== undefined;
-  const showInPanel = (entity: string | undefined) =>
+  const panelOpen = isWideDesktop && panelRecordId !== undefined;
+  const showInPanel = (record: string | undefined) =>
     void navigate({
       to: '/',
-      search: (previous) => ({ ...previous, entity }),
+      search: (previous) => ({ ...previous, record }),
       replace: true,
     });
-  const openPanel: OpenEntityPanel = (entityId, opener) => {
+  const openPanel: OpenRecordPanel = (recordId, opener) => {
     panelOpenerRef.current = opener;
-    showInPanel(entityId);
+    showInPanel(recordId);
   };
   const closePanel = () => {
     showInPanel(undefined);
@@ -186,7 +186,7 @@ export const Explorer = ({
             data={data}
             onFilterCell={requestFilter}
             onOpenPanel={isWideDesktop ? openPanel : undefined}
-            panelEntityId={panelOpen ? panelEntityId : undefined}
+            panelRecordId={panelOpen ? panelRecordId : undefined}
             onShowAllVersions={actions.showAllVersions}
             onSortChange={actions.toggleSort}
             search={search}
@@ -194,12 +194,12 @@ export const Explorer = ({
         </PageContainer>
       </Box>
       {panelOpen && (
-        <ExplorerEntityPanel
+        <ExplorerRecordPanel
           contextId={data.contextId}
-          entityId={panelEntityId}
-          key={panelEntityId}
+          recordId={panelRecordId}
+          key={panelRecordId}
           onClose={closePanel}
-          onOpenEntity={showInPanel}
+          onOpenRecord={showInPanel}
         />
       )}
     </Box>

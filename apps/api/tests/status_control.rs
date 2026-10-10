@@ -4,7 +4,7 @@ use support::*;
 const DEFINITION: &str = r#"format_version = 1
 code = 'status_item'
 name = 'Status item'
-kind = 'entity'
+kind = 'record'
 [views.dropdown_option]
 type = 'dropdown_option'
 fields = ['status']
@@ -49,14 +49,14 @@ async fn status_transitions_are_atomic_and_stale_edits_are_rejected(pool: PgPool
         .unwrap();
     let create = |status: &str| {
         client
-            .post(format!("{base}/v1/entities"))
+            .post(format!("{base}/v1/records"))
             .json(&json!({"blueprint":{"code":"status_item"},"values":[value(status)]}))
     };
     assert_eq!(
         create("live").send().await.unwrap().status(),
         StatusCode::UNPROCESSABLE_ENTITY
     );
-    let entity: Value = create("draft")
+    let record: Value = create("draft")
         .send()
         .await
         .unwrap()
@@ -65,8 +65,8 @@ async fn status_transitions_are_atomic_and_stale_edits_are_rejected(pool: PgPool
         .json()
         .await
         .unwrap();
-    let url = format!("{base}/v1/entities/{}", entity["id"].as_str().unwrap());
-    let version = &entity["updated_at"];
+    let url = format!("{base}/v1/records/{}", record["id"].as_str().unwrap());
+    let version = &record["updated_at"];
     // Intermediate writes cannot turn draft -> live -> done into one valid save.
     let denied = client
         .put(&url)
@@ -122,7 +122,7 @@ async fn status_transitions_are_atomic_and_stale_edits_are_rejected(pool: PgPool
         .unwrap();
     assert_eq!(done["projections"]["preview"]["default"]["status"], "done");
     // The append endpoint has the same precondition and transition rules.
-    let append_url = format!("{base}/entities/{}/values", entity["id"].as_str().unwrap());
+    let append_url = format!("{base}/records/{}/values", record["id"].as_str().unwrap());
     let append = client
         .post(&append_url)
         .json(&json!({"expected_updated_at":done["updated_at"],"values":[value("draft")]}))
@@ -162,8 +162,8 @@ async fn inherited_status_and_removing_an_override_use_effective_values(pool: Pg
         .json()
         .await
         .unwrap();
-    let entity: Value = client
-        .post(format!("{base}/v1/entities"))
+    let record: Value = client
+        .post(format!("{base}/v1/records"))
         .json(&json!({"blueprint":{"code":"status_item"},"values":[value("draft")]}))
         .send()
         .await
@@ -173,12 +173,12 @@ async fn inherited_status_and_removing_an_override_use_effective_values(pool: Pg
         .json()
         .await
         .unwrap();
-    let url = format!("{base}/v1/entities/{}", entity["id"].as_str().unwrap());
+    let url = format!("{base}/v1/records/{}", record["id"].as_str().unwrap());
     let mut live_value = value("live");
     live_value["context_id"] = context["id"].clone();
     let live: Value = client
         .put(&url)
-        .json(&json!({"expected_updated_at":entity["updated_at"],"values":[live_value]}))
+        .json(&json!({"expected_updated_at":record["updated_at"],"values":[live_value]}))
         .send()
         .await
         .unwrap()
@@ -199,8 +199,8 @@ async fn concurrent_status_edits_have_one_winner(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();
     create_blueprint(&client, &base, DEFINITION).await;
-    let entity: Value = client
-        .post(format!("{base}/v1/entities"))
+    let record: Value = client
+        .post(format!("{base}/v1/records"))
         .json(&json!({"blueprint":{"code":"status_item"},"values":[value("draft")]}))
         .send()
         .await
@@ -210,8 +210,8 @@ async fn concurrent_status_edits_have_one_winner(pool: PgPool) {
         .json()
         .await
         .unwrap();
-    let url = format!("{base}/v1/entities/{}", entity["id"].as_str().unwrap());
-    let body = json!({"expected_updated_at":entity["updated_at"],"values":[value("live")]});
+    let url = format!("{base}/v1/records/{}", record["id"].as_str().unwrap());
+    let body = json!({"expected_updated_at":record["updated_at"],"values":[value("live")]});
     let (a, b) = tokio::join!(
         client.put(&url).json(&body).send(),
         client.put(&url).json(&body).send()
@@ -236,8 +236,8 @@ async fn migration_does_not_silently_clear_a_status(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base, DEFINITION).await;
-    let entity: Value = client
-        .post(format!("{base}/v1/entities"))
+    let record: Value = client
+        .post(format!("{base}/v1/records"))
         .json(&json!({"blueprint":{"code":"status_item"},"values":[value("draft")]}))
         .send()
         .await
@@ -248,7 +248,7 @@ async fn migration_does_not_silently_clear_a_status(pool: PgPool) {
         .await
         .unwrap();
     let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
-    let definition = "format_version = 1\ncode = 'status_item'\nname = 'Status item'\nkind = 'entity'\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'";
+    let definition = "format_version = 1\ncode = 'status_item'\nname = 'Status item'\nkind = 'record'\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'";
     client
         .post(format!("{base}/blueprints/{blueprint_id}/versions"))
         .json(&json!({"definition":definition}))
@@ -267,8 +267,8 @@ async fn migration_does_not_silently_clear_a_status(pool: PgPool) {
         .error_for_status()
         .unwrap();
     let url = format!(
-        "{base}/v1/entities/{}/blueprint-migration",
-        entity["id"].as_str().unwrap()
+        "{base}/v1/records/{}/blueprint-migration",
+        record["id"].as_str().unwrap()
     );
     let preview: Value = client
         .post(format!("{url}/preview"))

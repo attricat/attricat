@@ -11,8 +11,8 @@ import {
 } from './draftStorage';
 
 const scope: DraftScope = {
-  editor: draftEditors.entityCreate,
-  resource: ['entity-1', 'context-1'],
+  editor: draftEditors.recordCreate,
+  resource: ['record-1', 'context-1'],
   userId: 'user-1',
   workspaceId: 'workspace-1',
 };
@@ -69,9 +69,9 @@ describe('draft storage', () => {
       draftStorageKey(scope),
       draftStorageKey({ ...scope, workspaceId: 'workspace-2' }),
       draftStorageKey({ ...scope, userId: 'user-2' }),
-      draftStorageKey({ ...scope, editor: draftEditors.entityComment }),
-      draftStorageKey({ ...scope, resource: ['entity-1', 'context-2'] }),
-      draftStorageKey({ ...scope, resource: ['entity-1:context-1'] }),
+      draftStorageKey({ ...scope, editor: draftEditors.recordComment }),
+      draftStorageKey({ ...scope, resource: ['record-1', 'context-2'] }),
+      draftStorageKey({ ...scope, resource: ['record-1:context-1'] }),
     ]);
     expect(keys.size).toBe(6);
   });
@@ -108,7 +108,7 @@ describe('draft storage', () => {
 
   it('prunes other drafts when storage is full', () => {
     const key = draftStorageKey(scope);
-    const olderKey = draftStorageKey({ ...scope, resource: ['entity-2'] });
+    const olderKey = draftStorageKey({ ...scope, resource: ['record-2'] });
     const unrelatedKey = 'catalog.language';
     const serializedLength = JSON.stringify({ format: 1, ...draft }).length;
     const storage = new QuotaStorage(serializedLength * 2);

@@ -183,11 +183,11 @@ async fn blueprint_lifecycle_emits_versioned_events(pool: sqlx::PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let first = client.post(format!("{base_url}/blueprints"))
-        .json(&support::json!({"definition": "format_version = 1\ncode = \"evented\"\nname = \"Evented\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""}))
+        .json(&support::json!({"definition": "format_version = 1\ncode = \"evented\"\nname = \"Evented\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""}))
         .send().await.unwrap().error_for_status().unwrap().json::<support::Value>().await.unwrap();
     let id = first["blueprint"]["id"].as_str().unwrap();
     client.post(format!("{base_url}/blueprints/{id}/versions"))
-        .json(&support::json!({"definition": "format_version = 1\ncode = \"evented\"\nname = \"Evented revision\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""}))
+        .json(&support::json!({"definition": "format_version = 1\ncode = \"evented\"\nname = \"Evented revision\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""}))
         .send().await.unwrap().error_for_status().unwrap();
     client
         .post(format!("{base_url}/blueprints/{id}/versions/2/publish"))

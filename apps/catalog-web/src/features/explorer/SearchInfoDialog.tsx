@@ -1,15 +1,15 @@
 import { Dialog, DialogContent, DialogTitle, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import type { EntityItem } from '../entities/api';
+import type { RecordItem } from '../records/api';
 
 type Props = {
-  entity: EntityItem | null;
+  record: RecordItem | null;
   onClose: () => void;
 };
 
-export const SearchInfoDialog = ({ entity, onClose }: Props) => {
+export const SearchInfoDialog = ({ record, onClose }: Props) => {
   const { t } = useTranslation();
-  const details = entity?.match_explanations
+  const details = record?.match_explanations
     .map((explanation) =>
       explanation.traversal_depth
         ? t('explorer.matchViaRelationship', {
@@ -26,7 +26,7 @@ export const SearchInfoDialog = ({ entity, onClose }: Props) => {
     .join(t('explorer.searchDetailsSeparator'));
 
   return (
-    <Dialog onClose={onClose} open={Boolean(entity)}>
+    <Dialog onClose={onClose} open={Boolean(record)}>
       <DialogTitle>{t('explorer.searchInfo')}</DialogTitle>
       <DialogContent>
         <Typography>{details || t('explorer.noSearchDetails')}</Typography>

@@ -4,14 +4,14 @@ const sameJson = (left: unknown, right: unknown) =>
   JSON.stringify(left) === JSON.stringify(right);
 
 /**
- * A migration is safe to run automatically when the entity schema is
+ * A migration is safe to run automatically when the record schema is
  * unchanged and every retained attribute keeps its storage contract.
  */
 export const isSafeAutomaticMigration = (
   source: BlueprintWithAttributes,
   target: BlueprintWithAttributes,
 ) => {
-  if (!sameJson(source.blueprint.entity_schema, target.blueprint.entity_schema))
+  if (!sameJson(source.blueprint.record_schema, target.blueprint.record_schema))
     return false;
   const targetAttributes = new Map(
     target.attributes.map((attribute) => [attribute.code, attribute]),

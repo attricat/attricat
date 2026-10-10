@@ -152,8 +152,8 @@ export const ExportsPage = () => {
                             checks,
                           })
                         }
-                        requireValidEntity={
-                          channel?.require_valid_entity ?? false
+                        requireValidRecord={
+                          channel?.require_valid_record ?? false
                         }
                         requiredRuleCodes={channel?.required_rule_codes ?? []}
                         ruleCodes={ruleCodes}

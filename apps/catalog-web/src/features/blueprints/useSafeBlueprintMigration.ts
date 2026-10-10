@@ -15,7 +15,7 @@ import { isSafeAutomaticMigration } from './safeMigration';
 import type { Blueprint } from './schemas';
 
 /**
- * Loads migration batches and decides whether entities can be migrated
+ * Loads migration batches and decides whether records can be migrated
  * automatically from the previous published revision to the latest one.
  */
 export const useSafeBlueprintMigration = (

@@ -21,11 +21,11 @@ The blueprint `name` and `description`, attribute `name` and `description`, tab 
 format_version = 1
 code = "product"
 name = "Product"
-kind = "entity"
-entity_schema = '''{ "type": "object", "required": ["title"] }'''
+kind = "record"
+record_schema = '''{ "type": "object", "required": ["title"] }'''
 ```
 
-Record blueprints use `kind = "entity"`: in blueprint keys, as in the API, records are called entities.
+Record blueprints use `kind = "record"`.
 
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -33,11 +33,11 @@ Record blueprints use `kind = "entity"`: in blueprint keys, as in the API, recor
 | `code` | code | Yes | Identifier of the blueprint family. It cannot change between revisions. |
 | `name` | string | Yes | Display name. Can change between revisions. |
 | `description` | string | No | What the blueprint's records are, up to 500 characters, such as "Product groupings, such as Basic tools". The agent reads it to match people's words to records; the web app does not show it yet. |
-| `kind` | `"entity"` or `"mixin"` | Yes | An `entity` blueprint can have records. A `mixin` only supplies attributes to other blueprints through `[[includes]]`. |
+| `kind` | `"record"` or `"mixin"` | Yes | An `record` blueprint can have records. A `mixin` only supplies attributes to other blueprints through `[[includes]]`. |
 | `attributes` | array of tables | Yes | At least one attribute. See [Attributes](#attributes). |
 | `includes` | array of tables | No | Mixins this blueprint pulls attributes from. See [Includes](#includes). |
-| `views` | table | For `entity`: yes | Layouts for the web app. Record blueprints must define `views.dropdown_option`. See [Views](#views). |
-| `entity_schema` | string (JSON) | No | JSON Schema for the whole record, optionally with [`x-attricat-checks`](#record-checks). Record blueprints only. See [Validation](/builders/validation/). |
+| `views` | table | For `record`: yes | Layouts for the web app. Record blueprints must define `views.dropdown_option`. See [Views](#views). |
+| `record_schema` | string (JSON) | No | JSON Schema for the whole record, optionally with [`x-attricat-checks`](#record-checks). Record blueprints only. See [Validation](/builders/validation/). |
 | `publication` | table | No | Publication reapproval policy. See [Publication](#publication). |
 | `rules` | array of tables | No | Data-quality rules owned by this blueprint. See [Rules](/builders/rules/). |
 | `unique_keys` | array of tables | No | Business keys whose values must be unique. Record blueprints only. See [Unique keys](#unique-keys). |
@@ -111,7 +111,7 @@ value_schema = '''{
       { "from": "draft", "to": "review", "code": "submit" },
       { "from": "review", "to": "released", "code": "release",
         "roles": ["reviewer"], "separate_from": ["submit"] },
-      { "from": "released", "to": "draft", "code": "correct", "permission": "entities.publish" }
+      { "from": "released", "to": "draft", "code": "correct", "permission": "records.publish" }
     ]
   }
 }'''
@@ -212,7 +212,7 @@ context_editable = "default"
 - The hierarchy applies to the whole blueprint family as declared by its latest published revision, including records still pinned to older revisions.
 - Publishing a revision that adds `acyclic` or `tree` checks the existing links first. If they contain cycles, or a tree has records with more than one target, publication fails with `409 relationship_hierarchy_violations`; `error.details` lists up to 20 cycles and records with extra targets. Fix the links and publish again.
 
-Relationships cannot have `value_schema` or `default_value`. Constrain them with `entity_schema` instead.
+Relationships cannot have `value_schema` or `default_value`. Constrain them with `record_schema` instead.
 
 ### File keys
 
@@ -395,7 +395,7 @@ Built-in components:
 | `catalog.relationship_list_edit` | 1 | `relationship_list` (edit) | `relationship` | |
 | `catalog.relationship_hierarchy` | 1 | `relationship_list` (detail) | `relationship` | `parent_field` |
 | `catalog.incoming_relationship_list_display` | 1 | `incoming_relationship_list` | | |
-| `catalog.entity_heading` | 1 | `stack` (detail) | | |
+| `catalog.record_heading` | 1 | `stack` (detail) | | |
 | `catalog.table_display` | 1 | `table` | Scalars | |
 | `catalog.table_edit` | 1 | `table` | Scalars | |
 | `catalog.table_image` | 1 | table column `renderer` | `file` with `cardinality = "one"` and `image_only = true` | |
@@ -421,7 +421,7 @@ An extension cell renderer's ID and version must match a renderer declared by an
 type = "extension_layout"
 version = 1
 
-[views.extension_layout.outlets.entity_preview_panel]
+[views.extension_layout.outlets.record_preview_panel]
 order = ["acme.inventory:summary"]
 hidden = ["acme.legacy:panel"]
 ```
@@ -429,7 +429,7 @@ hidden = ["acme.legacy:panel"]
 | Key | Description |
 | --- | --- |
 | `version` | Must be `1`. |
-| `outlets` | Keyed by `entity_preview_panel`, `entity_attribute_decoration`, or `entity_action`. |
+| `outlets` | Keyed by `record_preview_panel`, `record_attribute_decoration`, or `record_action`. |
 | `outlets.<outlet>.order` | Contribution keys (`<extension-id>:<contribution-id>`) in display order. |
 | `outlets.<outlet>.hidden` | Contribution keys to hide. |
 
@@ -457,7 +457,7 @@ This does not grant any permission. See [Publishing](/guides/publishing/).
 code = "released-documents-approved"
 name = "Released documents have an approver"
 severity = "error"
-triggers = [{ type = "event", event_type = "entity.updated.v1" }]
+triggers = [{ type = "event", event_type = "record.updated.v1" }]
 predicate = { type = "required", attribute_code = "approved_by" }
 
 [rules.enforcement]
@@ -515,10 +515,10 @@ Rules, record checks, transition conditions, and publication channel checks shar
 
 ### Record checks
 
-`x-attricat-checks` is an array inside `entity_schema`:
+`x-attricat-checks` is an array inside `record_schema`:
 
 ```toml
-entity_schema = '''
+record_schema = '''
 {
   "type": "object",
   "x-attricat-checks": [
@@ -535,7 +535,7 @@ entity_schema = '''
 | `message` | string | No | 1 to 500 characters. Replaces the generated message. |
 | `predicate` | object | Yes | A [predicate](#predicates), except `stale`, `unique`, and `acyclic`. |
 
-At most 32 checks. Failures return `422 entity_check_failed`. See [Validation](/builders/validation/#compare-attributes-with-checks).
+At most 32 checks. Failures return `422 record_check_failed`. See [Validation](/builders/validation/#compare-attributes-with-checks).
 
 ### Transition conditions
 
@@ -577,10 +577,10 @@ How values are compared:
 
 - Text is trimmed and every run of whitespace becomes one space. Unless `case_sensitive = true`, text is also compared in lowercase, so `ABC-1  Rev` and ` abc-1 rev` are the same key.
 - Numbers compare by value (`1.50` equals `1.5`), date-times by instant, and relationships by the linked record.
-- A record that has no value, or only blank text, for any of the key's attributes is not checked against that key. Make the attributes required in `entity_schema` if every record must have the key.
+- A record that has no value, or only blank text, for any of the key's attributes is not checked against that key. Make the attributes required in `record_schema` if every record must have the key.
 - The key covers the whole blueprint family as declared by its latest published revision, including records pinned to older revisions. Attributes are matched by code.
 
-A write that would give a second record the same key value returns `409 unique_key_conflict`. `error.details` names the `key`, the `context` code, the normalized `values`, and the `conflicting_entity_id` that already holds them. The check runs in the database inside the write's transaction, so when two people save the same value at the same moment, exactly one save succeeds.
+A write that would give a second record the same key value returns `409 unique_key_conflict`. `error.details` names the `key`, the `context` code, the normalized `values`, and the `conflicting_record_id` that already holds them. The check runs in the database inside the write's transaction, so when two people save the same value at the same moment, exactly one save succeeds.
 
 Publishing a revision that adds or changes unique keys checks existing records first. If some already share a value, publication fails with `409 unique_key_duplicates`, and `error.details.duplicates` lists up to 20 groups with the key, context, values, and record IDs (`error.details.total` counts all groups). Change or delete the duplicates and publish again.
 
@@ -618,8 +618,8 @@ A few compile-time rules that are easy to miss:
 
 - `format_version` other than `1` is rejected.
 - A record blueprint without `views.dropdown_option` is rejected.
-- `entity_schema` on a mixin is rejected.
-- `entity_schema` may only name attributes the blueprint has in its top-level `required`, `properties`, `dependentRequired`, and `dependentSchemas`.
+- `record_schema` on a mixin is rejected.
+- `record_schema` may only name attributes the blueprint has in its top-level `required`, `properties`, `dependentRequired`, and `dependentSchemas`.
 - Predicates in `x-attricat-checks`, transition `conditions`, and `[[rules]]` must name attributes the blueprint has, with types that suit the predicate. An ordering comparison on a string, or a comparison of a date with a number, is rejected.
 - `target_blueprint`, `target_blueprints`, `acyclic`, and `tree` on a non-relationship attribute are rejected.
 - `unique_keys` on a mixin, a key naming an unknown, `json`, file, or many-target relationship attribute, or a key listing an attribute twice is rejected.

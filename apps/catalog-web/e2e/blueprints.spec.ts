@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import {
   createBlueprint,
-  createEntityBlueprint,
+  createRecordBlueprint,
   createRevision,
   suffix,
 } from './helpers';
@@ -10,12 +10,12 @@ test('previews blueprint views and inspects revision metadata', async ({
   page,
 }) => {
   const code = `preview_${suffix()}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Preview product',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"',
     {
-      entitySchema:
+      recordSchema:
         '{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}',
       views:
         '[views.detail]\ntype = "stack"\nchildren = [{ type = "heading", text = "Preview detail" }, { type = "field", field = "title" }]\n\n[views.table]\ntype = "table"\nfields = ["title"]',
@@ -47,7 +47,7 @@ test('previews blueprint views and inspects revision metadata', async ({
 
 test('browses, filters, and compares blueprint revisions', async ({ page }) => {
   const code = `catalogue_${suffix()}`;
-  const first = await createEntityBlueprint(
+  const first = await createRecordBlueprint(
     code,
     'Catalogue product',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"',
@@ -57,7 +57,7 @@ test('browses, filters, and compares blueprint revisions', async ({ page }) => {
     `format_version = 1
 code = "${code}"
 name = "Catalogue product revision"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"

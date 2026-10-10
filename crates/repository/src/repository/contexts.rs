@@ -6,10 +6,10 @@ use crate::domain_events::{
     CONTEXT_CREATED_V1, CONTEXT_DELETED_V1, CONTEXT_UPDATED_V1, ContextCreatedV1, NewDomainEvent,
 };
 
-use super::entity_commands::lock_entity_writes;
 use super::generations::{Generation, advance_generation};
+use super::record_commands::lock_record_writes;
 use super::{CatalogRepository, RepositoryError, validate_code};
-use crate::model::{AttributeContext, CreateAttributeContext, Entity, UpdateAttributeContext};
+use crate::model::{AttributeContext, CreateAttributeContext, Record, UpdateAttributeContext};
 
 impl CatalogRepository {
     pub async fn create_context(
@@ -79,11 +79,11 @@ impl CatalogRepository {
         }
         // Lock order (see the module docs in `mod.rs`): the workspace row,
         // as blueprint publication takes it first, then this workspace's
-        // entity-writer lock, which waits for its in-flight entity writers,
+        // record-writer lock, which waits for its in-flight record writers,
         // then the family key locks. The new context is indexed from
         // committed values and later writes see it.
         advance_generation(transaction, workspace_id, Generation::Contexts).await?;
-        lock_entity_writes(transaction, workspace_id, true).await?;
+        lock_record_writes(transaction, workspace_id, true).await?;
         let key_families = self.lock_context_unique_keys(transaction).await?;
         let context = query_as::<_, Db<AttributeContext>>(
             r#"INSERT INTO attribute_contexts (id, workspace_id, code, data, parent_id)
@@ -171,14 +171,14 @@ impl CatalogRepository {
         let mut transaction = self.pool.begin().await?;
         // Lock order (see the module docs in `mod.rs`): the workspace row,
         // as blueprint publication takes it first; the relationship lock,
-        // which relationship writers take before entity rows; this
-        // workspace's entity-writer lock, which waits for its in-flight
-        // entity writers; then the family key locks. Reparenting changes
-        // resolved values for every entity, so it must serialize with writes.
+        // which relationship writers take before record rows; this
+        // workspace's record-writer lock, which waits for its in-flight
+        // record writers; then the family key locks. Reparenting changes
+        // resolved values for every record, so it must serialize with writes.
         advance_generation(&mut transaction, self.workspace_id.0, Generation::Contexts).await?;
         self.lock_relationship_cardinality_writes(&mut transaction)
             .await?;
-        lock_entity_writes(&mut transaction, self.workspace_id.0, true).await?;
+        lock_record_writes(&mut transaction, self.workspace_id.0, true).await?;
         let key_families = self.lock_context_unique_keys(&mut transaction).await?;
         let context_code = sqlx::query_scalar::<_, String>(
             "SELECT code FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
@@ -210,21 +210,21 @@ impl CatalogRepository {
             .bind(id).bind(input.parent_id).bind(input.data).bind(self.workspace_id.0).fetch_optional(&mut *transaction).await?
             .ok_or(RepositoryError::ContextCycle)?
             .into_domain();
-        let entities = query_as::<_, Db<Entity>>("SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at FROM entities WHERE workspace_id = $1 AND deleted_at IS NULL")
+        let records = query_as::<_, Db<Record>>("SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at FROM records WHERE workspace_id = $1 AND deleted_at IS NULL")
             .bind(self.workspace_id.0)
             .fetch_all(&mut *transaction).await?
             .into_domain();
-        // Re-index whole families first: syncing entities one at a time
-        // could collide with another entity's still-stale row.
+        // Re-index whole families first: syncing records one at a time
+        // could collide with another record's still-stale row.
         self.rebuild_context_unique_keys(&mut transaction, &key_families)
             .await?;
-        // Reparenting is not an edit of any entity: it is revalidated
+        // Reparenting is not an edit of any record: it is revalidated
         // structurally, without transition enforcement or status effects.
-        for entity in &entities {
-            self.validate_entity_schema_with(
+        for record in &records {
+            self.validate_record_schema_with(
                 &mut transaction,
-                entity,
-                super::entity_commands::Revalidation::Structural,
+                record,
+                super::record_commands::Revalidation::Structural,
             )
             .await?;
         }
@@ -285,11 +285,11 @@ impl CatalogRepository {
             return Err(RepositoryError::ContextInUse);
         }
         // Withdraw live publications through the shared helper so consumers
-        // receive `entity.unpublished`, then drop the channel's rows.
+        // receive `record.unpublished`, then drop the channel's rows.
         self.clear_context_publications(&mut transaction, id)
             .await?;
         sqlx::query(
-            "DELETE FROM entity_channel_publications WHERE workspace_id = $1 AND context_id = $2",
+            "DELETE FROM record_channel_publications WHERE workspace_id = $1 AND context_id = $2",
         )
         .bind(self.workspace_id.0)
         .bind(id)

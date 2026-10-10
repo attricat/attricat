@@ -21,8 +21,8 @@ import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
-import { ValueTypeIcon } from '../entities/components/ValueTypeLabel';
-import type { AttributeValueType } from '../entities/valueTypeIcons';
+import { ValueTypeIcon } from '../records/components/ValueTypeLabel';
+import type { AttributeValueType } from '../records/valueTypeIcons';
 import type { ExplorerColumnPreferences } from './columnPreferences';
 import { columnPreferencesListMaxHeight } from './constants';
 

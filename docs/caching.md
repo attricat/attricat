@@ -63,14 +63,14 @@ keyed by the workspace outbox high-water mark and bounded by
 The write transaction advances the counter with
 `generations::advance_generation` before it commits. A reader reads the
 counters in a query it already runs (session or token authentication, the
-entity lock of a write) and only then looks up cached state under that
+record lock of a write) and only then looks up cached state under that
 generation. A reader can therefore never use state older than the generation it
 read, and a committed write is visible to the very next request on every
 replica.
 
-Entity writes prefetch the context tree and enabled rules from committed data
+Record writes prefetch the context tree and enabled rules from committed data
 before their transaction opens (`WritePrefetch`). The transaction uses the
-prefetch only if the generations its own entity lock reads are the same, which
+prefetch only if the generations its own record lock reads are the same, which
 also rules out uncommitted changes of its own.
 
 ## Transactions consult the cache but never fill it

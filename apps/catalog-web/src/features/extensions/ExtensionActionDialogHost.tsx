@@ -76,7 +76,7 @@ const ActionDialog = ({
       item.kind === 'dialog' &&
       item.outlet === 'action_dialog',
   );
-  const count = context.entity_ids.length;
+  const count = context.record_ids.length;
   const title = contribution?.title ?? t('extensions.actionDialogTitle');
 
   return (
@@ -87,7 +87,7 @@ const ActionDialog = ({
           <Typography color="text.secondary" variant="body2">
             {context.selection_source === selectionSources.explorerSelection
               ? t('extensions.actionDialogSelection', { count })
-              : t('extensions.actionDialogEntity')}{' '}
+              : t('extensions.actionDialogRecord')}{' '}
             {t('extensions.actionDialogSavedData')}
           </Typography>
           {runtime.isPending ? (

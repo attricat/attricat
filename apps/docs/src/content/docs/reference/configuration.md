@@ -95,7 +95,7 @@ Session lifetime (eight hours), the login rate limit (five failures per workspac
 | --- | --- | --- |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | Deepest relationship nesting a record preview may request. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | Maximum related records shown inline per relationship in a preview. |
-| `ENTITY_MAX_PAGE_SIZE` | `100` | Largest page size for relationship target browsing. |
+| `RECORD_MAX_PAGE_SIZE` | `100` | Largest page size for relationship target browsing. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | Largest page size for incoming-relationship lists. Caps `page_size` in `incoming_relationship_list` view blocks. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | Maximum nodes returned per page of an Explorer relationship facet. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | How long data-health responses are cached. `0` disables the cache. Any recorded catalog change also refreshes them on the next request. |

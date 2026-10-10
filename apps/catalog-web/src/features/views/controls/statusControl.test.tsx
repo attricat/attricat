@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '@mui/material/styles';
 import { makeTheme } from '../../../app/theme';
 import '../../../i18n';
-import type { StatusConfiguration } from '../../entities/status';
+import type { StatusConfiguration } from '../../records/status';
 import { StatusEditor } from './editors';
 import { StatusValue } from './values';
 

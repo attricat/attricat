@@ -117,7 +117,7 @@ pub struct SeedPublicationChannel {
     pub enabled: bool,
     /// Pack rules, by logical key, that must hold before publication.
     pub required_rules: Vec<String>,
-    pub require_valid_entity: bool,
+    pub require_valid_record: bool,
 }
 
 /// Rules a channel may require, as for an ordinary channel update.
@@ -425,7 +425,7 @@ fn optional_key(
         .transpose()
 }
 
-fn entity_blueprint<'a>(
+fn record_blueprint<'a>(
     owner: &str,
     reference: &str,
     blueprints: &'a BTreeMap<String, SolutionPackBlueprint>,
@@ -435,9 +435,9 @@ fn entity_blueprint<'a>(
             "resource '{owner}' references undeclared blueprint '{reference}'"
         ))
     })?;
-    if blueprint.kind() != BlueprintKind::Entity {
+    if blueprint.kind() != BlueprintKind::Record {
         return invalid(format!(
-            "resource '{owner}' must reference an entity blueprint"
+            "resource '{owner}' must reference a record blueprint"
         ));
     }
     Ok(blueprint)
@@ -459,7 +459,7 @@ fn validate_context_reference(
 }
 
 /// Resolves the blueprint codes a predicate names (the source blueprint of
-/// `referenced_by`) to pack entity blueprints, by their pack-local code, and
+/// `referenced_by`) to pack record blueprints, by their pack-local code, and
 /// checks the referencing relationship. Returns the blueprints' logical keys.
 pub(crate) fn predicate_blueprint_keys(
     owner: &str,
@@ -483,10 +483,10 @@ pub(crate) fn predicate_blueprint_keys(
                 let source = blueprints
                     .values()
                     .find(|blueprint| blueprint.code() == blueprint_code)
-                    .filter(|blueprint| blueprint.kind() == BlueprintKind::Entity)
+                    .filter(|blueprint| blueprint.kind() == BlueprintKind::Record)
                     .ok_or_else(|| {
                         SolutionPackError::Invalid(format!(
-                            "'{owner}' references blueprint '{blueprint_code}' that is not a pack entity blueprint"
+                            "'{owner}' references blueprint '{blueprint_code}' that is not a pack record blueprint"
                         ))
                     })?;
                 if !declares_relationship(source, relationship_code) {
@@ -536,7 +536,7 @@ fn validate_rule(
     if compiled.code != expected_code {
         return invalid(format!("rule '{key}' code must be '{expected_code}'"));
     }
-    let target = entity_blueprint(key, &blueprint, blueprints)?;
+    let target = record_blueprint(key, &blueprint, blueprints)?;
     validate_context_reference(key, context.as_deref(), contexts)?;
     // The same type check as an ordinary rule write against its blueprint.
     let types = target
@@ -584,7 +584,7 @@ fn validate_workflow(
         .any(|trigger| matches!(trigger, catalog_workflow::Trigger::Schedule { .. }))
     {
         return invalid(format!(
-            "workflow '{key}' cannot seed a schedule trigger because it targets a workspace entity"
+            "workflow '{key}' cannot seed a schedule trigger because it targets a workspace record"
         ));
     }
     let all = blueprints.values().collect::<Vec<_>>();
@@ -624,8 +624,8 @@ fn declares_relationship(blueprint: &SolutionPackBlueprint, code: &str) -> bool 
         .any(|attribute| attribute.code == code && attribute.value_type == "relationship")
 }
 
-/// Checks every write, including those nested in a referencing-entities
-/// update, against the pack blueprints that can hold the written entity.
+/// Checks every write, including those nested in a referencing-records
+/// update, against the pack blueprints that can hold the written record.
 fn validate_workflow_actions(
     key: &str,
     actions: &[catalog_workflow::Action],
@@ -642,7 +642,7 @@ fn validate_workflow_actions(
                     "workflow '{key}' writes attribute '{attribute_code}' that no pack blueprint declares"
                 ));
             }
-            catalog_workflow::Action::ReferencingEntitiesUpdate {
+            catalog_workflow::Action::ReferencingRecordsUpdate {
                 relationship_attribute,
                 actions,
                 ..
@@ -725,7 +725,7 @@ fn validate_saved_search(
         .as_str()
         .expect("validated blueprint")
         .to_owned();
-    let target = entity_blueprint(key, &blueprint, blueprints)?;
+    let target = record_blueprint(key, &blueprint, blueprints)?;
     let mut referenced_blueprints = BTreeSet::from([blueprint.clone()]);
     let context = state
         .get("context")
@@ -771,7 +771,7 @@ fn validate_saved_search(
     {
         if facet.get("selectedIds").is_some() {
             return Err(invalid_state(
-                "relationship facets cannot seed selected entity IDs",
+                "relationship facets cannot seed selected record IDs",
             ));
         }
         let field = facet["field"].as_str().expect("validated facet field");
@@ -780,7 +780,7 @@ fn validate_saved_search(
                 .map_err(|reason| invalid_state(&reason))?;
         if let Some(target) = facet.get("targetBlueprint") {
             let target = target.as_str().expect("validated targetBlueprint");
-            let target_blueprint = entity_blueprint(key, target, blueprints)?;
+            let target_blueprint = record_blueprint(key, target, blueprints)?;
             if !relationship.target_blueprints.is_empty()
                 && !relationship
                     .target_blueprints
@@ -895,7 +895,7 @@ struct PublicationChannelDeclaration {
     #[serde(default)]
     required_rules: Vec<String>,
     #[serde(default)]
-    require_valid_entity: bool,
+    require_valid_record: bool,
 }
 
 fn validate_context(
@@ -951,7 +951,7 @@ fn validate_context(
                 Ok(SeedPublicationChannel {
                     enabled: declaration.enabled,
                     required_rules: declaration.required_rules,
-                    require_valid_entity: declaration.require_valid_entity,
+                    require_valid_record: declaration.require_valid_record,
                 })
             })
             .transpose()?,
@@ -977,7 +977,7 @@ pub fn seed_inspection_summary(pack: &ValidatedSolutionPack) -> Value {
             "publication_channel": context.publication_channel.as_ref().map(|channel| serde_json::json!({
                 "enabled": channel.enabled,
                 "required_rules": channel.required_rules,
-                "require_valid_entity": channel.require_valid_entity,
+                "require_valid_record": channel.require_valid_record,
             })),
         })).collect::<Vec<_>>(),
         "rules": manifest.resources.rules.iter().map(|resource| {

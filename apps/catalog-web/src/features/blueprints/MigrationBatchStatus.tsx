@@ -46,8 +46,8 @@ const removalPolicyLabel = (
 };
 
 const progressPercentage = ({
-  processed_entities: processed,
-  total_entities: total,
+  processed_records: processed,
+  total_records: total,
 }: MigrationBatch) =>
   total === 0
     ? completePercentage
@@ -110,10 +110,10 @@ export const MigrationBatchStatus = ({
                 <TableCell>{t('blueprints.targetVersion')}</TableCell>
                 <TableCell>{t('blueprints.status')}</TableCell>
                 <TableCell>{t('blueprints.migrationProgress')}</TableCell>
-                <TableCell>{t('blueprints.migratedEntities')}</TableCell>
-                <TableCell>{t('blueprints.needsReviewEntities')}</TableCell>
+                <TableCell>{t('blueprints.migratedRecords')}</TableCell>
+                <TableCell>{t('blueprints.needsReviewRecords')}</TableCell>
                 <TableCell>{t('blueprints.removedAttributes')}</TableCell>
-                <TableCell>{t('blueprints.failedEntities')}</TableCell>
+                <TableCell>{t('blueprints.failedRecords')}</TableCell>
                 <TableCell>{t('blueprints.created')}</TableCell>
                 <TableCell>{t('blueprints.started')}</TableCell>
                 <TableCell>{t('blueprints.completed')}</TableCell>
@@ -137,9 +137,9 @@ export const MigrationBatchStatus = ({
                   </TableCell>
                   <TableCell sx={{ minWidth: migrationProgressMinWidth }}>
                     <Typography variant="body2">
-                      {t('blueprints.processedEntities', {
-                        processed: batch.processed_entities,
-                        total: batch.total_entities,
+                      {t('blueprints.processedRecords', {
+                        processed: batch.processed_records,
+                        total: batch.total_records,
                       })}
                     </Typography>
                     <LinearProgress
@@ -149,12 +149,12 @@ export const MigrationBatchStatus = ({
                       variant="determinate"
                     />
                   </TableCell>
-                  <TableCell>{batch.migrated_entities}</TableCell>
-                  <TableCell>{batch.needs_input_entities}</TableCell>
+                  <TableCell>{batch.migrated_records}</TableCell>
+                  <TableCell>{batch.needs_input_records}</TableCell>
                   <TableCell>
                     {removalPolicyLabel(batch.removal_policy)}
                   </TableCell>
-                  <TableCell>{batch.failed_entities}</TableCell>
+                  <TableCell>{batch.failed_records}</TableCell>
                   <TableCell>
                     <Timestamp fallback={emptyDate} value={batch.created_at} />
                   </TableCell>

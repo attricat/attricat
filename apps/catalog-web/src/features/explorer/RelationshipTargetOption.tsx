@@ -41,28 +41,28 @@ export const RelationshipTargetOption = ({
       </Link>
       <Stack direction="row" spacing={0.5}>
         <Button
-          aria-label={t('entities.previewRelationshipOptionLabel', {
+          aria-label={t('records.previewRelationshipOptionLabel', {
             option: label,
           })}
           color={previewed ? 'secondary' : 'inherit'}
           onClick={onOpenPreview}
           size="small"
         >
-          {t('entities.previewRelationshipOption')}
+          {t('records.previewRelationshipOption')}
         </Button>
         <Button
           aria-label={t(
             selected
-              ? 'entities.removeRelationshipOptionLabel'
-              : 'entities.selectRelationshipOptionLabel',
+              ? 'records.removeRelationshipOptionLabel'
+              : 'records.selectRelationshipOptionLabel',
             { option: label },
           )}
           onClick={onToggle}
           size="small"
         >
           {selected
-            ? t('entities.removeRelationshipOption')
-            : t('entities.selectRelationshipOption')}
+            ? t('records.removeRelationshipOption')
+            : t('records.selectRelationshipOption')}
         </Button>
       </Stack>
     </ListItem>

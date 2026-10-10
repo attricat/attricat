@@ -6,8 +6,8 @@ import seoDefinition from './templates/seo.toml?raw';
 export const blueprintTemplates = [
   {
     definition: basicDefinition,
-    descriptionKey: 'blueprints.basicEntityDescription',
-    labelKey: 'blueprints.basicEntity',
+    descriptionKey: 'blueprints.basicRecordDescription',
+    labelKey: 'blueprints.basicRecord',
   },
   {
     definition: productDefinition,

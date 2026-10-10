@@ -1,4 +1,4 @@
-//! The one declarative predicate engine shared by rules, entity-schema checks,
+//! The one declarative predicate engine shared by rules, record-schema checks,
 //! status transition conditions and publication gates.
 //!
 //! Predicates are inert data. Validation is strict and type-aware when the
@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-/// Entity-schema keyword holding the blueprint's declarative checks.
+/// Record-schema keyword holding the blueprint's declarative checks.
 pub const CHECKS_KEY: &str = "x-attricat-checks";
-pub const MAX_ENTITY_CHECKS: usize = 32;
+pub const MAX_RECORD_CHECKS: usize = 32;
 pub const MAX_TRANSITION_CONDITIONS: usize = 16;
 pub const MAX_DEPTH: usize = 4;
 pub const MAX_NODES: usize = 32;
@@ -21,7 +21,7 @@ pub const MAX_BRANCHES: usize = 16;
 pub const MAX_LINKED_RECORDS: usize = 200;
 /// Referencing records loaded per `referenced_by` predicate.
 pub const MAX_REFERENCING_RECORDS: usize = 1_000;
-/// Entities visited while following a relationship for `acyclic`.
+/// Records visited while following a relationship for `acyclic`.
 pub const MAX_CYCLE_VISITS: usize = 1_000;
 pub const MAX_ONE_OF_VALUES: usize = 100;
 pub const MAX_UNIQUE_ATTRIBUTES: usize = 4;
@@ -115,12 +115,12 @@ pub enum Predicate {
         #[schemars(range(min = 1, max = MAX_STALE_AGE_SECONDS))]
         max_age_seconds: u64,
     },
-    /// The entity has the system tag.
+    /// The record has the system tag.
     HasTag {
         #[schemars(length(min = 1, max = MAX_TAG_LENGTH))]
         tag: String,
     },
-    /// The entity does not have the system tag.
+    /// The record does not have the system tag.
     MissingTag {
         #[schemars(length(min = 1, max = MAX_TAG_LENGTH))]
         tag: String,
@@ -162,7 +162,7 @@ pub enum Predicate {
         #[schemars(range(min = -MAX_OFFSET_DAYS, max = MAX_OFFSET_DAYS))]
         offset_days: i64,
     },
-    /// No other live entity of the blueprint revision has the same values. Rules only.
+    /// No other live record of the blueprint revision has the same values. Rules only.
     Unique {
         #[schemars(length(min = 1, max = MAX_UNIQUE_ATTRIBUTES))]
         attribute_codes: Vec<String>,
@@ -231,7 +231,7 @@ impl From<&str> for PredicateError {
     }
 }
 
-/// A named predicate in an entity schema (`x-attricat-checks`) or on a status
+/// A named predicate in a record schema (`x-attricat-checks`) or on a status
 /// transition edge (`conditions`).
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -364,14 +364,14 @@ pub fn validate_checks(
     Ok(())
 }
 
-/// Reads and syntactically validates an entity schema's `x-attricat-checks`.
-pub fn entity_checks(schema: &Value) -> Result<Vec<Check>, String> {
+/// Reads and syntactically validates a record schema's `x-attricat-checks`.
+pub fn record_checks(schema: &Value) -> Result<Vec<Check>, String> {
     let Some(value) = schema.get(CHECKS_KEY) else {
         return Ok(Vec::new());
     };
     let checks: Vec<Check> = serde_json::from_value(value.clone())
         .map_err(|error| format!("invalid {CHECKS_KEY}: {error}"))?;
-    validate_checks(&checks, None, Usage::Enforced, MAX_ENTITY_CHECKS)
+    validate_checks(&checks, None, Usage::Enforced, MAX_RECORD_CHECKS)
         .map_err(|message| format!("invalid {CHECKS_KEY}: {message}"))?;
     Ok(checks)
 }
@@ -879,7 +879,7 @@ pub fn visit_predicate_blueprint_codes<E>(
 }
 
 /// Visits every blueprint code named by the predicates of a JSON schema: its
-/// entity checks (`x-attricat-checks`) and status transition conditions.
+/// record checks (`x-attricat-checks`) and status transition conditions.
 pub fn visit_schema_blueprint_codes<E>(
     schema: &mut Value,
     visit: &mut dyn FnMut(&mut String) -> Result<(), E>,
@@ -936,7 +936,7 @@ impl Requirements {
 
 /// One record's resolved values in a single context.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Record {
+pub struct ResolvedRecord {
     pub id: String,
     /// Scalars in native JSON form; relationships as arrays of target UUID strings.
     pub values: Map<String, Value>,
@@ -947,7 +947,7 @@ pub struct Record {
 /// A bounded record list. `truncated` means the host stopped at its limit.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RecordSet {
-    pub records: Vec<Record>,
+    pub records: Vec<ResolvedRecord>,
     pub truncated: bool,
 }
 
@@ -955,7 +955,7 @@ pub struct RecordSet {
 pub enum CycleState {
     #[default]
     Clear,
-    /// Entity IDs on the cycle, starting and ending at the record.
+    /// Record IDs on the cycle, starting and ending at the record.
     Cycle(Vec<String>),
     LimitReached,
 }
@@ -965,13 +965,13 @@ pub enum CycleState {
 pub struct Related {
     pub linked: HashMap<String, RecordSet>,
     pub referenced_by: HashMap<(String, String), RecordSet>,
-    /// Other entity IDs sharing each unique key.
+    /// Other record IDs sharing each unique key.
     pub duplicates: HashMap<Vec<String>, Vec<String>>,
     pub cycles: HashMap<String, CycleState>,
 }
 
 pub struct Evaluation<'a> {
-    pub subject: &'a Record,
+    pub subject: &'a ResolvedRecord,
     pub related: &'a Related,
     pub now: DateTime<Utc>,
 }
@@ -1015,7 +1015,7 @@ fn present(value: Option<&Value>) -> bool {
     }
 }
 
-fn evaluate_on(predicate: &Predicate, current: &Record, input: &Evaluation<'_>) -> Outcome {
+fn evaluate_on(predicate: &Predicate, current: &ResolvedRecord, input: &Evaluation<'_>) -> Outcome {
     match predicate {
         Predicate::Required { attribute_code } => {
             if present(current.values.get(attribute_code)) {
@@ -1048,7 +1048,7 @@ fn evaluate_on(predicate: &Predicate, current: &Record, input: &Evaluation<'_>) 
                 Ok(())
             } else {
                 Err((
-                    format!("Entity is missing required system tag '{tag}'"),
+                    format!("Record is missing required system tag '{tag}'"),
                     json!({ "tag": tag }),
                 ))
             }
@@ -1056,7 +1056,7 @@ fn evaluate_on(predicate: &Predicate, current: &Record, input: &Evaluation<'_>) 
         Predicate::MissingTag { tag } => {
             if current.tags.iter().any(|item| item == tag) {
                 Err((
-                    format!("Entity has prohibited system tag '{tag}'"),
+                    format!("Record has prohibited system tag '{tag}'"),
                     json!({ "tag": tag }),
                 ))
             } else {
@@ -1167,7 +1167,7 @@ fn evaluate_on(predicate: &Predicate, current: &Record, input: &Evaluation<'_>) 
                             .collect::<Vec<_>>()
                             .join(", ")
                     ),
-                    json!({ "attribute_codes": attribute_codes, "duplicate_entity_ids": others }),
+                    json!({ "attribute_codes": attribute_codes, "duplicate_record_ids": others }),
                 )),
                 _ => Ok(()),
             }
@@ -1282,7 +1282,7 @@ fn evaluate_linked(
             json!({
                 "relationship_code": relationship_code,
                 "quantifier": quantifier,
-                "failing_entity_ids": if quantifier == Quantifier::None { &matching } else { &failing },
+                "failing_record_ids": if quantifier == Quantifier::None { &matching } else { &failing },
             }),
         )),
     }
@@ -1335,7 +1335,7 @@ fn evaluate_referenced_by(
         None => Ok(()),
         Some(message) => Err((
             message,
-            json!({ "blueprint_code": blueprint_code, "relationship_code": relationship_code, "count": count, "min": min, "max": max, "matching_entity_ids": matching }),
+            json!({ "blueprint_code": blueprint_code, "relationship_code": relationship_code, "count": count, "min": min, "max": max, "matching_record_ids": matching }),
         )),
     }
 }
@@ -1535,11 +1535,11 @@ mod tests {
         validate_predicate(&predicate(source), Some(&types), usage)
     }
 
-    fn record(values: Value) -> Record {
-        Record {
+    fn record(values: Value) -> ResolvedRecord {
+        ResolvedRecord {
             id: "subject".into(),
             values: values.as_object().unwrap().clone(),
-            ..Record::default()
+            ..ResolvedRecord::default()
         }
     }
 
@@ -1547,7 +1547,7 @@ mod tests {
         "2026-10-03T12:00:00Z".parse().unwrap()
     }
 
-    fn holds(source: Value, subject: &Record, related: &Related) -> Result<(), Failure> {
+    fn holds(source: Value, subject: &ResolvedRecord, related: &Related) -> Result<(), Failure> {
         evaluate(
             &predicate(source),
             &Evaluation {
@@ -1700,13 +1700,13 @@ mod tests {
     #[test]
     fn evaluates_linked_and_referencing_records() {
         let subject = record(json!({"supplier": ["s1"], "facility": ["f1", "f2"]}));
-        let linked = |supplier: &str, id: &str| Record {
+        let linked = |supplier: &str, id: &str| ResolvedRecord {
             id: id.into(),
             values: json!({"supplier": [supplier], "status": "released"})
                 .as_object()
                 .unwrap()
                 .clone(),
-            ..Record::default()
+            ..ResolvedRecord::default()
         };
         let mut related = Related::default();
         related.linked.insert(
@@ -1719,16 +1719,16 @@ mod tests {
         let same_supplier = json!({"type":"linked","relationship_code":"facility","predicate":{"type":"compare","attribute_code":"supplier","op":"eq","subject_attribute_code":"supplier"}});
         let failure = holds(same_supplier, &subject, &related).unwrap_err();
         assert_eq!(failure.attributes, vec!["facility", "supplier"]);
-        assert_eq!(failure.evidence["failing_entity_ids"], json!(["f2"]));
+        assert_eq!(failure.evidence["failing_record_ids"], json!(["f2"]));
         assert!(holds(json!({"type":"linked","relationship_code":"facility","quantifier":"any","predicate":{"type":"compare","attribute_code":"supplier","op":"eq","subject_attribute_code":"supplier"}}), &subject, &related).is_ok());
         assert!(holds(json!({"type":"linked","relationship_code":"facility","predicate":{"type":"one_of","attribute_code":"status","values":["released"]}}), &subject, &related).is_ok());
         related.linked.get_mut("facility").unwrap().truncated = true;
         assert!(holds(json!({"type":"linked","relationship_code":"facility","predicate":{"type":"one_of","attribute_code":"status","values":["released"]}}), &subject, &related).is_err());
 
-        let open = |id: &str, status: &str| Record {
+        let open = |id: &str, status: &str| ResolvedRecord {
             id: id.into(),
             values: json!({"status": status}).as_object().unwrap().clone(),
-            ..Record::default()
+            ..ResolvedRecord::default()
         };
         related.referenced_by.insert(
             ("action".into(), "nc".into()),
@@ -1796,18 +1796,18 @@ mod tests {
     }
 
     #[test]
-    fn entity_checks_are_strict() {
+    fn record_checks_are_strict() {
         let schema = json!({"type":"object", CHECKS_KEY: [{"code":"range","message":"Bad range","predicate":{"type":"compare","attribute_code":"a","op":"lte","other_attribute_code":"b"}}]});
-        assert_eq!(entity_checks(&schema).unwrap().len(), 1);
+        assert_eq!(record_checks(&schema).unwrap().len(), 1);
         let duplicate = json!({CHECKS_KEY: [
             {"code":"x","predicate":{"type":"required","attribute_code":"a"}},
             {"code":"x","predicate":{"type":"required","attribute_code":"b"}}
         ]});
-        assert!(entity_checks(&duplicate).is_err());
+        assert!(record_checks(&duplicate).is_err());
         let unsafe_check = json!({CHECKS_KEY: [{"code":"x","predicate":{"type":"unique","attribute_codes":["a"]}}]});
-        assert!(entity_checks(&unsafe_check).is_err());
+        assert!(record_checks(&unsafe_check).is_err());
         let unknown = json!({CHECKS_KEY: [{"code":"x","when":1,"predicate":{"type":"required","attribute_code":"a"}}]});
-        assert!(entity_checks(&unknown).is_err());
+        assert!(record_checks(&unknown).is_err());
     }
 
     #[test]

@@ -45,7 +45,7 @@
             "pattern": "^rules/[a-z][a-z0-9_-]*$"
           }
         },
-        "require_valid_entity": {
+        "require_valid_record": {
           "type": "boolean"
         }
       }

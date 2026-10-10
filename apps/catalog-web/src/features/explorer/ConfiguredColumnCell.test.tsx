@@ -2,10 +2,10 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import '../../i18n';
-import type { EntityItem } from '../entities/api';
+import type { RecordItem } from '../records/api';
 import { ConfiguredColumnCell } from './ConfiguredColumnCell';
 
-const entity: EntityItem = {
+const record: RecordItem = {
   id: '123e4567-e89b-12d3-a456-426614174001',
   blueprint_version: 1,
   schema_outdated: false,
@@ -26,7 +26,7 @@ const renderCell = (field: string, values: unknown[], version = 1) =>
         relationshipSortBlocked: false,
         sortable: false,
       }}
-      entity={{ ...entity, table_values: { [field]: values } }}
+      record={{ ...record, table_values: { [field]: values } }}
       extension={undefined}
       frameAllowed={false}
     />,

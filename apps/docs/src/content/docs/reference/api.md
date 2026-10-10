@@ -5,8 +5,6 @@ description: How to authenticate against the Attricat HTTP API, its conventions,
 
 Attricat's web app is built on the same HTTP API you can call from scripts and integrations. The [CLI](/reference/cli/) wraps nearly all of it.
 
-In the API, records are called entities, as in routes (`/v1/entities`), fields (`entity_id`), permissions, and error codes.
-
 ## Base URL
 
 API routes are served below `/api`, for example `GET https://catalog.example.com/api/blueprints`; the paths on this page are relative to it. Every other path belongs to the web app. The health probes (`/health`, `/health/live`, `/health/ready`) also answer at the root for load balancers and container checks.
@@ -24,7 +22,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 ## Conventions
 
 - Requests and responses are JSON unless a route says otherwise. Successful empty responses are `204`.
-- Errors return the HTTP status and a body like `{"error": {"code": "entity_schema_mismatch", "message": "…"}}`. Match on `code`, not on the message. Some errors add an `error.details` object with data you can act on, such as the record that already holds a unique key or the checks that failed; see below.
+- Errors return the HTTP status and a body like `{"error": {"code": "record_schema_mismatch", "message": "…"}}`. Match on `code`, not on the message. Some errors add an `error.details` object with data you can act on, such as the record that already holds a unique key or the checks that failed; see below.
 - `401` means no valid credential; `403` means the credential lacks the permission or scope.
 - `422` means the request was understood but is invalid, such as a blueprint that does not compile or a value that fails its schema.
 - `409` means a conflict with current state, such as a relationship cardinality limit.
@@ -38,24 +36,24 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `invalid_input` | 422 | The request body has an invalid value, such as a malformed, repeated, or unknown code. The message says which. |
 | `invalid_blueprint_definition` | 422 | The blueprint TOML does not compile. The message says why. |
 | `attribute_value_schema_mismatch` | 422 | A value fails its attribute's `value_schema`. |
-| `entity_schema_mismatch` | 422 | The record fails its `entity_schema` in some context. |
+| `record_schema_mismatch` | 422 | The record fails its `record_schema` in some context. |
 | `relationship_cardinality_conflict` | 409 | A relationship write exceeds `cardinality` or `target_cardinality`, or gives a record in a `tree` a second parent. |
 | `relationship_target_type_mismatch` | 422 | The linked record's blueprint is not allowed by `target_blueprint` or `target_blueprints`. |
 | `relationship_cycle` | 409 | The link would close a cycle in an `acyclic` or `tree` relationship. `details.path` lists the record IDs around the cycle. |
-| `unique_key_conflict` | 409 | Another record already has these values for a unique key. `details` has `key`, `context`, `values`, and `conflicting_entity_id`. |
+| `unique_key_conflict` | 409 | Another record already has these values for a unique key. `details` has `key`, `context`, `values`, and `conflicting_record_id`. |
 | `unique_key_duplicates` | 409 | Publishing a new unique key, or moving a context to another parent, failed because existing records would share values. `details.duplicates` lists them. |
 | `relationship_hierarchy_violations` | 409 | Publishing `acyclic` or `tree` failed because existing links contain cycles or extra parents. `details` lists them. |
-| `stale_entity` | 409 | `expected_updated_at` no longer matches the record. Reload it and try again. |
+| `stale_record` | 409 | `expected_updated_at` no longer matches the record. Reload it and try again. |
 | `status_precondition_required` | 428 | A write to a status attribute did not send `expected_updated_at`. Read the record and send its `updated_at`. |
 | `status_transition_forbidden` | 403 | The status transition requires a permission or role the caller does not have. |
 | `status_separation_of_duties` | 403 | The status transition must be made by someone other than the person who made an earlier transition. |
 | `record_locked` | 409 | The record's status locks the content being changed, or the record cannot be deleted while it is locked. |
-| `entity_id_taken` | 409 | A batch `create` chose an `entity_id` that already exists. |
+| `record_id_taken` | 409 | A batch `create` chose an `record_id` that already exists. |
 | `relationship_path_sort_requires_single_result_version` | 422 | Sorting by a related value across several blueprint revisions. |
 | `file_processing` | 409 | The file is not ready to download yet. |
 | `approval_already_decided` | 409 | An agent tool call was already approved or rejected. |
 | `service_unavailable` | 503 | For agent routes: no AI provider is configured. |
-| `entity_check_failed` | 422 | An `x-attricat-checks` check fails in some context. |
+| `record_check_failed` | 422 | An `x-attricat-checks` check fails in some context. |
 | `transition_conditions_unmet` | 422 | A status transition's conditions are not met. |
 | `rule_violation` | 422 | The write leaves the record violating an enforcing rule. |
 | `publication_checks_failed` | 422 | A channel's required checks fail. `details.context` is the channel code. |
@@ -67,7 +65,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 
 ### Error details
 
-`entity_check_failed`, `transition_conditions_unmet`, `rule_violation`, and `publication_checks_failed` list up to 50 violations in `error.details.violations`:
+`record_check_failed`, `transition_conditions_unmet`, `rule_violation`, and `publication_checks_failed` list up to 50 violations in `error.details.violations`:
 
 ```json
 {"error": {"code": "transition_conditions_unmet", "message": "…", "details": {"violations": [
@@ -80,14 +78,14 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 
 | Field | Description |
 | --- | --- |
-| `source` | `entity_check`, `transition_condition`, `rule`, or, for publication only, `entity_schema`. |
+| `source` | `record_check`, `transition_condition`, `rule`, or, for publication only, `record_schema`. |
 | `code` | The check, condition, or rule code. |
 | `message` | The custom message, or a generated one. |
 | `contexts` | Codes of the contexts where it failed. |
 | `attributes` | Attributes of this record involved, such as both sides of a comparison or the relationship of a `linked` check. Use them to highlight fields. |
 | `severity` | For rules: the rule's severity. |
 | `transition` | For conditions and guarded transitions: `attribute_code`, `from`, and `to`. |
-| `evidence` | Details such as the compared values or the IDs of failing linked records. Publication bulk failures add `entity_id`. |
+| `evidence` | Details such as the compared values or the IDs of failing linked records. Publication bulk failures add `record_id`. |
 
 `publication_checks_failed` also has `details.context`, the channel code. For what each error means and how to fix it, see [Validation](/builders/validation/#errors-and-how-to-fix-them).
 
@@ -114,54 +112,54 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/v1/entities` | Create a record with values, optional uploaded `files`, and optional `system_tags` and `system_metadata`. See [Files on a new record](#files-on-a-new-record). |
-| `POST` | `/v1/entities/batch` | Create, update, and delete several records at once: all changes are saved, or none are. See [Batch changes](#batch-changes). |
-| `GET`, `PUT` | `/v1/entities/{id}` | Read or update a record's form: values, relationships, removals, annotations. |
-| `GET`, `DELETE` | `/entities/{id}` | Read or delete a record. |
-| `POST` | `/v1/entities/{id}/duplicate` | Create a copy of a record with its values, relationships, and files. Unique-key values are left out. |
-| `POST` | `/v1/entities/search` | Search. See below. |
-| `POST` | `/v1/entities/labels` | Display labels for up to 100 record IDs: `{"entity_ids": [...]}`. Returns only live records you can read; other IDs are left out. |
-| `POST` | `/v1/entities/facets/relationship-tree/children` | One page of a relationship facet's children, with counts. |
-| `GET` | `/entities/{id}/preview` | Values per context, with related records inline. |
-| `GET` | `/entities/{id}/resolved-preview?context_id=…` | Values resolved in one context, with the context each came from. |
-| `GET` | `/entities/{id}/hierarchy` | Ancestors along a relationship. |
-| `POST` | `/v1/entities/{id}/incoming-relationships` | Records linking to this one. |
-| `GET` | `/entities` | Browse relationship targets. |
-| `GET` | `/entities/{id}/values/current` | Current direct values and links. |
-| `POST` | `/entities/{id}/values` | Append values. |
-| `POST` | `/entities/{id}/relationships/replace`, `/remove` | Replace or remove relationship targets. |
-| `GET` | `/entities/{id}/changes` | Change history. Add `limit` (1 to 50) and `offset` for pages. |
-| `GET` | `/entities/{id}/values/history` | Value history. Same paging. |
-| `POST` | `/entities/{id}/values/history/{history_id}/restore` | Restore an earlier value. |
-| `POST` | `/v1/entities/{id}/blueprint-migration/preview` | Check migration to the current revision. |
-| `POST` | `/v1/entities/{id}/blueprint-migration` | Migrate. |
-| `POST` | `/v1/entities/{id}/reusable-attributes`, `/v1/entities/{id}/reusable-attribute-groups/{group_id}` | Attach a reusable attribute or group. |
-| `GET` | `/v1/entities/{id}/status-transitions?context_id=…` | Declared transitions from the saved status in one context (default context if omitted): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, unmet}]}`. `denial_code` is `status_transition_forbidden`, `status_separation_of_duties` or `transition_conditions_unmet`; `unmet` lists unmet conditions and enforcing rules as violations. |
-| `GET` | `/v1/entities/{id}/approvals` | Approvals recorded by status transitions, newest first, with who approved, when, a digest of the covered content, and why an approval was voided. |
-| `GET` | `/v1/entities/{id}/retention-holds` | Retention holds on the record's files. |
+| `POST` | `/v1/records` | Create a record with values, optional uploaded `files`, and optional `system_tags` and `system_metadata`. See [Files on a new record](#files-on-a-new-record). |
+| `POST` | `/v1/records/batch` | Create, update, and delete several records at once: all changes are saved, or none are. See [Batch changes](#batch-changes). |
+| `GET`, `PUT` | `/v1/records/{id}` | Read or update a record's form: values, relationships, removals, annotations. |
+| `GET`, `DELETE` | `/records/{id}` | Read or delete a record. |
+| `POST` | `/v1/records/{id}/duplicate` | Create a copy of a record with its values, relationships, and files. Unique-key values are left out. |
+| `POST` | `/v1/records/search` | Search. See below. |
+| `POST` | `/v1/records/labels` | Display labels for up to 100 record IDs: `{"record_ids": [...]}`. Returns only live records you can read; other IDs are left out. |
+| `POST` | `/v1/records/facets/relationship-tree/children` | One page of a relationship facet's children, with counts. |
+| `GET` | `/records/{id}/preview` | Values per context, with related records inline. |
+| `GET` | `/records/{id}/resolved-preview?context_id=…` | Values resolved in one context, with the context each came from. |
+| `GET` | `/records/{id}/hierarchy` | Ancestors along a relationship. |
+| `POST` | `/v1/records/{id}/incoming-relationships` | Records linking to this one. |
+| `GET` | `/records` | Browse relationship targets. |
+| `GET` | `/records/{id}/values/current` | Current direct values and links. |
+| `POST` | `/records/{id}/values` | Append values. |
+| `POST` | `/records/{id}/relationships/replace`, `/remove` | Replace or remove relationship targets. |
+| `GET` | `/records/{id}/changes` | Change history. Add `limit` (1 to 50) and `offset` for pages. |
+| `GET` | `/records/{id}/values/history` | Value history. Same paging. |
+| `POST` | `/records/{id}/values/history/{history_id}/restore` | Restore an earlier value. |
+| `POST` | `/v1/records/{id}/blueprint-migration/preview` | Check migration to the current revision. |
+| `POST` | `/v1/records/{id}/blueprint-migration` | Migrate. |
+| `POST` | `/v1/records/{id}/reusable-attributes`, `/v1/records/{id}/reusable-attribute-groups/{group_id}` | Attach a reusable attribute or group. |
+| `GET` | `/v1/records/{id}/status-transitions?context_id=…` | Declared transitions from the saved status in one context (default context if omitted): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, unmet}]}`. `denial_code` is `status_transition_forbidden`, `status_separation_of_duties` or `transition_conditions_unmet`; `unmet` lists unmet conditions and enforcing rules as violations. |
+| `GET` | `/v1/records/{id}/approvals` | Approvals recorded by status transitions, newest first, with who approved, when, a digest of the covered content, and why an approval was voided. |
+| `GET` | `/v1/records/{id}/retention-holds` | Retention holds on the record's files. |
 
 ### Batch changes
 
 Some changes only make sense together: releasing a new document revision and marking the previous one superseded, or recording a movement and updating the item's current location. Send them as one batch so a failure cannot leave half of the change saved.
 
 ```json
-POST /api/v1/entities/batch
+POST /api/v1/records/batch
 {
   "operations": [
     {
       "op": "create",
-      "entity_id": "5b0b8c55-0c55-4cc5-9a0f-4a4c3d1a2b10",
+      "record_id": "5b0b8c55-0c55-4cc5-9a0f-4a4c3d1a2b10",
       "blueprint": { "code": "document_revision" },
       "values": [
         { "kind": "scalar", "attribute_code": "label", "context_id": null, "value": "B" },
         { "kind": "scalar", "attribute_code": "status", "context_id": null, "value": "released" },
         { "kind": "relationship", "attribute_code": "previous", "context_id": null,
-          "target_entity_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11" }
+          "target_record_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11" }
       ]
     },
     {
       "op": "update",
-      "entity_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11",
+      "record_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11",
       "expected_updated_at": "2026-10-01T09:30:00Z",
       "values": [
         { "kind": "scalar", "attribute_code": "status", "context_id": null, "value": "superseded" }
@@ -171,20 +169,20 @@ POST /api/v1/entities/batch
 }
 ```
 
-- `op` is `create`, `update`, or `delete`. `create` takes the same fields as `POST /v1/entities`, plus an optional `entity_id` you choose so later operations can link to the new record. `update` takes the same fields as `PUT /v1/entities/{id}`. `delete` takes `entity_id`.
-- `expected_updated_at` on `update` and `delete` is a precondition: if the record changed since you read it, the batch fails with `409 stale_entity`. Status changes need it, as in a single update.
+- `op` is `create`, `update`, or `delete`. `create` takes the same fields as `POST /v1/records`, plus an optional `record_id` you choose so later operations can link to the new record. `update` takes the same fields as `PUT /v1/records/{id}`. `delete` takes `record_id`.
+- `expected_updated_at` on `update` and `delete` is a precondition: if the record changed since you read it, the batch fails with `409 stale_record`. Status changes need it, as in a single update.
 - Operations run in order, and each is checked like the equivalent single request when it runs: values, schemas, status transitions, relationship rules, and unique keys. Order them so each is valid at its turn.
 - A batch has 1 to 50 operations and up to 1,000 values, links, and removals. A record can appear in only one operation.
-- Every operation needs its own permission: `entities.write` on the record to update it, `entities.delete` to delete it, and workspace-wide `entities.write` to create. If any is missing, nothing runs and the response is `403`.
+- Every operation needs its own permission: `records.write` on the record to update it, `records.delete` to delete it, and workspace-wide `records.write` to create. If any is missing, nothing runs and the response is `403`.
 
-A successful batch returns `200` with one result per operation, such as `{"op": "update", "entity": {…}}` or `{"op": "delete", "entity_id": "…"}`. Each operation is recorded in the audit log and emits its usual event, but only after the whole batch is saved.
+A successful batch returns `200` with one result per operation, such as `{"op": "update", "record": {…}}` or `{"op": "delete", "record_id": "…"}`. Each operation is recorded in the audit log and emits its usual event, but only after the whole batch is saved.
 
-If an operation fails, nothing is saved. The response has that operation's status and error code, the message starts with `operation <index>:`, and `error.details` includes `operation_index` and `entity_id`. Fix that operation and send the whole batch again. The CLI equivalent is `acli entity batch --operations <file>`.
+If an operation fails, nothing is saved. The response has that operation's status and error code, the message starts with `operation <index>:`, and `error.details` includes `operation_index` and `record_id`. Fix that operation and send the whole batch again. The CLI equivalent is `acli record batch --operations <file>`.
 
 ### Search
 
 ```json
-POST /api/v1/entities/search
+POST /api/v1/records/search
 {
   "blueprint": { "code": "product", "version": 3 },
   "query": "colors.name:red linen",
@@ -214,7 +212,7 @@ POST /api/v1/entities/search
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/entities/{entity_id}/file-attributes/{attribute_code}/uploads` | Upload with `multipart/form-data`: one or more `files` parts and an optional `context_id` part. Returns `201`. |
+| `POST` | `/records/{record_id}/file-attributes/{attribute_code}/uploads` | Upload with `multipart/form-data`: one or more `files` parts and an optional `context_id` part. Returns `201`. |
 | `POST` | `/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads` | Upload files for a record you are about to create. Same body as above. Returns `201` with `files` and `expires_at`. |
 | `GET` | `/files/{file_id}` | Metadata and processing status. |
 | `GET` | `/files/{file_id}/download` | Original file. Supports one `Range`. |
@@ -226,7 +224,7 @@ Downloads return `409 file_processing` until the file is `ready`.
 
 #### Files on a new record
 
-A record whose schema requires a file is created with its files in one request. First upload each file to `/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads`, which needs permission to create records. Then pass the returned IDs to `POST /v1/entities`:
+A record whose schema requires a file is created with its files in one request. First upload each file to `/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads`, which needs permission to create records. Then pass the returned IDs to `POST /v1/records`:
 
 ```json
 {
@@ -246,12 +244,12 @@ Add `context_id` to an entry for a context other than the default. Uploaded file
 | `GET` | `/contexts/{code}` | Read by code. |
 | `PUT`, `DELETE` | `/contexts/id/{id}` | Update or delete. |
 | `GET` | `/publication-channels` | Channel contexts. |
-| `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}` to make a context a channel. Optional `required_rule_codes` (up to 32 rule codes) and `require_valid_entity` set the checks publication requires; omitted fields keep their current value. Invalid or repeated codes, or codes that name no rule in the workspace, return `422 invalid_input`. |
-| `GET`, `POST` | `/v1/entities/{id}/publications` | Publication status, or publish with `{"context_id": "…"}`. |
-| `POST` | `/v1/entities/{id}/publications/unpublish` | Unpublish from one channel. |
-| `POST` | `/v1/entities/{id}/publications/publish-all` | Publish to every channel. |
-| `GET` | `/v1/entities/{id}/publications/readiness` | For each enabled channel: `{context_id, context_code, ready, violations}`. |
-| `POST` | `/blueprints/{id}/versions/{version}/entity-publications`, `…/publish-all` | Publish all records of a revision. |
+| `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}` to make a context a channel. Optional `required_rule_codes` (up to 32 rule codes) and `require_valid_record` set the checks publication requires; omitted fields keep their current value. Invalid or repeated codes, or codes that name no rule in the workspace, return `422 invalid_input`. |
+| `GET`, `POST` | `/v1/records/{id}/publications` | Publication status, or publish with `{"context_id": "…"}`. |
+| `POST` | `/v1/records/{id}/publications/unpublish` | Unpublish from one channel. |
+| `POST` | `/v1/records/{id}/publications/publish-all` | Publish to every channel. |
+| `GET` | `/v1/records/{id}/publications/readiness` | For each enabled channel: `{context_id, context_code, ready, violations}`. |
+| `POST` | `/blueprints/{id}/versions/{version}/record-publications`, `…/publish-all` | Publish all records of a revision. |
 
 ### Saved searches
 
@@ -275,13 +273,13 @@ Every route acts on your own [inbox](/guides/inbox/) in the current workspace an
 | `PATCH` | `/notifications/{id}` | `{"read": true}` or `{"read": false}`. |
 | `POST` | `/notifications/read-all` | Mark every unread notification read; optional `{"up_to": "<RFC 3339>"}` keeps later ones unread. Returns `{"updated"}`. |
 
-Each notification has `id`, `kind` (for example `entity.assigned`), a plain-text `title`, an optional `body`, the actor, an optional `subject` (`{"kind": "entity" | "agent_conversation", "id"}`), kind-specific `data`, `read`, `read_at`, and `created_at`. New kinds can appear; show `title` for kinds you do not recognize.
+Each notification has `id`, `kind` (for example `record.assigned`), a plain-text `title`, an optional `body`, the actor, an optional `subject` (`{"kind": "record" | "agent_conversation", "id"}`), kind-specific `data`, `read`, `read_at`, and `created_at`. New kinds can appear; show `title` for kinds you do not recognize.
 
 ### Translations
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/lexicon/entries` | List entries, optionally for one `language` (`entities.read`). |
+| `GET` | `/lexicon/entries` | List entries, optionally for one `language` (`records.read`). |
 | `PUT` | `/lexicon/entries` | Create or replace an entry: `key`, optional `context`, `language`, optional `plural_category` (default `other`), and `text` (`blueprints.write`). |
 | `DELETE` | `/lexicon/entries` | Delete the entry identified by the `key`, `context`, `language`, and `plural_category` query parameters (`blueprints.write`). |
 | `GET` | `/lexicon/export` | Export one `language` as an import file (`blueprints.read`). |
@@ -298,7 +296,7 @@ See [Translate labels](/builders/translations/).
 | `GET`, `POST` | `/rules` | List or create rules. |
 | `GET` | `/rules/{id}` | Read a rule. |
 | `POST` | `/rules/{id}/versions/{version}/publish`, `/enable`; `/rules/{id}/disable` | Lifecycle. `/enable` accepts an optional `{"accept_existing_violations": true}` for an enforcing rule whose dry run found violations. |
-| `POST` | `/rules/{id}/run-now` | `{"entity_id": null, "dry_run": false, "idempotency_key": "…"}`. A dry run may add `"version": 2` to target a published revision that is not enabled; it defaults to the enabled revision, or the latest published one. |
+| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. A dry run may add `"version": 2` to target a published revision that is not enabled; it defaults to the enabled revision, or the latest published one. |
 | `GET` | `/rule-runs`, `/rule-findings` | Runs and findings. A run's `truncated` is `true` when it stopped at its record limit before checking every record. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Replay a dead letter; acknowledge a finding. |
 | `POST` | `/workflows/validate` | Validate workflow TOML. |
@@ -306,7 +304,7 @@ See [Translate labels](/builders/translations/).
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Lifecycle. |
 | `POST` | `/workflows/{id}/run-now` | Manual run. |
 | `GET` | `/workflow-runs` | Run history. |
-| `GET` | `/workflow-runs/{id}/targets` | Per-record outcomes of a `referencing_entities_update` action. |
+| `GET` | `/workflow-runs/{id}/targets` | Per-record outcomes of a `referencing_records_update` action. |
 | `POST` | `/workflow-runs/{id}/replay` | Replay a dead letter. |
 
 ### Agents
@@ -337,7 +335,7 @@ See [Translate labels](/builders/translations/).
 | `GET`, `POST`, `DELETE` | `/workspace/invitations[/{id}]`; `POST /workspace/invitations/accept` | Invitations. |
 | `POST` | `/workspace/users` | Create a user. |
 | `GET`, `PUT` | `/workspace/navigation`; `GET /workspace/navigation/sidebar` | Sidebar shortcuts. |
-| `GET` | `/directory` | Users and teams that user or team attributes can reference (`entities.read`). |
+| `GET` | `/directory` | Users and teams that user or team attributes can reference (`records.read`). |
 | `GET`, `POST`, `PATCH`, `DELETE` | `/workspace/teams[/{id}]` | Teams (`members.manage`). `PATCH` takes `name` and/or `member_user_ids`, which replaces every member. |
 | `GET` | `/audit-events` | Audit log. |
 

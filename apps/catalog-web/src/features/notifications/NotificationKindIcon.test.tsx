@@ -29,9 +29,9 @@ const iconClass = (item: Notification) =>
 
 describe('NotificationKindIcon', () => {
   it.each([
-    ['entity.assigned', {}, 'lucide-user-round'],
-    ['entity.assigned', { team_name: 'Editors' }, 'lucide-users-round'],
-    ['entity.commented', {}, 'lucide-message-square'],
+    ['record.assigned', {}, 'lucide-user-round'],
+    ['record.assigned', { team_name: 'Editors' }, 'lucide-users-round'],
+    ['record.commented', {}, 'lucide-message-square'],
     ['agent.run_failed', {}, 'lucide-bot'],
     ['workspace.invitation_accepted', {}, 'lucide-user-plus'],
     ['unknown.kind', {}, 'lucide-bell'],

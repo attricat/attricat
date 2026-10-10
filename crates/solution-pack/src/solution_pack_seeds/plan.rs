@@ -33,7 +33,7 @@ pub struct ExistingContextSnapshot {
 pub struct ExistingPublicationChannel {
     pub enabled: bool,
     pub required_rule_codes: Vec<String>,
-    pub require_valid_entity: bool,
+    pub require_valid_record: bool,
 }
 
 impl ExistingPublicationChannel {
@@ -48,7 +48,7 @@ impl ExistingPublicationChannel {
                 .collect()
         }
         self.enabled == other.enabled
-            && self.require_valid_entity == other.require_valid_entity
+            && self.require_valid_record == other.require_valid_record
             && codes(self) == codes(other)
     }
 }
@@ -482,7 +482,7 @@ fn plan_rules(
         rule_outcomes.insert(resource.key.clone(), ((action, reason_code), code.clone()));
         let blueprint = &input.blueprint_mappings[&rule.blueprint];
         let context = input.context_mapping(rule.context.as_deref());
-        // An existing blueprint may have live entities, and an enforcing rule
+        // An existing blueprint may have live records, and an enforcing rule
         // is only enabled there after an operator's dry run, as for any rule.
         let enable_deferred = rule.enabled
             && rule.compiled.enforcement.is_some()
@@ -690,7 +690,7 @@ fn plan_publication_channels(
                 .iter()
                 .map(|rule| rule_outcomes[rule].1.clone())
                 .collect(),
-            require_valid_entity: channel.require_valid_entity,
+            require_valid_record: channel.require_valid_record,
         };
         let existing = input
             .seed
@@ -713,7 +713,7 @@ fn plan_publication_channels(
             "context_code": context_mapping.target_code,
             "enabled": declared.enabled,
             "required_rule_codes": declared.required_rule_codes,
-            "require_valid_entity": declared.require_valid_entity,
+            "require_valid_record": declared.require_valid_record,
         });
         mappings.push(PlannedMapping {
             resource_kind: PlanResourceKind::PublicationChannel,
@@ -742,7 +742,7 @@ fn plan_publication_channels(
                 "enabled": declared.enabled,
                 "required_rules": channel.required_rules,
                 "required_rule_codes": declared.required_rule_codes,
-                "require_valid_entity": declared.require_valid_entity,
+                "require_valid_record": declared.require_valid_record,
                 "current_enabled": existing.map(|existing| existing.enabled),
                 "required": required,
             }),

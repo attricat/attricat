@@ -13,7 +13,7 @@ async fn directional_cardinality_rejects_source_and_target_conflicts_per_context
 format_version = 1
 code = "cardinality_target"
 name = "Cardinality target"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -32,7 +32,7 @@ value_type = "string"
 format_version = 1
 code = "cardinality_source"
 name = "Cardinality source"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -51,15 +51,15 @@ target_cardinality = "one"
 "#,
     )
     .await;
-    let target_a = create_entity(&client, &base_url, &target_blueprint).await;
-    let target_b = create_entity(&client, &base_url, &target_blueprint).await;
-    let source_a = create_entity(&client, &base_url, &source_blueprint).await;
-    let source_b = create_entity(&client, &base_url, &source_blueprint).await;
+    let target_a = create_record(&client, &base_url, &target_blueprint).await;
+    let target_b = create_record(&client, &base_url, &target_blueprint).await;
+    let source_a = create_record(&client, &base_url, &source_blueprint).await;
+    let source_b = create_record(&client, &base_url, &source_blueprint).await;
 
     let replace = |source: &Value, targets: Value| {
         client.post(format!(
-        "{base_url}/entities/{}/relationships/replace", source["id"].as_str().unwrap()
-    )).json(&json!({"relationships": [{"attribute_code": "target", "target_entity_ids": targets}]}))
+        "{base_url}/records/{}/relationships/replace", source["id"].as_str().unwrap()
+    )).json(&json!({"relationships": [{"attribute_code": "target", "target_record_ids": targets}]}))
     };
 
     assert_eq!(
@@ -103,7 +103,7 @@ async fn source_one_allows_many_sources_to_share_a_target(pool: PgPool) {
         r#"format_version = 1
 code = "shared_cardinality_target"
 name = "Shared target"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -118,7 +118,7 @@ value_type = "string""#,
         r#"format_version = 1
 code = "shared_cardinality_source"
 name = "Shared source"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -132,19 +132,19 @@ target_blueprint = "shared_cardinality_target"
 cardinality = "one""#,
     )
     .await;
-    let target = create_entity(&client, &base_url, &target).await;
+    let target = create_record(&client, &base_url, &target).await;
     for source in [
-        create_entity(&client, &base_url, &source).await,
-        create_entity(&client, &base_url, &source).await,
+        create_record(&client, &base_url, &source).await,
+        create_record(&client, &base_url, &source).await,
     ] {
         let response = client
             .post(format!(
-                "{base_url}/entities/{}/relationships/replace",
+                "{base_url}/records/{}/relationships/replace",
                 source["id"].as_str().unwrap()
             ))
             .json(&json!({"relationships": [{
                 "attribute_code": "target",
-                "target_entity_ids": [target["id"]]
+                "target_record_ids": [target["id"]]
             }]}))
             .send()
             .await
@@ -164,7 +164,7 @@ async fn concurrent_opposite_order_appends_do_not_deadlock(pool: PgPool) {
         r#"format_version = 1
 code = "concurrent_cardinality_target"
 name = "Concurrent target"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -179,7 +179,7 @@ value_type = "string""#,
         r#"format_version = 1
 code = "concurrent_cardinality_source"
 name = "Concurrent source"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -193,10 +193,10 @@ target_blueprint = "concurrent_cardinality_target"
 target_cardinality = "one""#,
     )
     .await;
-    let target_a = create_entity(&client, &base_url, &target).await;
-    let target_b = create_entity(&client, &base_url, &target).await;
-    let source_a = create_entity(&client, &base_url, &source).await;
-    let source_b = create_entity(&client, &base_url, &source).await;
+    let target_a = create_record(&client, &base_url, &target).await;
+    let target_b = create_record(&client, &base_url, &target).await;
+    let source_a = create_record(&client, &base_url, &source).await;
+    let source_b = create_record(&client, &base_url, &source).await;
     let target_a_id = target_a["id"].as_str().unwrap().to_owned();
     let target_b_id = target_b["id"].as_str().unwrap().to_owned();
     let append = |source: Value, targets: Vec<String>| {
@@ -205,14 +205,14 @@ target_cardinality = "one""#,
         async move {
             client
                 .post(format!(
-                    "{base_url}/entities/{}/values",
+                    "{base_url}/records/{}/values",
                     source["id"].as_str().unwrap()
                 ))
                 .json(
-                    &json!({"values": targets.into_iter().map(|target_entity_id| json!({
+                    &json!({"values": targets.into_iter().map(|target_record_id| json!({
                     "kind": "relationship",
                     "attribute_code": "targets",
-                    "target_entity_id": target_entity_id
+                    "target_record_id": target_record_id
                 })).collect::<Vec<_>>() }),
                 )
                 .send()
@@ -238,7 +238,7 @@ target_cardinality = "one""#,
 }
 
 #[sqlx::test]
-async fn cardinality_is_enforced_when_an_entity_migrates_to_declaring_revision(pool: PgPool) {
+async fn cardinality_is_enforced_when_an_record_migrates_to_declaring_revision(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let target = create_blueprint(
@@ -248,7 +248,7 @@ async fn cardinality_is_enforced_when_an_entity_migrates_to_declaring_revision(p
 format_version = 1
 code = "migration_cardinality_target"
 name = "Target"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -262,7 +262,7 @@ value_type = "string"
 format_version = 1
 code = "migration_cardinality_source"
 name = "Source"
-kind = "entity"
+kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
@@ -275,14 +275,14 @@ value_type = "relationship"
 target_blueprint = "migration_cardinality_target"
 "#;
     let source = create_blueprint(&client, &base_url, source_definition).await;
-    let entity = create_entity(&client, &base_url, &source).await;
-    let first_target = create_entity(&client, &base_url, &target).await;
-    let second_target = create_entity(&client, &base_url, &target).await;
+    let record = create_record(&client, &base_url, &source).await;
+    let first_target = create_record(&client, &base_url, &target).await;
+    let second_target = create_record(&client, &base_url, &target).await;
     client.post(format!(
-        "{base_url}/entities/{}/relationships/replace",
-        entity["id"].as_str().unwrap()
+        "{base_url}/records/{}/relationships/replace",
+        record["id"].as_str().unwrap()
     ))
-        .json(&json!({"relationships": [{"attribute_code": "target", "target_entity_ids": [first_target["id"], second_target["id"]]}]}))
+        .json(&json!({"relationships": [{"attribute_code": "target", "target_record_ids": [first_target["id"], second_target["id"]]}]}))
         .send().await.unwrap().error_for_status().unwrap();
 
     let blueprint_id = source["blueprint"]["id"].as_str().unwrap();
@@ -302,8 +302,8 @@ target_blueprint = "migration_cardinality_target"
 
     let preview: Value = client
         .post(format!(
-            "{base_url}/v1/entities/{}/blueprint-migration/preview",
-            entity["id"].as_str().unwrap()
+            "{base_url}/v1/records/{}/blueprint-migration/preview",
+            record["id"].as_str().unwrap()
         ))
         .send()
         .await

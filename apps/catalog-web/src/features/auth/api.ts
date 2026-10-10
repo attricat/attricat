@@ -37,8 +37,8 @@ const sessionSchema = z.object({
       workflows_manage: z.boolean().default(false),
       rules_read: z.boolean().default(false),
       rules_manage: z.boolean().default(false),
-      entities_publish: z.boolean().default(false),
-      entities_delete: z.boolean().default(false),
+      records_publish: z.boolean().default(false),
+      records_delete: z.boolean().default(false),
       blueprints_write: z.boolean().default(false),
     })
     .optional(),

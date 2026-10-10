@@ -1,5 +1,5 @@
-//! Validation and patching of entity system tags and system metadata,
-//! shared by entity writes, workflow actions and extension annotations.
+//! Validation and patching of record system tags and system metadata,
+//! shared by record writes, workflow actions and extension annotations.
 
 use super::RepositoryError;
 use serde_json::{Map, Value};

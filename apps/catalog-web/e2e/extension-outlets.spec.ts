@@ -28,7 +28,7 @@ test('mounts a blueprint panel and a publish check only in its confirmation', as
 format_version = 1
 code = "${code}"
 name = "Outlet fixture"
-kind = "entity"
+kind = "record"
 
 [[attributes]]
 code = "title"

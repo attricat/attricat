@@ -38,13 +38,13 @@ describe('workspace API client', () => {
   it('uses the session workspace for an entire-workspace scope', () => {
     const workspaceId = '223e4567-e89b-12d3-a456-426614174000';
     expect(selectedScopeTarget('workspace', id, workspaceId)).toBe(workspaceId);
-    expect(selectedScopeTarget('entity', id, workspaceId)).toBe(id);
+    expect(selectedScopeTarget('record', id, workspaceId)).toBe(id);
   });
 
   it('rejects stale and cross-scope grant targets before posting a mutation', async () => {
     expect(() =>
       ensureActiveScopeTarget(
-        { role_id: id, scope_type: 'entity', scope_target_id: id },
+        { role_id: id, scope_type: 'record', scope_target_id: id },
         '223e4567-e89b-12d3-a456-426614174000',
         [],
       ),

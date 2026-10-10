@@ -33,7 +33,7 @@ test('refuses operations pages to a role without data-health access', async ({
   await request('/workspace/roles', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: roleCode, permissions: ['entities.read'] }),
+    body: JSON.stringify({ code: roleCode, permissions: ['records.read'] }),
   });
   const page = await signInAsMember(browser, roleCode);
 

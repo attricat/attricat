@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
-  createEntity,
-  createEntityBlueprint,
+  createRecord,
+  createRecordBlueprint,
   createRevision,
   publishRevision,
   relationship,
@@ -29,13 +29,13 @@ test('shows explorer empty states and configured table fields', async ({
   page,
 }) => {
   const code = `explorer_${suffix()}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Explorer products',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]\n\n[[attributes]]\ncode = "stock"\nvalue_type = "integer"',
     { views: '[views.table]\ntype = "table"\nfields = ["title", "stock"]' },
   );
-  await createEntity(blueprint, [
+  await createRecord(blueprint, [
     scalar('title', 'Table product'),
     scalar('stock', 12),
   ]);
@@ -63,7 +63,7 @@ test('shows explorer empty states and configured table fields', async ({
 
   const repeatedButtonSearch = page.waitForResponse(
     (response) =>
-      response.url().endsWith('/api/v1/entities/search') &&
+      response.url().endsWith('/api/v1/records/search') &&
       response.request().method() === 'POST',
   );
   await page.getByRole('button', { name: 'Search', exact: true }).click();
@@ -71,7 +71,7 @@ test('shows explorer empty states and configured table fields', async ({
 
   const repeatedKeyboardSearch = page.waitForResponse(
     (response) =>
-      response.url().endsWith('/api/v1/entities/search') &&
+      response.url().endsWith('/api/v1/records/search') &&
       response.request().method() === 'POST',
   );
   await page.getByLabel('Query').press('Enter');
@@ -82,13 +82,13 @@ test('reorders Explorer columns by dragging their handles', async ({
   page,
 }) => {
   const code = `explorer_columns_${suffix()}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Explorer column order',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "stock"\nvalue_type = "integer"',
     { views: '[views.table]\ntype = "table"\nfields = ["title", "stock"]' },
   );
-  await createEntity(blueprint, [
+  await createRecord(blueprint, [
     scalar('title', 'Column product'),
     scalar('stock', 3),
   ]);
@@ -143,7 +143,7 @@ test('saves an Explorer search and restores it through a short URL', async ({
 }) => {
   const code = `saved_${suffix()}`;
   const savedName = `My saved products ${code}`;
-  await createEntityBlueprint(
+  await createRecordBlueprint(
     code,
     'Saved products',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
@@ -214,7 +214,7 @@ test('prepares an equality filter from a hovered table cell', async ({
   page,
 }) => {
   const code = `cell_filter_${suffix()}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Cell filter products',
     `[[attributes]]
@@ -226,11 +226,11 @@ code = "color"
 value_type = "string"`,
     { views: '[views.table]\ntype = "table"\nfields = ["title", "color"]' },
   );
-  await createEntity(blueprint, [
+  await createRecord(blueprint, [
     scalar('title', 'Red laptop'),
     scalar('color', 'red'),
   ]);
-  await createEntity(blueprint, [
+  await createRecord(blueprint, [
     scalar('title', 'Blue laptop'),
     scalar('color', 'blue'),
   ]);
@@ -262,7 +262,7 @@ value_type = "string"`,
 test('applies and removes an attribute filter on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const code = `attribute_filter_${suffix()}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Attribute filter products',
     `[[attributes]]
@@ -274,11 +274,11 @@ code = "stock"
 value_type = "integer"`,
     { views: '[views.table]\ntype = "table"\nfields = ["title", "stock"]' },
   );
-  await createEntity(blueprint, [
+  await createRecord(blueprint, [
     scalar('title', 'In stock'),
     scalar('stock', 12),
   ]);
-  await createEntity(blueprint, [
+  await createRecord(blueprint, [
     scalar('title', 'Low stock'),
     scalar('stock', 2),
   ]);
@@ -337,7 +337,7 @@ test('filters explorer results with a relationship hierarchy facet', async ({
 }) => {
   const categoryCode = `facet_category_${suffix()}`;
   const productCode = `facet_product_${suffix()}`;
-  const category = await createEntityBlueprint(
+  const category = await createRecordBlueprint(
     categoryCode,
     'Facet categories',
     `[[attributes]]
@@ -349,13 +349,13 @@ code = "parent"
 value_type = "relationship"
 target_blueprint = "${categoryCode}"`,
   );
-  const parent = await createEntity(category, [scalar('title', 'Departments')]);
-  const child = await createEntity(category, [
+  const parent = await createRecord(category, [scalar('title', 'Departments')]);
+  const child = await createRecord(category, [
     scalar('title', 'Shoes'),
     relationship('parent', parent.id),
   ]);
-  const other = await createEntity(category, [scalar('title', 'Accessories')]);
-  const product = await createEntityBlueprint(
+  const other = await createRecord(category, [scalar('title', 'Accessories')]);
+  const product = await createRecordBlueprint(
     productCode,
     'Faceted products',
     `[[attributes]]
@@ -368,11 +368,11 @@ code = "category"
 value_type = "relationship"
 target_blueprint = "${categoryCode}"`,
   );
-  await createEntity(product, [
+  await createRecord(product, [
     scalar('title', 'Running shoe'),
     relationship('category', child.id),
   ]);
-  await createEntity(product, [
+  await createRecord(product, [
     scalar('title', 'Canvas bag'),
     relationship('category', other.id),
   ]);
@@ -404,16 +404,16 @@ test('filters explorer results with a one-level relationship facet', async ({
 }) => {
   const colorCode = `facet_color_${suffix()}`;
   const productCode = `facet_color_product_${suffix()}`;
-  const color = await createEntityBlueprint(
+  const color = await createRecordBlueprint(
     colorCode,
     'Facet colors',
     `[[attributes]]
 code = "title"
 value_type = "string"`,
   );
-  const red = await createEntity(color, [scalar('title', 'Red')]);
-  const blue = await createEntity(color, [scalar('title', 'Blue')]);
-  const product = await createEntityBlueprint(
+  const red = await createRecord(color, [scalar('title', 'Red')]);
+  const blue = await createRecord(color, [scalar('title', 'Blue')]);
+  const product = await createRecordBlueprint(
     productCode,
     'Color products',
     `[[attributes]]
@@ -427,11 +427,11 @@ value_type = "relationship"
 target_blueprint = "${colorCode}"
 cardinality = "one"`,
   );
-  await createEntity(product, [
+  await createRecord(product, [
     scalar('title', 'Red shirt'),
     relationship('color', red.id),
   ]);
-  await createEntity(product, [
+  await createRecord(product, [
     scalar('title', 'Blue shirt'),
     relationship('color', blue.id),
   ]);
@@ -453,21 +453,21 @@ test('intersects selections from multiple relationship facets', async ({
   const colorCode = `multi_color_${suffix()}`;
   const sizeCode = `multi_size_${suffix()}`;
   const productCode = `multi_product_${suffix()}`;
-  const color = await createEntityBlueprint(
+  const color = await createRecordBlueprint(
     colorCode,
     'Colors',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"',
   );
-  const size = await createEntityBlueprint(
+  const size = await createRecordBlueprint(
     sizeCode,
     'Sizes',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"',
   );
-  const red = await createEntity(color, [scalar('title', 'Red')]);
-  const blue = await createEntity(color, [scalar('title', 'Blue')]);
-  const small = await createEntity(size, [scalar('title', 'Small')]);
-  const large = await createEntity(size, [scalar('title', 'Large')]);
-  const product = await createEntityBlueprint(
+  const red = await createRecord(color, [scalar('title', 'Red')]);
+  const blue = await createRecord(color, [scalar('title', 'Blue')]);
+  const small = await createRecord(size, [scalar('title', 'Small')]);
+  const large = await createRecord(size, [scalar('title', 'Large')]);
+  const product = await createRecordBlueprint(
     productCode,
     'Products with multiple facets',
     `[[attributes]]
@@ -485,17 +485,17 @@ code = "size"
 value_type = "relationship"
 target_blueprint = "${sizeCode}"`,
   );
-  await createEntity(product, [
+  await createRecord(product, [
     scalar('title', 'Red large shirt'),
     relationship('color', red.id),
     relationship('size', large.id),
   ]);
-  await createEntity(product, [
+  await createRecord(product, [
     scalar('title', 'Red small shirt'),
     relationship('color', red.id),
     relationship('size', small.id),
   ]);
-  await createEntity(product, [
+  await createRecord(product, [
     scalar('title', 'Blue large shirt'),
     relationship('color', blue.id),
     relationship('size', large.id),
@@ -526,19 +526,19 @@ target_blueprint = "${sizeCode}"`,
 test('loads additional explorer search pages', async ({ page }) => {
   test.setTimeout(60_000);
   const code = `pagination_${suffix()}`;
-  const blueprint = await createEntityBlueprint(
+  const blueprint = await createRecordBlueprint(
     code,
     'Paginated products',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
   );
   for (let index = 0; index < 52; index += 1) {
-    await createEntity(blueprint, [
+    await createRecord(blueprint, [
       scalar('title', `Pagination product ${index}`),
     ]);
   }
 
   let searchRequests = 0;
-  await page.route('**/api/v1/entities/search', async (route) => {
+  await page.route('**/api/v1/records/search', async (route) => {
     searchRequests += 1;
     await new Promise((resolve) => setTimeout(resolve, 300));
     await route.continue();
@@ -560,14 +560,14 @@ test('loads additional explorer search pages', async ({ page }) => {
   await expect(loadMore).toBeHidden();
 });
 
-test('searches a requested blueprint version and identifies outdated entities', async ({
+test('searches a requested blueprint version and identifies outdated records', async ({
   page,
 }) => {
   const code = `versions_${suffix()}`;
   const firstDefinition = `format_version = 1
 code = "${code}"
 name = "Versioned products"
-kind = "entity"
+kind = "record"
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -577,12 +577,12 @@ fields = ["title"]
 code = "title"
 value_type = "string"
 tags = ["searchable"]`;
-  const first = await createEntityBlueprint(
+  const first = await createRecordBlueprint(
     code,
     'Versioned products',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
   );
-  const oldEntity = await createEntity(first, [scalar('title', 'Old product')]);
+  const oldRecord = await createRecord(first, [scalar('title', 'Old product')]);
   const second = await createRevision(
     first.blueprint.id,
     `${firstDefinition}
@@ -606,13 +606,13 @@ value_type = "string"`,
     page.getByRole('link', { name: 'Review migrations' }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: `View record ID ${oldEntity.id}` }),
+    page.getByRole('button', { name: `View record ID ${oldRecord.id}` }),
   ).toBeHidden();
 
   await page.getByRole('button', { name: 'Show all versions' }).click();
   await expect(page).toHaveURL(/allVersions=true/);
   await expect(
-    page.getByRole('button', { name: `View record ID ${oldEntity.id}` }),
+    page.getByRole('button', { name: `View record ID ${oldRecord.id}` }),
   ).toBeVisible();
 
   await page.getByRole('button', { name: /^Search scope/ }).click();

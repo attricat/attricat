@@ -13,7 +13,7 @@ afterEach(() => fetchMock.mockReset());
 const token = {
   id,
   label: 'automation',
-  permissions: ['entities.read'],
+  permissions: ['records.read'],
   expires_at: null,
   revoked_at: null,
   last_used_at: null,
@@ -35,7 +35,7 @@ describe('profile API client', () => {
     });
     const created = await createToken({
       label: 'automation',
-      permissions: ['entities.read'],
+      permissions: ['records.read'],
     });
     expect(created.secret).toBe('cat_pat_only_once');
 
@@ -73,7 +73,7 @@ describe('profile API client', () => {
     expect(() =>
       createToken({
         label: 'automation',
-        permissions: ['entities.read'],
+        permissions: ['records.read'],
         expires_at: '2020-01-01T00:00:00.000Z',
       }),
     ).toThrow('Token expiry must be in the future');

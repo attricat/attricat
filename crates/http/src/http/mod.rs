@@ -6,9 +6,6 @@ mod blueprints;
 mod conditional;
 mod contexts;
 mod data_health;
-mod entities;
-mod entity_comments;
-mod entity_reads;
 mod error;
 mod event_deliveries;
 mod extension_registries;
@@ -21,7 +18,10 @@ mod members;
 mod notifications;
 mod pagination;
 mod presentation_assets;
+mod record_comments;
 mod record_controls;
+mod record_reads;
+mod records;
 mod reusable_attributes;
 mod roles;
 mod rules;
@@ -95,7 +95,7 @@ pub struct AppState {
     // unbounded amount of database work.
     pub max_preview_relationship_depth: u8,
     pub max_preview_relationship_items: u32,
-    pub max_entity_page_size: u32,
+    pub max_record_page_size: u32,
     pub max_incoming_relationship_page_size: u32,
     pub max_relationship_facet_nodes: u32,
     /// Independently enforced while multipart fields stream to temporary storage.
@@ -130,11 +130,11 @@ const TIMING_PHASES: [&str; 4] = ["candidate", "page", "related", "serialize"];
 /// Only Explorer requests publish development SQL and phase breakdowns.
 /// Other API responses retain the standard aggregate `app` timing.
 const EXPLORER_TIMING_ROUTES: [&str; 2] = [
-    "/v1/entities/search",
-    "/v1/entities/facets/relationship-tree/children",
+    "/v1/records/search",
+    "/v1/records/facets/relationship-tree/children",
 ];
 /// SQL breakdowns are limited to Explorer result and facet retrieval.
-const SQL_TIMING_LABELS: [&str; 3] = ["relationship-facet", "entities-page", "related-hydrate"];
+const SQL_TIMING_LABELS: [&str; 3] = ["relationship-facet", "records-page", "related-hydrate"];
 
 /// Request-local, aggregate timings. Its API only permits fixed metric names,
 /// so headers cannot accidentally contain SQL, identifiers, parameters, or bodies.
@@ -584,7 +584,7 @@ pub fn router(state: AppState) -> Router {
                 .post(extension_runs::adopt_annotation_namespace),
         )
         .route(
-            "/extensions/{extension_id}/annotation-namespace/entities/{entity_id}",
+            "/extensions/{extension_id}/annotation-namespace/records/{record_id}",
             post(extension_runs::repair_annotations),
         )
         .route("/extension-runs", get(extension_runs::list))
@@ -799,7 +799,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/blueprints",
-            get(blueprints::list_entity_blueprints).post(blueprints::create_blueprint),
+            get(blueprints::list_record_blueprints).post(blueprints::create_blueprint),
         )
         .route("/rules", get(rules::list).post(rules::create))
         .route("/rules/validate", post(rules::validate))
@@ -869,11 +869,11 @@ pub fn router(state: AppState) -> Router {
             get(reusable_attributes::list_groups).post(reusable_attributes::create_group),
         )
         .route(
-            "/v1/entities/{entity_id}/reusable-attributes",
+            "/v1/records/{record_id}/reusable-attributes",
             post(reusable_attributes::attach),
         )
         .route(
-            "/v1/entities/{entity_id}/reusable-attribute-groups/{group_id}",
+            "/v1/records/{record_id}/reusable-attribute-groups/{group_id}",
             post(reusable_attributes::attach_group),
         )
         .route("/blueprints/catalogue", get(blueprints::list_blueprints))
@@ -891,12 +891,12 @@ pub fn router(state: AppState) -> Router {
             post(blueprints::publish_blueprint_revision),
         )
         .route(
-            "/blueprints/{blueprint_id}/versions/{version}/entity-publications",
-            post(blueprints::publish_blueprint_entities),
+            "/blueprints/{blueprint_id}/versions/{version}/record-publications",
+            post(blueprints::publish_blueprint_records),
         )
         .route(
-            "/blueprints/{blueprint_id}/versions/{version}/entity-publications/publish-all",
-            post(blueprints::publish_blueprint_entities_all_channels),
+            "/blueprints/{blueprint_id}/versions/{version}/record-publications/publish-all",
+            post(blueprints::publish_blueprint_records_all_channels),
         )
         .route(
             "/blueprints/{blueprint_id}/migration-batches",
@@ -936,77 +936,77 @@ pub fn router(state: AppState) -> Router {
             put(contexts::update_context).delete(contexts::delete_context),
         )
         .route(
-            "/v1/entities/search",
-            post(entity_reads::search_entity_previews),
+            "/v1/records/search",
+            post(record_reads::search_record_previews),
         )
-        .route("/v1/entities/labels", post(entity_reads::entity_labels))
+        .route("/v1/records/labels", post(record_reads::record_labels))
         .route(
-            "/v1/entities/facets/relationship-tree/children",
-            post(entity_reads::relationship_tree_facet_children),
+            "/v1/records/facets/relationship-tree/children",
+            post(record_reads::relationship_tree_facet_children),
         )
-        .route("/v1/entities", post(entities::create_entity_form))
-        .route("/v1/entities/batch", post(entities::apply_entity_batch))
+        .route("/v1/records", post(records::create_record_form))
+        .route("/v1/records/batch", post(records::apply_record_batch))
         .route(
-            "/v1/entities/{entity_id}",
-            get(entities::get_entity_form).put(entities::update_entity_form),
-        )
-        .route(
-            "/v1/entities/{entity_id}/duplicate",
-            post(entities::duplicate_entity),
-        )
-        .route("/agent/smart-fill", post(entities::smart_fill_entity_form))
-        .route(
-            "/v1/entities/{entity_id}/incoming-relationships",
-            post(entities::list_incoming_relationships),
+            "/v1/records/{record_id}",
+            get(records::get_record_form).put(records::update_record_form),
         )
         .route(
-            "/v1/entities/{entity_id}/publications",
-            get(entities::list_entity_publications).post(entities::publish_entity),
+            "/v1/records/{record_id}/duplicate",
+            post(records::duplicate_record),
+        )
+        .route("/agent/smart-fill", post(records::smart_fill_record_form))
+        .route(
+            "/v1/records/{record_id}/incoming-relationships",
+            post(records::list_incoming_relationships),
         )
         .route(
-            "/v1/entities/{entity_id}/publications/readiness",
-            get(entities::entity_publication_readiness),
+            "/v1/records/{record_id}/publications",
+            get(records::list_record_publications).post(records::publish_record),
         )
         .route(
-            "/v1/entities/{entity_id}/publications/unpublish",
-            post(entities::unpublish_entity),
+            "/v1/records/{record_id}/publications/readiness",
+            get(records::record_publication_readiness),
         )
         .route(
-            "/v1/entities/{entity_id}/publications/publish-all",
-            post(entities::publish_entity_all_channels),
+            "/v1/records/{record_id}/publications/unpublish",
+            post(records::unpublish_record),
         )
         .route(
-            "/v1/entities/{entity_id}/blueprint-migration/preview",
-            post(entities::preview_entity_migration),
+            "/v1/records/{record_id}/publications/publish-all",
+            post(records::publish_record_all_channels),
         )
         .route(
-            "/v1/entities/{entity_id}/blueprint-migration",
-            post(entities::migrate_entity_to_latest),
+            "/v1/records/{record_id}/blueprint-migration/preview",
+            post(records::preview_record_migration),
         )
         .route(
-            "/entities/{entity_id}/file-attributes/{attribute_code}/uploads",
+            "/v1/records/{record_id}/blueprint-migration",
+            post(records::migrate_record_to_latest),
+        )
+        .route(
+            "/records/{record_id}/file-attributes/{attribute_code}/uploads",
             post(files::upload).layer(axum::extract::DefaultBodyLimit::disable()),
         )
         .route(
             "/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads",
-            // Streams and limits each file itself, like entity uploads.
+            // Streams and limits each file itself, like record uploads.
             post(files::upload_staged).layer(axum::extract::DefaultBodyLimit::disable()),
         )
         .route(
-            "/entities/{entity_id}/file-attributes/{attribute_code}/references",
+            "/records/{record_id}/file-attributes/{attribute_code}/references",
             put(files::update_references),
         )
         .route(
-            "/v1/entities/{entity_id}/status-transitions",
+            "/v1/records/{record_id}/status-transitions",
             get(record_controls::status_transitions),
         )
         .route(
-            "/v1/entities/{entity_id}/approvals",
+            "/v1/records/{record_id}/approvals",
             get(record_controls::approvals),
         )
         .route(
-            "/v1/entities/{entity_id}/retention-holds",
-            get(record_controls::entity_holds),
+            "/v1/records/{record_id}/retention-holds",
+            get(record_controls::record_holds),
         )
         .route(
             "/files/{file_id}/retention-holds",
@@ -1023,61 +1023,58 @@ pub fn router(state: AppState) -> Router {
             get(files::download_variant),
         )
         .route(
-            "/v1/entities/{entity_id}/comments",
-            get(entity_comments::list).post(entity_comments::create),
+            "/v1/records/{record_id}/comments",
+            get(record_comments::list).post(record_comments::create),
         )
         .route(
-            "/v1/entities/{entity_id}/comments/count",
-            get(entity_comments::count),
+            "/v1/records/{record_id}/comments/count",
+            get(record_comments::count),
         )
         .route(
-            "/v1/entities/{entity_id}/comments/{comment_id}",
-            axum::routing::patch(entity_comments::update),
+            "/v1/records/{record_id}/comments/{comment_id}",
+            axum::routing::patch(record_comments::update),
         )
-        .route("/entities", get(entity_reads::list_previews))
+        .route("/records", get(record_reads::list_previews))
         .route(
-            "/entities/{entity_id}",
-            get(entity_reads::get_entity).delete(entities::delete_entity),
-        )
-        .route(
-            "/entities/{entity_id}/preview",
-            get(entity_reads::get_preview),
+            "/records/{record_id}",
+            get(record_reads::get_record).delete(records::delete_record),
         )
         .route(
-            "/entities/{entity_id}/resolved-preview",
-            get(entity_reads::get_resolved_preview),
+            "/records/{record_id}/preview",
+            get(record_reads::get_preview),
         )
         .route(
-            "/entities/{entity_id}/hierarchy",
-            get(entity_reads::get_entity_hierarchy),
+            "/records/{record_id}/resolved-preview",
+            get(record_reads::get_resolved_preview),
         )
         .route(
-            "/entities/{entity_id}/values",
-            post(entities::append_values),
+            "/records/{record_id}/hierarchy",
+            get(record_reads::get_record_hierarchy),
+        )
+        .route("/records/{record_id}/values", post(records::append_values))
+        .route(
+            "/records/{record_id}/changes",
+            get(records::get_record_changes),
         )
         .route(
-            "/entities/{entity_id}/changes",
-            get(entities::get_entity_changes),
+            "/records/{record_id}/values/history",
+            get(records::get_value_history),
         )
         .route(
-            "/entities/{entity_id}/values/history",
-            get(entities::get_value_history),
+            "/records/{record_id}/values/history/{history_id}/restore",
+            post(records::restore_value),
         )
         .route(
-            "/entities/{entity_id}/values/history/{history_id}/restore",
-            post(entities::restore_value),
+            "/records/{record_id}/relationships/replace",
+            post(records::replace_relationships),
         )
         .route(
-            "/entities/{entity_id}/relationships/replace",
-            post(entities::replace_relationships),
+            "/records/{record_id}/relationships/remove",
+            post(records::remove_relationships),
         )
         .route(
-            "/entities/{entity_id}/relationships/remove",
-            post(entities::remove_relationships),
-        )
-        .route(
-            "/entities/{entity_id}/values/current",
-            get(entities::get_current_values),
+            "/records/{record_id}/values/current",
+            get(records::get_current_values),
         )
         .layer(middleware::from_fn_with_state(state.clone(), audit::record))
         .layer(middleware::from_fn_with_state(
@@ -1112,7 +1109,7 @@ pub fn router(state: AppState) -> Router {
 }
 
 /// The API lives below `/api` only, so it never shares a path with a
-/// client-side route such as `/entities/{id}`. Health probes also answer at
+/// client-side route such as `/records/{id}`. Health probes also answer at
 /// the root for load balancers and container checks, and every other path
 /// belongs to the web app when one is served.
 fn mount(api: Router, probes: Router, web_dist: Option<&str>) -> Router {
@@ -1232,7 +1229,7 @@ mod timing_tests {
         for (path, body) in [
             ("/", "<!doctype html>index"),
             ("/login", "<!doctype html>index"),
-            ("/entities/123/edit", "<!doctype html>index"),
+            ("/records/123/edit", "<!doctype html>index"),
             ("/assets/app.js", "app"),
         ] {
             let request = axum::http::Request::builder()
@@ -1262,17 +1259,17 @@ mod timing_tests {
         std::fs::create_dir_all(&dist).unwrap();
         std::fs::write(dist.join("index.html"), "<!doctype html>index").unwrap();
         let api = Router::new()
-            .route("/entities/{entity_id}", get(|| async { "entity json" }))
+            .route("/records/{record_id}", get(|| async { "record json" }))
             .route("/health", get(|| async { "ok" }));
         let probes = Router::new().route("/health", get(|| async { "ok" }));
 
         let served = mount(api.clone(), probes.clone(), Some(dist.to_str().unwrap()));
         for (path, status, body) in [
-            ("/api/entities/123", StatusCode::OK, "entity json"),
+            ("/api/records/123", StatusCode::OK, "record json"),
             ("/api/health", StatusCode::OK, "ok"),
             ("/health", StatusCode::OK, "ok"),
             // Client-side routes that the API also has below `/api`.
-            ("/entities/123", StatusCode::OK, "<!doctype html>index"),
+            ("/records/123", StatusCode::OK, "<!doctype html>index"),
             ("/login", StatusCode::OK, "<!doctype html>index"),
         ] {
             assert_response(&served, path, status, body).await;
@@ -1280,15 +1277,9 @@ mod timing_tests {
 
         // Without a web build, only the API and probes answer.
         let api_only = mount(api, probes, None);
-        assert_response(
-            &api_only,
-            "/api/entities/123",
-            StatusCode::OK,
-            "entity json",
-        )
-        .await;
+        assert_response(&api_only, "/api/records/123", StatusCode::OK, "record json").await;
         assert_response(&api_only, "/health", StatusCode::OK, "ok").await;
-        assert_response(&api_only, "/entities/123", StatusCode::NOT_FOUND, "").await;
+        assert_response(&api_only, "/records/123", StatusCode::NOT_FOUND, "").await;
 
         std::fs::remove_dir_all(dist).unwrap();
 
@@ -1320,11 +1311,11 @@ mod timing_tests {
         let enabled = RequestTiming::new(true);
         enabled.record("candidate", Instant::now());
         enabled.record("unknown", Instant::now());
-        enabled.record_sql(Some("entities-page"), 12.345);
+        enabled.record_sql(Some("records-page"), 12.345);
         let header = enabled.server_timing();
         assert!(header.starts_with("candidate;dur="));
         assert!(header.contains("sql;dur=12.35;desc=queries-1"));
-        assert!(header.contains("sql-entities-page;dur=12.35;desc=queries-1"));
+        assert!(header.contains("sql-records-page;dur=12.35;desc=queries-1"));
         assert!(!header.contains("SELECT"));
     }
 }

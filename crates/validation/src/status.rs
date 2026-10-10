@@ -503,7 +503,7 @@ mod tests {
         s[STATUS_KEY]["transitions"] = json!([
             {"from":null,"to":"draft"},
             {"from":"draft","to":"live","code":"submit"},
-            {"from":"live","to":"done","code":"release","permission":"entities.publish","roles":["reviewer"],"separate_from":["submit"]},
+            {"from":"live","to":"done","code":"release","permission":"records.publish","roles":["reviewer"],"separate_from":["submit"]},
             {"from":"done","to":"draft","code":"correct","roles":["owner"]}
         ]);
         s
@@ -531,7 +531,7 @@ mod tests {
         assert!(!approval.covers.covers("status", "status"));
         let release = transition_requirements(&s, &json!("live"), &json!("done"));
         assert_eq!(release.code.as_deref(), Some("release"));
-        assert_eq!(release.permission.as_deref(), Some("entities.publish"));
+        assert_eq!(release.permission.as_deref(), Some("records.publish"));
         assert_eq!(release.roles, ["reviewer"]);
         assert_eq!(release.separate_from, ["submit"]);
         assert!(release.is_restricted());
@@ -563,7 +563,7 @@ mod tests {
             .unwrap()
             .push(json!({"from":"draft","to":"live","code":"other"}));
         let mut permission = controlled();
-        permission[STATUS_KEY]["transitions"][2]["permission"] = json!("Entities publish");
+        permission[STATUS_KEY]["transitions"][2]["permission"] = json!("Records publish");
         let mut lock = controlled();
         lock[STATUS_KEY]["options"][2]["lock"] = json!("everything");
         for (name, s) in [

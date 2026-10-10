@@ -1,0 +1,293 @@
+import { z } from 'zod';
+import i18n from '../../i18n';
+import type {
+  Attribute,
+  JsonSchema,
+  NewAttributeValue,
+  FormAttributeValue,
+  RelationshipTargets,
+} from './api';
+import { scalarValueForField, valueForField } from './attributeValues';
+import { jsonSchemaValidationErrors } from './jsonSchema';
+import { attributeValueKinds, attributeValueTypes } from './valueTypes';
+import { RELATIONSHIP_ID_JOINER, RELATIONSHIP_ID_SEPARATOR } from './constants';
+
+export type RecordFormValidation = {
+  fieldErrors: Record<string, string>;
+  formError?: string;
+};
+
+export const valuesForForm = (
+  attributes: readonly Attribute[],
+  values: FormAttributeValue[],
+  contextId: string | null = null,
+): Record<string, string> => {
+  return Object.fromEntries(
+    attributes.map((attribute) => {
+      const matching = values.filter(
+        (value) =>
+          value.attribute_code === attribute.code &&
+          (value.context_id ?? null) === contextId,
+      );
+      if (attribute.value_type === attributeValueTypes.relationship) {
+        return [
+          attribute.code,
+          matching
+            .filter(
+              (
+                value,
+              ): value is Extract<
+                NewAttributeValue,
+                { kind: typeof attributeValueKinds.relationship }
+              > => value.kind === attributeValueKinds.relationship,
+            )
+            .map((value) => value.target_record_id)
+            .join(RELATIONSHIP_ID_JOINER),
+        ];
+      }
+      const scalar = matching.find(
+        (
+          value,
+        ): value is Extract<
+          NewAttributeValue,
+          { kind: typeof attributeValueKinds.scalar }
+        > => value.kind === attributeValueKinds.scalar,
+      );
+      return [attribute.code, valueForField(scalar?.value)];
+    }),
+  );
+};
+
+/** Form behavior contributed by a field's configured edit component. */
+export type FieldEditRules = {
+  validateValue?: (value: string) => string | undefined;
+  preservesWhitespace?: boolean;
+};
+
+export const serializeAttributeValues = (
+  attributes: readonly Attribute[],
+  fields: Record<string, string>,
+  contextId: string | null = null,
+  fieldRules: ReadonlyMap<string, FieldEditRules> = new Map(),
+): NewAttributeValue[] => {
+  return attributes.flatMap<NewAttributeValue>(
+    (attribute): NewAttributeValue[] => {
+      if (attribute.value_type === attributeValueTypes.relationship) return [];
+      const scalar = scalarValueForField(
+        attribute,
+        fields[attribute.code] ?? '',
+        fieldRules.get(attribute.code)?.preservesWhitespace,
+      );
+      return scalar ? [{ ...scalar, context_id: contextId }] : [];
+    },
+  );
+};
+
+export const hasInvalidScalarField = (
+  attributes: readonly Attribute[],
+  fields: Record<string, string>,
+): boolean =>
+  attributes.some(
+    (attribute) =>
+      attribute.value_type !== attributeValueTypes.relationship &&
+      Boolean(fields[attribute.code]?.trim()) &&
+      !scalarValueForField(attribute, fields[attribute.code]),
+  );
+
+export type RecordFormValidationMessages = {
+  invalidRelationship: string;
+  invalidValue: string;
+  required: string;
+  schema: string;
+};
+
+/** Resolves validation messages in the active language at validation time. */
+export const recordFormValidationMessages =
+  (): RecordFormValidationMessages => ({
+    invalidRelationship: i18n.t('records.invalidRelationshipValue'),
+    invalidValue: i18n.t('records.invalidAttributeValue'),
+    required: i18n.t('records.requiredAttributeValue'),
+    schema: i18n.t('records.schemaValidationFailed'),
+  });
+
+/**
+ * How many files each file attribute will hold, by code, for a form that
+ * submits files with its values (such as files queued while creating a
+ * record). Without it, file attributes save apart and are not checked.
+ */
+export type FormFileCounts = Readonly<Record<string, number>>;
+
+/** Required editable attributes that have no value yet. */
+export const missingRequiredAttributes = (
+  attributes: readonly Attribute[],
+  fields: Record<string, string>,
+  requiredCodes: ReadonlySet<string>,
+  fileCounts?: FormFileCounts,
+): Attribute[] =>
+  attributes.filter((attribute) => {
+    if (!requiredCodes.has(attribute.code) || attribute.readonly === true)
+      return false;
+    const value = fields[attribute.code] ?? '';
+    if (attribute.value_type === attributeValueTypes.file)
+      return fileCounts !== undefined && !(fileCounts[attribute.code] > 0);
+    if (attribute.value_type === attributeValueTypes.relationship)
+      return relationshipIdsForField(value).length === 0;
+    return !value.trim();
+  });
+
+export const validateRecordForm = (
+  attributes: readonly Attribute[],
+  fields: Record<string, string>,
+  requiredAttributes: readonly string[] = [],
+  recordSchema?: JsonSchema | null,
+  messages: RecordFormValidationMessages = recordFormValidationMessages(),
+  fieldRules: ReadonlyMap<string, FieldEditRules> = new Map(),
+  fileCounts?: FormFileCounts,
+): RecordFormValidation => {
+  const fieldErrors: Record<string, string> = {};
+  const document: Record<string, unknown> = {};
+  // File values are validated by the server; the form only knows how many.
+  const fileCodes = new Set<string>();
+
+  for (const attribute of attributes) {
+    const value = fields[attribute.code] ?? '';
+    const required = requiredAttributes.includes(attribute.code);
+    if (attribute.value_type === attributeValueTypes.file) {
+      if (!fileCounts) continue;
+      fileCodes.add(attribute.code);
+      const count = fileCounts[attribute.code] ?? 0;
+      if (required && count === 0)
+        fieldErrors[attribute.code] = messages.required;
+      else if (count > 0)
+        document[attribute.code] = Array.from({ length: count }, () => ({}));
+      continue;
+    }
+    if (attribute.value_type === attributeValueTypes.relationship) {
+      const targetRecordIds = relationshipIdsForField(value);
+      if (required && targetRecordIds.length === 0) {
+        fieldErrors[attribute.code] = messages.required;
+      } else if (!relationshipIdsAreValid(targetRecordIds)) {
+        fieldErrors[attribute.code] = messages.invalidRelationship;
+      } else if (targetRecordIds.length > 0) {
+        document[attribute.code] = targetRecordIds;
+      }
+      continue;
+    }
+
+    if (required && !value.trim()) {
+      fieldErrors[attribute.code] = messages.required;
+      continue;
+    }
+    const rules = fieldRules.get(attribute.code);
+    const configuredError = rules?.validateValue?.(value);
+    if (configuredError) {
+      fieldErrors[attribute.code] = configuredError;
+      continue;
+    }
+    const scalar = scalarValueForField(
+      attribute,
+      value,
+      rules?.preservesWhitespace,
+    );
+    if (value.trim() && !scalar) {
+      fieldErrors[attribute.code] = messages.invalidValue;
+    } else if (scalar) {
+      const errors = jsonSchemaValidationErrors(
+        scalar.value,
+        attribute.value_schema,
+      );
+      if (errors === undefined || errors.length > 0)
+        fieldErrors[attribute.code] = messages.schema;
+      document[attribute.code] = scalar.value;
+    }
+  }
+
+  if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
+  const schemaErrors = jsonSchemaValidationErrors(document, recordSchema);
+  if (schemaErrors === undefined)
+    return {
+      fieldErrors,
+      formError: messages.schema,
+    };
+  const formError = schemaErrors
+    .filter(
+      (error) =>
+        error.keyword === 'required' ||
+        !fileCodes.has(attributeCodeForSchemaError(error) ?? ''),
+    )
+    .map((error) => {
+      const attributeCode = attributeCodeForSchemaError(error);
+      if (
+        attributeCode &&
+        attributes.some((attribute) => attribute.code === attributeCode)
+      ) {
+        fieldErrors[attributeCode] ??= messages.schema;
+        return undefined;
+      }
+      return messages.schema;
+    })
+    .find(Boolean);
+  return formError ? { fieldErrors, formError } : { fieldErrors };
+};
+
+const attributeCodeForSchemaError = (error: {
+  instancePath: string;
+  keyword: string;
+  params: Record<string, unknown>;
+}): string | undefined => {
+  if (
+    error.keyword === 'required' &&
+    typeof error.params.missingProperty === 'string'
+  )
+    return error.params.missingProperty;
+  const [segment] = error.instancePath.split('/').filter(Boolean);
+  return segment?.replaceAll('~1', '/').replaceAll('~0', '~');
+};
+
+/** Every blueprint a relationship may target; empty allows any blueprint. */
+export const allowedTargetBlueprints = (
+  attribute: Pick<
+    Attribute,
+    'target_blueprint_code' | 'target_blueprint_codes'
+  >,
+): string[] =>
+  attribute.target_blueprint_codes?.length
+    ? attribute.target_blueprint_codes
+    : attribute.target_blueprint_code
+      ? [attribute.target_blueprint_code]
+      : [];
+
+export const relationshipIdsForField = (value: string): string[] =>
+  value
+    .split(RELATIONSHIP_ID_SEPARATOR)
+    .map((targetRecordId) => targetRecordId.trim())
+    .filter(Boolean);
+
+const relationshipIdsAreValid = (ids: string[]): boolean =>
+  z.array(z.uuid()).safeParse(ids).success;
+
+export const relationshipTargetsForForm = (
+  attributes: readonly Attribute[],
+  fields: Record<string, string>,
+  contextId: string | null = null,
+): RelationshipTargets[] => {
+  return attributes
+    .filter(
+      (attribute) => attribute.value_type === attributeValueTypes.relationship,
+    )
+    .flatMap((attribute) => {
+      const targetRecordIds = relationshipIdsForField(
+        fields[attribute.code] ?? '',
+      );
+      const result = z.array(z.uuid()).safeParse(targetRecordIds);
+      return result.success
+        ? [
+            {
+              attribute_code: attribute.code,
+              context_id: contextId,
+              target_record_ids: result.data,
+            },
+          ]
+        : [];
+    });
+};

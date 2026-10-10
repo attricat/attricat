@@ -64,7 +64,7 @@ export const ApiErrorAlert = ({
       sx={sx}
       title={
         checks.context
-          ? t('entities.checks.publicationBlocked', { context: checks.context })
+          ? t('records.checks.publicationBlocked', { context: checks.context })
           : checks.message
       }
       violations={violations ?? checks.violations}

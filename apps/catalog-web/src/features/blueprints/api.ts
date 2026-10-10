@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { request } from '../../api/request';
 import type { RemovalDisposition } from './constants';
 import {
-  blueprintEntityPublicationSummarySchema,
+  blueprintRecordPublicationSummarySchema,
   blueprintMigrationBatchSchema,
   blueprintMigrationBatchStatusSchema,
   blueprintMigrationImpactSchema,
@@ -88,14 +88,14 @@ export const startSafeBlueprintMigrationBatch = (
       : { method: 'POST' },
   );
 
-export const publishBlueprintEntities = (
+export const publishBlueprintRecords = (
   id: string,
   version: number,
   contextId: string,
 ) =>
   request(
-    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/entity-publications`,
-    blueprintEntityPublicationSummarySchema,
+    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/record-publications`,
+    blueprintRecordPublicationSummarySchema,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -103,13 +103,13 @@ export const publishBlueprintEntities = (
     },
   );
 
-export const publishBlueprintEntitiesAllChannels = (
+export const publishBlueprintRecordsAllChannels = (
   id: string,
   version: number,
 ) =>
   request(
-    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/entity-publications/publish-all`,
-    blueprintEntityPublicationSummarySchema,
+    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/record-publications/publish-all`,
+    blueprintRecordPublicationSummarySchema,
     { method: 'POST' },
   );
 

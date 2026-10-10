@@ -35,10 +35,10 @@ import {
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize, smallIconSize } from '../../components/iconSizes';
-import { EntityIcon, RelationshipIcon } from '../../components/systemIcons';
-import type { Blueprint, BlueprintWithAttributes } from '../entities/api';
-import { attributeLabel } from '../entities/entityDisplay';
-import { valueTypeIcons, valueTypeLabelKey } from '../entities/valueTypeIcons';
+import { RecordIcon, RelationshipIcon } from '../../components/systemIcons';
+import type { Blueprint, BlueprintWithAttributes } from '../records/api';
+import { attributeLabel } from '../records/recordDisplay';
+import { valueTypeIcons, valueTypeLabelKey } from '../records/valueTypeIcons';
 import { querySuggestionListMaxHeight } from './constants';
 import {
   firstQueryError,
@@ -64,7 +64,7 @@ const suggestionIcon = (suggestion: QuerySuggestion): LucideIcon => {
     case 'global':
       return AsteriskIcon;
     case 'ids':
-      return EntityIcon;
+      return RecordIcon;
     case 'value':
       return CornerDownRightIcon;
   }
