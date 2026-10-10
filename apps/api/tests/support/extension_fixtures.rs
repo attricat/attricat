@@ -99,12 +99,14 @@ pub async fn drain_extension_operations(
             return;
         };
         match handler.handle(task.clone()).await.unwrap() {
+            // Claims compare `available_at` with the database clock, which can
+            // trail this process's clock; make the task due on both.
             TaskOutcome::Reschedule { .. } => repository
                 .reschedule_task_at(
                     task.id,
                     &task.lease_owner,
                     task.lease_token,
-                    chrono::Utc::now(),
+                    chrono::Utc::now() - chrono::Duration::seconds(60),
                 )
                 .await
                 .unwrap(),
