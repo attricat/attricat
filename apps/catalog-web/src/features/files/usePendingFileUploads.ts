@@ -113,7 +113,10 @@ export const usePendingFileUploads = (options: Options) => {
             attributeCode: attribute.code,
             contextId,
             files: [item.file],
-            onProgress: (progress) => updatePending(item.id, { progress }),
+            // Zero means "queued"; an early 0% event must not show the file
+            // as ready and removable mid-upload.
+            onProgress: (progress) =>
+              updatePending(item.id, { progress: Math.max(1, progress) }),
           });
           next = [...next, ...result.files];
           current.current.onEntityUpdated?.(result.entity_updated_at);

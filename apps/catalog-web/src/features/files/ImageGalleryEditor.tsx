@@ -22,8 +22,10 @@ import {
 import {
   createContext,
   useContext,
+  useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -102,21 +104,31 @@ const DragHandle = ({
   );
 };
 
+// Focus moves to the opposite arrow when the clicked one ends up disabled.
+const oppositeMove = { earlier: 'later', later: 'earlier' } as const;
+
 const GalleryAction = ({
   label,
   disabled,
+  move,
   onClick,
   children,
 }: {
   label: string;
   disabled: boolean;
+  move?: keyof typeof oppositeMove;
   onClick: () => void;
   children: ReactNode;
 }) => (
   <Tooltip title={label}>
     {/* Disabled buttons emit no events; the span keeps the tooltip working. */}
     <span>
-      <IconButton aria-label={label} disabled={disabled} onClick={onClick}>
+      <IconButton
+        aria-label={label}
+        disabled={disabled}
+        onClick={onClick}
+        data-gallery-move={move}
+      >
         {children}
       </IconButton>
     </span>
@@ -147,7 +159,33 @@ export const ImageGalleryEditor = ({
     const sorted = pendingOrder.flatMap((id) => byId.get(id) ?? []);
     return sorted.length === files.length ? sorted : files;
   }, [files, pendingOrder]);
+  // Saving disables every control, which drops keyboard focus to the page.
+  // Return it to the control that made the change once the save settles.
+  const focusAfterSave = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const element = focusAfterSave.current;
+    if (disabled || pendingOrder || !element) return;
+    focusAfterSave.current = null;
+    // The tile moved to another gallery page.
+    if (!element.isConnected) return;
+    const move = element.dataset.galleryMove;
+    const target =
+      element.matches(':disabled') && (move === 'earlier' || move === 'later')
+        ? element
+            .closest('[data-gallery-actions]')
+            ?.querySelector<HTMLElement>(
+              `[data-gallery-move="${oppositeMove[move]}"]`,
+            )
+        : element;
+    target?.focus();
+  }, [disabled, pendingOrder]);
   const reorder = async (ids: string[]) => {
+    const focused = document.activeElement;
+    if (
+      focused instanceof HTMLElement &&
+      focused.closest('[data-gallery-actions]')
+    )
+      focusAfterSave.current = focused;
     setPendingOrder(ids);
     try {
       await onChange(ids);
@@ -214,7 +252,7 @@ export const ImageGalleryEditor = ({
           : undefined
       }
       renderActions={(file, index) => (
-        <Stack direction="row">
+        <Stack data-gallery-actions direction="row">
           {ordered && (
             <>
               <DragHandle
@@ -224,13 +262,15 @@ export const ImageGalleryEditor = ({
               <GalleryAction
                 label={t('files.moveEarlier', { filename: file.filename })}
                 disabled={disabled || index === 0}
+                move="earlier"
                 onClick={() => move(index, -1)}
               >
                 <ArrowLeftIcon />
               </GalleryAction>
               <GalleryAction
                 label={t('files.moveLater', { filename: file.filename })}
-                disabled={disabled || index === files.length - 1}
+                disabled={disabled || index === count - 1}
+                move="later"
                 onClick={() => move(index, 1)}
               >
                 <ArrowRightIcon />

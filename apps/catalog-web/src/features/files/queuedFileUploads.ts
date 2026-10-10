@@ -63,11 +63,12 @@ export const useQueuedFileUploads = (scope: string | undefined) => {
     const failed: { filename: string; message?: string }[] = [];
     for (const [attributeCode, items] of Object.entries(files)) {
       for (const item of items) {
+        // Zero means "not started", so an upload never reports less than 1.
         const progress = (value: number) =>
           update(attributeCode, (queued) =>
             queued.map((queuedItem) =>
               queuedItem.id === item.id
-                ? { ...queuedItem, progress: value }
+                ? { ...queuedItem, progress: Math.max(1, value) }
                 : queuedItem,
             ),
           );
