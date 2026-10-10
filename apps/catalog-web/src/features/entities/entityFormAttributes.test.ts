@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Attribute } from './api';
 import {
+  editableFormAttributes,
   smartFillFormFields,
   unplacedRequiredAttributes,
 } from './entityFormAttributes';
@@ -48,6 +49,39 @@ describe('unplacedRequiredAttributes', () => {
     expect(codes({ type: 'table', fields: [], columns: [] } as never)).toEqual([
       'internal',
       'secret',
+    ]);
+  });
+
+  it('lists required fields the default form layout hides without a detail view', () => {
+    // Without a detail view the form layout leaves out fields hidden from
+    // forms and shows `internal`, which is only hidden from details.
+    expect(codes(undefined)).toEqual(['sku', 'secret']);
+  });
+});
+
+describe('editableFormAttributes', () => {
+  const attributes = [
+    { code: 'title', value_type: 'string' },
+    { code: 'sku', value_type: 'string', tags: ['hidden:form'] },
+    { code: 'notes', value_type: 'string', tags: ['hidden:form'] },
+  ] satisfies Attribute[];
+  const codes = (options: { usesFormLayout: boolean; required?: string[] }) =>
+    editableFormAttributes(attributes, {
+      contextId: null,
+      defaultContextId: null,
+      requiredCodes: options.required,
+      usesFormLayout: options.usesFormLayout,
+    }).map((attribute) => attribute.code);
+
+  it('leaves out fields hidden from forms in the default form layout', () => {
+    expect(codes({ usesFormLayout: true })).toEqual(['title']);
+    expect(codes({ usesFormLayout: false })).toEqual(['title', 'sku', 'notes']);
+  });
+
+  it('keeps required fields hidden from forms editable', () => {
+    expect(codes({ usesFormLayout: true, required: ['sku'] })).toEqual([
+      'title',
+      'sku',
     ]);
   });
 });

@@ -43,6 +43,7 @@ export const editableFormAttributes = (
     contextId,
     defaultContextId,
     usesFormLayout = false,
+    requiredCodes = [],
   }: {
     contextId: string | null;
     defaultContextId: string | null;
@@ -51,17 +52,22 @@ export const editableFormAttributes = (
      * hidden from forms, rather than by a view.
      */
     usesFormLayout?: boolean;
+    /** Required attributes stay editable even when hidden from forms. */
+    requiredCodes?: Iterable<string>;
   },
-) =>
-  attributes.filter(
+) => {
+  const required = new Set(requiredCodes);
+  return attributes.filter(
     (attribute) =>
       !attribute.readonly &&
       attribute.extension_type?.available !== false &&
       !isDefaultContextOnly(attribute, contextId, defaultContextId) &&
       (!usesFormLayout ||
+        required.has(attribute.code) ||
         attribute.code.includes(REUSABLE_ATTRIBUTE_NAMESPACE_SEPARATOR) ||
         !isHiddenByDefault(attribute, 'form')),
   );
+};
 
 /** Attribute codes listed in an entity schema's top-level `required`. */
 export const entitySchemaRequiredAttributes = (schema: unknown): string[] =>
@@ -80,23 +86,25 @@ const usesDefaultLayout = (view: ViewDefinition | undefined) =>
   view.type === viewBlockTypes.extensionLayout;
 
 /**
- * Required attributes the detail view does not render. A form shows them after
- * the view so Save is never blocked by a field the user cannot see.
+ * Required attributes the form layout does not render. A form shows them after
+ * the layout so Save is never blocked by a field the user cannot see.
  */
 export const unplacedRequiredAttributes = (
   attributes: readonly Attribute[],
-  view: ViewDefinition,
+  view: ViewDefinition | undefined,
   requiredCodes: readonly string[],
 ) => {
-  // Non-layout views render every field not hidden from details; see
+  // Without a detail view the form lays out fields not hidden from forms;
+  // non-layout views render every field not hidden from details. See
   // EntityView.
+  const fallbackScope = view ? 'detail' : 'form';
   const usesFallback = usesDefaultLayout(view);
   const placed = viewPlacedFields(view);
   return attributes.filter(
     (attribute) =>
       requiredCodes.includes(attribute.code) &&
       (usesFallback
-        ? isHiddenByDefault(attribute, 'detail')
+        ? isHiddenByDefault(attribute, fallbackScope)
         : !placed.has(attribute.code)),
   );
 };

@@ -538,6 +538,21 @@ describe('EntityForm', () => {
     expect(screen.queryByText('Other attributes')).toBeNull();
   });
 
+  it('offers a required field hidden from forms when the blueprint has no detail view', () => {
+    const result = blueprint([
+      attribute('title'),
+      attribute('code', { tags: ['hidden:form'] }),
+      attribute('notes', { tags: ['hidden:form'] }),
+    ]);
+    result.blueprint.entity_schema = { type: 'object', required: ['code'] };
+    delete result.blueprint.views.detail;
+    renderForm({ blueprint: result });
+
+    expect(screen.getAllByRole('textbox', { name: 'code' })).toHaveLength(1);
+    expect(screen.getByText('Other attributes')).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'notes' })).toBeNull();
+  });
+
   it('persists edited fields without file or readonly attributes', async () => {
     renderForm({
       blueprint: blueprint([

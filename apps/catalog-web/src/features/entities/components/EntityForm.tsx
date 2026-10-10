@@ -152,11 +152,19 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     // edits with its paired edit component.
     const detailView = blueprint?.blueprint.views.detail;
     const fieldComponents = viewFieldEditComponents(detailView);
+    // Required by the caller or, in the default context, by the entity schema.
+    const requiredCodes = new Set([
+      ...requiredAttributes,
+      ...(blueprint && contextId === defaultContextId
+        ? entitySchemaRequiredAttributes(blueprint.blueprint.entity_schema)
+        : []),
+    ]);
     const editableAttributes = editableFormAttributes(
       blueprint?.attributes ?? [],
       {
         contextId,
         defaultContextId,
+        requiredCodes,
         usesFormLayout: Boolean(blueprint && !showAllAttributes && !detailView),
       },
     );
@@ -204,18 +212,13 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         ? headingEditableAttributes(editableAttributes, detailView)
         : [];
     // Editable fields the layout leaves out.
-    // Required by the caller or, in the default context, by the entity schema.
-    const requiredCodes = new Set([
-      ...requiredAttributes,
-      ...(blueprint && contextId === defaultContextId
-        ? entitySchemaRequiredAttributes(blueprint.blueprint.entity_schema)
-        : []),
-    ]);
     const otherAttributes =
-      blueprint && detailView && !showAllAttributes
+      blueprint && !showAllAttributes
         ? [
             ...new Set([
-              ...unplacedEditableAttributes(editableAttributes, detailView),
+              ...(detailView
+                ? unplacedEditableAttributes(editableAttributes, detailView)
+                : []),
               ...unplacedRequiredAttributes(editableAttributes, detailView, [
                 ...requiredCodes,
               ]),
