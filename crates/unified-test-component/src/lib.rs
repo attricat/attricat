@@ -69,8 +69,8 @@ impl operations::Guest for Component {
             }]
         }});
         catalog_data::batch(&batch.to_string())?;
-        let direct_read = api::read(&api::ReadRequest::Entity(api::EntityReference {
-            entity_id: record_id.clone(),
+        let direct_read = api::read(&api::ReadRequest::Record(api::RecordReference {
+            record_id: record_id.clone(),
         }));
         let direct_command = api::call("catalog.read.v1", "{}");
         checkpoint["direct_read_error"] = json!(direct_read.err());

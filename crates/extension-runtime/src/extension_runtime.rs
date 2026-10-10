@@ -636,11 +636,11 @@ impl HostState {
     ) -> Result<wit::api::ReadResponse, String> {
         self.require_active("catalog.read").await?;
         let (record_id, context_id) = match request {
-            wit::api::ReadRequest::Entity(input) | wit::api::ReadRequest::Values(input) => {
-                (parse_uuid(&input.entity_id, "record ID")?, None)
+            wit::api::ReadRequest::Record(input) | wit::api::ReadRequest::Values(input) => {
+                (parse_uuid(&input.record_id, "record ID")?, None)
             }
             wit::api::ReadRequest::Resolved(input) => (
-                parse_uuid(&input.entity_id, "record ID")?,
+                parse_uuid(&input.record_id, "record ID")?,
                 Some(parse_uuid(&input.context_id, "context ID")?),
             ),
         };
@@ -672,7 +672,7 @@ impl HostState {
             None => None,
         };
         Ok(wit::api::ReadResponse {
-            entity: bounded_serialize(&record)?,
+            record: bounded_serialize(&record)?,
             blueprint: bounded_serialize(&blueprint)?,
             direct_values: bounded_serialize(&direct_values)?,
             resolved_values: resolved_values
@@ -690,7 +690,7 @@ impl HostState {
         if request.values.is_empty() || request.values.len() > MAX_WRITE_VALUES {
             return Err("writes require 1-100 scalar values".into());
         }
-        let record_id = parse_uuid(&request.entity_id, "record ID")?;
+        let record_id = parse_uuid(&request.record_id, "record ID")?;
         let values = request
             .values
             .into_iter()

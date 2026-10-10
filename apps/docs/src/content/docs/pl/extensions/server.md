@@ -36,7 +36,7 @@ Zadeklaruj procedurę obsługi i zasubskrybuj dokładne typy zdarzeń:
 }
 ```
 
-Eksport `handle-event` komponentu otrzymuje zdarzenie: jego identyfikator, typ, rodzaj i identyfikator agregatu, identyfikatory korelacji i przyczyny oraz ładunek JSON. Interfejs WIT `catalog:host@1.0.0` zachowuje pierwotne nazwy, więc odczyty i zapisy hosta wskazują rekord przez `entity-id`. Zdarzenia rekordów zawierają identyfikator rekordu, jego Schemat i wersję oraz listę faktów opisujących każdy zmieniony atrybut. Zobacz [dokumentację zdarzeń](/pl/reference/events/).
+Eksport `handle-event` komponentu otrzymuje zdarzenie: jego identyfikator, typ, rodzaj i identyfikator agregatu, identyfikatory korelacji i przyczyny oraz ładunek JSON. Zdarzenia rekordów zawierają identyfikator rekordu, jego Schemat i wersję oraz listę faktów opisujących każdy zmieniony atrybut. Zobacz [dokumentację zdarzeń](/pl/reference/events/).
 
 Zasady dostarczania:
 

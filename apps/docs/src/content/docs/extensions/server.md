@@ -36,7 +36,7 @@ Declare a handler and subscribe to exact event types:
 }
 ```
 
-The component's `handle-event` export receives the event: its ID, type, aggregate kind and ID, correlation and causation IDs, and a JSON payload. The `catalog:host@1.0.0` WIT interface keeps its original names, so host reads and writes identify a record with `entity-id`. Record events carry the record ID, its blueprint and revision, and a list of facts describing each changed attribute. See the [event reference](/reference/events/).
+The component's `handle-event` export receives the event: its ID, type, aggregate kind and ID, correlation and causation IDs, and a JSON payload. Record events carry the record ID, its blueprint and revision, and a list of facts describing each changed attribute. See the [event reference](/reference/events/).
 
 Delivery rules:
 
