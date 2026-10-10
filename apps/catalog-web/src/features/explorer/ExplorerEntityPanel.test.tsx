@@ -174,4 +174,24 @@ describe('ExplorerEntityPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('starts each record with fresh state', () => {
+    const panel = (id: string) => (
+      <ExplorerEntityPanel
+        entityId={id}
+        onClose={vi.fn()}
+        onOpenEntity={vi.fn()}
+      />
+    );
+    const { rerender } = render(panel(entityId));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
+      target: { value: 'Unsaved' },
+    });
+
+    rerender(panel(copyId));
+
+    expect(
+      screen.getByRole<HTMLInputElement>('textbox', { name: 'Title' }).value,
+    ).toBe('');
+  });
 });

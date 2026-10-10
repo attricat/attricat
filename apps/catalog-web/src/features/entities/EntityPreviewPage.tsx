@@ -17,6 +17,8 @@ export const EntityPreviewPage = ({
   return (
     <EntityPreview
       entityId={entityId}
+      // Context, dialogs and unsaved edits belong to one record.
+      key={entityId}
       onDeleted={() => void navigate({ to: '/' })}
       onDuplicated={(copy) =>
         void navigate({

@@ -94,6 +94,8 @@ export const ExplorerEntityPanel = ({
           drawerOffset={entityPanelWidth}
           entityId={entityId}
           initialContextId={contextId}
+          // Context, dialogs and unsaved edits belong to one record.
+          key={entityId}
           onDeleted={onClose}
           onDuplicated={(copy) => onOpenEntity(copy.id)}
           renderFrame={({ blueprint, children, headerActions }) => (
