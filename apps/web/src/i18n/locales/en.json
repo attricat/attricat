@@ -855,7 +855,17 @@
     "assignedToMe": "Assigned to me (or my teams)",
     "recordPanelTitle": "{{blueprint}} record",
     "openFullPage": "Open full page",
-    "closeRecordPanel": "Close record panel"
+    "closeRecordPanel": "Close record panel",
+    "browse": {
+      "label": "Browse by {{field}}",
+      "by": "Browse by",
+      "show": "Show browse panel",
+      "hide": "Hide browse panel",
+      "all": "All",
+      "empty": "Nothing to browse",
+      "expand": "Expand {{item}}",
+      "collapse": "Collapse {{item}}"
+    }
   },
   "audit": {
     "title": "Activity / Audit log",

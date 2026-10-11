@@ -69,14 +69,48 @@ export const selectedRelationshipFacets = (
     }))
     .filter((facet) => facet.selectedIds.length > 0);
 
+/** Facets without a hierarchy match only their directly assigned targets. */
 export const relationshipFiltersFromSearch = (
   search: ExplorerSearch,
 ): RelationshipFilter[] =>
   (search.relationshipFacets ?? []).flatMap((facet) =>
-    facet.selectedIds?.length
+    facet.selectedIds?.length && !facet.hierarchyField
       ? [{ field: facet.field, selected_target_ids: facet.selectedIds }]
       : [],
   );
+
+export type RelationshipTreeSelection = {
+  field: string;
+  hierarchyField: string;
+  selectedIds: string[];
+};
+
+/** Facets with a hierarchy also match descendants of the selected targets. */
+export const relationshipTreeSelectionsFromSearch = (
+  search: ExplorerSearch,
+): RelationshipTreeSelection[] =>
+  (search.relationshipFacets ?? []).flatMap((facet) =>
+    facet.selectedIds?.length && facet.hierarchyField
+      ? [
+          {
+            field: facet.field,
+            hierarchyField: facet.hierarchyField,
+            selectedIds: facet.selectedIds,
+          },
+        ]
+      : [],
+  );
+
+export const relationshipTreeFacetsRequest = (
+  selections: RelationshipTreeSelection[],
+  contextId: string,
+) =>
+  selections.map((selection) => ({
+    source_relationship_field: selection.field,
+    hierarchy_field: selection.hierarchyField,
+    context_id: contextId,
+    selected_target_ids: selection.selectedIds,
+  }));
 
 export const updateRelationshipFacets = (
   current: ExplorerSearch['relationshipFacets'] = [],
@@ -128,6 +162,7 @@ export const explorerResultsQueryKey = (
     filters: search.attributeFilters,
     query: search.query,
     relationshipFilters,
+    relationshipTreeFacets: relationshipTreeSelectionsFromSearch(search),
     sort,
     version,
   });

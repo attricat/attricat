@@ -17,6 +17,7 @@ export type ExplorerRelationshipFacet = {
 };
 
 export type RelationshipFacetUpdate = {
+  hierarchyField?: string;
   selectedIds?: string[];
   targetBlueprint?: string;
 };

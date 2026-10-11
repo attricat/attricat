@@ -598,6 +598,16 @@ export const searchRecordsRequestSchema = z.object({
       }),
     )
     .optional(),
+  relationship_tree_facets: z
+    .array(
+      z.object({
+        source_relationship_field: z.string().min(1),
+        hierarchy_field: z.string().min(1).optional(),
+        context_id: uuidSchema,
+        selected_target_ids: z.array(uuidSchema).min(1),
+      }),
+    )
+    .optional(),
   system_tags: z.array(z.string()).optional(),
   sort: z
     .object({
@@ -612,6 +622,29 @@ export const searchRecordsRequestSchema = z.object({
     size: z.number().int().positive(),
     cursor: z.string().nullable(),
   }),
+});
+export const relationshipTreeFacetChildrenRequestSchema = z.object({
+  blueprint: z.object({
+    code: z.string().min(1),
+    version: z.number().int().positive().optional(),
+  }),
+  query: z.string().optional(),
+  source_relationship_field: z.string().min(1),
+  hierarchy_field: z.string().min(1).optional(),
+  context_id: uuidSchema,
+  parent_id: uuidSchema.optional(),
+  cursor: uuidSchema.nullable().optional(),
+});
+export const relationshipTreeFacetChildrenResponseSchema = z.object({
+  items: z.array(
+    z.object({
+      id: uuidSchema,
+      display: z.string(),
+      count: z.number().int().nonnegative(),
+      has_children: z.boolean(),
+    }),
+  ),
+  next_cursor: uuidSchema.nullable(),
 });
 const getBlueprintRequestSchema = z.object({
   code: z.string().min(1),
@@ -680,6 +713,12 @@ export type NewAttributeValue = z.infer<typeof newAttributeValueSchema>;
 export type NewFileAttributeValue = z.infer<typeof newFileAttributeValueSchema>;
 export type FormAttributeValue = z.infer<typeof formAttributeValueSchema>;
 export type RelationshipTargets = z.infer<typeof relationshipTargetsSchema>;
+export type RelationshipTreeFacetChildrenRequest = z.infer<
+  typeof relationshipTreeFacetChildrenRequestSchema
+>;
+export type RelationshipTreeFacetChild = z.infer<
+  typeof relationshipTreeFacetChildrenResponseSchema
+>['items'][number];
 export type AttricatRecord = z.infer<typeof recordSchema>;
 export type RecordPublicationStatus = z.infer<
   typeof recordPublicationStatusSchema

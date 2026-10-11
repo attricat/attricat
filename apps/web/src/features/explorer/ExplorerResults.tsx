@@ -37,6 +37,7 @@ export const ExplorerResults = ({
     effectiveVersion,
     publicationSortAvailable,
     relationshipFilters,
+    relationshipTreeSelections,
     results,
     session,
   } = data;
@@ -86,6 +87,7 @@ export const ExplorerResults = ({
                 search.sort,
                 search.attributeFilters,
                 relationshipFilters,
+                relationshipTreeSelections,
               ])}
               canPublish={capabilities?.records_publish === true}
               canDelete={capabilities?.records_delete === true}

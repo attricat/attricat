@@ -399,6 +399,86 @@ target_blueprint = "${categoryCode}"`,
   await expect(page.getByText('2 results')).toBeVisible();
 });
 
+test('browses explorer results through a category tree rail', async ({
+  page,
+}) => {
+  const categoryCode = `rail_category_${suffix()}`;
+  const productCode = `rail_product_${suffix()}`;
+  const category = await createRecordBlueprint(
+    categoryCode,
+    'Rail categories',
+    `[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "${categoryCode}"
+tree = true
+context_editable = "default"`,
+  );
+  const departments = await createRecord(category, [
+    scalar('title', 'Departments'),
+  ]);
+  const shoes = await createRecord(category, [
+    scalar('title', 'Shoes'),
+    relationship('parent', departments.id),
+  ]);
+  const accessories = await createRecord(category, [
+    scalar('title', 'Accessories'),
+  ]);
+  const product = await createRecordBlueprint(
+    productCode,
+    'Rail products',
+    `[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "categories"
+value_type = "relationship"
+target_blueprint = "${categoryCode}"`,
+  );
+  await createRecord(product, [
+    scalar('title', 'Running shoe'),
+    relationship('categories', shoes.id),
+  ]);
+  await createRecord(product, [
+    scalar('title', 'Canvas bag'),
+    relationship('categories', accessories.id),
+  ]);
+
+  await page.goto(`/?blueprint=${productCode}`);
+  const rail = page.getByRole('complementary', {
+    name: 'Browse by categories',
+  });
+  await expect(
+    rail.getByRole('button', { name: /^Accessories/ }),
+  ).toBeVisible();
+  await rail.getByRole('button', { name: 'Expand Departments' }).click();
+  await expect(rail.getByRole('button', { name: /^Shoes/ })).toBeVisible();
+
+  // Choosing a parent also matches records assigned to its descendants.
+  await rail.getByRole('button', { name: /^Departments/ }).click();
+  await expect(page.getByText('1 result')).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Running shoe' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Canvas bag' })).toBeHidden();
+  await rail.getByRole('button', { name: 'All' }).click();
+  await expect(page.getByText('2 results')).toBeVisible();
+
+  // Hiding the rail is remembered for the blueprint.
+  await rail.getByRole('button', { name: 'Hide browse panel' }).click();
+  await expect(rail).toBeHidden();
+  await page.goto(`/?blueprint=${productCode}`);
+  await expect(page.getByText('2 results')).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Show browse panel' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Show browse panel' }).click();
+  await expect(rail).toBeVisible();
+});
+
 test('filters explorer results with a one-level relationship facet', async ({
   page,
 }) => {

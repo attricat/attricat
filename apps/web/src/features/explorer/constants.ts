@@ -9,6 +9,7 @@ export const maximumAgentRecordLabelLength = 60;
 export const lastBlueprintStorageKey = 'attricat.explorer.last-blueprint';
 export const columnPreferencesStorageKeyPrefix =
   'attricat.explorer.column-preferences.';
+export const browseByStorageKeyPrefix = 'attricat.explorer.browse-by.';
 
 // Attribute visibility scope used to hide attributes from the Explorer.
 export const explorerVisibilityScope = 'explorer';
@@ -92,6 +93,11 @@ export const resultsTableHeight = {
   md: 'calc(100dvh - 165px)',
 };
 export const displayColumnMinWidth = 280;
+export const browseRailWidth = 280;
+/** One nesting level of the browse rail tree. */
+export const browseRailIndent = 2;
+/** Keeps leaf labels aligned with the labels of expandable nodes. */
+export const browseRailToggleWidth = 28;
 export const idColumnWidth = 48;
 export const blueprintSelectWidth = 280;
 export const searchScopePopoverWidth = 280;

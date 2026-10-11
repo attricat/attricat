@@ -7,24 +7,26 @@ relationship such as `category.parent` supplies the tree edges.
 
 ## Use In The Explorer
 
-1. Search a record blueprint.
-2. The explorer renders a relationship facet for every relationship field, such
-   as `categories` and `color`, and loads each target blueprint independently.
-3. Each facet discovers self-targeting relationship fields and uses the first
-   one by default.
-4. Select target nodes to restrict results. Selecting a parent includes its
-   descendants when the target has a hierarchy; otherwise selections apply only
-   to the directly assigned targets.
+On `lg` screens the Explorer shows a **Browse by** rail beside the results
+(`ExplorerBrowseRail`). It lists the targets of one direct relationship field of
+the selected blueprint, through the children endpoint below, and loads a node's
+children when it is expanded.
 
-**Tree options** is collapsed by default when a hierarchy is available. It lets
-users select a different self-targeting field under **Build tree using** and
-select the relationship **Context**. For a target without a self-referencing
-relationship, the explorer instead renders a one-level picker and exposes only
-**Facet options** for the context. Changing either option clears selected nodes
-because the tree or effective relationship set may have changed.
+1. Candidate fields are relationships with a single target blueprint. A field
+   is a tree when its target has a self-targeting relationship with
+   `hierarchy` set (`tree` preferred over `acyclic`); otherwise the rail is a
+   one-level list. Plain self-relationships are never treated as trees.
+2. The field comes from the URL's `browseBy`, then the person's last choice for
+   the blueprint (local storage, keyed by blueprint ID), then the first tree
+   field. `browseBy: false` hides the rail. A field the current revision no
+   longer has falls through to the next source.
+3. Choosing a node writes a `relationshipFacets` entry with one selected ID.
+   For a tree field the entry also stores `hierarchyField`, and the search
+   sends it as a `relationship_tree_facets` item so descendants match; entries
+   without one are sent as exact `relationship_filters`. The selection shows as
+   a filter pill and is kept by saved views like other facets.
 
-Each facet's source field, hierarchy field, context code, and selected node IDs
-are in the explorer URL. Reloading or sharing that URL restores every facet.
+Tree edges and facet assignments resolve in the Explorer's selected context.
 
 ## Blueprint Requirements
 
@@ -87,16 +89,19 @@ Add `relationship_tree_facets` to `POST /v1/records/search`:
   "blueprint": { "code": "product" },
   "query": "linen",
   "filters": [],
-  "relationship_tree_facets": [{
-    "source_relationship_field": "categories",
-    "hierarchy_field": "parent",
-    "context_id": "00000000-0000-4000-8000-000000000001",
-    "selected_target_ids": ["e8b7a8d3-c954-4c0f-b658-0f686ba466a3"]
-  }, {
-    "source_relationship_field": "color",
-    "context_id": "00000000-0000-4000-8000-000000000001",
-    "selected_target_ids": ["2a036fb3-5a05-4f34-9a7d-9450bd1bd7d2"]
-  }],
+  "relationship_tree_facets": [
+    {
+      "source_relationship_field": "categories",
+      "hierarchy_field": "parent",
+      "context_id": "00000000-0000-4000-8000-000000000001",
+      "selected_target_ids": ["e8b7a8d3-c954-4c0f-b658-0f686ba466a3"]
+    },
+    {
+      "source_relationship_field": "color",
+      "context_id": "00000000-0000-4000-8000-000000000001",
+      "selected_target_ids": ["2a036fb3-5a05-4f34-9a7d-9450bd1bd7d2"]
+    }
+  ],
   "page": { "size": 25, "cursor": null }
 }
 ```

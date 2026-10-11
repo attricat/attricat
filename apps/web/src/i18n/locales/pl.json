@@ -879,7 +879,17 @@
     "assignedToMe": "Przypisane do mnie (lub moich zespołów)",
     "recordPanelTitle": "Rekord: {{blueprint}}",
     "openFullPage": "Otwórz pełną stronę",
-    "closeRecordPanel": "Zamknij panel rekordu"
+    "closeRecordPanel": "Zamknij panel rekordu",
+    "browse": {
+      "label": "Przeglądaj według: {{field}}",
+      "by": "Przeglądaj według",
+      "show": "Pokaż panel przeglądania",
+      "hide": "Ukryj panel przeglądania",
+      "all": "Wszystkie",
+      "empty": "Brak elementów do przeglądania",
+      "expand": "Rozwiń {{item}}",
+      "collapse": "Zwiń {{item}}"
+    }
   },
   "audit": {
     "title": "Aktywność / dziennik audytu",

@@ -1,4 +1,7 @@
-import type { RecordSearchFilter } from './schemas';
+import type {
+  RecordSearchFilter,
+  RelationshipTreeFacetChildrenRequest,
+} from './schemas';
 
 type RecordSearchKeyOptions = {
   allVersions?: boolean;
@@ -7,6 +10,11 @@ type RecordSearchKeyOptions = {
   filters?: RecordSearchFilter[];
   query?: string;
   relationshipFilters?: { field: string; selected_target_ids: string[] }[];
+  relationshipTreeFacets?: {
+    field: string;
+    hierarchyField: string;
+    selectedIds: string[];
+  }[];
   sort?: { field: string; direction: 'asc' | 'desc' };
   version?: number;
 };
@@ -22,6 +30,9 @@ export const recordQueryKeys = {
   currentBlueprint: (id: string) => ['current-blueprint', id] as const,
   blueprintRevisions: (id: string | undefined) =>
     ['blueprint-revisions', id] as const,
+  relationshipTreeFacetChildren: (
+    input: Omit<RelationshipTreeFacetChildrenRequest, 'cursor'>,
+  ) => ['relationship-tree-facet-children', input] as const,
   relationshipTargets: (blueprint: string | null | undefined, query: string) =>
     ['relationship-targets', blueprint, query] as const,
   form: (recordId: string) => ['record-form', recordId] as const,
@@ -74,6 +85,7 @@ export const recordQueryKeys = {
     filters,
     query,
     relationshipFilters,
+    relationshipTreeFacets,
     sort,
     version,
   }: RecordSearchKeyOptions) =>
@@ -86,6 +98,7 @@ export const recordQueryKeys = {
         filters,
         query,
         relationshipFilters,
+        relationshipTreeFacets,
         sort,
         version,
       },

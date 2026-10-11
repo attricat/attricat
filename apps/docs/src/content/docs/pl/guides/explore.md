@@ -59,16 +59,18 @@ Każdy aktywny filtr jest widoczny jako etykieta pod polem wyszukiwania. Wszystk
 
 ## Fasety relacji
 
-Każdy atrybut relacji schematu ma fasetę na pasku bocznym. Wybierz jeden lub więcej celów, aby zachować tylko rekordy z nimi powiązane.
+Na szerokich ekranach panel **Przeglądaj według** obok wyników wyświetla cele jednego atrybutu relacji wraz z licznikami. Kliknij cel, aby zachować tylko powiązane z nim rekordy. Kliknij go ponownie lub wybierz **Wszystkie**, aby wyczyścić wybór. Wybór pojawia się jako pigułka filtra, tak jak inne filtry.
 
-Gdy schemat docelowy ma relację do samego siebie, na przykład `category.parent`, faseta staje się drzewem:
+Gdy schemat docelowy ma hierarchię, na przykład pole `category.parent` z `tree = true`, panel wyświetla drzewo:
 
+- Rozwiń węzeł, aby wczytać jego elementy podrzędne.
 - Liczniki przy każdym węźle obejmują wszystko, co znajduje się pod nim. Rekord przypisany do dwóch podkategorii jest liczony raz.
 - Wybranie węzła nadrzędnego dopasowuje też rekordy przypisane do jego potomków.
-- Kilka zaznaczeń w jednej fasecie oznacza *dowolny z nich*. Zaznaczenia w różnych fasetach muszą pasować jednocześnie.
-- Liczniki uwzględniają zapytanie wyszukiwania i zakres wersji, ale nie własne zaznaczenie fasety, więc po wybraniu węzła nadal widzisz liczniki węzłów sąsiednich. Filtry atrybutów nie wpływają na liczniki faset.
+- Liczniki uwzględniają zapytanie wyszukiwania i zakres wersji. Filtry atrybutów i inne fasety na nie nie wpływają.
 
-**Opcje drzewa** pozwalają wybrać, które pole odwołujące się do tego samego schematu buduje drzewo i w którym kontekście rozwiązywane są relacje. Zmiana dowolnej z tych opcji czyści zaznaczenie fasety.
+W polu **Przeglądaj według** wybierz inny atrybut relacji albo ukryj panel. Panel otwiera się domyślnie tylko dla schematu powiązanego z hierarchią. Attricat zapamiętuje Twój wybór dla każdego schematu w tej przeglądarce, a zapisane i udostępnione wyszukiwania go zachowują.
+
+Aby wybrać kilka celów jednego atrybutu, użyj **Dodaj filtr** i wybierz atrybut relacji. Kilka zaznaczeń w jednym atrybucie oznacza *dowolny z nich*. Zaznaczenia w różnych atrybutach muszą pasować jednocześnie.
 
 ## Kontekst
 

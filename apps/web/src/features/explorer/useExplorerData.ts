@@ -30,6 +30,8 @@ import {
 import {
   explorerResultsQueryKey,
   relationshipFiltersFromSearch,
+  relationshipTreeFacetsRequest,
+  relationshipTreeSelectionsFromSearch,
   requestSort,
 } from './explorerSearchState';
 import { isRelationshipPath } from './explorerTableColumns';
@@ -127,6 +129,8 @@ export const useExplorerData = (search: ExplorerSearch) => {
     ) ?? false;
   const sort = requestSort(search.sort, contextCode);
   const relationshipFilters = relationshipFiltersFromSearch(search);
+  const relationshipTreeSelections =
+    relationshipTreeSelectionsFromSearch(search);
   const results = useInfiniteQuery({
     queryKey: explorerResultsQueryKey(
       search,
@@ -144,13 +148,20 @@ export const useExplorerData = (search: ExplorerSearch) => {
         includeTotal: pageParam === null,
         query: search.query,
         relationshipFilters,
+        relationshipTreeFacets: relationshipTreeFacetsRequest(
+          relationshipTreeSelections,
+          contextId ?? '',
+        ),
         signal,
         sort,
         version: effectiveVersion,
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
-    enabled: canSearch,
+    // Hierarchy selections resolve their edges in the selected context.
+    enabled:
+      canSearch &&
+      (relationshipTreeSelections.length === 0 || contextId !== undefined),
     placeholderData: keepPreviousData,
   });
 
@@ -182,6 +193,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
     publicationSortAvailable,
     relationshipFields,
     relationshipFilters,
+    relationshipTreeSelections,
     results,
     revisions,
     selectedBlueprint,

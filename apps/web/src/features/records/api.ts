@@ -17,6 +17,8 @@ import {
   recordPreviewResponseSchema,
   recordSchema,
   recordSearchResponseSchema,
+  relationshipTreeFacetChildrenRequestSchema,
+  relationshipTreeFacetChildrenResponseSchema,
   getBlueprintRequestSchema,
   getBlueprintRevisionRequestSchema,
   incomingRelationshipsPageSchema,
@@ -57,6 +59,8 @@ export type {
   NewAttributeValue,
   NewFileAttributeValue,
   RelationshipTargets,
+  RelationshipTreeFacetChild,
+  RelationshipTreeFacetChildrenRequest,
   ResolvedRecordPreview,
   RetentionHold,
   StatusTransitionAccess,
@@ -82,6 +86,13 @@ export type SearchRecordsOptions = {
     field: string;
     selected_target_ids: string[];
   }[];
+  /** Relationship selections that also match descendants of each target. */
+  relationshipTreeFacets?: {
+    source_relationship_field: string;
+    hierarchy_field?: string;
+    context_id: string;
+    selected_target_ids: string[];
+  }[];
   signal?: AbortSignal;
   sort?: { field: string; direction: 'asc' | 'desc'; context_code?: string };
   version?: number;
@@ -95,6 +106,7 @@ export const searchRecords = ({
   includeTotal = false,
   query = '',
   relationshipFilters = [],
+  relationshipTreeFacets = [],
   signal,
   sort,
   version,
@@ -109,6 +121,9 @@ export const searchRecords = ({
     ...(relationshipFilters.length
       ? { relationship_filters: relationshipFilters }
       : {}),
+    ...(relationshipTreeFacets.length
+      ? { relationship_tree_facets: relationshipTreeFacets }
+      : {}),
     sort,
     ...(contextCode === undefined ? {} : { context_code: contextCode }),
     ...(includeTotal ? { include_total: true } : {}),
@@ -121,6 +136,24 @@ export const searchRecords = ({
     ...(signal === undefined ? {} : { signal }),
   });
 };
+
+/** One page of a relationship facet's root nodes or of one node's children. */
+export const getRelationshipTreeFacetChildren = (
+  input: import('./schemas').RelationshipTreeFacetChildrenRequest,
+  signal?: AbortSignal,
+) =>
+  request(
+    '/api/v1/records/facets/relationship-tree/children',
+    relationshipTreeFacetChildrenResponseSchema,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(
+        relationshipTreeFacetChildrenRequestSchema.parse(input),
+      ),
+      ...(signal === undefined ? {} : { signal }),
+    },
+  );
 
 export const listRecordBlueprints = (signal?: AbortSignal) =>
   request(

@@ -11,7 +11,7 @@ import {
   type RelationshipFilter,
 } from './explorerSearchState';
 import type { RelationshipFacetUpdate } from './relationshipFilterTypes';
-import type { AttributeFilter, ExplorerSearch } from './search';
+import type { AttributeFilter, BrowseBy, ExplorerSearch } from './search';
 
 /** URL-backed Explorer search transitions. */
 export const useExplorerSearchActions = (
@@ -66,6 +66,7 @@ export const useExplorerSearchActions = (
         ),
       }),
     changeContext: (context: string) => go({ ...search, context }),
+    changeBrowseBy: (browseBy: BrowseBy) => go({ ...search, browseBy }),
     selectBlueprint: (blueprint: string) =>
       go({
         blueprint,

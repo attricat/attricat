@@ -11,7 +11,15 @@ const relationshipFacetSearchSchema = z.object({
   field: z.string().trim().min(1),
   selectedIds: z.array(z.string().uuid()).optional(),
   targetBlueprint: z.string().trim().min(1).optional(),
+  /** Self-targeting field of the target; selections then match descendants. */
+  hierarchyField: z.string().trim().min(1).optional(),
 });
+
+/** The relationship field the browse rail lists, or `false` when it is hidden. */
+export const browseBySchema = z.union([
+  z.string().trim().min(1),
+  z.literal(false),
+]);
 
 export const explorerSearchSchema = z.object({
   savedView: z.uuid().optional().catch(undefined),
@@ -39,9 +47,11 @@ export const explorerSearchSchema = z.object({
     .max(maximumAttributeFilters)
     .optional()
     .catch(undefined),
+  browseBy: browseBySchema.optional().catch(undefined),
 });
 
 export type AttributeFilter = z.infer<typeof attributeFilterSearchSchema>;
+export type BrowseBy = z.infer<typeof browseBySchema>;
 export type ExplorerSearch = z.infer<typeof explorerSearchSchema>;
 
 export const inlineExplorerSearch = (

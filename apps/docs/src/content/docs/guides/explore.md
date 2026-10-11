@@ -59,16 +59,18 @@ Every active filter shows as a pill under the search box. All filters, facets, a
 
 ## Relationship facets
 
-Each relationship attribute of the blueprint gets a facet in the sidebar. Select one or more targets to keep only records linked to them.
+On wide screens, the **Browse by** panel next to the results lists the targets of one relationship attribute, with a count beside each. Click a target to keep only records linked to it, click it again or choose **All** to clear it. The choice shows as a filter pill, like any other filter.
 
-When the target blueprint has a relationship to itself, such as `category.parent`, the facet becomes a tree:
+When the target blueprint has a hierarchy, such as a `category.parent` field with `tree = true`, the panel shows a tree:
 
+- Expand a node to load its children.
 - Counts next to each node include everything below it. A record assigned to two subcategories is counted once.
 - Selecting a parent also matches records assigned to its descendants.
-- Several selections in one facet mean *any of these*. Selections in different facets must all match.
-- Counts reflect the search query and version scope, but not the facet's own selection, so you can still see sibling counts after choosing a node. Attribute filters do not affect facet counts.
+- Counts reflect the search query and version scope. Attribute filters and other facets do not affect them.
 
-**Tree options** lets you pick which self-referencing field builds the tree and which context to resolve relationships in. Changing either clears the facet's selection.
+Pick another relationship attribute under **Browse by**, or hide the panel. The panel opens by default only for a blueprint linked to a hierarchy. Attricat remembers your choice for each blueprint in this browser, and saved and shared searches keep it.
+
+To select several targets of one attribute, use **Add filter** and pick the relationship attribute. Several selections in one attribute mean *any of these*. Selections in different attributes must all match.
 
 ## Context
 

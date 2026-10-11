@@ -8,6 +8,7 @@ import {
   ShareSearchButton,
 } from '../saved-views/SavedSearchControls';
 import type { SavedView } from '../saved-views/schemas';
+import { ExplorerBrowseRail } from './ExplorerBrowseRail';
 import { ExplorerRecordPanel } from './ExplorerRecordPanel';
 import { ExplorerFilterBar } from './ExplorerFilterBar';
 import { ExplorerLoadErrors } from './ExplorerLoadErrors';
@@ -26,6 +27,7 @@ import {
 import { getLastBlueprint, setLastBlueprint } from './lastBlueprint';
 import type { ExplorerSearch } from './search';
 import type { OpenRecordPanel } from './ExplorerTableCells';
+import { useBrowseBy } from './useBrowseBy';
 import { useExplorerData } from './useExplorerData';
 import { useSavedSearchActions } from '../saved-views/useSavedSearchActions';
 import { useExplorerSearchActions } from './useExplorerSearchActions';
@@ -88,6 +90,12 @@ export const Explorer = ({
     savedView,
     search,
     userId: session.data?.user_id,
+  });
+  const browseBy = useBrowseBy({
+    blueprintId: currentBlueprint?.id,
+    onChange: actions.changeBrowseBy,
+    relationshipFields,
+    requested: search.browseBy,
   });
   const facets = selectedRelationshipFacets(
     relationshipFacetSources(relationshipFields, search),
@@ -182,15 +190,44 @@ export const Explorer = ({
             <Typography sx={{ py: 3 }}>{t('explorer.start')}</Typography>
           )}
           {loading && <ExplorerLoadingIndicator />}
-          <ExplorerResults
-            data={data}
-            onFilterCell={requestFilter}
-            onOpenPanel={isWideDesktop ? openPanel : undefined}
-            panelRecordId={panelOpen ? panelRecordId : undefined}
-            onShowAllVersions={actions.showAllVersions}
-            onSortChange={actions.toggleSort}
-            search={search}
-          />
+          <Box sx={{ alignItems: 'flex-start', display: 'flex', gap: 2 }}>
+            {isWideDesktop && search.blueprint && !blueprintMissing && (
+              <ExplorerBrowseRail
+                blueprint={search.blueprint}
+                contextId={data.contextId}
+                field={browseBy.field}
+                fields={browseBy.fields}
+                onFieldChange={browseBy.change}
+                onSelect={(selectedIds) => {
+                  const field = browseBy.field;
+                  if (!field) return;
+                  actions.updateFacet(field.attribute.code, {
+                    hierarchyField: field.hierarchyField,
+                    selectedIds,
+                    targetBlueprint: field.attribute.target_blueprint_code,
+                  });
+                }}
+                query={search.query}
+                selectedIds={
+                  search.relationshipFacets?.find(
+                    (facet) => facet.field === browseBy.field?.attribute.code,
+                  )?.selectedIds ?? []
+                }
+                version={data.effectiveVersion}
+              />
+            )}
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+              <ExplorerResults
+                data={data}
+                onFilterCell={requestFilter}
+                onOpenPanel={isWideDesktop ? openPanel : undefined}
+                panelRecordId={panelOpen ? panelRecordId : undefined}
+                onShowAllVersions={actions.showAllVersions}
+                onSortChange={actions.toggleSort}
+                search={search}
+              />
+            </Box>
+          </Box>
         </PageContainer>
       </Box>
       {panelOpen && (
