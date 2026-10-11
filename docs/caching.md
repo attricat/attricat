@@ -2,7 +2,8 @@
 
 The API caches a small set of database reads that hot request and worker paths
 repeat: published blueprint revisions, the context tree, enabled rules,
-extension manifests and client contributions. This page describes how the
+extension manifests, client contributions, Explore navigation and each
+member's workspace-wide permissions. This page describes how the
 cache stays correct and what a new write path must do to keep it that way.
 
 HTTP caching of downloads is a separate concern; see the
@@ -34,12 +35,13 @@ Keys are `namespace:part:part`; the namespace (`blueprint_revision`,
 
 Nothing is invalidated across replicas, and there is no invalidation bus.
 Every entry is correct because of how its key is built. Each entry has one of
-three policies:
+four policies:
 
 | Policy | Meaning | Used for |
 | --- | --- | --- |
 | `Immutable` | The value never changes for its key; only LRU eviction removes it. | Published blueprint revisions (`blueprint_revision`, `blueprint_revision_code`) and installed release manifests (`extension_manifest`). Drafts are never cached. |
-| `Generation` | The key embeds a workspace generation the request read, so a write makes a new key and old entries age out unused. | `context_tree`, `enabled_rules`, `blueprint_latest_id`, `blueprint_latest_code`, `client_contributions`, `extension_layout`. |
+| `Generation` | The key embeds a workspace generation the request read, so a write makes a new key and old entries age out unused. | `context_tree`, `enabled_rules`, `blueprint_latest_id`, `blueprint_latest_code`, `client_contributions`, `extension_layout`, `explore_navigation`. |
+| `LocalGeneration` | Like `Generation`, but never read from or written to Redis. For values that also depend on state every process bootstraps at startup without advancing a generation, which a deploy can change. | `workspace_permissions`. |
 | `Ttl { fresh, stale }` | Served for `fresh`; for a further `stale` one caller reloads while others get the stale value. Use it only where bounded staleness is acceptable. | `active_workspaces` (5 s fresh, 5 s stale), the background loops' workspace list. |
 
 `Tag`s and `QueryCache::invalidate_local` evict L1 entries of one process only.
@@ -59,6 +61,7 @@ keyed by the workspace outbox high-water mark and bounded by
 | `attricat_generation` | Latest published revisions, enabled rules, Explore navigation | Publishing a blueprint revision, publishing, enabling or disabling a rule, writing Explore navigation |
 | `contexts_generation` | The context tree | Creating, updating or deleting an attribute context |
 | `extensions_generation` | Client contributions and extension layout | Every installation, upgrade, enable, quarantine, removal, grant, revocation and configuration change (all commit through `commit_extension_mutation`), lifecycle state changes, layout writes and the workspace extensions mode |
+| `access_generation` | Each member's workspace-wide permissions | Membership onboarding, invitation acceptance and deactivation (through `revoke_user_access`), role grants and revocations, ownership transfer, workspace role edits and retirement, and the bootstrap owner and sample accounts |
 
 The write transaction advances the counter with
 `generations::advance_generation` before it commits. A reader reads the
@@ -72,6 +75,38 @@ Record writes prefetch the context tree and enabled rules from committed data
 before their transaction opens (`WritePrefetch`). The transaction uses the
 prefetch only if the generations its own record lock reads are the same, which
 also rules out uncommitted changes of its own.
+
+## Request authorization
+
+The authorization middleware checks a route's permission against
+`workspace_permissions`: every permission the member holds through
+workspace-scoped grants, keyed by workspace, user and `access_generation`. A
+workspace-wide grant authorizes every target, so a hit allows the request
+without a query. A miss in the set (a narrower grant, or a denial) runs the
+full grant query, so only held permissions are ever served from the cache. A
+grant added without advancing the generation therefore still applies at once;
+a change that can remove access must advance it, or the removed permission
+keeps authorizing requests on every process that cached it.
+
+The entries are `LocalGeneration`. The startup `ensure_*_permissions`
+bootstraps add permissions to the system roles without advancing any
+workspace's generation, so a shared entry written by the previous release
+could miss a permission the new release grants. A restart empties the
+process cache instead.
+
+The set applies only to a live workspace: the token and trusted-header
+queries return no generations for a deleted workspace, and a browser session
+for one skips the cache.
+
+## Compiled JSON Schemas
+
+`attricat_validation::validate_json_schema` keeps compiled validators in a
+process-local LRU (4,096 entries) keyed by the schema's JSON text. Record
+writes validate every value and the record schema in every context, and
+migrations validate every value of every record, against the same few
+published schemas, so each schema compiles (including its `pattern` and
+`format` regexes) once per process. The key is the schema itself, so the
+cache needs no invalidation.
 
 ## Transactions consult the cache but never fill it
 

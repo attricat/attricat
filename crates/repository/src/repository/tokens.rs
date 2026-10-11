@@ -130,22 +130,17 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         // The token's permissions come back with the credential so request
         // authorization checks them in memory instead of re-reading the token.
         #[allow(clippy::type_complexity)]
-        let token: Option<(Uuid, Uuid, Uuid, bool, Vec<String>, Option<i64>, Option<i64>, Option<i64>)> = sqlx::query_as(
-            "SELECT t.id, t.user_id, t.workspace_id, (t.last_used_at IS NULL OR t.last_used_at < clock_timestamp() - interval '1 minute'), ARRAY(SELECT p.permission_code FROM personal_api_token_permissions p WHERE p.token_id = t.id), w.attricat_generation, w.contexts_generation, w.extensions_generation FROM personal_api_tokens t JOIN users u ON u.id = t.user_id LEFT JOIN workspaces w ON w.id = t.workspace_id WHERE t.token_digest = $1 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > clock_timestamp()) AND u.state = 'active'",
+        let token: Option<(Uuid, Uuid, Uuid, bool, Vec<String>, Option<i64>, Option<i64>, Option<i64>, Option<i64>)> = sqlx::query_as(
+            "SELECT t.id, t.user_id, t.workspace_id, (t.last_used_at IS NULL OR t.last_used_at < clock_timestamp() - interval '1 minute'), ARRAY(SELECT p.permission_code FROM personal_api_token_permissions p WHERE p.token_id = t.id), w.attricat_generation, w.contexts_generation, w.extensions_generation, w.access_generation FROM personal_api_tokens t JOIN users u ON u.id = t.user_id LEFT JOIN workspaces w ON w.id = t.workspace_id AND w.deleted_at IS NULL WHERE t.token_digest = $1 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > clock_timestamp()) AND u.state = 'active'",
         ).bind(digest).fetch_optional(&self.pool).await?;
-        let Some((id, user, workspace, touch, permissions, attricat, contexts, extensions)) = token
+        let Some((id, user, workspace, touch, permissions, attricat, contexts, extensions, access)) =
+            token
         else {
             return Ok(None);
         };
-        let generations = attricat.zip(contexts).zip(extensions).map(
-            |((attricat_generation, contexts_generation), extensions_generation)| {
-                super::WorkspaceGenerations {
-                    attricat_generation,
-                    contexts_generation,
-                    extensions_generation,
-                }
-            },
-        );
+        // A deleted workspace has no generations, so no cached state applies.
+        let generations =
+            super::WorkspaceGenerations::from_columns(attricat, contexts, extensions, access);
         if touch {
             sqlx::query("UPDATE personal_api_tokens SET last_used_at = clock_timestamp() WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < clock_timestamp() - interval '1 minute')")
                 .bind(id).execute(&self.pool).await?;

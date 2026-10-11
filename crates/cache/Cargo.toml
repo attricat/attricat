@@ -12,7 +12,7 @@ bytes.workspace = true
 # rustls with ring, like sqlx, reqwest and lettre, so `rediss://` works.
 fred = { version = "10", default-features = false, features = ["i-keys", "i-scripts", "enable-rustls-ring"] }
 metrics.workspace = true
-moka = { version = "0.12", features = ["future"] }
+moka = { workspace = true, features = ["future"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-native-certs = "0.8"
 serde.workspace = true

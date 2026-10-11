@@ -854,6 +854,9 @@ with a bounded `status` label. The [query cache](caching.md) reports:
   opened after repeated timeouts or connection failures (once per opening,
   not per skipped command). A disconnect shows in the gauge, not here.
 
+`attricat_json_schema_validator_cache_total` (`outcome` of `hit` or `miss`)
+counts compiled JSON Schema validator lookups; a miss compiles the schema.
+
 Database round trips are counted per named scope (an HTTP route, a task kind
 or a worker loop, such as `worker:event_dispatcher:<handler>`) by
 `crates/repository/src/round_trips.rs`. Every completed SQLx statement,

@@ -2,7 +2,10 @@ use uuid::Uuid;
 
 use crate::account::{Password, hash_password};
 
-use super::{AttricatRepository, RepositoryError};
+use super::{
+    AttricatRepository, RepositoryError,
+    generations::{Generation, advance_generation},
+};
 
 const OWNER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000101);
 
@@ -105,6 +108,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
                 .execute(&mut *transaction)
                 .await?;
         }
+        advance_generation(&mut transaction, workspace_id, Generation::Access).await?;
         transaction.commit().await?;
         Ok(())
     }
@@ -157,6 +161,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             .bind(role_id)
             .execute(&mut *transaction)
             .await?;
+        advance_generation(&mut transaction, workspace_id, Generation::Access).await?;
         transaction.commit().await?;
         Ok(())
     }

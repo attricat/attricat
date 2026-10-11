@@ -239,7 +239,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         session: &SessionDigest,
     ) -> Result<Option<ValidBrowserSession>, RepositoryError> {
         let row = sqlx::query(
-            "SELECT s.user_id, s.workspace_id, s.csrf_digest, (w.deleted_at IS NULL) AS workspace_active, w.attricat_generation, w.contexts_generation, w.extensions_generation FROM browser_sessions s JOIN users u ON u.id = s.user_id JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id AND m.workspace_id = s.workspace_id JOIN workspaces w ON w.id = s.workspace_id WHERE s.session_digest = $1 AND s.revoked_at IS NULL AND s.expires_at > clock_timestamp() AND u.state = 'active' AND u.security_version = s.issued_security_version AND c.credential_version = s.issued_credential_version AND m.state = 'active'",
+            "SELECT s.user_id, s.workspace_id, s.csrf_digest, (w.deleted_at IS NULL) AS workspace_active, w.attricat_generation, w.contexts_generation, w.extensions_generation, w.access_generation FROM browser_sessions s JOIN users u ON u.id = s.user_id JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id AND m.workspace_id = s.workspace_id JOIN workspaces w ON w.id = s.workspace_id WHERE s.session_digest = $1 AND s.revoked_at IS NULL AND s.expires_at > clock_timestamp() AND u.state = 'active' AND u.security_version = s.issued_security_version AND c.credential_version = s.issued_credential_version AND m.state = 'active'",
         )
         .bind(session.as_ref())
         .fetch_optional(&self.pool)
@@ -255,6 +255,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
                     attricat_generation: row.try_get("attricat_generation")?,
                     contexts_generation: row.try_get("contexts_generation")?,
                     extensions_generation: row.try_get("extensions_generation")?,
+                    access_generation: row.try_get("access_generation")?,
                 },
             })
         })

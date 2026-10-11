@@ -1511,11 +1511,12 @@ impl AttricatRepository {
             attricat_generation: Option<i64>,
             contexts_generation: Option<i64>,
             extensions_generation: Option<i64>,
+            access_generation: Option<i64>,
         }
         lock_record_writes(transaction, self.workspace_id.0, false).await?;
         let row = sqlx::query_as::<_, Row>(
             r#"SELECT e.id, e.blueprint_id, e.blueprint_version, e.projections, e.system_tags, e.system_metadata, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.updated_at, e.deleted_at,
-                      w.attricat_generation, w.contexts_generation, w.extensions_generation
+                      w.attricat_generation, w.contexts_generation, w.extensions_generation, w.access_generation
                FROM records e LEFT JOIN workspaces w ON w.id = e.workspace_id
                WHERE e.id = $1 AND e.workspace_id = $2 AND e.deleted_at IS NULL FOR UPDATE OF e"#,
         )
@@ -1524,19 +1525,12 @@ impl AttricatRepository {
         .fetch_optional(&mut **transaction)
         .await?
         .ok_or(RepositoryError::NotFound("record"))?;
-        let generations = row
-            .attricat_generation
-            .zip(row.contexts_generation)
-            .zip(row.extensions_generation)
-            .map(
-                |((attricat_generation, contexts_generation), extensions_generation)| {
-                    WorkspaceGenerations {
-                        attricat_generation,
-                        contexts_generation,
-                        extensions_generation,
-                    }
-                },
-            );
+        let generations = WorkspaceGenerations::from_columns(
+            row.attricat_generation,
+            row.contexts_generation,
+            row.extensions_generation,
+            row.access_generation,
+        );
         Ok((row.record.into_domain(), generations))
     }
 

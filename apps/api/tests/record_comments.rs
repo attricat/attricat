@@ -151,11 +151,16 @@ async fn readers_can_comment_but_only_authors_can_edit(pool: PgPool) {
     .unwrap();
     assert_eq!(audits, 2);
     // Revoking membership removes both read and comment access.
-    sqlx::query("UPDATE workspace_memberships SET state='inactive' WHERE id=$1")
-        .bind(membership)
-        .execute(&pool)
-        .await
-        .unwrap();
+    assert!(
+        owner
+            .put(format!("{base}/workspace/members/{membership}"))
+            .json(&json!({"state":"inactive"}))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success()
+    );
     assert_eq!(
         viewer
             .post(&path)

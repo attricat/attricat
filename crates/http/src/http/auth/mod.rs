@@ -210,6 +210,12 @@ pub(super) async fn authorize(
             Some(session.generations),
         )
     };
+    // Cached permissions apply only to a live workspace; tokens and trusted
+    // headers read no generations for a deleted one.
+    let authorization_generations = match active_principal {
+        Some(false) => None,
+        _ => generations,
+    };
     // A token's permissions were read with the credential in this request.
     let token_permits = |permission: &str| {
         token_permissions
@@ -256,7 +262,8 @@ pub(super) async fn authorize(
             && (handler_authorized
                 || state
                     .repository
-                    .is_authorized(
+                    .is_authorized_at(
+                        authorization_generations,
                         principal,
                         workspace,
                         policy.permission,
@@ -271,7 +278,14 @@ pub(super) async fn authorize(
             && !(token_permits(extra)
                 && state
                     .repository
-                    .is_authorized(principal, workspace, extra, None, None)
+                    .is_authorized_at(
+                        authorization_generations,
+                        principal,
+                        workspace,
+                        extra,
+                        None,
+                        None,
+                    )
                     .await?)
         {
             return Err(ApiError::forbidden());

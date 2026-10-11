@@ -28,6 +28,26 @@ pub struct WorkspaceGenerations {
     pub contexts_generation: i64,
     /// Extension installations, grants, configuration and layout.
     pub extensions_generation: i64,
+    /// Memberships, role grants and workspace role permissions.
+    pub access_generation: i64,
+}
+
+impl WorkspaceGenerations {
+    /// Generations read through an outer join; `None` without a workspace
+    /// row.
+    pub(crate) fn from_columns(
+        attricat_generation: Option<i64>,
+        contexts_generation: Option<i64>,
+        extensions_generation: Option<i64>,
+        access_generation: Option<i64>,
+    ) -> Option<Self> {
+        Some(Self {
+            attricat_generation: attricat_generation?,
+            contexts_generation: contexts_generation?,
+            extensions_generation: extensions_generation?,
+            access_generation: access_generation?,
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -35,6 +55,7 @@ pub(crate) enum Generation {
     Attricat,
     Contexts,
     Extensions,
+    Access,
 }
 
 impl Generation {
@@ -43,6 +64,7 @@ impl Generation {
             Self::Attricat => "attricat_generation",
             Self::Contexts => "contexts_generation",
             Self::Extensions => "extensions_generation",
+            Self::Access => "access_generation",
         }
     }
 }

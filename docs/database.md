@@ -51,6 +51,7 @@ so a request never uses cached state older than what it read:
 | `attricat_generation` | blueprint revision publication, rule publication, enabling and disabling a rule, and Explore navigation writes |
 | `contexts_generation` | creating, updating, and deleting an attribute context |
 | `extensions_generation` | extension installation, upgrade, lifecycle, grant, configuration, and layout changes, and the workspace extensions mode |
+| `access_generation` | membership onboarding, acceptance and deactivation, role grants, revocations and ownership transfer, workspace role edits and retirement, and bootstrap and sample accounts |
 
 Attricat tables carry a required `workspace_id`. Composite foreign keys keep blueprint revisions, attributes, records, contexts, values, history, relationships, and migration records in the same workspace. Every repository query and mutation binds the server-derived workspace ID explicitly; the application never accepts a tenant ID from a client body or header as authorization input.
 

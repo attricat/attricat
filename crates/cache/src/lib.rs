@@ -95,6 +95,11 @@ pub enum Policy {
     /// The key embeds a generation the caller read; a new generation is a new
     /// key, so the entry itself never goes stale.
     Generation,
+    /// Like [`Policy::Generation`], but kept in this process only and never
+    /// shared through the remote tier: for values that also depend on state
+    /// every process bootstraps at startup, such as system role permissions,
+    /// which a deploy may change without advancing any generation.
+    LocalGeneration,
     /// Served for `fresh`; for a further `stale` one caller reloads while
     /// concurrent callers keep receiving the stale value.
     Ttl { fresh: Duration, stale: Duration },
@@ -105,7 +110,9 @@ impl Policy {
     fn remote_ttl(self) -> Duration {
         match self {
             // Remote memory is shared; let unused immutable entries age out.
-            Self::Immutable | Self::Generation => Duration::from_secs(24 * 60 * 60),
+            Self::Immutable | Self::Generation | Self::LocalGeneration => {
+                Duration::from_secs(24 * 60 * 60)
+            }
             Self::Ttl { fresh, stale } => fresh + stale,
         }
     }
@@ -234,7 +241,7 @@ enum Freshness {
 impl Entry {
     fn freshness(&self) -> Freshness {
         match self.policy {
-            Policy::Immutable | Policy::Generation => Freshness::Fresh,
+            Policy::Immutable | Policy::Generation | Policy::LocalGeneration => Freshness::Fresh,
             Policy::Ttl { fresh, stale } => {
                 let age = self.stored_at.elapsed();
                 if age < fresh {
@@ -486,6 +493,9 @@ impl QueryCache {
         key: &CacheKey,
         policy: Policy,
     ) -> Option<(T, Instant)> {
+        if policy == Policy::LocalGeneration {
+            return None;
+        }
         let l2 = self.inner.l2.as_ref()?;
         let remote = match l2.get(key.as_str()).await {
             Ok(remote) => remote?,
@@ -496,7 +506,7 @@ impl QueryCache {
             }
         };
         let stored_at = match policy {
-            Policy::Immutable | Policy::Generation => Instant::now(),
+            Policy::Immutable | Policy::Generation | Policy::LocalGeneration => Instant::now(),
             Policy::Ttl { fresh, .. } => {
                 let age = policy.remote_ttl().checked_sub(remote.remaining?)?;
                 // A stale shared value is reloaded by this caller.
@@ -518,6 +528,9 @@ impl QueryCache {
     /// Writes `value` to the shared tier in the background, so a slow Redis
     /// never delays the request that loaded it.
     fn store_remote<T: Serialize>(&self, key: &CacheKey, value: &T, policy: Policy) {
+        if policy == Policy::LocalGeneration {
+            return;
+        }
         let Some(l2) = self.inner.l2.clone() else {
             return;
         };
@@ -764,6 +777,40 @@ mod tests {
             .await
             .unwrap();
         assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[tokio::test]
+    async fn local_generation_entries_never_reach_the_shared_tier() {
+        let remote = Arc::new(FakeRemote::default());
+        remote.entries.lock().unwrap().insert(
+            key("local").to_string(),
+            (
+                Bytes::from_static(b"1"),
+                Instant::now(),
+                Duration::from_secs(60),
+            ),
+        );
+        let cache = QueryCache::with_remote(CacheConfig::default(), Some(remote.clone()));
+        let value = cache
+            .fetch(key("local"), &[], Policy::LocalGeneration, || async {
+                Ok::<_, CacheError>(2_u32)
+            })
+            .await
+            .unwrap();
+        // The shared value is ignored, and the loaded one is not written back.
+        assert_eq!(*value, 2);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert_eq!(
+            remote.entries.lock().unwrap()[key("local").as_str()].0,
+            Bytes::from_static(b"1")
+        );
+        let cached = cache
+            .fetch(key("local"), &[], Policy::LocalGeneration, || async {
+                Ok::<_, CacheError>(3_u32)
+            })
+            .await
+            .unwrap();
+        assert_eq!(*cached, 2);
     }
 
     #[tokio::test]

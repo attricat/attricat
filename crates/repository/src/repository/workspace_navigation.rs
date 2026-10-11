@@ -1,5 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
+use attricat_cache::{CacheKey, Policy};
 use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -12,6 +16,14 @@ pub struct ExploreNavigationEntry {
     pub blueprint_code: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub visible_to_role_codes: Vec<String>,
+}
+
+/// The workspace-wide part of Explore navigation.
+#[derive(Debug, Deserialize, Serialize)]
+struct ExploreNavigationConfiguration {
+    entries: Vec<ExploreNavigationEntry>,
+    /// Latest published name by blueprint code.
+    names: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -47,17 +59,10 @@ impl AttricatRepository {
         actor_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<Vec<ExploreNavigationItem>, RepositoryError> {
-        // Stored configuration is written only by the validated method below.
-        // Treat malformed legacy data as no navigation rather than failing sidebar rendering.
-        let settings: serde_json::Value = sqlx::query_scalar(
-            "SELECT COALESCE(settings->'explore_navigation', '[]'::jsonb) FROM workspaces WHERE id = $1 AND deleted_at IS NULL",
-        )
-        .bind(workspace_id)
-        .fetch_optional(&self.pool)
-        .await?
-        .unwrap_or(serde_json::json!([]));
-        let entries: Vec<ExploreNavigationEntry> =
-            serde_json::from_value(settings).unwrap_or_default();
+        let configuration = self.explore_navigation_configuration(workspace_id).await?;
+        if configuration.entries.is_empty() {
+            return Ok(Vec::new());
+        }
         let held_roles: Vec<String> = sqlx::query_scalar(
             "SELECT DISTINCT r.code FROM workspace_memberships m JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN roles r ON r.id = g.role_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active'",
         )
@@ -66,8 +71,9 @@ impl AttricatRepository {
         .fetch_all(&self.pool)
         .await?;
         let held_roles: HashSet<_> = held_roles.into_iter().collect();
-        let entries: Vec<ExploreNavigationEntry> = entries
-            .into_iter()
+        let entries: Vec<&ExploreNavigationEntry> = configuration
+            .entries
+            .iter()
             .filter(|entry| {
                 entry.visible_to_role_codes.is_empty()
                     || entry
@@ -86,15 +92,7 @@ impl AttricatRepository {
         let readable = self
             .authorized_target_codes(actor_id, workspace_id, "records.read", &codes)
             .await?;
-        let names: HashMap<String, String> = sqlx::query_as::<_, (String, String)>(
-            "SELECT DISTINCT ON (code) code, name FROM blueprints WHERE workspace_id = $1 AND code = ANY($2) AND kind = 'record' AND status = 'published' AND deleted_at IS NULL ORDER BY code, version DESC",
-        )
-        .bind(workspace_id)
-        .bind(&codes)
-        .fetch_all(&self.pool)
-        .await?
-        .into_iter()
-        .collect();
+        let names = &configuration.names;
         let mut items = Vec::new();
         for entry in entries {
             if !readable.contains(&entry.blueprint_code) {
@@ -103,11 +101,72 @@ impl AttricatRepository {
             if let Some(blueprint_name) = names.get(&entry.blueprint_code) {
                 items.push(ExploreNavigationItem {
                     blueprint_name: blueprint_name.clone(),
-                    blueprint_code: entry.blueprint_code,
+                    blueprint_code: entry.blueprint_code.clone(),
                 });
             }
         }
         Ok(items)
+    }
+
+    /// The configured entries and their blueprints' latest published names,
+    /// the same for every member. Navigation writes and publications advance
+    /// the attricat generation the cache key carries.
+    async fn explore_navigation_configuration(
+        &self,
+        workspace_id: Uuid,
+    ) -> Result<Arc<ExploreNavigationConfiguration>, RepositoryError> {
+        let load = || async {
+            // Stored configuration is written only by the validated method
+            // below. Treat malformed legacy data as no navigation rather than
+            // failing sidebar rendering.
+            let settings: serde_json::Value = sqlx::query_scalar(
+                "SELECT COALESCE(settings->'explore_navigation', '[]'::jsonb) FROM workspaces WHERE id = $1 AND deleted_at IS NULL",
+            )
+            .bind(workspace_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .unwrap_or(serde_json::json!([]));
+            let entries: Vec<ExploreNavigationEntry> =
+                serde_json::from_value(settings).unwrap_or_default();
+            let codes: Vec<&str> = entries
+                .iter()
+                .map(|entry| entry.blueprint_code.as_str())
+                .collect();
+            let names = if codes.is_empty() {
+                HashMap::new()
+            } else {
+                sqlx::query_as::<_, (String, String)>(
+                    "SELECT DISTINCT ON (code) code, name FROM blueprints WHERE workspace_id = $1 AND code = ANY($2) AND kind = 'record' AND status = 'published' AND deleted_at IS NULL ORDER BY code, version DESC",
+                )
+                .bind(workspace_id)
+                .bind(&codes)
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .collect()
+            };
+            Ok::<_, RepositoryError>(ExploreNavigationConfiguration { entries, names })
+        };
+        // The generations belong to this repository's workspace.
+        match self
+            .generations()
+            .filter(|_| workspace_id == self.workspace_id.0)
+        {
+            Some(generations) => {
+                self.cache
+                    .fetch(
+                        CacheKey::new(
+                            "explore_navigation",
+                            &[&workspace_id, &generations.attricat_generation],
+                        ),
+                        &[],
+                        Policy::Generation,
+                        load,
+                    )
+                    .await
+            }
+            None => load().await.map(Arc::new),
+        }
     }
 
     pub async fn configured_explore_navigation(

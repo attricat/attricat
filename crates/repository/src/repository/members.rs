@@ -4,7 +4,10 @@ use serde_json::Value;
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
 
-use super::{AttricatRepository, RepositoryError};
+use super::{
+    AttricatRepository, RepositoryError,
+    generations::{Generation, advance_generation},
+};
 
 const OWNER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000101);
 type WorkspaceUserInvitation = (Uuid, Uuid, String, Uuid, Vec<u8>, DateTime<Utc>);
@@ -187,6 +190,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
                 .notify_invitation_accepted_on(&mut tx, inviter, user_id)
                 .await?;
         }
+        advance_generation(&mut tx, workspace_id, Generation::Access).await?;
         self.commit_mutation(tx).await?;
         Ok(CompletedWorkspaceOnboarding {
             membership_id,
@@ -286,7 +290,9 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         user_id: Uuid,
         workspace_id: Uuid,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<(), RepositoryError> {
+        // Cached workspace permissions are filed under the access generation.
+        advance_generation(tx, workspace_id, Generation::Access).await?;
         sqlx::query("UPDATE browser_sessions SET revoked_at = clock_timestamp() WHERE user_id = $1 AND workspace_id = $2 AND revoked_at IS NULL").bind(user_id).bind(workspace_id).execute(&mut **tx).await?;
         // Older invitations must not reactivate a disabled membership or
         // restore a revoked grant. A subsequent administrator-issued invitation
@@ -392,6 +398,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             return Err(RepositoryError::NotFound("role grant"));
         }
         sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, $4, $5, $6)").bind(id).bind(workspace_id).bind(membership_id).bind(role_id).bind(scope_type).bind(scope_target_id).execute(&mut *tx).await?;
+        advance_generation(&mut tx, workspace_id, Generation::Access).await?;
         self.commit_mutation(tx).await?;
         Ok(id)
     }
@@ -486,6 +493,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, $4, 'workspace', $2) ON CONFLICT (workspace_id, membership_id, role_id, scope_type, scope_target_id) DO NOTHING").bind(Uuid::new_v4()).bind(workspace_id).bind(target_membership_id).bind(OWNER_ROLE_ID).execute(&mut *tx).await?;
             sqlx::query("DELETE FROM role_grants WHERE workspace_id = $1 AND membership_id IN (SELECT id FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2) AND role_id = $3 AND scope_type = 'workspace' AND scope_target_id = $1").bind(workspace_id).bind(actor_id).bind(OWNER_ROLE_ID).execute(&mut *tx).await?;
         }
+        advance_generation(&mut tx, workspace_id, Generation::Access).await?;
         self.commit_mutation(tx).await?;
         Ok(())
     }
@@ -598,6 +606,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         destination
             .notify_invitation_accepted_on(&mut tx, inviter, user_id)
             .await?;
+        advance_generation(&mut tx, workspace_id, Generation::Access).await?;
         destination.commit_mutation(tx).await?;
         Ok(membership_id)
     }

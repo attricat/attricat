@@ -2,7 +2,10 @@ use chrono::{DateTime, Utc};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use super::{AttricatRepository, RepositoryError};
+use super::{
+    AttricatRepository, RepositoryError,
+    generations::{Generation, advance_generation},
+};
 
 #[derive(Debug, serde::Serialize, FromRow)]
 pub struct WorkspaceRole {
@@ -91,7 +94,8 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         // one query covers every requested permission.
         let requested: Vec<&str> = permissions.iter().map(String::as_str).collect();
         let held =
-            Self::workspace_permissions_on(connection, actor_id, workspace_id, &requested).await?;
+            Self::workspace_permissions_on(connection, actor_id, workspace_id, Some(&requested))
+                .await?;
         if requested
             .iter()
             .any(|permission| !held.contains(*permission))
@@ -263,6 +267,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
                 .execute(&mut *tx)
                 .await?;
         }
+        advance_generation(&mut tx, workspace_id, Generation::Access).await?;
         self.commit_mutation(tx).await?;
         Ok(())
     }
@@ -319,6 +324,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
                 .bind(role_id)
                 .execute(&mut *tx)
                 .await?;
+            advance_generation(&mut tx, workspace_id, Generation::Access).await?;
             self.commit_mutation(tx).await?;
             return Ok(());
         };
@@ -363,6 +369,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             .bind(role_id)
             .execute(&mut *tx)
             .await?;
+        advance_generation(&mut tx, workspace_id, Generation::Access).await?;
         self.commit_mutation(tx).await?;
         Ok(())
     }

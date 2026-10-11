@@ -33,7 +33,9 @@
 //! locks they need themselves; re-taking a lock the transaction already
 //! holds is a no-op, so a caller that pre-locks must only respect the order.
 
-use std::{collections::HashSet, num::NonZeroI64, str::FromStr};
+use std::{collections::HashSet, num::NonZeroI64, str::FromStr, sync::Arc};
+
+use attricat_cache::{CacheKey, Policy};
 
 use attricat_validation::is_valid_code;
 use chrono::{DateTime, NaiveDate, NaiveTime};
@@ -1566,23 +1568,17 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         user_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<(bool, Option<WorkspaceGenerations>), RepositoryError> {
-        let (active, attricat, contexts, extensions): (bool, Option<i64>, Option<i64>, Option<i64>) =
+        #[allow(clippy::type_complexity)]
+        let (active, attricat, contexts, extensions, access): (bool, Option<i64>, Option<i64>, Option<i64>, Option<i64>) =
             sqlx::query_as(
-                "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND state = 'active'), w.attricat_generation, w.contexts_generation, w.extensions_generation FROM (SELECT 1) one LEFT JOIN workspaces w ON w.id = $2",
+                "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND state = 'active'), w.attricat_generation, w.contexts_generation, w.extensions_generation, w.access_generation FROM (SELECT 1) one LEFT JOIN workspaces w ON w.id = $2 AND w.deleted_at IS NULL",
             )
             .bind(user_id)
             .bind(workspace_id)
             .fetch_one(&self.pool)
             .await?;
-        let generations = attricat.zip(contexts).zip(extensions).map(
-            |((attricat_generation, contexts_generation), extensions_generation)| {
-                WorkspaceGenerations {
-                    attricat_generation,
-                    contexts_generation,
-                    extensions_generation,
-                }
-            },
-        );
+        let generations =
+            WorkspaceGenerations::from_columns(attricat, contexts, extensions, access);
         Ok((active, generations))
     }
 
@@ -1621,17 +1617,73 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         permissions: &[&str],
     ) -> Result<HashSet<String>, RepositoryError> {
         let mut connection = self.pool.acquire().await?;
-        Self::workspace_permissions_on(&mut connection, user_id, workspace_id, permissions).await
+        Self::workspace_permissions_on(&mut connection, user_id, workspace_id, Some(permissions))
+            .await
     }
 
+    /// Every permission the user holds workspace-wide at `generations`, from
+    /// the process-local cache. The key carries the access generation the
+    /// request's credential query read, so a revoked grant, deactivated
+    /// membership or edited role is never served afterwards.
+    pub async fn cached_workspace_permissions(
+        &self,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        generations: WorkspaceGenerations,
+    ) -> Result<Arc<HashSet<String>>, RepositoryError> {
+        self.cache
+            .fetch(
+                CacheKey::new(
+                    "workspace_permissions",
+                    &[&workspace_id, &user_id, &generations.access_generation],
+                ),
+                &[],
+                // System role permissions are bootstrapped at startup without
+                // advancing any generation, so entries never leave the process.
+                Policy::LocalGeneration,
+                || async {
+                    let mut connection = self.pool.acquire().await?;
+                    Self::workspace_permissions_on(&mut connection, user_id, workspace_id, None)
+                        .await
+                },
+            )
+            .await
+    }
+
+    /// [`Self::is_authorized`] that first consults the user's cached
+    /// workspace-wide permissions; a workspace-wide grant authorizes every
+    /// target. Anything else, including a denial, is decided by the query.
+    /// `generations` must have been read for `workspace_id` in this request.
+    pub async fn is_authorized_at(
+        &self,
+        generations: Option<WorkspaceGenerations>,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        permission: &str,
+        target_id: Option<Uuid>,
+        target_code: Option<&str>,
+    ) -> Result<bool, RepositoryError> {
+        if let Some(generations) = generations
+            && self
+                .cached_workspace_permissions(user_id, workspace_id, generations)
+                .await?
+                .contains(permission)
+        {
+            return Ok(true);
+        }
+        self.is_authorized(user_id, workspace_id, permission, target_id, target_code)
+            .await
+    }
+
+    /// `permissions` limits the result; `None` returns every held permission.
     async fn workspace_permissions_on(
         connection: &mut sqlx::PgConnection,
         user_id: Uuid,
         workspace_id: Uuid,
-        permissions: &[&str],
+        permissions: Option<&[&str]>,
     ) -> Result<HashSet<String>, RepositoryError> {
         let rows: Vec<String> = sqlx::query_scalar(
-            "SELECT DISTINCT rp.permission_code FROM workspace_memberships m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN role_permissions rp ON rp.role_id = g.role_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND u.state = 'active' AND w.deleted_at IS NULL AND g.scope_type = 'workspace' AND g.scope_target_id = $2 AND rp.permission_code = ANY($3)",
+            "SELECT DISTINCT rp.permission_code FROM workspace_memberships m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN role_permissions rp ON rp.role_id = g.role_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND u.state = 'active' AND w.deleted_at IS NULL AND g.scope_type = 'workspace' AND g.scope_target_id = $2 AND ($3::text[] IS NULL OR rp.permission_code = ANY($3))",
         )
         .bind(user_id)
         .bind(workspace_id)

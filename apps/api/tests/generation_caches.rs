@@ -209,3 +209,93 @@ async fn the_database_identity_is_created_once(pool: PgPool) {
     let first = repository.ensure_database_identity().await.unwrap();
     assert_eq!(repository.ensure_database_identity().await.unwrap(), first);
 }
+
+#[sqlx::test]
+async fn revoked_workspace_access_applies_to_the_next_request(pool: PgPool) {
+    let (base, server) = start_server(pool.clone()).await;
+    let owner = authenticated_client();
+    let readers = create_role(&pool, "generation_readers", &["blueprints.read"]).await;
+    let (user, membership) = add_workspace_user(&pool).await;
+    let grant = grant_role(&pool, membership, readers, GrantScope::Workspace).await;
+    let client = client_for(user);
+    let list = || async { send(client.get(format!("{base}/blueprints"))).await.0 };
+    // The second request is served from the cached workspace permissions.
+    assert_eq!(list().await, StatusCode::OK);
+    assert_eq!(list().await, StatusCode::OK);
+
+    // Editing the role's permissions.
+    let set_permissions = |permissions: &[&str]| {
+        owner
+            .put(format!("{base}/workspace/roles/{readers}"))
+            .json(&json!({ "code": "generation_readers", "permissions": permissions }))
+    };
+    let (status, body) = send(set_permissions(&["contexts.read"])).await;
+    assert!(status.is_success(), "{body}");
+    assert_eq!(list().await, StatusCode::FORBIDDEN);
+    let (status, body) = send(set_permissions(&["blueprints.read"])).await;
+    assert!(status.is_success(), "{body}");
+    assert_eq!(list().await, StatusCode::OK);
+
+    // Revoking the grant.
+    let (status, body) = send(owner.delete(format!(
+        "{base}/workspace/members/{membership}/grants/{grant}"
+    )))
+    .await;
+    assert!(status.is_success(), "{body}");
+    assert_eq!(list().await, StatusCode::FORBIDDEN);
+
+    // Deactivating the membership.
+    grant_role(&pool, membership, readers, GrantScope::Workspace).await;
+    assert_eq!(list().await, StatusCode::OK);
+    assert_eq!(list().await, StatusCode::OK);
+    let (status, body) = send(
+        owner
+            .put(format!("{base}/workspace/members/{membership}"))
+            .json(&json!({ "state": "inactive" })),
+    )
+    .await;
+    assert!(status.is_success(), "{body}");
+    assert_eq!(list().await, StatusCode::FORBIDDEN);
+    server.abort();
+}
+
+#[sqlx::test]
+async fn explore_navigation_writes_and_publications_apply_to_the_next_request(pool: PgPool) {
+    let (base, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base, DEFINITION).await;
+    let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap().to_owned();
+    let sidebar = || async {
+        let (status, body) = send(client.get(format!("{base}/workspace/navigation/sidebar"))).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        body
+    };
+    assert_eq!(sidebar().await, json!([]));
+    assert_eq!(sidebar().await, json!([]));
+
+    let (status, body) = send(
+        client
+            .put(format!("{base}/workspace/navigation"))
+            .json(&json!({ "explore_navigation": [{ "blueprint_code": "generation_item" }] })),
+    )
+    .await;
+    assert!(status.is_success(), "{body}");
+    assert_eq!(sidebar().await[0]["blueprint_name"], "Generation item");
+
+    // A newly published revision renames the entry.
+    let (status, body) = send(
+        client
+            .post(format!("{base}/blueprints/{blueprint_id}/versions"))
+            .json(&json!({ "definition": DEFINITION.replace("Generation item", "Generation item v2") })),
+    )
+    .await;
+    assert!(status.is_success(), "{body}");
+    assert_eq!(sidebar().await[0]["blueprint_name"], "Generation item");
+    let (status, body) = send(client.post(format!(
+        "{base}/blueprints/{blueprint_id}/versions/2/publish"
+    )))
+    .await;
+    assert!(status.is_success(), "{body}");
+    assert_eq!(sidebar().await[0]["blueprint_name"], "Generation item v2");
+    server.abort();
+}
