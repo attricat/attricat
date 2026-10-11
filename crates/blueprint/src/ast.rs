@@ -203,10 +203,10 @@ pub enum ViewDefinition {
     /// Explorer defaults for this blueprint's results.
     Explorer {
         /// Relationship field the browse rail lists until a person picks
-        /// another. It must have a single target blueprint.
+        /// another, or `false` to keep the rail closed. The field must have
+        /// a single target blueprint.
         #[serde(default)]
-        #[schemars(extend("x-attricat-reference" = "attribute"))]
-        browse_by: Option<String>,
+        browse_by: Option<BrowseBy>,
     },
     /// Blocks stacked vertically.
     Stack {
@@ -258,6 +258,18 @@ pub enum ViewDefinition {
         #[schemars(extend("x-attricat-key-suggestions" = EXTENSION_LAYOUT_OUTLETS))]
         outlets: HashMap<String, ExtensionOutletLayout>,
     },
+}
+
+/// The Explorer browse rail's default: a relationship field, or `false`.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[serde(untagged)]
+#[schemars(extend("x-attricat-reference" = "attribute"))]
+pub enum BrowseBy {
+    /// Relationship attribute code.
+    Field(String),
+    /// `false` keeps the rail closed until a person opens it.
+    #[schemars(extend("const" = false))]
+    Hidden(bool),
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]

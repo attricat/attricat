@@ -44,7 +44,9 @@ pub enum BlueprintError {
     InvalidExtensionLayout,
     #[error("explorer views must be named views.explorer on a record blueprint")]
     InvalidExplorerView,
-    #[error("views.explorer browse_by '{0}' must be a relationship with a single target blueprint")]
+    #[error(
+        "views.explorer browse_by '{0}' must be false or a relationship with a single target blueprint"
+    )]
     InvalidBrowseByField(String),
     #[error("views.dropdown_option contains duplicate field '{0}'")]
     DuplicateDropdownOptionField(String),

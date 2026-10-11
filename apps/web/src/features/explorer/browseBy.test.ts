@@ -108,6 +108,10 @@ describe('resolveBrowseBy', () => {
       categories,
     );
     expect(resolveBrowseBy(fields, undefined, false, 'brand')).toBeUndefined();
+    expect(
+      resolveBrowseBy(fields, undefined, undefined, false),
+    ).toBeUndefined();
+    expect(resolveBrowseBy(fields, 'brand', undefined, false)).toBe(brand);
     expect(resolveBrowseBy(fields, undefined, undefined, 'removed')).toBe(
       categories,
     );

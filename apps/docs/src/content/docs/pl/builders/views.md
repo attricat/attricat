@@ -181,7 +181,7 @@ type = "explorer"
 browse_by = "brand"
 ```
 
-Atrybut musi być relacją z jednym schematem docelowym. Jeśli schemat docelowy nie ma hierarchii, cele są wyświetlane jako płaska lista. Użytkownicy nadal mogą wybrać inny atrybut lub ukryć panel; ich wybór ma pierwszeństwo w ich przeglądarce.
+Atrybut musi być relacją z jednym schematem docelowym. Jeśli schemat docelowy nie ma hierarchii, cele są wyświetlane jako płaska lista. Ustaw `browse_by = false`, aby panel pozostawał zamknięty, dopóki ktoś go nie otworzy. Użytkownicy nadal mogą wybrać inny atrybut lub ukryć panel; ich wybór ma pierwszeństwo w ich przeglądarce.
 
 ## Kontrolki pól
 

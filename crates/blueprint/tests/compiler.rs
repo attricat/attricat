@@ -1,5 +1,6 @@
 use attricat_blueprint::{
-    BlueprintError, EffectiveAttribute, ResolvedInclude, ViewDefinition, compile, parse, raw_hash,
+    BlueprintError, BrowseBy, EffectiveAttribute, ResolvedInclude, ViewDefinition, compile, parse,
+    raw_hash,
 };
 
 #[test]
@@ -1184,7 +1185,17 @@ target_blueprints = ["category", "brand"]
     assert_eq!(
         compiled.views.get("explorer"),
         Some(&ViewDefinition::Explorer {
-            browse_by: Some("categories".to_owned())
+            browse_by: Some(BrowseBy::Field("categories".to_owned()))
+        })
+    );
+    let hidden = source.replace("browse_by = \"categories\"", "browse_by = false");
+    assert_eq!(
+        compile(parse(&hidden).unwrap(), &[], &hidden)
+            .unwrap()
+            .views
+            .get("explorer"),
+        Some(&ViewDefinition::Explorer {
+            browse_by: Some(BrowseBy::Hidden(false))
         })
     );
 
@@ -1200,6 +1211,10 @@ target_blueprints = ["category", "brand"]
         (
             source.replace("browse_by = \"categories\"", "browse_by = \"missing\""),
             "missing",
+        ),
+        (
+            source.replace("browse_by = \"categories\"", "browse_by = true"),
+            "true",
         ),
     ] {
         assert!(matches!(

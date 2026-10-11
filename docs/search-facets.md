@@ -18,8 +18,10 @@ children when it is expanded.
    one-level list. Plain self-relationships are never treated as trees.
 2. The field comes from the URL's `browseBy`, then the person's last choice for
    the blueprint (local storage, keyed by blueprint ID), then the blueprint's
-   `views.explorer.browse_by`, then the first tree field. `browseBy: false` hides the rail. A field the current revision no
-   longer has falls through to the next source.
+   `views.explorer.browse_by`, then the first tree field. `browseBy: false`
+   in the URL or storage, or `browse_by = false` in the blueprint, hides the
+   rail. A field the current revision no longer has falls through to the
+   next source.
 3. Choosing a node writes a `relationshipFacets` entry with one selected ID.
    For a tree field the entry also stores `hierarchyField`, and the search
    sends it as a `relationship_tree_facets` item so descendants match; entries

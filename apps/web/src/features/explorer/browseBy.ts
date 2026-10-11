@@ -55,7 +55,7 @@ export const resolveBrowseBy = (
   fields: BrowseByField[],
   requested: BrowseBy | undefined,
   stored: BrowseBy | undefined,
-  blueprintDefault?: string | null,
+  blueprintDefault?: BrowseBy | null,
 ): BrowseByField | undefined => {
   for (const choice of [requested, stored, blueprintDefault]) {
     if (choice === false) return undefined;

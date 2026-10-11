@@ -181,7 +181,7 @@ type = "explorer"
 browse_by = "brand"
 ```
 
-The field must be a relationship with a single target blueprint. A field whose target has no hierarchy is listed flat. People can still pick another field or hide the panel; their choice takes precedence in their browser.
+The field must be a relationship with a single target blueprint. A field whose target has no hierarchy is listed flat. Set `browse_by = false` to keep the panel closed until someone opens it. People can still pick another field or hide the panel; their choice takes precedence in their browser.
 
 ## Field controls
 

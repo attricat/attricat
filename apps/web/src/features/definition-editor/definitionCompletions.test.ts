@@ -156,6 +156,13 @@ describe('definitionCompletions', () => {
     );
   });
 
+  it('completes the explorer browse_by attribute', async () => {
+    const { labels } = await complete(
+      `${header}[views.explorer]\ntype = "explorer"\nbrowse_by = "|"\n\n[[attributes]]\ncode = "category"\nvalue_type = "relationship"\ntarget_blueprint = "category"\n`,
+    );
+    expect(labels).toContain('category');
+  });
+
   it('follows relationship hops in table column paths', async () => {
     const attributes = `\n[[attributes]]\ncode = "category"\nvalue_type = "relationship"\ntarget_blueprint = "category"\n`;
     const first = await complete(

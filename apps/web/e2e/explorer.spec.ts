@@ -477,6 +477,27 @@ target_blueprint = "${categoryCode}"`,
   ).toBeVisible();
   await page.getByRole('button', { name: 'Show browse panel' }).click();
   await expect(rail).toBeVisible();
+
+  // A blueprint can keep the rail closed even for a tree field.
+  const closedCode = `rail_closed_product_${suffix()}`;
+  await createRecordBlueprint(
+    closedCode,
+    'Rail closed products',
+    `[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "categories"
+value_type = "relationship"
+target_blueprint = "${categoryCode}"`,
+    { views: '[views.explorer]\ntype = "explorer"\nbrowse_by = false' },
+  );
+  await page.goto(`/?blueprint=${closedCode}`);
+  await expect(
+    page.getByRole('button', { name: 'Show browse panel' }),
+  ).toBeVisible();
+  await expect(rail).toBeHidden();
 });
 
 test("opens the browse rail on the blueprint's browse_by field", async ({

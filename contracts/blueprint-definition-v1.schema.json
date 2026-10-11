@@ -14,6 +14,21 @@
         }
       ]
     },
+    "BrowseBy": {
+      "anyOf": [
+        {
+          "description": "Relationship attribute code.",
+          "type": "string"
+        },
+        {
+          "const": false,
+          "description": "`false` keeps the rail closed until a person opens it.",
+          "type": "boolean"
+        }
+      ],
+      "description": "The Explorer browse rail's default: a relationship field, or `false`.",
+      "x-attricat-reference": "attribute"
+    },
     "CompareOp": {
       "description": "Comparison operator. `lt`–`gte` order numbers, dates and datetimes;\n`eq`/`ne` compare any scalar or relationship target set; `disjoint`\nrequires two relationship target sets without a common target.",
       "enum": [
@@ -1162,13 +1177,16 @@
           "description": "Explorer defaults for this blueprint's results.",
           "properties": {
             "browse_by": {
-              "default": null,
-              "description": "Relationship field the browse rail lists until a person picks\nanother. It must have a single target blueprint.",
-              "type": [
-                "string",
-                "null"
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BrowseBy"
+                },
+                {
+                  "type": "null"
+                }
               ],
-              "x-attricat-reference": "attribute"
+              "default": null,
+              "description": "Relationship field the browse rail lists until a person picks\nanother, or `false` to keep the rail closed. The field must have\na single target blueprint."
             },
             "type": {
               "const": "explorer",

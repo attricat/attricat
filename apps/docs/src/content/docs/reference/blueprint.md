@@ -363,7 +363,7 @@ browse_by = "categories"
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `browse_by` | attribute code | Relationship attribute the **Browse by** panel lists until a person picks another. It must have a single target blueprint. |
+| `browse_by` | attribute code or `false` | Relationship attribute the **Browse by** panel lists until a person picks another. It must have a single target blueprint. `false` keeps the panel closed until a person opens it. |
 
 Only a record blueprint can define it, and only under the name `explorer`. Without `browse_by`, the panel opens for the first relationship whose target has a hierarchy.
 

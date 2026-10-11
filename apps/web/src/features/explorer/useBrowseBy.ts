@@ -23,7 +23,7 @@ export const useBrowseBy = ({
   requested,
 }: {
   /** The blueprint's `views.explorer.browse_by`. */
-  blueprintDefault: string | null | undefined;
+  blueprintDefault: BrowseBy | null | undefined;
   blueprintId: string | undefined;
   onChange: (browseBy: BrowseBy) => void;
   relationshipFields: RelationshipFilterAttribute[];

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    BlueprintError, BlueprintKind, ComponentReference, EXTENSION_LAYOUT_OUTLETS,
+    BlueprintError, BlueprintKind, BrowseBy, ComponentReference, EXTENSION_LAYOUT_OUTLETS,
     EffectiveAttribute, TableColumn, ViewDefinition, ViewNode,
     component_manifest::validate_component, parser::validate_code,
 };
@@ -66,14 +66,20 @@ pub(crate) fn validate_view(
             if view != "explorer" || *blueprint_kind != BlueprintKind::Record {
                 return Err(BlueprintError::InvalidExplorerView);
             }
-            if let Some(field) = browse_by
-                && !attributes.iter().any(|attribute| {
-                    attribute.code == *field
-                        && attribute.value_type == "relationship"
-                        && attribute.target_blueprint.is_some()
-                })
-            {
-                return Err(BlueprintError::InvalidBrowseByField(field.clone()));
+            match browse_by {
+                None | Some(BrowseBy::Hidden(false)) => {}
+                Some(BrowseBy::Hidden(true)) => {
+                    return Err(BlueprintError::InvalidBrowseByField("true".to_owned()));
+                }
+                Some(BrowseBy::Field(field)) => {
+                    if !attributes.iter().any(|attribute| {
+                        attribute.code == *field
+                            && attribute.value_type == "relationship"
+                            && attribute.target_blueprint.is_some()
+                    }) {
+                        return Err(BlueprintError::InvalidBrowseByField(field.clone()));
+                    }
+                }
             }
         }
         ViewDefinition::Stack {

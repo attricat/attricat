@@ -363,7 +363,7 @@ browse_by = "categories"
 
 | Klucz | Typ | Opis |
 | --- | --- | --- |
-| `browse_by` | kod atrybutu | Atrybut relacji wyświetlany w panelu **Przeglądaj według**, dopóki użytkownik nie wybierze innego. Musi mieć jeden schemat docelowy. |
+| `browse_by` | kod atrybutu lub `false` | Atrybut relacji wyświetlany w panelu **Przeglądaj według**, dopóki użytkownik nie wybierze innego. Musi mieć jeden schemat docelowy. `false` pozostawia panel zamknięty, dopóki użytkownik go nie otworzy. |
 
 Może go zdefiniować tylko schemat rekordów i tylko pod nazwą `explorer`. Bez `browse_by` panel otwiera się dla pierwszej relacji, której schemat docelowy ma hierarchię.
 

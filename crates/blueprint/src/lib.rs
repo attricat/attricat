@@ -7,7 +7,7 @@ mod parser;
 mod view_validation;
 
 pub use ast::{
-    AttributeDeclaration, BlueprintDefinition, BlueprintKind, CONNECTOR_JOB_DIRECTIONS,
+    AttributeDeclaration, BlueprintDefinition, BlueprintKind, BrowseBy, CONNECTOR_JOB_DIRECTIONS,
     CompiledBlueprint, ComponentReference, ConnectorJobDefinition, EXTENSION_LAYOUT_OUTLETS,
     EffectiveAttribute, ExtensionOutletLayout, FilePolicy, IncludeRef, IncomingRelationship,
     KNOWN_VIEW_NAMES, LocalAttributeDeclaration, MAX_UNIQUE_KEY_ATTRIBUTES, PublicationPolicy,

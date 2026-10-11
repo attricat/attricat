@@ -84,7 +84,7 @@ export type ViewDefinition =
       }[];
       component?: ComponentReference | null;
     }
-  | { type: 'explorer'; browse_by?: string | null }
+  | { type: 'explorer'; browse_by?: string | false | null }
   | {
       type: 'extension_layout';
       version: 1;
@@ -216,7 +216,7 @@ const viewDefinitionSchema: z.ZodType<ViewDefinition> = z.lazy(() =>
     }),
     z.object({
       type: z.literal(viewBlockTypes.explorer),
-      browse_by: z.string().nullish(),
+      browse_by: z.union([z.string(), z.literal(false)]).nullish(),
     }),
     z.object({
       type: z.literal(viewBlockTypes.extensionLayout),
