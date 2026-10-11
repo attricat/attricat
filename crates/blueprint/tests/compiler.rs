@@ -1151,6 +1151,70 @@ value_type = "string"
 }
 
 #[test]
+fn explorer_view_browse_by_requires_a_single_target_relationship() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[views.explorer]
+type = "explorer"
+browse_by = "categories"
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "categories"
+value_type = "relationship"
+target_blueprint = "category"
+
+[[attributes]]
+code = "related"
+value_type = "relationship"
+target_blueprints = ["category", "brand"]
+"#;
+    let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    assert_eq!(
+        compiled.views.get("explorer"),
+        Some(&ViewDefinition::Explorer {
+            browse_by: Some("categories".to_owned())
+        })
+    );
+
+    for (invalid, error) in [
+        (
+            source.replace("browse_by = \"categories\"", "browse_by = \"title\""),
+            "title",
+        ),
+        (
+            source.replace("browse_by = \"categories\"", "browse_by = \"related\""),
+            "related",
+        ),
+        (
+            source.replace("browse_by = \"categories\"", "browse_by = \"missing\""),
+            "missing",
+        ),
+    ] {
+        assert!(matches!(
+            compile(parse(&invalid).unwrap(), &[], &invalid),
+            Err(BlueprintError::InvalidBrowseByField(field)) if field == error
+        ));
+    }
+    let renamed = source.replace("[views.explorer]", "[views.browse]");
+    assert!(matches!(
+        compile(parse(&renamed).unwrap(), &[], &renamed),
+        Err(BlueprintError::InvalidExplorerView)
+    ));
+}
+
+#[test]
 fn table_columns_preserve_legacy_fields_and_reject_invalid_paths() {
     let source = r#"
 format_version = 1

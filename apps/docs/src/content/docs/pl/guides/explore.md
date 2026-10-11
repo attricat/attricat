@@ -68,7 +68,7 @@ Gdy schemat docelowy ma hierarchię, na przykład pole `category.parent` z `tree
 - Wybranie węzła nadrzędnego dopasowuje też rekordy przypisane do jego potomków.
 - Liczniki uwzględniają zapytanie wyszukiwania i zakres wersji. Filtry atrybutów i inne fasety na nie nie wpływają.
 
-W polu **Przeglądaj według** wybierz inny atrybut relacji albo ukryj panel. Panel otwiera się domyślnie tylko dla schematu powiązanego z hierarchią. Attricat zapamiętuje Twój wybór dla każdego schematu w tej przeglądarce, a zapisane i udostępnione wyszukiwania go zachowują.
+W polu **Przeglądaj według** wybierz inny atrybut relacji albo ukryj panel. Domyślnie panel otwiera się dla atrybutu wskazanego przez schemat w `views.explorer`, a w przeciwnym razie dla pierwszej relacji powiązanej z hierarchią. Attricat zapamiętuje Twój wybór dla każdego schematu w tej przeglądarce, a zapisane i udostępnione wyszukiwania go zachowują.
 
 Aby wybrać kilka celów jednego atrybutu, użyj **Dodaj filtr** i wybierz atrybut relacji. Kilka zaznaczeń w jednym atrybucie oznacza *dowolny z nich*. Zaznaczenia w różnych atrybutach muszą pasować jednocześnie.
 

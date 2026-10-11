@@ -14,6 +14,7 @@ Views are optional. Without them, the web app shows attributes in declaration or
 | `dropdown_option` | The label of a record in pickers, filter pills, and search. Required for record blueprints. |
 | `detail` | The record page, its preview, and the create form. Fields are shown and edited in this layout. |
 | `table` | The Explorer's result columns. |
+| `explorer` | Explorer defaults, such as the field the **Browse by** panel lists. |
 | `extension_layout` | Order and visibility of extension panels and actions on this blueprint's record pages. |
 
 `views.edit` is deprecated. The web app ignores it, and blueprints that still define it remain valid.
@@ -169,6 +170,18 @@ renderer = { id = "example.currency", version = 1, props = { currency = "USD" } 
 ```
 
 The renderer must be declared by an enabled extension for the column's value type. It runs in a sandboxed frame; see [Client contributions](/extensions/client/).
+
+## Explorer browse panel
+
+The **Browse by** panel beside the Explorer results lists the targets of one relationship. By default it opens for the first relationship whose target blueprint has a [hierarchy](#hierarchies). To choose the field, name it in `views.explorer`:
+
+```toml
+[views.explorer]
+type = "explorer"
+browse_by = "brand"
+```
+
+The field must be a relationship with a single target blueprint. A field whose target has no hierarchy is listed flat. People can still pick another field or hide the panel; their choice takes precedence in their browser.
 
 ## Field controls
 

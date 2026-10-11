@@ -301,6 +301,7 @@ A selected attribute keeps all of the mixin's settings. To pick up changes in th
 | `detail` | Record page and create form. Fields the user may change are edited in place. | A layout block |
 | `edit` | Deprecated and ignored by the web app. Still accepted, and edit components in it are still validated. | A layout block |
 | `table` | Explorer columns. | `table` |
+| `explorer` | Explorer defaults, such as the field the **Browse by** panel lists. | `explorer` |
 | `extension_layout` | Order and visibility of extension contributions on this blueprint's record pages. | `extension_layout` |
 
 When `detail` or `table` is missing, the web app lists attributes in declaration order.
@@ -351,6 +352,20 @@ renderer = { id = "attricat.table_image", version = 1 }
 | `component` | component reference | Optional table component. |
 
 A column can be sorted in the Explorer only when it is scalar and every relationship hop in its path has `cardinality = "one"`.
+
+### `explorer`
+
+```toml
+[views.explorer]
+type = "explorer"
+browse_by = "categories"
+```
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `browse_by` | attribute code | Relationship attribute the **Browse by** panel lists until a person picks another. It must have a single target blueprint. |
+
+Only a record blueprint can define it, and only under the name `explorer`. Without `browse_by`, the panel opens for the first relationship whose target has a hierarchy.
 
 ### Layout blocks
 

@@ -301,6 +301,7 @@ Wybrany atrybut zachowuje wszystkie ustawienia z mixinu. Aby uwzględnić zmiany
 | `detail` | Strona rekordu i formularz tworzenia. Pola, które użytkownik może zmienić, są edytowane w miejscu. | Blok układu |
 | `edit` | Przestarzały i ignorowany przez aplikację internetową. Nadal akceptowany, a komponenty edycji w nim nadal są walidowane. | Blok układu |
 | `table` | Kolumny przeglądarki rekordów. | `table` |
+| `explorer` | Ustawienia domyślne przeglądarki rekordów, np. atrybut wyświetlany w panelu **Przeglądaj według**. | `explorer` |
 | `extension_layout` | Kolejność i widoczność kontrybucji z rozszerzeń na stronach rekordów tego schematu. | `extension_layout` |
 
 Gdy brakuje `detail` lub `table`, aplikacja webowa wyświetla atrybuty w kolejności deklaracji.
@@ -351,6 +352,20 @@ renderer = { id = "attricat.table_image", version = 1 }
 | `component` | odwołanie do komponentu | Opcjonalny komponent tabeli. |
 
 Kolumnę można sortować w przeglądarce rekordów tylko wtedy, gdy jest skalarna, a każdy krok relacji w jej ścieżce ma `cardinality = "one"`.
+
+### `explorer`
+
+```toml
+[views.explorer]
+type = "explorer"
+browse_by = "categories"
+```
+
+| Klucz | Typ | Opis |
+| --- | --- | --- |
+| `browse_by` | kod atrybutu | Atrybut relacji wyświetlany w panelu **Przeglądaj według**, dopóki użytkownik nie wybierze innego. Musi mieć jeden schemat docelowy. |
+
+Może go zdefiniować tylko schemat rekordów i tylko pod nazwą `explorer`. Bez `browse_by` panel otwiera się dla pierwszej relacji, której schemat docelowy ma hierarchię.
 
 ### Bloki układu
 

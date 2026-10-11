@@ -91,7 +91,10 @@ export const Explorer = ({
     search,
     userId: session.data?.user_id,
   });
+  const explorerView = selectedBlueprint.data?.blueprint.views.explorer;
   const browseBy = useBrowseBy({
+    blueprintDefault:
+      explorerView?.type === 'explorer' ? explorerView.browse_by : undefined,
     blueprintId: currentBlueprint?.id,
     onChange: actions.changeBrowseBy,
     relationshipFields,

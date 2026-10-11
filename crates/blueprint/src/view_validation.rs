@@ -62,6 +62,20 @@ pub(crate) fn validate_view(
                 )?;
             }
         }
+        ViewDefinition::Explorer { browse_by } => {
+            if view != "explorer" || *blueprint_kind != BlueprintKind::Record {
+                return Err(BlueprintError::InvalidExplorerView);
+            }
+            if let Some(field) = browse_by
+                && !attributes.iter().any(|attribute| {
+                    attribute.code == *field
+                        && attribute.value_type == "relationship"
+                        && attribute.target_blueprint.is_some()
+                })
+            {
+                return Err(BlueprintError::InvalidBrowseByField(field.clone()));
+            }
+        }
         ViewDefinition::Stack {
             children,
             component,

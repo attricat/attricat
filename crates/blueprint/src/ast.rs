@@ -94,7 +94,13 @@ pub const EXTENSION_LAYOUT_OUTLETS: &[&str] = &[
     "record_action",
 ];
 /// View names with platform meaning, offered to editors as suggestions.
-pub const KNOWN_VIEW_NAMES: &[&str] = &["dropdown_option", "detail", "table", "extension_layout"];
+pub const KNOWN_VIEW_NAMES: &[&str] = &[
+    "dropdown_option",
+    "detail",
+    "table",
+    "explorer",
+    "extension_layout",
+];
 
 pub const CONNECTOR_JOB_DIRECTIONS: &[&str] = &["import", "export"];
 
@@ -167,7 +173,8 @@ pub struct IncomingRelationship {
 }
 
 /// A named view. `dropdown_option` labels relationship choices, `table`
-/// configures Explorer columns, and layout roots arrange `detail` and `edit`.
+/// configures Explorer columns, `explorer` sets Explorer defaults, and layout
+/// roots arrange `detail` and `edit`.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ViewDefinition {
@@ -192,6 +199,14 @@ pub enum ViewDefinition {
         /// Registered component that renders this block.
         #[serde(default)]
         component: Option<ComponentReference>,
+    },
+    /// Explorer defaults for this blueprint's results.
+    Explorer {
+        /// Relationship field the browse rail lists until a person picks
+        /// another. It must have a single target blueprint.
+        #[serde(default)]
+        #[schemars(extend("x-attricat-reference" = "attribute"))]
+        browse_by: Option<String>,
     },
     /// Blocks stacked vertically.
     Stack {

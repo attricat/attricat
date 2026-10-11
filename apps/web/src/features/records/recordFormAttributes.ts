@@ -83,7 +83,8 @@ const usesDefaultLayout = (view: ViewDefinition | undefined) =>
   !view ||
   view.type === viewBlockTypes.table ||
   view.type === viewBlockTypes.dropdownOption ||
-  view.type === viewBlockTypes.extensionLayout;
+  view.type === viewBlockTypes.extensionLayout ||
+  view.type === viewBlockTypes.explorer;
 
 /**
  * Required attributes the form layout does not render. A form shows them after

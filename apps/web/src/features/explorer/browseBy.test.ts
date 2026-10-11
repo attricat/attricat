@@ -102,6 +102,17 @@ describe('resolveBrowseBy', () => {
     expect(resolveBrowseBy(fields, 'removed', undefined)).toBe(categories);
   });
 
+  it("uses the blueprint's default after the person's choices", () => {
+    expect(resolveBrowseBy([brand], undefined, undefined, 'brand')).toBe(brand);
+    expect(resolveBrowseBy(fields, undefined, 'categories', 'brand')).toBe(
+      categories,
+    );
+    expect(resolveBrowseBy(fields, undefined, false, 'brand')).toBeUndefined();
+    expect(resolveBrowseBy(fields, undefined, undefined, 'removed')).toBe(
+      categories,
+    );
+  });
+
   it('opens by default only for a hierarchy', () => {
     expect(resolveBrowseBy(fields, undefined, undefined)).toBe(categories);
     expect(resolveBrowseBy([brand], undefined, undefined)).toBeUndefined();

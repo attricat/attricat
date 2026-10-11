@@ -26,6 +26,7 @@ export const viewBlockTypes = {
   incomingRelationshipList: 'incoming_relationship_list',
   table: 'table',
   extensionLayout: 'extension_layout',
+  explorer: 'explorer',
 } as const;
 
 export type ComponentReference = {
@@ -83,6 +84,7 @@ export type ViewDefinition =
       }[];
       component?: ComponentReference | null;
     }
+  | { type: 'explorer'; browse_by?: string | null }
   | {
       type: 'extension_layout';
       version: 1;
@@ -211,6 +213,10 @@ const viewDefinitionSchema: z.ZodType<ViewDefinition> = z.lazy(() =>
         .nullish()
         .transform((columns) => columns ?? undefined),
       component: componentReferenceSchema.nullish(),
+    }),
+    z.object({
+      type: z.literal(viewBlockTypes.explorer),
+      browse_by: z.string().nullish(),
     }),
     z.object({
       type: z.literal(viewBlockTypes.extensionLayout),

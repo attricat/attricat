@@ -479,6 +479,44 @@ target_blueprint = "${categoryCode}"`,
   await expect(rail).toBeVisible();
 });
 
+test("opens the browse rail on the blueprint's browse_by field", async ({
+  page,
+}) => {
+  const brandCode = `rail_brand_${suffix()}`;
+  const productCode = `rail_brand_product_${suffix()}`;
+  const brand = await createRecordBlueprint(
+    brandCode,
+    'Rail brands',
+    `[[attributes]]
+code = "title"
+value_type = "string"`,
+  );
+  const acme = await createRecord(brand, [scalar('title', 'Acme')]);
+  const product = await createRecordBlueprint(
+    productCode,
+    'Rail brand products',
+    `[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "brand"
+value_type = "relationship"
+target_blueprint = "${brandCode}"
+cardinality = "one"`,
+    { views: '[views.explorer]\ntype = "explorer"\nbrowse_by = "brand"' },
+  );
+  await createRecord(product, [
+    scalar('title', 'Anvil'),
+    relationship('brand', acme.id),
+  ]);
+
+  // A flat target opens only because the blueprint names it.
+  await page.goto(`/?blueprint=${productCode}`);
+  const rail = page.getByRole('complementary', { name: 'Browse by brand' });
+  await expect(rail.getByRole('button', { name: /^Acme/ })).toBeVisible();
+});
+
 test('filters explorer results with a one-level relationship facet', async ({
   page,
 }) => {

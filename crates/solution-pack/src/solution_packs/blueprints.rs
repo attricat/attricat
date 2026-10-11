@@ -668,6 +668,7 @@ fn validate_incoming_relationships_in_view(
         }
         ViewDefinition::DropdownOption { .. }
         | ViewDefinition::Table { .. }
+        | ViewDefinition::Explorer { .. }
         | ViewDefinition::ExtensionLayout { .. } => Ok(()),
     }
 }

@@ -13,7 +13,8 @@ export const findRecordHeading = (
     !view ||
     view.type === viewBlockTypes.table ||
     view.type === viewBlockTypes.dropdownOption ||
-    view.type === viewBlockTypes.extensionLayout
+    view.type === viewBlockTypes.extensionLayout ||
+    view.type === viewBlockTypes.explorer
   )
     return undefined;
   const visit = (node: ViewNode): ViewNode | undefined => {

@@ -14,6 +14,7 @@ Widoki są opcjonalne. Bez nich aplikacja internetowa pokazuje atrybuty w kolejn
 | `dropdown_option` | Etykieta rekordu w selektorach, etykietach filtrów i wyszukiwaniu. Wymagany w schematach rekordów. |
 | `detail` | Strona rekordu, jej podgląd i formularz tworzenia. W tym układzie pola są zarówno wyświetlane, jak i edytowane. |
 | `table` | Kolumny wyników w **Przeglądarce rekordów**. |
+| `explorer` | Ustawienia domyślne **Przeglądarki rekordów**, np. atrybut wyświetlany w panelu **Przeglądaj według**. |
 | `extension_layout` | Kolejność i widoczność paneli i akcji rozszerzeń na stronach rekordów tego schematu. |
 
 Widok `views.edit` jest przestarzały. Aplikacja internetowa go ignoruje, a schematy, które nadal go definiują, pozostają poprawne.
@@ -169,6 +170,18 @@ renderer = { id = "example.currency", version = 1, props = { currency = "USD" } 
 ```
 
 Renderer musi być zadeklarowany przez włączone rozszerzenie dla typu wartości kolumny. Działa w odizolowanej ramce; zobacz [Kontrybucje klienckie](/pl/extensions/client/).
+
+## Panel przeglądania w Przeglądarce rekordów
+
+Panel **Przeglądaj według** obok wyników **Przeglądarki rekordów** wyświetla cele jednej relacji. Domyślnie otwiera się dla pierwszej relacji, której schemat docelowy ma [hierarchię](#hierarchie). Aby wybrać atrybut, wskaż go w `views.explorer`:
+
+```toml
+[views.explorer]
+type = "explorer"
+browse_by = "brand"
+```
+
+Atrybut musi być relacją z jednym schematem docelowym. Jeśli schemat docelowy nie ma hierarchii, cele są wyświetlane jako płaska lista. Użytkownicy nadal mogą wybrać inny atrybut lub ukryć panel; ich wybór ma pierwszeństwo w ich przeglądarce.
 
 ## Kontrolki pól
 

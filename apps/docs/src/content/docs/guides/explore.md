@@ -68,7 +68,7 @@ When the target blueprint has a hierarchy, such as a `category.parent` field wit
 - Selecting a parent also matches records assigned to its descendants.
 - Counts reflect the search query and version scope. Attribute filters and other facets do not affect them.
 
-Pick another relationship attribute under **Browse by**, or hide the panel. The panel opens by default only for a blueprint linked to a hierarchy. Attricat remembers your choice for each blueprint in this browser, and saved and shared searches keep it.
+Pick another relationship attribute under **Browse by**, or hide the panel. The panel opens by default for the field the blueprint names in `views.explorer`, or else for the first relationship linked to a hierarchy. Attricat remembers your choice for each blueprint in this browser, and saved and shared searches keep it.
 
 To select several targets of one attribute, use **Add filter** and pick the relationship attribute. Several selections in one attribute mean *any of these*. Selections in different attributes must all match.
 

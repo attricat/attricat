@@ -1078,7 +1078,7 @@
       "type": "object"
     },
     "ViewDefinition": {
-      "description": "A named view. `dropdown_option` labels relationship choices, `table`\nconfigures Explorer columns, and layout roots arrange `detail` and `edit`.",
+      "description": "A named view. `dropdown_option` labels relationship choices, `table`\nconfigures Explorer columns, `explorer` sets Explorer defaults, and layout\nroots arrange `detail` and `edit`.",
       "oneOf": [
         {
           "additionalProperties": false,
@@ -1149,6 +1149,29 @@
             },
             "type": {
               "const": "table",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Explorer defaults for this blueprint's results.",
+          "properties": {
+            "browse_by": {
+              "default": null,
+              "description": "Relationship field the browse rail lists until a person picks\nanother. It must have a single target blueprint.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "x-attricat-reference": "attribute"
+            },
+            "type": {
+              "const": "explorer",
               "type": "string"
             }
           },
@@ -1930,6 +1953,7 @@
         "dropdown_option",
         "detail",
         "table",
+        "explorer",
         "extension_layout"
       ]
     }

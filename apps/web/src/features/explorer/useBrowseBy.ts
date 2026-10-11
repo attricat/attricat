@@ -16,11 +16,14 @@ import type { BrowseBy } from './search';
  * the person's default for the blueprint.
  */
 export const useBrowseBy = ({
+  blueprintDefault,
   blueprintId,
   onChange,
   relationshipFields,
   requested,
 }: {
+  /** The blueprint's `views.explorer.browse_by`. */
+  blueprintDefault: string | null | undefined;
   blueprintId: string | undefined;
   onChange: (browseBy: BrowseBy) => void;
   relationshipFields: RelationshipFilterAttribute[];
@@ -46,7 +49,9 @@ export const useBrowseBy = ({
   const pending = targets.some((target) => target.isPending);
 
   return {
-    field: pending ? undefined : resolveBrowseBy(fields, requested, stored),
+    field: pending
+      ? undefined
+      : resolveBrowseBy(fields, requested, stored, blueprintDefault),
     fields,
     pending,
     change: (browseBy: BrowseBy) => {

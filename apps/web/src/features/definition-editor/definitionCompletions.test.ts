@@ -78,7 +78,7 @@ describe('definitionCompletions', () => {
       suggestions.find((suggestion) => suggestion.label === '[views.…]')
         ?.insertText,
     ).toBe(
-      '[views.${1|dropdown_option,detail,table,extension_layout|}]\ntype = "${2|dropdown_option,table,stack,grid,section,tabs,accordion,extension_layout|}"',
+      '[views.${1|dropdown_option,detail,table,explorer,extension_layout|}]\ntype = "${2|dropdown_option,table,explorer,stack,grid,section,tabs,accordion,extension_layout|}"',
     );
   });
 

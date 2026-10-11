@@ -47,15 +47,17 @@ export const browseByFields = (
 
 /**
  * The field the rail lists: the URL's choice, then the person's last choice
- * for the blueprint, then the first field whose target is a hierarchy.
- * A choice the current revision no longer offers falls through.
+ * for the blueprint, then the blueprint's `views.explorer.browse_by`, then the
+ * first field whose target is a hierarchy. A choice the current revision no
+ * longer offers falls through.
  */
 export const resolveBrowseBy = (
   fields: BrowseByField[],
   requested: BrowseBy | undefined,
   stored: BrowseBy | undefined,
+  blueprintDefault?: string | null,
 ): BrowseByField | undefined => {
-  for (const choice of [requested, stored]) {
+  for (const choice of [requested, stored, blueprintDefault]) {
     if (choice === false) return undefined;
     const field = fields.find((field) => field.attribute.code === choice);
     if (field) return field;
