@@ -3411,7 +3411,9 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
                     task.id,
                     &task.lease_owner,
                     task.lease_token,
-                    chrono::Utc::now(),
+                    // The database clock may trail the host's; back-date so the
+                    // immediate reclaim below sees the task as available.
+                    chrono::Utc::now() - chrono::Duration::seconds(1),
                 )
                 .await
                 .unwrap();
@@ -3500,7 +3502,9 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
                     task.id,
                     &task.lease_owner,
                     task.lease_token,
-                    chrono::Utc::now(),
+                    // The database clock may trail the host's; back-date so the
+                    // immediate reclaim below sees the task as available.
+                    chrono::Utc::now() - chrono::Duration::seconds(1),
                 )
                 .await
                 .unwrap();
