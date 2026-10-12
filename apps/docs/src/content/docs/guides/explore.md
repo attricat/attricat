@@ -67,6 +67,7 @@ When the target blueprint has a hierarchy, such as a `category.parent` field wit
 - Counts next to each node include everything below it. A record assigned to two subcategories is counted once.
 - Selecting a parent also matches records assigned to its descendants.
 - Counts reflect the search query and version scope. Attribute filters and other facets do not affect them.
+- Without a search query, counts can take about 30 seconds to reflect recent changes. New categories appear immediately.
 
 When the blueprint itself is a hierarchy, such as categories, the panel can list its own tree under the blueprint's name. Choosing a node then keeps that record and everything below it.
 

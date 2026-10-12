@@ -11,30 +11,34 @@ OTEL_EXPORTER_OTLP_TRACES_ENDPOINT= RUST_LOG=warn \
   cargo test --release -p api --test facet_latency -- --ignored --nocapture
 ```
 
-`FACET_BENCH_PRODUCTS` changes the product count. Each scenario runs once to
-warm up and then ten times, which is past the five executions after which
-PostgreSQL may switch a pooled prepared statement to a generic plan. The test
-also prints the `server-timing` header of each scenario's slowest sample.
+`FACET_BENCH_PRODUCTS` changes the product count. Each scenario runs once and
+then ten more times, which is past the five executions after which PostgreSQL
+may switch a pooled prepared statement to a generic plan. The test reports the
+first request separately, because Browse scenarios without a query share
+cached counts and only the first of them misses the cache. It also prints the
+`server-timing` header of each scenario's slowest sample.
 
 ## Results
 
-Medians on a local PostgreSQL (Apple silicon, release build). Before, the
+Medians on a local PostgreSQL (Apple silicon, release build). "Exact" is the
+first optimization pass; "Cached" adds cached Browse rail counts. Before, the
 searches with a selected root also took about 1.5 s on some samples because
 of generic plans (see below).
 
-| Scenario | Before | After |
-| --- | ---: | ---: |
-| Browse: root level | 1,319 ms | 189 ms |
-| Browse: root level, child context | 1,157 ms | 222 ms |
-| Browse: expand a root | 1,277 ms | 192 ms |
-| Browse: expand a level-1 node | 1,270 ms | 177 ms |
-| Browse: expand a level-2 node | 1,170 ms | 180 ms |
-| Browse: root level, query "Product 1" | 726 ms | 567 ms |
-| Search: no facet (reference) | 34 ms | 37 ms |
-| Search: root selected | 2,496 ms | 108 ms |
-| Search: root selected, child context | 2,460 ms | 103 ms |
-| Search: root selected, version 1 | 992 ms | 93 ms |
-| Search: level-2 node selected | 960 ms | 11 ms |
+| Scenario | Before | Exact | Cached |
+| --- | ---: | ---: | ---: |
+| Browse: root level, first request | 1,319 ms | 189 ms | 259 ms |
+| Browse: root level, cached | 1,319 ms | 189 ms | 14 ms |
+| Browse: root level, child context, first request | 1,157 ms | 222 ms | 220 ms |
+| Browse: expand a root | 1,277 ms | 192 ms | 14 ms |
+| Browse: expand a level-1 node | 1,270 ms | 177 ms | 14 ms |
+| Browse: expand a level-2 node | 1,170 ms | 180 ms | 14 ms |
+| Browse: root level, query "Product 1" | 726 ms | 567 ms | 640 ms |
+| Search: no facet (reference) | 34 ms | 37 ms | 33 ms |
+| Search: root selected | 2,496 ms | 108 ms | 98 ms |
+| Search: root selected, child context | 2,460 ms | 103 ms | 106 ms |
+| Search: root selected, version 1 | 992 ms | 93 ms | 105 ms |
+| Search: level-2 node selected | 960 ms | 11 ms | 9 ms |
 
 ## What changed
 
@@ -57,9 +61,16 @@ of generic plans (see below).
   every record of the blueprint and compares each against the whole ID list
   (about 1.4 s for 10,000 IDs). These queries now join from the ID list.
 
+- **Cached counts.** Without a search term, a Browse rail page reads only the
+  tree's parent edges and the page's labels (about 14 ms). Every node's count
+  is computed once per blueprint, field, hierarchy, context and version, and
+  shared by the workspace for 30 seconds, so counts may lag writes by that
+  long. The tree's nodes are always read fresh.
+
 ## Remaining cost
 
-A Browse rail page still resolves every edge of the relationship (about
-180 ms at this size) because counts include all of a node's descendants. With
-a search term, resolving the term dominates. Reusing resolved edges across
-pages, or approximate counts, are the next steps.
+The first Browse rail page for a tree, and the first after its counts expire,
+still resolves every edge of the relationship (about 200 ms at this size).
+With a search term, counts are exact and uncached, and resolving the term
+dominates each page. Caching those per term would need the cache to bound
+entries by size rather than count.

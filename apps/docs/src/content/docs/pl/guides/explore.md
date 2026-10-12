@@ -67,6 +67,7 @@ Gdy schemat docelowy ma hierarchię, na przykład pole `category.parent` z `tree
 - Liczniki przy każdym węźle obejmują wszystko, co znajduje się pod nim. Rekord przypisany do dwóch podkategorii jest liczony raz.
 - Wybranie węzła nadrzędnego dopasowuje też rekordy przypisane do jego potomków.
 - Liczniki uwzględniają zapytanie wyszukiwania i zakres wersji. Filtry atrybutów i inne fasety na nie nie wpływają.
+- Bez zapytania wyszukiwania uwzględnienie ostatnich zmian w licznikach może potrwać około 30 sekund. Nowe kategorie pojawiają się od razu.
 
 Gdy sam schemat jest hierarchią, na przykład kategorie, panel może wyświetlić jego własne drzewo pod nazwą schematu. Wybranie węzła zachowuje wtedy ten rekord i wszystko, co znajduje się pod nim.
 

@@ -2,7 +2,10 @@ use super::*;
 use super::{record_projection::display_label, system_annotations::validate_system_tags};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    time::Duration,
+};
 use uuid::Uuid;
 
 #[derive(sqlx::FromRow)]
@@ -1964,32 +1967,10 @@ impl AttricatRepository {
             .get_context_by_id(context_id)
             .await?
             .ok_or(RepositoryError::InvalidContext)?;
-        // Each edge set is one statement, so read them concurrently; the tree
-        // is then walked in memory for only the requested page's subtrees.
-        let sources = async {
-            match source_field {
-                Some(field) => {
-                    self.resolved_relationship_edges(
-                        source_blueprint_id,
-                        source_blueprint_version,
-                        field,
-                        target_blueprint_id,
-                        context_id,
-                    )
-                    .await
-                }
-                None => Ok(sqlx::query_scalar::<_, Uuid>(
-                    "SELECT id FROM records WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL",
-                )
-                .bind(source_blueprint_id)
-                .bind(source_blueprint_version)
-                .fetch_all(&self.pool)
-                .await?
-                .into_iter()
-                .map(|id| (id, id))
-                .collect()),
-            }
-        };
+        // The tree's shape is always read fresh, so added or moved nodes show
+        // at once. Without a search term, counts come from a cache shared by
+        // the workspace (see [`Self::cached_tree_facet_counts`]); with one,
+        // the matching sources are counted for the requested page only.
         let parents = async {
             match hierarchy_field {
                 Some(field) => {
@@ -2017,13 +1998,43 @@ impl AttricatRepository {
             .await
             .map_err(RepositoryError::from)
         };
-        let (sources, parents, nodes) = tokio::try_join!(sources, parents, roots)?;
+        let cached_counts = async {
+            if matching_record_ids.is_some() {
+                return Ok(None);
+            }
+            self.cached_tree_facet_counts(
+                source_blueprint_id,
+                source_blueprint_version,
+                source_field,
+                target_blueprint_id,
+                hierarchy_field,
+                context_id,
+            )
+            .await
+            .map(Some)
+        };
+        let sources = async {
+            let Some(matching) = matching_record_ids else {
+                return Ok(Vec::new());
+            };
+            let mut sources = self
+                .tree_facet_sources(
+                    source_blueprint_id,
+                    source_blueprint_version,
+                    source_field,
+                    target_blueprint_id,
+                    context_id,
+                )
+                .await?;
+            sources.retain(|(source, _)| matching.contains(source));
+            Ok(sources)
+        };
+        let (parents, nodes, cached_counts, sources) =
+            tokio::try_join!(parents, roots, cached_counts, sources)?;
 
         let mut sources_by_target: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
         for (source, target) in sources {
-            if matching_record_ids.is_none_or(|ids| ids.contains(&source)) {
-                sources_by_target.entry(target).or_default().push(source);
-            }
+            sources_by_target.entry(target).or_default().push(source);
         }
         let mut children_by_parent: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
         let mut has_parent = HashSet::new();
@@ -2095,6 +2106,14 @@ impl AttricatRepository {
         let items = page
             .into_iter()
             .map(|id| {
+                if let Some(counts) = &cached_counts {
+                    return RelationshipTreeFacetChildItem {
+                        id,
+                        display: labels.get(&id).cloned().unwrap_or_default(),
+                        count: counts.get(&id).copied().unwrap_or_default(),
+                        has_children: children_by_parent.contains_key(&id),
+                    };
+                }
                 // A source counts once per node even when it reaches several
                 // of the node's descendants or one through several parents.
                 let mut visited = HashSet::new();
@@ -2128,6 +2147,124 @@ impl AttricatRepository {
             selected_items,
             next_cursor,
         })
+    }
+
+    /// The `(source, target)` pairs a tree facet counts. Without
+    /// `source_field`, each source record is its own target.
+    async fn tree_facet_sources(
+        &self,
+        source_blueprint_id: Uuid,
+        source_blueprint_version: Option<i64>,
+        source_field: Option<&str>,
+        target_blueprint_id: Uuid,
+        context_id: Uuid,
+    ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
+        match source_field {
+            Some(field) => {
+                self.resolved_relationship_edges(
+                    source_blueprint_id,
+                    source_blueprint_version,
+                    field,
+                    target_blueprint_id,
+                    context_id,
+                )
+                .await
+            }
+            None => Ok(sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM records WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL",
+            )
+            .bind(source_blueprint_id)
+            .bind(source_blueprint_version)
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .map(|id| (id, id))
+            .collect()),
+        }
+    }
+
+    /// Distinct sources per tree node, including the node's descendants, for
+    /// every node with any. Resolving every edge of a large relationship takes
+    /// a noticeable fraction of a second, and Browse rail pages for one tree
+    /// arrive in bursts, so counts are shared by the workspace and may lag
+    /// writes by up to [`TREE_FACET_COUNTS_FRESH`]. The next request after
+    /// that reloads them; requests arriving during the reload keep the
+    /// previous counts.
+    async fn cached_tree_facet_counts(
+        &self,
+        source_blueprint_id: Uuid,
+        source_blueprint_version: Option<i64>,
+        source_field: Option<&str>,
+        target_blueprint_id: Uuid,
+        hierarchy_field: Option<&str>,
+        context_id: Uuid,
+    ) -> Result<Arc<HashMap<Uuid, i64>>, RepositoryError> {
+        let key = CacheKey::new(
+            "tree_facet_counts",
+            &[
+                &self.workspace_id.0,
+                &source_blueprint_id,
+                &source_blueprint_version.map_or_else(|| "all".to_owned(), |v| v.to_string()),
+                &source_field.unwrap_or("-"),
+                &target_blueprint_id,
+                &hierarchy_field.unwrap_or("-"),
+                &context_id,
+            ],
+        );
+        let policy = Policy::Ttl {
+            fresh: TREE_FACET_COUNTS_FRESH,
+            stale: TREE_FACET_COUNTS_STALE,
+        };
+        self.cache
+            .fetch(key, &[], policy, || async {
+                let parents = async {
+                    match hierarchy_field {
+                        Some(field) => {
+                            self.resolved_relationship_edges(
+                                target_blueprint_id,
+                                None,
+                                field,
+                                target_blueprint_id,
+                                context_id,
+                            )
+                            .await
+                        }
+                        None => Ok(Vec::new()),
+                    }
+                };
+                let sources = self.tree_facet_sources(
+                    source_blueprint_id,
+                    source_blueprint_version,
+                    source_field,
+                    target_blueprint_id,
+                    context_id,
+                );
+                let (parents, sources) = tokio::try_join!(parents, sources)?;
+                let mut parents_by_child: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+                for (child, parent) in parents {
+                    parents_by_child.entry(child).or_default().push(parent);
+                }
+                let mut targets_by_source: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+                for (source, target) in sources {
+                    targets_by_source.entry(source).or_default().push(target);
+                }
+                // Each source adds one to every node it reaches upwards, once
+                // even through several targets or parents.
+                let mut counts: HashMap<Uuid, i64> = HashMap::new();
+                let mut visited = HashSet::new();
+                for targets in targets_by_source.into_values() {
+                    visited.clear();
+                    let mut pending = targets;
+                    while let Some(node) = pending.pop() {
+                        if visited.insert(node) {
+                            *counts.entry(node).or_default() += 1;
+                            pending.extend(parents_by_child.get(&node).into_iter().flatten());
+                        }
+                    }
+                }
+                Ok::<_, RepositoryError>(counts)
+            })
+            .await
     }
 
     /// Records of `source_blueprint_id` per target of one relationship field,
@@ -3203,6 +3340,12 @@ fn encode_sorted_search_cursor(sort: &RecordSearchSort, row: &SortedRecordPrevie
     };
     URL_SAFE_NO_PAD.encode(serde_json::to_vec(&cursor).expect("cursor serializes"))
 }
+
+/// How long cached tree facet counts are served before a reload.
+const TREE_FACET_COUNTS_FRESH: Duration = Duration::from_secs(30);
+/// How long expired counts are kept after that, so requests arriving while
+/// one request reloads them get the previous counts instead of waiting.
+const TREE_FACET_COUNTS_STALE: Duration = Duration::from_secs(10 * 60);
 
 /// The `records e` source and filter of a query over every search match, for
 /// matching IDs bound at `$parameter`. The ID list drives the join: with an

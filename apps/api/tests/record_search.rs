@@ -932,6 +932,152 @@ context_fallback = "none"
 }
 
 #[sqlx::test]
+async fn relationship_tree_facet_counts_without_a_query_may_lag_while_nodes_do_not(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "lagging_category"
+name = "Lagging category"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "lagging_category"
+"#,
+    )
+    .await;
+    create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "lagging_product"
+name = "Lagging product"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "category"
+value_type = "relationship"
+target_blueprint = "lagging_category"
+"#,
+    )
+    .await;
+    let category = json!({ "blueprint": { "code": "lagging_category", "version": 1 } });
+    let product = json!({ "blueprint": { "code": "lagging_product", "version": 1 } });
+    let root = create_record(&client, &base_url, &category).await;
+    let link = |record: Value, target: Value| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        async move {
+            client
+                .put(format!(
+                    "{base_url}/v1/records/{}",
+                    record["id"].as_str().unwrap()
+                ))
+                .json(&json!({
+                    "relationships": [{
+                        "attribute_code": "category",
+                        "target_record_ids": [target["id"]],
+                    }]
+                }))
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap();
+        }
+    };
+    link(
+        create_record(&client, &base_url, &product).await,
+        root.clone(),
+    )
+    .await;
+    let roots = |query: Option<&'static str>| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        async move {
+            let mut body = json!({
+                "blueprint": { "code": "lagging_product" },
+                "source_relationship_field": "category",
+                "hierarchy_field": "parent",
+                "context_id": "00000000-0000-4000-8000-000000000001",
+            });
+            if let Some(query) = query {
+                body["query"] = json!(query);
+            }
+            let page: Value = client
+                .post(format!(
+                    "{base_url}/v1/records/facets/relationship-tree/children"
+                ))
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            page["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| (item["id"].clone(), item["count"].as_i64().unwrap()))
+                .collect::<Vec<_>>()
+        }
+    };
+    assert_eq!(roots(None).await, vec![(root["id"].clone(), 1)]);
+
+    let second_root = create_record(&client, &base_url, &category).await;
+    let second = create_record(&client, &base_url, &product).await;
+    client
+        .post(format!(
+            "{base_url}/records/{}/values",
+            second["id"].as_str().unwrap()
+        ))
+        .json(&json!({ "values": [{ "kind": "scalar", "attribute_code": "title", "value": "Second" }] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    link(second, second_root.clone()).await;
+
+    // The new node shows at once; the cached count still predates the link.
+    let lagging = roots(None).await;
+    assert_eq!(lagging.len(), 2);
+    assert!(lagging.contains(&(root["id"].clone(), 1)));
+    assert!(lagging.contains(&(second_root["id"].clone(), 0)));
+    // A search term counts its matches exactly.
+    let searched = roots(Some("Second")).await;
+    assert!(searched.contains(&(root["id"].clone(), 0)));
+    assert!(searched.contains(&(second_root["id"].clone(), 1)));
+
+    server.abort();
+}
+
+#[sqlx::test]
 async fn relationship_tree_facet_children_page_through_roots_by_cursor(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
