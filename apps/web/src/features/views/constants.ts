@@ -13,7 +13,8 @@ export const VIEW_COMPONENT_IDS = {
   fieldEdit: 'attricat.field_edit',
   phoneDisplay: 'attricat.phone_display',
   phoneEdit: 'attricat.phone_edit',
-  incomingRelationshipListDisplay: 'attricat.incoming_relationship_list_display',
+  incomingRelationshipListDisplay:
+    'attricat.incoming_relationship_list_display',
   relationshipHierarchy: 'attricat.relationship_hierarchy',
   relationshipListDisplay: 'attricat.relationship_list_display',
   relationshipListEdit: 'attricat.relationship_list_edit',
