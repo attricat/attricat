@@ -2,5 +2,14 @@ code = "size"
 name = "Size"
 value_type = "string"
 facetable = true
-# Saving rejects any other value.
-value_schema = { type = "string", enum = ["small", "medium", "large"] }
+
+# The form offers these values in a dropdown; saving rejects any other.
+[value_schema]
+type = "string"
+enum = ["s", "m", "l"]
+
+# Optional labels; a value without one shows as itself.
+[value_schema."x-attricat-enum-labels"]
+s = "Small"
+m = "Medium"
+l = "Large"

@@ -39,6 +39,27 @@ value_schema = '{"enum":["XS","S","M","L","XL"]}'
 
 Wartość, która nie przejdzie walidacji, zwraca `422 attribute_value_schema_mismatch`.
 
+### Listy wyboru
+
+Atrybut `string`, którego `value_schema` ma `enum`, edytuje się przez listę rozwijaną jego wartości. Przeglądarka rekordów filtruje go przez wybór jednej wartości albo według tego, czy jest ustawiony. Aby pokazać coś czytelniejszego niż zapisana wartość, dodaj opcjonalną mapę `x-attricat-enum-labels`:
+
+```toml
+[[attributes]]
+code = "size"
+value_type = "string"
+value_schema = '''{
+  "enum": ["s", "m", "l"],
+  "x-attricat-enum-labels": { "s": "Small", "m": "Medium", "l": "{{Large}}" }
+}'''
+```
+
+- Możesz nadać etykiety części wartości albo wszystkim. Wartość bez etykiety wyświetla się bez zmian.
+- Każda wartość z etykietą musi należeć do `enum`. Etykieta ma od 1 do 200 znaków i można ją [przetłumaczyć](/pl/builders/translations/#etykiety-statusów-i-list-wyboru).
+- Etykietę pokazują lista rozwijana, strony rekordów, tabela i wartości filtrów w Przeglądarce rekordów oraz etykiety filtrów. Wyszukiwanie, zapisane wyszukiwania, API i eksporty używają zapisanej wartości, więc zmiana etykiety nigdy nie zmienia danych.
+- Wartość, której nie ma już w `enum`, pozostaje widoczna i jest oznaczona, aby można było wybrać nową.
+
+Jeśli wartości to etapy, przez które przechodzi rekord, użyj [statusu](#statusy): dodaje kolory, przejścia i kontrolę rekordu.
+
 ## Statusy
 
 Status to atrybut `string`, którego `value_schema` ma `enum` ze stałymi kodami oraz adnotację `x-attricat-status`. Adnotacja nadaje każdemu kodowi etykietę, opcjonalny odcień koloru i opcjonalnie dozwolone przejścia między kodami:
@@ -66,7 +87,7 @@ value_schema = '''{
 }'''
 ```
 
-- Każdy kod z `enum` musi mieć dokładnie jedną opcję, podaną w kolejności wyświetlania. Kody składają się z liter, cyfr, `_` i `-`. Etykiety to tekst, który można [przetłumaczyć](/pl/builders/translations/#etykiety-statusów) odwołaniami do leksykonu `{{…}}`.
+- Każdy kod z `enum` musi mieć dokładnie jedną opcję, podaną w kolejności wyświetlania. Kody składają się z liter, cyfr, `_` i `-`. Etykiety to tekst, który można [przetłumaczyć](/pl/builders/translations/#etykiety-statusów-i-list-wyboru) odwołaniami do leksykonu `{{…}}`.
 - `tone` przyjmuje wartość `default`, `success`, `warning`, `error` lub `info`. Etykieta jest zawsze widoczna, więc kolor nigdy nie jest jedyną informacją.
 - Pomiń `transitions`, aby zezwolić na każdą zmianę. Z `transitions` dozwolone są tylko wymienione zmiany; pusta tablica nie zezwala na żadną. `null` oznacza „brak wartości”: przejście z `null` pozwala ustawić pierwszą wartość (także domyślną), a przejście do `null` pozwala ją wyczyścić. Pozostawienie tej samej wartości jest zawsze dozwolone.
 

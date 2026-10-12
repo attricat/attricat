@@ -60,7 +60,7 @@ const blueprintSnippets: DefinitionSnippet[] = [
     id: 'choiceAttribute',
     group: 'attributes',
     body: attribute(
-      'value_type = "string"\nvalue_schema = \'{"type":"string","enum":["${3:small}","${4:large}"]}\'',
+      'value_type = "string"\nvalue_schema = \'{"type":"string","enum":["${3:s}","${4:l}"],"x-attricat-enum-labels":{"${3}":"${5:Small}","${4}":"${6:Large}"}}\'',
     ),
     placement: snippetPlacements.section,
   },
@@ -154,7 +154,7 @@ const reusableAttributeSnippets: DefinitionSnippet[] = [
   {
     id: 'allowedValues',
     group: 'values',
-    body: 'value_schema = { type = "string", enum = ["${1:small}", "${2:large}"] }',
+    body: 'value_schema = { type = "string", enum = ["${1:s}", "${2:l}"], "x-attricat-enum-labels" = { "${1}" = "${3:Small}", "${2}" = "${4:Large}" } }',
     placement: snippetPlacements.key,
     conflicts: [['value_schema']],
   },

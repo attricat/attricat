@@ -174,7 +174,7 @@ fn parse_definition(
     if let Some(schema) = toml_value_to_json(definition.value_schema.clone())? {
         attricat_validation::validate_json_schema_definition(&schema)
             .map_err(RepositoryError::InvalidReusableAttributeDefinition)?;
-        for text in attricat_blueprint::status_option_texts("attribute", &schema) {
+        for text in attricat_blueprint::option_label_texts("attribute", &schema) {
             attricat_lexicon::parse(text.text).map_err(|error| {
                 RepositoryError::InvalidReusableAttributeDefinition(format!(
                     "{} has an invalid lexicon reference: {error}",

@@ -481,7 +481,8 @@
       "json": "JSON",
       "file": "Plik",
       "relationship": "Relacja"
-    }
+    },
+    "choiceUnknown": "Niedozwolona wartość: {{value}}"
   },
   "exports": {
     "title": "Eksporty",
@@ -734,7 +735,7 @@
     "snippetDescriptions": {
       "textAttribute": "Zwykła wartość tekstowa.",
       "numberAttribute": "Liczba z wartością minimalną.",
-      "choiceAttribute": "Jedna wartość ze stałej listy.",
+      "choiceAttribute": "Jedna wartość ze stałej listy, z opcjonalnymi etykietami.",
       "statusAttribute": "Statusy z etykietami i przejścia między nimi.",
       "assigneeAttribute": "Członek obszaru roboczego lub zespół wybierany z listy.",
       "relationshipAttribute": "Powiązania z rekordami innego schematu.",
@@ -747,7 +748,7 @@
       "uniqueKey": "Wartości, których nie mogą mieć dwa rekordy.",
       "rule": "Zaplanowana kontrola jakości danych.",
       "include": "Atrybuty ze schematu typu mixin.",
-      "allowedValues": "Akceptuj tylko wartości z listy.",
+      "allowedValues": "Akceptuj tylko wartości z listy, z opcjonalnymi etykietami.",
       "numberRange": "Akceptuj liczby między minimum a maksimum.",
       "textPattern": "Akceptuj tekst zgodny z wyrażeniem regularnym.",
       "status": "Statusy z etykietami i kolorami.",
@@ -1680,7 +1681,7 @@
       "number": "Pomiar",
       "numberDescription": "Nieujemna liczba, według której można filtrować w przeglądarce rekordów.",
       "choice": "Wybór",
-      "choiceDescription": "Jedna wartość ze stałej listy, sprawdzana przy zapisie.",
+      "choiceDescription": "Jedna wartość ze stałej listy, wybierana z listy rozwijanej.",
       "status": "Status",
       "statusDescription": "Statusy z etykietami, kolorami i wartością domyślną.",
       "assignee": "Właściciel",

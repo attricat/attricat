@@ -469,7 +469,8 @@
       "json": "JSON",
       "file": "File",
       "relationship": "Relationship"
-    }
+    },
+    "choiceUnknown": "Not an allowed value: {{value}}"
   },
   "exports": {
     "title": "Exports",
@@ -720,7 +721,7 @@
     "snippetDescriptions": {
       "textAttribute": "A plain string value.",
       "numberAttribute": "A number with a minimum.",
-      "choiceAttribute": "One value from a fixed list.",
+      "choiceAttribute": "One value from a fixed list, with optional labels.",
       "statusAttribute": "Labelled statuses and the transitions between them.",
       "assigneeAttribute": "A workspace member or team, chosen from a picker.",
       "relationshipAttribute": "Links to records of another blueprint.",
@@ -733,7 +734,7 @@
       "uniqueKey": "Values no two records may share.",
       "rule": "A scheduled data quality check.",
       "include": "Attributes from a mixin blueprint.",
-      "allowedValues": "Accept only values from a list.",
+      "allowedValues": "Accept only values from a list, with optional labels.",
       "numberRange": "Accept numbers between a minimum and a maximum.",
       "textPattern": "Accept text that matches a regular expression.",
       "status": "Labelled, coloured statuses.",
@@ -1638,7 +1639,7 @@
       "number": "Measurement",
       "numberDescription": "A non-negative number you can filter by in the Explorer.",
       "choice": "Choice",
-      "choiceDescription": "One value from a fixed list, checked on save.",
+      "choiceDescription": "One value from a fixed list, chosen from a dropdown.",
       "status": "Status",
       "statusDescription": "Labelled, coloured statuses with a default.",
       "assignee": "Owner",

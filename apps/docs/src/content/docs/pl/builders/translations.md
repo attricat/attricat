@@ -29,15 +29,16 @@ Ponieważ leksykon jest oddzielony od schematów, możesz poprawić tłumaczenie
 | Nazwa atrybutu | `[[attributes]] name` atrybutu zdefiniowanego w schemacie |
 | Nazwa atrybutu wielokrotnego użytku | `name` w jego definicji |
 | Etykieta opcji statusu | `label` każdej opcji w adnotacji `x-attricat-status`, w atrybutach zdefiniowanych w schemacie i wielokrotnego użytku |
+| Etykieta listy wyboru | Każda etykieta w mapie `x-attricat-enum-labels`, w atrybutach zdefiniowanych w schemacie i wielokrotnego użytku |
 | Etykieta karty i sekcji akordeonu | `label` w blokach `tabs` i `accordion` |
 | Nagłówek kolumny tabeli | `label` w `[views.table] columns` |
 | Przycisk i tytuł okna relacji przychodzących | `label` w `incoming_relationship_list` |
 
 Pozostały tekst, na przykład bloki `heading` i `text`, separatory wyświetlania i wartości katalogu, zawsze wyświetla się tak, jak go zapisano.
 
-### Etykiety statusów
+### Etykiety statusów i list wyboru
 
-[Status](/pl/builders/validation/#statusy) przechowuje stały kod, na przykład `live`, i wyświetla etykietę jego opcji. Etykietę tłumaczy się tak jak każdą inną:
+[Status](/pl/builders/validation/#statusy) lub [lista wyboru](/pl/builders/validation/#listy-wyboru) przechowuje stały kod, na przykład `live`, i wyświetla etykietę jego opcji. Etykietę tłumaczy się tak jak każdą inną:
 
 ```toml
 "options": [
@@ -46,7 +47,7 @@ Pozostały tekst, na przykład bloki `heading` i `text`, separatory wyświetlani
 ]
 ```
 
-Przetłumaczoną etykietę, z takim samym zastępowaniem brakujących tłumaczeń jak w innych etykietach, pokazują znaczniki statusu, lista wyboru statusu na stronie rekordu i w formularzu tworzenia, lista wartości filtra i etykiety filtrów w Przeglądarce oraz wartości wyświetlane jako tekst. Wyszukiwanie, filtry, zapisane wyszukiwania, API i eksporty nadal używają kodu, więc przetłumaczenie lub zmiana etykiety nigdy nie zmienia zapisanych danych. Kontekst, na przykład `{{Draft|status}}`, oddziela status „Draft” od innych użyć tego słowa.
+Etykiety list wyboru w `x-attricat-enum-labels` działają tak samo. Przetłumaczoną etykietę, z takim samym zastępowaniem brakujących tłumaczeń jak w innych etykietach, pokazują znaczniki statusu, lista wyboru statusu lub wartości na stronie rekordu i w formularzu tworzenia, lista wartości filtra i etykiety filtrów w Przeglądarce oraz wartości wyświetlane jako tekst. Wyszukiwanie, filtry, zapisane wyszukiwania, API i eksporty nadal używają kodu, więc przetłumaczenie lub zmiana etykiety nigdy nie zmienia zapisanych danych. Kontekst, na przykład `{{Draft|status}}`, oddziela status „Draft” od innych użyć tego słowa.
 
 ## Składnia odwołań
 

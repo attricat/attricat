@@ -50,6 +50,7 @@ import {
 } from '../recordFormAttributes';
 import { schemaMismatchField } from '../recordFieldSaves';
 import { recordFormOptions } from '../queryOptions';
+import { choiceOptions } from '../choices';
 import { statusConfiguration, statusLocks } from '../status';
 import {
   useRecordFieldSaves,
@@ -95,6 +96,7 @@ const commitsImmediately = (attribute: Attribute) =>
   attribute.value_type === attributeValueTypes.boolean ||
   attribute.value_type === attributeValueTypes.file ||
   statusConfiguration(attribute) !== undefined ||
+  choiceOptions(attribute) !== undefined ||
   principalConfiguration(attribute) !== undefined;
 
 /**

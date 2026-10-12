@@ -281,7 +281,7 @@ impl AttricatRepository {
         references.extend(
             schemas
                 .iter()
-                .flat_map(|schema| attricat_blueprint::status_option_texts("attribute", schema))
+                .flat_map(|schema| attricat_blueprint::option_label_texts("attribute", schema))
                 .flat_map(|text| attricat_lexicon::references(text.text).unwrap_or_default())
                 .map(|reference| UsedReference {
                     reference,

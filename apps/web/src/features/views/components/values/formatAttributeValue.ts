@@ -1,4 +1,5 @@
 import i18n from 'i18next';
+import { choiceValueLabel } from '../../../records/choices';
 import { statusLabel } from '../../../records/status';
 import { attributeValueTypes } from '../../../records/valueTypes';
 import type { Attribute } from '../../../records/api';
@@ -11,7 +12,8 @@ import { formatCalendarDate } from '../../../../time/instantFormat';
 
 export const formatAttributeValue = (attribute: Attribute, value: unknown) => {
   if (value === null || value === undefined) return i18n.t('views.notSet');
-  const label = statusLabel(attribute, value);
+  const label =
+    statusLabel(attribute, value) ?? choiceValueLabel(attribute, value);
   if (label) return label;
   if (attribute.value_type === attributeValueTypes.boolean)
     return value ? i18n.t('views.yes') : i18n.t('views.no');

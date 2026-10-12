@@ -12,7 +12,7 @@ pub struct LexiconText<'a> {
 }
 
 /// Every translatable label in the definition: the blueprint name and
-/// description, local attribute names, descriptions and status option labels,
+/// description, local attribute names, descriptions, status and enum labels,
 /// and view tab, section, column, and incoming-relationship labels.
 pub fn lexicon_texts(definition: &BlueprintDefinition) -> Vec<LexiconText<'_>> {
     let mut texts = vec![LexiconText {
@@ -46,7 +46,7 @@ pub fn lexicon_texts(definition: &BlueprintDefinition) -> Vec<LexiconText<'_>> {
             });
         }
         if let Some(schema) = &attribute.value_schema {
-            texts.extend(status_option_texts(
+            texts.extend(option_label_texts(
                 &format!("attribute '{}'", attribute.code),
                 schema,
             ));
@@ -99,14 +99,22 @@ pub fn lexicon_texts(definition: &BlueprintDefinition) -> Vec<LexiconText<'_>> {
 
 /// Status option labels in an attribute's value schema, which resolve lexicon
 /// references like attribute names. `location` names the attribute.
-pub fn status_option_texts<'a>(
+/// The status option labels and enum value labels of a value schema.
+pub fn option_label_texts<'a>(
     location: &str,
     schema: &'a serde_json::Value,
 ) -> impl Iterator<Item = LexiconText<'a>> {
-    attricat_validation::status::status_option_labels(schema)
+    let status = attricat_validation::status::status_option_labels(schema)
         .into_iter()
-        .map(move |(code, text)| LexiconText {
-            location: format!("{location} status option '{code}' label"),
+        .map(move |(code, text)| (format!("status option '{code}'"), text));
+    let choices = attricat_validation::choices::enum_value_labels(schema)
+        .into_iter()
+        .map(move |(code, text)| (format!("enum value '{code}'"), text));
+    let location = location.to_owned();
+    status
+        .chain(choices)
+        .map(move |(option, text)| LexiconText {
+            location: format!("{location} {option} label"),
             text,
             counted: false,
         })

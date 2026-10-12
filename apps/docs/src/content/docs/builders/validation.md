@@ -39,6 +39,27 @@ value_schema = '{"enum":["XS","S","M","L","XL"]}'
 
 A value that fails returns `422 attribute_value_schema_mismatch`.
 
+### Choice lists
+
+A `string` attribute whose `value_schema` has an `enum` is edited with a dropdown of its values. The Explorer filters it by choosing one value, or by whether it is set. To show something friendlier than the stored value, add an optional `x-attricat-enum-labels` map:
+
+```toml
+[[attributes]]
+code = "size"
+value_type = "string"
+value_schema = '''{
+  "enum": ["s", "m", "l"],
+  "x-attricat-enum-labels": { "s": "Small", "m": "Medium", "l": "{{Large}}" }
+}'''
+```
+
+- Label some values or all of them. A value without a label shows as itself.
+- Every labelled value must be in the `enum`. Labels are 1 to 200 characters and can be [translated](/builders/translations/#status-and-choice-labels).
+- The dropdown, record pages, Explorer table, filter values, and filter pills show the label. Searches, saved searches, the API, and exports use the stored value, so relabelling never changes data.
+- A value that is no longer in the `enum` stays visible and is flagged, so you can choose a new one.
+
+If the values are stages a record moves through, use a [status](#statuses) instead: it adds colors, transitions, and record controls.
+
 ## Statuses
 
 A status is a `string` attribute whose `value_schema` has an `enum` of stable codes plus an `x-attricat-status` annotation. The annotation gives each code a label, an optional color tone, and optionally the transitions allowed between them:
@@ -66,7 +87,7 @@ value_schema = '''{
 }'''
 ```
 
-- Every `enum` code needs exactly one option, listed in display order. Codes use letters, digits, `_`, and `-`. Labels are text, and can be [translated](/builders/translations/#status-labels) with `{{…}}` lexicon references.
+- Every `enum` code needs exactly one option, listed in display order. Codes use letters, digits, `_`, and `-`. Labels are text, and can be [translated](/builders/translations/#status-and-choice-labels) with `{{…}}` lexicon references.
 - `tone` is `default`, `success`, `warning`, `error`, or `info`. The label is always shown, so color is never the only signal.
 - Omit `transitions` to allow any change. With `transitions`, only the listed changes are allowed; an empty array allows none. `null` means "no value": an edge from `null` allows setting the first value (including defaults), and an edge to `null` allows clearing it. Keeping the same value is always allowed.
 

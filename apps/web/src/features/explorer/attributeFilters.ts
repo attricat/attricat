@@ -2,6 +2,7 @@ import type { TFunction } from 'i18next';
 import type { Attribute } from '../records/api';
 import { PRESENCE_FILTER_OPERATOR } from '../records/constants';
 import { attributeLabel } from '../records/recordDisplay';
+import { choiceOptions, choiceValueLabel } from '../records/choices';
 import { statusConfiguration, statusLabel } from '../records/status';
 import { CURRENT_USER_FILTER_VALUE } from '../principals/constants';
 import {
@@ -50,14 +51,16 @@ export const operatorsForValueType = (
 };
 
 /**
- * Status codes and user-or-team references are matched exactly, so they offer
- * equality and presence, not text matching.
+ * Status codes, `enum` values and user-or-team references are matched
+ * exactly, so they offer equality and presence, not text matching.
  */
 export const operatorsForAttribute = (
   attribute: Attribute | undefined,
 ): AttributeFilterOperator[] =>
   attribute &&
-  (statusConfiguration(attribute) || principalConfiguration(attribute))
+  (statusConfiguration(attribute) ||
+    choiceOptions(attribute) ||
+    principalConfiguration(attribute))
     ? ['eq', PRESENCE_FILTER_OPERATOR]
     : operatorsForValueType(attribute?.value_type ?? 'string');
 
@@ -78,7 +81,8 @@ const principalFilterValueLabel = (
     : resolvePrincipal(directory, value)?.label;
 
 /**
- * The filter value as shown to the user: status codes show their label, and
+ * The filter value as shown to the user: status codes and `enum` values show
+ * their label, and
  * user-or-team references the name from `directory`.
  */
 export const attributeFilterValueLabel = (
@@ -91,6 +95,7 @@ export const attributeFilterValueLabel = (
     ? t(filter.value ? 'explorer.true' : 'explorer.false')
     : ((attribute &&
         (statusLabel(attribute, filter.value) ??
+          choiceValueLabel(attribute, filter.value) ??
           (principalConfiguration(attribute)
             ? principalFilterValueLabel(t, filter.value, directory)
             : undefined))) ??

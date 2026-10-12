@@ -15,6 +15,7 @@ import type { Attribute } from '../records/api';
 import { PRESENCE_FILTER_OPERATOR } from '../records/constants';
 import { ValueTypeIcon } from '../records/components/ValueTypeLabel';
 import { attributeLabel } from '../records/recordDisplay';
+import { choiceOptions } from '../records/choices';
 import { statusConfiguration, statusOptionLabel } from '../records/status';
 import { CURRENT_USER_FILTER_VALUE } from '../principals/constants';
 import {
@@ -125,6 +126,7 @@ export const AttributeFilterDialog = ({
     valueIsValid,
   } = describeDraft(values, attributes);
   const status = attribute && statusConfiguration(attribute);
+  const choices = attribute && choiceOptions(attribute);
   const principal = attribute && principalConfiguration(attribute);
   const presence = effectiveOperator === PRESENCE_FILTER_OPERATOR;
   const directory = usePrincipalDirectory(Boolean(principal) && !presence);
@@ -159,7 +161,10 @@ export const AttributeFilterDialog = ({
               value: option.code,
               label: statusOptionLabel(option),
             }))
-          : undefined;
+          : choices?.map((option) => ({
+              value: option.code,
+              label: option.label,
+            }));
   const submit = () => void form.handleSubmit();
   const submitOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') return;

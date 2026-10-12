@@ -473,3 +473,80 @@ async fn validates_definitions_without_storing_them(pool: PgPool) {
 
     server.abort();
 }
+
+#[sqlx::test]
+async fn checks_enum_value_labels(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = |labels: &str| {
+        format!(
+            "format_version = 1\ncode = \"sized\"\nname = \"Sized\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"size\"]\n\n[[attributes]]\ncode = \"size\"\nvalue_type = \"string\"\nvalue_schema = '{{\"type\":\"string\",\"enum\":[\"s\",\"l\"],\"x-attricat-enum-labels\":{labels}}}'\n"
+        )
+    };
+    let reusable = |labels: &str| {
+        format!(
+            "code = \"size\"\nname = \"Size\"\nvalue_type = \"string\"\nvalue_schema = {{ type = \"string\", enum = [\"s\", \"l\"], \"x-attricat-enum-labels\" = {labels} }}\n"
+        )
+    };
+    for (route, definition) in [
+        (
+            "blueprints/validate",
+            blueprint(r#"{"s":"Small","l":"{{Large}}"}"#),
+        ),
+        (
+            "reusable-attributes/validate",
+            reusable(r#"{ s = "Small" }"#),
+        ),
+    ] {
+        let response = client
+            .post(format!("{base_url}/{route}"))
+            .json(&json!({ "definition": definition }))
+            .send()
+            .await
+            .unwrap();
+        assert!(
+            response.status().is_success(),
+            "{route}: {}",
+            response.text().await.unwrap()
+        );
+    }
+    for (route, definition, message) in [
+        (
+            "blueprints/validate",
+            blueprint(r#"{"m":"Medium"}"#),
+            "labels 'm', which is not in the enum",
+        ),
+        (
+            "blueprints/validate",
+            blueprint(r#"{"s":"{{Small"}"#),
+            "enum value 's' label has an invalid lexicon reference",
+        ),
+        (
+            "reusable-attributes/validate",
+            reusable(r#"{ s = " " }"#),
+            "label for 's' must be 1 to 200 characters",
+        ),
+    ] {
+        let response = client
+            .post(format!("{base_url}/{route}"))
+            .json(&json!({ "definition": definition }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{route}"
+        );
+        let error = response.json::<Value>().await.unwrap();
+        assert!(
+            error["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains(message),
+            "{error}"
+        );
+    }
+
+    server.abort();
+}

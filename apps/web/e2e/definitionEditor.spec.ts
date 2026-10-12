@@ -65,6 +65,11 @@ test('checks, previews and inserts into a reusable attribute definition', async 
   await expect(page.getByText('Ready to save')).toBeVisible();
   await expect(preview(page).getByText(/^string · .+:size$/)).toBeVisible();
   await expect(preview(page).getByText('Explorer filter')).toBeVisible();
+  await preview(page).getByRole('combobox', { name: 'Size' }).click();
+  await page.getByRole('option', { name: 'Medium' }).click();
+  await expect(
+    preview(page).getByRole('combobox', { name: 'Size' }),
+  ).toHaveText('Medium');
 
   await openInsertGroup(page, 'Values');
   await expect(

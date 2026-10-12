@@ -1,6 +1,7 @@
 import { ListItemText, MenuItem, Stack, TextField } from '@mui/material';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { ChoiceOption } from '../../records/choices';
 import { attributeLabel } from '../../records/recordDisplay';
 import {
   statusCodeLabel,
@@ -19,6 +20,53 @@ import { TextControlEditor } from './TextControl';
 import { safeUrl, validateUrl } from './url';
 import { ExternalLinkIcon, MailIcon, PhoneIcon } from 'lucide-react';
 import { smallIconSize } from '../../../components/iconSizes';
+
+/** A select of an `enum` attribute's values, labelled where configured. */
+export const ChoiceEditor = ({
+  attribute,
+  options,
+  value,
+  disabled,
+  required,
+  error,
+  helperText,
+  onChange,
+}: ValueEditorProps & { options: readonly ChoiceOption[] }) => {
+  const { t } = useTranslation();
+  const id = useId();
+  const known = !value || options.some((option) => option.code === value);
+  return (
+    <TextField
+      id={id}
+      fullWidth
+      select
+      label={attributeLabel(attribute)}
+      value={value}
+      disabled={disabled}
+      required={required}
+      slotProps={{ select: { readOnly: disabled } }}
+      error={Boolean(error) || !known}
+      helperText={
+        error ?? (known ? helperText : t('records.choiceUnknown', { value }))
+      }
+      onChange={(event) => {
+        if (!disabled) onChange(event.target.value);
+      }}
+    >
+      <MenuItem value="">{t('records.notSet')}</MenuItem>
+      {!known && (
+        <MenuItem value={value} disabled>
+          {value}
+        </MenuItem>
+      )}
+      {options.map((option) => (
+        <MenuItem key={option.code} value={option.code}>
+          {option.label}
+        </MenuItem>
+      ))}
+    </TextField>
+  );
+};
 
 export const ColorEditor = ({
   attribute,

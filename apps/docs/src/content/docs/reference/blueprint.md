@@ -86,6 +86,10 @@ value_type = "string"
 | `relationship` | Links to other records | | See [Relationship keys](#relationship-keys). |
 | `file` | Uploaded files | | See [File keys](#file-keys). |
 
+### Choice lists
+
+A `string` attribute whose `value_schema` has an `enum` is edited with a dropdown. An optional `x-attricat-enum-labels` object maps enum values to display labels; every key must be an enum value, and labels are 1 to 200 characters. It cannot be combined with `x-attricat-status`. See [Choice lists](/builders/validation/#choice-lists).
+
 ### Statuses
 
 A `string` attribute whose `value_schema` has an `enum` and an `x-attricat-status` annotation is a status. See [Statuses](/builders/validation/#statuses) for how they behave.
@@ -128,7 +132,7 @@ Each option:
 | Key | Value | Description |
 | --- | --- | --- |
 | `code` | code, up to 128 characters | Required. Must match exactly one `enum` value. |
-| `label` | string, 1 to 200 characters | Required. Can contain [lexicon references](/builders/translations/#status-labels). |
+| `label` | string, 1 to 200 characters | Required. Can contain [lexicon references](/builders/translations/#status-and-choice-labels). |
 | `tone` | `default`, `success`, `warning`, `error`, or `info` | Color of the status chip. |
 | `lock` | `"all"`, or 1 to 500 attribute codes | Makes the listed attributes read-only while the record has this status. `"all"` covers every attribute, relationship, and file except the status itself. A reusable attribute is written `namespace:code`. A record with a locking status cannot be deleted. Requires `transitions`. |
 | `approval` | table with `covers` and `void_to` | Records an approval when the record enters this status. `covers` is `"all"` or 1 to 500 attribute codes; `void_to` is another option the record moves to when covered content changes. |

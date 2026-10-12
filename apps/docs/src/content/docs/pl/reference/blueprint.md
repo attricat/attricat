@@ -86,6 +86,10 @@ value_type = "string"
 | `relationship` | Powiązania z innymi rekordami | | Zobacz [Klucze relacji](#klucze-relacji). |
 | `file` | Przesłane pliki | | Zobacz [Klucze plików](#klucze-plików). |
 
+### Listy wyboru
+
+Atrybut `string`, którego `value_schema` ma `enum`, edytuje się przez listę rozwijaną. Opcjonalny obiekt `x-attricat-enum-labels` przypisuje wartościom `enum` etykiety; każdy klucz musi być wartością `enum`, a etykieta ma od 1 do 200 znaków. Nie można go łączyć z `x-attricat-status`. Zobacz [Listy wyboru](/pl/builders/validation/#listy-wyboru).
+
 ### Statusy
 
 Atrybut `string`, którego `value_schema` ma `enum` i adnotację `x-attricat-status`, jest statusem. Działanie statusów opisuje sekcja [Statusy](/pl/builders/validation/#statusy).
@@ -128,7 +132,7 @@ Każda opcja:
 | Klucz | Wartość | Opis |
 | --- | --- | --- |
 | `code` | kod, do 128 znaków | Wymagany. Musi odpowiadać dokładnie jednej wartości z `enum`. |
-| `label` | ciąg znaków, od 1 do 200 znaków | Wymagany. Może zawierać [odwołania do leksykonu](/pl/builders/translations/#etykiety-statusów). |
+| `label` | ciąg znaków, od 1 do 200 znaków | Wymagany. Może zawierać [odwołania do leksykonu](/pl/builders/translations/#etykiety-statusów-i-list-wyboru). |
 | `tone` | `default`, `success`, `warning`, `error` lub `info` | Kolor znacznika statusu. |
 | `lock` | `"all"` lub od 1 do 500 kodów atrybutów | Sprawia, że wymienione atrybuty są tylko do odczytu, dopóki rekord ma ten status. `"all"` obejmuje wszystkie atrybuty, relacje i pliki oprócz samego statusu. Atrybut wielokrotnego użytku zapisuje się jako `namespace:code`. Rekordu ze statusem z blokadą nie można usunąć. Wymaga `transitions`. |
 | `approval` | tabela z `covers` i `void_to` | Rejestruje zatwierdzenie, gdy rekord przechodzi do tego statusu. `covers` to `"all"` lub od 1 do 500 kodów atrybutów; `void_to` to inna opcja, do której rekord przechodzi, gdy objęta treść się zmieni. |
