@@ -378,3 +378,98 @@ async fn blueprint_rules_cannot_take_a_rule_code_owned_by_another_blueprint(pool
             .unwrap();
     assert_eq!(families, 1);
 }
+
+#[sqlx::test]
+async fn validates_definitions_without_storing_them(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let definition = |code: &str, field: &str| {
+        format!(
+            "format_version = 1\ncode = \"{code}\"\nname = \"Checked\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"{field}\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
+        )
+    };
+
+    let checked: Value = client
+        .post(format!("{base_url}/blueprints/validate"))
+        .json(&json!({ "definition": definition("checked", "title") }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(checked["blueprint"]["version"], 1);
+    assert_eq!(checked["attributes"][0]["code"], "title");
+    let missing = client
+        .get(format!("{base_url}/blueprints/by-code/checked"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+    let unknown_field = client
+        .post(format!("{base_url}/blueprints/validate"))
+        .json(&json!({ "definition": definition("checked", "missing") }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unknown_field.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let error = unknown_field.json::<Value>().await.unwrap();
+    assert_eq!(error["error"]["code"], "invalid_blueprint_definition");
+    assert!(
+        error["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("unknown attribute 'missing'")
+    );
+
+    let created = create_blueprint(&client, &base_url, &definition("checked", "title")).await;
+    let blueprint_id = created["blueprint"]["id"].as_str().unwrap();
+    let taken = client
+        .post(format!("{base_url}/blueprints/validate"))
+        .json(&json!({ "definition": definition("checked", "title") }))
+        .send()
+        .await
+        .unwrap();
+    assert!(taken.status().is_client_error());
+    let revision: Value = client
+        .post(format!(
+            "{base_url}/blueprints/{blueprint_id}/versions/validate"
+        ))
+        .json(&json!({
+            "definition": definition("checked", "title").replace("Checked", "Checked again")
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(revision["blueprint"]["version"], 2);
+    let renamed = client
+        .post(format!(
+            "{base_url}/blueprints/{blueprint_id}/versions/validate"
+        ))
+        .json(&json!({ "definition": definition("renamed", "title") }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(renamed.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let revisions: Value = client
+        .get(format!("{base_url}/blueprints/{blueprint_id}/versions"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(revisions.as_array().unwrap().len(), 1);
+
+    server.abort();
+}

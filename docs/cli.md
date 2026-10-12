@@ -57,6 +57,7 @@ acli blueprint list [--include-drafts]
 acli blueprint catalogue
 acli blueprint create --file product.toml
 acli blueprint create --stdin
+acli blueprint validate --file product.toml [--blueprint-id <blueprint-id>]
 acli blueprint revision <blueprint-id> --file product-v2.toml
 acli blueprint revision-list <blueprint-id>
 acli blueprint publish <blueprint-id> <version>

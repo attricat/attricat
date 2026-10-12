@@ -357,7 +357,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::BlueprintId,
         });
     }
-    if path == "/blueprints" || path == "/blueprints/catalogue" {
+    if path == "/blueprints" || path == "/blueprints/catalogue" || path == "/blueprints/validate" {
         return Some(Policy {
             permission: blueprint,
             target: TargetKind::None,
@@ -617,6 +617,22 @@ mod tests {
         assert_eq!(staged.permission, create.permission);
         assert!(matches!(staged.target, TargetKind::None));
         assert!(matches!(create.target, TargetKind::None));
+    }
+
+    #[test]
+    fn definition_validation_routes_require_write_permission() {
+        for path in [
+            "/blueprints/validate",
+            "/blueprints/{blueprint_id}/versions/validate",
+            "/reusable-attributes/validate",
+            "/reusable-attributes/{definition_id}/versions/validate",
+        ] {
+            assert_eq!(
+                policy(&Method::POST, path).unwrap().permission,
+                "blueprints.write",
+                "{path}"
+            );
+        }
     }
 
     #[test]

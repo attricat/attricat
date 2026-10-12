@@ -407,6 +407,14 @@ enum BlueprintCommand {
         #[command(flatten)]
         source: SourceInput,
     },
+    /// Run every save check on a definition without storing it. With
+    /// `--blueprint-id`, check it as that blueprint's next revision.
+    Validate {
+        #[arg(long)]
+        blueprint_id: Option<Uuid>,
+        #[command(flatten)]
+        source: SourceInput,
+    },
     Publish {
         blueprint_id: Uuid,
         version: i64,
@@ -1840,6 +1848,26 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &server,
                     Method::POST,
                     &format!("/blueprints/{}/versions", segment(blueprint_id)),
+                    Some(json!({ "definition": definition })),
+                )
+                .await
+            }
+            BlueprintCommand::Validate {
+                blueprint_id,
+                source,
+            } => {
+                let definition = read_source(source)?;
+                let path = match blueprint_id {
+                    Some(blueprint_id) => {
+                        format!("/blueprints/{}/versions/validate", segment(blueprint_id))
+                    }
+                    None => "/blueprints/validate".to_owned(),
+                };
+                request(
+                    &client,
+                    &server,
+                    Method::POST,
+                    &path,
                     Some(json!({ "definition": definition })),
                 )
                 .await
@@ -5266,6 +5294,18 @@ value = "Blue shirt"
             .is_ok()
         );
         assert!(Cli::try_parse_from(["acli", "rule", "validate", "--stdin"]).is_err());
+        assert!(Cli::try_parse_from(["acli", "blueprint", "validate", "--file", "b.toml"]).is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "blueprint",
+                "validate",
+                "--blueprint-id",
+                id,
+                "--stdin"
+            ])
+            .is_ok()
+        );
         assert!(
             read_source(SourceInput {
                 file: None,

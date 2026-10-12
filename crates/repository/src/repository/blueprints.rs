@@ -129,31 +129,8 @@ impl AttricatRepository {
         input: CreateBlueprint,
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let latest = sqlx::query_as::<_, LatestBlueprint>(
-            "SELECT version, code FROM blueprints WHERE id = $1 AND workspace_id = $2 ORDER BY version DESC LIMIT 1 FOR UPDATE",
-        )
-        .bind(blueprint_id)
-        .bind(self.workspace_id.0)
-        .fetch_optional(&mut *transaction)
-        .await?
-        .ok_or(RepositoryError::NotFound("blueprint"))?;
-
-        let compiled =
-            compile_definition(&mut transaction, self.workspace_id.0, &input.definition).await?;
-        if latest.code.as_deref() != Some(compiled.code.as_str()) {
-            return Err(RepositoryError::InvalidBlueprintDefinition(
-                "blueprint code cannot change across revisions".to_owned(),
-            ));
-        }
-
         let result = self
-            .insert_blueprint_revision_in_transaction(
-                &mut transaction,
-                blueprint_id,
-                latest.version + 1,
-                input.definition,
-                compiled,
-            )
+            .create_blueprint_revision_in_transaction(&mut transaction, blueprint_id, input)
             .await?;
         self.commit_mutation_with_event(
             transaction,
@@ -163,6 +140,61 @@ impl AttricatRepository {
         self.get_blueprint_by_code_and_version(&result.blueprint.code, result.blueprint.version)
             .await?
             .ok_or(RepositoryError::NotFound("blueprint"))
+    }
+
+    /// Runs every check that creating the blueprint, or its next revision when
+    /// `blueprint_id` is given, would run, then rolls back so nothing is stored.
+    pub async fn validate_blueprint(
+        &self,
+        blueprint_id: Option<Uuid>,
+        input: CreateBlueprint,
+    ) -> Result<BlueprintWithAttributes, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let result = match blueprint_id {
+            Some(blueprint_id) => {
+                self.create_blueprint_revision_in_transaction(&mut transaction, blueprint_id, input)
+                    .await
+            }
+            None => {
+                self.create_blueprint_in_transaction(&mut transaction, Uuid::new_v4(), input)
+                    .await
+            }
+        };
+        transaction.rollback().await?;
+        result
+    }
+
+    async fn create_blueprint_revision_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        blueprint_id: Uuid,
+        input: CreateBlueprint,
+    ) -> Result<BlueprintWithAttributes, RepositoryError> {
+        let latest = sqlx::query_as::<_, LatestBlueprint>(
+            "SELECT version, code FROM blueprints WHERE id = $1 AND workspace_id = $2 ORDER BY version DESC LIMIT 1 FOR UPDATE",
+        )
+        .bind(blueprint_id)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .ok_or(RepositoryError::NotFound("blueprint"))?;
+
+        let compiled =
+            compile_definition(transaction, self.workspace_id.0, &input.definition).await?;
+        if latest.code.as_deref() != Some(compiled.code.as_str()) {
+            return Err(RepositoryError::InvalidBlueprintDefinition(
+                "blueprint code cannot change across revisions".to_owned(),
+            ));
+        }
+
+        self.insert_blueprint_revision_in_transaction(
+            transaction,
+            blueprint_id,
+            latest.version + 1,
+            input.definition,
+            compiled,
+        )
+        .await
     }
 
     async fn insert_blueprint_revision_in_transaction(

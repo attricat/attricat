@@ -149,6 +149,8 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/blueprints/catalogue` | List blueprint families and revisions. |
 | `POST` | `/blueprints` | Create the first draft revision from TOML. |
 | `GET`, `POST` | `/blueprints/{id}/versions` | List revisions or create the next draft. |
+| `POST` | `/blueprints/validate`, `/blueprints/{id}/versions/validate` | Run the create (or next-draft) path in a transaction that is rolled back, returning the would-be blueprint and attributes or the same error a save would return (`blueprints.write`). Nothing is stored, audited, or emitted. |
+| `POST` | `/reusable-attributes/validate`, `/reusable-attributes/{id}/versions/validate` | The same for a reusable attribute definition or its next revision (`blueprints.write`). |
 | `GET` | `/blueprints/{id}` | Read the highest published revision. |
 | `GET` | `/blueprints/{id}/versions/{version}` | Read an exact revision, including drafts. |
 | `POST` | `/blueprints/{id}/versions/{version}/publish` | Publish a draft revision. |

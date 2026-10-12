@@ -135,15 +135,35 @@ fn parse_definition(
     if !is_valid_code(&definition.code) {
         return Err(RepositoryError::InvalidReusableAttributeCode);
     }
-    if definition.name.trim().is_empty()
-        || !REUSABLE_ATTRIBUTE_VALUE_TYPES.contains(&definition.value_type.as_str())
-        || definition.default_value.is_some()
-            && matches!(definition.value_type.as_str(), "relationship" | "file")
-        || !CONTEXT_FALLBACKS.contains(&definition.context_fallback.as_str())
-        || !CONTEXT_EDITABLE_SCOPES.contains(&definition.context_editable.as_str())
+    let invalid =
+        |message: String| Err(RepositoryError::InvalidReusableAttributeDefinition(message));
+    let code = &definition.code;
+    if definition.name.trim().is_empty() {
+        return invalid("name must not be empty".to_owned());
+    }
+    if !REUSABLE_ATTRIBUTE_VALUE_TYPES.contains(&definition.value_type.as_str()) {
+        return invalid(format!(
+            "attribute '{code}' has unsupported value type '{}'",
+            definition.value_type
+        ));
+    }
+    if definition.default_value.is_some()
+        && matches!(definition.value_type.as_str(), "relationship" | "file")
     {
-        return Err(RepositoryError::InvalidReusableAttributeDefinition(
-            "invalid context policy or blank name".to_owned(),
+        return invalid(format!(
+            "attribute '{code}' can only define a default value for scalar values"
+        ));
+    }
+    if !CONTEXT_FALLBACKS.contains(&definition.context_fallback.as_str()) {
+        return invalid(format!(
+            "attribute '{code}' has invalid context_fallback '{}'",
+            definition.context_fallback
+        ));
+    }
+    if !CONTEXT_EDITABLE_SCOPES.contains(&definition.context_editable.as_str()) {
+        return invalid(format!(
+            "attribute '{code}' has invalid context_editable '{}'",
+            definition.context_editable
         ));
     }
     attricat_lexicon::parse(&definition.name).map_err(|error| {
@@ -198,28 +218,10 @@ impl AttricatRepository {
         &self,
         input: CreateReusableAttribute,
     ) -> Result<ReusableAttribute, RepositoryError> {
-        let definition = parse_definition(&input)?;
         let mut transaction = self.pool.begin().await?;
-        let definition_id = Uuid::new_v4();
-        let revision_id = Uuid::new_v4();
-        let ws = workspace(self);
-        let namespace: String =
-            sqlx::query_scalar("SELECT slug FROM workspaces WHERE id = $1 AND deleted_at IS NULL")
-                .bind(ws)
-                .fetch_one(&mut *transaction)
-                .await?;
-        sqlx::query("INSERT INTO reusable_attribute_definitions (id, workspace_id, namespace, code, name) VALUES ($1, $2, $3, $4, $5)")
-            .bind(definition_id).bind(ws).bind(&namespace).bind(&definition.code).bind(&definition.name)
-            .execute(&mut *transaction).await?;
-        self.insert_reusable_revision(
-            &mut transaction,
-            revision_id,
-            definition_id,
-            1,
-            &input,
-            definition,
-        )
-        .await?;
+        let revision_id = self
+            .create_reusable_attribute_in_transaction(&mut transaction, &input)
+            .await?;
         transaction.commit().await?;
         self.reusable_attribute_revision(revision_id)
             .await?
@@ -231,11 +233,93 @@ impl AttricatRepository {
         definition_id: Uuid,
         input: CreateReusableAttribute,
     ) -> Result<ReusableAttribute, RepositoryError> {
-        let definition = parse_definition(&input)?;
         let mut transaction = self.pool.begin().await?;
+        let revision_id = self
+            .create_reusable_attribute_revision_in_transaction(
+                &mut transaction,
+                definition_id,
+                &input,
+            )
+            .await?;
+        transaction.commit().await?;
+        self.reusable_attribute_revision(revision_id)
+            .await?
+            .ok_or(RepositoryError::NotFound("reusable attribute revision"))
+    }
+
+    /// Runs every check that creating the reusable attribute, or its next
+    /// revision when `definition_id` is given, would run, then rolls back so
+    /// nothing is stored.
+    pub async fn validate_reusable_attribute(
+        &self,
+        definition_id: Option<Uuid>,
+        input: CreateReusableAttribute,
+    ) -> Result<ReusableAttribute, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let revision_id = match definition_id {
+            Some(definition_id) => {
+                self.create_reusable_attribute_revision_in_transaction(
+                    &mut transaction,
+                    definition_id,
+                    &input,
+                )
+                .await
+            }
+            None => {
+                self.create_reusable_attribute_in_transaction(&mut transaction, &input)
+                    .await
+            }
+        };
+        let result = match revision_id {
+            Ok(revision_id) => self
+                .reusable_attribute_revision_in_transaction(&mut transaction, revision_id)
+                .await?
+                .ok_or(RepositoryError::NotFound("reusable attribute revision")),
+            Err(error) => Err(error),
+        };
+        transaction.rollback().await?;
+        result
+    }
+
+    async fn create_reusable_attribute_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        input: &CreateReusableAttribute,
+    ) -> Result<Uuid, RepositoryError> {
+        let definition = parse_definition(input)?;
+        let definition_id = Uuid::new_v4();
+        let revision_id = Uuid::new_v4();
+        let ws = workspace(self);
+        let namespace: String =
+            sqlx::query_scalar("SELECT slug FROM workspaces WHERE id = $1 AND deleted_at IS NULL")
+                .bind(ws)
+                .fetch_one(&mut **transaction)
+                .await?;
+        sqlx::query("INSERT INTO reusable_attribute_definitions (id, workspace_id, namespace, code, name) VALUES ($1, $2, $3, $4, $5)")
+            .bind(definition_id).bind(ws).bind(&namespace).bind(&definition.code).bind(&definition.name)
+            .execute(&mut **transaction).await?;
+        self.insert_reusable_revision(
+            transaction,
+            revision_id,
+            definition_id,
+            1,
+            input,
+            definition,
+        )
+        .await?;
+        Ok(revision_id)
+    }
+
+    async fn create_reusable_attribute_revision_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        definition_id: Uuid,
+        input: &CreateReusableAttribute,
+    ) -> Result<Uuid, RepositoryError> {
+        let definition = parse_definition(input)?;
         let ws = workspace(self);
         let existing: Option<(String, String)> = sqlx::query_as("SELECT namespace, code FROM reusable_attribute_definitions WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE")
-            .bind(definition_id).bind(ws).fetch_optional(&mut *transaction).await?;
+            .bind(definition_id).bind(ws).fetch_optional(&mut **transaction).await?;
         let Some((_namespace, code)) = existing else {
             return Err(RepositoryError::NotFound("reusable attribute"));
         };
@@ -245,21 +329,18 @@ impl AttricatRepository {
             ));
         }
         let version: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(version), 0) + 1 FROM reusable_attribute_revisions WHERE definition_id = $1 AND workspace_id = $2")
-            .bind(definition_id).bind(ws).fetch_one(&mut *transaction).await?;
+            .bind(definition_id).bind(ws).fetch_one(&mut **transaction).await?;
         let revision_id = Uuid::new_v4();
         self.insert_reusable_revision(
-            &mut transaction,
+            transaction,
             revision_id,
             definition_id,
             version,
-            &input,
+            input,
             definition,
         )
         .await?;
-        transaction.commit().await?;
-        self.reusable_attribute_revision(revision_id)
-            .await?
-            .ok_or(RepositoryError::NotFound("reusable attribute revision"))
+        Ok(revision_id)
     }
 
     async fn insert_reusable_revision(

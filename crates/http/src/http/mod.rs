@@ -801,6 +801,7 @@ pub fn router(state: AppState) -> Router {
             "/blueprints",
             get(blueprints::list_record_blueprints).post(blueprints::create_blueprint),
         )
+        .route("/blueprints/validate", post(blueprints::validate_blueprint))
         .route("/rules", get(rules::list).post(rules::create))
         .route("/rules/validate", post(rules::validate))
         .route("/rules/{rule_id}", get(rules::get))
@@ -857,8 +858,16 @@ pub fn router(state: AppState) -> Router {
             get(reusable_attributes::list).post(reusable_attributes::create),
         )
         .route(
+            "/reusable-attributes/validate",
+            post(reusable_attributes::validate),
+        )
+        .route(
             "/reusable-attributes/{definition_id}/versions",
             post(reusable_attributes::create_revision),
+        )
+        .route(
+            "/reusable-attributes/{definition_id}/versions/validate",
+            post(reusable_attributes::validate_revision),
         )
         .route(
             "/reusable-attribute-revisions/{revision_id}/publish",
@@ -880,6 +889,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/blueprints/{blueprint_id}/versions",
             get(blueprints::list_blueprint_revisions).post(blueprints::create_blueprint_revision),
+        )
+        .route(
+            "/blueprints/{blueprint_id}/versions/validate",
+            post(blueprints::validate_blueprint_revision),
         )
         .route("/blueprints/{blueprint_id}", get(blueprints::get_blueprint))
         .route(

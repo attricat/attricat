@@ -99,6 +99,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `GET` | `/blueprints/catalogue` | Wszystkie rodziny schematów i wersje. |
 | `POST` | `/blueprints` | Tworzy schemat (pierwszy szkic) z `{"definition": "<toml>"}`. |
 | `GET`, `POST` | `/blueprints/{id}/versions` | Wyświetla wersje lub tworzy kolejny szkic. |
+| `POST` | `/blueprints/validate`, `/blueprints/{id}/versions/validate` | Uruchamia wszystkie kontrole, które wykonałoby utworzenie schematu lub jego kolejnego szkicu, niczego nie zapisując. Zwraca powstały schemat i atrybuty albo ten sam błąd, który zwróciłby zapis. |
 | `GET` | `/blueprints/{id}` | Bieżąca opublikowana wersja. |
 | `GET` | `/blueprints/{id}/versions/{version}` | Konkretna wersja, w tym szkice. |
 | `POST` | `/blueprints/{id}/versions/{version}/publish` | Publikuje szkic. |
@@ -107,6 +108,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `GET` | `/blueprints/{id}/connector-jobs` | Zadania konektorów. |
 | `POST` | `/blueprint-connector-jobs/{id}/run` | Uruchamia zadanie konektora z `{"idempotency_key": "…"}`. |
 | `GET`, `POST` | `/reusable-attributes`; `POST /reusable-attributes/{id}/versions`; `POST /reusable-attribute-revisions/{id}/publish`; `GET`, `POST /reusable-attribute-groups` | Atrybuty wielokrotnego użytku. |
+| `POST` | `/reusable-attributes/validate`, `/reusable-attributes/{id}/versions/validate` | Uruchamia wszystkie kontrole, które wykonałoby utworzenie atrybutu wielokrotnego użytku lub jego kolejnej wersji, niczego nie zapisując. |
 
 ### Rekordy
 

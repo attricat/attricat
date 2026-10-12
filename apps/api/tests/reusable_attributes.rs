@@ -415,3 +415,101 @@ async fn attaching_a_reusable_attribute_audits_its_default_and_emits_an_record_u
     assert_eq!(change_kind, "set");
     server.abort();
 }
+
+#[sqlx::test]
+async fn validates_definitions_without_storing_them(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let definition = |code: &str, value_type: &str| {
+        format!("code = \"{code}\"\nname = \"Checked\"\nvalue_type = \"{value_type}\"\n")
+    };
+    let list = || async {
+        client
+            .get(format!(
+                "{base_url}/reusable-attributes?include_drafts=true"
+            ))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()
+    };
+
+    let checked: Value = client
+        .post(format!("{base_url}/reusable-attributes/validate"))
+        .json(&json!({ "definition": definition("checked", "number") }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(checked["code"], "checked");
+    assert_eq!(checked["value_type"], "number");
+    assert_eq!(checked["version"], 1);
+    assert_eq!(list().await.as_array().unwrap().len(), 0);
+
+    let invalid = client
+        .post(format!("{base_url}/reusable-attributes/validate"))
+        .json(&json!({ "definition": definition("checked", "colour") }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        invalid.json::<Value>().await.unwrap()["error"]["message"],
+        "invalid reusable attribute definition: attribute 'checked' has unsupported value type 'colour'"
+    );
+
+    let created: Value = client
+        .post(format!("{base_url}/reusable-attributes"))
+        .json(&json!({ "definition": definition("checked", "number") }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let definition_id = created["definition_id"].as_str().unwrap();
+    let taken = client
+        .post(format!("{base_url}/reusable-attributes/validate"))
+        .json(&json!({ "definition": definition("checked", "number") }))
+        .send()
+        .await
+        .unwrap();
+    assert!(taken.status().is_client_error());
+    let revision: Value = client
+        .post(format!(
+            "{base_url}/reusable-attributes/{definition_id}/versions/validate"
+        ))
+        .json(&json!({ "definition": definition("checked", "integer") }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(revision["version"], 2);
+    assert_eq!(revision["value_type"], "integer");
+    let renamed = client
+        .post(format!(
+            "{base_url}/reusable-attributes/{definition_id}/versions/validate"
+        ))
+        .json(&json!({ "definition": definition("renamed", "number") }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(renamed.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(list().await.as_array().unwrap().len(), 1);
+
+    server.abort();
+}

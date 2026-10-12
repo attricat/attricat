@@ -99,6 +99,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `GET` | `/blueprints/catalogue` | All blueprint families and revisions. |
 | `POST` | `/blueprints` | Create a blueprint (first draft) from `{"definition": "<toml>"}`. |
 | `GET`, `POST` | `/blueprints/{id}/versions` | List revisions, or create the next draft. |
+| `POST` | `/blueprints/validate`, `/blueprints/{id}/versions/validate` | Run every check that creating the blueprint, or its next draft, would run, without storing it. Returns the resulting blueprint and attributes, or the same error the save would. |
 | `GET` | `/blueprints/{id}` | Current published revision. |
 | `GET` | `/blueprints/{id}/versions/{version}` | Exact revision, including drafts. |
 | `POST` | `/blueprints/{id}/versions/{version}/publish` | Publish a draft. |
@@ -107,6 +108,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `GET` | `/blueprints/{id}/connector-jobs` | Connector jobs. |
 | `POST` | `/blueprint-connector-jobs/{id}/run` | Run a connector job, with `{"idempotency_key": "…"}`. |
 | `GET`, `POST` | `/reusable-attributes`; `POST /reusable-attributes/{id}/versions`; `POST /reusable-attribute-revisions/{id}/publish`; `GET`, `POST /reusable-attribute-groups` | Reusable attributes. |
+| `POST` | `/reusable-attributes/validate`, `/reusable-attributes/{id}/versions/validate` | Run every check that creating the reusable attribute, or its next revision, would run, without storing it. |
 
 ### Records
 

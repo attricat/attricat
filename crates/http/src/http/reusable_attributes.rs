@@ -48,6 +48,29 @@ pub(super) async fn create(
     ))
 }
 
+/// Checks a first reusable attribute definition without storing it.
+pub(super) async fn validate(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiJson(input): ApiJson<CreateReusableAttribute>,
+) -> Result<Json<ReusableAttribute>, ApiError> {
+    Ok(Json(
+        repository.validate_reusable_attribute(None, input).await?,
+    ))
+}
+
+/// Checks the next revision of a reusable attribute without storing it.
+pub(super) async fn validate_revision(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(definition_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<CreateReusableAttribute>,
+) -> Result<Json<ReusableAttribute>, ApiError> {
+    Ok(Json(
+        repository
+            .validate_reusable_attribute(Some(definition_id), input)
+            .await?,
+    ))
+}
+
 pub(super) async fn create_revision(
     State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,

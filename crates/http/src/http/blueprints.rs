@@ -33,6 +33,25 @@ pub(super) async fn create_blueprint(
     invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(blueprint)))
 }
+/// Checks a first blueprint definition without storing it.
+pub(super) async fn validate_blueprint(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiJson(input): ApiJson<CreateBlueprint>,
+) -> Result<Json<BlueprintWithAttributes>, ApiError> {
+    Ok(Json(repository.validate_blueprint(None, input).await?))
+}
+/// Checks the next revision of a blueprint without storing it.
+pub(super) async fn validate_blueprint_revision(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(blueprint_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<CreateBlueprint>,
+) -> Result<Json<BlueprintWithAttributes>, ApiError> {
+    Ok(Json(
+        repository
+            .validate_blueprint(Some(blueprint_id), input)
+            .await?,
+    ))
+}
 pub(super) async fn list_record_blueprints(
     State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
