@@ -4,10 +4,10 @@ import { lazy, Suspense, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
+import { BlueprintLink } from '../../blueprints/BlueprintLink';
 import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
 import { currentSession } from '../../auth/api';
 import { authQueryKeys } from '../../auth/queryKeys';
-import { lexiconText } from '../../lexicon/lexicon';
 import { getCurrentBlueprint, type AttricatRecord } from '../api';
 import {
   RECORD_HEADER_CONTEXT_VERSION,
@@ -142,7 +142,10 @@ export const RecordPreview = ({
                     header's eyebrow instead. */}
                 {compact && (
                   <Typography color="primary" component="p" variant="overline">
-                    {lexiconText(blueprint.data.blueprint.name)}
+                    <BlueprintLink
+                      blueprint={blueprint.data.blueprint}
+                      style={{ textDecoration: 'none' }}
+                    />
                   </Typography>
                 )}
                 <RecordHeading
@@ -173,6 +176,7 @@ export const RecordPreview = ({
               />
             )}
             <RecordPreviewToolbar
+              blueprint={blueprint.data?.blueprint}
               compact={compact}
               recordId={recordId}
               extensionPanelOpen={extensionPanelOpen}

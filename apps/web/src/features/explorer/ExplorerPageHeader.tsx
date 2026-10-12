@@ -2,11 +2,14 @@ import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
 import { ExplorerIcon } from '../../components/systemIcons';
+import { BlueprintLink } from '../blueprints/BlueprintLink';
 
 type Props = {
   blueprint: string | undefined;
   /** Name of the selected blueprint, which titles the page. */
   blueprintName: string | undefined;
+  /** The selected blueprint, linked from the eyebrow once it has loaded. */
+  blueprintRecord?: { id: string; name: string };
   locked: boolean;
 };
 
@@ -20,6 +23,7 @@ const createSearch = (blueprint: string | undefined, locked: boolean) => {
 export const ExplorerPageHeader = ({
   blueprint,
   blueprintName,
+  blueprintRecord,
   locked,
 }: Props) => {
   const { t } = useTranslation();
@@ -35,6 +39,14 @@ export const ExplorerPageHeader = ({
             ? t('explorer.createBlueprint', { blueprint: blueprintName })
             : t('explorer.create')}
         </RouterButton>
+      }
+      eyebrow={
+        blueprintRecord && (
+          <BlueprintLink
+            blueprint={blueprintRecord}
+            style={{ textDecoration: 'none' }}
+          />
+        )
       }
       description={
         blueprintName

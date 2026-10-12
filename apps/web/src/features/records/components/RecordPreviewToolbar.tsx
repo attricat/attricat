@@ -6,6 +6,7 @@ import {
   HashIcon,
   InfoIcon,
   PanelRightIcon,
+  PlusIcon,
   RefreshCwIcon,
   RotateCcwClockIcon,
   SendIcon,
@@ -39,8 +40,11 @@ import { RECORD_EXTENSION_DRAWER_ID, publicationStatuses } from '../constants';
 import { publicationReadinessText } from '../checkViolations';
 import { compactIconSize } from '../../../components/iconSizes';
 import { useInstantFormat } from '../../../time/useInstantFormat';
+import { lexiconText } from '../../lexicon/lexicon';
 
 type Props = {
+  /** The record's blueprint, offered for creating another record. */
+  blueprint?: { code: string; name: string };
   /** Moves the agent and extension buttons into the actions menu. */
   compact?: boolean;
   recordId: string;
@@ -66,6 +70,7 @@ type Props = {
 };
 
 export const RecordPreviewToolbar = ({
+  blueprint,
   compact = false,
   recordId,
   extensionPanelOpen,
@@ -159,6 +164,22 @@ export const RecordPreviewToolbar = ({
           </ListItemIcon>
           <ListItemText>{t('records.duplicateRecord')}</ListItemText>
         </MenuItem>
+        {blueprint && (
+          <RouterMenuItem
+            onClick={closeActionsMenu}
+            search={{ blueprint: blueprint.code }}
+            to="/records/new"
+          >
+            <ListItemIcon>
+              <PlusIcon size={compactIconSize} />
+            </ListItemIcon>
+            <ListItemText>
+              {t('records.createAnother', {
+                blueprint: lexiconText(blueprint.name),
+              })}
+            </ListItemText>
+          </RouterMenuItem>
+        )}
         {schemaOutdated && (
           <RouterMenuItem
             onClick={closeActionsMenu}

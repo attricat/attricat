@@ -1,9 +1,10 @@
 import { Typography } from '@mui/material';
+import type { ReactNode } from 'react';
 
 type Props = {
   /** Nests the heading under a panel's h2 record heading. */
   compact?: boolean;
-  name?: string;
+  name?: ReactNode;
 };
 
 /** Names the schema used by the record page beneath its action toolbar. */

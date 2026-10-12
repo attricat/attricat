@@ -15,6 +15,14 @@ vi.mock('../../components/RouterLink', () => ({
   }) => <button data-search={JSON.stringify(search)}>{children}</button>,
 }));
 
+vi.mock('../blueprints/BlueprintLink', () => ({
+  BlueprintLink: ({
+    blueprint,
+  }: {
+    blueprint: { id: string; name: string };
+  }) => <a href={`/manage/blueprints/${blueprint.id}`}>{blueprint.name}</a>,
+}));
+
 const createSearch = () =>
   JSON.parse(screen.getByRole('button').getAttribute('data-search')!);
 
@@ -30,6 +38,20 @@ describe('ExplorerPageHeader', () => {
     expect(createSearch()).toEqual({ blueprint: 'product' });
     // The selected blueprint titles the page, not only a locked one.
     expect(screen.getByRole('heading', { name: 'Product' })).toBeTruthy();
+  });
+
+  it('links the explored blueprint to its management page', () => {
+    render(
+      <ExplorerPageHeader
+        blueprint="product"
+        blueprintName="Product"
+        blueprintRecord={{ id: 'blueprint-id', name: 'Product' }}
+        locked={false}
+      />,
+    );
+    expect(
+      screen.getByRole('link', { name: 'Product' }).getAttribute('href'),
+    ).toBe('/manage/blueprints/blueprint-id');
   });
 
   it('locks the create form to a locked Explorer blueprint', () => {

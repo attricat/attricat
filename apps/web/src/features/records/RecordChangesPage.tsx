@@ -13,7 +13,7 @@ import { getRecordChanges } from './api';
 import { recordFormOptions } from './queryOptions';
 import type { RecordAuditChange } from './api';
 import { recordQueryKeys } from './queryKeys';
-import { lexiconText } from '../lexicon/lexicon';
+import { BlueprintLink } from '../blueprints/BlueprintLink';
 
 type EventChanges = [RecordAuditChange, ...RecordAuditChange[]];
 
@@ -54,8 +54,9 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
       </RecordToolbar>
       <RecordSchemaSubheader
         name={
-          recordForm.data &&
-          lexiconText(recordForm.data.blueprint.blueprint.name)
+          recordForm.data && (
+            <BlueprintLink blueprint={recordForm.data.blueprint.blueprint} />
+          )
         }
       />
       {changes.isPending && (

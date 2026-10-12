@@ -283,6 +283,7 @@
   "records": {
     "createRecord": "Utwórz rekord",
     "duplicateRecord": "Duplikuj rekord",
+    "createAnother": "Utwórz kolejny rekord: {{blueprint}}",
     "deleteRecord": "Usuń rekord",
     "recordActions": "Akcje",
     "deleteRecordConfirmation": "Usunąć ten rekord? Zniknie z wyników wyszukiwania i podglądów, ale jego historia zostanie zachowana.",

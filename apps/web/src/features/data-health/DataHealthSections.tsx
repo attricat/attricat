@@ -86,6 +86,7 @@ export const BlueprintHealthSection = ({
                 <BlueprintLabel
                   code={blueprint.code}
                   currentVersion={blueprint.current_version}
+                  id={blueprint.id}
                   name={blueprint.name}
                   outdatedRecords={blueprint.outdated_records}
                 />
@@ -185,6 +186,7 @@ export const CompletenessSection = ({
                 <BlueprintLabel
                   code={item.code}
                   currentVersion={item.current_version}
+                  id={item.id}
                   name={item.name}
                   outdatedRecords={item.outdated_records}
                 />

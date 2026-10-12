@@ -961,6 +961,7 @@ pub struct DataHealthSummary {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct BlueprintHealth {
+    pub id: Uuid,
     pub code: String,
     pub name: String,
     pub current_version: i64,
@@ -1000,6 +1001,7 @@ pub struct StorageHealth {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct CompletenessHealth {
+    pub id: Uuid,
     pub code: String,
     pub name: String,
     pub current_version: i64,

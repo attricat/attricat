@@ -1,9 +1,8 @@
-import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { PageContainer } from '../../../components/PageContainer';
 import { PageHeader } from '../../../components/PageHeader';
 import { RecordIcon } from '../../../components/systemIcons';
-import { lexiconText } from '../../lexicon/lexicon';
+import { BlueprintLink } from '../../blueprints/BlueprintLink';
 
 export const RecordPage = ({
   blueprint,
@@ -22,13 +21,10 @@ export const RecordPage = ({
       <PageHeader
         eyebrow={
           blueprint && (
-            <Link
-              params={{ blueprintId: blueprint.id }}
+            <BlueprintLink
+              blueprint={blueprint}
               style={{ textDecoration: 'none' }}
-              to="/manage/blueprints/$blueprintId"
-            >
-              {lexiconText(blueprint.name)}
-            </Link>
+            />
           )
         }
         icon={RecordIcon}

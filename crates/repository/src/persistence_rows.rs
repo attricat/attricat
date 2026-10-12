@@ -291,6 +291,7 @@ domain_row!(DataHealthSummary {
     deleted_relationship_targets,
 });
 domain_row!(BlueprintHealth {
+    id,
     code,
     name,
     current_version,
@@ -314,6 +315,7 @@ domain_row!(RelationshipHealth {
 });
 domain_row!(StorageHealth { table, bytes });
 domain_row!(CompletenessHealth {
+    id,
     code,
     name,
     current_version,

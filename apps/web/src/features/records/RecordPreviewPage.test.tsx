@@ -193,7 +193,8 @@ describe('RecordPreviewPage', () => {
       capabilities: { records_delete: false },
     } as never);
     const { unmount } = renderPage();
-    await screen.findByText(/^Product ·/);
+    // The eyebrow links the blueprint once the record has loaded.
+    await screen.findByText('See all');
     await waitFor(() =>
       expect(outletRender).toHaveBeenCalledWith({
         outlet: 'record_attribute_panel',

@@ -193,6 +193,14 @@ describe('record actions menu', () => {
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
+  it("offers to create another record of the record's blueprint", async () => {
+    renderActions({ blueprint: { code: 'product', name: 'Product' } });
+    const menu = await openActions();
+    expect(
+      menu.getByRole('menuitem', { name: 'Create another Product' }),
+    ).toBeTruthy();
+  });
+
   it('offers the schema upgrade only for outdated records', async () => {
     renderActions({ schemaOutdated: true });
     const menu = await openActions();

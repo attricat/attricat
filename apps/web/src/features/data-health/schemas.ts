@@ -21,6 +21,7 @@ export const dataHealthSummarySchema = z.object({
 });
 
 export const blueprintHealthSchema = z.object({
+  id: z.uuid(),
   code: z.string(),
   name: z.string(),
   current_version: z.number().int().positive(),
@@ -37,6 +38,7 @@ export const freshnessBandSchema = z.object({
 });
 
 export const completenessHealthSchema = z.object({
+  id: z.uuid(),
   code: z.string(),
   name: z.string(),
   current_version: z.number().int().positive(),

@@ -139,6 +139,9 @@ export const Explorer = ({
           <ExplorerPageHeader
             blueprint={blueprintMissing ? undefined : search.blueprint}
             blueprintName={blueprintMissing ? undefined : blueprintName}
+            blueprintRecord={
+              blueprintMissing ? undefined : selectedBlueprint.data?.blueprint
+            }
             locked={Boolean(search.locked)}
           />
           <ExplorerLoadErrors
