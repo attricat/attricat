@@ -1,4 +1,4 @@
-import { Box, Tab, Tabs } from '@mui/material';
+import { Box, Tab, tabClasses, Tabs, tabsClasses } from '@mui/material';
 import { CircleAlertIcon } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -31,6 +31,19 @@ export const ViewTabs = ({
     <>
       <Tabs
         onChange={(_, next) => setValue(next)}
+        // View tabs are bordered rather than underlined. The line under the
+        // strip is drawn by the unselected tabs and a filler after them, so
+        // the selected tab opens into the panel on any background.
+        slotProps={{ indicator: { sx: { display: 'none' } } }}
+        sx={{
+          borderBottom: 0,
+          [`& .${tabsClasses.list}::after`]: {
+            borderBottom: 1,
+            borderColor: 'divider',
+            content: '""',
+            flexGrow: 1,
+          },
+        }}
         value={value}
         variant="scrollable"
       >
@@ -47,7 +60,21 @@ export const ViewTabs = ({
               id={`${tabId}-tab-${index}`}
               key={index}
               label={lexiconText(tab.label)}
-              sx={invalid ? { color: 'error.main', minHeight: 48 } : undefined}
+              sx={[
+                {
+                  bgcolor: 'action.hover',
+                  border: 1,
+                  borderColor: 'divider',
+                  borderTopLeftRadius: (theme) => theme.shape.borderRadius,
+                  borderTopRightRadius: (theme) => theme.shape.borderRadius,
+                  '& + &': { borderLeft: 0 },
+                  [`&.${tabClasses.selected}`]: {
+                    bgcolor: 'transparent',
+                    borderBottomColor: 'transparent',
+                  },
+                },
+                invalid && { color: 'error.main', minHeight: 48 },
+              ]}
             />
           );
         })}
