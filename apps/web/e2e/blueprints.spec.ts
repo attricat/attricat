@@ -3,6 +3,7 @@ import {
   createBlueprint,
   createRecordBlueprint,
   createRevision,
+  publishRevision,
   suffix,
 } from './helpers';
 
@@ -95,4 +96,36 @@ value_type = "string"`,
   await page.getByRole('tab', { name: /Version \d+ metadata/ }).click();
   await page.getByRole('tab', { name: /Attributes/ }).click();
   await expect(page.getByText('title', { exact: true })).toBeVisible();
+});
+
+test('opens on the latest published version metadata', async ({ page }) => {
+  const code = `latest_${suffix()}`;
+  const first = await createRecordBlueprint(
+    code,
+    'Latest product',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+  );
+  await publishRevision(
+    await createRevision(
+      first.blueprint.id,
+      `format_version = 1
+code = "${code}"
+name = "Latest product"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["sku"]
+
+[[attributes]]
+code = "sku"
+value_type = "string"`,
+    ),
+  );
+
+  await page.goto(`/manage/blueprints/${first.blueprint.id}`);
+  await expect(
+    page.getByRole('heading', { name: 'Version 2 metadata' }),
+  ).toBeVisible();
+  await expect(page.getByText('sku', { exact: true })).toBeVisible();
 });

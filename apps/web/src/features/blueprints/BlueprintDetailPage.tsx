@@ -13,7 +13,7 @@ import { useResourcePageTitle } from '../../app/useResourcePageTitle';
 import { PageContainer } from '../../components/PageContainer';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
-import { listBlueprintRevisions } from './api';
+import { getBlueprintRevision, listBlueprintRevisions } from './api';
 import { BlueprintDetailHeader } from './BlueprintDetailHeader';
 import { BlueprintRevisionComparison } from './BlueprintRevisionComparison';
 import { BlueprintVersionMetadata } from './BlueprintVersionMetadata';
@@ -74,7 +74,18 @@ export const BlueprintDetailPage = ({
   const comparison = useBlueprintRevisionComparison(blueprintId, revisionItems);
   const migration = useSafeBlueprintMigration(blueprintId, revisionItems);
   const blueprint = revisionItems[0];
-  const metadataRevision = comparison.left.data;
+  // Metadata describes the version records use: the latest published one,
+  // or the latest draft before anything is published.
+  const metadataVersion = (
+    revisionItems.find((revision) => revision.status === 'published') ??
+    blueprint
+  )?.version;
+  const metadata = useQuery({
+    queryKey: blueprintQueryKeys.revision(blueprintId, metadataVersion ?? 0),
+    queryFn: () => getBlueprintRevision(blueprintId, metadataVersion!),
+    enabled: metadataVersion !== undefined,
+  });
+  const metadataRevision = metadata.data;
   useResourcePageTitle(
     blueprint && lexiconText(blueprint.name),
     t('navigation.blueprints'),
@@ -126,7 +137,7 @@ export const BlueprintDetailPage = ({
               {...tabId.tab(blueprintDetailTabs.metadata)}
               icon={<InfoIcon aria-hidden size={compactIconSize} />}
               label={t('blueprints.versionMetadata', {
-                version: comparison.leftVersion,
+                version: metadataVersion,
               })}
             />
             <Tab

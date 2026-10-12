@@ -4,7 +4,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
 import '../../i18n';
-import { publishBlueprintRevision } from './api';
+import { publishBlueprintRevision, type BlueprintWithAttributes } from './api';
 import { blueprintQueryKeys } from './queryKeys';
 import { BlueprintDetailPage } from './BlueprintDetailPage';
 
@@ -135,4 +135,58 @@ it('shows a refused publish inside its dialog and clears it on reopen', async ()
       screen.getByRole('dialog', { name: 'Publish blueprint?' }),
     ).queryByRole('alert'),
   ).toBeNull();
+});
+
+const revision = (version: number, status: 'draft' | 'published') => ({
+  id: '123e4567-e89b-12d3-a456-426614174000',
+  code: 'product',
+  kind: 'record',
+  name: 'Product',
+  version,
+  status,
+  updated_at: null,
+});
+
+const renderWithRevisions = (
+  revisions: ReturnType<typeof revision>[],
+  metadataVersion: number,
+) => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { staleTime: Infinity } },
+  });
+  const id = revisions[0].id;
+  client.setQueryData(blueprintQueryKeys.revisions(id), revisions);
+  client.setQueryData(blueprintQueryKeys.revision(id, metadataVersion), {
+    blueprint: {
+      ...revisions.find((item) => item.version === metadataVersion),
+      definition: '',
+      views: {},
+    },
+    attributes: [],
+    table_path_attributes: [],
+  } as unknown as BlueprintWithAttributes);
+  render(
+    <QueryClientProvider client={client}>
+      <BlueprintDetailPage blueprintId={id} />
+    </QueryClientProvider>,
+  );
+};
+
+it('shows the latest published version metadata by default', () => {
+  renderWithRevisions(
+    [revision(3, 'draft'), revision(2, 'draft'), revision(1, 'published')],
+    1,
+  );
+  expect(screen.getByRole('tab', { name: 'Version 1 metadata' })).toBeTruthy();
+  expect(
+    screen.getByRole('heading', { name: 'Version 1 metadata' }),
+  ).toBeTruthy();
+});
+
+it('shows the latest draft metadata before any version is published', () => {
+  renderWithRevisions([revision(2, 'draft'), revision(1, 'draft')], 2);
+  expect(screen.getByRole('tab', { name: 'Version 2 metadata' })).toBeTruthy();
+  expect(
+    screen.getByRole('heading', { name: 'Version 2 metadata' }),
+  ).toBeTruthy();
 });
