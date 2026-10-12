@@ -16,12 +16,14 @@ import type { BrowseBy } from './search';
  * the person's default for the blueprint.
  */
 export const useBrowseBy = ({
+  blueprintCode,
   blueprintDefault,
   blueprintId,
   onChange,
   relationshipFields,
   requested,
 }: {
+  blueprintCode: string | undefined;
   /** The blueprint's `views.explorer.browse_by`. */
   blueprintDefault: BrowseBy | null | undefined;
   blueprintId: string | undefined;
@@ -43,6 +45,7 @@ export const useBrowseBy = ({
   const stored =
     blueprintId === undefined ? undefined : getStoredBrowseBy(blueprintId);
   const fields = browseByFields(
+    blueprintCode,
     relationshipFields,
     targets.map((target) => target.data),
   );

@@ -478,6 +478,19 @@ target_blueprint = "${categoryCode}"`,
   await page.getByRole('button', { name: 'Show browse panel' }).click();
   await expect(rail).toBeVisible();
 
+  // The category blueprint browses its own tree: a node matches itself and
+  // everything below it.
+  await page.goto(`/?blueprint=${categoryCode}`);
+  const ownRail = page.getByRole('complementary', {
+    name: 'Browse by Rail categories',
+  });
+  await expect(page.getByText('3 results')).toBeVisible();
+  await ownRail.getByRole('button', { name: /^Departments/ }).click();
+  await expect(page.getByText('2 results')).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Departments' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Shoes' })).toBeVisible();
+  await expect(page.getByText('Rail categories: Departments')).toBeVisible();
+
   // A blueprint can keep the rail closed even for a tree field.
   const closedCode = `rail_closed_product_${suffix()}`;
   await createRecordBlueprint(

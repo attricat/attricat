@@ -528,7 +528,11 @@ pub struct SearchRecordsRequest {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RelationshipTreeFacetRequest {
-    pub source_relationship_field: String,
+    /// Relationship whose targets form the tree. Omit it to facet the searched
+    /// blueprint by its own `hierarchy_field`: a record then matches when it
+    /// is a selected node or one of its descendants.
+    #[serde(default)]
+    pub source_relationship_field: Option<String>,
     #[serde(default)]
     pub hierarchy_field: Option<String>,
     pub context_id: Uuid,
@@ -555,7 +559,9 @@ pub struct RelationshipTreeFacetChildrenRequest {
     pub blueprint: SearchBlueprint,
     #[serde(default)]
     pub query: Option<String>,
-    pub source_relationship_field: String,
+    /// Omit it to list the blueprint's own tree; see [`RelationshipTreeFacetRequest`].
+    #[serde(default)]
+    pub source_relationship_field: Option<String>,
     #[serde(default)]
     pub hierarchy_field: Option<String>,
     pub context_id: Uuid,

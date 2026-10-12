@@ -13,6 +13,7 @@ type RecordSearchKeyOptions = {
   relationshipTreeFacets?: {
     field: string;
     hierarchyField: string;
+    ownTree?: true;
     selectedIds: string[];
   }[];
   sort?: { field: string; direction: 'asc' | 'desc' };

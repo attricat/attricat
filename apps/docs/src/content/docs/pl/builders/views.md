@@ -173,7 +173,7 @@ Renderer musi być zadeklarowany przez włączone rozszerzenie dla typu wartośc
 
 ## Panel przeglądania w Przeglądarce rekordów
 
-Panel **Przeglądaj według** obok wyników **Przeglądarki rekordów** wyświetla cele jednej relacji. Domyślnie otwiera się dla pierwszej relacji, której schemat docelowy ma [hierarchię](#hierarchie). Aby wybrać atrybut, wskaż go w `views.explorer`:
+Panel **Przeglądaj według** obok wyników **Przeglądarki rekordów** wyświetla cele jednej relacji. Schemat z własną [hierarchią](#hierarchie) wyświetla zamiast tego własne drzewo, pod nazwą schematu. Domyślnie panel otwiera się dla tego drzewa, a w przeciwnym razie dla pierwszej relacji, której schemat docelowy ma hierarchię. Aby wybrać atrybut, wskaż go w `views.explorer`:
 
 ```toml
 [views.explorer]

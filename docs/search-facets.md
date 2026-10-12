@@ -16,17 +16,21 @@ children when it is expanded.
    is a tree when its target has a self-targeting relationship with
    `hierarchy` set (`tree` preferred over `acyclic`); otherwise the rail is a
    one-level list. Plain self-relationships are never treated as trees.
+   The selected blueprint's own hierarchy field is its **own tree**: the rail
+   labels it with the blueprint's name and lists the blueprint's records.
 2. The field comes from the URL's `browseBy`, then the person's last choice for
    the blueprint (local storage, keyed by blueprint ID), then the blueprint's
-   `views.explorer.browse_by`, then the first tree field. `browseBy: false`
+   `views.explorer.browse_by`, then the own tree, then the first tree field. `browseBy: false`
    in the URL or storage, or `browse_by = false` in the blueprint, hides the
    rail. A field the current revision no longer has falls through to the
    next source.
 3. Choosing a node writes a `relationshipFacets` entry with one selected ID.
    For a tree field the entry also stores `hierarchyField`, and the search
    sends it as a `relationship_tree_facets` item so descendants match; entries
-   without one are sent as exact `relationship_filters`. The selection shows as
-   a filter pill and is kept by saved views like other facets.
+   without one are sent as exact `relationship_filters`. An own-tree entry
+   also stores `ownTree: true` and is sent without `source_relationship_field`.
+   The selection shows as a filter pill and is kept by saved views like other
+   facets.
 
 Tree edges and facet assignments resolve in the Explorer's selected context.
 
@@ -107,6 +111,11 @@ Add `relationship_tree_facets` to `POST /v1/records/search`:
   "page": { "size": 25, "cursor": null }
 }
 ```
+
+Omit `source_relationship_field` to facet the searched blueprint by its own
+`hierarchy_field`, which is then required. Each record is its own node, so a
+selection matches the selected records and their descendants, and a node's
+count includes the node itself.
 
 The search response retains `items` and `next_cursor`. The facet tree is loaded
 separately so searching does not transfer an entire taxonomy.

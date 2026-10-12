@@ -39,6 +39,31 @@ describe('relationship facet requests', () => {
     ]);
   });
 
+  it('sends an own-tree selection without a source relationship', () => {
+    expect(
+      relationshipTreeFacetsRequest(
+        relationshipTreeSelectionsFromSearch({
+          blueprint: 'category',
+          relationshipFacets: [
+            {
+              field: 'parent',
+              hierarchyField: 'parent',
+              ownTree: true,
+              selectedIds: [shoesId],
+            },
+          ],
+        }),
+        contextId,
+      ),
+    ).toEqual([
+      {
+        context_id: contextId,
+        hierarchy_field: 'parent',
+        selected_target_ids: [shoesId],
+      },
+    ]);
+  });
+
   it('drops a facet, hierarchy included, when its selection is cleared', () => {
     expect(
       updateRelationshipFacets(search.relationshipFacets, 'categories', {

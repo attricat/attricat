@@ -93,6 +93,7 @@ export const Explorer = ({
   });
   const explorerView = selectedBlueprint.data?.blueprint.views.explorer;
   const browseBy = useBrowseBy({
+    blueprintCode: search.blueprint,
     blueprintDefault:
       explorerView?.type === 'explorer' ? explorerView.browse_by : undefined,
     blueprintId: currentBlueprint?.id,
@@ -197,6 +198,7 @@ export const Explorer = ({
             {isWideDesktop && search.blueprint && !blueprintMissing && (
               <ExplorerBrowseRail
                 blueprint={search.blueprint}
+                blueprintName={blueprintName ?? search.blueprint}
                 contextId={data.contextId}
                 field={browseBy.field}
                 fields={browseBy.fields}
@@ -206,6 +208,7 @@ export const Explorer = ({
                   if (!field) return;
                   actions.updateFacet(field.attribute.code, {
                     hierarchyField: field.hierarchyField,
+                    ownTree: field.ownTree,
                     selectedIds,
                     targetBlueprint: field.attribute.target_blueprint_code,
                   });
@@ -213,7 +216,10 @@ export const Explorer = ({
                 query={search.query}
                 selectedIds={
                   search.relationshipFacets?.find(
-                    (facet) => facet.field === browseBy.field?.attribute.code,
+                    (facet) =>
+                      facet.field === browseBy.field?.attribute.code &&
+                      Boolean(facet.ownTree) ===
+                        Boolean(browseBy.field.ownTree),
                   )?.selectedIds ?? []
                 }
                 version={data.effectiveVersion}

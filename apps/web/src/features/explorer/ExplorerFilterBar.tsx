@@ -246,7 +246,11 @@ export const ExplorerFilterBar = ({
       })}
       {withOpenFacet(facets, relationshipToOpen).map((facet) => {
         const { code } = facet.sourceRelationship;
-        const fieldLabel = attributeLabel(facet.sourceRelationship);
+        // An own-tree selection is a subtree of the blueprint's records, not
+        // a value of the hierarchy field.
+        const fieldLabel = facet.ownTree
+          ? blueprintName(facet.sourceRelationship.target_blueprint_code)
+          : attributeLabel(facet.sourceRelationship);
         return (
           <RelationshipFacetChip
             chipRef={chipRef(code)}

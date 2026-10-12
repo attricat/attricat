@@ -88,7 +88,7 @@ export type SearchRecordsOptions = {
   }[];
   /** Relationship selections that also match descendants of each target. */
   relationshipTreeFacets?: {
-    source_relationship_field: string;
+    source_relationship_field?: string;
     hierarchy_field?: string;
     context_id: string;
     selected_target_ids: string[];

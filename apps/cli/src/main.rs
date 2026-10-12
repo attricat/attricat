@@ -621,7 +621,7 @@ enum RecordCommand {
         #[arg(long)]
         query: Option<String>,
         #[arg(long)]
-        source_relationship_field: String,
+        source_relationship_field: Option<String>,
         #[arg(long)]
         hierarchy_field: Option<String>,
         #[arg(long)]

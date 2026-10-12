@@ -1850,10 +1850,13 @@ impl AttricatRepository {
 
     // Facet traversal inputs are explicit to keep query scope auditable.
     #[allow(clippy::too_many_arguments)]
+    /// Without `source_field`, the nodes are the source blueprint's own
+    /// records and each record is attached to itself, so a selection matches
+    /// the selected nodes and their descendants.
     pub async fn relationship_tree_facet(
         &self,
         source_blueprint_id: Uuid,
-        source_field: &str,
+        source_field: Option<&str>,
         target_blueprint_id: Uuid,
         hierarchy_field: Option<&str>,
         context_id: Uuid,
@@ -1882,14 +1885,18 @@ impl AttricatRepository {
             return Err(RepositoryError::RelationshipTargetTypeMismatch);
         }
 
-        let edges = self
-            .resolved_relationship_edges(
-                source_blueprint_id,
-                source_field,
-                target_blueprint_id,
-                context_id,
-            )
-            .await?;
+        let edges = match source_field {
+            Some(source_field) => {
+                self.resolved_relationship_edges(
+                    source_blueprint_id,
+                    source_field,
+                    target_blueprint_id,
+                    context_id,
+                )
+                .await?
+            }
+            None => node_ids.iter().map(|id| (*id, *id)).collect(),
+        };
         let parents = match hierarchy_field {
             Some(field) => {
                 self.resolved_relationship_edges(
@@ -1983,12 +1990,14 @@ impl AttricatRepository {
 
     // Facet traversal inputs are explicit to keep query scope auditable.
     #[allow(clippy::too_many_arguments)]
+    /// Without `source_field`, each source record is its own node; see
+    /// [`Self::relationship_tree_facet`].
     pub async fn relationship_tree_facet_children(
         &self,
         source_blueprint_id: Uuid,
         source_blueprint_version: Option<i64>,
         matching_record_ids: Option<&HashSet<Uuid>>,
-        source_field: &str,
+        source_field: Option<&str>,
         target_blueprint_id: Uuid,
         hierarchy_field: Option<&str>,
         context_id: Uuid,
@@ -2030,6 +2039,13 @@ impl AttricatRepository {
                       AND source.deleted_at IS NULL AND target.deleted_at IS NULL
                       AND target.blueprint_id = $5 AND a.code = $4 AND av.active
                       AND av.relationship_target_record_id IS NOT NULL
+                      AND ($3::uuid[] IS NULL OR source.id = ANY($3))
+                    UNION
+                    SELECT source.id, source.id
+                    FROM records source
+                    WHERE $4::text IS NULL AND source.blueprint_id = $1
+                      AND ($2::bigint IS NULL OR source.blueprint_version = $2)
+                      AND source.deleted_at IS NULL
                       AND ($3::uuid[] IS NULL OR source.id = ANY($3))
                 ), parent_edges AS (
                     SELECT DISTINCT child.id AS child_id, av.relationship_target_record_id AS parent_id

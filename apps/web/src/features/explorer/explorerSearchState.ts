@@ -60,13 +60,16 @@ export const selectedRelationshipFacets = (
   search: ExplorerSearch,
 ): ExplorerRelationshipFacet[] =>
   sources
-    .map((sourceRelationship) => ({
-      selectedIds:
-        search.relationshipFacets?.find(
-          (facet) => facet.field === sourceRelationship.code,
-        )?.selectedIds ?? [],
-      sourceRelationship,
-    }))
+    .map((sourceRelationship) => {
+      const facet = search.relationshipFacets?.find(
+        (facet) => facet.field === sourceRelationship.code,
+      );
+      return {
+        ...(facet?.ownTree ? { ownTree: true as const } : {}),
+        selectedIds: facet?.selectedIds ?? [],
+        sourceRelationship,
+      };
+    })
     .filter((facet) => facet.selectedIds.length > 0);
 
 /** Facets without a hierarchy match only their directly assigned targets. */
@@ -82,6 +85,7 @@ export const relationshipFiltersFromSearch = (
 export type RelationshipTreeSelection = {
   field: string;
   hierarchyField: string;
+  ownTree?: true;
   selectedIds: string[];
 };
 
@@ -95,6 +99,7 @@ export const relationshipTreeSelectionsFromSearch = (
           {
             field: facet.field,
             hierarchyField: facet.hierarchyField,
+            ...(facet.ownTree ? { ownTree: true as const } : {}),
             selectedIds: facet.selectedIds,
           },
         ]
@@ -106,7 +111,10 @@ export const relationshipTreeFacetsRequest = (
   contextId: string,
 ) =>
   selections.map((selection) => ({
-    source_relationship_field: selection.field,
+    // An own-tree facet walks the searched blueprint's hierarchy directly.
+    ...(selection.ownTree
+      ? {}
+      : { source_relationship_field: selection.field }),
     hierarchy_field: selection.hierarchyField,
     context_id: contextId,
     selected_target_ids: selection.selectedIds,

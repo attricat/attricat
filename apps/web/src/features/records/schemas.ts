@@ -607,7 +607,8 @@ export const searchRecordsRequestSchema = z.object({
   relationship_tree_facets: z
     .array(
       z.object({
-        source_relationship_field: z.string().min(1),
+        /** Omitted to facet the searched blueprint by its own hierarchy. */
+        source_relationship_field: z.string().min(1).optional(),
         hierarchy_field: z.string().min(1).optional(),
         context_id: uuidSchema,
         selected_target_ids: z.array(uuidSchema).min(1),
@@ -635,7 +636,8 @@ export const relationshipTreeFacetChildrenRequestSchema = z.object({
     version: z.number().int().positive().optional(),
   }),
   query: z.string().optional(),
-  source_relationship_field: z.string().min(1),
+  /** Omitted to list the blueprint's own tree through `hierarchy_field`. */
+  source_relationship_field: z.string().min(1).optional(),
   hierarchy_field: z.string().min(1).optional(),
   context_id: uuidSchema,
   parent_id: uuidSchema.optional(),

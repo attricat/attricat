@@ -41,6 +41,8 @@ import type { BrowseBy } from './search';
 
 type Props = {
   blueprint: string;
+  /** Labels the blueprint's own tree in the field picker. */
+  blueprintName: string;
   contextId: string | undefined;
   field: BrowseByField | undefined;
   fields: BrowseByField[];
@@ -58,6 +60,7 @@ type Props = {
  */
 export const ExplorerBrowseRail = ({
   blueprint,
+  blueprintName,
   contextId,
   field,
   fields,
@@ -85,14 +88,18 @@ export const ExplorerBrowseRail = ({
       </Box>
     );
   }
-  const fieldLabel = attributeLabel(field.attribute);
+  const label = (candidate: BrowseByField) =>
+    candidate.ownTree ? blueprintName : attributeLabel(candidate.attribute);
+  const fieldLabel = label(field);
   const request: Omit<RelationshipTreeFacetChildrenRequest, 'cursor'> = {
     blueprint: {
       code: blueprint,
       ...(version === undefined ? {} : { version }),
     },
     ...(query ? { query } : {}),
-    source_relationship_field: field.attribute.code,
+    ...(field.ownTree
+      ? {}
+      : { source_relationship_field: field.attribute.code }),
     ...(field.hierarchyField ? { hierarchy_field: field.hierarchyField } : {}),
     context_id: contextId ?? '',
   };
@@ -134,7 +141,7 @@ export const ExplorerBrowseRail = ({
               key={candidate.attribute.code}
               value={candidate.attribute.code}
             >
-              {attributeLabel(candidate.attribute)}
+              {label(candidate)}
             </MenuItem>
           ))}
         </TextField>

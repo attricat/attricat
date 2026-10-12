@@ -305,62 +305,22 @@ pub(super) async fn search_record_previews(
         matching = Some(intersect_record_ids(matching, filtered));
     }
     for facet in input.relationship_tree_facets {
-        let source = &search_blueprint
-            .attributes
-            .iter()
-            .find(|a| a.code == facet.source_relationship_field)
-            .ok_or_else(|| {
-                ApiError::invalid_input(
-                    "relationship_tree_facets.source_relationship_field is not an attribute"
-                        .to_owned(),
-                )
-            })?;
-        if source.value_type != "relationship" {
-            return Err(ApiError::invalid_input(
-                "relationship_tree_facets.source_relationship_field must be a relationship"
-                    .to_owned(),
-            ));
-        }
-        let target_code = source.target_blueprint_code.as_deref().ok_or_else(|| {
-            ApiError::invalid_input(
-                "relationship_tree_facets.source_relationship_field has no target blueprint"
-                    .to_owned(),
-            )
-        })?;
-        let target = repository
-            .get_blueprint_by_code(target_code)
-            .instrument(tracing::info_span!(
-                "sql.operation",
-                label = "blueprint-load"
-            ))
-            .await?
-            .ok_or_else(|| ApiError::not_found("target blueprint"))?;
-        if let Some(hierarchy_field) = &facet.hierarchy_field {
-            let hierarchy = target
-                .attributes
-                .iter()
-                .find(|a| a.code == *hierarchy_field)
-                .ok_or_else(|| {
-                    ApiError::invalid_input(
-                        "relationship_tree_facets.hierarchy_field is not an attribute".to_owned(),
-                    )
-                })?;
-            if hierarchy.value_type != "relationship"
-                || hierarchy.target_blueprint_code.as_deref() != Some(target_code)
-            {
-                return Err(ApiError::invalid_input(
-                    "relationship_tree_facets.hierarchy_field must be a self-targeting relationship"
-                        .to_owned(),
-                ));
-            }
-        }
+        let target = resolve_tree_facet_target(
+            &repository,
+            &search_blueprint,
+            &current,
+            facet.source_relationship_field.as_deref(),
+            facet.hierarchy_field.as_deref(),
+            "relationship_tree_facets.",
+        )
+        .await?;
         let facet_candidates = matching
             .as_ref()
             .map(|ids| ids.iter().copied().collect::<HashSet<_>>());
         let facet_matching = repository
             .relationship_tree_facet(
                 current.blueprint.id,
-                &facet.source_relationship_field,
+                facet.source_relationship_field.as_deref(),
                 target.blueprint.id,
                 facet.hierarchy_field.as_deref(),
                 facet.context_id,
@@ -739,6 +699,66 @@ async fn resolve_search_filter(
     })
 }
 
+/// The blueprint whose records are a tree facet's nodes: the source
+/// relationship's target, or `current` itself when the facet has no source
+/// relationship and walks the searched blueprint's own hierarchy. `prefix`
+/// names the request field in errors.
+async fn resolve_tree_facet_target(
+    repository: &crate::repository::AttricatRepository,
+    source: &crate::model::BlueprintWithAttributes,
+    current: &crate::model::BlueprintWithAttributes,
+    source_field: Option<&str>,
+    hierarchy_field: Option<&str>,
+    prefix: &str,
+) -> Result<crate::model::BlueprintWithAttributes, ApiError> {
+    let invalid = |message: &str| ApiError::invalid_input(format!("{prefix}{message}"));
+    let target = match source_field {
+        Some(source_field) => {
+            let relationship = source
+                .attributes
+                .iter()
+                .find(|a| a.code == source_field)
+                .filter(|a| a.value_type == "relationship")
+                .ok_or_else(|| {
+                    invalid("source_relationship_field must be a relationship attribute")
+                })?;
+            let target_code = relationship
+                .target_blueprint_code
+                .as_deref()
+                .ok_or_else(|| invalid("source_relationship_field has no target blueprint"))?;
+            repository
+                .get_blueprint_by_code(target_code)
+                .instrument(tracing::info_span!(
+                    "sql.operation",
+                    label = "blueprint-load"
+                ))
+                .await?
+                .ok_or_else(|| ApiError::not_found("target blueprint"))?
+        }
+        None if hierarchy_field.is_none() => {
+            return Err(invalid(
+                "hierarchy_field is required without source_relationship_field",
+            ));
+        }
+        None => current.clone(),
+    };
+    if let Some(hierarchy_field) = hierarchy_field {
+        let hierarchy = target
+            .attributes
+            .iter()
+            .find(|a| a.code == hierarchy_field)
+            .ok_or_else(|| invalid("hierarchy_field is not an attribute"))?;
+        if hierarchy.value_type != "relationship"
+            || hierarchy.target_blueprint_code.as_deref() != Some(&target.blueprint.code)
+        {
+            return Err(invalid(
+                "hierarchy_field must be a self-targeting relationship",
+            ));
+        }
+    }
+    Ok(target)
+}
+
 async fn resolve_relationship_filter(
     repository: &crate::repository::AttricatRepository,
     blueprint: &crate::model::BlueprintWithAttributes,
@@ -1020,42 +1040,15 @@ pub(super) async fn relationship_tree_facet_children(
         None => None,
     };
     let version = published.as_ref().map(|b| b.blueprint.version);
-    let relationship = source
-        .attributes
-        .iter()
-        .find(|a| a.code == input.source_relationship_field)
-        .filter(|a| a.value_type == "relationship")
-        .ok_or_else(|| {
-            ApiError::invalid_input(
-                "source_relationship_field must be a relationship attribute".to_owned(),
-            )
-        })?;
-    let target_code = relationship
-        .target_blueprint_code
-        .as_deref()
-        .ok_or_else(|| {
-            ApiError::invalid_input("source_relationship_field has no target blueprint".to_owned())
-        })?;
-    let target = repository
-        .get_blueprint_by_code(target_code)
-        .await?
-        .ok_or_else(|| ApiError::not_found("target blueprint"))?;
-    if let Some(hierarchy_field) = &input.hierarchy_field {
-        let hierarchy = target
-            .attributes
-            .iter()
-            .find(|a| a.code == *hierarchy_field)
-            .ok_or_else(|| {
-                ApiError::invalid_input("hierarchy_field is not an attribute".to_owned())
-            })?;
-        if hierarchy.value_type != "relationship"
-            || hierarchy.target_blueprint_code.as_deref() != Some(target_code)
-        {
-            return Err(ApiError::invalid_input(
-                "hierarchy_field must be a self-targeting relationship".to_owned(),
-            ));
-        }
-    }
+    let target = resolve_tree_facet_target(
+        &repository,
+        &source,
+        &source,
+        input.source_relationship_field.as_deref(),
+        input.hierarchy_field.as_deref(),
+        "",
+    )
+    .await?;
     let query = input
         .query
         .as_deref()
@@ -1079,7 +1072,7 @@ pub(super) async fn relationship_tree_facet_children(
                 source.blueprint.id,
                 version,
                 resolved.as_ref().map(|resolved| &resolved.ids),
-                &input.source_relationship_field,
+                input.source_relationship_field.as_deref(),
                 target.blueprint.id,
                 input.hierarchy_field.as_deref(),
                 input.context_id,

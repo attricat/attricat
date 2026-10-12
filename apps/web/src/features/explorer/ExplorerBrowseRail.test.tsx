@@ -48,6 +48,7 @@ const renderRail = (
     >
       <ExplorerBrowseRail
         blueprint="product"
+        blueprintName="Product"
         contextId={contextId}
         field={categories}
         fields={[categories, brand]}
@@ -138,6 +139,33 @@ describe('ExplorerBrowseRail', () => {
     expect(onSelect).toHaveBeenLastCalledWith([]);
   });
 
+  it("lists the blueprint's own tree under its name", async () => {
+    const parent: BrowseByField = {
+      attribute: {
+        code: 'parent',
+        name: 'Parent',
+        target_blueprint_code: 'product',
+        value_type: 'relationship',
+      },
+      hierarchyField: 'parent',
+      ownTree: true,
+    };
+    renderRail({ field: parent, fields: [parent, brand] });
+    expect(
+      await screen.findByRole('complementary', { name: 'Browse by Product' }),
+    ).toBeTruthy();
+    expect(getRelationshipTreeFacetChildren).toHaveBeenCalledWith(
+      {
+        blueprint: { code: 'product', version: 2 },
+        context_id: contextId,
+        cursor: null,
+        hierarchy_field: 'parent',
+        query: 'linen',
+      },
+      expect.anything(),
+    );
+  });
+
   it('hides the rail', async () => {
     const { onFieldChange } = renderRail();
     await userEvent.click(
@@ -161,6 +189,7 @@ describe('ExplorerBrowseRail', () => {
     const { container } = render(
       <ExplorerBrowseRail
         blueprint="product"
+        blueprintName="Product"
         contextId={contextId}
         field={undefined}
         fields={[]}

@@ -12,12 +12,15 @@ export const isRelationshipFilterAttribute = (
   typeof attribute.target_blueprint_code === 'string';
 
 export type ExplorerRelationshipFacet = {
+  /** Selects the browsed blueprint's own records and their descendants. */
+  ownTree?: true;
   selectedIds: string[];
   sourceRelationship: RelationshipFilterAttribute;
 };
 
 export type RelationshipFacetUpdate = {
   hierarchyField?: string;
+  ownTree?: true;
   selectedIds?: string[];
   targetBlueprint?: string;
 };

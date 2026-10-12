@@ -173,7 +173,7 @@ The renderer must be declared by an enabled extension for the column's value typ
 
 ## Explorer browse panel
 
-The **Browse by** panel beside the Explorer results lists the targets of one relationship. By default it opens for the first relationship whose target blueprint has a [hierarchy](#hierarchies). To choose the field, name it in `views.explorer`:
+The **Browse by** panel beside the Explorer results lists the targets of one relationship. A blueprint with its own [hierarchy](#hierarchies) lists its own tree instead, under the blueprint's name. By default the panel opens for that tree, or else for the first relationship whose target blueprint has a hierarchy. To choose the field, name it in `views.explorer`:
 
 ```toml
 [views.explorer]

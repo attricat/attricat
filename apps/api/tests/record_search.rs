@@ -622,5 +622,110 @@ target_blueprint = "facet_category"
         StatusCode::UNPROCESSABLE_ENTITY
     );
 
+    // Without a source relationship, the facet walks the blueprint's own tree:
+    // a selected node matches itself and its descendants.
+    let own_tree: Value = client
+        .post(format!("{base_url}/v1/records/search"))
+        .json(&json!({
+            "blueprint": { "code": "facet_category" },
+            "relationship_tree_facets": [{
+                "hierarchy_field": "parent",
+                "context_id": context["id"],
+                "selected_target_ids": [root["id"]]
+            }]
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let mut own_tree_ids: Vec<_> = own_tree["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].clone())
+        .collect();
+    own_tree_ids.sort_by_key(|id| id.to_string());
+    let mut expected = vec![root["id"].clone(), child["id"].clone()];
+    expected.sort_by_key(|id| id.to_string());
+    assert_eq!(own_tree_ids, expected);
+
+    let own_roots: Value = client
+        .post(format!(
+            "{base_url}/v1/records/facets/relationship-tree/children"
+        ))
+        .json(&json!({
+            "blueprint": { "code": "facet_category" },
+            "hierarchy_field": "parent",
+            "context_id": context["id"],
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let own_roots = own_roots["items"].as_array().unwrap();
+    assert_eq!(own_roots.len(), 2);
+    for item in own_roots {
+        // Each root counts itself and the shared child.
+        assert_eq!(item["count"], 2);
+        assert_eq!(item["has_children"], true);
+    }
+    let own_children: Value = client
+        .post(format!(
+            "{base_url}/v1/records/facets/relationship-tree/children"
+        ))
+        .json(&json!({
+            "blueprint": { "code": "facet_category" },
+            "hierarchy_field": "parent",
+            "context_id": context["id"],
+            "parent_id": root["id"],
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(own_children["items"][0]["id"], child["id"]);
+    assert_eq!(own_children["items"][0]["count"], 1);
+    assert_eq!(own_children["items"][0]["has_children"], false);
+
+    for (path, body) in [
+        (
+            "/v1/records/search",
+            json!({
+                "blueprint": { "code": "facet_category" },
+                "relationship_tree_facets": [{
+                    "context_id": context["id"],
+                    "selected_target_ids": [root["id"]]
+                }]
+            }),
+        ),
+        (
+            "/v1/records/facets/relationship-tree/children",
+            json!({
+                "blueprint": { "code": "facet_category" },
+                "context_id": context["id"],
+            }),
+        ),
+    ] {
+        let missing_hierarchy = client
+            .post(format!("{base_url}{path}"))
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(missing_hierarchy.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
     server.abort();
 }

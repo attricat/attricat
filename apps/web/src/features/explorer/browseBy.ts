@@ -8,6 +8,11 @@ export type BrowseByField = {
   attribute: RelationshipFilterAttribute;
   /** Self-targeting field that arranges the targets as a tree. */
   hierarchyField?: string;
+  /**
+   * `attribute` is the browsed blueprint's own hierarchy field, so the rail
+   * lists the blueprint's records and a node matches itself and its subtree.
+   */
+  ownTree?: true;
 };
 
 const hierarchyPreference = { tree: 0, acyclic: 1 } as const;
@@ -32,9 +37,11 @@ export const hierarchyFieldOf = (target: BlueprintWithAttributes) =>
 
 /**
  * Relationship fields with a single target blueprint. Fields that allow
- * several targets cannot supply one list of targets.
+ * several targets cannot supply one list of targets. The browsed blueprint's
+ * own hierarchy field lists its own tree rather than its records' parents.
  */
 export const browseByFields = (
+  blueprintCode: string | undefined,
   relationshipFields: RelationshipFilterAttribute[],
   targets: (BlueprintWithAttributes | undefined)[],
 ): BrowseByField[] =>
@@ -42,14 +49,20 @@ export const browseByFields = (
     if ((attribute.target_blueprint_codes?.length ?? 1) > 1) return [];
     const target = targets[index];
     if (!target) return [];
-    return [{ attribute, hierarchyField: hierarchyFieldOf(target) }];
+    const hierarchyField = hierarchyFieldOf(target);
+    const ownTree =
+      target.blueprint.code === blueprintCode &&
+      hierarchyField === attribute.code;
+    return [
+      { attribute, hierarchyField, ...(ownTree ? { ownTree: true } : {}) },
+    ];
   });
 
 /**
  * The field the rail lists: the URL's choice, then the person's last choice
- * for the blueprint, then the blueprint's `views.explorer.browse_by`, then the
- * first field whose target is a hierarchy. A choice the current revision no
- * longer offers falls through.
+ * for the blueprint, then the blueprint's `views.explorer.browse_by`, then its
+ * own tree, then the first field whose target is a hierarchy. A choice the
+ * current revision no longer offers falls through.
  */
 export const resolveBrowseBy = (
   fields: BrowseByField[],
@@ -62,7 +75,10 @@ export const resolveBrowseBy = (
     const field = fields.find((field) => field.attribute.code === choice);
     if (field) return field;
   }
-  return fields.find((field) => field.hierarchyField);
+  return (
+    fields.find((field) => field.ownTree) ??
+    fields.find((field) => field.hierarchyField)
+  );
 };
 
 const storageKey = (blueprintId: string) =>

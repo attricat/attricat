@@ -62,6 +62,7 @@ describe('browseByFields', () => {
     });
     const supplier = relationship('supplier', 'supplier');
     const fields = browseByFields(
+      'product',
       [categories, brand, related, supplier],
       [
         blueprint('category', [
@@ -75,6 +76,18 @@ describe('browseByFields', () => {
     expect(fields).toEqual([
       { attribute: categories, hierarchyField: 'parent' },
       { attribute: brand, hierarchyField: undefined },
+    ]);
+  });
+
+  it("marks the blueprint's own hierarchy field as its own tree", () => {
+    const parent = relationship('parent', 'category', { hierarchy: 'tree' });
+    const related = relationship('related', 'category');
+    const category = blueprint('category', [parent]);
+    expect(
+      browseByFields('category', [related, parent], [category, category]),
+    ).toEqual([
+      { attribute: related, hierarchyField: 'parent' },
+      { attribute: parent, hierarchyField: 'parent', ownTree: true },
     ]);
   });
 });
@@ -115,6 +128,17 @@ describe('resolveBrowseBy', () => {
     expect(resolveBrowseBy(fields, undefined, undefined, 'removed')).toBe(
       categories,
     );
+  });
+
+  it("opens on the blueprint's own tree before a related tree", () => {
+    const ownTree: BrowseByField = {
+      attribute: relationship('parent', 'product'),
+      hierarchyField: 'parent',
+      ownTree: true,
+    };
+    expect(
+      resolveBrowseBy([brand, categories, ownTree], undefined, undefined),
+    ).toBe(ownTree);
   });
 
   it('opens by default only for a hierarchy', () => {

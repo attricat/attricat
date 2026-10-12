@@ -13,6 +13,11 @@ const relationshipFacetSearchSchema = z.object({
   targetBlueprint: z.string().trim().min(1).optional(),
   /** Self-targeting field of the target; selections then match descendants. */
   hierarchyField: z.string().trim().min(1).optional(),
+  /**
+   * `field` is the searched blueprint's own hierarchy field: a selection
+   * matches the selected records and their descendants.
+   */
+  ownTree: z.literal(true).optional(),
 });
 
 /** The relationship field the browse rail lists, or `false` when it is hidden. */
