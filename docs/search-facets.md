@@ -82,6 +82,12 @@ counts after choosing a category. Attribute filters apply to the main Explorer
 search but are not included in the separately loaded facet-child request, so
 they do not currently affect facet counts.
 
+Without a search term, counts are cached for the workspace and may lag record
+changes by about 30 seconds. The next request after that reloads them, and
+requests arriving during the reload keep receiving the previous counts. Nodes themselves are always
+current: a new or moved category appears at once, with the count it had when
+the counts were cached (0 for a new one). Counts for a search term are exact.
+
 Selection is an OR over the selected nodes and their descendants within a
 facet. Selections across different facets are combined with AND semantics.
 Selecting both a parent and child does not duplicate results.
@@ -135,9 +141,12 @@ is expanded and uses `next_cursor` for that node's **Load more** action.
 
 ## Performance
 
-The API aggregates complete matching result sets in PostgreSQL so counts remain
-stable across record pagination, but only returns the requested root or child
-page. `RELATIONSHIP_FACET_MAX_NODES` sets the server-side maximum number of
+Counts cover complete matching result sets, so they stay stable across record
+pagination, but the API only returns the requested root or child page. A page
+reads the tree's parent edges fresh and takes counts from the cache described
+in [Counts And Selection](#counts-and-selection); with a search term, it
+resolves every matching source edge and counts the page's subtrees in memory.
+`apps/api/tests/facet_latency.rs` measures both paths (see `perf/facets.md`). `RELATIONSHIP_FACET_MAX_NODES` sets the server-side maximum number of
 nodes returned for each page (default: 100).
 
 Large taxonomies should retain indexes for relationship target lookups. The

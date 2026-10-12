@@ -276,23 +276,27 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
             search(default_context, Some(level_2), None),
         ),
     ];
-    // Ten samples after a warm-up exceed the five executions after which
+    // Ten samples after the first exceed the five executions after which
     // PostgreSQL may switch a pooled prepared statement to a generic plan.
-    println!("| Scenario | Median | Min | Max |\n| --- | ---: | ---: | ---: |");
+    // `First` is each scenario's first request. Browse scenarios without a
+    // query share cached counts, so only the first of them misses the cache.
+    println!("| Scenario | First | Median | Min | Max |\n| --- | ---: | ---: | ---: | ---: |");
     let mut slowest = Vec::new();
     for (name, (path, body)) in scenarios {
+        let started = Instant::now();
+        post(&client, &base_url, path, &body).await;
+        let first = started.elapsed();
         let mut samples = Vec::new();
-        for run in 0..11 {
+        for _ in 0..10 {
             let started = Instant::now();
             let timing = post(&client, &base_url, path, &body).await;
-            if run > 0 {
-                samples.push((started.elapsed(), timing));
-            }
+            samples.push((started.elapsed(), timing));
         }
         samples.sort_by_key(|(elapsed, _)| *elapsed);
         let (max, max_timing) = samples.last().unwrap().clone();
         println!(
-            "| {name} | {} | {} | {} |",
+            "| {name} | {} | {} | {} | {} |",
+            millis(first),
             millis(samples[samples.len() / 2].0),
             millis(samples[0].0),
             millis(max),
