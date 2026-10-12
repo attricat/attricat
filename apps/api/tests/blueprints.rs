@@ -550,3 +550,83 @@ async fn checks_enum_value_labels(pool: PgPool) {
 
     server.abort();
 }
+
+#[sqlx::test]
+async fn checks_an_unchanged_definition_as_the_revision_it_matches(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let definition = "format_version = 1\ncode = \"unchanged\"\nname = \"Unchanged\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"";
+    let created = create_blueprint(&client, &base_url, definition).await;
+    let blueprint_id = created["blueprint"]["id"].as_str().unwrap();
+
+    let checked: Value = client
+        .post(format!(
+            "{base_url}/blueprints/{blueprint_id}/versions/validate"
+        ))
+        .json(&json!({ "definition": definition }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(checked["blueprint"]["version"], 1);
+
+    let saved = client
+        .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
+        .json(&json!({ "definition": definition }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::CONFLICT);
+    let error = saved.json::<Value>().await.unwrap();
+    assert_eq!(
+        error["error"]["message"],
+        "the definition is identical to version 1 of this blueprint"
+    );
+
+    server.abort();
+}
+
+#[sqlx::test]
+async fn checks_running_during_a_save_number_the_revision_after_it(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let definition = |name: &str| {
+        format!(
+            "format_version = 1\ncode = \"raced\"\nname = \"{name}\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
+        )
+    };
+    let created = create_blueprint(&client, &base_url, &definition("Raced")).await;
+    let blueprint_id = created["blueprint"]["id"].as_str().unwrap();
+    let post = |path: &str, definition: String| {
+        client
+            .post(format!(
+                "{base_url}/blueprints/{blueprint_id}/versions{path}"
+            ))
+            .json(&json!({ "definition": definition }))
+            .send()
+    };
+
+    // A check that waits for a save must see the saved revision, whether it
+    // checks that definition or another one.
+    for round in 0..10 {
+        let (same, saved, other) = tokio::join!(
+            post("/validate", definition(&format!("Saved {round}"))),
+            post("", definition(&format!("Saved {round}"))),
+            post("/validate", definition(&format!("Other {round}"))),
+        );
+        for response in [same, saved, other] {
+            let response = response.unwrap();
+            assert!(
+                response.status().is_success(),
+                "round {round}: {}",
+                response.text().await.unwrap()
+            );
+        }
+    }
+
+    server.abort();
+}

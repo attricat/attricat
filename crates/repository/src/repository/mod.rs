@@ -633,6 +633,8 @@ pub enum RepositoryError {
     RelationshipSearchTimedOut,
     #[error("blueprint code is already owned by another blueprint")]
     BlueprintCodeTaken,
+    #[error("the definition is identical to version {version} of this blueprint")]
+    BlueprintRevisionUnchanged { version: i64 },
     #[error("catalog code is already in use")]
     AttricatCodeTaken,
     #[error("invalid team: {0}")]

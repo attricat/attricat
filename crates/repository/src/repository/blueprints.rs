@@ -161,7 +161,16 @@ impl AttricatRepository {
             }
         };
         transaction.rollback().await?;
-        result
+        match (blueprint_id, result) {
+            // Saving would store nothing new, but the definition itself is
+            // fine: it is the revision it matches.
+            (Some(blueprint_id), Err(RepositoryError::BlueprintRevisionUnchanged { version })) => {
+                self.get_blueprint_revision(blueprint_id, version)
+                    .await?
+                    .ok_or(RepositoryError::NotFound("blueprint version"))
+            }
+            (_, result) => result,
+        }
     }
 
     async fn create_blueprint_revision_in_transaction(
@@ -170,8 +179,19 @@ impl AttricatRepository {
         blueprint_id: Uuid,
         input: CreateBlueprint,
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
+        // Serialize revisions of one blueprint on its first revision, which
+        // never changes. Locking the latest instead would let a waiter resume
+        // on a revision that is no longer the latest and reuse its successor's
+        // version, so the latest is read afterwards in its own statement.
+        sqlx::query(
+            "SELECT 1 FROM blueprints WHERE id = $1 AND workspace_id = $2 ORDER BY version LIMIT 1 FOR UPDATE",
+        )
+        .bind(blueprint_id)
+        .bind(self.workspace_id.0)
+        .execute(&mut **transaction)
+        .await?;
         let latest = sqlx::query_as::<_, LatestBlueprint>(
-            "SELECT version, code FROM blueprints WHERE id = $1 AND workspace_id = $2 ORDER BY version DESC LIMIT 1 FOR UPDATE",
+            "SELECT version, code FROM blueprints WHERE id = $1 AND workspace_id = $2 ORDER BY version DESC LIMIT 1",
         )
         .bind(blueprint_id)
         .bind(self.workspace_id.0)
@@ -185,6 +205,17 @@ impl AttricatRepository {
             return Err(RepositoryError::InvalidBlueprintDefinition(
                 "blueprint code cannot change across revisions".to_owned(),
             ));
+        }
+        let unchanged: Option<i64> = sqlx::query_scalar(
+            "SELECT version FROM blueprints WHERE id = $1 AND workspace_id = $2 AND definition_hash = $3",
+        )
+        .bind(blueprint_id)
+        .bind(self.workspace_id.0)
+        .bind(&compiled.raw_definition_hash)
+        .fetch_optional(&mut **transaction)
+        .await?;
+        if let Some(version) = unchanged {
+            return Err(RepositoryError::BlueprintRevisionUnchanged { version });
         }
 
         self.insert_blueprint_revision_in_transaction(
