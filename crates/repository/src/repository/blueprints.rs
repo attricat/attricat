@@ -106,9 +106,7 @@ impl AttricatRepository {
         // shared logical namespace is required by solution-pack mappings and
         // also prevents ordinary creates from racing an applying plan.
         let workspace_id = self.workspace_id.0;
-        if !self.check_only {
-            super::lock_workspace_resource_code(transaction, workspace_id, &compiled.code).await?;
-        }
+        super::lock_workspace_resource_code(transaction, workspace_id, &compiled.code).await?;
         if !super::workspace_resource_code_matches(transaction, workspace_id, &compiled.code)
             .await?
             .is_empty()
@@ -151,17 +149,14 @@ impl AttricatRepository {
         blueprint_id: Option<Uuid>,
         input: CreateBlueprint,
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
-        let check = self.for_check();
         let mut transaction = self.pool.begin().await?;
         let result = match blueprint_id {
             Some(blueprint_id) => {
-                check
-                    .create_blueprint_revision_in_transaction(&mut transaction, blueprint_id, input)
+                self.create_blueprint_revision_in_transaction(&mut transaction, blueprint_id, input)
                     .await
             }
             None => {
-                check
-                    .create_blueprint_in_transaction(&mut transaction, Uuid::new_v4(), input)
+                self.create_blueprint_in_transaction(&mut transaction, Uuid::new_v4(), input)
                     .await
             }
         };
@@ -175,11 +170,9 @@ impl AttricatRepository {
         blueprint_id: Uuid,
         input: CreateBlueprint,
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
-        let latest = sqlx::query_as::<_, LatestBlueprint>(if self.check_only {
-            "SELECT version, code FROM blueprints WHERE id = $1 AND workspace_id = $2 ORDER BY version DESC LIMIT 1"
-        } else {
-            "SELECT version, code FROM blueprints WHERE id = $1 AND workspace_id = $2 ORDER BY version DESC LIMIT 1 FOR UPDATE"
-        })
+        let latest = sqlx::query_as::<_, LatestBlueprint>(
+            "SELECT version, code FROM blueprints WHERE id = $1 AND workspace_id = $2 ORDER BY version DESC LIMIT 1 FOR UPDATE",
+        )
         .bind(blueprint_id)
         .bind(self.workspace_id.0)
         .fetch_optional(&mut **transaction)

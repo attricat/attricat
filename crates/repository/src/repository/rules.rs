@@ -124,7 +124,7 @@ impl AttricatRepository {
     }
 
     /// Serializes every writer of a rule code in this workspace until the
-    /// transaction ends, unless this is a save check, and returns the families that already use it, as
+    /// transaction ends and returns the families that already use it, as
     /// `(rule_id, blueprint_id, latest_version)`. A rule code names one family
     /// per workspace; callers must reject a code owned by another family.
     pub(super) async fn lock_rule_code(
@@ -133,12 +133,10 @@ impl AttricatRepository {
         code: &str,
     ) -> Result<Vec<(Uuid, Uuid, i64)>, RepositoryError> {
         let ws = self.workspace_id.0;
-        if !self.check_only {
-            sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
-                .bind(format!("rule-code:{ws}:{code}"))
-                .execute(&mut **tx)
-                .await?;
-        }
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
+            .bind(format!("rule-code:{ws}:{code}"))
+            .execute(&mut **tx)
+            .await?;
         Ok(sqlx::query_as(
             "SELECT id, blueprint_id, max(version) FROM rules WHERE workspace_id=$1 AND code=$2 GROUP BY id, blueprint_id",
         )

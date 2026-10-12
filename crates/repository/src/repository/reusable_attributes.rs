@@ -255,21 +255,18 @@ impl AttricatRepository {
         definition_id: Option<Uuid>,
         input: CreateReusableAttribute,
     ) -> Result<ReusableAttribute, RepositoryError> {
-        let check = self.for_check();
         let mut transaction = self.pool.begin().await?;
         let revision_id = match definition_id {
             Some(definition_id) => {
-                check
-                    .create_reusable_attribute_revision_in_transaction(
-                        &mut transaction,
-                        definition_id,
-                        &input,
-                    )
-                    .await
+                self.create_reusable_attribute_revision_in_transaction(
+                    &mut transaction,
+                    definition_id,
+                    &input,
+                )
+                .await
             }
             None => {
-                check
-                    .create_reusable_attribute_in_transaction(&mut transaction, &input)
+                self.create_reusable_attribute_in_transaction(&mut transaction, &input)
                     .await
             }
         };
@@ -321,11 +318,7 @@ impl AttricatRepository {
     ) -> Result<Uuid, RepositoryError> {
         let definition = parse_definition(input)?;
         let ws = workspace(self);
-        let existing: Option<(String, String)> = sqlx::query_as(if self.check_only {
-            "SELECT namespace, code FROM reusable_attribute_definitions WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL"
-        } else {
-            "SELECT namespace, code FROM reusable_attribute_definitions WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE"
-        })
+        let existing: Option<(String, String)> = sqlx::query_as("SELECT namespace, code FROM reusable_attribute_definitions WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE")
             .bind(definition_id).bind(ws).fetch_optional(&mut **transaction).await?;
         let Some((_namespace, code)) = existing else {
             return Err(RepositoryError::NotFound("reusable attribute"));
