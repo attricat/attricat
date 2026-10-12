@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { definitionKinds } from '../definition-editor/constants';
-import { DefinitionEditor } from '../definition-editor/DefinitionEditor';
+import { DefinitionTemplateDialog } from '../definition-editor/DefinitionTemplateDialog';
+import { DefinitionWorkspace } from '../definition-editor/DefinitionWorkspace';
+import { UnsavedDefinitionChangesDialog } from '../definition-editor/UnsavedDefinitionChangesDialog';
+import { useDefinitionCheck } from '../definition-editor/useDefinitionCheck';
 import { draftEditors } from '../drafts/constants';
 import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
 import { definitionDraftSchema } from '../drafts/schemas';
@@ -16,12 +19,11 @@ import {
   createBlueprint,
   createBlueprintRevision,
   getBlueprintRevision,
+  validateBlueprint,
 } from './api';
 import { blueprintTemplates } from './blueprintEditorUtils';
-import { BlueprintTemplateDialog } from './BlueprintTemplateDialog';
-import { blueprintEditorHeight } from './constants';
+import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import { blueprintQueryKeys } from './queryKeys';
-import { UnsavedBlueprintChangesDialog } from './UnsavedBlueprintChangesDialog';
 import { BlueprintIcon } from '../../components/systemIcons';
 
 type PendingUnsavedAction =
@@ -90,16 +92,14 @@ export const BlueprintEditorPage = ({
     },
   });
   const canSave = !save.isPending && (!blueprintId || isDirty);
-
-  // Monaco keeps the handlers registered on mount, so they read the latest
-  // render's values through refs instead of capturing stale ones.
-  const savePendingRef = useRef(save.isPending);
-  const saveShortcutRef = useRef<() => void>(() => undefined);
-  useLayoutEffect(() => {
-    savePendingRef.current = save.isPending;
-    saveShortcutRef.current = () => {
-      if (canSave) save.mutate({ definition });
-    };
+  const saveDefinition = () => {
+    if (canSave && !source.isError) save.mutate({ definition });
+  };
+  const check = useDefinitionCheck({
+    definition,
+    kind: definitionKinds.blueprint,
+    resourceId: blueprintId,
+    validate: (value, id, signal) => validateBlueprint(value, id, signal),
   });
 
   const restoreDraft = () => {
@@ -179,23 +179,15 @@ export const BlueprintEditorPage = ({
           }
         />
         <Stack direction="row" spacing={1}>
-          {!blueprintId && (
-            <Button
-              disabled={save.isPending}
-              onClick={() => setTemplateDialogOpen(true)}
-            >
-              {t('blueprints.examples')}
-            </Button>
-          )}
           {isDirty && (
-            <Chip color="warning" label={t('blueprints.unsavedChanges')} />
+            <Chip color="warning" label={t('definitionEditor.unsaved.chip')} />
           )}
           <Button disabled={save.isPending} onClick={cancel}>
             {t('blueprints.cancel')}
           </Button>
           <Button
             disabled={!canSave || source.isError}
-            onClick={() => save.mutate({ definition })}
+            onClick={saveDefinition}
             variant="contained"
           >
             {save.isPending
@@ -228,11 +220,12 @@ export const BlueprintEditorPage = ({
         </Alert>
       )}
       {!blueprintId && (
-        <BlueprintTemplateDialog
+        <DefinitionTemplateDialog
           onClose={() => setTemplateDialogOpen(false)}
           onSelect={selectTemplate}
           open={templateDialogOpen && !draft.pending}
           selectedIndex={templateIndex}
+          templates={blueprintTemplates}
         />
       )}
       <DraftRestoreDialog
@@ -240,30 +233,42 @@ export const BlueprintEditorPage = ({
         onDiscard={draft.discard}
         onRestore={restoreDraft}
       />
-      <UnsavedBlueprintChangesDialog
+      <UnsavedDefinitionChangesDialog
         action={pendingUnsavedAction?.type}
         onCancel={() => setPendingUnsavedAction(undefined)}
         onConfirm={confirmUnsavedAction}
       />
-      <DefinitionEditor
+      <DefinitionWorkspace
+        check={check}
         kind={definitionKinds.blueprint}
-        height={blueprintEditorHeight}
-        marginTop={3}
-        onChange={(value) => {
-          if (!savePendingRef.current) setEditedDefinition(value ?? '');
-        }}
-        onMount={(editor, monaco) => {
-          editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () =>
-            saveShortcutRef.current(),
-          );
-        }}
+        onChange={setEditedDefinition}
+        onSave={saveDefinition}
+        preview={
+          check.result && (
+            <BlueprintViewsPreview
+              attributes={check.result.attributes}
+              recordSchema={check.result.blueprint.record_schema}
+              views={check.result.blueprint.views}
+            />
+          )
+        }
         readOnly={save.isPending}
+        toolbar={
+          !blueprintId && (
+            <Button
+              disabled={save.isPending}
+              onClick={() => setTemplateDialogOpen(true)}
+            >
+              {t('definitionEditor.templates.button')}
+            </Button>
+          )
+        }
         value={definition}
       />
       <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">
         {blueprintId && !isDirty
-          ? t('blueprints.makeChangeBeforeSaving')
-          : t('blueprints.saveShortcut')}
+          ? t('definitionEditor.makeChangeBeforeSaving')
+          : t('definitionEditor.saveShortcut')}
       </Typography>
     </PageContainer>
   );

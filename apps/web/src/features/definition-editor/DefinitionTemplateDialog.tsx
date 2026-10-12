@@ -11,39 +11,49 @@ import {
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { blueprintTemplates } from './blueprintEditorUtils';
 
-export const BlueprintTemplateDialog = ({
+const maxTemplateColumns = 3;
+
+export type DefinitionTemplate = {
+  definition: string;
+  descriptionKey: string;
+  labelKey: string;
+};
+
+/** Offers valid starting definitions for a new blueprint or attribute. */
+export const DefinitionTemplateDialog = ({
   onClose,
   onSelect,
   open,
   selectedIndex,
+  templates,
 }: {
   onClose: () => void;
   onSelect: (index: number) => void;
   open: boolean;
   selectedIndex: number;
+  templates: readonly DefinitionTemplate[];
 }) => {
   const { t } = useTranslation();
   return (
     <Dialog fullWidth maxWidth="md" onClose={onClose} open={open}>
-      <DialogTitle>{t('blueprints.startFromExample')}</DialogTitle>
+      <DialogTitle>{t('definitionEditor.templates.title')}</DialogTitle>
       <DialogContent>
         <Typography color="text.secondary">
-          {t('blueprints.templateDescription')}
+          {t('definitionEditor.templates.description')}
         </Typography>
         <Box
           sx={{
             display: 'grid',
             gap: 2,
             gridTemplateColumns: {
-              sm: `repeat(${blueprintTemplates.length}, minmax(0, 1fr))`,
+              sm: `repeat(${Math.min(templates.length, maxTemplateColumns)}, minmax(0, 1fr))`,
               xs: '1fr',
             },
             mt: 2,
           }}
         >
-          {blueprintTemplates.map((template, index) => {
+          {templates.map((template, index) => {
             const selected = selectedIndex === index;
             return (
               <Card
@@ -70,7 +80,9 @@ export const BlueprintTemplateDialog = ({
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>{t('blueprints.dismiss')}</Button>
+        <Button onClick={onClose}>
+          {t('definitionEditor.templates.dismiss')}
+        </Button>
       </DialogActions>
     </Dialog>
   );

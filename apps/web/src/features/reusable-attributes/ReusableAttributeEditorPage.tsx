@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Button, Chip, Stack, Typography } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
@@ -9,62 +9,26 @@ import {
   createReusableAttribute,
   createReusableAttributeRevision,
   listReusableAttributes,
+  validateReusableAttribute,
 } from './api';
 import { definitionKinds } from '../definition-editor/constants';
-import { DefinitionEditor } from '../definition-editor/DefinitionEditor';
+import { DefinitionTemplateDialog } from '../definition-editor/DefinitionTemplateDialog';
+import { DefinitionWorkspace } from '../definition-editor/DefinitionWorkspace';
+import { UnsavedDefinitionChangesDialog } from '../definition-editor/UnsavedDefinitionChangesDialog';
+import { useDefinitionCheck } from '../definition-editor/useDefinitionCheck';
 import { draftEditors } from '../drafts/constants';
 import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
 import { definitionDraftSchema } from '../drafts/schemas';
 import { useEditorDraft } from '../drafts/useEditorDraft';
 import { reusableAttributeQueryKeys } from './queryKeys';
-import {
-  DEFAULT_VALUE_TYPE,
-  EDITOR_HEIGHT,
-  EMPTY_VALUE_PLACEHOLDER,
-  NEW_ATTRIBUTE_DEFINITION,
-  PREVIEW_COLUMN_WIDTH,
-} from './constants';
 import { latestReusableAttributeRevisions } from './latestRevisions';
+import { ReusableAttributePreview } from './ReusableAttributePreview';
+import { reusableAttributeTemplates } from './templates';
 import { ReusableAttributeIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
 
-const definitionValue = (definition: string, key: string) =>
-  definition.match(new RegExp(`^${key}\\s*=\\s*"([^"]*)"`, 'm'))?.[1];
-
-const DefinitionPreview = ({ definition }: { definition: string }) => {
-  const { t } = useTranslation();
-  const code = definitionValue(definition, 'code') ?? EMPTY_VALUE_PLACEHOLDER;
-  const name =
-    definitionValue(definition, 'name') ??
-    t('reusableAttributes.editor.untitled');
-  const valueType =
-    definitionValue(definition, 'value_type') ?? DEFAULT_VALUE_TYPE;
-  return (
-    <Paper sx={{ p: 2 }} variant="outlined">
-      <Typography gutterBottom variant="subtitle2">
-        {t('reusableAttributes.editor.preview')}
-      </Typography>
-      <Typography color="text.secondary" variant="caption">
-        {valueType} · {code}
-      </Typography>
-      <Box
-        component="input"
-        disabled
-        sx={{
-          border: 1,
-          borderColor: 'divider',
-          borderRadius: 1,
-          boxSizing: 'border-box',
-          display: 'block',
-          mt: 1,
-          p: 1.5,
-          width: '100%',
-        }}
-        value={name}
-      />
-    </Paper>
-  );
-};
+type PendingUnsavedAction =
+  { templateIndex: number; type: 'replace' } | { type: 'discard' };
 
 export const ReusableAttributeEditorPage = ({
   definitionId,
@@ -81,11 +45,18 @@ export const ReusableAttributeEditorPage = ({
   const attribute = latestReusableAttributeRevisions(
     attributes.data ?? [],
   ).find((item) => item.definition_id === definitionId);
-  const [editedDefinition, setEditedDefinition] = useState<string>();
-  const initialDefinition = attribute?.definition ?? NEW_ATTRIBUTE_DEFINITION;
+  const [templateIndex, setTemplateIndex] = useState(0);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(!definitionId);
+  const [pendingUnsavedAction, setPendingUnsavedAction] =
+    useState<PendingUnsavedAction>();
+  const [editedDefinition, setEditedDefinition] = useState<string | null>(null);
+  const initialDefinition =
+    attribute?.definition ??
+    reusableAttributeTemplates[templateIndex].definition;
   const definition = editedDefinition ?? initialDefinition;
+  const isDirty = definition !== initialDefinition;
   const draft = useEditorDraft({
-    dirty: definition !== initialDefinition,
+    dirty: isDirty,
     editor: definitionId
       ? draftEditors.reusableAttributeRevision
       : draftEditors.reusableAttributeCreate,
@@ -110,6 +81,50 @@ export const ReusableAttributeEditorPage = ({
       navigate({ to: '/manage/reusable-attributes' });
     },
   });
+  const canSave = !save.isPending && (!definitionId || isDirty);
+  const saveDefinition = () => {
+    if (canSave) save.mutate(definition);
+  };
+  const check = useDefinitionCheck({
+    definition,
+    kind: definitionKinds.reusableAttribute,
+    resourceId: attribute?.definition_id,
+    validate: (value, id, signal) =>
+      validateReusableAttribute({ definition: value }, id, signal),
+  });
+
+  const applyTemplate = (index: number) => {
+    setTemplateIndex(index);
+    setEditedDefinition(null);
+    setTemplateDialogOpen(false);
+  };
+
+  const selectTemplate = (index: number) => {
+    if (isDirty) {
+      setPendingUnsavedAction({ templateIndex: index, type: 'replace' });
+      return;
+    }
+    applyTemplate(index);
+  };
+
+  const leaveEditor = () => navigate({ to: '/manage/reusable-attributes' });
+
+  const cancel = () => {
+    if (isDirty) {
+      setPendingUnsavedAction({ type: 'discard' });
+      return;
+    }
+    leaveEditor();
+  };
+
+  const confirmUnsavedAction = () => {
+    if (pendingUnsavedAction?.type === 'replace') {
+      applyTemplate(pendingUnsavedAction.templateIndex);
+    } else if (pendingUnsavedAction?.type === 'discard') {
+      leaveEditor();
+    }
+    setPendingUnsavedAction(undefined);
+  };
 
   if (definitionId && attributes.isPending) {
     return (
@@ -131,67 +146,99 @@ export const ReusableAttributeEditorPage = ({
 
   return (
     <PageContainer>
-      <Stack spacing={3}>
-        <PageHeader
-          description={t('reusableAttributes.editor.description')}
-          icon={ReusableAttributeIcon}
-          title={
-            attribute
-              ? t('reusableAttributes.editor.editTitle', {
-                  name: lexiconText(attribute.name),
-                })
-              : t('reusableAttributes.editor.newTitle')
-          }
-          actions={
-            <Stack direction="row" spacing={1}>
-              <Button
-                disabled={save.isPending}
-                onClick={() => navigate({ to: '/manage/reusable-attributes' })}
-              >
-                {t('reusableAttributes.editor.cancel')}
-              </Button>
-              <Button
-                disabled={save.isPending}
-                onClick={() => save.mutate(definition)}
-                variant="contained"
-              >
-                {attribute
-                  ? t('reusableAttributes.editor.saveRevision')
-                  : t('reusableAttributes.editor.createAttribute')}
-              </Button>
-            </Stack>
-          }
+      <PageHeader
+        description={t('reusableAttributes.editor.description')}
+        icon={ReusableAttributeIcon}
+        title={
+          attribute
+            ? t('reusableAttributes.editor.editTitle', {
+                name: lexiconText(attribute.name),
+              })
+            : t('reusableAttributes.editor.newTitle')
+        }
+        actions={
+          <Stack direction="row" spacing={1}>
+            {isDirty && (
+              <Chip
+                color="warning"
+                label={t('definitionEditor.unsaved.chip')}
+              />
+            )}
+            <Button disabled={save.isPending} onClick={cancel}>
+              {t('reusableAttributes.editor.cancel')}
+            </Button>
+            <Button
+              disabled={!canSave}
+              onClick={saveDefinition}
+              variant="contained"
+            >
+              {attribute
+                ? t('reusableAttributes.editor.saveRevision')
+                : t('reusableAttributes.editor.createAttribute')}
+            </Button>
+          </Stack>
+        }
+      />
+      {save.error && (
+        <Alert severity="error" sx={{ mt: 3 }}>
+          {save.error.message}
+        </Alert>
+      )}
+      {!definitionId && (
+        <DefinitionTemplateDialog
+          onClose={() => setTemplateDialogOpen(false)}
+          onSelect={selectTemplate}
+          open={templateDialogOpen && !draft.pending}
+          selectedIndex={templateIndex}
+          templates={reusableAttributeTemplates}
         />
-        <DraftRestoreDialog
-          draft={draft.pending}
-          onDiscard={draft.discard}
-          onRestore={() => {
-            const restored = draft.restore();
-            if (restored !== undefined) setEditedDefinition(restored);
-          }}
-        />
-        {save.error && <Alert severity="error">{save.error.message}</Alert>}
-        <Box
-          sx={{
-            display: 'grid',
-            gap: 2,
-            gridTemplateColumns: {
-              lg: `minmax(0, 1fr) ${PREVIEW_COLUMN_WIDTH}`,
-            },
-          }}
-        >
-          <DefinitionEditor
-            kind={definitionKinds.reusableAttribute}
-            height={EDITOR_HEIGHT}
-            onChange={(value) => {
-              if (!save.isPending) setEditedDefinition(value ?? '');
-            }}
-            readOnly={save.isPending}
-            value={definition}
-          />
-          <DefinitionPreview definition={definition} />
-        </Box>
-      </Stack>
+      )}
+      <DraftRestoreDialog
+        draft={draft.pending}
+        onDiscard={draft.discard}
+        onRestore={() => {
+          const restored = draft.restore();
+          if (restored === undefined) return;
+          setEditedDefinition(restored);
+          setTemplateDialogOpen(false);
+        }}
+      />
+      <UnsavedDefinitionChangesDialog
+        action={pendingUnsavedAction?.type}
+        onCancel={() => setPendingUnsavedAction(undefined)}
+        onConfirm={confirmUnsavedAction}
+      />
+      <DefinitionWorkspace
+        check={check}
+        kind={definitionKinds.reusableAttribute}
+        onChange={setEditedDefinition}
+        onSave={saveDefinition}
+        preview={
+          check.result && (
+            <ReusableAttributePreview
+              key={check.result.value_type}
+              reusable={check.result}
+            />
+          )
+        }
+        readOnly={save.isPending}
+        toolbar={
+          !definitionId && (
+            <Button
+              disabled={save.isPending}
+              onClick={() => setTemplateDialogOpen(true)}
+            >
+              {t('definitionEditor.templates.button')}
+            </Button>
+          )
+        }
+        value={definition}
+      />
+      <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">
+        {definitionId && !isDirty
+          ? t('definitionEditor.makeChangeBeforeSaving')
+          : t('definitionEditor.saveShortcut')}
+      </Typography>
     </PageContainer>
   );
 };

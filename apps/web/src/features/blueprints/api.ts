@@ -59,6 +59,28 @@ export const createBlueprintRevision = (
     },
   );
 
+/**
+ * Runs every check that saving would, without storing anything. With an id it
+ * checks the next revision of that blueprint.
+ */
+export const validateBlueprint = (
+  definition: string,
+  id?: string,
+  signal?: AbortSignal,
+): Promise<BlueprintWithAttributes> =>
+  request(
+    id === undefined
+      ? '/api/blueprints/validate'
+      : `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/validate`,
+    blueprintWithAttributesSchema,
+    {
+      body: JSON.stringify({ definition }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      signal,
+    },
+  );
+
 export const listBlueprintMigrationBatches = (id: string) =>
   request(
     `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/migration-batches`,

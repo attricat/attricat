@@ -13,11 +13,13 @@ import { attributeValueTypes } from '../records/valueTypes';
 export const SandboxAttributeEditor = ({
   attribute,
   component,
+  error,
   onChange,
   value,
 }: {
   attribute: Attribute;
   component?: ComponentReference | null;
+  error?: string;
   onChange: (value: string) => void;
   value: string;
 }) => {
@@ -38,6 +40,7 @@ export const SandboxAttributeEditor = ({
     <ScalarAttributeEditor
       attribute={attribute}
       component={component}
+      error={error}
       value={value}
       onChange={onChange}
       disabled={

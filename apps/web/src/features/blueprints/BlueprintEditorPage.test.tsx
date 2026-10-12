@@ -7,12 +7,18 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
+import { ApiRequestError } from '../../api/request';
 import { authQueryKeys } from '../auth/queryKeys';
 import { draftEditors } from '../drafts/constants';
 import { draftStorageKey, writeDraft } from '../drafts/draftStorage';
-import { createBlueprint } from './api';
+import {
+  createBlueprint,
+  validateBlueprint,
+  type BlueprintWithAttributes,
+} from './api';
+import { blueprintTemplates } from './blueprintEditorUtils';
 import { BlueprintEditorPage } from './BlueprintEditorPage';
 
 vi.mock('@tanstack/react-router', () => ({
@@ -40,7 +46,26 @@ vi.mock('@monaco-editor/react', () => ({
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
   createBlueprint: vi.fn(),
+  validateBlueprint: vi.fn(),
 }));
+
+const checkedBlueprint = {
+  attributes: [
+    {
+      code: 'price',
+      name: 'Price',
+      value_type: 'number',
+      value_schema: { minimum: 0, type: 'number' },
+    },
+  ],
+  blueprint: {
+    record_schema: null,
+    views: {
+      detail: { children: [{ field: 'price', type: 'field' }], type: 'stack' },
+      dropdown_option: { fields: ['price'], type: 'dropdown_option' },
+    },
+  },
+} as unknown as BlueprintWithAttributes;
 
 const session = { user_id: 'user-1', workspace_id: 'workspace-1' };
 const draftKey = draftStorageKey({
@@ -73,9 +98,13 @@ const editDefinition = (value: string) =>
     target: { value },
   });
 
+beforeEach(() => {
+  vi.mocked(validateBlueprint).mockResolvedValue(checkedBlueprint);
+});
 afterEach(() => {
   sessionStorage.clear();
   vi.mocked(createBlueprint).mockReset();
+  vi.mocked(validateBlueprint).mockReset();
 });
 
 describe('BlueprintEditorPage', () => {
@@ -155,5 +184,43 @@ describe('BlueprintEditorPage', () => {
     expect(
       screen.getByRole('button', { name: 'Examples' }).hasAttribute('disabled'),
     ).toBe(true);
+  });
+
+  it('previews the checked views and checks sandbox values', async () => {
+    renderWithSession();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(
+      await screen.findByText('Ready to save', {}, { timeout: 2000 }),
+    ).toBeTruthy();
+    expect(validateBlueprint).toHaveBeenCalledWith(
+      blueprintTemplates[0].definition,
+      undefined,
+      expect.any(AbortSignal),
+    );
+    expect(screen.getByRole('tab', { name: 'detail' })).toBeTruthy();
+    const price = screen.getByRole('spinbutton', { name: 'Price' });
+    fireEvent.change(price, { target: { value: '-1' } });
+    expect(price.getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('points at the line a failed check names', async () => {
+    renderWithSession();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    await screen.findByText('Ready to save', {}, { timeout: 2000 });
+    vi.mocked(validateBlueprint).mockRejectedValue(
+      new ApiRequestError(
+        422,
+        "view 'dropdown_option' references unknown attribute 'sku'",
+        'invalid_blueprint_definition',
+      ),
+    );
+    editDefinition(
+      'format_version = 1\ncode = "p"\n\n[views.dropdown_option]\ntype = "dropdown_option"\nfields = ["sku"]\n',
+    );
+    expect(
+      await screen.findByText('Problem on line 6', {}, { timeout: 2000 }),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Go to line 6' })).toBeTruthy();
   });
 });

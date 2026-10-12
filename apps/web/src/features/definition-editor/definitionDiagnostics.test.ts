@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import '../../i18n';
 import { blueprintTemplates } from '../blueprints/blueprintEditorUtils';
-import { NEW_ATTRIBUTE_DEFINITION } from '../reusable-attributes/constants';
+import { reusableAttributeTemplates } from '../reusable-attributes/templates';
 import { definitionKinds } from './constants';
 import { definitionDiagnostics } from './definitionDiagnostics';
 
@@ -28,12 +28,13 @@ describe('definitionDiagnostics', () => {
   it('accepts the built-in templates', () => {
     for (const template of blueprintTemplates)
       expect(diagnose(template.definition)).toEqual([]);
-    expect(
-      definitionDiagnostics(
-        definitionKinds.reusableAttribute,
-        NEW_ATTRIBUTE_DEFINITION,
-      ),
-    ).toEqual([]);
+    for (const template of reusableAttributeTemplates)
+      expect(
+        definitionDiagnostics(
+          definitionKinds.reusableAttribute,
+          template.definition,
+        ),
+      ).toEqual([]);
   });
 
   it('reports TOML syntax errors on their line', () => {

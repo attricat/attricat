@@ -11,7 +11,8 @@ import { useTranslation } from 'react-i18next';
 
 export type UnsavedChangesAction = 'replace' | 'discard';
 
-export const UnsavedBlueprintChangesDialog = ({
+/** Confirms replacing or discarding unsaved definition edits. */
+export const UnsavedDefinitionChangesDialog = ({
   action,
   onCancel,
   onConfirm,
@@ -29,18 +30,22 @@ export const UnsavedBlueprintChangesDialog = ({
       onClose={onCancel}
       open={action !== undefined}
     >
-      <DialogTitle>{t('blueprints.unsavedChangesTitle')}</DialogTitle>
+      <DialogTitle>{t('definitionEditor.unsaved.title')}</DialogTitle>
       <DialogContent>
         <DialogContentText id={descriptionId}>
           {replacing
-            ? t('blueprints.replaceUnsavedChanges')
-            : t('blueprints.discardUnsavedChanges')}
+            ? t('definitionEditor.unsaved.replaceQuestion')
+            : t('definitionEditor.unsaved.discardQuestion')}
         </DialogContentText>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onCancel}>{t('blueprints.keepEditing')}</Button>
+        <Button onClick={onCancel}>
+          {t('definitionEditor.unsaved.keepEditing')}
+        </Button>
         <Button color="error" onClick={onConfirm} variant="contained">
-          {replacing ? t('blueprints.replace') : t('blueprints.discard')}
+          {replacing
+            ? t('definitionEditor.unsaved.replace')
+            : t('definitionEditor.unsaved.discard')}
         </Button>
       </DialogActions>
     </Dialog>

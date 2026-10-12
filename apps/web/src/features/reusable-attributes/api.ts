@@ -47,6 +47,28 @@ export const createReusableAttributeRevision = (
     },
   );
 
+/**
+ * Runs every check that saving would, without storing anything. With an id it
+ * checks the next revision of that reusable attribute.
+ */
+export const validateReusableAttribute = (
+  input: CreateReusableAttribute,
+  definitionId?: string,
+  signal?: AbortSignal,
+) =>
+  request(
+    definitionId === undefined
+      ? '/api/reusable-attributes/validate'
+      : `/api/reusable-attributes/${encodeURIComponent(z.uuid().parse(definitionId))}/versions/validate`,
+    reusableAttributeSchema,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(createReusableAttributeSchema.parse(input)),
+      signal,
+    },
+  );
+
 export const publishReusableAttributeRevision = (
   revisionId: string,
 ): Promise<ReusableAttribute> =>

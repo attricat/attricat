@@ -215,7 +215,7 @@ export const createMember = async (roleCode: string) => {
 /** Replaces the whole document in the page's first Monaco editor. */
 export const replaceDefinition = async (page: Page, value: string) => {
   const editor = page.locator('.monaco-editor').first();
-  await expect(editor.locator('.view-lines')).toContainText('format_version');
+  await expect(editor.locator('.view-lines')).toContainText('code');
   await editor.locator('.view-lines').click();
   // Monaco's EditContext input inserts text at the caret and ignores the
   // selection, so clear the selected document before inserting.

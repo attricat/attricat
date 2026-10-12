@@ -151,7 +151,7 @@ value_type = "string"
 searchable = true
 ```
 
-It accepts the same attribute keys as a blueprint (`value_type`, `value_schema`, `default_value`, `tags`, `context_fallback`, `context_editable`, `readonly`, and the relationship keys with `target_blueprint_code`), plus `searchable`, which includes its values in Explorer search and filters. Each change creates a new revision; publish a revision before it can be attached. The workspace supplies the namespace, so a reusable attribute's full code is `<namespace>:<code>`.
+It accepts the same attribute keys as a blueprint (`value_type`, `value_schema`, `default_value`, `tags`, `context_fallback`, `context_editable`, `readonly`, and the relationship keys with `target_blueprint_code`), plus `searchable`, which includes its values in Explorer search and filters. Each change creates a new revision; publish a revision before it can be attached. The workspace supplies the namespace, so a reusable attribute's full code is `<namespace>:<code>`. The editor offers examples, ready-made pieces, save checks as you type, and a preview of the field; see [The web editor](/builders/blueprints/#the-web-editor).
 
 Creating and publishing reusable attributes needs `blueprints.write`. Attaching one to a record needs `records.write` on that record.
 

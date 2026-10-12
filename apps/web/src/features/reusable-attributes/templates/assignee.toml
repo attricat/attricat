@@ -1,0 +1,6 @@
+code = "owner"
+name = "Owner"
+value_type = "string"
+facetable = true
+# Accepts an active workspace member or a team, chosen from a picker.
+value_schema = { type = "string", "x-attricat-principal" = { version = 1, kinds = ["user", "team"] } }

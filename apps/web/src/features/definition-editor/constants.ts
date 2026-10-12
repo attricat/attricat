@@ -26,5 +26,9 @@ export const maxAttributePathHops = 3;
 
 export const diagnosticsOwner = 'attricat-definition';
 export const diagnosticsDelayMs = 250;
+export const serverDiagnosticsOwner = 'attricat-definition-server';
+/** Server checks wait for a longer pause than local diagnostics. */
+export const checkDelayMs = 600;
+export const definitionEditorHeight = 'calc(100vh - 280px)';
 /** Completion lookups reuse cached workspace data for this long. */
 export const referenceStaleTimeMs = 60_000;

@@ -1,4 +1,4 @@
-import { Paper, Tab, Tabs, Typography } from '@mui/material';
+import { Alert, Paper, Tab, Tabs, Typography } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
@@ -6,6 +6,7 @@ import type {
   Attribute,
   Blueprint,
   ComponentReference,
+  JsonSchema,
   ViewDefinition,
 } from '../records/api';
 import { EditableRecordLayout } from '../views/components/EditableRecordLayout';
@@ -17,7 +18,7 @@ import {
 import { legacyEditViewName, sandboxEditTab } from './constants';
 import { RenderedBlueprintView } from './RenderedBlueprintView';
 import { SandboxAttributeEditor } from './SandboxAttributeEditor';
-import { sandboxValuesForFields } from './sandboxValues';
+import { sandboxValidation, sandboxValuesForFields } from './sandboxValues';
 
 type ViewTab = readonly [name: string, view: ViewDefinition | undefined];
 
@@ -32,9 +33,11 @@ const viewTabs = (views: Blueprint['views']): ViewTab[] => [
 
 export const BlueprintViewsPreview = ({
   attributes,
+  recordSchema,
   views,
 }: {
   attributes: readonly Attribute[];
+  recordSchema?: JsonSchema | null;
   views: Blueprint['views'];
 }) => {
   const { t } = useTranslation();
@@ -48,6 +51,7 @@ export const BlueprintViewsPreview = ({
   );
   const [activeViewName, activeView] = tabs[activeViewIndex];
   const values = sandboxValuesForFields(attributes, fields);
+  const validation = sandboxValidation(attributes, fields, recordSchema);
   const updateField = (code: string, value: string) =>
     setFields((current) => ({ ...current, [code]: value }));
   // Display components on the detail layout edit with their paired editor.
@@ -58,6 +62,7 @@ export const BlueprintViewsPreview = ({
     <SandboxAttributeEditor
       attribute={attribute}
       component={resolveEditComponent(component) ?? component}
+      error={validation.fieldErrors[attribute.code]}
       onChange={(value) => updateField(attribute.code, value)}
       value={fields[attribute.code] ?? ''}
     />
@@ -91,6 +96,11 @@ export const BlueprintViewsPreview = ({
         sx={{ mt: 2, p: 2.5 }}
         variant="outlined"
       >
+        {activeViewName === sandboxEditTab && validation.formError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {validation.formError}
+          </Alert>
+        )}
         {activeViewName === sandboxEditTab ? (
           <EditableRecordLayout
             attributes={attributes}

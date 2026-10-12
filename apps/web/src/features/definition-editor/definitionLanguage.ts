@@ -1,7 +1,11 @@
 import type { Monaco } from '@monaco-editor/react';
 import type { editor, languages, Position } from 'monaco-editor';
 import { tomlLanguageId } from '../blueprints/blueprintEditorUtils';
-import { diagnosticsOwner, type DefinitionKind } from './constants';
+import {
+  diagnosticsOwner,
+  serverDiagnosticsOwner,
+  type DefinitionKind,
+} from './constants';
 import {
   definitionCompletions,
   suggestionKinds,
@@ -145,8 +149,10 @@ export const attachDefinitionModel = (
   modelConfigs.set(model, config);
   return () => {
     modelConfigs.delete(model);
-    if (!model.isDisposed())
+    if (!model.isDisposed()) {
       monaco.editor.setModelMarkers(model, diagnosticsOwner, []);
+      monaco.editor.setModelMarkers(model, serverDiagnosticsOwner, []);
+    }
   };
 };
 
@@ -172,4 +178,32 @@ export const updateDefinitionDiagnostics = (
       };
     }),
   );
+};
+
+/** Marks where the server's save check failed, or clears the mark. */
+export const updateServerDiagnostic = (
+  monaco: Monaco,
+  model: editor.ITextModel,
+  error: { message: string; range: TextRange } | undefined,
+) => {
+  if (model.isDisposed()) return;
+  if (!error) {
+    monaco.editor.setModelMarkers(model, serverDiagnosticsOwner, []);
+    return;
+  }
+  const { startLineNumber, startColumn, endLineNumber, endColumn } = toRange(
+    monaco,
+    model,
+    error.range,
+  );
+  monaco.editor.setModelMarkers(model, serverDiagnosticsOwner, [
+    {
+      endColumn,
+      endLineNumber,
+      message: error.message,
+      severity: monaco.MarkerSeverity.Error,
+      startColumn,
+      startLineNumber,
+    },
+  ]);
 };

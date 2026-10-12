@@ -1,0 +1,6 @@
+code = "size"
+name = "Size"
+value_type = "string"
+facetable = true
+# Saving rejects any other value.
+value_schema = { type = "string", enum = ["small", "medium", "large"] }

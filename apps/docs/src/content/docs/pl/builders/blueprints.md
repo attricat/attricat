@@ -9,16 +9,30 @@ Schemat to dokument TOML opisujący jeden rodzaj rekordu katalogu: jego atrybuty
 
 Schematy możesz pisać w dwóch miejscach:
 
-- W aplikacji internetowej, w **Zarządzanie → Schematy → Nowy schemat**. Edytor waliduje treść podczas pisania i pokazuje podgląd powstałej strony rekordu, na którym możesz wypróbować edycję przykładowych wartości.
+- W aplikacji internetowej, w **Zarządzanie → Schematy → Nowy schemat**. Zobacz [Edytor w aplikacji internetowej](#edytor-w-aplikacji-internetowej).
 - W dowolnym edytorze tekstu, a następnie przesłać je przez CLI:
 
   ```sh
+  acli blueprint validate --file product.toml
   acli blueprint create --file product.toml
   ```
+
+  `validate` uruchamia wszystkie kontrole wykonywane przy zapisie, niczego nie zapisując. Dodaj `--blueprint-id <id>`, aby sprawdzić plik jako następną wersję tego schematu.
 
 Obie drogi zapisują TOML dokładnie w takiej postaci, w jakiej go napisano. Dobrze sprawdza się trzymanie plików schematów w systemie kontroli wersji obok kodu integracji; CLI wysyła je bez zmian.
 
 Do tworzenia szkiców potrzebujesz uprawnienia `blueprints.write`, a do ich publikowania `blueprints.publish`.
+
+### Edytor w aplikacji internetowej
+
+Edytor schematów i edytor [atrybutów wielokrotnego użytku](/pl/builders/modeling/#wielokrotne-użycie-atrybutów) działają tak samo:
+
+- **Przykłady** rozpoczyna nową definicję od poprawnego szablonu.
+- **Wstaw** dodaje gotowy fragment, na przykład atrybut statusu, widok tabeli lub klucz unikalny, z polami do uzupełnienia. Klawisz Tab przechodzi między nimi. Fragmenty, które powieliłyby coś już zdefiniowanego, są wyszarzone.
+- Podczas pisania edytor podpowiada klucze i wartości, a po najechaniu na klucz wyjaśnia go. Błędy względem formatu są podkreślane na bieżąco.
+- Chwilę po tym, jak przestaniesz pisać, edytor uruchamia wszystkie kontrole wykonywane przy zapisie, niczego nie zapisując. Status nad edytorem pokazuje **Gotowe do zapisu** albo numer wiersza z problemem, który jest też podkreślony.
+- **Podgląd** pokazuje ostatnią wersję, która przeszła kontrole. Dla schematu pokazuje każdy widok i edytowalny przykładowy rekord, a dla atrybutu wielokrotnego użytku jego pole. Przykładowe wartości są sprawdzane względem `value_schema` atrybutu i `record_schema` schematu i nigdy nie są zapisywane.
+- Naciśnij Ctrl+S (Command+S na Macu), aby zapisać.
 
 ## Krok 1: najmniejszy poprawny schemat
 

@@ -513,3 +513,43 @@ async fn validates_definitions_without_storing_them(pool: PgPool) {
 
     server.abort();
 }
+
+/// The web editors offer these as starting points, so each must save as is.
+#[sqlx::test]
+async fn editor_templates_pass_validation(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../web/src/features");
+    for (directory, route) in [
+        ("blueprints/templates", "blueprints/validate"),
+        (
+            "reusable-attributes/templates",
+            "reusable-attributes/validate",
+        ),
+    ] {
+        let mut paths = std::fs::read_dir(web.join(directory))
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect::<Vec<_>>();
+        paths.sort();
+        assert!(!paths.is_empty(), "{directory} has no templates");
+        for path in paths {
+            let definition = std::fs::read_to_string(&path).unwrap();
+            let response = client
+                .post(format!("{base_url}/{route}"))
+                .json(&json!({ "definition": definition }))
+                .send()
+                .await
+                .unwrap();
+            let status = response.status();
+            assert!(
+                status.is_success(),
+                "{}: {status} {}",
+                path.display(),
+                response.text().await.unwrap()
+            );
+        }
+    }
+
+    server.abort();
+}

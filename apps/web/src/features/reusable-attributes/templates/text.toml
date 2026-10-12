@@ -1,0 +1,7 @@
+code = "short_description"
+name = "Short description"
+value_type = "string"
+# Searchable values are matched by the Explorer search box.
+searchable = true
+# value_schema is JSON Schema written as TOML.
+value_schema = { type = "string", maxLength = 280 }

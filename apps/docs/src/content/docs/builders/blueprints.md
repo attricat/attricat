@@ -9,16 +9,30 @@ A blueprint is a TOML document that describes one kind of catalog record: its at
 
 You can write blueprints in two places:
 
-- **Manage → Blueprints → New blueprint** in the web app. The editor validates as you type and shows a preview of the resulting record page, where you can try editing sample values.
+- **Manage → Blueprints → New blueprint** in the web app. See [The web editor](#the-web-editor).
 - Any text editor, then upload with the CLI:
 
   ```sh
+  acli blueprint validate --file product.toml
   acli blueprint create --file product.toml
   ```
+
+  `validate` runs every check that saving runs without storing anything. Add `--blueprint-id <id>` to check a file as that blueprint's next revision.
 
 Both paths store the TOML exactly as written. Keeping blueprint files in version control alongside your integration code works well; the CLI sends them unchanged.
 
 You need `blueprints.write` to create drafts and `blueprints.publish` to publish them.
+
+### The web editor
+
+The blueprint editor and the [reusable attribute](/builders/modeling/#reuse-attributes) editor work the same way:
+
+- **Examples** starts a new definition from a valid template.
+- **Insert** adds a ready-made piece, such as a status attribute, a table view, or a unique key, with placeholders to fill in. Press Tab to move between them. Pieces that would duplicate something already defined are greyed out.
+- Typing suggests keys and values, and hovering a key explains it. Mistakes against the format are underlined as you type.
+- A moment after you stop typing, the editor runs every check that saving runs, without saving. The status above the editor says **Ready to save**, or names the line with the problem, which is also underlined.
+- **Preview** shows the last version that passed the checks. For a blueprint it shows each view and an editable sample record; for a reusable attribute, its field. Sample values are checked against the attribute's `value_schema` and the blueprint's `record_schema`, and are never saved.
+- Press Ctrl+S (Command+S on a Mac) to save.
 
 ## Step 1: the smallest valid blueprint
 

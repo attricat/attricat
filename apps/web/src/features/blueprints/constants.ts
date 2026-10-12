@@ -60,6 +60,5 @@ export const emptyValuePlaceholder = '—';
 
 export const blueprintFilterWidth = 420;
 export const tomlDiffEditorHeight = 560;
-export const blueprintEditorHeight = 'calc(100vh - 260px)';
 export const migrationProgressMinWidth = 150;
 export const completePercentage = 100;
