@@ -499,6 +499,7 @@ target_blueprint = "facet_category"
     assert_eq!(root_page["next_cursor"], Value::Null);
     assert_eq!(root_page["selected_items"][0]["id"], root["id"]);
     assert_eq!(root_page["selected_items"][0]["display"], "Root");
+    assert_eq!(root_page["selected_paths"], json!([]));
     let root_item = root_page["items"]
         .as_array()
         .unwrap()
@@ -518,6 +519,7 @@ target_blueprint = "facet_category"
             "hierarchy_field": "parent",
             "context_id": context["id"],
             "parent_id": root["id"],
+            "selected_target_ids": [child["id"]]
         }))
         .send()
         .await
@@ -527,6 +529,13 @@ target_blueprint = "facet_category"
         .json()
         .await
         .unwrap();
+    // The child has two parents; its path follows the lower ID.
+    let lower_parent = [&root, &alternate_root]
+        .into_iter()
+        .map(|parent| parent["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+        .min()
+        .unwrap();
+    assert_eq!(child_page["selected_paths"], json!([[lower_parent]]));
     assert!(
         child_page["items"]
             .as_array()

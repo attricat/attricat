@@ -93,6 +93,9 @@ describe('ExplorerBrowseRail', () => {
                   },
                 ]
               : [],
+        selected_paths: input.selected_target_ids?.includes(sneakersId)
+          ? [[shoesId]]
+          : [],
         next_cursor: null,
       }),
     );
@@ -137,6 +140,19 @@ describe('ExplorerBrowseRail', () => {
     expect(onSelect).toHaveBeenLastCalledWith([]);
     await userEvent.click(screen.getByText('All'));
     expect(onSelect).toHaveBeenLastCalledWith([]);
+  });
+
+  it('opens the branches that lead to the selection', async () => {
+    renderRail({ selectedIds: [sneakersId] });
+    expect(await screen.findByText('Sneakers')).toBeTruthy();
+    expect(getRelationshipTreeFacetChildren).toHaveBeenCalledWith(
+      expect.objectContaining({ selected_target_ids: [sneakersId] }),
+      expect.anything(),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Collapse Shoes' }),
+    );
+    expect(screen.queryByText('Sneakers')).toBeNull();
   });
 
   it("lists the blueprint's own tree under its name", async () => {

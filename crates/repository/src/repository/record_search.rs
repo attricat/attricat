@@ -340,6 +340,26 @@ fn presence_filter_query(
     }
 }
 
+/// The IDs from a root down to `node`'s parent. A node with several parents
+/// follows the lowest parent ID, and a cycle ends the path where it repeats.
+fn ancestor_path(parents_by_child: &HashMap<Uuid, Vec<Uuid>>, node: Uuid) -> Vec<Uuid> {
+    let mut path = Vec::new();
+    let mut seen = HashSet::from([node]);
+    let mut current = node;
+    while let Some(parent) = parents_by_child
+        .get(&current)
+        .and_then(|parents| parents.iter().min())
+    {
+        if !seen.insert(*parent) {
+            break;
+        }
+        path.push(*parent);
+        current = *parent;
+    }
+    path.reverse();
+    path
+}
+
 /// Rewrites each `$n` placeholder of `sql` to `$map(n)`.
 fn renumber_parameters(sql: &str, map: impl Fn(usize) -> usize) -> String {
     let mut renumbered = String::with_capacity(sql.len() + 16);
@@ -2037,10 +2057,10 @@ impl AttricatRepository {
             sources_by_target.entry(target).or_default().push(source);
         }
         let mut children_by_parent: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
-        let mut has_parent = HashSet::new();
+        let mut parents_by_child: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
         for (child, parent) in parents {
             children_by_parent.entry(parent).or_default().push(child);
-            has_parent.insert(child);
+            parents_by_child.entry(child).or_default().push(parent);
         }
         let mut page: Vec<Uuid> = match parent_id {
             Some(parent) => {
@@ -2051,7 +2071,7 @@ impl AttricatRepository {
             }
             None => nodes
                 .into_iter()
-                .filter(|id| !has_parent.contains(id))
+                .filter(|id| !parents_by_child.contains_key(id))
                 .collect(),
         };
         // UUIDs order bytewise in both PostgreSQL and Rust, so cursors carry over.
@@ -2142,9 +2162,15 @@ impl AttricatRepository {
             })
             .collect();
         selected_items.sort_unstable_by_key(|item| item.id);
+        let selected_paths = selected_items
+            .iter()
+            .map(|item| ancestor_path(&parents_by_child, item.id))
+            .filter(|path| !path.is_empty())
+            .collect();
         Ok(RelationshipTreeFacetChildrenResponse {
             items,
             selected_items,
+            selected_paths,
             next_cursor,
         })
     }
@@ -3162,6 +3188,15 @@ mod global_search_budget_tests {
             renumber_parameters("a = $1 AND b = $12 AND $3[x] AND '$' AND $", |n| n + 10),
             "a = $11 AND b = $22 AND $13[x] AND '$' AND $"
         );
+    }
+
+    #[test]
+    fn walks_from_a_root_to_a_nodes_parent() {
+        let [a, b, c, d] = [1, 2, 3, 4].map(Uuid::from_u128);
+        let parents = HashMap::from([(d, vec![c, b]), (c, vec![a]), (b, vec![a]), (a, vec![d])]);
+        // d → b (lowest parent) → a → d repeats, so the walk stops at a.
+        assert_eq!(ancestor_path(&parents, d), vec![a, b]);
+        assert_eq!(ancestor_path(&HashMap::new(), a), Vec::<Uuid>::new());
     }
 
     #[test]

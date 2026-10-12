@@ -464,6 +464,17 @@ target_blueprint = "${categoryCode}"`,
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Running shoe' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Canvas bag' })).toBeHidden();
+
+  // A selection loaded with the page opens the branches leading to it.
+  await rail.getByRole('button', { name: /^Shoes/ }).click();
+  await page.reload();
+  await expect(
+    rail.getByRole('button', { name: 'Collapse Departments' }),
+  ).toBeVisible();
+  await expect(rail.getByRole('button', { name: /^Shoes/ })).toHaveAttribute(
+    'aria-current',
+    'true',
+  );
   await rail.getByRole('button', { name: 'All' }).click();
   await expect(page.getByText('2 results')).toBeVisible();
 

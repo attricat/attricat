@@ -13,7 +13,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -187,14 +187,45 @@ type TreeProps = {
   onSelect: (selectedIds: string[]) => void;
 };
 
+/** Paths of the branches that lead to the nodes selected on mount. */
+const useSelectedBranches = ({ request, selected }: TreeProps) => {
+  const [initialSelection] = useState(() => [...selected]);
+  const pathsRequest = { ...request, selected_target_ids: initialSelection };
+  // A stale selection fails the request; the tree then just stays collapsed.
+  const paths = useQuery({
+    queryKey: recordQueryKeys.relationshipTreeFacetSelectedPaths(pathsRequest),
+    queryFn: ({ signal }) =>
+      getRelationshipTreeFacetChildren(
+        { ...pathsRequest, cursor: null },
+        signal,
+      ),
+    enabled: initialSelection.length > 0,
+    select: (page) => page.selected_paths,
+    staleTime: Infinity,
+  });
+  return new Set(
+    (paths.data ?? []).flatMap((path) =>
+      path.map((_, index) => path.slice(0, index + 1).join('/')),
+    ),
+  );
+};
+
 const BrowseTree = (props: TreeProps) => {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const selectedBranches = useSelectedBranches(props);
+  // What the user opened or closed, over the branches leading to the selection.
+  const [toggled, setToggled] = useState<Map<string, boolean>>(new Map());
+  const expanded = new Set(
+    [...selectedBranches, ...toggled.keys()].filter(
+      (path) => toggled.get(path) ?? selectedBranches.has(path),
+    ),
+  );
   const toggle = (path: string) =>
-    setExpanded((current) => {
-      const next = new Set(current);
-      if (!next.delete(path)) next.add(path);
-      return next;
-    });
+    setToggled((current) =>
+      new Map(current).set(
+        path,
+        !(current.get(path) ?? selectedBranches.has(path)),
+      ),
+    );
   return (
     <BrowseLevel
       {...props}

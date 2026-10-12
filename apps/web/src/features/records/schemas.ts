@@ -642,6 +642,7 @@ export const relationshipTreeFacetChildrenRequestSchema = z.object({
   context_id: uuidSchema,
   parent_id: uuidSchema.optional(),
   cursor: uuidSchema.nullable().optional(),
+  selected_target_ids: z.array(uuidSchema).optional(),
 });
 export const relationshipTreeFacetChildrenResponseSchema = z.object({
   items: z.array(
@@ -652,6 +653,8 @@ export const relationshipTreeFacetChildrenResponseSchema = z.object({
       has_children: z.boolean(),
     }),
   ),
+  /** Root-first ancestor IDs of each selected node below the roots. */
+  selected_paths: z.array(z.array(uuidSchema)),
   next_cursor: uuidSchema.nullable(),
 });
 const getBlueprintRequestSchema = z.object({

@@ -572,6 +572,9 @@ pub struct RelationshipTreeFacetChildItem {
 pub struct RelationshipTreeFacetChildrenResponse {
     pub items: Vec<RelationshipTreeFacetChildItem>,
     pub selected_items: Vec<RecordHierarchyItem>,
+    /// For each selected node below the roots, the IDs from a root down to
+    /// its parent, so a client can open the branches that lead to it.
+    pub selected_paths: Vec<Vec<Uuid>>,
     pub next_cursor: Option<Uuid>,
 }
 

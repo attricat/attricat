@@ -137,7 +137,12 @@ blueprint/query, facet fields and context, plus an optional `hierarchy_field`,
 `parent_id`, and cursor. Omit `hierarchy_field` for a one-level picker. It
 returns one configured-size page of direct children with `count`,
 `has_children`, and `next_cursor`. The client requests a page only when a node
-is expanded and uses `next_cursor` for that node's **Load more** action.
+is expanded and uses `next_cursor` for that node's **Load more** action. With
+`selected_target_ids`, the response also has `selected_paths`: for each selected
+node below the roots, the IDs from a root down to its parent, following the
+lowest parent ID where a node has several. The Explorer's browse panel requests
+them once when it opens, so a filter loaded from the URL shows its node
+expanded into view.
 
 ## Performance
 
