@@ -143,16 +143,6 @@ struct RelationshipTreeNodeRow {
 }
 
 #[derive(sqlx::FromRow)]
-struct RelationshipTreeChildRow {
-    id: Uuid,
-    preview: Value,
-    display: Value,
-    context_fallback: Value,
-    count: i64,
-    has_children: bool,
-}
-
-#[derive(sqlx::FromRow)]
 struct TablePathEdgeRow {
     source_id: Uuid,
     target_id: Uuid,
@@ -948,20 +938,21 @@ impl AttricatRepository {
         limit: i64,
     ) -> Result<i64, RepositoryError> {
         validate_system_tags(system_tags)?;
-        Ok(sqlx::query_scalar::<_, i64>(
+        let (records, matching) = matching_records(matching_record_ids.is_some(), 3);
+        Ok(sqlx::query_scalar::<_, i64>(&format!(
             r#"SELECT COUNT(*)
                  FROM (
                     SELECT 1
-                      FROM records e
+                      FROM {records}
                      WHERE e.blueprint_id = $1
                        AND ($2::bigint IS NULL OR e.blueprint_version = $2)
                        AND e.deleted_at IS NULL
-                       AND ($3::uuid[] IS NULL OR e.id = ANY($3))
+                       {matching}
                        AND ($4::text[] IS NULL OR e.system_tags @> $4)
                        AND (NOT $5 OR e.blueprint_version <> $6)
                      LIMIT $7
                  ) matches"#,
-        )
+        ))
         .bind(blueprint_id)
         .bind(blueprint_version)
         .bind(matching_record_ids)
@@ -983,20 +974,21 @@ impl AttricatRepository {
         current_blueprint_version: i64,
     ) -> Result<Vec<i64>, RepositoryError> {
         validate_system_tags(system_tags)?;
-        Ok(sqlx::query_scalar::<_, i64>(
+        let (records, matching) = matching_records(matching_record_ids.is_some(), 4);
+        Ok(sqlx::query_scalar::<_, i64>(&format!(
             r#"SELECT e.blueprint_version
-                 FROM records e
+                 FROM {records}
                 WHERE e.blueprint_id = $1
                   AND ($2::bigint IS NULL OR e.blueprint_version = $2)
                   AND e.workspace_id = $3
                   AND e.deleted_at IS NULL
-                  AND ($4::uuid[] IS NULL OR e.id = ANY($4))
+                  {matching}
                   AND ($5::text[] IS NULL OR e.system_tags @> $5)
                   AND (NOT $6 OR e.blueprint_version <> $7)
                 GROUP BY e.blueprint_version
                 ORDER BY e.blueprint_version DESC
                 LIMIT 2"#,
-        )
+        ))
         .bind(blueprint_id)
         .bind(blueprint_version)
         .bind(self.workspace_id.0)
@@ -1036,15 +1028,16 @@ impl AttricatRepository {
             ));
         };
         validate_system_tags(system_tags)?;
-        let (versions, count) = sqlx::query_as::<_, (Vec<i64>, i64)>(
+        let (records, matching) = matching_records(matching_record_ids.is_some(), 4);
+        let (versions, count) = sqlx::query_as::<_, (Vec<i64>, i64)>(&format!(
             r#"WITH matches AS MATERIALIZED (
                    SELECT e.blueprint_version
-                     FROM records e
+                     FROM {records}
                     WHERE e.blueprint_id = $1
                       AND ($2::bigint IS NULL OR e.blueprint_version = $2)
                       AND e.workspace_id = $3
                       AND e.deleted_at IS NULL
-                      AND ($4::uuid[] IS NULL OR e.id = ANY($4))
+                      {matching}
                       AND ($5::text[] IS NULL OR e.system_tags @> $5)
                       AND (NOT $6 OR e.blueprint_version <> $7)
                )
@@ -1055,7 +1048,7 @@ impl AttricatRepository {
                            LIMIT 2
                       ),
                       (SELECT COUNT(*) FROM (SELECT 1 FROM matches LIMIT $8) capped)"#,
-        )
+        ))
         .bind(blueprint_id)
         .bind(blueprint_version)
         .bind(self.workspace_id.0)
@@ -1850,10 +1843,12 @@ impl AttricatRepository {
 
     // Facet traversal inputs are explicit to keep query scope auditable.
     #[allow(clippy::too_many_arguments)]
+    /// Source records whose relationship, resolved in `context_id`, targets a
+    /// selected node or one of its descendants, or `None` without a selection.
     /// Without `source_field`, the nodes are the source blueprint's own
     /// records and each record is attached to itself, so a selection matches
     /// the selected nodes and their descendants.
-    pub async fn relationship_tree_facet(
+    pub async fn relationship_tree_facet_matches(
         &self,
         source_blueprint_id: Uuid,
         source_field: Option<&str>,
@@ -1862,136 +1857,95 @@ impl AttricatRepository {
         context_id: Uuid,
         selected_target_ids: &[Uuid],
         source_record_ids: Option<&HashSet<Uuid>>,
-    ) -> Result<(RelationshipTreeFacetResponse, Option<Vec<Uuid>>), RepositoryError> {
-        let context_exists = self.get_context_by_id(context_id).await?.is_some();
-        if !context_exists {
+    ) -> Result<Option<Vec<Uuid>>, RepositoryError> {
+        if self.get_context_by_id(context_id).await?.is_none() {
             return Err(RepositoryError::InvalidContext);
         }
-        let nodes = sqlx::query_as::<_, RelationshipTreeNodeRow>(
-            r#"SELECT e.id, e.projections -> 'preview' AS preview, b.views,
-                      (SELECT COALESCE(jsonb_object_agg(a.code, a.context_fallback), '{}'::jsonb)
-                         FROM attributes a
-                        WHERE a.blueprint_id = e.blueprint_id
-                          AND a.blueprint_version = e.blueprint_version AND a.deleted_at IS NULL) AS context_fallback
-                 FROM records e JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
-                WHERE e.blueprint_id = $1 AND e.deleted_at IS NULL
-                ORDER BY e.id"#,
-        )
-        .bind(target_blueprint_id)
-        .fetch_all(&self.pool)
-        .await?;
-        let node_ids: HashSet<_> = nodes.iter().map(|node| node.id).collect();
-        if selected_target_ids.iter().any(|id| !node_ids.contains(id)) {
-            return Err(RepositoryError::RelationshipTargetTypeMismatch);
-        }
-
-        let edges = match source_field {
-            Some(source_field) => {
-                self.resolved_relationship_edges(
-                    source_blueprint_id,
-                    source_field,
-                    target_blueprint_id,
-                    context_id,
-                )
-                .await?
-            }
-            None => node_ids.iter().map(|id| (*id, *id)).collect(),
-        };
-        let parents = match hierarchy_field {
-            Some(field) => {
-                self.resolved_relationship_edges(
-                    target_blueprint_id,
-                    field,
-                    target_blueprint_id,
-                    context_id,
-                )
-                .await?
-            }
-            None => Vec::new(),
-        };
-        let mut parents_by_child: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
-        for (child, parent) in parents {
-            if node_ids.contains(&child) && node_ids.contains(&parent) {
-                parents_by_child.entry(child).or_default().push(parent);
-            }
-        }
-        let mut children_by_parent: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
-        for (child, parents) in &parents_by_child {
-            for parent in parents {
-                children_by_parent.entry(*parent).or_default().push(*child);
-            }
+        if selected_target_ids.is_empty() {
+            return Ok(None);
         }
         let selected: HashSet<_> = selected_target_ids.iter().copied().collect();
-        let mut allowed = selected.clone();
-        let mut pending: Vec<_> = selected.into_iter().collect();
-        while let Some(parent) = pending.pop() {
-            for child in children_by_parent.get(&parent).into_iter().flatten() {
-                if allowed.insert(*child) {
-                    pending.push(*child);
-                }
-            }
+        let selected_nodes: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM records WHERE blueprint_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+        )
+        .bind(target_blueprint_id)
+        .bind(selected.iter().copied().collect::<Vec<_>>())
+        .fetch_one(&self.pool)
+        .await?;
+        if selected_nodes as usize != selected.len() {
+            return Err(RepositoryError::RelationshipTargetTypeMismatch);
         }
-        let matching_record_ids = (!selected_target_ids.is_empty()).then(|| {
-            edges
-                .iter()
-                .filter(|(source, target)| {
-                    source_record_ids.is_none_or(|ids| ids.contains(source))
-                        && allowed.contains(target)
-                })
-                .map(|(source, _)| *source)
-                .collect::<HashSet<_>>()
+        // Walks down from the selection and then back to the sources through
+        // the target-side relationship indexes, so the cost follows the size
+        // of the selected subtrees rather than the whole relationship. A value
+        // counts only when no nearer context on the path has one for its record.
+        let matches = sqlx::query_scalar::<_, Uuid>(
+            r#"WITH RECURSIVE context_path AS (
+                    SELECT id, parent_id, 0 AS depth FROM attribute_contexts WHERE id = $4
+                    UNION ALL
+                    SELECT c.id, c.parent_id, path.depth + 1
+                    FROM attribute_contexts c JOIN context_path path ON c.id = path.parent_id
+                ), allowed AS (
+                    SELECT unnest($5::uuid[]) AS id
+                    UNION
+                    SELECT child.id
+                    FROM allowed
+                    JOIN attribute_values av ON av.relationship_target_record_id = allowed.id
+                     AND av.active AND av.relationship_target_record_id IS NOT NULL
+                    JOIN attributes a ON a.id = av.attribute_id AND a.blueprint_id = $3 AND a.code = $6
+                    JOIN context_path path ON path.id = av.context_id
+                     AND (path.depth = 0 OR a.context_fallback <> 'none')
+                    JOIN records child ON child.id = av.record_id AND child.blueprint_id = $3
+                     AND child.blueprint_version = a.blueprint_version AND child.deleted_at IS NULL
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM attribute_values nearer
+                        JOIN context_path nearer_path ON nearer_path.id = nearer.context_id
+                        WHERE nearer.record_id = av.record_id AND nearer.attribute_id = av.attribute_id
+                          AND nearer.active AND nearer.relationship_target_record_id IS NOT NULL
+                          AND nearer_path.depth < path.depth
+                    )
+                )
+                SELECT id FROM allowed WHERE $2::text IS NULL
+                UNION
+                SELECT source.id
+                FROM allowed
+                JOIN attribute_values av ON av.relationship_target_record_id = allowed.id
+                 AND av.active AND av.relationship_target_record_id IS NOT NULL
+                JOIN attributes a ON a.id = av.attribute_id AND a.blueprint_id = $1 AND a.code = $2
+                JOIN context_path path ON path.id = av.context_id
+                 AND (path.depth = 0 OR a.context_fallback <> 'none')
+                JOIN records source ON source.id = av.record_id AND source.blueprint_id = $1
+                 AND source.blueprint_version = a.blueprint_version AND source.deleted_at IS NULL
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM attribute_values nearer
+                    JOIN context_path nearer_path ON nearer_path.id = nearer.context_id
+                    WHERE nearer.record_id = av.record_id AND nearer.attribute_id = av.attribute_id
+                      AND nearer.active AND nearer.relationship_target_record_id IS NOT NULL
+                      AND nearer_path.depth < path.depth
+                )"#,
+        )
+        .bind(source_blueprint_id)
+        .bind(source_field)
+        .bind(target_blueprint_id)
+        .bind(context_id)
+        .bind(selected.into_iter().collect::<Vec<_>>())
+        .bind(hierarchy_field)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(Some(
+            matches
                 .into_iter()
-                .collect()
-        });
-        let mut counts: HashMap<Uuid, HashSet<Uuid>> = HashMap::new();
-        for (source, target) in edges {
-            if source_record_ids.is_some_and(|ids| !ids.contains(&source)) {
-                continue;
-            }
-            let mut pending = vec![target];
-            let mut visited = HashSet::new();
-            while let Some(node) = pending.pop() {
-                if !visited.insert(node) {
-                    continue;
-                }
-                counts.entry(node).or_default().insert(source);
-                pending.extend(parents_by_child.get(&node).into_iter().flatten().copied());
-            }
-        }
-        let requested_context = self
-            .get_context_by_id(context_id)
-            .await?
-            .expect("context was checked above");
-        Ok((
-            RelationshipTreeFacetResponse {
-                items: nodes
-                    .into_iter()
-                    .map(|node| RelationshipTreeFacetItem {
-                        id: node.id,
-                        parent_ids: parents_by_child.remove(&node.id).unwrap_or_default(),
-                        display: display_label(
-                            &node.preview,
-                            &node.views,
-                            &node.context_fallback,
-                            &requested_context.code,
-                        )
-                        .as_str()
-                        .unwrap_or_default()
-                        .to_owned(),
-                        count: counts
-                            .get(&node.id)
-                            .map_or(0, |sources| sources.len() as i64),
-                    })
-                    .collect(),
-            },
-            matching_record_ids,
+                .filter(|id| source_record_ids.is_none_or(|ids| ids.contains(id)))
+                .collect(),
         ))
     }
 
     // Facet traversal inputs are explicit to keep query scope auditable.
     #[allow(clippy::too_many_arguments)]
-    /// Without `source_field`, each source record is its own node; see
-    /// [`Self::relationship_tree_facet`].
+    /// One page of a tree facet's roots, or of `parent_id`'s children, with
+    /// the distinct sources attached to each node or its descendants. Without
+    /// `source_field`, each source record is its own node; see
+    /// [`Self::relationship_tree_facet_matches`].
     pub async fn relationship_tree_facet_children(
         &self,
         source_blueprint_id: Uuid,
@@ -2010,172 +1964,165 @@ impl AttricatRepository {
             .get_context_by_id(context_id)
             .await?
             .ok_or(RepositoryError::InvalidContext)?;
-        let rows = sqlx::query_as::<_, RelationshipTreeChildRow>(
-            r#"WITH RECURSIVE context_path AS (
-                    SELECT id, parent_id, 0 AS depth FROM attribute_contexts WHERE id = $7
-                    UNION ALL
-                    SELECT c.id, c.parent_id, path.depth + 1
-                    FROM attribute_contexts c JOIN context_path path ON c.id = path.parent_id
-                ), source_edges AS (
-                    SELECT DISTINCT source.id AS source_id, av.relationship_target_record_id AS target_id
-                    FROM records source
-                    JOIN LATERAL (
-                        SELECT av.context_id
-                        FROM attribute_values av
-                        JOIN attributes a ON a.id = av.attribute_id
-                         AND a.blueprint_id = source.blueprint_id AND a.blueprint_version = source.blueprint_version
-                        JOIN context_path path ON path.id = av.context_id
-                        WHERE av.record_id = source.id AND av.active
-                          AND av.relationship_target_record_id IS NOT NULL
-                          AND a.code = $4 AND (path.depth = 0 OR a.context_fallback <> 'none')
-                        ORDER BY path.depth LIMIT 1
-                    ) chosen ON true
-                    JOIN attribute_values av ON av.record_id = source.id AND av.context_id = chosen.context_id
-                    JOIN attributes a ON a.id = av.attribute_id
-                     AND a.blueprint_id = source.blueprint_id AND a.blueprint_version = source.blueprint_version
-                    JOIN records target ON target.id = av.relationship_target_record_id
-                    WHERE source.blueprint_id = $1
-                      AND ($2::bigint IS NULL OR source.blueprint_version = $2)
-                      AND source.deleted_at IS NULL AND target.deleted_at IS NULL
-                      AND target.blueprint_id = $5 AND a.code = $4 AND av.active
-                      AND av.relationship_target_record_id IS NOT NULL
-                      AND ($3::uuid[] IS NULL OR source.id = ANY($3))
-                    UNION
-                    SELECT source.id, source.id
-                    FROM records source
-                    WHERE $4::text IS NULL AND source.blueprint_id = $1
-                      AND ($2::bigint IS NULL OR source.blueprint_version = $2)
-                      AND source.deleted_at IS NULL
-                      AND ($3::uuid[] IS NULL OR source.id = ANY($3))
-                ), parent_edges AS (
-                    SELECT DISTINCT child.id AS child_id, av.relationship_target_record_id AS parent_id
-                    FROM records child
-                    JOIN LATERAL (
-                        SELECT av.context_id
-                        FROM attribute_values av
-                        JOIN attributes a ON a.id = av.attribute_id
-                         AND a.blueprint_id = child.blueprint_id AND a.blueprint_version = child.blueprint_version
-                        JOIN context_path path ON path.id = av.context_id
-                        WHERE av.record_id = child.id AND av.active
-                          AND av.relationship_target_record_id IS NOT NULL
-                          AND a.code = $6 AND (path.depth = 0 OR a.context_fallback <> 'none')
-                        ORDER BY path.depth LIMIT 1
-                    ) chosen ON true
-                    JOIN attribute_values av ON av.record_id = child.id AND av.context_id = chosen.context_id
-                    JOIN attributes a ON a.id = av.attribute_id
-                     AND a.blueprint_id = child.blueprint_id AND a.blueprint_version = child.blueprint_version
-                    JOIN records parent ON parent.id = av.relationship_target_record_id
-                    WHERE child.blueprint_id = $5 AND child.deleted_at IS NULL
-                      AND parent.blueprint_id = $5 AND parent.deleted_at IS NULL
-                      AND a.code = $6 AND av.active AND av.relationship_target_record_id IS NOT NULL
-                ), ancestors AS (
-                    SELECT source_id, target_id AS node_id, ARRAY[target_id] AS path FROM source_edges
-                    UNION ALL
-                    SELECT ancestors.source_id, edges.parent_id, ancestors.path || edges.parent_id
-                    FROM ancestors JOIN parent_edges edges ON edges.child_id = ancestors.node_id
-                    WHERE NOT edges.parent_id = ANY(ancestors.path)
-                ), counts AS (
-                    SELECT node_id, COUNT(DISTINCT source_id)::bigint AS count
-                    FROM ancestors GROUP BY node_id
+        // Each edge set is one statement, so read them concurrently; the tree
+        // is then walked in memory for only the requested page's subtrees.
+        let sources = async {
+            match source_field {
+                Some(field) => {
+                    self.resolved_relationship_edges(
+                        source_blueprint_id,
+                        source_blueprint_version,
+                        field,
+                        target_blueprint_id,
+                        context_id,
+                    )
+                    .await
+                }
+                None => Ok(sqlx::query_scalar::<_, Uuid>(
+                    "SELECT id FROM records WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL",
                 )
-                SELECT record.id, record.projections -> 'preview' AS preview, blueprint.views AS display,
-                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
-                          FROM attributes attribute
-                         WHERE attribute.blueprint_id = record.blueprint_id
-                           AND attribute.blueprint_version = record.blueprint_version
-                           AND attribute.deleted_at IS NULL) AS context_fallback,
-                       COALESCE(counts.count, 0) AS count,
-                       EXISTS (SELECT 1 FROM parent_edges edge WHERE edge.parent_id = record.id) AS has_children
-                FROM records record
-                JOIN blueprints blueprint ON blueprint.id = record.blueprint_id AND blueprint.version = record.blueprint_version
-                LEFT JOIN counts ON counts.node_id = record.id
-                WHERE record.blueprint_id = $5 AND record.deleted_at IS NULL
-                  AND ($8::uuid IS NULL
-                       AND NOT EXISTS (SELECT 1 FROM parent_edges edge WHERE edge.child_id = record.id)
-                       OR $8::uuid IS NOT NULL AND EXISTS (
-                           SELECT 1 FROM parent_edges edge
-                           WHERE edge.child_id = record.id AND edge.parent_id = $8
-                       ))
-                  AND ($9::uuid IS NULL OR record.id > $9)
-                ORDER BY record.id LIMIT $10"#,
-        )
-        .bind(source_blueprint_id)
-        .bind(source_blueprint_version)
-        .bind(matching_record_ids.map(|ids| ids.iter().copied().collect::<Vec<_>>()))
-        .bind(source_field)
-        .bind(target_blueprint_id)
-        .bind(hierarchy_field)
-        .bind(context_id)
-        .bind(parent_id)
-        .bind(cursor)
-        .bind(limit + 1)
-        .fetch_all(&self.pool)
-        .await?;
-        let mut items: Vec<_> = rows
-            .into_iter()
-            .map(|row| RelationshipTreeFacetChildItem {
-                id: row.id,
-                display: display_label(
-                    &row.preview,
-                    &row.display,
-                    &row.context_fallback,
-                    &requested_context.code,
-                )
-                .as_str()
-                .unwrap_or_default()
-                .to_owned(),
-                count: row.count,
-                has_children: row.has_children,
-            })
-            .collect();
-        let next_cursor = if items.len() > limit as usize {
-            items.pop();
-            items.last().map(|item| item.id)
+                .bind(source_blueprint_id)
+                .bind(source_blueprint_version)
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|id| (id, id))
+                .collect()),
+            }
+        };
+        let parents = async {
+            match hierarchy_field {
+                Some(field) => {
+                    self.resolved_relationship_edges(
+                        target_blueprint_id,
+                        None,
+                        field,
+                        target_blueprint_id,
+                        context_id,
+                    )
+                    .await
+                }
+                None => Ok(Vec::new()),
+            }
+        };
+        let roots = async {
+            if parent_id.is_some() {
+                return Ok(Vec::new());
+            }
+            sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM records WHERE blueprint_id = $1 AND deleted_at IS NULL ORDER BY id",
+            )
+            .bind(target_blueprint_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RepositoryError::from)
+        };
+        let (sources, parents, nodes) = tokio::try_join!(sources, parents, roots)?;
+
+        let mut sources_by_target: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+        for (source, target) in sources {
+            if matching_record_ids.is_none_or(|ids| ids.contains(&source)) {
+                sources_by_target.entry(target).or_default().push(source);
+            }
+        }
+        let mut children_by_parent: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+        let mut has_parent = HashSet::new();
+        for (child, parent) in parents {
+            children_by_parent.entry(parent).or_default().push(child);
+            has_parent.insert(child);
+        }
+        let mut page: Vec<Uuid> = match parent_id {
+            Some(parent) => {
+                let mut children = children_by_parent.get(&parent).cloned().unwrap_or_default();
+                children.sort_unstable();
+                children.dedup();
+                children
+            }
+            None => nodes
+                .into_iter()
+                .filter(|id| !has_parent.contains(id))
+                .collect(),
+        };
+        // UUIDs order bytewise in both PostgreSQL and Rust, so cursors carry over.
+        page.retain(|id| cursor.is_none_or(|cursor| *id > cursor));
+        page.truncate(limit as usize + 1);
+        let next_cursor = if page.len() > limit as usize {
+            page.pop();
+            page.last().copied()
         } else {
             None
         };
-        let selected_rows = if selected_target_ids.is_empty() {
-            Vec::new()
-        } else {
-            sqlx::query_as::<_, RelationshipTreeNodeRow>(
-                r#"SELECT record.id, record.projections -> 'preview' AS preview,
-                          blueprint.views,
-                          (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
-                             FROM attributes attribute
-                            WHERE attribute.blueprint_id = record.blueprint_id
-                              AND attribute.blueprint_version = record.blueprint_version
-                              AND attribute.deleted_at IS NULL) AS context_fallback
-                     FROM records record
-                     JOIN blueprints blueprint ON blueprint.id = record.blueprint_id
-                      AND blueprint.version = record.blueprint_version
-                    WHERE record.blueprint_id = $1
-                      AND record.id = ANY($2)
-                      AND record.deleted_at IS NULL
-                    ORDER BY record.id"#,
+
+        let selected: HashSet<_> = selected_target_ids.iter().copied().collect();
+        let labeled: HashSet<_> = page.iter().chain(&selected).copied().collect();
+        let labels: HashMap<_, _> = sqlx::query_as::<_, RelationshipTreeNodeRow>(
+            r#"SELECT record.id, record.projections -> 'preview' AS preview,
+                      blueprint.views,
+                      (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
+                         FROM attributes attribute
+                        WHERE attribute.blueprint_id = record.blueprint_id
+                          AND attribute.blueprint_version = record.blueprint_version
+                          AND attribute.deleted_at IS NULL) AS context_fallback
+                 FROM records record
+                 JOIN blueprints blueprint ON blueprint.id = record.blueprint_id
+                  AND blueprint.version = record.blueprint_version
+                WHERE record.blueprint_id = $1
+                  AND record.id = ANY($2)
+                  AND record.deleted_at IS NULL"#,
+        )
+        .bind(target_blueprint_id)
+        .bind(labeled.into_iter().collect::<Vec<_>>())
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(|row| {
+            let display = display_label(
+                &row.preview,
+                &row.views,
+                &row.context_fallback,
+                &requested_context.code,
             )
-            .bind(target_blueprint_id)
-            .bind(selected_target_ids)
-            .fetch_all(&self.pool)
-            .await?
-        };
-        if selected_rows.len() != selected_target_ids.iter().collect::<HashSet<_>>().len() {
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+            (row.id, display)
+        })
+        .collect();
+        if selected.iter().any(|id| !labels.contains_key(id)) {
             return Err(RepositoryError::RelationshipTargetTypeMismatch);
         }
-        let selected_items = selected_rows
+
+        let items = page
             .into_iter()
-            .map(|row| RecordHierarchyItem {
-                id: row.id,
-                display: display_label(
-                    &row.preview,
-                    &row.views,
-                    &row.context_fallback,
-                    &requested_context.code,
-                )
-                .as_str()
-                .unwrap_or_default()
-                .to_owned(),
+            .map(|id| {
+                // A source counts once per node even when it reaches several
+                // of the node's descendants or one through several parents.
+                let mut visited = HashSet::new();
+                let mut counted: HashSet<Uuid> = HashSet::new();
+                let mut pending = vec![id];
+                while let Some(node) = pending.pop() {
+                    if !visited.insert(node) {
+                        continue;
+                    }
+                    counted.extend(sources_by_target.get(&node).into_iter().flatten());
+                    pending.extend(children_by_parent.get(&node).into_iter().flatten());
+                }
+                RelationshipTreeFacetChildItem {
+                    id,
+                    display: labels.get(&id).cloned().unwrap_or_default(),
+                    count: counted.len() as i64,
+                    has_children: children_by_parent.contains_key(&id),
+                }
             })
             .collect();
+        let mut selected_items: Vec<_> = selected
+            .into_iter()
+            .map(|id| RecordHierarchyItem {
+                display: labels[&id].clone(),
+                id,
+            })
+            .collect();
+        selected_items.sort_unstable_by_key(|item| item.id);
         Ok(RelationshipTreeFacetChildrenResponse {
             items,
             selected_items,
@@ -2200,6 +2147,7 @@ impl AttricatRepository {
             for (source, target) in self
                 .resolved_relationship_edges(
                     source_blueprint_id,
+                    None,
                     field,
                     *target_blueprint_id,
                     context_id,
@@ -2222,45 +2170,52 @@ impl AttricatRepository {
         ))
     }
 
+    /// `(source, target)` pairs of one relationship field as resolved in
+    /// `context_id`: each source reads its values from the nearest context on
+    /// the path to the root that has any, unless the field has no fallback.
+    /// `source_blueprint_version` limits the sources to one revision.
     async fn resolved_relationship_edges(
         &self,
         source_blueprint_id: Uuid,
+        source_blueprint_version: Option<i64>,
         field: &str,
         target_blueprint_id: Uuid,
         context_id: Uuid,
     ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
+        // Choosing each source's context in one sorted pass, rather than with a
+        // per-source LATERAL subquery, keeps this a few index scans and hash
+        // joins whose row counts the planner estimates well.
         Ok(sqlx::query_as::<_, (Uuid, Uuid)>(
             r#"WITH RECURSIVE context_path AS (
                     SELECT id, parent_id, 0 AS depth FROM attribute_contexts WHERE id = $4
                     UNION ALL
                     SELECT c.id, c.parent_id, path.depth + 1
                     FROM attribute_contexts c JOIN context_path path ON c.id = path.parent_id
+                ), chosen AS (
+                    SELECT DISTINCT ON (av.record_id) av.record_id, av.attribute_id, av.context_id
+                    FROM attributes a
+                    JOIN context_path path ON path.depth = 0 OR a.context_fallback <> 'none'
+                    JOIN attribute_values av ON av.attribute_id = a.id AND av.context_id = path.id
+                     AND av.active AND av.relationship_target_record_id IS NOT NULL
+                    JOIN records source ON source.id = av.record_id AND source.blueprint_id = $1
+                     AND source.blueprint_version = a.blueprint_version AND source.deleted_at IS NULL
+                    WHERE a.blueprint_id = $1 AND a.code = $2
+                      AND ($5::bigint IS NULL OR source.blueprint_version = $5)
+                    ORDER BY av.record_id, path.depth
                 )
-                SELECT DISTINCT source.id, av.relationship_target_record_id
-                FROM records source
-                JOIN LATERAL (
-                    SELECT av.context_id
-                    FROM attribute_values av
-                    JOIN attributes a ON a.id = av.attribute_id
-                     AND a.blueprint_id = source.blueprint_id AND a.blueprint_version = source.blueprint_version
-                    JOIN context_path path ON path.id = av.context_id
-                    WHERE av.record_id = source.id AND av.active
-                      AND av.relationship_target_record_id IS NOT NULL
-                      AND a.code = $2 AND (path.depth = 0 OR a.context_fallback <> 'none')
-                    ORDER BY path.depth LIMIT 1
-                ) chosen ON true
-                JOIN attribute_values av ON av.record_id = source.id AND av.context_id = chosen.context_id
-                JOIN attributes a ON a.id = av.attribute_id
-                 AND a.blueprint_id = source.blueprint_id AND a.blueprint_version = source.blueprint_version
+                SELECT DISTINCT chosen.record_id, av.relationship_target_record_id
+                FROM chosen
+                JOIN attribute_values av ON av.record_id = chosen.record_id
+                 AND av.attribute_id = chosen.attribute_id AND av.context_id = chosen.context_id
+                 AND av.active AND av.relationship_target_record_id IS NOT NULL
                 JOIN records target ON target.id = av.relationship_target_record_id
-                WHERE source.blueprint_id = $1 AND source.deleted_at IS NULL
-                  AND a.code = $2 AND av.active AND av.relationship_target_record_id IS NOT NULL
-                  AND target.blueprint_id = $3 AND target.deleted_at IS NULL"#,
+                WHERE target.blueprint_id = $3 AND target.deleted_at IS NULL"#,
         )
         .bind(source_blueprint_id)
         .bind(field)
         .bind(target_blueprint_id)
         .bind(context_id)
+        .bind(source_blueprint_version)
         .fetch_all(&self.pool)
         .await?)
     }
@@ -3247,6 +3202,26 @@ fn encode_sorted_search_cursor(sort: &RecordSearchSort, row: &SortedRecordPrevie
         id: row.id,
     };
     URL_SAFE_NO_PAD.encode(serde_json::to_vec(&cursor).expect("cursor serializes"))
+}
+
+/// The `records e` source and filter of a query over every search match, for
+/// matching IDs bound at `$parameter`. The ID list drives the join: with an
+/// `e.id = ANY(...)` filter, a cached generic plan scans every record of the
+/// blueprint and compares each one against the whole list.
+fn matching_records(matching: bool, parameter: usize) -> (String, String) {
+    if matching {
+        (
+            format!(
+                "(SELECT DISTINCT unnest(${parameter}::uuid[]) AS id) matching JOIN records e ON e.id = matching.id"
+            ),
+            String::new(),
+        )
+    } else {
+        (
+            "records e".to_owned(),
+            format!("AND ${parameter}::uuid[] IS NULL"),
+        )
+    }
 }
 
 pub fn decode_search_cursor(cursor: &str) -> Option<(DateTime<Utc>, Uuid)> {

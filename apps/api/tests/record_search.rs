@@ -729,3 +729,278 @@ target_blueprint = "facet_category"
 
     server.abort();
 }
+
+#[sqlx::test]
+async fn relationship_tree_facets_resolve_each_source_in_its_nearest_context(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "nearest_category"
+name = "Nearest category"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "nearest_category"
+"#,
+    )
+    .await;
+    create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "nearest_product"
+name = "Nearest product"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "category"
+value_type = "relationship"
+target_blueprint = "nearest_category"
+
+[[attributes]]
+code = "local_category"
+value_type = "relationship"
+target_blueprint = "nearest_category"
+context_fallback = "none"
+"#,
+    )
+    .await;
+    let category = json!({ "blueprint": { "code": "nearest_category", "version": 1 } });
+    let product = json!({ "blueprint": { "code": "nearest_product", "version": 1 } });
+    let root = create_record(&client, &base_url, &category).await;
+    let child = create_record(&client, &base_url, &category).await;
+    let other = create_record(&client, &base_url, &category).await;
+    let overridden = create_record(&client, &base_url, &product).await;
+    let inherited = create_record(&client, &base_url, &product).await;
+    let context: Value = client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({ "code": "nearest_child", "data": {} }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    for (record, field, context_id, targets) in [
+        (&child, "parent", Value::Null, vec![&root]),
+        (&overridden, "category", Value::Null, vec![&child]),
+        (&overridden, "category", context["id"].clone(), vec![&other]),
+        (&inherited, "category", Value::Null, vec![&child]),
+        (&inherited, "local_category", Value::Null, vec![&root]),
+    ] {
+        client
+            .put(format!(
+                "{base_url}/v1/records/{}",
+                record["id"].as_str().unwrap()
+            ))
+            .json(&json!({
+                "relationships": [{
+                    "attribute_code": field,
+                    "context_id": context_id,
+                    "target_record_ids": targets.iter().map(|t| &t["id"]).collect::<Vec<_>>(),
+                }]
+            }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+    let default_id = "00000000-0000-4000-8000-000000000001";
+    let search = |field: &'static str, context_id: Value, selected: &Value| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        let selected = selected["id"].clone();
+        async move {
+            let response: Value = client
+                .post(format!("{base_url}/v1/records/search"))
+                .json(&json!({
+                    "blueprint": { "code": "nearest_product" },
+                    "relationship_tree_facets": [{
+                        "source_relationship_field": field,
+                        "hierarchy_field": "parent",
+                        "context_id": context_id,
+                        "selected_target_ids": [selected],
+                    }]
+                }))
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            let mut ids: Vec<_> = response["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item["id"].as_str().unwrap().to_owned())
+                .collect();
+            ids.sort();
+            ids
+        }
+    };
+    let ids = |records: &[&Value]| {
+        let mut ids: Vec<_> = records
+            .iter()
+            .map(|record| record["id"].as_str().unwrap().to_owned())
+            .collect();
+        ids.sort();
+        ids
+    };
+    // The child context's value replaces the inherited one for that record only.
+    assert_eq!(
+        search("category", json!(default_id), &root).await,
+        ids(&[&overridden, &inherited])
+    );
+    assert_eq!(
+        search("category", context["id"].clone(), &root).await,
+        ids(&[&inherited])
+    );
+    assert_eq!(
+        search("category", context["id"].clone(), &other).await,
+        ids(&[&overridden])
+    );
+    // Without fallback, a default-context value does not apply in a child context.
+    assert_eq!(
+        search("local_category", json!(default_id), &root).await,
+        ids(&[&inherited])
+    );
+    assert!(
+        search("local_category", context["id"].clone(), &root)
+            .await
+            .is_empty()
+    );
+
+    let roots: Value = client
+        .post(format!(
+            "{base_url}/v1/records/facets/relationship-tree/children"
+        ))
+        .json(&json!({
+            "blueprint": { "code": "nearest_product" },
+            "source_relationship_field": "category",
+            "hierarchy_field": "parent",
+            "context_id": context["id"],
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let count = |id: &Value| {
+        roots["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| &item["id"] == id)
+            .map(|item| item["count"].clone())
+    };
+    assert_eq!(count(&root["id"]), Some(json!(1)));
+    assert_eq!(count(&other["id"]), Some(json!(1)));
+    assert_eq!(count(&child["id"]), None);
+
+    server.abort();
+}
+
+#[sqlx::test]
+async fn relationship_tree_facet_children_page_through_roots_by_cursor(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "paged_category"
+name = "Paged category"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "paged_category"
+"#,
+    )
+    .await;
+    let category = json!({ "blueprint": { "code": "paged_category", "version": 1 } });
+    let mut expected = Vec::new();
+    // One more root than the test server's page size.
+    for _ in 0..101 {
+        let record = create_record(&client, &base_url, &category).await;
+        expected.push(record["id"].as_str().unwrap().to_owned());
+    }
+    expected.sort();
+    let mut seen = Vec::new();
+    let mut cursor = Value::Null;
+    loop {
+        let page: Value = client
+            .post(format!(
+                "{base_url}/v1/records/facets/relationship-tree/children"
+            ))
+            .json(&json!({
+                "blueprint": { "code": "paged_category" },
+                "hierarchy_field": "parent",
+                "context_id": "00000000-0000-4000-8000-000000000001",
+                "cursor": cursor,
+            }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        seen.extend(
+            page["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item["id"].as_str().unwrap().to_owned()),
+        );
+        cursor = page["next_cursor"].clone();
+        if cursor.is_null() {
+            break;
+        }
+    }
+    assert_eq!(seen, expected);
+
+    server.abort();
+}

@@ -254,31 +254,24 @@ pub(super) async fn search_record_previews(
             .push(resolve_relationship_filter(&repository, &search_blueprint, filter).await?);
     }
     let candidate_started = Instant::now();
-    // An unfiltered current-version search is already constrained by the page query.
-    // Avoid materializing every record ID only to pass it back as `id = ANY(...)`.
-    let must_resolve =
-        query.is_some() || (selected.is_some() && !input.relationship_tree_facets.is_empty());
-    let resolved = if must_resolve {
-        Some(
+    // Without a search term, the page query already scopes the blueprint and
+    // version, so no record IDs are materialized.
+    let resolved = match query {
+        Some(query) => Some(
             repository
-                .resolve_search(&search_blueprint, selected, query)
+                .resolve_search(&search_blueprint, selected, Some(query))
                 .instrument(tracing::info_span!(
                     "sql.operation",
                     label = "search-resolve"
                 ))
                 .await
                 .map_err(map_search_error)?,
-        )
-    } else {
-        None
+        ),
+        None => None,
     };
-    let ids = resolved.as_ref().map(|resolved| &resolved.ids);
-    let mut matching: Option<Vec<Uuid>> = query.is_some().then(|| {
-        ids.expect("search queries are resolved")
-            .iter()
-            .copied()
-            .collect()
-    });
+    let mut matching: Option<Vec<Uuid>> = resolved
+        .as_ref()
+        .map(|resolved| resolved.ids.iter().copied().collect());
     if !filters.is_empty() {
         let filtered = repository
             .filter_record_ids(current.blueprint.id, selected, &filters, &context)
@@ -318,7 +311,7 @@ pub(super) async fn search_record_previews(
             .as_ref()
             .map(|ids| ids.iter().copied().collect::<HashSet<_>>());
         let facet_matching = repository
-            .relationship_tree_facet(
+            .relationship_tree_facet_matches(
                 current.blueprint.id,
                 facet.source_relationship_field.as_deref(),
                 target.blueprint.id,
@@ -331,8 +324,7 @@ pub(super) async fn search_record_previews(
                 "sql.operation",
                 label = "relationship-facet"
             ))
-            .await?
-            .1;
+            .await?;
         if let Some(facet_matching) = facet_matching {
             matching = Some(intersect_record_ids(matching, facet_matching));
         }
