@@ -32,6 +32,9 @@ export const VIEW_SECTION_PADDING = 2.5;
 export const VIEW_LAYOUT_SPACING = 2;
 /** Rows of editable fields need room for their floating labels and help text. */
 export const VIEW_EDIT_LAYOUT_SPACING = 8;
+/** Space between a tab strip and its panel, clear of a first floating label. */
+export const VIEW_TAB_PANEL_SPACING = 2;
+export const VIEW_EDIT_TAB_PANEL_SPACING = 5;
 export const VIEW_GRID_COLUMNS = {
   xs: '1fr',
   md: 'repeat(2, minmax(0, 1fr))',

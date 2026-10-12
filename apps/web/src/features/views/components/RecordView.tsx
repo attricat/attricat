@@ -33,6 +33,8 @@ import {
   VIEW_COMPONENT_LOG_LABEL,
   VIEW_GRID_COLUMNS,
   VIEW_EDIT_LAYOUT_SPACING,
+  VIEW_EDIT_TAB_PANEL_SPACING,
+  VIEW_TAB_PANEL_SPACING,
   VIEW_LAYOUT_SPACING,
   VIEW_SECTION_PADDING,
 } from '../constants';
@@ -148,6 +150,11 @@ export const RecordView = ({
         <Box key={key}>
           <ViewTabs
             invalidFields={invalidFields}
+            panelSpacing={
+              renderEditor
+                ? VIEW_EDIT_TAB_PANEL_SPACING
+                : VIEW_TAB_PANEL_SPACING
+            }
             render={renderNodes}
             tabs={node.tabs}
           />

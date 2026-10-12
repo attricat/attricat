@@ -6,14 +6,18 @@ import type { ViewNode } from '../../records/api';
 import { lexiconText } from '../../lexicon/lexicon';
 import { nodesPlacedFields } from '../viewFieldComponents';
 import { compactIconSize } from '../../../components/iconSizes';
+import { VIEW_TAB_PANEL_SPACING } from '../constants';
 
 export const ViewTabs = ({
   invalidFields,
+  panelSpacing = VIEW_TAB_PANEL_SPACING,
   tabs,
   render,
 }: {
   /** Fields with errors; tabs holding one are marked, as only one renders. */
   invalidFields?: ReadonlySet<string>;
+  /** Space above the panel, larger when it opens on an editable field. */
+  panelSpacing?: number;
   tabs: { label: string; children: ViewNode[] }[];
   render: (nodes: ViewNode[]) => ReactNode;
 }) => {
@@ -53,7 +57,7 @@ export const ViewTabs = ({
           aria-labelledby={`${tabId}-tab-${value}`}
           id={`${tabId}-tabpanel-${value}`}
           role="tabpanel"
-          sx={{ pt: 2 }}
+          sx={{ pt: panelSpacing }}
         >
           {render(tabs[value].children)}
         </Box>
