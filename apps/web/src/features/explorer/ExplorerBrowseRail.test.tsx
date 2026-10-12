@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
@@ -94,7 +94,7 @@ describe('ExplorerBrowseRail', () => {
                 ]
               : [],
         selected_paths: input.selected_target_ids?.includes(sneakersId)
-          ? [[shoesId]]
+          ? [[shoesId, sneakersId]]
           : [],
         next_cursor: null,
       }),
@@ -153,6 +153,41 @@ describe('ExplorerBrowseRail', () => {
       screen.getByRole('button', { name: 'Collapse Shoes' }),
     );
     expect(screen.queryByText('Sneakers')).toBeNull();
+  });
+
+  it('asks each level for the selected branch past its first page', async () => {
+    const mock = vi.mocked(getRelationshipTreeFacetChildren);
+    const paged = mock.getMockImplementation()!;
+    // Sneakers sits on a later page of Shoes, behind a Load more.
+    mock.mockImplementation(async (input, signal) => {
+      const page = await paged(input, signal);
+      if (input.parent_id !== shoesId) return page;
+      const included = input.include_ids?.includes(sneakersId);
+      return {
+        ...page,
+        items: included ? page.items : [],
+        next_cursor: input.cursor ? null : apparelId,
+      };
+    });
+    renderRail({ selectedIds: [sneakersId] });
+    expect(await screen.findByText('Sneakers')).toBeTruthy();
+    expect(mock).toHaveBeenCalledWith(
+      expect.objectContaining({ include_ids: [shoesId] }),
+      expect.anything(),
+    );
+    expect(mock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include_ids: [sneakersId],
+        parent_id: shoesId,
+      }),
+      expect.anything(),
+    );
+    // The page that holds it later does not list it twice.
+    await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull(),
+    );
+    expect(screen.getAllByText('Sneakers')).toHaveLength(1);
   });
 
   it("lists the blueprint's own tree under its name", async () => {

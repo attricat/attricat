@@ -84,7 +84,7 @@ Gdy API zwraca szczegóły w formie czytelnej dla maszyn (na przykład naruszeni
 
 ## Argumenty JSON
 
-Opcje przyjmujące dane strukturalne (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationships`, `--selected-target-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`, `--operations`) akceptują JSON podany bezpośrednio albo ścieżkę do pliku JSON.
+Opcje przyjmujące dane strukturalne (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationships`, `--selected-target-ids`, `--include-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`, `--operations`) akceptują JSON podany bezpośrednio albo ścieżkę do pliku JSON.
 
 Polecenia schematów, przepływów pracy i reguł przyjmują `--file <path>` lub `--stdin` i wysyłają TOML bez zmian.
 

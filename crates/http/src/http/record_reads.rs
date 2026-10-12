@@ -1017,6 +1017,12 @@ pub(super) async fn relationship_tree_facet_children(
             "blueprint.code must not be empty".to_owned(),
         ));
     }
+    let max_nodes = state.max_relationship_facet_nodes;
+    if input.include_ids.len() as u64 > u64::from(max_nodes) {
+        return Err(ApiError::invalid_input(format!(
+            "include_ids must not name more than {max_nodes} nodes"
+        )));
+    }
     let source = repository
         .get_blueprint_by_code(&input.blueprint.code)
         .await?
@@ -1071,6 +1077,7 @@ pub(super) async fn relationship_tree_facet_children(
                 input.parent_id,
                 input.cursor,
                 &input.selected_target_ids,
+                &input.include_ids,
                 state.max_relationship_facet_nodes.into(),
             )
             .instrument(tracing::info_span!(

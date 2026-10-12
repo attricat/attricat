@@ -82,7 +82,7 @@ When the API returns machine-readable `details` (for example check violations or
 
 ## JSON arguments
 
-Options that take structured data (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationships`, `--selected-target-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`, `--operations`) accept either inline JSON or a path to a JSON file.
+Options that take structured data (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationships`, `--selected-target-ids`, `--include-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`, `--operations`) accept either inline JSON or a path to a JSON file.
 
 Blueprint, workflow, and rule commands take `--file <path>` or `--stdin` and send the TOML unchanged.
 

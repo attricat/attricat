@@ -499,7 +499,7 @@ target_blueprint = "facet_category"
     assert_eq!(root_page["next_cursor"], Value::Null);
     assert_eq!(root_page["selected_items"][0]["id"], root["id"]);
     assert_eq!(root_page["selected_items"][0]["display"], "Root");
-    assert_eq!(root_page["selected_paths"], json!([]));
+    assert_eq!(root_page["selected_paths"], json!([[root["id"]]]));
     let root_item = root_page["items"]
         .as_array()
         .unwrap()
@@ -535,7 +535,13 @@ target_blueprint = "facet_category"
         .map(|parent| parent["id"].as_str().unwrap().parse::<Uuid>().unwrap())
         .min()
         .unwrap();
-    assert_eq!(child_page["selected_paths"], json!([[lower_parent]]));
+    assert_eq!(
+        child_page["selected_paths"],
+        json!([[
+            lower_parent.to_string(),
+            child["id"].as_str().unwrap().to_owned()
+        ]])
+    );
     assert!(
         child_page["items"]
             .as_array()
@@ -1156,6 +1162,44 @@ target_blueprint = "paged_category"
         }
     }
     assert_eq!(seen, expected);
+
+    // A node past the first page can be asked for, without moving the cursor;
+    // IDs on the page or outside the level are ignored.
+    let children = |include_ids: Value| {
+        client
+            .post(format!(
+                "{base_url}/v1/records/facets/relationship-tree/children"
+            ))
+            .json(&json!({
+                "blueprint": { "code": "paged_category" },
+                "hierarchy_field": "parent",
+                "context_id": "00000000-0000-4000-8000-000000000001",
+                "include_ids": include_ids,
+            }))
+            .send()
+    };
+    let first_page: Value = children(json!([expected[100], expected[0], Uuid::new_v4()]))
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let ids: Vec<_> = first_page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(ids.len(), 101);
+    assert_eq!(ids.last(), Some(&expected[100]));
+    assert_eq!(first_page["next_cursor"], expected[99]);
+    let too_many: Vec<_> = (0..101).map(|_| Uuid::new_v4()).collect();
+    assert_eq!(
+        children(json!(too_many)).await.unwrap().status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
 
     server.abort();
 }

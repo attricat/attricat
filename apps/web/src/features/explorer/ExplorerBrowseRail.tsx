@@ -187,8 +187,11 @@ type TreeProps = {
   onSelect: (selectedIds: string[]) => void;
 };
 
-/** Paths of the branches that lead to the nodes selected on mount. */
-const useSelectedBranches = ({ request, selected }: TreeProps) => {
+/**
+ * Root-first paths to the nodes selected on mount, ending with each node. The
+ * selection is fixed for the tree's life, so clicks never reload its levels.
+ */
+const useSelectedPaths = ({ request, selected }: TreeProps) => {
   const [initialSelection] = useState(() => [...selected]);
   const pathsRequest = { ...request, selected_target_ids: initialSelection };
   // A stale selection fails the request; the tree then just stays collapsed.
@@ -203,17 +206,32 @@ const useSelectedBranches = ({ request, selected }: TreeProps) => {
     select: (page) => page.selected_paths,
     staleTime: Infinity,
   });
-  return new Set(
-    (paths.data ?? []).flatMap((path) =>
-      path.map((_, index) => path.slice(0, index + 1).join('/')),
-    ),
-  );
+  return {
+    paths: paths.data ?? [],
+    settled: initialSelection.length === 0 || !paths.isPending,
+  };
 };
 
+const pathKey = (ids: string[]) => ids.join('/');
+
 const BrowseTree = (props: TreeProps) => {
-  const selectedBranches = useSelectedBranches(props);
+  const { paths, settled } = useSelectedPaths(props);
+  // Open each branch above a selected node, and ask each level on the way
+  // for its node in case it falls past the first page.
+  const selectedBranches = new Set(
+    paths.flatMap((path) =>
+      path.slice(0, -1).map((_, index) => pathKey(path.slice(0, index + 1))),
+    ),
+  );
+  const included = new Map<string, string[]>();
+  for (const path of paths)
+    path.forEach((id, index) => {
+      const level = pathKey(path.slice(0, index));
+      included.set(level, [...(included.get(level) ?? []), id]);
+    });
   // What the user opened or closed, over the branches leading to the selection.
   const [toggled, setToggled] = useState<Map<string, boolean>>(new Map());
+  if (!settled) return <LevelLoading depth={0} />;
   const expanded = new Set(
     [...selectedBranches, ...toggled.keys()].filter(
       (path) => toggled.get(path) ?? selectedBranches.has(path),
@@ -231,8 +249,21 @@ const BrowseTree = (props: TreeProps) => {
       {...props}
       ancestry={[]}
       expanded={expanded}
+      included={included}
       onToggle={toggle}
     />
+  );
+};
+
+const LevelLoading = ({ depth }: { depth: number }) => {
+  const { t } = useTranslation();
+  return (
+    <Box sx={{ pl: depth * browseRailIndent + 1, py: 1 }}>
+      <CircularProgress
+        aria-label={t('common.loading')}
+        size={compactIconSize}
+      />
+    </Box>
   );
 };
 
@@ -240,12 +271,15 @@ type LevelProps = TreeProps & {
   /** Target IDs from the root to this level's parent. */
   ancestry: string[];
   expanded: Set<string>;
+  /** Nodes each level returns even past its first page, by ancestry path. */
+  included: Map<string, string[]>;
   onToggle: (path: string) => void;
 };
 
 const BrowseLevel = ({
   ancestry,
   expanded,
+  included,
   request,
   selected,
   onSelect,
@@ -253,9 +287,11 @@ const BrowseLevel = ({
 }: LevelProps) => {
   const { i18n, t } = useTranslation();
   const parentId = ancestry.at(-1);
+  const includeIds = included.get(pathKey(ancestry));
   const levelRequest = {
     ...request,
     ...(parentId === undefined ? {} : { parent_id: parentId }),
+    ...(includeIds ? { include_ids: includeIds } : {}),
   };
   const children = useInfiniteQuery({
     queryKey: recordQueryKeys.relationshipTreeFacetChildren(levelRequest),
@@ -269,27 +305,24 @@ const BrowseLevel = ({
   });
   const indent = ancestry.length * browseRailIndent;
 
-  if (children.isPending)
-    return (
-      <Box sx={{ pl: indent + 1, py: 1 }}>
-        <CircularProgress
-          aria-label={t('common.loading')}
-          size={compactIconSize}
-        />
-      </Box>
-    );
+  if (children.isPending) return <LevelLoading depth={ancestry.length} />;
   if (children.isError)
     return (
       <Typography color="error" sx={{ pl: indent + 1, py: 1 }} variant="body2">
         {children.error.message}
       </Typography>
     );
-  // Pages arrive in ID order; show each level alphabetically.
-  const items = children.data.pages
-    .flatMap((page) => page.items)
-    .sort((left, right) =>
-      left.display.localeCompare(right.display, i18n.language),
-    );
+  // Pages arrive in ID order; show each level alphabetically. An included
+  // node returns again on the page that holds it.
+  const items = [
+    ...new Map(
+      children.data.pages
+        .flatMap((page) => page.items)
+        .map((item) => [item.id, item]),
+    ).values(),
+  ].sort((left, right) =>
+    left.display.localeCompare(right.display, i18n.language),
+  );
   if (!items.length && ancestry.length === 0)
     return (
       <Typography color="text.secondary" sx={{ px: 1, py: 1 }} variant="body2">
@@ -303,6 +336,7 @@ const BrowseLevel = ({
         <BrowseNode
           ancestry={ancestry}
           expanded={expanded}
+          included={included}
           item={item}
           key={item.id}
           onSelect={onSelect}
@@ -333,7 +367,7 @@ const BrowseNode = ({
 }: LevelProps & { item: RelationshipTreeFacetChild }) => {
   const { t } = useTranslation();
   const { expanded, selected, onSelect, onToggle } = props;
-  const path = [...ancestry, item.id].join('/');
+  const path = pathKey([...ancestry, item.id]);
   // An acyclic hierarchy is never expected to loop; stop if it does.
   const canExpand = item.has_children && !ancestry.includes(item.id);
   const open = canExpand && expanded.has(path);

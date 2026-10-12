@@ -558,6 +558,10 @@ pub struct RelationshipTreeFacetChildrenRequest {
     pub cursor: Option<Uuid>,
     #[serde(default)]
     pub selected_target_ids: Vec<Uuid>,
+    /// Nodes of this level to return even when they fall outside the page,
+    /// such as the branch leading to a selection. Others are ignored.
+    #[serde(default)]
+    pub include_ids: Vec<Uuid>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -572,8 +576,8 @@ pub struct RelationshipTreeFacetChildItem {
 pub struct RelationshipTreeFacetChildrenResponse {
     pub items: Vec<RelationshipTreeFacetChildItem>,
     pub selected_items: Vec<RecordHierarchyItem>,
-    /// For each selected node below the roots, the IDs from a root down to
-    /// its parent, so a client can open the branches that lead to it.
+    /// For each selected node, the IDs from a root down to the node itself,
+    /// so a client can open and page to the branches that lead to it.
     pub selected_paths: Vec<Vec<Uuid>>,
     pub next_cursor: Option<Uuid>,
 }

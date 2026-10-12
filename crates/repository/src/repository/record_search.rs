@@ -1981,6 +1981,7 @@ impl AttricatRepository {
         parent_id: Option<Uuid>,
         cursor: Option<Uuid>,
         selected_target_ids: &[Uuid],
+        include_ids: &[Uuid],
         limit: i64,
     ) -> Result<RelationshipTreeFacetChildrenResponse, RepositoryError> {
         let requested_context = self
@@ -2074,6 +2075,9 @@ impl AttricatRepository {
                 .filter(|id| !parents_by_child.contains_key(id))
                 .collect(),
         };
+        // Requested nodes of this level outside the page follow it, without
+        // moving the cursor, so paging on still reaches every node once.
+        let level: HashSet<_> = page.iter().copied().collect();
         // UUIDs order bytewise in both PostgreSQL and Rust, so cursors carry over.
         page.retain(|id| cursor.is_none_or(|cursor| *id > cursor));
         page.truncate(limit as usize + 1);
@@ -2083,6 +2087,14 @@ impl AttricatRepository {
         } else {
             None
         };
+        let mut included: Vec<_> = include_ids
+            .iter()
+            .copied()
+            .filter(|id| level.contains(id) && !page.contains(id))
+            .collect();
+        included.sort_unstable();
+        included.dedup();
+        page.extend(included);
 
         let selected: HashSet<_> = selected_target_ids.iter().copied().collect();
         let labeled: HashSet<_> = page.iter().chain(&selected).copied().collect();
@@ -2164,8 +2176,11 @@ impl AttricatRepository {
         selected_items.sort_unstable_by_key(|item| item.id);
         let selected_paths = selected_items
             .iter()
-            .map(|item| ancestor_path(&parents_by_child, item.id))
-            .filter(|path| !path.is_empty())
+            .map(|item| {
+                let mut path = ancestor_path(&parents_by_child, item.id);
+                path.push(item.id);
+                path
+            })
             .collect();
         Ok(RelationshipTreeFacetChildrenResponse {
             items,

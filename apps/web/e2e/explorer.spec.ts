@@ -3,8 +3,10 @@ import {
   createRecord,
   createRecordBlueprint,
   createRevision,
+  defaultContext,
   publishRevision,
   relationship,
+  request,
   scalar,
   suffix,
 } from './helpers';
@@ -522,6 +524,75 @@ target_blueprint = "${categoryCode}"`,
     page.getByRole('button', { name: 'Show browse panel' }),
   ).toBeVisible();
   await expect(rail).toBeHidden();
+});
+
+test('opens the browse rail to a selection past the first page', async ({
+  page,
+}) => {
+  const categoryCode = `rail_paged_category_${suffix()}`;
+  const category = await createRecordBlueprint(
+    categoryCode,
+    'Paged rail categories',
+    `[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "${categoryCode}"
+tree = true
+context_editable = "default"`,
+  );
+  const parent = await createRecord(category, [scalar('title', 'Catalog')]);
+  // One more child than a page holds. Pages follow ID order, so the highest
+  // ID always lands on page two. Batches keep fixture logins under the limit.
+  const context = await defaultContext();
+  const children = Array.from({ length: 101 }, (_, index) => ({
+    id: crypto.randomUUID(),
+    title: `Child ${String(index).padStart(3, '0')}`,
+  }));
+  for (let start = 0; start < children.length; start += 50)
+    await request('/v1/records/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operations: children.slice(start, start + 50).map((child) => ({
+          op: 'create',
+          record_id: child.id,
+          blueprint: {
+            code: category.blueprint.code,
+            version: category.blueprint.version,
+          },
+          values: [
+            scalar('title', child.title),
+            relationship('parent', parent.id),
+          ].map((value) => ({ ...value, context_id: context.id })),
+        })),
+      }),
+    });
+  const lastTitle = children.reduce((highest, child) =>
+    child.id > highest.id ? child : highest,
+  ).title;
+
+  await page.goto(`/?blueprint=${categoryCode}`);
+  const rail = page.getByRole('complementary', {
+    name: 'Browse by Paged rail categories',
+  });
+  await rail.getByRole('button', { name: 'Expand Catalog' }).click();
+  await rail.getByRole('button', { name: 'Load more' }).click();
+  await rail.getByRole('button', { name: new RegExp(`^${lastTitle}`) }).click();
+  await expect(page.getByText('1 result')).toBeVisible();
+
+  await page.reload();
+  const selected = rail.getByRole('button', {
+    name: new RegExp(`^${lastTitle}`),
+  });
+  await expect(selected).toHaveAttribute('aria-current', 'true');
+  await expect(rail.getByRole('button', { name: 'Load more' })).toBeVisible();
+  await rail.getByRole('button', { name: 'Load more' }).click();
+  await expect(rail.getByRole('button', { name: 'Load more' })).toBeHidden();
+  await expect(rail.getByText(lastTitle, { exact: true })).toHaveCount(1);
 });
 
 test("opens the browse rail on the blueprint's browse_by field", async ({

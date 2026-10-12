@@ -84,7 +84,7 @@ acli record preview <record-id> [--relationship-depth <depth>] [--relationship-l
 acli record resolved-preview <record-id> --context-id <context-id>
 acli record hierarchy <record-id> --context-id <context-id> --field <relationship-field>
 acli record incoming-relationships <record-id> --relationships <json-or-file> [--size <size>] [--cursor <opaque-cursor>]
-acli record facet-children --blueprint <code> [--source-relationship-field <field>] --context-id <context-id> [--version <version>] [--query <text>] [--hierarchy-field <field>] [--parent-id <record-id>] [--cursor <record-id>] [--selected-target-ids <json-or-file>]
+acli record facet-children --blueprint <code> [--source-relationship-field <field>] --context-id <context-id> [--version <version>] [--query <text>] [--hierarchy-field <field>] [--parent-id <record-id>] [--cursor <record-id>] [--selected-target-ids <json-or-file>] [--include-ids <json-or-file>]
 acli record search --blueprint <code> [--version <version>] [--query <text>] [--size <size>] [--cursor <cursor>] [--system-tags <json>] [--filters <json-or-file>] [--outdated] [--include-total] [--relationship-tree-facets <json-or-file>] [--sort-field <field> --sort-direction asc|desc]
 acli record update <record-id> [--values values.toml] [--relationships relationships.toml] [--remove-values removals.toml] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
 acli record changes|value-history <record-id>
@@ -285,7 +285,7 @@ The CLI returns JSON with an `id`; set `ATTRICAT_WEB_URL` (or `WEB_PORT` from `.
 
 Options named `--permissions`, `--entries`, `--filters`,
 `--relationship-tree-facets`, `--relationships`, `--selected-target-ids`,
-`--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, and
+`--include-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, and
 `--operations` accept an inline JSON value or a path to a JSON file. Array options reject
 non-array JSON locally. This keeps complex request bodies out of shell quoting.
 
@@ -328,8 +328,8 @@ Search `--filters` is the API array of field/operator/value objects;
 optional `source_relationship_field`, `context_id`, optional `hierarchy_field`,
 and optional `selected_target_ids`; omit the source field (also
 `facet-children --source-relationship-field`) to use the blueprint's own
-tree. `facet-children --selected-target-ids` is a
-JSON UUID array. `incoming-relationships --relationships` is a non-empty array
+tree. `facet-children --selected-target-ids` and `--include-ids` are
+JSON UUID arrays. `incoming-relationships --relationships` is a non-empty array
 of `{ "source_blueprint": "…", "field": "…" }`. Migration `--values` and
 `--relationships` are the API migration arrays, while
 `--discard-attributes` is an array of attribute-code strings. The command first

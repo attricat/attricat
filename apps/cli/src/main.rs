@@ -640,6 +640,9 @@ enum RecordCommand {
         cursor: Option<Uuid>,
         #[arg(long)]
         selected_target_ids: Option<String>,
+        /// JSON array of this level's node IDs to return even outside the page.
+        #[arg(long)]
+        include_ids: Option<String>,
     },
     Publication {
         #[command(subcommand)]
@@ -2197,7 +2200,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
             }
             RecordCommand::Hierarchy { record_id, context_id, field } => request(&client, &server, Method::GET, &format!("/records/{}/hierarchy?context_id={}&field={}", segment(record_id), segment(context_id), segment(&field)), None).await,
             RecordCommand::IncomingRelationships { record_id, relationships, size, cursor } => request(&client, &server, Method::POST, &format!("/v1/records/{}/incoming-relationships", segment(record_id)), Some(json!({"relationships": json_array_input(&relationships, "--relationships")?, "page": {"size": size, "cursor": cursor}}))).await,
-            RecordCommand::FacetChildren { blueprint, version, query, source_relationship_field, hierarchy_field, context_id, parent_id, cursor, selected_target_ids } => request(&client, &server, Method::POST, "/v1/records/facets/relationship-tree/children", Some(json!({"blueprint":{"code": blueprint, "version":version}, "query":query, "source_relationship_field":source_relationship_field, "hierarchy_field":hierarchy_field, "context_id":context_id, "parent_id":parent_id, "cursor":cursor, "selected_target_ids":json_array_argument(selected_target_ids.as_deref(), "--selected-target-ids")?}))).await,
+            RecordCommand::FacetChildren { blueprint, version, query, source_relationship_field, hierarchy_field, context_id, parent_id, cursor, selected_target_ids, include_ids } => request(&client, &server, Method::POST, "/v1/records/facets/relationship-tree/children", Some(json!({"blueprint":{"code": blueprint, "version":version}, "query":query, "source_relationship_field":source_relationship_field, "hierarchy_field":hierarchy_field, "context_id":context_id, "parent_id":parent_id, "cursor":cursor, "selected_target_ids":json_array_argument(selected_target_ids.as_deref(), "--selected-target-ids")?, "include_ids":json_array_argument(include_ids.as_deref(), "--include-ids")?}))).await,
             RecordCommand::Publication { command } => record_publication_command(&client, &server, command).await,
             RecordCommand::Changes { record_id } => request(&client, &server, Method::GET, &format!("/records/{}/changes", segment(record_id)), None).await,
             RecordCommand::ValueHistory { record_id } => request(&client, &server, Method::GET, &format!("/records/{}/values/history", segment(record_id)), None).await,
