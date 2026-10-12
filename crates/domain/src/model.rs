@@ -540,19 +540,6 @@ pub struct RelationshipTreeFacetRequest {
     pub selected_target_ids: Vec<Uuid>,
 }
 
-#[derive(Clone, Debug, Serialize)]
-pub struct RelationshipTreeFacetItem {
-    pub id: Uuid,
-    pub parent_ids: Vec<Uuid>,
-    pub display: String,
-    pub count: i64,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct RelationshipTreeFacetResponse {
-    pub items: Vec<RelationshipTreeFacetItem>,
-}
-
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RelationshipTreeFacetChildrenRequest {
