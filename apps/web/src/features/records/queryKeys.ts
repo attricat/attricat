@@ -34,9 +34,6 @@ export const recordQueryKeys = {
   relationshipTreeFacetChildren: (
     input: Omit<RelationshipTreeFacetChildrenRequest, 'cursor'>,
   ) => ['relationship-tree-facet-children', input] as const,
-  relationshipTreeFacetSelectedPaths: (
-    input: Omit<RelationshipTreeFacetChildrenRequest, 'cursor'>,
-  ) => ['relationship-tree-facet-children', input, 'selected-paths'] as const,
   relationshipTargets: (blueprint: string | null | undefined, query: string) =>
     ['relationship-targets', blueprint, query] as const,
   form: (recordId: string) => ['record-form', recordId] as const,

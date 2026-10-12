@@ -8,7 +8,7 @@ import type {
 import { resolveValueEditor } from '../../views/components/registry';
 import type { ValueEditorProps } from '../../views/components/componentTypes';
 import { ChoiceEditor, StatusEditor } from '../../views/controls/editors';
-import { choiceOptions } from '../choices';
+import { choiceEditorOptions } from '../choices';
 import { attributeLabel } from '../recordDisplay';
 import { attributeValueTypes } from '../valueTypes';
 import {
@@ -76,9 +76,9 @@ const BuiltInEditor = ({
 
 /**
  * Editor for one scalar attribute value, shared by the record form and the
- * blueprint preview sandbox. A status or user-or-team annotation, or an
- * `enum` of choices, takes precedence, then the view's configured edit
- * component, then the built-in input for the type.
+ * blueprint preview sandbox. A status or user-or-team annotation takes
+ * precedence, then the view's configured edit component, then a select for an
+ * `enum` of choices, then the built-in input for the type.
  */
 export const ScalarAttributeEditor = ({
   component,
@@ -107,10 +107,9 @@ export const ScalarAttributeEditor = ({
     );
   const principal = principalConfiguration(props.attribute);
   if (principal) return <PrincipalEditor {...props} config={principal} />;
-  const choices = choiceOptions(props.attribute);
+  const configured = resolveValueEditor(component, props.attribute);
+  if (configured?.valueEditor) return <configured.valueEditor {...props} />;
+  const choices = choiceEditorOptions(props.attribute, component);
   if (choices) return <ChoiceEditor {...props} options={choices} />;
-  const Editor =
-    resolveValueEditor(component, props.attribute)?.valueEditor ??
-    BuiltInEditor;
-  return <Editor {...props} />;
+  return <BuiltInEditor {...props} />;
 };

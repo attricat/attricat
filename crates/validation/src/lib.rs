@@ -1,4 +1,7 @@
-use std::sync::{Arc, LazyLock};
+use std::{
+    hash::{DefaultHasher, Hasher},
+    sync::{Arc, LazyLock},
+};
 
 pub mod choices;
 pub mod files;
@@ -38,22 +41,51 @@ pub fn validate_json_schema_definition(schema: &serde_json::Value) -> Result<(),
         .map_err(|error| error.to_string())
 }
 
-/// Compiled validators by schema text. Building one compiles every `pattern`
-/// and `format` regex, and record writes and migrations validate many values
+/// Compiled validators by schema. Building one compiles every `pattern` and
+/// `format` regex, and record writes and migrations validate many values
 /// against the same few published schemas, so each schema compiles once per
-/// process. Keys are the schema's full JSON text, so equal keys are equal
-/// schemas.
-static VALIDATORS: LazyLock<moka::sync::Cache<Arc<str>, Arc<jsonschema::Validator>>> =
+/// process. Keys hash the schema's JSON text as it streams out, without
+/// building it, and each entry keeps its schema so a hash collision compiles
+/// rather than reusing another schema's validator.
+static VALIDATORS: LazyLock<moka::sync::Cache<u64, Arc<CompiledSchema>>> =
     LazyLock::new(|| moka::sync::Cache::new(VALIDATOR_CACHE_ENTRIES));
 
 const VALIDATOR_CACHE_ENTRIES: u64 = 4_096;
 
+struct CompiledSchema {
+    schema: serde_json::Value,
+    validator: Arc<jsonschema::Validator>,
+}
+
+/// Feeds written bytes to a hasher.
+struct HashWriter<H>(H);
+
+impl<H: Hasher> std::io::Write for HashWriter<H> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.write(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+fn schema_hash(schema: &serde_json::Value) -> u64 {
+    let mut writer = HashWriter(DefaultHasher::new());
+    serde_json::to_writer(&mut writer, schema).expect("hashing a JSON value cannot fail");
+    writer.0.finish()
+}
+
 fn validator(schema: &serde_json::Value) -> Result<Arc<jsonschema::Validator>, String> {
-    let key: Arc<str> = schema.to_string().into();
-    if let Some(validator) = VALIDATORS.get(&key) {
+    let key = schema_hash(schema);
+    if let Some(compiled) = VALIDATORS
+        .get(&key)
+        .filter(|compiled| compiled.schema == *schema)
+    {
         metrics::counter!("attricat_json_schema_validator_cache_total", "outcome" => "hit")
             .increment(1);
-        return Ok(validator);
+        return Ok(compiled.validator.clone());
     }
     // Concurrent misses may compile twice; the result is the same.
     let validator = Arc::new(
@@ -64,7 +96,13 @@ fn validator(schema: &serde_json::Value) -> Result<Arc<jsonschema::Validator>, S
     );
     metrics::counter!("attricat_json_schema_validator_cache_total", "outcome" => "miss")
         .increment(1);
-    VALIDATORS.insert(key, validator.clone());
+    VALIDATORS.insert(
+        key,
+        Arc::new(CompiledSchema {
+            schema: schema.clone(),
+            validator: validator.clone(),
+        }),
+    );
     Ok(validator)
 }
 

@@ -200,6 +200,7 @@ export const Explorer = ({
                 blueprint={search.blueprint}
                 blueprintName={blueprintName ?? search.blueprint}
                 contextId={data.contextId}
+                defaultField={browseBy.defaultField}
                 field={browseBy.field}
                 fields={browseBy.fields}
                 onFieldChange={browseBy.change}

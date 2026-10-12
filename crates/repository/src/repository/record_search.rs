@@ -6,6 +6,7 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     time::Duration,
 };
+use tokio::sync::OnceCell;
 use uuid::Uuid;
 
 #[derive(sqlx::FromRow)]
@@ -340,23 +341,54 @@ fn presence_filter_query(
     }
 }
 
-/// The IDs from a root down to `node`'s parent. A node with several parents
-/// follows the lowest parent ID, and a cycle ends the path where it repeats.
+/// The IDs from a root down to `node`'s parent, along the shortest way up and
+/// the lowest parent IDs among equally short ones. A node that reaches no
+/// root, because every way up loops, follows its lowest parents until one
+/// repeats.
 fn ancestor_path(parents_by_child: &HashMap<Uuid, Vec<Uuid>>, node: Uuid) -> Vec<Uuid> {
-    let mut path = Vec::new();
+    let sorted_parents = |child: &Uuid| {
+        let mut parents = parents_by_child.get(child).cloned().unwrap_or_default();
+        parents.sort_unstable();
+        parents
+    };
+    let mut child_of: HashMap<Uuid, Uuid> = HashMap::new();
+    let mut queue = VecDeque::from([node]);
     let mut seen = HashSet::from([node]);
-    let mut current = node;
-    while let Some(parent) = parents_by_child
-        .get(&current)
-        .and_then(|parents| parents.iter().min())
-    {
-        if !seen.insert(*parent) {
+    let mut root = None;
+    while let Some(current) = queue.pop_front() {
+        if current != node && !parents_by_child.contains_key(&current) {
+            root = Some(current);
             break;
         }
-        path.push(*parent);
-        current = *parent;
+        for parent in sorted_parents(&current) {
+            if seen.insert(parent) {
+                child_of.insert(parent, current);
+                queue.push_back(parent);
+            }
+        }
     }
-    path.reverse();
+    let mut path = Vec::new();
+    match root {
+        Some(root) => {
+            let mut current = root;
+            while current != node {
+                path.push(current);
+                current = child_of[&current];
+            }
+        }
+        None => {
+            let mut seen = HashSet::from([node]);
+            let mut current = node;
+            while let Some(&parent) = sorted_parents(&current).first() {
+                if !seen.insert(parent) {
+                    break;
+                }
+                path.push(parent);
+                current = parent;
+            }
+            path.reverse();
+        }
+    }
     path
 }
 
@@ -1992,21 +2024,15 @@ impl AttricatRepository {
         // at once. Without a search term, counts come from a cache shared by
         // the workspace (see [`Self::cached_tree_facet_counts`]); with one,
         // the matching sources are counted for the requested page only.
-        let parents = async {
-            match hierarchy_field {
-                Some(field) => {
-                    self.resolved_relationship_edges(
-                        target_blueprint_id,
-                        None,
-                        field,
-                        target_blueprint_id,
-                        context_id,
-                    )
-                    .await
-                }
-                None => Ok(Vec::new()),
-            }
-        };
+        // Counting on a cache miss needs the same edges; whichever starts
+        // first resolves them for both.
+        let hierarchy_edges = OnceCell::new();
+        let parents = self.hierarchy_edges(
+            &hierarchy_edges,
+            target_blueprint_id,
+            hierarchy_field,
+            context_id,
+        );
         let roots = async {
             if parent_id.is_some() {
                 return Ok(Vec::new());
@@ -2030,6 +2056,7 @@ impl AttricatRepository {
                 target_blueprint_id,
                 hierarchy_field,
                 context_id,
+                &hierarchy_edges,
             )
             .await
             .map(Some)
@@ -2059,10 +2086,21 @@ impl AttricatRepository {
         }
         let mut children_by_parent: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
         let mut parents_by_child: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
-        for (child, parent) in parents {
+        for &(child, parent) in parents {
             children_by_parent.entry(parent).or_default().push(child);
             parents_by_child.entry(child).or_default().push(parent);
         }
+        let mut selected_ids: Vec<_> = selected_target_ids.to_vec();
+        selected_ids.sort_unstable();
+        selected_ids.dedup();
+        let selected_paths: Vec<Vec<Uuid>> = selected_ids
+            .iter()
+            .map(|&id| {
+                let mut path = ancestor_path(&parents_by_child, id);
+                path.push(id);
+                path
+            })
+            .collect();
         let mut page: Vec<Uuid> = match parent_id {
             Some(parent) => {
                 let mut children = children_by_parent.get(&parent).cloned().unwrap_or_default();
@@ -2075,8 +2113,9 @@ impl AttricatRepository {
                 .filter(|id| !parents_by_child.contains_key(id))
                 .collect(),
         };
-        // Requested nodes of this level outside the page follow it, without
-        // moving the cursor, so paging on still reaches every node once.
+        // Requested nodes of this level outside the page, and those on the way
+        // to a selected node, follow it without moving the cursor, so paging
+        // on still reaches every node once.
         let level: HashSet<_> = page.iter().copied().collect();
         // UUIDs order bytewise in both PostgreSQL and Rust, so cursors carry over.
         page.retain(|id| cursor.is_none_or(|cursor| *id > cursor));
@@ -2089,6 +2128,7 @@ impl AttricatRepository {
         };
         let mut included: Vec<_> = include_ids
             .iter()
+            .chain(selected_paths.iter().flatten())
             .copied()
             .filter(|id| level.contains(id) && !page.contains(id))
             .collect();
@@ -2174,20 +2214,41 @@ impl AttricatRepository {
             })
             .collect();
         selected_items.sort_unstable_by_key(|item| item.id);
-        let selected_paths = selected_items
-            .iter()
-            .map(|item| {
-                let mut path = ancestor_path(&parents_by_child, item.id);
-                path.push(item.id);
-                path
-            })
-            .collect();
         Ok(RelationshipTreeFacetChildrenResponse {
             items,
             selected_items,
             selected_paths,
             next_cursor,
         })
+    }
+
+    /// The `(child, parent)` edges of a tree facet's hierarchy, resolved once
+    /// into `edges` however many callers ask for them.
+    async fn hierarchy_edges<'cell>(
+        &self,
+        edges: &'cell OnceCell<Vec<(Uuid, Uuid)>>,
+        target_blueprint_id: Uuid,
+        hierarchy_field: Option<&str>,
+        context_id: Uuid,
+    ) -> Result<&'cell [(Uuid, Uuid)], RepositoryError> {
+        edges
+            .get_or_try_init(|| async {
+                match hierarchy_field {
+                    Some(field) => {
+                        self.resolved_relationship_edges(
+                            target_blueprint_id,
+                            None,
+                            field,
+                            target_blueprint_id,
+                            context_id,
+                        )
+                        .await
+                    }
+                    None => Ok(Vec::new()),
+                }
+            })
+            .await
+            .map(Vec::as_slice)
     }
 
     /// The `(source, target)` pairs a tree facet counts. Without
@@ -2231,6 +2292,7 @@ impl AttricatRepository {
     /// writes by up to [`TREE_FACET_COUNTS_FRESH`]. The next request after
     /// that reloads them; requests arriving during the reload keep the
     /// previous counts.
+    #[allow(clippy::too_many_arguments)]
     async fn cached_tree_facet_counts(
         &self,
         source_blueprint_id: Uuid,
@@ -2239,6 +2301,7 @@ impl AttricatRepository {
         target_blueprint_id: Uuid,
         hierarchy_field: Option<&str>,
         context_id: Uuid,
+        hierarchy_edges: &OnceCell<Vec<(Uuid, Uuid)>>,
     ) -> Result<Arc<HashMap<Uuid, i64>>, RepositoryError> {
         let key = CacheKey::new(
             "tree_facet_counts",
@@ -2258,21 +2321,12 @@ impl AttricatRepository {
         };
         self.cache
             .fetch(key, &[], policy, || async {
-                let parents = async {
-                    match hierarchy_field {
-                        Some(field) => {
-                            self.resolved_relationship_edges(
-                                target_blueprint_id,
-                                None,
-                                field,
-                                target_blueprint_id,
-                                context_id,
-                            )
-                            .await
-                        }
-                        None => Ok(Vec::new()),
-                    }
-                };
+                let parents = self.hierarchy_edges(
+                    hierarchy_edges,
+                    target_blueprint_id,
+                    hierarchy_field,
+                    context_id,
+                );
                 let sources = self.tree_facet_sources(
                     source_blueprint_id,
                     source_blueprint_version,
@@ -2282,7 +2336,7 @@ impl AttricatRepository {
                 );
                 let (parents, sources) = tokio::try_join!(parents, sources)?;
                 let mut parents_by_child: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
-                for (child, parent) in parents {
+                for &(child, parent) in parents {
                     parents_by_child.entry(child).or_default().push(parent);
                 }
                 let mut targets_by_source: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
@@ -3207,11 +3261,26 @@ mod global_search_budget_tests {
 
     #[test]
     fn walks_from_a_root_to_a_nodes_parent() {
-        let [a, b, c, d] = [1, 2, 3, 4].map(Uuid::from_u128);
-        let parents = HashMap::from([(d, vec![c, b]), (c, vec![a]), (b, vec![a]), (a, vec![d])]);
-        // d → b (lowest parent) → a → d repeats, so the walk stops at a.
-        assert_eq!(ancestor_path(&parents, d), vec![a, b]);
+        let [a, b, c, e] = [1, 2, 3, 5].map(Uuid::from_u128);
+        // Equally short ways up take the lowest parent: e → b → a.
+        let parents = HashMap::from([(e, vec![c, b]), (c, vec![a]), (b, vec![a])]);
+        assert_eq!(ancestor_path(&parents, e), vec![a, b]);
         assert_eq!(ancestor_path(&HashMap::new(), a), Vec::<Uuid>::new());
+    }
+
+    #[test]
+    fn reaches_a_root_past_a_lowest_parent_that_loops() {
+        let [a, b, c, d, root] = [1, 2, 3, 4, 5].map(Uuid::from_u128);
+        // d's lowest parent b loops back through a; c leads to the root.
+        let parents = HashMap::from([(d, vec![c, b]), (b, vec![a]), (a, vec![d]), (c, vec![root])]);
+        assert_eq!(ancestor_path(&parents, d), vec![root, c]);
+    }
+
+    #[test]
+    fn stops_where_a_path_without_a_root_repeats() {
+        let [a, b, d] = [1, 2, 4].map(Uuid::from_u128);
+        let parents = HashMap::from([(d, vec![b]), (b, vec![a]), (a, vec![d])]);
+        assert_eq!(ancestor_path(&parents, d), vec![a, b]);
     }
 
     #[test]

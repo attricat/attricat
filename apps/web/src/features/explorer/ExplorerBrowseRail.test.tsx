@@ -50,6 +50,7 @@ const renderRail = (
         blueprint="product"
         blueprintName="Product"
         contextId={contextId}
+        defaultField={categories}
         field={categories}
         fields={[categories, brand]}
         query="linen"
@@ -158,11 +159,12 @@ describe('ExplorerBrowseRail', () => {
   it('asks each level for the selected branch past its first page', async () => {
     const mock = vi.mocked(getRelationshipTreeFacetChildren);
     const paged = mock.getMockImplementation()!;
-    // Sneakers sits on a later page of Shoes, behind a Load more.
+    // Sneakers sits on a later page of Shoes, behind a Load more; the API
+    // returns it with the first page when the level is asked for it.
     mock.mockImplementation(async (input, signal) => {
       const page = await paged(input, signal);
       if (input.parent_id !== shoesId) return page;
-      const included = input.include_ids?.includes(sneakersId);
+      const included = input.selected_target_ids?.includes(sneakersId);
       return {
         ...page,
         items: included ? page.items : [],
@@ -172,22 +174,35 @@ describe('ExplorerBrowseRail', () => {
     renderRail({ selectedIds: [sneakersId] });
     expect(await screen.findByText('Sneakers')).toBeTruthy();
     expect(mock).toHaveBeenCalledWith(
-      expect.objectContaining({ include_ids: [shoesId] }),
-      expect.anything(),
-    );
-    expect(mock).toHaveBeenCalledWith(
       expect.objectContaining({
-        include_ids: [sneakersId],
         parent_id: shoesId,
+        selected_target_ids: [sneakersId],
       }),
       expect.anything(),
     );
+    // The root level is requested once, paths included.
+    expect(
+      mock.mock.calls.filter(([input]) => input.parent_id === undefined),
+    ).toHaveLength(1);
     // The page that holds it later does not list it twice.
     await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull(),
     );
     expect(screen.getAllByText('Sneakers')).toHaveLength(1);
+  });
+
+  it('opens collapsed when the selection is stale', async () => {
+    const mock = vi.mocked(getRelationshipTreeFacetChildren);
+    const paged = mock.getMockImplementation()!;
+    mock.mockImplementation(async (input, signal) => {
+      if (input.selected_target_ids) throw new Error('Unknown target');
+      return paged(input, signal);
+    });
+    renderRail({ selectedIds: [sneakersId] });
+    expect(await screen.findByText('Shoes')).toBeTruthy();
+    expect(screen.queryByText('Sneakers')).toBeNull();
+    expect(screen.queryByText('Unknown target')).toBeNull();
   });
 
   it("lists the blueprint's own tree under its name", async () => {
@@ -225,15 +240,16 @@ describe('ExplorerBrowseRail', () => {
     expect(onFieldChange).toHaveBeenLastCalledWith(false);
   });
 
-  it('offers to reopen when hidden', async () => {
+  it('offers to reopen on the default field when hidden', async () => {
     const { onFieldChange } = renderRail({
+      defaultField: brand,
       field: undefined,
-      fields: [brand, categories],
+      fields: [categories, brand],
     });
     await userEvent.click(
       screen.getByRole('button', { name: 'Show browse panel' }),
     );
-    expect(onFieldChange).toHaveBeenLastCalledWith('categories');
+    expect(onFieldChange).toHaveBeenLastCalledWith('brand');
   });
 
   it('renders nothing without a field to browse', () => {
@@ -242,6 +258,7 @@ describe('ExplorerBrowseRail', () => {
         blueprint="product"
         blueprintName="Product"
         contextId={contextId}
+        defaultField={undefined}
         field={undefined}
         fields={[]}
         query={undefined}

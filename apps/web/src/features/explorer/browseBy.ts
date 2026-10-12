@@ -70,16 +70,26 @@ export const resolveBrowseBy = (
   stored: BrowseBy | undefined,
   blueprintDefault?: BrowseBy | null,
 ): BrowseByField | undefined => {
-  for (const choice of [requested, stored, blueprintDefault]) {
+  for (const choice of [requested, stored]) {
     if (choice === false) return undefined;
     const field = fields.find((field) => field.attribute.code === choice);
     if (field) return field;
   }
-  return (
-    fields.find((field) => field.ownTree) ??
-    fields.find((field) => field.hierarchyField)
-  );
+  if (blueprintDefault === false) return undefined;
+  return defaultBrowseByField(fields, blueprintDefault);
 };
+
+/**
+ * The field the blueprint opens the rail on: its `views.explorer.browse_by`,
+ * then its own tree, then the first field whose target is a hierarchy.
+ */
+export const defaultBrowseByField = (
+  fields: BrowseByField[],
+  blueprintDefault: BrowseBy | null | undefined,
+): BrowseByField | undefined =>
+  fields.find((field) => field.attribute.code === blueprintDefault) ??
+  fields.find((field) => field.ownTree) ??
+  fields.find((field) => field.hierarchyField);
 
 const storageKey = (blueprintId: string) =>
   `${browseByStorageKeyPrefix}${blueprintId}`;

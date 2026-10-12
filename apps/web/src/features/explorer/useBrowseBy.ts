@@ -3,6 +3,7 @@ import { getBlueprintByCode } from '../records/api';
 import { recordQueryKeys } from '../records/queryKeys';
 import {
   browseByFields,
+  defaultBrowseByField,
   getStoredBrowseBy,
   resolveBrowseBy,
   setStoredBrowseBy,
@@ -55,6 +56,8 @@ export const useBrowseBy = ({
     field: pending
       ? undefined
       : resolveBrowseBy(fields, requested, stored, blueprintDefault),
+    /** The field the rail reopens on after the person hides it. */
+    defaultField: defaultBrowseByField(fields, blueprintDefault) ?? fields[0],
     fields,
     pending,
     change: (browseBy: BrowseBy) => {

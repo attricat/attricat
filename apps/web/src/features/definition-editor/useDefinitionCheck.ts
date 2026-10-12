@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { checkDelayMs, type DefinitionKind } from './constants';
+import { definitionQueryKeys } from './queryKeys';
 
 export const checkStatuses = {
   checking: 'checking',
@@ -55,7 +56,7 @@ export const useDefinitionCheck = <T>({
     gcTime: 0,
     placeholderData: keepPreviousData,
     queryFn: ({ signal }) => validate(checked, resourceId, signal),
-    queryKey: ['definition-check', kind, resourceId ?? null, checked],
+    queryKey: definitionQueryKeys.check(kind, resourceId, checked),
     retry: false,
   });
   const [lastValid, setLastValid] = useState<{

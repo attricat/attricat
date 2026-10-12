@@ -50,7 +50,7 @@ import {
 } from '../recordFormAttributes';
 import { schemaMismatchField } from '../recordFieldSaves';
 import { recordFormOptions } from '../queryOptions';
-import { choiceOptions } from '../choices';
+import { choiceEditorOptions } from '../choices';
 import { statusConfiguration, statusLocks } from '../status';
 import {
   useRecordFieldSaves,
@@ -91,12 +91,15 @@ export type RecordInlineFieldsHandle = {
 };
 
 /** Changes of these kinds are final choices rather than typing. */
-const commitsImmediately = (attribute: Attribute) =>
+const commitsImmediately = (
+  attribute: Attribute,
+  component: ComponentReference | undefined,
+) =>
   attribute.value_type === attributeValueTypes.relationship ||
   attribute.value_type === attributeValueTypes.boolean ||
   attribute.value_type === attributeValueTypes.file ||
   statusConfiguration(attribute) !== undefined ||
-  choiceOptions(attribute) !== undefined ||
+  choiceEditorOptions(attribute, component) !== undefined ||
   principalConfiguration(attribute) !== undefined;
 
 /**
@@ -254,7 +257,7 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
           : undefined;
       const editor = (
         <InlineFieldEditor
-          immediate={commitsImmediately(attribute)}
+          immediate={commitsImmediately(attribute, editComponent)}
           onCommit={(value) => saves.commit(attribute.code, value)}
           onRevert={() => saves.revert(attribute.code)}
           renderAtRest={

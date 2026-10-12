@@ -139,13 +139,15 @@ returns one configured-size page of direct children with `count`,
 `has_children`, and `next_cursor`. The client requests a page only when a node
 is expanded and uses `next_cursor` for that node's **Load more** action. With
 `selected_target_ids`, the response also has `selected_paths`: for each selected
-node, the IDs from a root down to the node itself, following the lowest parent
-ID where a node has several. `include_ids` names nodes of the requested level to
-return even when they fall outside the page; they follow the page's items and do
-not move `next_cursor`, and IDs outside the level are ignored. The Explorer's
-browse panel requests the paths once when it opens, then includes each path's
-node in its level, so a filter loaded from the URL shows its node expanded into
-view however many siblings come before it.
+node, the IDs from a root down to the node itself, along the shortest way up and
+the lowest parent IDs among equally short ones. A node whose every way up loops
+follows its lowest parents until one repeats. `include_ids` names nodes of the
+requested level to return even when they fall outside the page; they follow the
+page's items and do not move `next_cursor`, and IDs outside the level are
+ignored. Nodes of the level on a selected path are included the same way. The
+Explorer's browse panel sends the selection with the root level when it opens,
+then includes each path's node in the deeper levels, so a filter loaded from the
+URL shows its node expanded into view however many siblings come before it.
 
 ## Performance
 

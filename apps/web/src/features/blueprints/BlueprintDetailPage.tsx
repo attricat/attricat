@@ -20,6 +20,7 @@ import { BlueprintVersionMetadata } from './BlueprintVersionMetadata';
 import {
   archiveRemovalDisposition,
   blueprintDetailTabs,
+  blueprintStatuses,
   blueprintExtensionContextVersion,
   type BlueprintDetailTab,
 } from './constants';
@@ -77,8 +78,9 @@ export const BlueprintDetailPage = ({
   // Metadata describes the version records use: the latest published one,
   // or the latest draft before anything is published.
   const metadataVersion = (
-    revisionItems.find((revision) => revision.status === 'published') ??
-    blueprint
+    revisionItems.find(
+      (revision) => revision.status === blueprintStatuses.published,
+    ) ?? blueprint
   )?.version;
   const metadata = useQuery({
     queryKey: blueprintQueryKeys.revision(blueprintId, metadataVersion ?? 0),

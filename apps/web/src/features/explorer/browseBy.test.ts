@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Attribute, BlueprintWithAttributes } from '../records/api';
 import {
   browseByFields,
+  defaultBrowseByField,
   hierarchyFieldOf,
   resolveBrowseBy,
   type BrowseByField,
@@ -144,5 +145,29 @@ describe('resolveBrowseBy', () => {
   it('opens by default only for a hierarchy', () => {
     expect(resolveBrowseBy(fields, undefined, undefined)).toBe(categories);
     expect(resolveBrowseBy([brand], undefined, undefined)).toBeUndefined();
+  });
+});
+
+describe('defaultBrowseByField', () => {
+  const brand: BrowseByField = { attribute: relationship('brand', 'brand') };
+  const categories: BrowseByField = {
+    attribute: relationship('categories', 'category'),
+    hierarchyField: 'parent',
+  };
+  const ownTree: BrowseByField = {
+    attribute: relationship('parent', 'product'),
+    hierarchyField: 'parent',
+    ownTree: true,
+  };
+
+  it("prefers the blueprint's default, then its own tree, then a hierarchy", () => {
+    const fields = [categories, ownTree, brand];
+    expect(defaultBrowseByField(fields, 'brand')).toBe(brand);
+    expect(defaultBrowseByField(fields, undefined)).toBe(ownTree);
+    expect(defaultBrowseByField(fields, false)).toBe(ownTree);
+    expect(defaultBrowseByField([brand, categories], 'removed')).toBe(
+      categories,
+    );
+    expect(defaultBrowseByField([brand], null)).toBeUndefined();
   });
 });

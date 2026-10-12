@@ -1,6 +1,7 @@
 import { lexiconText } from '../lexicon/lexicon';
 import { principalConfiguration } from '../principals/principal';
-import type { Attribute } from './api';
+import { resolveValueEditor } from '../views/components/registry';
+import type { Attribute, ComponentReference } from './api';
 import { STATUS_SCHEMA_KEY } from './status';
 
 export const ENUM_LABELS_SCHEMA_KEY = 'x-attricat-enum-labels';
@@ -59,3 +60,15 @@ export const choiceLabel = (
   value: unknown,
 ): string =>
   options.find((option) => option.code === value)?.label ?? String(value);
+
+/**
+ * The choices to offer in a select, unless the view configures its own edit
+ * component for the attribute, which then takes precedence over the `enum`.
+ */
+export const choiceEditorOptions = (
+  attribute: Attribute,
+  component: ComponentReference | null | undefined,
+): ChoiceOption[] | undefined =>
+  resolveValueEditor(component, attribute)
+    ? undefined
+    : choiceOptions(attribute);

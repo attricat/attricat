@@ -47,6 +47,19 @@ describe('ScalarAttributeEditor', () => {
     expect(screen.getByRole('textbox').getAttribute('type')).toBe('url');
   });
 
+  it('prefers a configured component over the enum select', () => {
+    const site: Attribute = {
+      code: 'site',
+      value_type: 'string',
+      value_schema: { type: 'string', enum: ['https://example.com'] },
+    };
+    renderEditor(site, urlEdit);
+    expect(screen.getByRole('textbox').getAttribute('type')).toBe('url');
+    cleanup();
+    renderEditor(site, null);
+    expect(screen.getByRole('combobox', { name: 'site' })).toBeTruthy();
+  });
+
   it('falls back to the built-in input for unsupported components', () => {
     renderEditor({ code: 'count', value_type: 'integer' }, urlEdit);
     expect(screen.getByRole('spinbutton', { name: 'count' })).toBeTruthy();

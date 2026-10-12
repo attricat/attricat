@@ -253,6 +253,10 @@ pub struct AttricatRepository<S = WorkspaceScope> {
     /// The workspace's generations as read by this request's authentication.
     /// Generation-keyed caches are consulted only when this is known.
     generations: Option<WorkspaceGenerations>,
+    /// Set for a save check whose transaction always rolls back. Its writes
+    /// never land, so it takes no row or advisory locks that would hold up
+    /// real saves of the same resource.
+    check_only: bool,
 }
 
 /// A user, and optionally the personal API token, that initiated an
@@ -748,6 +752,7 @@ impl AttricatRepository {
             authorization_actor: None,
             cache: QueryCache::default(),
             generations: None,
+            check_only: false,
         }
     }
 
@@ -767,6 +772,15 @@ impl AttricatRepository {
             authorization_actor: None,
             cache: QueryCache::default(),
             generations: None,
+            check_only: false,
+        }
+    }
+
+    /// This repository for a save check that rolls back; see `check_only`.
+    pub(super) fn for_check(&self) -> Self {
+        Self {
+            check_only: true,
+            ..self.clone()
         }
     }
 

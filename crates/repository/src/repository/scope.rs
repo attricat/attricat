@@ -22,6 +22,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             cache: self.cache.clone(),
             // Generations belong to the workspace they were read for.
             generations: None,
+            check_only: self.check_only,
         })
     }
 
