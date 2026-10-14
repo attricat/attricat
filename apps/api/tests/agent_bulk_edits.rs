@@ -513,3 +513,134 @@ async fn every_record_needs_the_initiators_write_access(pool: PgPool) {
     server.abort();
     provider_server.abort();
 }
+
+#[sqlx::test]
+async fn admins_configure_the_bulk_edit_policy_and_limit(pool: PgPool) {
+    let (base, server) = start_server(pool.clone()).await;
+    let owner = authenticated_client();
+    let path = format!("{base}/workspace/agent-settings");
+    let settings: Value = owner
+        .get(&path)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        settings,
+        json!({"bulk_edits": "per_proposal", "bulk_edit_max_records": 500})
+    );
+    let updated: Value = owner
+        .put(&path)
+        .json(&json!({"bulk_edits": "per_record", "bulk_edit_max_records": 50}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(updated["bulk_edits"], "per_record");
+    let stored = scoped(&pool).await.agent_settings().await.unwrap();
+    assert_eq!(stored.bulk_edit_max_records, 50);
+    for invalid in [
+        json!({"bulk_edits": "per_record", "bulk_edit_max_records": 0}),
+        json!({"bulk_edits": "per_record", "bulk_edit_max_records": 5001}),
+        json!({"bulk_edits": "sometimes", "bulk_edit_max_records": 10}),
+    ] {
+        let status = owner
+            .put(&path)
+            .json(&invalid)
+            .send()
+            .await
+            .unwrap()
+            .status();
+        assert!(status.is_client_error(), "{invalid}: {status}");
+    }
+    assert_eq!(
+        scoped(&pool).await.agent_settings().await.unwrap(),
+        stored,
+        "rejected settings change nothing"
+    );
+
+    // Editors may use the agent but not configure it.
+    let user = Uuid::new_v4();
+    let membership = Uuid::new_v4();
+    let workspace = bootstrap_workspace_id();
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, 'bulk-settings@example.test')")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(membership)
+    .bind(workspace)
+    .bind(user)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, $4::uuid, 'workspace', $2)")
+        .bind(Uuid::new_v4())
+        .bind(workspace)
+        .bind(membership)
+        .bind(EDITOR_ROLE_ID)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("x-attricat-user-id", user.to_string().parse().unwrap());
+    headers.insert(
+        "x-attricat-workspace-id",
+        workspace.to_string().parse().unwrap(),
+    );
+    let editor = Client::builder().default_headers(headers).build().unwrap();
+    assert_eq!(
+        editor.get(&path).send().await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
+    let status = editor
+        .put(&path)
+        .json(&json!({"bulk_edits": "per_proposal", "bulk_edit_max_records": 500}))
+        .send()
+        .await
+        .unwrap()
+        .status();
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    server.abort();
+}
+
+#[sqlx::test]
+async fn per_record_policy_withholds_the_bulk_tool(pool: PgPool) {
+    let (base, server) = start_server(pool.clone()).await;
+    create_blueprint(&authenticated_client(), &base, PRODUCT).await;
+    let repository = scoped(&pool).await;
+    let record = product(&repository, "Boot", "Acme").await;
+    repository
+        .update_agent_settings(
+            owner(),
+            bootstrap_workspace_id(),
+            api::repository::AgentSettings {
+                bulk_edits: api::repository::BulkEditPolicy::PerRecord,
+                bulk_edit_max_records: 500,
+            },
+        )
+        .await
+        .unwrap();
+    let (provider, provider_server, _) = scripted_provider(json!({"items": [
+        {"record_id": record, "values": [{"attribute_code":"brand","value":"Acme Co"}]}
+    ]}))
+    .await;
+    let run = start_run(&pool, owner(), &provider).await;
+    let run = repository.get_agent_run(run.run).await.unwrap();
+    assert_eq!(run.status, "failed");
+    assert_eq!(run.error_code.as_deref(), Some("unknown_tool"));
+    assert_eq!(brand(&repository, record).await, "Acme");
+    server.abort();
+    provider_server.abort();
+}

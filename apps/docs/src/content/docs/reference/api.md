@@ -339,6 +339,7 @@ See [Translate labels](/builders/translations/).
 | `GET`, `POST`, `DELETE` | `/workspace/invitations[/{id}]`; `POST /workspace/invitations/accept` | Invitations. |
 | `POST` | `/workspace/users` | Create a user. |
 | `GET`, `PUT` | `/workspace/navigation`; `GET /workspace/navigation/sidebar` | Sidebar shortcuts. |
+| `GET`, `PUT` | `/workspace/agent-settings` | How agent bulk edits are approved (`agents.manage`): `{"bulk_edits": "per_proposal" \| "per_record", "bulk_edit_max_records": 1–5000}`. |
 | `GET` | `/directory` | Users and teams that user or team attributes can reference (`records.read`). |
 | `GET`, `POST`, `PATCH`, `DELETE` | `/workspace/teams[/{id}]` | Teams (`members.manage`). `PATCH` takes `name` and/or `member_user_ids`, which replaces every member. |
 | `GET` | `/audit-events` | Audit log. |

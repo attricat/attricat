@@ -1,3 +1,4 @@
+mod agent_settings;
 mod agents;
 mod audit;
 mod audit_events;
@@ -724,6 +725,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/workspace/navigation",
             get(workspace_navigation::configured).put(workspace_navigation::update),
+        )
+        .route(
+            "/workspace/agent-settings",
+            get(agent_settings::configured).put(agent_settings::update),
         )
         .route(
             "/workspace/extension-layout",

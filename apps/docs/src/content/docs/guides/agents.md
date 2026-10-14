@@ -41,6 +41,7 @@ The agent acts as you. It can only see and change what your role allows.
 - create blueprints and blueprint revisions, and publish blueprints;
 - create, update, migrate, and delete records; set, remove, and restore values; change relationships; link files;
 - apply several record changes together as one batch;
+- set the same values on many records with one approval;
 - update system tags and metadata;
 - publish and unpublish records;
 - create, update, and delete contexts;
@@ -63,6 +64,23 @@ Read proposals carefully. Replacing relationships sets the complete list for tha
 ### Changes to several records
 
 When one request changes several records, such as releasing a new revision and superseding the previous one, the agent proposes a single **batch** (`apply_record_batch`). The approval summary lists every step in order. You approve the batch once, and it is saved completely or not at all: if one step fails, for example because a record changed in the meantime, nothing is saved and the agent is told which step failed.
+
+### The same edit on many records
+
+When you ask for the same value change on many records, such as *set the season to Spring on every Acme product*, the agent proposes one **bulk edit** (`bulk_set_record_values`). It picks the records either by listing them or with a search filter.
+
+When the agent proposes it, the filter is turned into a fixed list of records, and that list is what you approve. The approval card shows a summary such as *Set Brand, Season on 412 Product records* and a table of record names with each current and proposed value: the first 20 records, then **Show all**. A record that someone else saves after the proposal is not overwritten; it fails as changed in the meantime.
+
+Unlike a batch, a bulk edit is not all-or-nothing:
+
+- After you approve, records change one at a time, and the conversation shows the progress.
+- Each record is checked against your permissions as it changes, and audited like your own edit.
+- The edit **stops at the first record that fails**. Records before it keep their changes, and records after it are not changed. Attricat leaves a comment on the failed record, signed **Attricat** with a **System** badge, with the error and a link to the conversation.
+- The result lists the records that changed, the one that failed and why, and the ones that were not changed, with links to each.
+
+Bulk edits cannot change status attributes, relationships, or files. A proposal that selects more records than the workspace allows (500 by default) is not offered for approval; the agent narrows it or splits it instead.
+
+Use a batch when the changes must succeed or fail together, and a bulk edit when you want the same change on many records and can fix a failed record afterwards.
 
 ## When a change is refused
 
@@ -88,3 +106,12 @@ Every request to the AI provider includes the conversation so far and the result
 ## Permissions
 
 Using agents needs `agents.run`, which the owner and admin roles have by default. Grant it to people who should be able to request changes this way.
+
+### Bulk edit approvals
+
+People with `agents.manage` (by default the owner and admin roles) choose how bulk edits are approved in **Manage → Workspace → Agent**, with `acli workspace agent set`, or through `PUT /workspace/agent-settings`:
+
+- **Approve once per proposal** (the default): one approval covers every record a bulk edit lists.
+- **Approve each record**: the agent is not offered bulk edits, so it proposes each record's change separately and each needs its own approval.
+
+**Records per bulk edit** limits how many records one proposal can change, from 1 to 5,000 (500 by default).

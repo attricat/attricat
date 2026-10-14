@@ -42,6 +42,7 @@ pub(super) struct SessionCapabilities {
     roles_grant: bool,
     tokens_manage: bool,
     workspace_navigation_manage: bool,
+    agents_manage: bool,
     extensions_read: bool,
     extensions_manage: bool,
     workflows_read: bool,
@@ -68,6 +69,7 @@ impl SessionResponse {
         c.roles_grant &= permits("roles.grant");
         c.tokens_manage &= permits("tokens.manage");
         c.workspace_navigation_manage &= permits("workspace_navigation.manage");
+        c.agents_manage &= permits("agents.manage");
         c.extensions_read &= permits("extensions.read");
         c.extensions_manage &= permits("extensions.manage");
         c.workflows_read &= permits("workflows.read");
@@ -181,7 +183,7 @@ async fn session_response_payload_with_identifier(
 }
 
 /// Workspace-wide permissions reported as session capability flags.
-const CAPABILITY_PERMISSIONS: [&str; 20] = [
+const CAPABILITY_PERMISSIONS: [&str; 21] = [
     "audit.read",
     "data_health.read",
     "members.manage",
@@ -189,6 +191,7 @@ const CAPABILITY_PERMISSIONS: [&str; 20] = [
     "roles.grant",
     "tokens.manage",
     "workspace_navigation.manage",
+    "agents.manage",
     "extensions.read",
     "extensions.manage",
     "workflows.read",
@@ -224,6 +227,7 @@ async fn session_capabilities(
         roles_grant: has("roles.grant"),
         tokens_manage: has("tokens.manage"),
         workspace_navigation_manage: has("workspace_navigation.manage"),
+        agents_manage: has("agents.manage"),
         extensions_read: has("extensions.read"),
         extensions_manage: has("extensions.manage"),
         workflows_read: has("workflows.read"),

@@ -273,6 +273,12 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
+    if path == "/workspace/agent-settings" {
+        return Some(Policy {
+            permission: "agents.manage",
+            target: TargetKind::None,
+        });
+    }
     if path == "/workspace/token-permissions" {
         return Some(Policy {
             permission: "tokens.manage",
@@ -527,6 +533,16 @@ mod tests {
                 "members.manage"
             );
             assert_eq!(additional_permission(path), Some("roles.grant"));
+        }
+    }
+
+    #[test]
+    fn agent_settings_need_agent_management() {
+        for method in [Method::GET, Method::PUT] {
+            assert_eq!(
+                policy(&method, "/workspace/agent-settings").map(|policy| policy.permission),
+                Some("agents.manage")
+            );
         }
     }
 

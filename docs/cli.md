@@ -131,6 +131,8 @@ acli rule acknowledge <finding-id>
 
 acli workspace navigation get|sidebar
 acli workspace navigation set --entries <json-or-file>
+acli workspace agent get
+acli workspace agent set [--bulk-edits per-proposal|per-record] [--bulk-edit-max-records <1-5000>]
 acli workspace token-permission list
 acli workspace grant-target list <scope-type>
 acli workspace publication-channel list
@@ -337,6 +339,7 @@ previews the migration and then submits supplied remediation input unless the
 migration is blocked or `--dry-run` is selected.
 
 `workspace navigation set --entries` takes the `explore_navigation` array.
+`workspace agent set` changes only the settings it is given and keeps the others.
 Extension `configure` takes its configuration JSON directly; `storage --body`
 takes exactly one tagged storage request (`get`, `set`, `delete`, or `list`),
 and `command --payload` is the contribution-defined JSON payload.

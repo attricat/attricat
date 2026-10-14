@@ -13,7 +13,8 @@ use crate::{
     agents::MAX_INLINE_ATTACHMENT_BYTES,
     bulk_edits,
     repository::{
-        AgentAuditAttribution, AgentSettings, AttricatRepository, AuditContext, RepositoryError,
+        AgentAuditAttribution, AgentSettings, AttricatRepository, AuditContext, BulkEditPolicy,
+        RepositoryError,
     },
     storage::ObjectStore,
 };
@@ -76,13 +77,24 @@ fn run_system_prompt(read_only: bool) -> String {
     }
 }
 
-/// The tools offered to the provider: all of them, or reads only.
-fn offered_tools(read_only: bool) -> Vec<agent_tools::ToolDefinition> {
+/// The tools offered to the provider: all of them, or reads only. A
+/// workspace that approves bulk edits per record is not offered the bulk
+/// tool, so each record's edit is proposed and approved on its own.
+fn offered_tools(read_only: bool, settings: &AgentSettings) -> Vec<agent_tools::ToolDefinition> {
     let mut tools = agent_tools::definitions();
-    if read_only {
-        tools.retain(|tool| matches!(agent_tools::kind(tool.function.name), Ok(ToolKind::Read)));
-    }
+    tools.retain(|tool| offered(tool.function.name, read_only, settings));
     tools
+}
+
+fn offered(name: &str, read_only: bool, settings: &AgentSettings) -> bool {
+    match agent_tools::kind(name) {
+        Ok(ToolKind::Read) => true,
+        Ok(ToolKind::Mutation) => {
+            !read_only
+                && !(name == bulk_edits::TOOL && settings.bulk_edits == BulkEditPolicy::PerRecord)
+        }
+        Err(_) => false,
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -278,6 +290,10 @@ async fn drive(
         memo.catalog_map = Some(catalog_map(repository).await?);
     }
     let catalog_map = memo.catalog_map.as_deref().unwrap_or_default();
+    let settings = match memo.settings {
+        Some(settings) => settings,
+        None => *memo.settings.insert(repository.agent_settings().await?),
+    };
     let mut request = vec![ChatMessage {
         role: "system".into(),
         content: Value::String(format!(
@@ -301,15 +317,16 @@ async fn drive(
     }
     let pending = Arc::new(Mutex::new(String::new()));
     let stream_pending = pending.clone();
-    let mut stream =
-        Box::pin(
-            provider.stream(request, offered_tools(provider.read_only()), move |delta| {
-                stream_pending
-                    .lock()
-                    .expect("agent delta buffer poisoned")
-                    .push_str(delta);
-            }),
-        );
+    let mut stream = Box::pin(provider.stream(
+        request,
+        offered_tools(provider.read_only(), &settings),
+        move |delta| {
+            stream_pending
+                .lock()
+                .expect("agent delta buffer poisoned")
+                .push_str(delta);
+        },
+    ));
     // The provider callback is synchronous. Flush while its future waits for
     // network frames so subscribers see text before generation completes,
     // without a database write for every token.
@@ -377,9 +394,10 @@ async fn drive(
             }
         };
         let kind = match agent_tools::kind(&call.function.name) {
-            // A read-only run never offers mutations, so one is never queued
-            // for approval even if the provider names it anyway.
-            Ok(ToolKind::Mutation) if provider.read_only() => {
+            // A tool the run did not offer, such as a mutation in a read-only
+            // run, is never queued for approval even if the provider names it
+            // anyway.
+            Ok(_) if !offered(&call.function.name, provider.read_only(), &settings) => {
                 fail_run(
                     repository,
                     run_id,
@@ -410,10 +428,6 @@ async fn drive(
             }
         };
         if call.function.name == bulk_edits::TOOL {
-            let settings = match memo.settings {
-                Some(settings) => settings,
-                None => *memo.settings.insert(repository.agent_settings().await?),
-            };
             // The selection resolves to the explicit record list that is
             // approved. A selection that cannot be proposed returns to the
             // agent as the tool's result, so it can narrow or correct it.
@@ -1003,6 +1017,7 @@ pub(crate) async fn fail_run(
 #[cfg(test)]
 mod tests {
     use super::{SYSTEM_PROMPT_SECTIONS, mutation_authorization, system_prompt};
+    use crate::repository::{AgentSettings, BulkEditPolicy};
     use serde_json::json;
     use uuid::Uuid;
 
@@ -1069,7 +1084,8 @@ mod tests {
 
     #[test]
     fn read_only_runs_offer_reads_and_say_so() {
-        let tools = super::offered_tools(true);
+        let defaults = AgentSettings::default();
+        let tools = super::offered_tools(true, &defaults);
         assert!(!tools.is_empty());
         for tool in &tools {
             assert!(
@@ -1082,7 +1098,7 @@ mod tests {
             );
         }
         assert!(
-            super::offered_tools(false).len() > tools.len(),
+            super::offered_tools(false, &defaults).len() > tools.len(),
             "writable runs offer mutations too"
         );
         assert!(super::run_system_prompt(true).ends_with(super::READ_ONLY_PROMPT));
@@ -1101,6 +1117,25 @@ mod tests {
         for section in SYSTEM_PROMPT_SECTIONS {
             assert_eq!(section.trim(), section, "sections are joined with spaces");
         }
+    }
+
+    #[test]
+    fn per_record_bulk_policy_withholds_only_the_bulk_tool() {
+        let names = |settings: &AgentSettings| {
+            super::offered_tools(false, settings)
+                .into_iter()
+                .map(|tool| tool.function.name)
+                .collect::<Vec<_>>()
+        };
+        let per_proposal = names(&AgentSettings::default());
+        let per_record = names(&AgentSettings {
+            bulk_edits: BulkEditPolicy::PerRecord,
+            ..AgentSettings::default()
+        });
+        assert!(per_proposal.contains(&crate::bulk_edits::TOOL));
+        assert!(!per_record.contains(&crate::bulk_edits::TOOL));
+        assert!(per_record.contains(&"set_record_values"));
+        assert_eq!(per_record.len() + 1, per_proposal.len());
     }
 
     #[test]

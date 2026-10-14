@@ -1452,7 +1452,28 @@
     "teamMemberCount_one": "{{count}} member",
     "teamMemberCount_other": "{{count}} members",
     "noTeams": "No teams yet.",
-    "saveTeam": "Save team"
+    "saveTeam": "Save team",
+    "agent": "Agent",
+    "agentSettingsTitle": "Agent approvals",
+    "agentSettingsDescription": "Choose how people approve the changes the Attricat agent proposes to many records at once.",
+    "loadingAgentSettings": "Loading agent settings",
+    "notAuthorizedAgentSettings": "You are not authorized to manage agent settings.",
+    "bulkEditPolicy": "Bulk value edits",
+    "bulkEditPolicies": {
+      "per_proposal": {
+        "label": "Approve once per proposal",
+        "description": "The agent can propose the same value edit for many records. One approval covers every record listed in the proposal; records change one at a time and the edit stops at the first failure."
+      },
+      "per_record": {
+        "label": "Approve each record",
+        "description": "The agent proposes each record’s edit separately, and each needs its own approval."
+      }
+    },
+    "bulkEditLimit": "Records per bulk edit",
+    "bulkEditLimitHelp": "The agent must narrow a proposal that selects more records.",
+    "bulkEditLimitInvalid": "Enter a whole number from 1 to {{max}}.",
+    "saveAgentSettings": "Save agent settings",
+    "agentSettingsSaved": "Agent settings saved."
   },
   "views": {
     "tabHasErrors": "Contains fields that need attention",

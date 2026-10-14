@@ -55,6 +55,7 @@ import { Route as ManageWorkflowsIndexRouteImport } from './routes/manage/workfl
 import { Route as ManageWorkflowsWorkflowIdRouteImport } from './routes/manage/workflows/$workflowId'
 import { Route as ManageWorkflowsNewRouteImport } from './routes/manage/workflows/new'
 import { Route as ManageWorkspaceIndexRouteImport } from './routes/manage/workspace/index'
+import { Route as ManageWorkspaceAgentRouteImport } from './routes/manage/workspace/agent'
 import { Route as ManageWorkspaceInvitationsRouteImport } from './routes/manage/workspace/invitations'
 import { Route as ManageWorkspaceMembersRouteImport } from './routes/manage/workspace/members'
 import { Route as ManageWorkspaceNavigationRouteImport } from './routes/manage/workspace/navigation'
@@ -314,6 +315,11 @@ const ManageWorkspaceIndexRoute = ManageWorkspaceIndexRouteImport.update({
   path: '/manage/workspace/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManageWorkspaceAgentRoute = ManageWorkspaceAgentRouteImport.update({
+  id: '/manage/workspace/agent',
+  path: '/manage/workspace/agent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ManageWorkspaceInvitationsRoute =
   ManageWorkspaceInvitationsRouteImport.update({
     id: '/manage/workspace/invitations',
@@ -451,6 +457,7 @@ export interface FileRoutesByFullPath {
   '/manage/rules/runs': typeof ManageRulesRunsRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdRouteWithChildren
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
+  '/manage/workspace/agent': typeof ManageWorkspaceAgentRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
@@ -511,6 +518,7 @@ export interface FileRoutesByTo {
   '/manage/rules/findings': typeof ManageRulesFindingsRoute
   '/manage/rules/runs': typeof ManageRulesRunsRoute
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
+  '/manage/workspace/agent': typeof ManageWorkspaceAgentRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
@@ -577,6 +585,7 @@ export interface FileRoutesById {
   '/manage/rules/runs': typeof ManageRulesRunsRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdRouteWithChildren
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
+  '/manage/workspace/agent': typeof ManageWorkspaceAgentRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
@@ -644,6 +653,7 @@ export interface FileRouteTypes {
     | '/manage/rules/runs'
     | '/manage/workflows/$workflowId'
     | '/manage/workflows/new'
+    | '/manage/workspace/agent'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
@@ -704,6 +714,7 @@ export interface FileRouteTypes {
     | '/manage/rules/findings'
     | '/manage/rules/runs'
     | '/manage/workflows/new'
+    | '/manage/workspace/agent'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
@@ -769,6 +780,7 @@ export interface FileRouteTypes {
     | '/manage/rules/runs'
     | '/manage/workflows/$workflowId'
     | '/manage/workflows/new'
+    | '/manage/workspace/agent'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
@@ -832,6 +844,7 @@ export interface RootRouteChildren {
   ManageRulesRunsRoute: typeof ManageRulesRunsRoute
   ManageWorkflowsWorkflowIdRoute: typeof ManageWorkflowsWorkflowIdRouteWithChildren
   ManageWorkflowsNewRoute: typeof ManageWorkflowsNewRoute
+  ManageWorkspaceAgentRoute: typeof ManageWorkspaceAgentRoute
   ManageWorkspaceInvitationsRoute: typeof ManageWorkspaceInvitationsRoute
   ManageWorkspaceMembersRoute: typeof ManageWorkspaceMembersRoute
   ManageWorkspaceNavigationRoute: typeof ManageWorkspaceNavigationRoute
@@ -1171,6 +1184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageWorkspaceIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/workspace/agent': {
+      id: '/manage/workspace/agent'
+      path: '/manage/workspace/agent'
+      fullPath: '/manage/workspace/agent'
+      preLoaderRoute: typeof ManageWorkspaceAgentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/workspace/invitations': {
       id: '/manage/workspace/invitations'
       path: '/manage/workspace/invitations'
@@ -1415,6 +1435,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageRulesRunsRoute: ManageRulesRunsRoute,
   ManageWorkflowsWorkflowIdRoute: ManageWorkflowsWorkflowIdRouteWithChildren,
   ManageWorkflowsNewRoute: ManageWorkflowsNewRoute,
+  ManageWorkspaceAgentRoute: ManageWorkspaceAgentRoute,
   ManageWorkspaceInvitationsRoute: ManageWorkspaceInvitationsRoute,
   ManageWorkspaceMembersRoute: ManageWorkspaceMembersRoute,
   ManageWorkspaceNavigationRoute: ManageWorkspaceNavigationRoute,

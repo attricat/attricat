@@ -308,6 +308,8 @@ acli workspace invitation accept --secret-stdin
 acli workspace user create --email <email> [--display-name <name>]
 acli workspace navigation get | sidebar
 acli workspace navigation set --entries <json>
+acli workspace agent get
+acli workspace agent set [--bulk-edits per-proposal|per-record] [--bulk-edit-max-records <1-5000>]
 acli workspace publication-channel list
 acli workspace publication-channel set <context-id> --enabled true|false
 acli workspace grant-target list <scope-type>
