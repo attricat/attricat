@@ -19,13 +19,14 @@ import {
 } from './systemIcons';
 
 type NavigationCapabilities = {
+  agents_run?: boolean;
   audit_read?: boolean;
   data_health_read?: boolean;
   extensions_read?: boolean;
   members_manage?: boolean;
   roles_manage?: boolean;
-  tokens_manage?: boolean;
   workflows_read?: boolean;
+  workspace_navigation_manage?: boolean;
   rules_read?: boolean;
 };
 
@@ -159,6 +160,13 @@ export const managementNavigationItems = [
   },
 ] as const;
 
+export const getVisiblePrimaryNavigationItems = (
+  capabilities?: NavigationCapabilities,
+) =>
+  primaryNavigationItems.filter(
+    (item) => item.to !== navigationRoutes.agents || capabilities?.agents_run,
+  );
+
 export const profileNavigationItem = {
   icon: ProfileIcon,
   labelKey: 'navigation.profile',
@@ -173,11 +181,12 @@ export const getVisibleManagementNavigationItems = (
       return Boolean(
         capabilities?.members_manage ||
         capabilities?.roles_manage ||
-        capabilities?.tokens_manage,
+        capabilities?.workspace_navigation_manage,
       );
     }
     if (
       item.to === navigationRoutes.backgroundProcessing ||
+      item.to === navigationRoutes.dataHealth ||
       item.to === navigationRoutes.systemHealth
     )
       return capabilities?.data_health_read;

@@ -27,12 +27,15 @@ import { ReusableAttributeIcon } from '../../components/systemIcons';
 
 export const ReusableAttributesTable = ({
   attributes,
+  canEdit,
   onPublish,
   publishing,
 }: {
   attributes: ReusableAttribute[];
   onPublish: (revisionId: string) => void;
   publishing: boolean;
+  /** The caller may edit and publish reusable attributes. */
+  canEdit: boolean;
 }) => {
   const { t } = useTranslation();
   return (
@@ -80,15 +83,17 @@ export const ReusableAttributesTable = ({
                   />
                 </TableCell>
                 <TableCell align="right">
-                  <RouterButton
-                    params={{ definitionId: attribute.definition_id }}
-                    size="small"
-                    startIcon={<PencilIcon />}
-                    to="/manage/reusable-attributes/$definitionId"
-                  >
-                    {t('reusableAttributes.edit')}
-                  </RouterButton>
-                  {attribute.status === STATUS_DRAFT && (
+                  {canEdit && (
+                    <RouterButton
+                      params={{ definitionId: attribute.definition_id }}
+                      size="small"
+                      startIcon={<PencilIcon />}
+                      to="/manage/reusable-attributes/$definitionId"
+                    >
+                      {t('reusableAttributes.edit')}
+                    </RouterButton>
+                  )}
+                  {canEdit && attribute.status === STATUS_DRAFT && (
                     <Button
                       disabled={publishing}
                       onClick={() => onPublish(attribute.id)}

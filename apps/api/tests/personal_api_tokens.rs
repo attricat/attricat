@@ -99,6 +99,18 @@ async fn personal_api_tokens_are_one_time_secrets_and_enforce_permission_subsets
         .await
         .unwrap();
     assert_eq!(owner_session["capabilities"]["blueprints_write"], true);
+    for capability in [
+        "records_write",
+        "blueprints_publish",
+        "contexts_write",
+        "agents_run",
+    ] {
+        assert_eq!(session["capabilities"][capability], false, "{capability}");
+        assert_eq!(
+            owner_session["capabilities"][capability], true,
+            "{capability}"
+        );
+    }
     assert_eq!(
         token
             .get(format!("{base_url}/blueprints"))

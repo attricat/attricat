@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ExplorerPageHeader } from './ExplorerPageHeader';
 
+vi.mock('../auth/useCan', () => ({ useCan: () => true }));
+
 vi.mock('../../components/RouterLink', () => ({
   RouterButton: ({
     children,

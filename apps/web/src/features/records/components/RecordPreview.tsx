@@ -87,6 +87,8 @@ export const RecordPreview = ({
   const selectedContextId = contextId ?? undefined;
   const canPublish = useCan('records_publish');
   const canDeleteRecords = useCan('records_delete');
+  const canCreateRecords = useCan('records_write');
+  const canAskAgent = useCan('agents_run');
   const publications = useRecordPublications(recordId, contextId, canPublish);
   const { blueprint, recordForm, resolved, statusTransitions } =
     useRecordPreviewData(recordId, contextId);
@@ -187,6 +189,9 @@ export const RecordPreview = ({
               }}
               schemaOutdated={schemaOutdated}
               showExtensions={Boolean(loaded)}
+              canWrite={recordForm.data?.can_write === true}
+              canCreate={canCreateRecords}
+              canAskAgent={canAskAgent}
               onDuplicate={() => setDuplicateOpen(true)}
               canDelete={canDeleteRecords && Boolean(resolved.data)}
               onDelete={() => setDeleteOpen(true)}

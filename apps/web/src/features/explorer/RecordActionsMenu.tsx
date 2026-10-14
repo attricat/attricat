@@ -23,6 +23,7 @@ import {
   explorerExtensionOutlets,
   publicationStatuses,
 } from './constants';
+import { useCan } from '../auth/useCan';
 
 type Props = {
   blueprintId: string;
@@ -63,6 +64,7 @@ export const RecordActionsMenu = ({
   unpublishing,
 }: Props) => {
   const { t } = useTranslation();
+  const canDuplicate = useCan('records_write');
   // A row action that opens the host dialog hands off to it; the dialog keeps
   // its captured selection after this menu and its frames unmount.
   const dialogKey = useActionDialogStore((state) => state.dialog?.key);
@@ -90,17 +92,19 @@ export const RecordActionsMenu = ({
         </ListItemIcon>
         <ListItemText>{t('explorer.searchInfo')}</ListItemText>
       </MenuItem>
-      <MenuItem
-        onClick={() => {
-          onClose();
-          duplicate();
-        }}
-      >
-        <ListItemIcon>
-          <CopyIcon size={compactIconSize} />
-        </ListItemIcon>
-        <ListItemText>{t('records.duplicateRecord')}</ListItemText>
-      </MenuItem>
+      {canDuplicate && (
+        <MenuItem
+          onClick={() => {
+            onClose();
+            duplicate();
+          }}
+        >
+          <ListItemIcon>
+            <CopyIcon size={compactIconSize} />
+          </ListItemIcon>
+          <ListItemText>{t('records.duplicateRecord')}</ListItemText>
+        </MenuItem>
+      )}
       {canDelete && (
         <MenuItem
           onClick={() => {

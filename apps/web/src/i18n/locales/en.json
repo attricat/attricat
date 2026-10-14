@@ -103,6 +103,13 @@
     "systemHealth": "System health"
   },
   "auth": {
+    "notAuthorized": {
+      "data_health_read": "You are not authorized to view data health in this workspace.",
+      "agents_run": "You are not authorized to use agents in this workspace.",
+      "blueprints_write": "You are not authorized to edit blueprints in this workspace.",
+      "contexts_write": "You are not authorized to create contexts in this workspace.",
+      "records_write": "You are not authorized to create records in this workspace."
+    },
     "signIn": "Sign in",
     "signInTo": "Sign in to {{identifier}}",
     "workspacePrompt": "Enter your workspace identifier.",

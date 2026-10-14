@@ -17,9 +17,11 @@ import { listContexts } from './api';
 import { contextQueryKeys } from './queryKeys';
 import { EmptyState } from '../../components/EmptyState';
 import { ContextIcon } from '../../components/systemIcons';
+import { useCan } from '../auth/useCan';
 
 export const ContextsPage = () => {
   const { t } = useTranslation();
+  const canCreate = useCan('contexts_write');
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
     queryFn: ({ signal }) => listContexts(signal),
@@ -31,14 +33,16 @@ export const ContextsPage = () => {
     <PageContainer>
       <PageHeader
         actions={
-          <Button
-            component={Link}
-            startIcon={<PlusIcon />}
-            to="/manage/contexts/new"
-            variant="contained"
-          >
-            {t('contexts.createContext')}
-          </Button>
+          canCreate && (
+            <Button
+              component={Link}
+              startIcon={<PlusIcon />}
+              to="/manage/contexts/new"
+              variant="contained"
+            >
+              {t('contexts.createContext')}
+            </Button>
+          )
         }
         icon={ContextIcon}
         title={t('contexts.contexts')}

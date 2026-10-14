@@ -17,7 +17,7 @@ import {
   getVisibleManagementNavigationItems,
   navigationRoutes,
   inboxNavigationItem,
-  primaryNavigationItems,
+  getVisiblePrimaryNavigationItems,
 } from './navigation';
 import { NavigationBrandIcon } from './NavigationBrandIcon';
 import { NavigationFlyout } from './NavigationFlyout';
@@ -183,7 +183,7 @@ export const SideNavigation = ({
           />
         )}
         {(compact || mobilePrimary) &&
-          primaryNavigationItems
+          getVisiblePrimaryNavigationItems(session.data?.capabilities)
             .filter((item) => compact || item.to !== navigationRoutes.explore)
             .map((item) => (
               <NavigationItem

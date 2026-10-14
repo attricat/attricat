@@ -107,6 +107,13 @@
     "systemHealth": "Stan systemu"
   },
   "auth": {
+    "notAuthorized": {
+      "data_health_read": "Nie masz uprawnień do wyświetlania stanu danych w tym obszarze roboczym.",
+      "agents_run": "Nie masz uprawnień do korzystania z agentów w tym obszarze roboczym.",
+      "blueprints_write": "Nie masz uprawnień do edytowania schematów w tym obszarze roboczym.",
+      "contexts_write": "Nie masz uprawnień do tworzenia kontekstów w tym obszarze roboczym.",
+      "records_write": "Nie masz uprawnień do tworzenia rekordów w tym obszarze roboczym."
+    },
     "signIn": "Zaloguj się",
     "signInTo": "Zaloguj się do {{identifier}}",
     "workspacePrompt": "Wpisz identyfikator obszaru roboczego.",

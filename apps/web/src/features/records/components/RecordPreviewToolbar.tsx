@@ -54,6 +54,12 @@ type Props = {
   onOpenAgent: () => void;
   schemaOutdated?: boolean;
   showExtensions: boolean;
+  /** The caller may change this record (duplicate it or upgrade its blueprint). */
+  canWrite: boolean;
+  /** The caller may create records in the workspace. */
+  canCreate: boolean;
+  /** The caller may ask an agent about the record. */
+  canAskAgent: boolean;
   onDuplicate: () => void;
   canDelete: boolean;
   onDelete: () => void;
@@ -79,6 +85,9 @@ export const RecordPreviewToolbar = ({
   onOpenAgent,
   schemaOutdated,
   showExtensions,
+  canWrite,
+  canCreate,
+  canAskAgent,
   onDuplicate,
   canDelete,
   onDelete,
@@ -153,18 +162,20 @@ export const RecordPreviewToolbar = ({
           </ListItemIcon>
           <ListItemText>{t('records.copyRecordId')}</ListItemText>
         </MenuItem>
-        <MenuItem
-          onClick={() => {
-            closeActionsMenu();
-            onDuplicate();
-          }}
-        >
-          <ListItemIcon>
-            <CopyIcon size={compactIconSize} />
-          </ListItemIcon>
-          <ListItemText>{t('records.duplicateRecord')}</ListItemText>
-        </MenuItem>
-        {blueprint && (
+        {canWrite && (
+          <MenuItem
+            onClick={() => {
+              closeActionsMenu();
+              onDuplicate();
+            }}
+          >
+            <ListItemIcon>
+              <CopyIcon size={compactIconSize} />
+            </ListItemIcon>
+            <ListItemText>{t('records.duplicateRecord')}</ListItemText>
+          </MenuItem>
+        )}
+        {canCreate && blueprint && (
           <RouterMenuItem
             onClick={closeActionsMenu}
             search={{ blueprint: blueprint.code }}
@@ -180,7 +191,7 @@ export const RecordPreviewToolbar = ({
             </ListItemText>
           </RouterMenuItem>
         )}
-        {schemaOutdated && (
+        {canWrite && schemaOutdated && (
           <RouterMenuItem
             onClick={closeActionsMenu}
             params={{ recordId }}
@@ -193,7 +204,7 @@ export const RecordPreviewToolbar = ({
           </RouterMenuItem>
         )}
         {compact && showExtensions && <Divider />}
-        {compact && showExtensions && (
+        {compact && showExtensions && canAskAgent && (
           <MenuItem
             onClick={() => {
               closeActionsMenu();
@@ -375,7 +386,7 @@ export const RecordPreviewToolbar = ({
           </Menu>
         </>
       )}
-      {!compact && showExtensions && (
+      {!compact && showExtensions && canAskAgent && (
         <Tooltip title={t('records.askAboutRecord')}>
           <IconButton
             aria-label={t('records.askAboutRecord')}

@@ -15,6 +15,7 @@ import {
 import type { Blueprint } from './api';
 import { blueprintStatusChipColor } from './constants';
 import { Timestamp } from '../../time/Timestamp';
+import { useCan } from '../auth/useCan';
 
 export const RevisionHistory = ({
   blueprintId,
@@ -24,6 +25,7 @@ export const RevisionHistory = ({
   revisions: Blueprint[];
 }) => {
   const { t } = useTranslation();
+  const canEdit = useCan('blueprints_write');
   return (
     <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
       <Typography component="h2" variant="h6">
@@ -72,12 +74,17 @@ export const RevisionHistory = ({
                   {revision.definition_hash}
                 </TableCell>
                 <TableCell align="right">
-                  <Link
-                    params={{ blueprintId, version: String(revision.version) }}
-                    to="/manage/blueprints/$blueprintId/revisions/$version/new"
-                  >
-                    <Button size="small">{t('blueprints.edit')}</Button>
-                  </Link>
+                  {canEdit && (
+                    <Link
+                      params={{
+                        blueprintId,
+                        version: String(revision.version),
+                      }}
+                      to="/manage/blueprints/$blueprintId/revisions/$version/new"
+                    >
+                      <Button size="small">{t('blueprints.edit')}</Button>
+                    </Link>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

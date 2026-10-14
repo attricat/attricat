@@ -10,6 +10,7 @@ import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
 import { AgentIcon, SavedSearchIcon } from '../../components/systemIcons';
+import { useCan } from '../auth/useCan';
 
 type Props = {
   disabled: boolean;
@@ -23,6 +24,7 @@ export const ExplorerSelectionActionsMenu = ({
   onSendToAgent,
 }: Props) => {
   const { t } = useTranslation();
+  const canSendToAgent = useCan('agents_run');
   const menuId = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const close = () => setAnchor(null);
@@ -49,17 +51,19 @@ export const ExplorerSelectionActionsMenu = ({
         open={Boolean(anchor)}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
       >
-        <MenuItem
-          onClick={() => {
-            close();
-            onSendToAgent();
-          }}
-        >
-          <ListItemIcon>
-            <AgentIcon size={compactIconSize} />
-          </ListItemIcon>
-          <ListItemText>{t('explorer.sendToAgentConversation')}</ListItemText>
-        </MenuItem>
+        {canSendToAgent && (
+          <MenuItem
+            onClick={() => {
+              close();
+              onSendToAgent();
+            }}
+          >
+            <ListItemIcon>
+              <AgentIcon size={compactIconSize} />
+            </ListItemIcon>
+            <ListItemText>{t('explorer.sendToAgentConversation')}</ListItemText>
+          </MenuItem>
+        )}
         <MenuItem
           onClick={() => {
             close();

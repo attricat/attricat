@@ -1,9 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
 import { CreateRecordPage } from '../../features/records/CreateRecordPage';
+import { RequireCapability } from '../../features/auth/RequireCapability';
 
 const NewRecordRouteComponent = () => (
-  <CreateRecordPage search={Route.useSearch()} />
+  <RequireCapability capability="records_write">
+    <CreateRecordPage search={Route.useSearch()} />
+  </RequireCapability>
 );
 
 export const Route = createFileRoute('/records/new')({

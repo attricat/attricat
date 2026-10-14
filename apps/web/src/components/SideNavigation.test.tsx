@@ -148,6 +148,9 @@ beforeEach(() => {
 
 describe('SideNavigation', () => {
   it('replaces the mobile primary navigation with sub-navigation and supports going back', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { agents_run: true },
+    } as never);
     const onNavigate = renderNavigation();
 
     expect(
@@ -186,7 +189,7 @@ describe('SideNavigation', () => {
       screen.getByRole('button', { name: 'Back to main navigation' }),
     );
 
-    expect(screen.getByRole('link', { name: 'Agents' })).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'Agents' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Blueprints' })).toBeNull();
   });
 

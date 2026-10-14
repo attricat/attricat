@@ -4,13 +4,16 @@ import { useTranslation } from 'react-i18next';
 import { listFindings } from '../../rules/api';
 import { FINDING_STATE_RESOLVED } from '../../rules/constants';
 import { ruleQueryKeys } from '../../rules/queryKeys';
+import { useCan } from '../../auth/useCan';
 
 /** Warns about unresolved data quality findings for a record. */
 export const DataQualityFindingsChip = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
+  const canReadRules = useCan('rules_read');
   const findings = useQuery({
     queryKey: ruleQueryKeys.findings(recordId),
     queryFn: () => listFindings(recordId),
+    enabled: canReadRules,
   });
   const unresolvedCount =
     findings.data?.filter((finding) => finding.state !== FINDING_STATE_RESOLVED)

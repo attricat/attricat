@@ -17,6 +17,8 @@ beforeEach(() => {
   virtualWindow.start = 0;
   virtualWindow.size = Infinity;
 });
+vi.mock('../auth/useCan', () => ({ useCan: () => true }));
+
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>

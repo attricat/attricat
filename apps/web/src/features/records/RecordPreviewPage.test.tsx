@@ -36,6 +36,7 @@ vi.mock('./api', async (importOriginal) => ({
   deleteRecord: vi.fn(),
   getBlueprintRevision: vi.fn(),
   getCurrentBlueprint: vi.fn(),
+  getRecordForm: vi.fn(),
   getRecordPublications: vi.fn(),
   getResolvedRecordPreview: vi.fn(),
   publishRecord: vi.fn(),
@@ -149,6 +150,8 @@ describe('RecordPreviewPage', () => {
     vi.mocked(currentSession).mockResolvedValue(null);
     const api = await import('./api');
     vi.mocked(api.getRecordPublications).mockResolvedValue([]);
+    vi.mocked(api.getRecordForm).mockReset();
+    vi.mocked(api.getRecordForm).mockRejectedValue(new Error('not loaded'));
   });
   it('offers confirmed deletion only when permitted and navigates away afterwards', async () => {
     const { getExtensionRuntime } = await import('../extensions/api');
@@ -267,6 +270,9 @@ describe('RecordPreviewPage', () => {
     vi.mocked(api.duplicateRecord).mockResolvedValue({
       id: '99999999-9999-4999-8999-999999999999',
     } as never);
+    vi.mocked(api.getRecordForm).mockResolvedValue({
+      can_write: true,
+    } as never);
     navigate.mockClear();
     renderPage();
 
@@ -329,6 +335,10 @@ describe('RecordPreviewPage', () => {
 
   it('scopes every blueprint-owned extension surface to the pinned revision', async () => {
     const api = await import('./api');
+    const { currentSession } = await import('../auth/api');
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { agents_run: true },
+    } as never);
     const blueprintId = '22222222-2222-4222-8222-222222222222';
     vi.mocked(listContexts).mockResolvedValue([
       {

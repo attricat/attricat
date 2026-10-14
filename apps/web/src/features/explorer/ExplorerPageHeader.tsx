@@ -3,6 +3,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
 import { ExplorerIcon } from '../../components/systemIcons';
 import { BlueprintLink } from '../blueprints/BlueprintLink';
+import { useCan } from '../auth/useCan';
 
 type Props = {
   blueprint: string | undefined;
@@ -27,18 +28,21 @@ export const ExplorerPageHeader = ({
   locked,
 }: Props) => {
   const { t } = useTranslation();
+  const canCreate = useCan('records_write');
   return (
     <PageHeader
       actions={
-        <RouterButton
-          search={createSearch(blueprint, locked)}
-          to="/records/new"
-          variant="contained"
-        >
-          {blueprintName
-            ? t('explorer.createBlueprint', { blueprint: blueprintName })
-            : t('explorer.create')}
-        </RouterButton>
+        canCreate && (
+          <RouterButton
+            search={createSearch(blueprint, locked)}
+            to="/records/new"
+            variant="contained"
+          >
+            {blueprintName
+              ? t('explorer.createBlueprint', { blueprint: blueprintName })
+              : t('explorer.create')}
+          </RouterButton>
+        )
       }
       eyebrow={
         blueprintRecord && (

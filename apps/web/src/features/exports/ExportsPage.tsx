@@ -43,6 +43,7 @@ export const ExportsPage = () => {
     queryFn: listPublicationChannels,
   });
   const canReadRules = useCan('rules_read');
+  const canEditChannels = useCan('contexts_write');
   // Rule codes are suggestions only; a reader without rule access can type them.
   const rules = useQuery({
     ...ruleDefinitionsOptions(),
@@ -116,7 +117,9 @@ export const ExportsPage = () => {
                         control={
                           <Switch
                             checked={enabled}
-                            disabled={updateChannel.isPending}
+                            disabled={
+                              !canEditChannels || updateChannel.isPending
+                            }
                             onChange={(_, checked) =>
                               updateChannel.mutate({
                                 contextId: context.id,
@@ -140,7 +143,7 @@ export const ExportsPage = () => {
                     </TableCell>
                     <TableCell>
                       <ChannelChecksEditor
-                        disabled={updateChannel.isPending}
+                        disabled={!canEditChannels || updateChannel.isPending}
                         onChange={(checks) =>
                           updateChannel.mutate({
                             contextId: context.id,

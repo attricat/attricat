@@ -28,9 +28,11 @@ import { blueprintQueryKeys } from './queryKeys';
 import { EmptyState } from '../../components/EmptyState';
 import { BlueprintIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
+import { useCan } from '../auth/useCan';
 
 export const BlueprintsPage = () => {
   const { t } = useTranslation();
+  const canEdit = useCan('blueprints_write');
   const [query, setQuery] = useState('');
   const blueprints = useQuery({
     queryKey: blueprintQueryKeys.catalogue(),
@@ -51,14 +53,16 @@ export const BlueprintsPage = () => {
     <PageContainer>
       <PageHeader
         actions={
-          <Button
-            component={Link}
-            startIcon={<PlusIcon />}
-            to="/manage/blueprints/new"
-            variant="contained"
-          >
-            {t('blueprints.newBlueprintAction')}
-          </Button>
+          canEdit && (
+            <Button
+              component={Link}
+              startIcon={<PlusIcon />}
+              to="/manage/blueprints/new"
+              variant="contained"
+            >
+              {t('blueprints.newBlueprintAction')}
+            </Button>
+          )
         }
         description={t('blueprints.blueprintsDescription')}
         icon={BlueprintIcon}
@@ -153,16 +157,18 @@ export const BlueprintsPage = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <RouterButton
-                        params={{
-                          blueprintId: blueprint.id,
-                          version: String(blueprint.version),
-                        }}
-                        size="small"
-                        to="/manage/blueprints/$blueprintId/revisions/$version/new"
-                      >
-                        {t('blueprints.edit')}
-                      </RouterButton>
+                      {canEdit && (
+                        <RouterButton
+                          params={{
+                            blueprintId: blueprint.id,
+                            version: String(blueprint.version),
+                          }}
+                          size="small"
+                          to="/manage/blueprints/$blueprintId/revisions/$version/new"
+                        >
+                          {t('blueprints.edit')}
+                        </RouterButton>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

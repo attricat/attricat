@@ -17,9 +17,11 @@ import { ReusableAttributeGroupDialog } from './ReusableAttributeGroupDialog';
 import { ReusableAttributeGroupsTable } from './ReusableAttributeGroupsTable';
 import { ReusableAttributesTable } from './ReusableAttributesTable';
 import { ReusableAttributeIcon } from '../../components/systemIcons';
+import { useCan } from '../auth/useCan';
 
 export const ReusableAttributesPage = () => {
   const { t } = useTranslation();
+  const canEdit = useCan('blueprints_write');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [groupOpen, setGroupOpen] = useState(false);
@@ -49,24 +51,26 @@ export const ReusableAttributesPage = () => {
         icon={ReusableAttributeIcon}
         title={t('reusableAttributes.title')}
         actions={
-          <Stack direction="row" spacing={1}>
-            <Button
-              onClick={() => setGroupOpen(true)}
-              startIcon={<PlusIcon />}
-              variant="outlined"
-            >
-              {t('reusableAttributes.newGroup')}
-            </Button>
-            <Button
-              onClick={() =>
-                navigate({ to: '/manage/reusable-attributes/new' })
-              }
-              startIcon={<PlusIcon />}
-              variant="contained"
-            >
-              {t('reusableAttributes.newAttribute')}
-            </Button>
-          </Stack>
+          canEdit && (
+            <Stack direction="row" spacing={1}>
+              <Button
+                onClick={() => setGroupOpen(true)}
+                startIcon={<PlusIcon />}
+                variant="outlined"
+              >
+                {t('reusableAttributes.newGroup')}
+              </Button>
+              <Button
+                onClick={() =>
+                  navigate({ to: '/manage/reusable-attributes/new' })
+                }
+                startIcon={<PlusIcon />}
+                variant="contained"
+              >
+                {t('reusableAttributes.newAttribute')}
+              </Button>
+            </Stack>
+          )
         }
       />
       {(attributes.error || groups.error || publish.error) && (
@@ -83,6 +87,7 @@ export const ReusableAttributesPage = () => {
       ) : (
         <ReusableAttributesTable
           attributes={displayedAttributes}
+          canEdit={canEdit}
           onPublish={(revisionId) => publish.mutate(revisionId)}
           publishing={publish.isPending}
         />

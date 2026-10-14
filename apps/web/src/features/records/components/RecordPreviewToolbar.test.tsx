@@ -45,8 +45,11 @@ const renderToolbar = (
     wrap(
       <RecordPreviewToolbar
         agentPanelOpen={false}
+        canAskAgent
+        canCreate
         canDelete={false}
         canPublish
+        canWrite
         recordId="123e4567-e89b-12d3-a456-426614174001"
         extensionPanelOpen={false}
         notReadyChannels={readiness.ready ? [] : [readiness]}
@@ -127,8 +130,11 @@ describe('record actions menu', () => {
       <QueryClientProvider client={new QueryClient()}>
         <RecordPreviewToolbar
           agentPanelOpen={false}
+          canAskAgent
+          canCreate
           canDelete={false}
           canPublish={false}
+          canWrite
           recordId="123e4567-e89b-12d3-a456-426614174001"
           extensionPanelOpen={false}
           onDelete={vi.fn()}
@@ -207,6 +213,24 @@ describe('record actions menu', () => {
     expect(
       menu.getByRole('menuitem', { name: 'Upgrade blueprint' }),
     ).toBeTruthy();
+  });
+
+  it('hides actions the caller may not take', async () => {
+    renderActions({
+      blueprint: { code: 'product', name: 'Product' },
+      canAskAgent: false,
+      canCreate: false,
+      canWrite: false,
+      schemaOutdated: true,
+      showExtensions: true,
+    });
+    expect(
+      screen.queryByRole('button', { name: 'Ask about this record' }),
+    ).toBeNull();
+    const menu = await openActions();
+    expect(
+      menu.getAllByRole('menuitem').map((item) => item.textContent),
+    ).toEqual(['Changes', 'Copy record ID']);
   });
 
   it('moves the agent and extensions into the menu when compact', async () => {

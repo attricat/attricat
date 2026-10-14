@@ -8,6 +8,7 @@ import { Timestamp } from '../../time/Timestamp';
 import type { Blueprint } from './schemas';
 import { BlueprintIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
+import { useCan } from '../auth/useCan';
 
 export const BlueprintDetailHeader = ({
   blueprint,
@@ -27,23 +28,28 @@ export const BlueprintDetailHeader = ({
   onPublishRecords: () => void;
 }) => {
   const { t } = useTranslation();
+  const canEdit = useCan('blueprints_write');
+  const canPublish = useCan('blueprints_publish');
+  const canPublishRecords = useCan('records_publish');
   return (
     <>
       <PageHeader
         actions={
           <Stack direction="row" spacing={1}>
-            <Link
-              params={{
-                blueprintId: blueprint.id,
-                version: String(blueprint.version),
-              }}
-              to="/manage/blueprints/$blueprintId/revisions/$version/new"
-            >
-              <Button startIcon={<PencilIcon />} variant="outlined">
-                {t('blueprints.editBlueprint')}
-              </Button>
-            </Link>
-            {blueprint.status === blueprintStatuses.draft && (
+            {canEdit && (
+              <Link
+                params={{
+                  blueprintId: blueprint.id,
+                  version: String(blueprint.version),
+                }}
+                to="/manage/blueprints/$blueprintId/revisions/$version/new"
+              >
+                <Button startIcon={<PencilIcon />} variant="outlined">
+                  {t('blueprints.editBlueprint')}
+                </Button>
+              </Link>
+            )}
+            {canPublish && blueprint.status === blueprintStatuses.draft && (
               <Button
                 color="primary"
                 onClick={onPublish}
@@ -53,16 +59,17 @@ export const BlueprintDetailHeader = ({
                 {t('blueprints.publish')}
               </Button>
             )}
-            {blueprint.status === blueprintStatuses.published && (
-              <Button
-                onClick={onPublishRecords}
-                startIcon={<SendIcon />}
-                variant="outlined"
-              >
-                {t('blueprints.publishRecords')}
-              </Button>
-            )}
-            {canStartSafeMigration && (
+            {canPublishRecords &&
+              blueprint.status === blueprintStatuses.published && (
+                <Button
+                  onClick={onPublishRecords}
+                  startIcon={<SendIcon />}
+                  variant="outlined"
+                >
+                  {t('blueprints.publishRecords')}
+                </Button>
+              )}
+            {canPublish && canStartSafeMigration && (
               <Button
                 disabled={!migrationStatusKnown || migrationActive}
                 onClick={onMigrate}
