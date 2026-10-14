@@ -155,7 +155,16 @@ describe('useConversationLiveUpdates', () => {
     expect(screen.queryByText('Bulk 1/4')).toBeNull();
     act(() => sources[0].emit('bulk_progress', { run_id: run.id }));
     expect(screen.getByText('Bulk 2/4')).toBeTruthy();
-    view.rerender(tree([{ ...run, status: 'completed' }]));
+    act(() =>
+      sources[0].emit('bulk_progress', {
+        ...progress(2),
+        payload: { ...progress(2).payload, state: 'failed' },
+      }),
+    );
     expect(screen.queryByText('Bulk 2/4')).toBeNull();
+    act(() => sources[0].emit('bulk_progress', progress(3)));
+    expect(screen.getByText('Bulk 3/4')).toBeTruthy();
+    view.rerender(tree([{ ...run, status: 'completed' }]));
+    expect(screen.queryByText('Bulk 3/4')).toBeNull();
   });
 });

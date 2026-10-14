@@ -78,7 +78,11 @@ const CommentItem = ({
           {comment.author_display_name || comment.author_email}
         </Typography>
         {comment.author_kind === systemAuthorKind && (
-          <Chip label={t('comments.systemAuthor')} size="small" />
+          <Chip
+            label={t('comments.systemAuthor')}
+            size="small"
+            variant="outlined"
+          />
         )}
         <Typography component="span" variant="caption" color="text.secondary">
           <Timestamp value={comment.created_at} />
