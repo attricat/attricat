@@ -16,6 +16,7 @@ pub mod agents {
 }
 pub mod agent_tools;
 pub mod agent_worker;
+pub mod bulk_edits;
 pub mod conversation_title;
 pub mod provider_config;
 mod search_filters;

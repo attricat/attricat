@@ -11,7 +11,10 @@ use crate::{
     },
     agent_tools::{self, ToolKind},
     agents::MAX_INLINE_ATTACHMENT_BYTES,
-    repository::{AgentAuditAttribution, AttricatRepository, AuditContext, RepositoryError},
+    bulk_edits,
+    repository::{
+        AgentAuditAttribution, AgentSettings, AttricatRepository, AuditContext, RepositoryError,
+    },
     storage::ObjectStore,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -39,7 +42,7 @@ const RECORD_CONTROLS_PROMPT: &str = "Status attributes can restrict who may mak
 const CHECKS_PROMPT: &str = "Rules, record checks (x-attricat-checks), status transition conditions and channel gates share declarative predicates: required, has_tag, missing_tag, compare (between attributes, with a linked record's subject_attribute_code, or with a value), one_of, relative_date (dates relative to now, such as expiry), linked (records reached through one relationship: all, any or none), referenced_by (counts records of another blueprint pointing here, such as open corrective actions), all_of, any_of, and rules-only stale, unique (duplicate values) and acyclic (relationship cycles). To explain a rule finding, combine its message with the predicate from get_rule_definition and inspect the record and, for linked or referenced_by predicates, the related records; a rule without a context fails when the record fails in any context. Check failures carry details.violations; each violation has source (record_check, transition_condition, rule or record_schema), code, message, contexts, attributes (fields of this record to fix), optional severity and transition {attribute_code, from, to}, and evidence (for example failing_record_ids of linked records or matching_record_ids of referencing records). Explain every violation before proposing a fix. For record_check_failed or rule_violation, fix the listed attributes in the listed contexts, or the linked or referencing records named in evidence, and propose one corrected write; a record that already violates an enforcing rule can only be saved by a write that also fixes it. Changes to linked records are not rejected; affected records appear as rule findings instead. For transition_conditions_unmet, call get_record_controls: each transition lists its unmet conditions and guarding rules; propose the missing values together with the status change. For publication_checks_failed, details.context names the channel; use get_record_publication_readiness, fix the listed violations, then propose publishing again. rule_dry_run_required means an enforcing rule revision needs a completed dry run (run-now with dry_run and its version) before it is enabled; rule_has_existing_violations reports details.existing_violations, which must be fixed or explicitly accepted with accept_existing_violations. You cannot create, enable or run rules or workflows: draft a definition for the user, check it with validate_rule_definition or validate_workflow_definition, and explain these steps. When the user accepts an open finding instead of fixing it, propose acknowledge_rule_finding.";
 
 /// Atomic multi-record changes and blueprint structural constraints.
-const STRUCTURAL_CONSTRAINTS_PROMPT: &str = "When one business change touches several records, such as releasing a new revision and superseding the previous one or recording a movement and updating an item's current location, propose a single apply_record_batch instead of separate mutations, so the user approves it once and it applies all-or-nothing. Choose a new UUID for each created record_id that later operations link to, and order operations so each is valid when it runs. A failed batch applies nothing; its error keeps the failing operation's own code and details and adds details.operation_index, so fix that operation and propose the whole batch again. Blueprints can declare unique_keys, relationship target_blueprints, and acyclic or tree hierarchies; read the blueprint definition before proposing writes. unique_key_conflict means another record already holds that business key (details name the key, the normalized values, the context and conflicting_record_id): inspect the conflicting record, explain the conflict, and offer to update that record, choose a different value, or stop. Keys ignore case and surrounding or repeated whitespace unless the key is case-sensitive. relationship_cycle means the link would make a record its own ancestor; explain details.path and propose a different target. relationship_target_type_mismatch means the target belongs to a blueprint the relationship does not allow; search the allowed blueprints instead. When publish_blueprint fails with unique_key_duplicates or relationship_hierarchy_violations, list the records named in details and propose fixing them first; do not remove the constraint unless the user asks.";
+const STRUCTURAL_CONSTRAINTS_PROMPT: &str = "To apply the same kind of value edit across many records, such as setting a brand or season on every matching product, propose one bulk_set_record_values with a filter or an item list instead of one set_record_values per record; the user approves it once, records change one at a time, and it stops at the first failure, so report its applied, failed and not_run records. When one business change touches several records, such as releasing a new revision and superseding the previous one or recording a movement and updating an item's current location, propose a single apply_record_batch instead of separate mutations, so the user approves it once and it applies all-or-nothing. Choose a new UUID for each created record_id that later operations link to, and order operations so each is valid when it runs. A failed batch applies nothing; its error keeps the failing operation's own code and details and adds details.operation_index, so fix that operation and propose the whole batch again. Blueprints can declare unique_keys, relationship target_blueprints, and acyclic or tree hierarchies; read the blueprint definition before proposing writes. unique_key_conflict means another record already holds that business key (details name the key, the normalized values, the context and conflicting_record_id): inspect the conflicting record, explain the conflict, and offer to update that record, choose a different value, or stop. Keys ignore case and surrounding or repeated whitespace unless the key is case-sensitive. relationship_cycle means the link would make a record its own ancestor; explain details.path and propose a different target. relationship_target_type_mismatch means the target belongs to a blueprint the relationship does not allow; search the allowed blueprints instead. When publish_blueprint fails with unique_key_duplicates or relationship_hierarchy_violations, list the records named in details and propose fixing them first; do not remove the constraint unless the user asks.";
 
 /// Approval and reporting rules that close the prompt.
 const APPROVAL_PROMPT: &str = "Never claim a mutation happened until its tool result says so. All mutations require human approval. stale_record means someone saved the record after you read it or proposed the change: read it again, explain what changed, and propose the change again only if it still applies.";
@@ -135,6 +138,7 @@ struct RunMemo {
     messages: HashMap<Uuid, ChatMessage>,
     initiator: Option<(Uuid, Uuid)>,
     catalog_map: Option<String>,
+    settings: Option<AgentSettings>,
 }
 
 /// Bounds the catalog map so a large catalog cannot crowd out the prompt.
@@ -405,6 +409,51 @@ async fn drive(
                 initiator
             }
         };
+        if call.function.name == bulk_edits::TOOL {
+            let settings = match memo.settings {
+                Some(settings) => settings,
+                None => *memo.settings.insert(repository.agent_settings().await?),
+            };
+            // The selection resolves to the explicit record list that is
+            // approved. A selection that cannot be proposed returns to the
+            // agent as the tool's result, so it can narrow or correct it.
+            match bulk_edits::resolve(
+                repository,
+                actor,
+                workspace,
+                arguments.clone(),
+                settings.bulk_edit_max_records,
+            )
+            .await
+            {
+                Ok(resolved) => arguments = resolved,
+                Err(error) => {
+                    let payload = agent_tools::tool_error_payload(&error);
+                    let tool = repository
+                        .create_agent_tool_call(
+                            run_id,
+                            Some(&call.id),
+                            &call.function.name,
+                            arguments,
+                            None,
+                            "pending_approval",
+                        )
+                        .await?;
+                    repository
+                        .complete_agent_tool_call_with_message(
+                            tool.id,
+                            Err(payload.clone()),
+                            conversation_id,
+                            run_id,
+                            json!({"tool_call_id":call.id,"name":call.function.name,"result":payload}),
+                            &[],
+                        )
+                        .await?;
+                    executed_read = true;
+                    continue;
+                }
+            }
+        }
         if kind == ToolKind::Mutation {
             agent_tools::pin_record_versions(repository, &call.function.name, &mut arguments)
                 .await?;
@@ -721,6 +770,15 @@ pub async fn resume_claimed(
                 Err(
                     json!({"code":"forbidden","message":"The initiating user is no longer authorized to make this change."}),
                 )
+            } else if call.tool_name == bulk_edits::TOOL {
+                let audit_actor = agent_tools::tool_actor(repository, actor);
+                bulk_edits::execute(repository, actor, workspace, &agent_run, &call, |record| {
+                    AuditContext {
+                        target: json!({"id": record}),
+                        ..agent_audit_context(audit_actor, &agent_run, &call)
+                    }
+                })
+                .await
             } else {
                 let audited_repository =
                     repository.clone().with_audit_context(agent_audit_context(
@@ -778,6 +836,8 @@ fn mutation_authorization(name: &str, arguments: &Value) -> Option<(&'static str
         "create_record" | "link_file" => ("records.write", None),
         // Every operation is authorized separately in `mutation_authorized`.
         "apply_record_batch" => ("records.write", None),
+        // Every record is authorized as it is changed; see `bulk_edits`.
+        bulk_edits::TOOL => ("records.write", None),
         "publish_record" | "unpublish_record" | "publish_record_to_all_channels" => (
             "records.publish",
             arguments
@@ -851,6 +911,18 @@ pub async fn mutation_authorized(
         Some((OWN_NOTIFICATIONS_SCOPE, _))
     ) {
         return repository.is_active_principal(actor, workspace).await;
+    }
+    if name == bulk_edits::TOOL {
+        // Each record needs record-scoped write access when it is changed;
+        // the run itself needs an active initiator whose token may write.
+        return Ok(repository.is_active_principal(actor, workspace).await?
+            && repository
+                .principal_token_permits(
+                    agent_tools::tool_actor(repository, actor),
+                    workspace,
+                    "records.write",
+                )
+                .await?);
     }
     if name == "apply_record_batch" {
         let Ok(batch) =
