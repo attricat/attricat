@@ -41,6 +41,7 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 - tworzyć schematy i ich wersje oraz publikować schematy;
 - tworzyć, aktualizować, migrować i usuwać rekordy; ustawiać, usuwać i przywracać wartości; zmieniać relacje; łączyć pliki;
 - wprowadzać kilka zmian rekordów razem jako jeden wsad;
+- ustawiać te same wartości w wielu rekordach po jednym zatwierdzeniu;
 - aktualizować tagi systemowe i metadane;
 - publikować rekordy i cofać ich publikację;
 - tworzyć, aktualizować i usuwać konteksty;
@@ -63,6 +64,23 @@ Czytaj propozycje uważnie. Zastąpienie relacji ustawia pełną listę dla dane
 ### Zmiany w kilku rekordach
 
 Gdy jedna prośba zmienia kilka rekordów, np. wydanie nowej wersji i zastąpienie poprzedniej, agent proponuje jeden **wsad** (`apply_record_batch`). Podsumowanie do zatwierdzenia wymienia wszystkie kroki po kolei. Zatwierdzasz wsad raz i zostaje on zapisany w całości albo wcale: jeśli jeden krok się nie powiedzie, np. dlatego, że rekord w międzyczasie się zmienił, nic nie zostaje zapisane, a agent dowiaduje się, który krok zawiódł.
+
+### Ta sama zmiana w wielu rekordach
+
+Gdy prosisz o tę samą zmianę wartości w wielu rekordach, np. *ustaw sezon Wiosna we wszystkich produktach Acme*, agent proponuje jedną **edycję zbiorczą** (`bulk_set_record_values`). Wybiera rekordy, wymieniając je albo za pomocą filtra wyszukiwania.
+
+W chwili propozycji filtr zamienia się w stałą listę rekordów i to ją zatwierdzasz. Karta zatwierdzenia pokazuje podsumowanie, np. *Set Brand, Season on 412 Product records*, oraz tabelę z nazwami rekordów, obecną i proponowaną wartością: najpierw 20 rekordów, a po kliknięciu **Pokaż wszystkie rekordy** pozostałe. Rekord, który ktoś zapisze po propozycji, nie zostanie nadpisany; jego zmiana nie powiedzie się, bo rekord zmienił się w międzyczasie.
+
+W przeciwieństwie do wsadu edycja zbiorcza nie działa na zasadzie „wszystko albo nic”:
+
+- Po zatwierdzeniu rekordy są zmieniane po kolei, a rozmowa pokazuje postęp.
+- Przy każdym rekordzie Attricat sprawdza Twoje uprawnienia, a zmiana trafia do dziennika audytu tak jak Twoja własna edycja.
+- Edycja **zatrzymuje się na pierwszym rekordzie, którego nie udało się zmienić**. Wcześniejsze rekordy zachowują zmiany, a kolejne pozostają niezmienione. Attricat dodaje do tego rekordu komentarz podpisany **Attricat** z oznaczeniem **System**, z opisem błędu i linkiem do rozmowy.
+- Wynik wymienia zmienione rekordy, rekord, którego nie udało się zmienić, wraz z przyczyną, oraz pominięte rekordy, z linkami do każdego z nich.
+
+Edycja zbiorcza nie zmienia atrybutów statusu, relacji ani plików. Propozycja obejmująca więcej rekordów, niż pozwala obszar roboczy (domyślnie 500), nie trafia do zatwierdzenia; agent zawęża ją albo dzieli.
+
+Wybierz wsad, gdy zmiany muszą się udać albo nie udać razem, a edycję zbiorczą, gdy chcesz wprowadzić tę samą zmianę w wielu rekordach i możesz później poprawić rekord, którego nie udało się zmienić.
 
 ## Gdy zmiana zostaje odrzucona
 
@@ -88,3 +106,12 @@ Każde żądanie do dostawcy AI zawiera dotychczasową rozmowę i wyniki narzęd
 ## Uprawnienia
 
 Korzystanie z agentów wymaga uprawnienia `agents.run`, które domyślnie mają role właściciela i administratora. Nadaj je osobom, które powinny móc zlecać zmiany w ten sposób.
+
+### Zatwierdzanie edycji zbiorczych
+
+Osoby z uprawnieniem `agents.manage` (domyślnie role właściciela i administratora) wybierają sposób zatwierdzania edycji zbiorczych w **Zarządzanie → Obszar roboczy → Agent**, poleceniem `acli workspace agent set` lub przez `PUT /workspace/agent-settings`:
+
+- **Jedno zatwierdzenie na propozycję** (domyślnie): jedno zatwierdzenie obejmuje wszystkie rekordy z edycji zbiorczej.
+- **Zatwierdzanie każdego rekordu**: agent nie może proponować edycji zbiorczych, więc proponuje zmianę każdego rekordu osobno i każda wymaga osobnego zatwierdzenia.
+
+**Rekordy w jednej edycji zbiorczej** ogranicza liczbę rekordów, które może zmienić jedna propozycja: od 1 do 5000 (domyślnie 500).

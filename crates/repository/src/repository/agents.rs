@@ -911,12 +911,16 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         let mut tx = self.pool.begin().await?;
         sqlx::query("INSERT INTO permissions (code, description) VALUES ('agents.run', 'Create, inspect, and decide conversational agent runs') ON CONFLICT (code) DO NOTHING")
             .execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO permissions (code, description) VALUES ('agents.manage', 'Configure how the agent proposes and applies changes') ON CONFLICT (code) DO NOTHING")
+            .execute(&mut *tx).await?;
         for role_id in [
             Uuid::from_u128(0x00000000000040008000000000000101),
             Uuid::from_u128(0x00000000000040008000000000000102),
         ] {
-            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'agents.run') ON CONFLICT DO NOTHING")
-                .bind(role_id).execute(&mut *tx).await?;
+            for permission in ["agents.run", "agents.manage"] {
+                sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, $2) ON CONFLICT DO NOTHING")
+                    .bind(role_id).bind(permission).execute(&mut *tx).await?;
+            }
         }
         tx.commit().await?;
         Ok(())

@@ -676,6 +676,12 @@ enum WorkspaceCommand {
         #[command(subcommand)]
         command: NavigationCommand,
     },
+    /// Read or change how agent bulk value edits are approved (requires
+    /// `agents.manage`).
+    Agent {
+        #[command(subcommand)]
+        command: AgentSettingsCommand,
+    },
     TokenPermission {
         #[command(subcommand)]
         command: TokenPermissionCommand,
@@ -704,6 +710,54 @@ enum WorkspaceCommand {
         #[command(subcommand)]
         command: UserCommand,
     },
+}
+
+#[derive(Subcommand)]
+enum AgentSettingsCommand {
+    Get,
+    /// Change the given settings and keep the others.
+    #[command(group(clap::ArgGroup::new("change").required(true).multiple(true).args(["bulk_edits", "bulk_edit_max_records"])))]
+    Set {
+        /// per-proposal: one approval covers a whole bulk edit; per-record:
+        /// the agent is not offered bulk edits and each record is approved.
+        #[arg(long, value_enum)]
+        bulk_edits: Option<BulkEditPolicyArgument>,
+        /// The most records one bulk edit may change (1-5000).
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=5000))]
+        bulk_edit_max_records: Option<u32>,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum BulkEditPolicyArgument {
+    PerProposal,
+    PerRecord,
+}
+
+impl BulkEditPolicyArgument {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::PerProposal => "per_proposal",
+            Self::PerRecord => "per_record",
+        }
+    }
+}
+
+/// The settings `acli workspace agent set` sends: the current settings with
+/// the given changes.
+fn changed_agent_settings(
+    mut current: Value,
+    bulk_edits: Option<BulkEditPolicyArgument>,
+    bulk_edit_max_records: Option<u32>,
+) -> Result<Value, CliError> {
+    let settings = current.as_object_mut().ok_or(CliError::InvalidResponse)?;
+    if let Some(policy) = bulk_edits {
+        settings.insert("bulk_edits".into(), json!(policy.as_str()));
+    }
+    if let Some(limit) = bulk_edit_max_records {
+        settings.insert("bulk_edit_max_records".into(), json!(limit));
+    }
+    Ok(current)
 }
 
 #[derive(Subcommand)]
@@ -2514,6 +2568,14 @@ async fn workspace_command(
             NavigationCommand::Get => request(client, server, Method::GET, "/workspace/navigation", None).await,
             NavigationCommand::Set { entries } => request(client, server, Method::PUT, "/workspace/navigation", Some(json!({"explore_navigation": json_array_input(&entries, "--entries")?}))).await,
             NavigationCommand::Sidebar => request(client, server, Method::GET, "/workspace/navigation/sidebar", None).await,
+        },
+        WorkspaceCommand::Agent { command } => match command {
+            AgentSettingsCommand::Get => request(client, server, Method::GET, "/workspace/agent-settings", None).await,
+            AgentSettingsCommand::Set { bulk_edits, bulk_edit_max_records } => {
+                let current = request_value(client, server, Method::GET, "/workspace/agent-settings", None).await?;
+                let changed = changed_agent_settings(current, bulk_edits, bulk_edit_max_records)?;
+                request(client, server, Method::PUT, "/workspace/agent-settings", Some(changed)).await
+            }
         },
         WorkspaceCommand::TokenPermission { command: TokenPermissionCommand::List } => request(client, server, Method::GET, "/workspace/token-permissions", None).await,
         WorkspaceCommand::GrantTarget { command: GrantTargetCommand::List { scope_type } } => request(client, server, Method::GET, &format!("/workspace/grant-targets/{}", segment(&scope_type)), None).await,
@@ -4780,6 +4842,80 @@ mod tests {
             parse(&["acli", "notification", "count"]).1,
             "/notifications/unread-count"
         );
+    }
+
+    #[test]
+    fn agent_settings_changes_keep_unchanged_settings() {
+        let parse = |args: &[&str]| match Cli::try_parse_from(args).unwrap().command {
+            Command::Workspace {
+                command:
+                    WorkspaceCommand::Agent {
+                        command:
+                            AgentSettingsCommand::Set {
+                                bulk_edits,
+                                bulk_edit_max_records,
+                            },
+                    },
+            } => changed_agent_settings(
+                json!({"bulk_edits": "per_proposal", "bulk_edit_max_records": 500}),
+                bulk_edits,
+                bulk_edit_max_records,
+            )
+            .unwrap(),
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            parse(&[
+                "acli",
+                "workspace",
+                "agent",
+                "set",
+                "--bulk-edits",
+                "per-record"
+            ]),
+            json!({"bulk_edits": "per_record", "bulk_edit_max_records": 500})
+        );
+        assert_eq!(
+            parse(&[
+                "acli",
+                "workspace",
+                "agent",
+                "set",
+                "--bulk-edit-max-records",
+                "50"
+            ]),
+            json!({"bulk_edits": "per_proposal", "bulk_edit_max_records": 50})
+        );
+        for invalid in [
+            &["acli", "workspace", "agent", "set"][..],
+            &[
+                "acli",
+                "workspace",
+                "agent",
+                "set",
+                "--bulk-edit-max-records",
+                "0",
+            ],
+            &[
+                "acli",
+                "workspace",
+                "agent",
+                "set",
+                "--bulk-edit-max-records",
+                "5001",
+            ],
+            &[
+                "acli",
+                "workspace",
+                "agent",
+                "set",
+                "--bulk-edits",
+                "sometimes",
+            ],
+        ] {
+            assert!(Cli::try_parse_from(invalid).is_err(), "{invalid:?}");
+        }
+        assert!(Cli::try_parse_from(["acli", "workspace", "agent", "get"]).is_ok());
     }
 
     #[test]

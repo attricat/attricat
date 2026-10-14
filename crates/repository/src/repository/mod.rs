@@ -138,7 +138,9 @@ fn summarize_violations(violations: &[CheckViolation]) -> String {
         .join("; ")
 }
 
-pub use agent_settings::{AgentSettings, BulkEditPolicy, DEFAULT_BULK_EDIT_MAX_RECORDS};
+pub use agent_settings::{
+    AgentSettings, BulkEditPolicy, DEFAULT_BULK_EDIT_MAX_RECORDS, MAX_BULK_EDIT_MAX_RECORDS,
+};
 pub use checks::{
     CheckSource, CheckTransition, CheckViolation, MAX_REPORTED_VIOLATIONS, PublicationReadiness,
 };
@@ -643,6 +645,8 @@ pub enum RepositoryError {
     AttricatCodeTaken,
     #[error("invalid team: {0}")]
     InvalidTeam(String),
+    #[error("invalid agent settings: {0}")]
+    InvalidAgentSettings(String),
     #[error("workflow code is already in use")]
     WorkflowCodeTaken,
     #[error("invalid workflow definition: {0}")]

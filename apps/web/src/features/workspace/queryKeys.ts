@@ -8,6 +8,7 @@ export const workspaceQueryKeys = {
     [...workspaceQueryKeys.all(), 'explore-navigation'] as const,
   sidebarExploreNavigation: () =>
     [...workspaceQueryKeys.all(), 'sidebar-explore-navigation'] as const,
+  agentSettings: () => [...workspaceQueryKeys.all(), 'agent-settings'] as const,
   assignableRoles: () =>
     [...workspaceQueryKeys.all(), 'assignable-roles'] as const,
   grantTargets: (scope: string) =>

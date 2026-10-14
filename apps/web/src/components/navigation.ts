@@ -27,6 +27,7 @@ type NavigationCapabilities = {
   roles_manage?: boolean;
   workflows_read?: boolean;
   workspace_navigation_manage?: boolean;
+  agents_manage?: boolean;
   rules_read?: boolean;
 };
 
@@ -181,7 +182,8 @@ export const getVisibleManagementNavigationItems = (
       return Boolean(
         capabilities?.members_manage ||
         capabilities?.roles_manage ||
-        capabilities?.workspace_navigation_manage,
+        capabilities?.workspace_navigation_manage ||
+        capabilities?.agents_manage,
       );
     }
     if (

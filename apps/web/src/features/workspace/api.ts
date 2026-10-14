@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import i18n from 'i18next';
 import { request, requestNoContent } from '../../api/request';
+import { bulkEditPolicies, maxBulkEditMaxRecords } from './constants';
 
 const uuid = z.uuid();
 const scopeTypeSchema = z.enum([
@@ -218,6 +219,19 @@ export const updateExploreNavigation = (
         .array(exploreNavigationEntrySchema)
         .parse(explore_navigation),
     }),
+  );
+const agentSettingsSchema = z.object({
+  bulk_edits: z.enum(bulkEditPolicies),
+  bulk_edit_max_records: z.number().int().min(1).max(maxBulkEditMaxRecords),
+});
+export type AgentSettings = z.infer<typeof agentSettingsSchema>;
+export const getAgentSettings = () =>
+  request('/api/workspace/agent-settings', agentSettingsSchema);
+export const updateAgentSettings = (settings: AgentSettings) =>
+  request(
+    '/api/workspace/agent-settings',
+    agentSettingsSchema,
+    json('PUT', agentSettingsSchema.parse(settings)),
   );
 export const listAssignableRoles = () =>
   request('/api/workspace/assignable-roles', z.array(roleSchema));

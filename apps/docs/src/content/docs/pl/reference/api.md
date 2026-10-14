@@ -338,6 +338,7 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 | `GET`, `POST`, `DELETE` | `/workspace/invitations[/{id}]`; `POST /workspace/invitations/accept` | Zaproszenia. |
 | `POST` | `/workspace/users` | Tworzy użytkownika. |
 | `GET`, `PUT` | `/workspace/navigation`; `GET /workspace/navigation/sidebar` | Skróty na pasku bocznym. |
+| `GET`, `PUT` | `/workspace/agent-settings` | Sposób zatwierdzania edycji zbiorczych agenta (`agents.manage`): `{"bulk_edits": "per_proposal" \| "per_record", "bulk_edit_max_records": 1–5000}`. |
 | `GET` | `/directory` | Użytkownicy i zespoły, do których mogą odwoływać się atrybuty użytkownika lub zespołu (`records.read`). |
 | `GET`, `POST`, `PATCH`, `DELETE` | `/workspace/teams[/{id}]` | Zespoły (`members.manage`). `PATCH` przyjmuje `name` lub `member_user_ids`, które zastępuje cały skład. |
 | `GET` | `/audit-events` | Dziennik audytu. |

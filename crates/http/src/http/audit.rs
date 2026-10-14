@@ -133,6 +133,8 @@ fn audit_permission(method: &Method, route: &str) -> &'static str {
         "roles.manage"
     } else if route.starts_with("/workspace/navigation") {
         "workspace_navigation.manage"
+    } else if route.starts_with("/workspace/agent-settings") {
+        "agents.manage"
     } else if method == Method::DELETE {
         "records.delete"
     } else {
@@ -232,6 +234,10 @@ mod tests {
         assert_eq!(
             audit_permission(&Method::DELETE, "/workspace/roles/{id}"),
             "roles.manage"
+        );
+        assert_eq!(
+            audit_permission(&Method::PUT, "/workspace/agent-settings"),
+            "agents.manage"
         );
         assert_eq!(
             audit_permission(

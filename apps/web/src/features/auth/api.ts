@@ -31,6 +31,7 @@ const sessionSchema = z.object({
       roles_grant: z.boolean().default(false),
       tokens_manage: z.boolean(),
       workspace_navigation_manage: z.boolean(),
+      agents_manage: z.boolean().default(false),
       extensions_read: z.boolean(),
       extensions_manage: z.boolean(),
       workflows_read: z.boolean().default(false),

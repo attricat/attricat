@@ -1502,7 +1502,28 @@
     "teamMemberCount_many": "{{count}} członków",
     "teamMemberCount_other": "{{count}} członka",
     "noTeams": "Nie ma jeszcze zespołów.",
-    "saveTeam": "Zapisz zespół"
+    "saveTeam": "Zapisz zespół",
+    "agent": "Agent",
+    "agentSettingsTitle": "Zatwierdzanie zmian agenta",
+    "agentSettingsDescription": "Wybierz, jak zatwierdzać zmiany, które agent Attricat proponuje dla wielu rekordów naraz.",
+    "loadingAgentSettings": "Wczytywanie ustawień agenta",
+    "notAuthorizedAgentSettings": "Nie masz uprawnień do zarządzania ustawieniami agenta.",
+    "bulkEditPolicy": "Zbiorcza edycja wartości",
+    "bulkEditPolicies": {
+      "per_proposal": {
+        "label": "Jedno zatwierdzenie na propozycję",
+        "description": "Agent może zaproponować tę samą zmianę wartości dla wielu rekordów. Jedno zatwierdzenie obejmuje wszystkie rekordy z propozycji; rekordy są zmieniane po kolei, a edycja zatrzymuje się na pierwszym błędzie."
+      },
+      "per_record": {
+        "label": "Zatwierdzanie każdego rekordu",
+        "description": "Agent proponuje zmianę każdego rekordu osobno i każda wymaga osobnego zatwierdzenia."
+      }
+    },
+    "bulkEditLimit": "Rekordy w jednej edycji zbiorczej",
+    "bulkEditLimitHelp": "Agent musi zawęzić propozycję, która obejmuje więcej rekordów.",
+    "bulkEditLimitInvalid": "Wpisz liczbę całkowitą od 1 do {{max}}.",
+    "saveAgentSettings": "Zapisz ustawienia agenta",
+    "agentSettingsSaved": "Zapisano ustawienia agenta."
   },
   "views": {
     "tabHasErrors": "Zawiera pola wymagające uwagi",

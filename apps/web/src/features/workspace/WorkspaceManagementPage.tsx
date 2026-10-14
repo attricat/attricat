@@ -7,6 +7,7 @@ import { WorkspaceIcon } from '../../components/systemIcons';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { WorkspaceAgentSection } from './WorkspaceAgentSection';
 import { WorkspaceInvitationsSection } from './WorkspaceInvitationsSection';
 import { WorkspaceMembersSection } from './WorkspaceMembersSection';
 import { WorkspaceNavigationSection } from './WorkspaceNavigationSection';
@@ -14,7 +15,7 @@ import { WorkspaceRolesSection } from './WorkspaceRolesSection';
 import { WorkspaceTeamsSection } from './WorkspaceTeamsSection';
 
 export type WorkspaceManagementSection =
-  'members' | 'teams' | 'roles' | 'invitations' | 'navigation';
+  'members' | 'teams' | 'roles' | 'invitations' | 'navigation' | 'agent';
 
 const sections: {
   labelKey: string;
@@ -45,6 +46,11 @@ const sections: {
     labelKey: 'workspace.navigation',
     section: 'navigation',
     to: '/manage/workspace/navigation',
+  },
+  {
+    labelKey: 'workspace.agent',
+    section: 'agent',
+    to: '/manage/workspace/agent',
   },
 ];
 
@@ -80,7 +86,8 @@ export const WorkspaceManagementPage = ({
                 item.section === 'invitations') &&
                 capabilities?.members_manage) ||
               (item.section === 'navigation' &&
-                capabilities?.workspace_navigation_manage),
+                capabilities?.workspace_navigation_manage) ||
+              (item.section === 'agent' && capabilities?.agents_manage),
           )
           .map((item) => (
             <Button
@@ -117,6 +124,11 @@ export const WorkspaceManagementPage = ({
       {section === 'navigation' && (
         <WorkspaceNavigationSection
           canManage={capabilities?.workspace_navigation_manage === true}
+        />
+      )}
+      {section === 'agent' && (
+        <WorkspaceAgentSection
+          canManage={capabilities?.agents_manage === true}
         />
       )}
       {section === 'invitations' && (

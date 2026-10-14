@@ -117,6 +117,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/event-deliveries/{consumer_id}/{event_id}/replay` | Reactivate one terminal delivery as pending; it preserves the event and attempts (`roles.manage`). |
 | `GET` | `/workspace/roles` | List fixed and workspace-local roles with permissions (`roles.manage`). |
 | `GET`, `PUT` | `/workspace/navigation` | Read or replace configured workspace navigation (`workspace_navigation.manage`). |
+| `GET`, `PUT` | `/workspace/agent-settings` | Read or replace how agent bulk value edits are approved (`agents.manage`): `bulk_edits` is `per_proposal` (default; one approval per `bulk_set_record_values` proposal) or `per_record` (the tool is not offered), and `bulk_edit_max_records` (1–5000, default 500) bounds one proposal. Out-of-range values return `422 invalid_input`. |
 | `GET` | `/workspace/navigation/sidebar` | Read the caller-visible navigation tree. |
 | `POST` | `/workspace/roles` | Create a workspace-local role. |
 | `PUT` | `/workspace/roles/{role_id}` | Update a workspace-local role. Fixed roles are immutable. |
@@ -956,7 +957,22 @@ for each specified attribute/context (an empty list clears it); removal unlinks
 only named targets. `apply_record_batch` proposes several record operations
 as one approval and applies them through [record batches](#record-batches);
 each operation is authorized for the initiating user when the approved call
-runs. `get_record_publication_readiness` reports, per channel, whether a
+runs. `bulk_set_record_values` proposes the same scalar value edit for many
+records, chosen by `items` or by a `search_records`-style `filter` plus
+`values`. At proposal time the selection resolves to an explicit record list,
+each pinned to its `updated_at` with its current values; that list is stored as
+the call's arguments, summarized and approved once. Selections over the
+workspace's `bulk_edit_max_records` (`bulk_edit_too_large`), status attributes
+(`bulk_edit_status_attribute`) and empty selections (`bulk_edit_empty`) return
+to the agent as tool errors instead of an approval. The approved edit is not
+atomic: records change one at a time through `set_record_values`, each
+authorized with record-scoped `records.write` and audited against the tool
+call, with `bulk_progress` run events. It stops at the first failure, which the
+workspace's system user records as a comment on the failed record (comments
+report `author_kind` `person` or `system`), and returns `applied`, `failed`
+(`record_id`, `code`, `message`) and `not_run`. With the workspace's
+`bulk_edits` setting at `per_record` the tool is not offered.
+`get_record_publication_readiness` reports, per channel, whether a
 record passes the channel's required checks. The agent must inspect current values first. These tools
 use the initiating user's `blueprints.read` or record-scoped permissions:
 `records.write` for migration assessment and relationship changes, and
