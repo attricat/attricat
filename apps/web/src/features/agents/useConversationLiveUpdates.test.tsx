@@ -19,7 +19,12 @@ class TestEventSource {
   addEventListener = (type: string, listener: (event: Event) => void) => {
     this.listeners.set(type, listener);
   };
-  emit = (type: string) => this.listeners.get(type)?.(new Event(type));
+  emit = (type: string, data?: unknown) =>
+    this.listeners.get(type)?.(
+      data === undefined
+        ? new Event(type)
+        : new MessageEvent(type, { data: JSON.stringify(data) }),
+    );
   fail = () => this.onerror?.(new Event('error'));
   open = () => this.onopen?.(new Event('open'));
 }
@@ -41,6 +46,11 @@ const Probe = ({ runs }: { runs: AgentRun[] }) => {
   return (
     <>
       <div>{live.connected ? 'Connected' : 'Polling'}</div>
+      {live.bulkProgress.map((progress) => (
+        <div key={progress.tool_call_id}>
+          {`Bulk ${progress.applied}/${progress.total}`}
+        </div>
+      ))}
       {live.error && <div role="alert">{live.error}</div>}
     </>
   );
@@ -119,5 +129,33 @@ describe('useConversationLiveUpdates', () => {
     await vi.runAllTimersAsync();
     expect(invalidate).not.toHaveBeenCalled();
     expect(sources[0].close).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the latest bulk edit progress while its run is active', () => {
+    const client = new QueryClient();
+    const tree = (runs: AgentRun[]) => (
+      <QueryClientProvider client={client}>
+        <Probe runs={runs} />
+      </QueryClientProvider>
+    );
+    const view = render(tree([run]));
+    const progress = (applied: number) => ({
+      run_id: run.id,
+      payload: {
+        tool_call_id: '123e4567-e89b-12d3-a456-426614174009',
+        record_id: '123e4567-e89b-12d3-a456-426614174010',
+        state: 'applied',
+        applied,
+        total: 4,
+      },
+    });
+    act(() => sources[0].emit('bulk_progress', progress(1)));
+    act(() => sources[0].emit('bulk_progress', progress(2)));
+    expect(screen.getByText('Bulk 2/4')).toBeTruthy();
+    expect(screen.queryByText('Bulk 1/4')).toBeNull();
+    act(() => sources[0].emit('bulk_progress', { run_id: run.id }));
+    expect(screen.getByText('Bulk 2/4')).toBeTruthy();
+    view.rerender(tree([{ ...run, status: 'completed' }]));
+    expect(screen.queryByText('Bulk 2/4')).toBeNull();
   });
 });

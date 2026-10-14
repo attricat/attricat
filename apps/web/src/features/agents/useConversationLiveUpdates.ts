@@ -3,6 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { agentRunEventsUrl } from './api';
 import {
+  bulkProgressEvent,
+  bulkProgressSchema,
+  type BulkProgress,
+} from './bulkEdits';
+import {
   activeRunStatuses,
   conversationEventBatchDelayMs,
   runUpdateEvents,
@@ -22,6 +27,9 @@ export const useConversationLiveUpdates = (
     .sort()
     .join(',');
   const subscriptionKey = `${conversationId}:${activeRunIds}`;
+  const [bulkProgress, setBulkProgress] = useState<
+    Record<string, BulkProgress>
+  >({});
   const [connection, setConnection] = useState<{
     key: string;
     connected: boolean;
@@ -60,6 +68,21 @@ export const useConversationLiveUpdates = (
       runUpdateEvents.forEach((type) =>
         source.addEventListener(type, scheduleRefresh),
       );
+      source.addEventListener(bulkProgressEvent, (event: MessageEvent) => {
+        let data: unknown;
+        try {
+          data = JSON.parse(String(event.data));
+        } catch {
+          return;
+        }
+        const parsed = bulkProgressSchema.safeParse(data);
+        if (disposed || !parsed.success) return;
+        const progress = { ...parsed.data.payload, run_id: parsed.data.run_id };
+        setBulkProgress((current) => ({
+          ...current,
+          [progress.tool_call_id]: progress,
+        }));
+      });
       source.onerror = () => {
         open.delete(id);
         report(true);
@@ -74,7 +97,12 @@ export const useConversationLiveUpdates = (
   }, [activeRunIds, client, conversationId, subscriptionKey]);
 
   const current = connection?.key === subscriptionKey ? connection : undefined;
+  const activeRuns = new Set(activeRunIds.split(','));
   return {
+    /** The latest progress of each bulk edit an active run is applying. */
+    bulkProgress: Object.values(bulkProgress).filter((progress) =>
+      activeRuns.has(progress.run_id),
+    ),
     connected: Boolean(activeRunIds && current?.connected),
     error:
       activeRunIds && current?.failed

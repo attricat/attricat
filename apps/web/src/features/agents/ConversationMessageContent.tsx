@@ -9,6 +9,8 @@ import {
   Typography,
 } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
+import { bulkEditResultSchema, bulkEditToolName } from './bulkEdits';
+import { BulkEditResult } from './BulkEditResult';
 import { useTranslation } from 'react-i18next';
 import '../../i18n';
 import { jsonIndent, messageRoles, uuidPattern } from './constants';
@@ -69,6 +71,10 @@ const ToolResult = ({ content }: { content: Record<string, unknown> }) => {
   const name =
     typeof content.name === 'string' ? content.name : t('agents.unknownTool');
   const result = content.result;
+  const bulkResult =
+    name === bulkEditToolName
+      ? bulkEditResultSchema.safeParse(result)
+      : undefined;
 
   return (
     <Stack spacing={1}>
@@ -87,6 +93,7 @@ const ToolResult = ({ content }: { content: Record<string, unknown> }) => {
                 : result.url}
           </Link>
         )}
+      {bulkResult?.success && <BulkEditResult result={bulkResult.data} />}
       <JsonDetails label={t('agents.showResultJson')}>{result}</JsonDetails>
     </Stack>
   );
