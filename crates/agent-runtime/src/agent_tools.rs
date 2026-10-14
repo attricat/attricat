@@ -1588,6 +1588,7 @@ pub async fn execute_read(
                     json!({
                         "id": comment.id, "author_user_id": comment.author_user_id,
                         "author_display_name": comment.author_display_name,
+                        "author_kind": comment.author_kind,
                         "body": comment.body.chars().take(MAX_COMMENT_BODY_CHARS).collect::<String>(),
                         "body_truncated": truncated, "revision": comment.revision,
                         "created_at": comment.created_at, "updated_at": comment.updated_at,

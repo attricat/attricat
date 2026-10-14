@@ -66,7 +66,10 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     ) -> Result<CreatedWorkspaceUser, RepositoryError> {
         self.require_member_permission(actor_id, workspace_id, "members.manage")
             .await?;
-        if email != email.trim().to_lowercase() || !email.contains('@') {
+        if email != email.trim().to_lowercase()
+            || !email.contains('@')
+            || super::system_users::is_reserved_email(email)
+        {
             return Err(RepositoryError::InvitationInvalid);
         }
         if invitation.is_none() && action_digest.is_some() {
@@ -515,6 +518,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             .await?;
         if email != email.trim().to_lowercase()
             || !email.contains('@')
+            || super::system_users::is_reserved_email(email)
             || digest.len() != 32
             || expires_at <= Utc::now()
         {
@@ -592,7 +596,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         Self::lock_invitation_acceptance_on(&mut tx, digest).await?;
         let invitation = sqlx::query("SELECT id, workspace_id, invitee_email, role_id, scope_type, scope_target_id FROM workspace_invitations WHERE token_digest = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > clock_timestamp() FOR UPDATE").bind(digest).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::InvitationInvalid)?;
         let email: String = invitation.try_get("invitee_email")?;
-        let user_ok: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND state = 'active' AND email = $2 AND email_verified_at IS NOT NULL)").bind(user_id).bind(&email).fetch_one(&mut *tx).await?;
+        let user_ok: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND kind = 'person' AND state = 'active' AND email = $2 AND email_verified_at IS NOT NULL)").bind(user_id).bind(&email).fetch_one(&mut *tx).await?;
         if !user_ok {
             return Err(RepositoryError::InvitationInvalid);
         }

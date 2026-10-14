@@ -578,7 +578,8 @@ impl AttricatRepository {
                 "SELECT m.user_id FROM team_members tm JOIN teams t ON t.id=tm.team_id
                  JOIN workspace_memberships m ON m.id=tm.membership_id
                  WHERE tm.workspace_id=$1 AND tm.team_id=ANY($2) AND t.deleted_at IS NULL
-                 UNION SELECT author_user_id FROM record_comments WHERE workspace_id=$1 AND record_id=$3",
+                 UNION SELECT c.author_user_id FROM record_comments c JOIN users u ON u.id=c.author_user_id
+                 WHERE c.workspace_id=$1 AND c.record_id=$3 AND u.kind='person'",
             )
             .bind(self.workspace_id_for_runtime())
             .bind(ids(PrincipalKind::Team))

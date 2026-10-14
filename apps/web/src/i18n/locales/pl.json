@@ -19,7 +19,8 @@
     "count_one": "{{count}} komentarz",
     "count_few": "{{count}} komentarze",
     "count_many": "{{count}} komentarzy",
-    "count_other": "{{count}} komentarza"
+    "count_other": "{{count}} komentarza",
+    "systemAuthor": "System"
   },
   "markdown": {
     "write": "Edytuj",
