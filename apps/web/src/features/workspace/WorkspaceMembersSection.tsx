@@ -16,7 +16,7 @@ import {
 import { useRef, useState } from 'react';
 import { UserAvatar } from '../../components/UserAvatar';
 import { userAvatarSizes } from '../../components/userAvatars';
-import { authQueryKeys } from '../auth/queryKeys';
+import { invalidateAuthorization } from '../auth/invalidateAuthorization';
 import { principalQueryKeys } from '../principals/queryKeys';
 import { useTranslation } from 'react-i18next';
 import {
@@ -63,7 +63,7 @@ export const WorkspaceMembersSection = ({
     queryFn: listAssignableRoles,
   });
   const refresh = () => {
-    void client.invalidateQueries({ queryKey: authQueryKeys.session() });
+    void invalidateAuthorization(client);
     // Assignee pickers list members, so membership changes refresh them too.
     void client.invalidateQueries({ queryKey: principalQueryKeys.directory() });
     return client.invalidateQueries({ queryKey: workspaceQueryKeys.members() });

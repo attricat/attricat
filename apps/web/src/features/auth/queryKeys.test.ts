@@ -6,4 +6,13 @@ describe('auth query keys', () => {
     expect(authQueryKeys.all()).toEqual(['auth']);
     expect(authQueryKeys.session()).toEqual(['auth', 'session']);
   });
+
+  it('keeps every access check beneath one invalidation root', () => {
+    expect(authQueryKeys.access('records.write', 'record', ['a'])).toEqual([
+      ...authQueryKeys.accessAll(),
+      'records.write',
+      'record',
+      ['a'],
+    ]);
+  });
 });

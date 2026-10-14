@@ -14,7 +14,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useRef, useState } from 'react';
-import { authQueryKeys } from '../auth/queryKeys';
+import { invalidateAuthorization } from '../auth/invalidateAuthorization';
 import { useTranslation } from 'react-i18next';
 import { ArchiveIcon, CopyIcon, PencilIcon } from 'lucide-react';
 import { createRole, listPermissions, listRoles } from './api';
@@ -46,7 +46,7 @@ export const WorkspaceRolesSection = ({
     queryFn: listPermissions,
   });
   const refresh = () => {
-    void client.invalidateQueries({ queryKey: authQueryKeys.session() });
+    void invalidateAuthorization(client);
     return client.invalidateQueries({ queryKey: workspaceQueryKeys.roles() });
   };
   const form = useForm({
