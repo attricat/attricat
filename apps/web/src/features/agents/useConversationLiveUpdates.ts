@@ -99,9 +99,15 @@ export const useConversationLiveUpdates = (
   const current = connection?.key === subscriptionKey ? connection : undefined;
   const activeRuns = new Set(activeRunIds.split(','));
   return {
-    /** The latest progress of each bulk edit an active run is applying. */
-    bulkProgress: Object.values(bulkProgress).filter((progress) =>
-      activeRuns.has(progress.run_id),
+    /**
+     * The latest progress of each bulk edit an active run is still applying;
+     * one that finished or stopped reports through its tool result instead.
+     */
+    bulkProgress: Object.values(bulkProgress).filter(
+      (progress) =>
+        activeRuns.has(progress.run_id) &&
+        progress.state !== 'failed' &&
+        progress.applied < progress.total,
     ),
     connected: Boolean(activeRunIds && current?.connected),
     error:
