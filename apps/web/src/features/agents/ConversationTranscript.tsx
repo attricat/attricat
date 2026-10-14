@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Box, CircularProgress, Stack, Typography } from '@mui/material';
 import { ApprovalCard } from './ApprovalCard';
+import type { BulkProgress } from './bulkEdits';
+import { BulkEditProgress } from './BulkEditProgress';
 import { loadingProgressSize, transcriptEndScrollMargin } from './constants';
 import type { AgentRun, AgentToolCall, ConversationMessage } from './schemas';
 import { ThinkingIndicator } from './ThinkingIndicator';
@@ -9,6 +11,7 @@ import { TranscriptMessage } from './TranscriptMessage';
 
 export type ConversationTranscriptProps = {
   approvals: AgentToolCall[] | undefined;
+  bulkProgress?: BulkProgress[];
   isDecidingApproval: boolean;
   isLoadingMessages: boolean;
   isThinking: boolean | undefined;
@@ -21,6 +24,7 @@ export type ConversationTranscriptProps = {
 
 export const ConversationTranscript = ({
   approvals,
+  bulkProgress,
   isDecidingApproval,
   isLoadingMessages,
   isThinking,
@@ -58,6 +62,9 @@ export const ConversationTranscript = ({
           </Typography>
         </Stack>
       )}
+      {bulkProgress?.map((progress) => (
+        <BulkEditProgress key={progress.tool_call_id} progress={progress} />
+      ))}
       {isThinking && <ThinkingIndicator />}
       {latestRun?.error_message && (
         <Alert severity="error">

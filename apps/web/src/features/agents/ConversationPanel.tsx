@@ -76,6 +76,7 @@ export const ConversationPanel = ({
       <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
         <ConversationTranscript
           approvals={approvals.data}
+          bulkProgress={live.bulkProgress}
           isDecidingApproval={decide.isPending}
           isLoadingMessages={messages.isPending}
           isThinking={

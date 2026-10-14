@@ -10,6 +10,8 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { CheckIcon, XIcon } from 'lucide-react';
+import { bulkEditProposalSchema, bulkEditToolName } from './bulkEdits';
+import { BulkEditPreview } from './BulkEditPreview';
 import { jsonIndent } from './constants';
 import type { AgentToolCall } from './schemas';
 
@@ -23,6 +25,10 @@ export const ApprovalCard = ({
   onDecide: (approvalId: string, approved: boolean) => void;
 }) => {
   const { t } = useTranslation();
+  const bulkEdit =
+    call.tool_name === bulkEditToolName
+      ? bulkEditProposalSchema.safeParse(call.arguments)
+      : undefined;
   return (
     <Paper sx={{ border: 1, borderColor: 'warning.main', p: 2.5 }}>
       <Typography variant="h6">
@@ -31,6 +37,7 @@ export const ApprovalCard = ({
       {call.change_summary && (
         <Typography sx={{ mt: 1 }}>{call.change_summary}</Typography>
       )}
+      {bulkEdit?.success && <BulkEditPreview proposal={bulkEdit.data} />}
       <Accordion
         disableGutters
         elevation={0}

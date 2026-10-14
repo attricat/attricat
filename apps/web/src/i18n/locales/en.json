@@ -195,7 +195,35 @@
     "toolResult": "Tool result",
     "showCallJson": "Show call JSON",
     "showResultJson": "Show result JSON",
-    "unknownTool": "unknown tool"
+    "unknownTool": "unknown tool",
+    "bulkEdit": {
+      "preview": "Records this bulk edit changes",
+      "columns": {
+        "record": "Record",
+        "attribute": "Attribute",
+        "change": "Current → proposed"
+      },
+      "changesTo": "changes to",
+      "noValue": "No value",
+      "showAll": "Show all {{count}} records",
+      "showFirst": "Show only the first {{count}} records",
+      "failureNote": "Records change one at a time. If a record fails, the edit stops there: records before it keep their changes, later records stay unchanged, and Attricat leaves a comment on the failed record.",
+      "progress_one": "Applying the bulk edit: {{applied}} of {{count}} record changed",
+      "progress_other": "Applying the bulk edit: {{applied}} of {{count}} records changed",
+      "applied_one": "{{count}} record changed",
+      "applied_other": "{{count}} records changed",
+      "failed_one": "{{count}} record failed",
+      "failed_other": "{{count}} records failed",
+      "notRun_one": "{{count}} record not changed",
+      "notRun_other": "{{count}} records not changed",
+      "stoppedAt": "The edit stopped at",
+      "failure": "{{code}}: {{message}}",
+      "appliedRecords_one": "Show the changed record",
+      "appliedRecords_other": "Show the {{count}} changed records",
+      "notRunRecords_one": "Show the record that was not changed",
+      "notRunRecords_other": "Show the {{count}} records that were not changed",
+      "recordWithoutLabel": "Record {{id}}"
+    }
   },
   "inbox": {
     "title": "Inbox",
