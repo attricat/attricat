@@ -116,6 +116,7 @@ mod solution_packs;
 mod status;
 mod structural_constraints;
 mod system_annotations;
+mod system_users;
 mod tasks;
 mod teams;
 mod tokens;
@@ -149,6 +150,7 @@ pub use notifications::{
 pub use record_comments::{COMMENT_PAGE_SIZE, RecordComment};
 pub use saved_views::SavedView;
 pub use structural_constraints::UniqueKeyDuplicate;
+pub use system_users::{SYSTEM_USER_DISPLAY_NAME, system_user_email};
 
 pub use agents::{
     AgentRun, AgentRunEvent, AgentToolCall, ApprovalDecision, Conversation, ConversationMessage,
@@ -1446,6 +1448,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         .bind(workspace_id)
         .execute(&self.pool)
         .await?;
+        self.ensure_workspace_system_user(workspace_id).await?;
         Ok(())
     }
 

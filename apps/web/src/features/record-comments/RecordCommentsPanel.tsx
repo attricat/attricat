@@ -6,6 +6,7 @@ import {
 import {
   Box,
   Button,
+  Chip,
   CircularProgress,
   Paper,
   Stack,
@@ -14,12 +15,13 @@ import {
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
+import { BrandIcon } from '../../components/BrandIcon';
 import { UserAvatar } from '../../components/UserAvatar';
 import { Timestamp } from '../../time/Timestamp';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import { listComments } from './api';
-import { commentsSectionId } from './constants';
+import { commentsSectionId, systemAuthorKind } from './constants';
 import { CommentComposer } from './CommentComposer';
 import { MarkdownContent } from '../markdown/MarkdownContent';
 import { commentQueryKeys } from './queryKeys';
@@ -64,13 +66,20 @@ const CommentItem = ({
         spacing={1}
         sx={{ alignItems: 'baseline', flexWrap: 'wrap', mb: 1 }}
       >
-        <UserAvatar
-          name={comment.author_display_name || comment.author_email}
-          size={32}
-        />
+        {comment.author_kind === systemAuthorKind ? (
+          <BrandIcon />
+        ) : (
+          <UserAvatar
+            name={comment.author_display_name || comment.author_email}
+            size={32}
+          />
+        )}
         <Typography variant="subtitle2">
           {comment.author_display_name || comment.author_email}
         </Typography>
+        {comment.author_kind === systemAuthorKind && (
+          <Chip label={t('comments.systemAuthor')} size="small" />
+        )}
         <Typography component="span" variant="caption" color="text.secondary">
           <Timestamp value={comment.created_at} />
         </Typography>

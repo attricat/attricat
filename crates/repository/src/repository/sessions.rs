@@ -96,7 +96,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         email: &str,
     ) -> Result<Option<LocalLoginCredential>, RepositoryError> {
         let row = sqlx::query(
-            "SELECT credential.user_id, credential.password_hash, user_account.state AS user_state, user_account.email_verified_at, user_account.security_version, credential.credential_version FROM local_password_credentials credential JOIN users user_account ON user_account.id = credential.user_id WHERE user_account.email = lower(btrim($1))",
+            "SELECT credential.user_id, credential.password_hash, user_account.state AS user_state, user_account.email_verified_at, user_account.security_version, credential.credential_version FROM local_password_credentials credential JOIN users user_account ON user_account.id = credential.user_id WHERE user_account.email = lower(btrim($1)) AND user_account.kind = 'person'",
         )
         .bind(email)
         .fetch_optional(&self.pool)
@@ -223,7 +223,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         expires_at: DateTime<Utc>,
     ) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await?;
-        let result = sqlx::query("INSERT INTO browser_sessions (id, user_id, workspace_id, issued_security_version, issued_credential_version, session_digest, csrf_digest, expires_at) SELECT $1, $2, $3, $4, $5, $6, $7, $8 WHERE EXISTS (SELECT 1 FROM users u JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id WHERE u.id = $2 AND u.state = 'active' AND u.security_version = $4 AND c.credential_version = $5 AND m.workspace_id = $3 AND m.state = 'active')")
+        let result = sqlx::query("INSERT INTO browser_sessions (id, user_id, workspace_id, issued_security_version, issued_credential_version, session_digest, csrf_digest, expires_at) SELECT $1, $2, $3, $4, $5, $6, $7, $8 WHERE EXISTS (SELECT 1 FROM users u JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id WHERE u.id = $2 AND u.kind = 'person' AND u.state = 'active' AND u.security_version = $4 AND c.credential_version = $5 AND m.workspace_id = $3 AND m.state = 'active')")
             .bind(id).bind(credential.user_id).bind(workspace_id).bind(credential.security_version).bind(credential.credential_version).bind(session.as_ref()).bind(csrf.as_ref()).bind(expires_at)
             .execute(&mut *tx)
             .await?;
@@ -239,7 +239,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         session: &SessionDigest,
     ) -> Result<Option<ValidBrowserSession>, RepositoryError> {
         let row = sqlx::query(
-            "SELECT s.user_id, s.workspace_id, s.csrf_digest, (w.deleted_at IS NULL) AS workspace_active, w.attricat_generation, w.contexts_generation, w.extensions_generation, w.access_generation FROM browser_sessions s JOIN users u ON u.id = s.user_id JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id AND m.workspace_id = s.workspace_id JOIN workspaces w ON w.id = s.workspace_id WHERE s.session_digest = $1 AND s.revoked_at IS NULL AND s.expires_at > clock_timestamp() AND u.state = 'active' AND u.security_version = s.issued_security_version AND c.credential_version = s.issued_credential_version AND m.state = 'active'",
+            "SELECT s.user_id, s.workspace_id, s.csrf_digest, (w.deleted_at IS NULL) AS workspace_active, w.attricat_generation, w.contexts_generation, w.extensions_generation, w.access_generation FROM browser_sessions s JOIN users u ON u.id = s.user_id JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id AND m.workspace_id = s.workspace_id JOIN workspaces w ON w.id = s.workspace_id WHERE s.session_digest = $1 AND s.revoked_at IS NULL AND s.expires_at > clock_timestamp() AND u.kind = 'person' AND u.state = 'active' AND u.security_version = s.issued_security_version AND c.credential_version = s.issued_credential_version AND m.state = 'active'",
         )
         .bind(session.as_ref())
         .fetch_optional(&self.pool)
@@ -344,7 +344,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         subject: &str,
     ) -> Result<Option<Uuid>, RepositoryError> {
         Ok(sqlx::query_scalar(
-            "SELECT user_id FROM external_identities WHERE issuer = $1 AND subject = $2",
+            "SELECT i.user_id FROM external_identities i JOIN users u ON u.id = i.user_id WHERE i.issuer = $1 AND i.subject = $2 AND u.kind = 'person'",
         )
         .bind(issuer)
         .bind(subject)
@@ -370,7 +370,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         }
         let mut tx = self.pool.begin().await?;
         let user = sqlx::query(
-            "SELECT security_version, email_verified_at, state FROM users WHERE id = $1 FOR UPDATE",
+            "SELECT security_version, email_verified_at, state FROM users WHERE id = $1 AND kind = 'person' FOR UPDATE",
         )
         .bind(user_id)
         .fetch_optional(&mut *tx)

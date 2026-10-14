@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { maxCommentLength } from './constants';
+import { authorKinds, maxCommentLength } from './constants';
 
 export const commentDraftSchema = z.object({ body: z.string() });
 export const commentInputSchema = z.object({
@@ -17,6 +17,7 @@ export const commentSchema = z.object({
   author_user_id: z.uuid(),
   author_display_name: z.string().nullable(),
   author_email: z.string(),
+  author_kind: z.enum(authorKinds),
   body: z.string(),
   revision: z.number().int().positive(),
   created_at: z.string().datetime(),

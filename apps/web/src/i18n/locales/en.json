@@ -17,7 +17,8 @@
     "reload": "Reload comments and keep draft",
     "conflict": "This comment changed elsewhere. Reload comments, then choose Edit and Restore draft to reconcile your text with the latest version.",
     "count_one": "{{count}} comment",
-    "count_other": "{{count}} comments"
+    "count_other": "{{count}} comments",
+    "systemAuthor": "System"
   },
   "markdown": {
     "write": "Write",
