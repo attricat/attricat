@@ -1,5 +1,6 @@
 import { Alert, Box } from '@mui/material';
 import { useState } from 'react';
+import { useCan } from '../auth/useCan';
 import type { RecordItem } from '../records/api';
 import { SaveSelectionAsSearchDialog } from '../saved-views/SaveSelectionAsSearchDialog';
 import { ExplorerResultsTable } from './ExplorerResultsTable';
@@ -39,9 +40,10 @@ export const ExplorerResults = ({
     relationshipFilters,
     relationshipTreeSelections,
     results,
-    session,
   } = data;
-  const capabilities = session.data?.capabilities;
+  const canReadDataHealth = useCan('data_health_read');
+  const canPublish = useCan('records_publish');
+  const canDelete = useCan('records_delete');
   const resultPages = results.data?.pages ?? [];
   const firstPage = resultPages[0];
   const resultBlueprint = firstPage?.blueprint;
@@ -70,7 +72,7 @@ export const ExplorerResults = ({
             effectiveVersion === currentBlueprint?.version &&
             hiddenOutdatedCount > 0 && (
               <HiddenOutdatedNotice
-                canReviewMigrations={Boolean(capabilities?.data_health_read)}
+                canReviewMigrations={canReadDataHealth}
                 capped={Boolean(firstPage?.hidden_outdated_count_capped)}
                 count={hiddenOutdatedCount}
                 onShowAllVersions={onShowAllVersions}
@@ -89,8 +91,8 @@ export const ExplorerResults = ({
                 relationshipFilters,
                 relationshipTreeSelections,
               ])}
-              canPublish={capabilities?.records_publish === true}
-              canDelete={capabilities?.records_delete === true}
+              canPublish={canPublish}
+              canDelete={canDelete}
               hasNextPage={results.hasNextPage}
               isFetching={results.isFetching}
               isFetchingNextPage={results.isFetchingNextPage}

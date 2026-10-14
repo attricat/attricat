@@ -4,8 +4,7 @@ import { Stack } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import {
   extensionDetail,
   lifecycleExtension,
@@ -54,9 +53,7 @@ export const InstalledExtensionPage = ({
     queryKey: extensionManagementQueryKeys.detail(extensionId),
     queryFn: () => extensionDetail(extensionId),
   });
-  const canManage =
-    useQuery({ queryKey: authQueryKeys.session(), queryFn: currentSession })
-      .data?.capabilities?.extensions_manage === true;
+  const canManage = useCan('extensions_manage');
   const action = useMutation({
     mutationFn: (input: InstallationAction) =>
       runInstallationAction(extensionId, input).then(() => undefined),

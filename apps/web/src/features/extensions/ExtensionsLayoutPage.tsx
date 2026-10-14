@@ -5,6 +5,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
 import {
@@ -21,10 +22,11 @@ export const ExtensionsLayoutPage = () => {
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
+  const canManage = useCan('extensions_manage');
   const layout = useQuery({
     queryKey: extensionManagementQueryKeys.layout(),
     queryFn: workspaceExtensionLayout,
-    enabled: session.data?.capabilities?.extensions_manage === true,
+    enabled: canManage,
   });
   const saveLayout = useMutation({
     mutationFn: updateWorkspaceExtensionLayout,
@@ -69,7 +71,7 @@ export const ExtensionsLayoutPage = () => {
     }
   }, [form, layout.data]);
 
-  if (session.data && !session.data.capabilities?.extensions_manage) {
+  if (session.data && !canManage) {
     return (
       <Alert severity="error">{t('extensions.notAuthorizedManage')}</Alert>
     );

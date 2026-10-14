@@ -2,8 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Box, Paper, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import { ErrorNotice } from './ExtensionErrorNotice';
 import { repositoryParts } from './extensionPageUtils';
 import { discoverExtensions } from './managementApi';
@@ -11,14 +10,11 @@ import { extensionManagementQueryKeys } from './managementQueryKeys';
 
 export const ExtensionsMarketplacePage = () => {
   const { t } = useTranslation();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const canRead = useCan('extensions_read');
   const marketplace = useQuery({
     queryKey: extensionManagementQueryKeys.marketplace(),
     queryFn: discoverExtensions,
-    enabled: session.data?.capabilities?.extensions_read === true,
+    enabled: canRead,
   });
 
   return (

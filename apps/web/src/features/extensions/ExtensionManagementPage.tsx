@@ -15,6 +15,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import { extensionManagementTabIds } from './constants';
 import { ExtensionIcon } from '../../components/systemIcons';
 
@@ -54,8 +55,10 @@ export const ExtensionManagementPage = ({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
+  const canRead = useCan('extensions_read');
+  const canManage = useCan('extensions_manage');
 
-  if (session.data && !session.data.capabilities?.extensions_read) {
+  if (session.data && !canRead) {
     return (
       <PageContainer>
         <Alert severity="error">{t('extensions.notAuthorizedView')}</Alert>
@@ -70,7 +73,7 @@ export const ExtensionManagementPage = ({
         title={t('extensions.title')}
         description={t('extensions.description')}
         actions={
-          session.data?.capabilities?.extensions_manage ? (
+          canManage ? (
             <Button
               component={Link}
               startIcon={<UploadIcon />}

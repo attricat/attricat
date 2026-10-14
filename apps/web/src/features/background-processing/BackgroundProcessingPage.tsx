@@ -14,6 +14,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { Timestamp } from '../../time/Timestamp';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import { getBackgroundProcessingStatus } from './api';
 import { BackgroundProcessingTable } from './BackgroundProcessingTable';
 import {
@@ -30,7 +31,7 @@ export const BackgroundProcessingPage = () => {
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const canRead = session.data?.capabilities?.data_health_read === true;
+  const canRead = useCan('data_health_read');
   const status = useQuery({
     queryKey: backgroundProcessingQueryKeys.status(session.data?.workspace_id),
     queryFn: getBackgroundProcessingStatus,

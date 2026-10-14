@@ -8,6 +8,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import {
   acknowledgeFinding,
   disableRule,
@@ -52,8 +53,8 @@ export const RuleInspectionPage = ({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const canRead = session.data?.capabilities?.rules_read === true;
-  const canManage = session.data?.capabilities?.rules_manage === true;
+  const canRead = useCan('rules_read');
+  const canManage = useCan('rules_manage');
   // Findings and runs name their rule revision from the definitions.
   const rules = useQuery({ ...ruleDefinitionsOptions(), enabled: canRead });
   const revisions = ruleRevisionsByKey(rules.data ?? []);

@@ -1,19 +1,13 @@
-import { useQuery } from '@tanstack/react-query';
 import { Button, Stack, Typography } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { PlusIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import { PersonalTokens } from './PersonalTokens';
 
 export const PersonalTokensPage = () => {
   const { t } = useTranslation();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
-  const canManage = session.data?.capabilities?.tokens_manage === true;
+  const canManage = useCan('tokens_manage');
   return (
     <Stack spacing={5}>
       <Stack

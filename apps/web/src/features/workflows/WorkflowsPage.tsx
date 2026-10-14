@@ -21,6 +21,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import { listWorkflowRuns, listWorkflows, type Workflow } from './api';
 import { workflowQueryKeys } from './queryKeys';
 import {
@@ -44,10 +45,8 @@ export const WorkflowsPage = () => {
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const canRead =
-    session.data?.capabilities?.[workflowCapabilities.read] === true;
-  const canManage =
-    session.data?.capabilities?.[workflowCapabilities.manage] === true;
+  const canRead = useCan(workflowCapabilities.read);
+  const canManage = useCan(workflowCapabilities.manage);
   const workflows = useQuery({
     queryKey: workflowQueryKeys.all(),
     queryFn: listWorkflows,

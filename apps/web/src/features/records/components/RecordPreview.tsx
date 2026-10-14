@@ -6,8 +6,7 @@ import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
 import { BlueprintLink } from '../../blueprints/BlueprintLink';
 import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
-import { currentSession } from '../../auth/api';
-import { authQueryKeys } from '../../auth/queryKeys';
+import { useCan } from '../../auth/useCan';
 import { getCurrentBlueprint, type AttricatRecord } from '../api';
 import {
   RECORD_HEADER_CONTEXT_VERSION,
@@ -86,11 +85,8 @@ export const RecordPreview = ({
   const { contextId, contexts, defaultContextId, setSelectedContext } =
     useRecordContextSelection(initialContextId);
   const selectedContextId = contextId ?? undefined;
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
-  const canPublish = session.data?.capabilities?.records_publish === true;
+  const canPublish = useCan('records_publish');
+  const canDeleteRecords = useCan('records_delete');
   const publications = useRecordPublications(recordId, contextId, canPublish);
   const { blueprint, recordForm, resolved, statusTransitions } =
     useRecordPreviewData(recordId, contextId);
@@ -192,10 +188,7 @@ export const RecordPreview = ({
               schemaOutdated={schemaOutdated}
               showExtensions={Boolean(loaded)}
               onDuplicate={() => setDuplicateOpen(true)}
-              canDelete={
-                session.data?.capabilities?.records_delete === true &&
-                Boolean(resolved.data)
-              }
+              canDelete={canDeleteRecords && Boolean(resolved.data)}
               onDelete={() => setDeleteOpen(true)}
               publication={publications.publication}
               canPublish={canPublish}

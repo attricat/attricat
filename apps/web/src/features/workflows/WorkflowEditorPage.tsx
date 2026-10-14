@@ -5,6 +5,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import { getWorkflowRevision } from './api';
 import { workflowCapabilities } from './constants';
 import { workflowQueryKeys } from './queryKeys';
@@ -23,8 +24,7 @@ export const WorkflowEditorPage = ({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const canManage =
-    session.data?.capabilities?.[workflowCapabilities.manage] === true;
+  const canManage = useCan(workflowCapabilities.manage);
   const source = useQuery({
     queryKey: workflowQueryKeys.revision(workflowId ?? '', sourceVersion ?? 0),
     queryFn: () => getWorkflowRevision(workflowId!, sourceVersion!),

@@ -15,6 +15,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import {
   disableWorkflow,
   enableWorkflowRevision,
@@ -49,10 +50,8 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const canRead =
-    session.data?.capabilities?.[workflowCapabilities.read] === true;
-  const canManage =
-    session.data?.capabilities?.[workflowCapabilities.manage] === true;
+  const canRead = useCan(workflowCapabilities.read);
+  const canManage = useCan(workflowCapabilities.manage);
   const revisions = useQuery({
     queryKey: workflowQueryKeys.revisions(workflowId),
     queryFn: () => listWorkflowRevisions(workflowId),

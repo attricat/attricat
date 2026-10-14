@@ -18,6 +18,7 @@ import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { SystemHealthIcon } from '../../components/systemIcons';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import { getSystemHealth } from './api';
 import { systemHealthQueryKeys } from './queryKeys';
 import type { SystemHealth } from './schemas';
@@ -82,7 +83,7 @@ export const SystemHealthPage = () => {
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const canRead = session.data?.capabilities?.data_health_read === true;
+  const canRead = useCan('data_health_read');
   const health = useQuery({
     queryKey: systemHealthQueryKeys.health(),
     queryFn: getSystemHealth,

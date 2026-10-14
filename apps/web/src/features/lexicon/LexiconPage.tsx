@@ -17,6 +17,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { LexiconIcon } from '../../components/systemIcons';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import { supportedLanguages } from '../../i18n';
 import {
   exportLexicon,
@@ -63,7 +64,7 @@ export const LexiconPage = ({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const canEdit = session.data?.capabilities?.blueprints_write === true;
+  const canEdit = useCan('blueprints_write');
   const entries = useQuery({
     queryKey: lexiconQueryKeys.entries(),
     queryFn: ({ signal }) => listStoredLexiconEntries(signal),

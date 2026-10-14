@@ -8,6 +8,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import { sideloadExtension } from './managementApi';
 import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
@@ -31,7 +32,7 @@ export const SideloadExtensionPage = () => {
       if (value.archive) sideload.mutate(value.archive);
     },
   });
-  const canManage = session.data?.capabilities?.extensions_manage === true;
+  const canManage = useCan('extensions_manage');
   if (session.data && !canManage)
     return (
       <PageContainer>

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useDocumentationUrl } from '../app/documentation';
 import { currentSession } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
+import { useCan } from '../features/auth/useCan';
 import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
 import { InboxNavigationIcon } from '../features/notifications/InboxNavigationIcon';
 import { useUnreadNotificationCount } from '../features/notifications/useUnreadNotificationCount';
@@ -96,8 +97,7 @@ export const SideNavigation = ({
   const managementItems = getVisibleManagementNavigationItems(
     session.data?.capabilities,
   );
-  const canBrowseExtensions =
-    session.data?.capabilities?.extensions_read === true;
+  const canBrowseExtensions = useCan('extensions_read');
   const exploreActive = pathname === navigationRoutes.explore;
   const exploreLinkProps = {
     allRecordsSelected: exploreActive && !search.locked,

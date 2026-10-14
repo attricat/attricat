@@ -27,8 +27,7 @@ import {
 import { zonedDateTimeToIso } from '../../time/instantFormat';
 import { useTimeZone } from '../../time/useInstantFormat';
 import { useToast } from '../../components/useToast';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
+import { useCan } from '../auth/useCan';
 import {
   tokenFormMaxWidth,
   tokenPermissionPresets,
@@ -70,11 +69,7 @@ export const CreatePersonalTokenPage = () => {
   const { show } = useToast();
   const navigate = useNavigate();
   const client = useQueryClient();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
-  const canManage = session.data?.capabilities?.tokens_manage === true;
+  const canManage = useCan('tokens_manage');
   const permissions = useQuery({
     enabled: canManage,
     queryKey: profileQueryKeys.tokenPermissions(),
