@@ -64,6 +64,7 @@ use crate::{
     },
 };
 
+mod agent_settings;
 mod agents;
 mod audit_events;
 mod avatars;
@@ -137,6 +138,7 @@ fn summarize_violations(violations: &[CheckViolation]) -> String {
         .join("; ")
 }
 
+pub use agent_settings::{AgentSettings, BulkEditPolicy, DEFAULT_BULK_EDIT_MAX_RECORDS};
 pub use checks::{
     CheckSource, CheckTransition, CheckViolation, MAX_REPORTED_VIOLATIONS, PublicationReadiness,
 };

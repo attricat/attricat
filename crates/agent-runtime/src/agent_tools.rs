@@ -132,6 +132,15 @@ fn attribute_value_parameters() -> Value {
     },"additionalProperties":false}})
 }
 
+/// One scalar value a bulk edit sets on each selected record.
+fn bulk_value_parameters() -> Value {
+    json!({"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","required":["attribute_code","value"],"properties":{
+        "attribute_code":{"type":"string"},
+        "context_id":{"type":["string","null"],"format":"uuid"},
+        "value":{"description":"Typed JSON value."}
+    },"additionalProperties":false}})
+}
+
 fn relationship_targets_parameters() -> Value {
     json!({"type":"array","items":{
         "type":"object","required":["attribute_code","target_record_ids"],"properties":{
@@ -175,6 +184,10 @@ pub enum ToolError {
     ResultTooLarge,
     #[error("the initiating user is not authorized to read this catalog data")]
     Forbidden,
+    /// A deliberate refusal with its own error code, such as a bulk edit
+    /// over the workspace's record limit.
+    #[error("{message}")]
+    Coded { code: &'static str, message: String },
     #[error(transparent)]
     Repository(#[from] RepositoryError),
 }
@@ -186,10 +199,10 @@ pub enum ToolError {
 /// failures use `forbidden` or `tool_error`.
 pub fn tool_error_payload(error: &ToolError) -> Value {
     let ToolError::Repository(error) = error else {
-        let code = if matches!(error, ToolError::Forbidden) {
-            "forbidden"
-        } else {
-            "tool_error"
+        let code = match error {
+            ToolError::Forbidden => "forbidden",
+            ToolError::Coded { code, .. } => code,
+            _ => "tool_error",
         };
         return json!({"code": code, "message": error.to_string()});
     };
@@ -447,6 +460,25 @@ pub fn definitions() -> Vec<ToolDefinition> {
                 pinned_note!()
             ),
             json!({"type":"object","required":["record_id","values"],"properties":{"record_id":{"type":"string","format":"uuid"},"expected_updated_at":expected_updated_at_parameter(),"values":{"type":"array","minItems":1,"items":{"type":"object","required":["kind","attribute_code","context_id","value"],"properties":{"kind":{"const":"scalar"},"attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"},"value":{}},"additionalProperties":false}}},"additionalProperties":false}),
+        ),
+        definition(
+            crate::bulk_edits::TOOL,
+            "Set the same kind of scalar value edit on many existing records with one approval. Use it to apply one change across many records, such as a brand or season on every matching product; use apply_record_batch instead when changes must apply all-or-nothing. Select records either with items, each {record_id, values, context_id?, expected_updated_at?} where context_id applies to values that name no context, or with filter {blueprint, attribute_filters, relationship_filters, context_code?} (shaped like search_records filters and relationship_filters) plus values to set on every match. Values are {attribute_code, context_id?, value}; status, relationship and file attributes cannot be bulk edited. When proposed, the selection becomes an explicit list of records, each pinned to its current state, which the user approves; bulk_edit_too_large means it exceeds the workspace limit, so narrow or split it. After approval, records change one at a time and the edit stops at the first failure, leaving earlier records changed and a comment on the failed record; the result lists applied, failed (record_id, code, message) and not_run records. This change requires approval.",
+            json!({"type":"object","properties":{
+                "items":{"type":"array","minItems":1,"items":{"type":"object","required":["record_id","values"],"properties":{
+                    "record_id":{"type":"string","format":"uuid"},
+                    "values":bulk_value_parameters(),
+                    "context_id":{"type":["string","null"],"format":"uuid"},
+                    "expected_updated_at":expected_updated_at_parameter()
+                },"additionalProperties":false}},
+                "filter":{"type":"object","required":["blueprint"],"properties":{
+                    "blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},
+                    "attribute_filters":attribute_filter_parameters(),
+                    "relationship_filters":relationship_filter_parameters(),
+                    "context_code":{"type":"string"}
+                },"additionalProperties":false},
+                "values":bulk_value_parameters()
+            },"additionalProperties":false}),
         ),
         definition(
             "remove_record_values",
@@ -754,6 +786,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "delete_record"
         | "apply_record_batch"
         | "set_record_values"
+        | crate::bulk_edits::TOOL
         | "remove_record_values"
         | "restore_record_value"
         | "replace_record_relationships"
@@ -899,6 +932,7 @@ pub fn change_summary_named(
             "Set attribute values on record {}.",
             named("record_id")?
         )),
+        crate::bulk_edits::TOOL => crate::bulk_edits::change_summary(arguments),
         "update_record_annotations" => Ok(format!(
             "Update {} on record {}.",
             match (
@@ -3212,17 +3246,17 @@ async fn unknown_blueprint(repository: &AttricatRepository, code: &str) -> ToolE
 
 /// A search's blueprint, context and matching records, shared by the tools
 /// that search and count.
-struct AgentSearchScope {
-    current: crate::model::BlueprintWithAttributes,
-    selected: Option<i64>,
-    search_blueprint: crate::model::BlueprintWithAttributes,
-    context: SearchContext,
-    explanations: HashMap<Uuid, Vec<crate::model::MatchExplanation>>,
+pub(crate) struct AgentSearchScope {
+    pub(crate) current: crate::model::BlueprintWithAttributes,
+    pub(crate) selected: Option<i64>,
+    pub(crate) search_blueprint: crate::model::BlueprintWithAttributes,
+    pub(crate) context: SearchContext,
+    pub(crate) explanations: HashMap<Uuid, Vec<crate::model::MatchExplanation>>,
     /// `None` when neither a query nor a filter narrows the blueprint.
-    matching: Option<Vec<Uuid>>,
+    pub(crate) matching: Option<Vec<Uuid>>,
 }
 
-async fn agent_search_scope(
+pub(crate) async fn agent_search_scope(
     repository: &AttricatRepository,
     actor: Uuid,
     blueprint: &crate::model::SearchBlueprint,
