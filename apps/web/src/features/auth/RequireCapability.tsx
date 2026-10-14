@@ -3,29 +3,39 @@ import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
-import { currentSession } from './api';
+import { currentSession, type AccessTargetKind } from './api';
 import { authQueryKeys } from './queryKeys';
-import { useCan, type Capability } from './useCan';
+import { useAccess, type Capability } from './useCan';
 
 /**
- * Renders a page only for callers holding `capability`, and a refusal for a
- * loaded session without it. Session errors fall through to the page, whose
- * requests the server still authorizes.
+ * Renders a page only for callers holding `capability`, workspace-wide or on
+ * `target` when one is named, and a refusal for a loaded session without it.
+ * Session errors fall through to the page, whose requests the server still
+ * authorizes.
  */
 export const RequireCapability = ({
   capability,
   children,
+  target,
 }: {
   capability: Capability;
   children: ReactNode;
+  target?: { kind: AccessTargetKind; id: string };
 }) => {
   const { t } = useTranslation();
   const session = useQuery({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const allowed = useCan(capability);
-  if (session.isPending) return null;
+  const access = useAccess(
+    capability,
+    target?.kind ?? 'record',
+    target ? [target.id] : [],
+  );
+  const allowed = target
+    ? access.can(target.id)
+    : session.data?.capabilities?.[capability] === true;
+  if (session.isPending || (target && access.isPending)) return null;
   if (session.data && !allowed)
     return (
       <PageContainer>

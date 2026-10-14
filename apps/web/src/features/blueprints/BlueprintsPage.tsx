@@ -28,7 +28,7 @@ import { blueprintQueryKeys } from './queryKeys';
 import { EmptyState } from '../../components/EmptyState';
 import { BlueprintIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
-import { useCan } from '../auth/useCan';
+import { useAccess, useCan } from '../auth/useCan';
 
 export const BlueprintsPage = () => {
   const { t } = useTranslation();
@@ -38,6 +38,11 @@ export const BlueprintsPage = () => {
     queryKey: blueprintQueryKeys.catalogue(),
     queryFn: listBlueprints,
   });
+  const editAccess = useAccess(
+    'blueprints_write',
+    'blueprint',
+    (blueprints.data ?? []).map((blueprint) => blueprint.id),
+  );
   const matchingBlueprints = (blueprints.data ?? []).filter((blueprint) => {
     const term = query.toLowerCase();
     return (
@@ -157,7 +162,7 @@ export const BlueprintsPage = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      {canEdit && (
+                      {editAccess.can(blueprint.id) && (
                         <RouterButton
                           params={{
                             blueprintId: blueprint.id,

@@ -19,6 +19,8 @@ pub const VIEWER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000_0000_4000_8000_00000
 pub enum GrantScope {
     Workspace,
     Record(Uuid),
+    BlueprintFamily(Uuid),
+    ContextSubtree(Uuid),
 }
 
 /// A client that authenticates as `user` in the bootstrap workspace through
@@ -64,6 +66,8 @@ pub async fn grant_role(pool: &PgPool, membership: Uuid, role_id: Uuid, scope: G
     let (scope_type, target) = match scope {
         GrantScope::Workspace => ("workspace", bootstrap_workspace_id()),
         GrantScope::Record(record_id) => ("record", record_id),
+        GrantScope::BlueprintFamily(blueprint_id) => ("blueprint_family", blueprint_id),
+        GrantScope::ContextSubtree(context_id) => ("context_subtree", context_id),
     };
     sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, $4, $5, $6)")
         .bind(grant)

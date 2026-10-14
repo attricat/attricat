@@ -8,7 +8,11 @@ import { publishBlueprintRevision, type BlueprintWithAttributes } from './api';
 import { blueprintQueryKeys } from './queryKeys';
 import { BlueprintDetailPage } from './BlueprintDetailPage';
 
-vi.mock('../auth/useCan', () => ({ useCan: () => true }));
+vi.mock('../auth/useCan', () => ({
+  useAccess: () => ({ can: () => true, isPending: false }),
+  useCan: () => true,
+  useCanOn: () => true,
+}));
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => (

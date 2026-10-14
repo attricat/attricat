@@ -1871,6 +1871,50 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         Ok(rows.into_iter().collect())
     }
 
+    /// The subset of `target_ids` of one kind the user may access with
+    /// `permission`, in one query. Equivalent to calling
+    /// [`Self::is_authorized`] with each ID as the target: a workspace grant
+    /// covers every ID, while scoped grants require the target to exist in
+    /// this workspace.
+    pub async fn authorized_target_ids(
+        &self,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        permission: &str,
+        kind: AuthorizationTargetKind,
+        target_ids: &[Uuid],
+    ) -> Result<HashSet<Uuid>, RepositoryError> {
+        if target_ids.is_empty() {
+            return Ok(HashSet::new());
+        }
+        let codes = GrantCodes::Permission(permission);
+        let scoped = match kind {
+            AuthorizationTargetKind::Record => {
+                return self
+                    .authorized_record_ids(user_id, workspace_id, permission, target_ids)
+                    .await;
+            }
+            AuthorizationTargetKind::Blueprint => {
+                "g.scope_type = 'blueprint_family' AND g.scope_target_id = r.id AND EXISTS (SELECT 1 FROM blueprints b WHERE b.workspace_id = $2 AND b.id = r.id)"
+            }
+            AuthorizationTargetKind::Context => {
+                "g.scope_type = 'context_subtree' AND EXISTS (SELECT 1 FROM ancestors a WHERE a.requested_id = r.id AND a.id = g.scope_target_id)"
+            }
+        };
+        let sql = format!(
+            "WITH RECURSIVE {}, requested AS (SELECT DISTINCT id FROM unnest($4::uuid[]) AS requested(id)), ancestors AS (SELECT r.id AS requested_id, c.id, c.parent_id FROM requested r JOIN attribute_contexts c ON c.workspace_id = $2 AND c.id = r.id UNION ALL SELECT a.requested_id, p.id, p.parent_id FROM attribute_contexts p JOIN ancestors a ON a.parent_id = p.id WHERE p.workspace_id = $2) SELECT r.id FROM requested r WHERE EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR ({scoped}))",
+            codes.grant_set_sql()
+        );
+        let rows: Vec<Uuid> = sqlx::query_scalar(&sql)
+            .bind(user_id)
+            .bind(workspace_id)
+            .bind(codes.codes())
+            .bind(target_ids)
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows.into_iter().collect())
+    }
+
     pub async fn is_authorized(
         &self,
         user_id: Uuid,
@@ -1939,6 +1983,14 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             .fetch_one(connection)
             .await?)
     }
+}
+
+/// The kind of target [`AttricatRepository::authorized_target_ids`] checks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuthorizationTargetKind {
+    Record,
+    Blueprint,
+    Context,
 }
 
 /// Which of a user's live grants count: those whose role carries a

@@ -42,8 +42,6 @@ export const ExplorerResults = ({
     results,
   } = data;
   const canReadDataHealth = useCan('data_health_read');
-  const canPublish = useCan('records_publish');
-  const canDelete = useCan('records_delete');
   const resultPages = results.data?.pages ?? [];
   const firstPage = resultPages[0];
   const resultBlueprint = firstPage?.blueprint;
@@ -91,8 +89,6 @@ export const ExplorerResults = ({
                 relationshipFilters,
                 relationshipTreeSelections,
               ])}
-              canPublish={canPublish}
-              canDelete={canDelete}
               hasNextPage={results.hasNextPage}
               isFetching={results.isFetching}
               isFetchingNextPage={results.isFetchingNextPage}

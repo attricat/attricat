@@ -329,6 +329,7 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 | --- | --- | --- |
 | `POST` | `/auth/discover`, `/auth/login`, `/auth/renew`, `/auth/logout` | Sesje. |
 | `GET` | `/auth/session` | Bieżąca tożsamość i możliwości. |
+| `POST` | `/auth/access` | Które z podanych rekordów, schematów lub kontekstów (`kind`, `ids`, najwyżej 500) objęte są uprawnieniem `permission` wywołującego, z uwzględnieniem nadań na rekord, rodzinę schematu i poddrzewo kontekstów. |
 | `GET`, `POST`, `DELETE` | `/personal-access-tokens[/{id}]` | Osobiste tokeny API. Sekret jest zwracany tylko raz. |
 | `GET` | `/workspace/members`; `PUT /workspace/members/{id}` | Członkowie i ich stan. |
 | `POST`, `DELETE` | `/workspace/members/{id}/grants[/{grant_id}]` | Przydziały ról. |

@@ -44,6 +44,7 @@ import { useTimeZone } from '../../time/useInstantFormat';
 import { lexiconText } from '../lexicon/lexicon';
 import { EmptyState } from '../../components/EmptyState';
 import { RecordIcon } from '../../components/systemIcons';
+import { useCanOn } from '../auth/useCan';
 
 // The column dialog carries drag-and-drop; load it when first opened so it
 // stays out of the Explorer's startup bundle.
@@ -74,8 +75,6 @@ type Props = {
   publicationContextCode: string;
   publicationContextId: string | undefined;
   publicationSortAvailable: boolean;
-  canPublish: boolean;
-  canDelete: boolean;
   relationshipSortAvailable?: boolean;
   selection: ExplorerSelection;
   showExplorerActions?: boolean;
@@ -100,8 +99,6 @@ export const ExplorerResultsTable = ({
   publicationContextCode,
   publicationContextId,
   publicationSortAvailable,
-  canPublish,
-  canDelete,
   relationshipSortAvailable = true,
   selection,
   showExplorerActions = false,
@@ -151,6 +148,21 @@ export const ExplorerResultsTable = ({
     : undefined;
   if (activeActionRecord)
     publicationItems.set(activeActionRecord.id, activeActionRecord);
+  const canPublish = useCanOn(
+    'records_publish',
+    'record',
+    activeActionRecord?.id,
+  );
+  const canDelete = useCanOn(
+    'records_delete',
+    'record',
+    activeActionRecord?.id,
+  );
+  const canDuplicate = useCanOn(
+    'records_write',
+    'record',
+    activeActionRecord?.id,
+  );
   const { error, publicationsByRecordId, publish, readiness, unpublish } =
     useRecordPublicationActions(
       [...publicationItems.values()],
@@ -269,6 +281,7 @@ export const ExplorerResultsTable = ({
           blueprintId={blueprint.blueprint.id}
           canPublish={canPublish}
           canDelete={canDelete}
+          canDuplicate={canDuplicate}
           record={activeActionRecord}
           onClose={() => setActionMenu(null)}
           onDelete={() => setDeleteRecordId(activeActionRecord.id)}

@@ -329,6 +329,7 @@ See [Translate labels](/builders/translations/).
 | --- | --- | --- |
 | `POST` | `/auth/discover`, `/auth/login`, `/auth/renew`, `/auth/logout` | Sessions. |
 | `GET` | `/auth/session` | Current identity and capabilities. |
+| `POST` | `/auth/access` | Which of the named records, blueprints or contexts (`kind`, `ids`, at most 500) the caller holds a `permission` on, counting record, blueprint-family and context-subtree grants. |
 | `GET`, `POST`, `DELETE` | `/personal-access-tokens[/{id}]` | Personal API tokens. The secret is returned once. |
 | `GET` | `/workspace/members`; `PUT /workspace/members/{id}` | Members and state. |
 | `POST`, `DELETE` | `/workspace/members/{id}/grants[/{grant_id}]` | Role grants. |

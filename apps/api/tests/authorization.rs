@@ -499,3 +499,153 @@ async fn explore_navigation_lists_only_readable_published_entries(pool: PgPool) 
     );
     server.abort();
 }
+
+#[sqlx::test]
+async fn access_checks_report_scoped_grants_per_target(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let owner = authenticated_client();
+    let definition = |code: &str| {
+        format!(
+            "format_version = 1\ncode = \"{code}\"\nname = \"{code}\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n"
+        )
+    };
+    let granted_blueprint =
+        create_blueprint(&owner, &base_url, &definition("access_granted")).await;
+    let other_blueprint = create_blueprint(&owner, &base_url, &definition("access_other")).await;
+    let granted_record = create_record(&owner, &base_url, &granted_blueprint).await;
+    let other_record = create_record(&owner, &base_url, &other_blueprint).await;
+    let context = |code: &str, parent: &str| {
+        let owner = owner.clone();
+        let base_url = base_url.clone();
+        let body = json!({ "code": code, "data": {}, "parent_id": parent });
+        async move {
+            owner
+                .post(format!("{base_url}/contexts"))
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap()
+        }
+    };
+    let default_context = "00000000-0000-4000-8000-000000000001";
+    let root = context("access-root", default_context).await;
+    let child = context("access-child", root["id"].as_str().unwrap()).await;
+    let sibling = context("access-sibling", default_context).await;
+    let id = |value: &Value| value["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    let blueprint_id = |value: &Value| {
+        value["blueprint"]["id"]
+            .as_str()
+            .unwrap()
+            .parse::<Uuid>()
+            .unwrap()
+    };
+
+    let (editor, membership) = add_workspace_user(&pool).await;
+    grant_role(
+        &pool,
+        membership,
+        EDITOR_ROLE_ID,
+        GrantScope::BlueprintFamily(blueprint_id(&granted_blueprint)),
+    )
+    .await;
+    grant_role(
+        &pool,
+        membership,
+        EDITOR_ROLE_ID,
+        GrantScope::ContextSubtree(id(&root)),
+    )
+    .await;
+    let editor = client_for(editor);
+    let check = |client: &Client, permission: &str, kind: &str, ids: Vec<Uuid>| {
+        let request = client
+            .post(format!("{base_url}/auth/access"))
+            .json(&json!({ "permission": permission, "kind": kind, "ids": ids }));
+        async move { request.send().await.unwrap() }
+    };
+    let granted = |response: reqwest::Response| async move {
+        assert_eq!(response.status(), StatusCode::OK);
+        response.json::<Value>().await.unwrap()["granted"].clone()
+    };
+
+    let blueprints = vec![
+        blueprint_id(&other_blueprint),
+        blueprint_id(&granted_blueprint),
+        blueprint_id(&granted_blueprint),
+    ];
+    assert_eq!(
+        granted(check(&editor, "blueprints.write", "blueprint", blueprints.clone()).await).await,
+        json!([blueprint_id(&granted_blueprint)])
+    );
+    assert_eq!(
+        granted(check(&owner, "blueprints.write", "blueprint", blueprints).await).await,
+        json!([
+            blueprint_id(&other_blueprint),
+            blueprint_id(&granted_blueprint)
+        ])
+    );
+    assert_eq!(
+        granted(
+            check(
+                &editor,
+                "records.write",
+                "record",
+                vec![id(&granted_record), id(&other_record)]
+            )
+            .await
+        )
+        .await,
+        json!([id(&granted_record)])
+    );
+    assert_eq!(
+        granted(
+            check(
+                &editor,
+                "contexts.write",
+                "context",
+                vec![id(&child), id(&sibling), id(&root)]
+            )
+            .await
+        )
+        .await,
+        json!([id(&child), id(&root)])
+    );
+    // The check reports the same answer the guarded route gives.
+    assert_eq!(
+        editor
+            .put(format!("{base_url}/contexts/id/{}", id(&sibling)))
+            .json(&json!({ "code": "access-sibling", "data": {} }))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert!(
+        check(
+            &editor,
+            "members.manage",
+            "record",
+            vec![id(&granted_record)]
+        )
+        .await
+        .status()
+        .is_client_error()
+    );
+    assert!(
+        check(
+            &editor,
+            "records.write",
+            "record",
+            vec![Uuid::new_v4(); 501]
+        )
+        .await
+        .status()
+        .is_client_error()
+    );
+    server.abort();
+}

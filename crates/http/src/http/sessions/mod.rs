@@ -19,8 +19,10 @@ use crate::{
     repository::RepositoryError,
 };
 
+mod access;
 mod password;
 mod responses;
+pub(super) use access::check_access;
 pub(super) use password::hash_password;
 pub(super) use responses::onboarding_session_response;
 use responses::{

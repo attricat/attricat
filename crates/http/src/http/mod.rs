@@ -617,6 +617,7 @@ pub fn router(state: AppState) -> Router {
             post(sessions::confirm_password_reset),
         )
         .route("/auth/session", get(sessions::current_session))
+        .route("/auth/access", post(sessions::check_access))
         .route(
             "/auth/preferences",
             axum::routing::patch(sessions::update_preferences),

@@ -23,12 +23,12 @@ import {
   explorerExtensionOutlets,
   publicationStatuses,
 } from './constants';
-import { useCan } from '../auth/useCan';
 
 type Props = {
   blueprintId: string;
   canPublish: boolean;
   canDelete: boolean;
+  canDuplicate: boolean;
   record: RecordItem;
   onClose: () => void;
   onDelete: () => void;
@@ -49,6 +49,7 @@ export const RecordActionsMenu = ({
   blueprintId,
   canPublish,
   canDelete,
+  canDuplicate,
   record,
   onClose,
   onDelete,
@@ -64,7 +65,6 @@ export const RecordActionsMenu = ({
   unpublishing,
 }: Props) => {
   const { t } = useTranslation();
-  const canDuplicate = useCan('records_write');
   // A row action that opens the host dialog hands off to it; the dialog keeps
   // its captured selection after this menu and its frames unmount.
   const dialogKey = useActionDialogStore((state) => state.dialog?.key);

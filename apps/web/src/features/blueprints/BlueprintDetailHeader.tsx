@@ -8,7 +8,7 @@ import { Timestamp } from '../../time/Timestamp';
 import type { Blueprint } from './schemas';
 import { BlueprintIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
-import { useCan } from '../auth/useCan';
+import { useCanOn } from '../auth/useCan';
 
 export const BlueprintDetailHeader = ({
   blueprint,
@@ -28,9 +28,13 @@ export const BlueprintDetailHeader = ({
   onPublishRecords: () => void;
 }) => {
   const { t } = useTranslation();
-  const canEdit = useCan('blueprints_write');
-  const canPublish = useCan('blueprints_publish');
-  const canPublishRecords = useCan('records_publish');
+  const canEdit = useCanOn('blueprints_write', 'blueprint', blueprint.id);
+  const canPublish = useCanOn('blueprints_publish', 'blueprint', blueprint.id);
+  const canPublishRecords = useCanOn(
+    'records_publish',
+    'blueprint',
+    blueprint.id,
+  );
   return (
     <>
       <PageHeader

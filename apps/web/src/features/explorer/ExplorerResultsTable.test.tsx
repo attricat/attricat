@@ -17,7 +17,15 @@ beforeEach(() => {
   virtualWindow.start = 0;
   virtualWindow.size = Infinity;
 });
-vi.mock('../auth/useCan', () => ({ useCan: () => true }));
+const access = vi.hoisted(() => ({ delete: false }));
+
+vi.mock('../auth/useCan', () => ({
+  useCan: () => true,
+  useCanOn: (capability: string) =>
+    capability === 'records_delete'
+      ? access.delete
+      : capability !== 'records_publish',
+}));
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => (
@@ -128,6 +136,7 @@ const renderTable = (
   onSaveSelectionAsSearch = vi.fn(),
   publicationContextId?: string,
 ) => {
+  access.delete = canDelete;
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
@@ -140,8 +149,6 @@ const renderTable = (
         <TableWithSelection
           tableKey={key}
           blueprint={blueprint}
-          canPublish={false}
-          canDelete={canDelete}
           hasNextPage={false}
           isFetching={false}
           isFetchingNextPage={false}

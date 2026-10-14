@@ -10,7 +10,11 @@ import {
 import '../../i18n';
 import { ReusableAttributesPage } from './ReusableAttributesPage';
 
-vi.mock('../auth/useCan', () => ({ useCan: () => true }));
+vi.mock('../auth/useCan', () => ({
+  useAccess: () => ({ can: () => true, isPending: false }),
+  useCan: () => true,
+  useCanOn: () => true,
+}));
 
 vi.mock('@tanstack/react-router', async () => {
   const { forwardRef, createElement } = await import('react');

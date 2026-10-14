@@ -6,7 +6,7 @@ import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
 import { BlueprintLink } from '../../blueprints/BlueprintLink';
 import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
-import { useCan } from '../../auth/useCan';
+import { useCan, useCanOn } from '../../auth/useCan';
 import { getCurrentBlueprint, type AttricatRecord } from '../api';
 import {
   RECORD_HEADER_CONTEXT_VERSION,
@@ -85,8 +85,8 @@ export const RecordPreview = ({
   const { contextId, contexts, defaultContextId, setSelectedContext } =
     useRecordContextSelection(initialContextId);
   const selectedContextId = contextId ?? undefined;
-  const canPublish = useCan('records_publish');
-  const canDeleteRecords = useCan('records_delete');
+  const canPublish = useCanOn('records_publish', 'record', recordId);
+  const canDeleteRecords = useCanOn('records_delete', 'record', recordId);
   const canCreateRecords = useCan('records_write');
   const canAskAgent = useCan('agents_run');
   const publications = useRecordPublications(recordId, contextId, canPublish);

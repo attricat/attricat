@@ -113,6 +113,27 @@ export const confirmPasswordReset = async (token: string, password: string) => {
   });
 };
 
+/** Targets whose scoped grants `checkAccess` evaluates. */
+export const accessTargetKinds = ['record', 'blueprint', 'context'] as const;
+export type AccessTargetKind = (typeof accessTargetKinds)[number];
+
+/** The most targets one access check may name. */
+export const maxAccessTargets = 500;
+
+const accessSchema = z.object({ granted: z.array(z.uuid()) });
+
+/** Which of `ids` the caller holds `permission` on. */
+export const checkAccess = (
+  permission: string,
+  kind: AccessTargetKind,
+  ids: readonly string[],
+) =>
+  request('/api/auth/access', accessSchema, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ permission, kind, ids }),
+  });
+
 export const currentSession = async () => {
   try {
     return await request('/api/auth/session', sessionSchema);

@@ -293,6 +293,8 @@ pub(super) async fn authorize(
     } else if matches!(
         matched,
         "/auth/session"
+            // Reports only the caller's own access to the targets it names.
+            | "/auth/access"
             | "/auth/preferences"
             | "/auth/display-name"
             | "/auth/avatar"

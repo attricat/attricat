@@ -5,7 +5,10 @@ import { RequireCapability } from '../../../../../../features/auth/RequireCapabi
 const RevisionEditorRoute = () => {
   const { blueprintId, version } = Route.useParams();
   return (
-    <RequireCapability capability="blueprints_write">
+    <RequireCapability
+      capability="blueprints_write"
+      target={{ kind: 'blueprint', id: blueprintId }}
+    >
       <BlueprintEditorPage
         blueprintId={blueprintId}
         sourceVersion={Number(version)}

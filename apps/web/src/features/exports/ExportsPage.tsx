@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
-import { useCan } from '../auth/useCan';
+import { useAccess, useCan } from '../auth/useCan';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/queryKeys';
 import {
@@ -38,12 +38,16 @@ export const ExportsPage = () => {
     queryKey: contextQueryKeys.all(),
     queryFn: ({ signal }) => listContexts(signal),
   });
+  const channelAccess = useAccess(
+    'contexts_write',
+    'context',
+    contexts.data?.map((context) => context.id) ?? [],
+  );
   const channels = useQuery({
     queryKey: exportQueryKeys.channels(),
     queryFn: listPublicationChannels,
   });
   const canReadRules = useCan('rules_read');
-  const canEditChannels = useCan('contexts_write');
   // Rule codes are suggestions only; a reader without rule access can type them.
   const rules = useQuery({
     ...ruleDefinitionsOptions(),
@@ -109,6 +113,7 @@ export const ExportsPage = () => {
               {contexts.data.map((context) => {
                 const channel = channelsByContextId.get(context.id);
                 const enabled = channel?.enabled ?? false;
+                const canEdit = channelAccess.can(context.id);
                 return (
                   <TableRow key={context.id}>
                     <TableCell>{context.code}</TableCell>
@@ -117,9 +122,7 @@ export const ExportsPage = () => {
                         control={
                           <Switch
                             checked={enabled}
-                            disabled={
-                              !canEditChannels || updateChannel.isPending
-                            }
+                            disabled={!canEdit || updateChannel.isPending}
                             onChange={(_, checked) =>
                               updateChannel.mutate({
                                 contextId: context.id,
@@ -143,7 +146,7 @@ export const ExportsPage = () => {
                     </TableCell>
                     <TableCell>
                       <ChannelChecksEditor
-                        disabled={!canEditChannels || updateChannel.isPending}
+                        disabled={!canEdit || updateChannel.isPending}
                         onChange={(checks) =>
                           updateChannel.mutate({
                             contextId: context.id,
