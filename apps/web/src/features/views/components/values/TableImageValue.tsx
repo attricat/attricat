@@ -1,4 +1,5 @@
 import { fileDownloadUrl } from '../../../files/api';
+import { fileStatuses, THUMBNAIL_VARIANT_KIND } from '../../../files/constants';
 import { ThumbnailPreview } from '../../../files/FileThumbnail';
 import { fileMetadataSchema } from '../../../files/schemas';
 import { TABLE_IMAGE_SIZE } from '../../constants';
@@ -17,18 +18,23 @@ export const TableImageValue = ({ value }: { value: unknown }) => {
   if (!file) return <NotSetValue />;
 
   const thumbnail = file.variants.find(
-    (variant) => variant.kind === 'thumbnail',
+    (variant) => variant.kind === THUMBNAIL_VARIANT_KIND,
   );
+  // Never fall back to the original: it can be a full-resolution upload.
   return (
     <ThumbnailPreview
       filename={file.filename}
       size={TABLE_IMAGE_SIZE}
       source={
-        file.status === 'ready'
-          ? fileDownloadUrl(file.id, thumbnail?.kind)
+        file.status === fileStatuses.ready && thumbnail
+          ? fileDownloadUrl(file.id, thumbnail.kind)
           : undefined
       }
-      unavailable={file.status === 'failed' || file.status === 'deleted'}
+      unavailable={
+        (file.status === fileStatuses.ready && !thumbnail) ||
+        file.status === fileStatuses.failed ||
+        file.status === fileStatuses.deleted
+      }
     />
   );
 };

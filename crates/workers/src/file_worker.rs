@@ -21,8 +21,9 @@ use crate::storage::{ObjectStore, ObjectStoreError, StoredObject};
 
 const DEFAULT_MAX_PIXELS: u64 = 40_000_000;
 const DEFAULT_MAX_ATTEMPTS: i32 = 5;
-/// Longest edge for compact previews used in lists and attachment pickers.
-const THUMBNAIL_MAX_DIMENSION: u32 = 320;
+/// Edge length of the square `thumbnail` variant. Clients show thumbnails in
+/// square tiles of up to 128 CSS pixels, so this covers high-density screens.
+const THUMBNAIL_DIMENSION: u32 = 320;
 /// Longest edge for the high-resolution image variant served to clients.
 const DISPLAY_MAX_DIMENSION: u32 = 1600;
 /// Edge length of the square `avatar` variant, enough for high-density screens.
@@ -294,18 +295,8 @@ impl FileWorker {
                 ));
             }
             let variants = vec![
-                encode_variant(
-                    "thumbnail",
-                    &image.thumbnail(THUMBNAIL_MAX_DIMENSION, THUMBNAIL_MAX_DIMENSION),
-                )?,
-                encode_variant(
-                    "display",
-                    &image.resize(
-                        DISPLAY_MAX_DIMENSION,
-                        DISPLAY_MAX_DIMENSION,
-                        image::imageops::FilterType::Lanczos3,
-                    ),
-                )?,
+                encode_variant("thumbnail", &square_thumbnail(&image))?,
+                encode_variant("display", &display_image(&image))?,
             ];
             Ok::<_, WorkerError>((width, height, variants))
         })
@@ -481,22 +472,45 @@ enum WorkerError {
     Image(String),
 }
 
+/// Center-crops to a square and scales it down to at most `max_side` pixels.
+/// Smaller images are cropped but never upscaled.
+fn center_square(image: &DynamicImage, max_side: u32) -> DynamicImage {
+    let (width, height) = image.dimensions();
+    let side = width.min(height);
+    let square = image.crop_imm((width - side) / 2, (height - side) / 2, side, side);
+    if side <= max_side {
+        square
+    } else {
+        square.resize_exact(max_side, max_side, image::imageops::FilterType::Lanczos3)
+    }
+}
+
+/// Clients render thumbnails as square `object-fit: cover` tiles, so the
+/// variant is the centered square they show rather than a letterboxed fit
+/// whose short edge would have to be upscaled to fill the tile.
+fn square_thumbnail(image: &DynamicImage) -> DynamicImage {
+    center_square(image, THUMBNAIL_DIMENSION)
+}
+
+/// Scales the image down to fit the display bound, never upscaling.
+fn display_image(image: &DynamicImage) -> DynamicImage {
+    let (width, height) = image.dimensions();
+    if width.max(height) <= DISPLAY_MAX_DIMENSION {
+        image.clone()
+    } else {
+        image.resize(
+            DISPLAY_MAX_DIMENSION,
+            DISPLAY_MAX_DIMENSION,
+            image::imageops::FilterType::Lanczos3,
+        )
+    }
+}
+
 /// Center-crops to a square, scales to the avatar size, and flattens any
 /// transparency onto white so avatars look the same on every background.
 /// Images smaller than the avatar size are cropped but never upscaled.
 fn square_avatar(image: &DynamicImage) -> DynamicImage {
-    let (width, height) = image.dimensions();
-    let side = width.min(height);
-    let square = image.crop_imm((width - side) / 2, (height - side) / 2, side, side);
-    let square = if side <= AVATAR_DIMENSION {
-        square
-    } else {
-        square.resize_exact(
-            AVATAR_DIMENSION,
-            AVATAR_DIMENSION,
-            image::imageops::FilterType::Lanczos3,
-        )
-    };
+    let square = center_square(image, AVATAR_DIMENSION);
     let (width, height) = square.dimensions();
     let mut canvas = image::RgbaImage::from_pixel(width, height, image::Rgba([255, 255, 255, 255]));
     image::imageops::overlay(&mut canvas, &square.to_rgba8(), 0, 0);
@@ -628,6 +642,40 @@ mod tests {
         assert_eq!(square_avatar(&tall).dimensions(), (256, 256));
         let small = DynamicImage::new_rgba8(120, 80);
         assert_eq!(square_avatar(&small).dimensions(), (80, 80));
+    }
+
+    #[test]
+    fn thumbnails_are_center_cropped_squares_that_never_upscale() {
+        let wide = DynamicImage::new_rgba8(4000, 1000);
+        assert_eq!(square_thumbnail(&wide).dimensions(), (320, 320));
+        let tall = DynamicImage::new_rgba8(600, 1800);
+        assert_eq!(square_thumbnail(&tall).dimensions(), (320, 320));
+        let small = DynamicImage::new_rgba8(200, 100);
+        assert_eq!(square_thumbnail(&small).dimensions(), (100, 100));
+    }
+
+    #[test]
+    fn thumbnails_keep_the_center_of_the_image() {
+        let mut image = image::RgbaImage::from_pixel(900, 300, image::Rgba([0, 0, 255, 255]));
+        for x in 300..600 {
+            for y in 0..300 {
+                image.put_pixel(x, y, image::Rgba([255, 0, 0, 255]));
+            }
+        }
+        let thumbnail = square_thumbnail(&DynamicImage::ImageRgba8(image)).to_rgba8();
+        assert_eq!(thumbnail.get_pixel(0, 0), &image::Rgba([255, 0, 0, 255]));
+        assert_eq!(
+            thumbnail.get_pixel(299, 299),
+            &image::Rgba([255, 0, 0, 255])
+        );
+    }
+
+    #[test]
+    fn display_images_fit_the_bound_and_never_upscale() {
+        let large = DynamicImage::new_rgba8(3200, 1600);
+        assert_eq!(display_image(&large).dimensions(), (1600, 800));
+        let small = DynamicImage::new_rgba8(640, 480);
+        assert_eq!(display_image(&small).dimensions(), (640, 480));
     }
 
     #[test]

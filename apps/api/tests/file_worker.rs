@@ -95,8 +95,8 @@ async fn worker_generates_image_variants_and_completes_metadata_job(pool: PgPool
     assert_eq!(
         variants,
         vec![
-            ("display".into(), "image/webp".into(), 1600, 1200),
-            ("thumbnail".into(), "image/webp".into(), 320, 240),
+            ("display".into(), "image/webp".into(), 640, 480),
+            ("thumbnail".into(), "image/webp".into(), 320, 320),
         ]
     );
     assert_eq!(

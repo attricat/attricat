@@ -108,6 +108,7 @@ const ThumbnailPreviewContent = ({
               : source
           }
           sx={{
+            display: 'block',
             height: '100%',
             objectFit: 'cover',
             opacity: loaded ? 1 : 0,

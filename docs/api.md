@@ -786,8 +786,9 @@ cannot be linked to an existing record in any other way.
 ### Processing and downloads
 
 A newly accepted file has `status: "queued"`. Image files are processed into
-`thumbnail` and `display` WebP variants (avatar files get a single square
-`avatar` variant instead); non-image files become `ready` without
+WebP variants: `thumbnail`, a center-cropped square of at most 320 pixels, and
+`display`, scaled to fit 1600 pixels; neither is upscaled (avatar files get a
+single square `avatar` variant instead); non-image files become `ready` without
 variants. `GET /files/{file_id}` returns `200` with safe metadata and its
 current status while a file is queued, processing, ready, or failed. The
 original and variant download endpoints return `409 file_processing` until the
