@@ -968,7 +968,8 @@ async fn handle_workflow_task_once(repository: &AttricatRepository) -> bool {
                     id,
                     &owner,
                     token,
-                    chrono::Utc::now(),
+                    // Backdated: claims compare against the database clock, which can trail this one.
+                    chrono::Utc::now() - chrono::Duration::seconds(1),
                     "workflow_run",
                     &message,
                 )
