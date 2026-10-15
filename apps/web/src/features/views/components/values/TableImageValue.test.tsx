@@ -6,7 +6,16 @@ import { TableImageValue } from './TableImageValue';
 
 const fileId = '11111111-1111-4111-8111-111111111111';
 
-const image = (status: 'ready' | 'failed') => [
+const thumbnailVariant = {
+  kind: 'thumbnail',
+  mime_type: 'image/webp',
+  width: 48,
+  height: 48,
+  byte_size: 12,
+  sha256: 'def',
+};
+
+const image = (status: 'ready' | 'failed', variants = [thumbnailVariant]) => [
   {
     id: fileId,
     filename: 'main.png',
@@ -14,16 +23,7 @@ const image = (status: 'ready' | 'failed') => [
     byte_size: 42,
     sha256: 'abc',
     status,
-    variants: [
-      {
-        kind: 'thumbnail',
-        mime_type: 'image/webp',
-        width: 48,
-        height: 48,
-        byte_size: 12,
-        sha256: 'def',
-      },
-    ],
+    variants,
   },
 ];
 
@@ -34,6 +34,15 @@ describe('TableImageValue', () => {
     expect(container.querySelector('img')?.getAttribute('src')).toBe(
       `/api/files/${fileId}/variants/thumbnail/download`,
     );
+  });
+
+  it('never loads the original when a ready image has no thumbnail', () => {
+    const { container } = render(
+      <TableImageValue value={image('ready', [])} />,
+    );
+
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByText('Thumbnail unavailable')).toBeTruthy();
   });
 
   it('shows the normal unset state when no file is assigned', () => {
