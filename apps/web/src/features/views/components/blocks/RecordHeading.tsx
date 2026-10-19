@@ -7,7 +7,10 @@ import {
   type Attribute,
   type ViewDefinition,
 } from '../../../records/api';
+import { statusConfiguration } from '../../../records/status';
+import { StatusValue } from '../../controls/values';
 import { FieldErrorBoundary } from '../boundaries/FieldErrorBoundary';
+import { resolveValueRenderer } from '../registry';
 import { AttributeValueText } from '../values/AttributeValueText';
 import { findRecordHeading } from './RecordHeadingDefinition';
 
@@ -68,11 +71,28 @@ export const RecordHeading = ({
               (item) => item.code === child.field,
             );
             const value = attribute ? values[attribute.code]?.value : undefined;
-            return attribute && value !== undefined ? (
+            if (!attribute || value === undefined) return null;
+            // Fields with their own read-only control render as they do in
+            // the view body; everything else stays secondary heading text.
+            const Renderer = resolveValueRenderer(child.component);
+            if (Renderer)
+              return (
+                <Renderer
+                  attribute={attribute}
+                  component={child.component}
+                  key={index}
+                  recordId={recordId}
+                  value={value}
+                />
+              );
+            const status = statusConfiguration(attribute);
+            if (status)
+              return <StatusValue config={status} key={index} value={value} />;
+            return (
               <Typography color="text.secondary" key={index}>
                 <AttributeValueText attribute={attribute} value={value} />
               </Typography>
-            ) : null;
+            );
           }
           return null;
         })}
