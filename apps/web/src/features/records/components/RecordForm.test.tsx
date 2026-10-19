@@ -137,7 +137,7 @@ describe('RecordForm', () => {
     renderForm({
       blueprint: blueprint([attribute('title'), attribute('price')]),
       expectedUpdatedAt: '2026-01-01T00:00:00Z',
-      highlightedAttributes: ['price'],
+      migrationReviews: { price: { message: 'Required now' } },
       showAllAttributes: true,
     });
     expect(document.activeElement).toBe(
@@ -341,6 +341,34 @@ describe('RecordForm', () => {
       ),
     );
     expect(summary.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('waits for confirmations shown above the fields and leads to them', async () => {
+    const { onSubmit, rerenderForm } = renderForm({
+      blueprint: blueprint([attribute('title')]),
+      children: (
+        <div data-field-code="removed:legacy">
+          <input aria-label="Discard legacy" type="checkbox" />
+        </div>
+      ),
+      pendingConfirmations: [
+        { id: 'removed:legacy', label: 'Legacy', message: 'Confirm it.' },
+      ],
+    });
+    expect(
+      screen.getByRole('button', { name: '1 change to confirm' }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByRole('button', { name: 'Legacy' })).toBeTruthy();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('checkbox', { name: 'Discard legacy' }),
+      ),
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+    rerenderForm({ pendingConfirmations: [] });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
   });
 
   it('submits for another record from its own button', async () => {

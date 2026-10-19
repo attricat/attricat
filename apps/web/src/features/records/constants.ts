@@ -44,7 +44,13 @@ export const attributeContextFallbacks = {
 
 export const migrationIssueKinds = {
   removed: 'removed',
+  valueTypeChanged: 'value_type_changed',
   relationshipTargetChanged: 'relationship_target_changed',
+  relationshipCardinalityChanged: 'relationship_cardinality_changed',
+  relationshipCardinalityConflict: 'relationship_cardinality_conflict',
+  fileContractChanged: 'file_contract_changed',
+  contextNotEditable: 'context_not_editable',
+  attributeSchemaMismatch: 'attribute_schema_mismatch',
   missingRequired: 'missing_required',
 } as const;
 

@@ -1,4 +1,4 @@
-import { Box, Tooltip, useTheme } from '@mui/material';
+import { Box, Stack, Typography, useTheme } from '@mui/material';
 import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type {
@@ -12,6 +12,7 @@ import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
 import { smallIconSize } from '../../../components/iconSizes';
 import { ScalarAttributeEditor } from './ScalarAttributeEditor';
+import type { MigrationFieldReview } from '../migrationReview';
 
 /** Form editor for one attribute in the current context. */
 export const RecordAttributeEditor = ({
@@ -27,10 +28,9 @@ export const RecordAttributeEditor = ({
   files,
   error,
   helperText,
-  migrationReviewMessage,
+  migrationReview,
   onChange,
   onRecordUpdated,
-  showMigrationBadge,
   value,
 }: {
   attribute: Attribute;
@@ -45,11 +45,11 @@ export const RecordAttributeEditor = ({
   files: FileMetadata[];
   error?: string;
   helperText?: string;
-  migrationReviewMessage?: string;
+  /** Shown below the editor when a migration asks to review the field. */
+  migrationReview?: MigrationFieldReview;
   onChange: (value: string) => void;
   /** Receives the record version after a file change saved by this editor. */
   onRecordUpdated?: (updatedAt: string) => void;
-  showMigrationBadge: boolean;
   value: string;
 }) => {
   const effectiveDisabled =
@@ -94,23 +94,38 @@ export const RecordAttributeEditor = ({
         onChange={onChange}
       />
     );
-  return showMigrationBadge ? (
-    // `display: contents` keeps the badge and editor laid out as siblings.
+  return migrationReview ? (
+    // `display: contents` keeps the editor and its note laid out as siblings.
     <Box data-migration-review sx={{ display: 'contents' }}>
-      <MigrationBadge message={migrationReviewMessage} />
       {editor}
+      <MigrationReviewNote review={migrationReview} />
     </Box>
   ) : (
     editor
   );
 };
 
-const MigrationBadge = ({ message }: { message?: string }) => {
+/** Why a migration asks to review the field, and the value it had before. */
+const MigrationReviewNote = ({ review }: { review: MigrationFieldReview }) => {
   const { t } = useTranslation();
   const { palette } = useTheme();
   return (
-    <Tooltip title={message ?? t('records.migrationReview')}>
-      <InfoIcon color={palette.info.main} size={smallIconSize} />
-    </Tooltip>
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+      <Box sx={{ display: 'flex', flexShrink: 0, pt: 0.25 }}>
+        <InfoIcon aria-hidden color={palette.info.main} size={smallIconSize} />
+      </Box>
+      <Box>
+        <Typography variant="body2">{review.message}</Typography>
+        {review.previousValue && (
+          <Typography
+            color="text.secondary"
+            sx={{ overflowWrap: 'anywhere' }}
+            variant="body2"
+          >
+            {t('records.previousValue', { value: review.previousValue })}
+          </Typography>
+        )}
+      </Box>
+    </Stack>
   );
 };

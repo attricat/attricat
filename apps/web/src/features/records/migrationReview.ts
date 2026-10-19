@@ -1,4 +1,5 @@
-import type { RecordMigrationPreview } from './api';
+import type { TFunction } from 'i18next';
+import type { Attribute, RecordMigrationPreview, ViewDefinition } from './api';
 import { valueForField } from './attributeValues';
 import { migrationIssueKinds } from './constants';
 import { attributeValueKinds } from './valueTypes';
@@ -39,11 +40,15 @@ export const migrationFormValues = (
       ),
   );
 
-/** Human-readable current value of an attribute before migration. */
+/**
+ * Human-readable value of an attribute before migration; related records are
+ * named by `recordLabel`.
+ */
 export const describeMigrationValues = (
   values: readonly MigrationValue[],
   attributeCode: string,
   fileCountLabel: (count: number) => string,
+  recordLabel: (recordId: string) => string = (recordId) => recordId,
 ) =>
   values
     .filter((value) => value.attribute_code === attributeCode)
@@ -51,10 +56,57 @@ export const describeMigrationValues = (
       value.kind === attributeValueKinds.scalar
         ? valueForField(value.value)
         : value.kind === attributeValueKinds.relationship
-          ? value.target_record_id
+          ? recordLabel(value.target_record_id)
           : fileCountLabel(value.files.length),
     )
     .join(', ');
+
+/** The issue in the user's language; a kind the UI does not know keeps the API's message. */
+export const migrationIssueMessage = (issue: MigrationIssue, t: TFunction) =>
+  t(`records.migrationIssues.${issue.kind}`, { defaultValue: issue.message });
+
+/**
+ * Lays out a migration form with the fields to review first and every other
+ * target attribute in a collapsed section after them.
+ */
+export const migrationLayout = (
+  attributes: readonly Attribute[],
+  reviewCodes: ReadonlySet<string>,
+  labels: { review: string; others: (count: number) => string },
+): ViewDefinition => {
+  const field = (attribute: Attribute) => ({
+    type: 'field' as const,
+    field: attribute.code,
+  });
+  const review = attributes.filter((attribute) =>
+    reviewCodes.has(attribute.code),
+  );
+  const others = attributes.filter(
+    (attribute) => !reviewCodes.has(attribute.code),
+  );
+  if (review.length === 0)
+    return { type: 'stack', children: others.map(field) };
+  return {
+    type: 'stack',
+    children: [
+      { type: 'heading', text: labels.review },
+      ...review.map(field),
+      ...(others.length > 0
+        ? [
+            {
+              type: 'accordion' as const,
+              sections: [
+                {
+                  label: labels.others(others.length),
+                  children: others.map(field),
+                },
+              ],
+            },
+          ]
+        : []),
+    ],
+  };
+};
 
 export const requiredMigrationAttributes = (
   issues: readonly MigrationIssue[],
@@ -70,3 +122,14 @@ export const removedAttributeIssues = (issues: readonly MigrationIssue[]) =>
       issue.attribute_code !== null &&
       issue.kind === migrationIssueKinds.removed,
   );
+
+/** What a migration asks the user to review on one target field. */
+export type MigrationFieldReview = {
+  message: string;
+  /** The stored value before migration, for reference. */
+  previousValue?: string;
+};
+
+/** The `data-field-code` of a removal, so an error can lead to it. */
+export const removalFieldCode = (attributeCode: string) =>
+  `removed:${attributeCode}`;
