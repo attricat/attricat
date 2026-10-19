@@ -335,12 +335,15 @@ describe('FileAttributeEditor', () => {
       'unsafe.svg was not added',
     );
     expect(URL.createObjectURL).toHaveBeenCalledOnce();
+    // A queued image is not reported as missing.
+    expect(screen.queryByText('No images attached.')).toBeNull();
     fireEvent.click(
       screen.getByRole('button', {
         name: 'Remove photo.png from upload queue',
       }),
     );
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:queued');
+    expect(screen.getByText('No images attached.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Upload 1/ })).toBeNull();
     expect(uploadFiles).not.toHaveBeenCalled();
   });

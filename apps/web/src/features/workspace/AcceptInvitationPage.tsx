@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NarrowPage } from '../../components/CenteredPage';
 import { acceptInvitation } from './api';
+import { useInitialFocus } from '../../components/initialFocus';
 
 type Notice = { severity: 'error' | 'success'; text: string };
 
@@ -13,6 +14,7 @@ export const AcceptInvitationPage = ({
   secret?: string;
 }) => {
   const { t } = useTranslation();
+  const formRef = useInitialFocus<HTMLFormElement>();
   const [notice, setNotice] = useState<Notice>();
   const form = useForm({
     defaultValues: { secret: initialSecret },
@@ -39,6 +41,7 @@ export const AcceptInvitationPage = ({
     <NarrowPage>
       <Typography variant="h4">{t('workspace.acceptTitle')}</Typography>
       <Stack
+        ref={formRef}
         component="form"
         onSubmit={(event) => {
           event.preventDefault();

@@ -139,10 +139,12 @@ export const ImageGalleryEditor = ({
   files,
   disabled,
   ordered,
+  showEmptyMessage,
   onChange,
 }: {
   files: readonly GalleryFile[];
   disabled: boolean;
+  showEmptyMessage?: boolean;
   ordered: boolean;
   onChange: (fileIds: string[]) => Promise<boolean>;
 }) => {
@@ -237,6 +239,7 @@ export const ImageGalleryEditor = ({
   const gallery = (
     <ImageGallery
       files={shown}
+      showEmptyMessage={showEmptyMessage}
       renderItem={
         ordered
           ? ({ children, file, index }) => (

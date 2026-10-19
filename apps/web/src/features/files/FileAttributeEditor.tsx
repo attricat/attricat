@@ -141,6 +141,8 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
           files={uploads.uploaded}
           disabled={!uploads.canUpload}
           ordered={policy.ordered}
+          // Queued images are listed above; they are not missing.
+          showEmptyMessage={uploads.pending.length === 0}
           onChange={uploads.changeReferences}
         />
       ) : (

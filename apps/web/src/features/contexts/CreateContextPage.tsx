@@ -19,9 +19,11 @@ import { contextMetadataMinRows, emptyContextMetadata } from './constants';
 import { parseContextMetadata } from './contextMetadata';
 import { contextQueryKeys } from './queryKeys';
 import { ContextIcon } from '../../components/systemIcons';
+import { useInitialFocus } from '../../components/initialFocus';
 
 export const CreateContextPage = () => {
   const { t } = useTranslation();
+  const formRef = useInitialFocus<HTMLFormElement>();
   const navigate = useNavigate({ from: '/manage/contexts/new' });
   const queryClient = useQueryClient();
   const contexts = useQuery({
@@ -74,6 +76,7 @@ export const CreateContextPage = () => {
         titleVariant="h3"
       />
       <Paper
+        ref={formRef}
         component="form"
         onSubmit={(event) => {
           event.preventDefault();

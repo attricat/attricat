@@ -19,9 +19,11 @@ import { MessageInputBox } from './MessageInputBox';
 import { agentQueryKeys } from './queryKeys';
 import { useMessageAttachments } from './useMessageAttachments';
 import { AgentIcon } from '../../components/systemIcons';
+import { useInitialFocus } from '../../components/initialFocus';
 
 export const NewConversationPage = () => {
   const { t } = useTranslation();
+  const formRef = useInitialFocus<HTMLFormElement>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const form = useForm({ defaultValues: { content: '' } });
@@ -87,6 +89,7 @@ export const NewConversationPage = () => {
           titleVariant="h3"
         />
         <Box
+          ref={formRef}
           component="form"
           onSubmit={(event) => {
             event.preventDefault();

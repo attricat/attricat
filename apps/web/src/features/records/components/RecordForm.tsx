@@ -50,6 +50,8 @@ import { useViolationText } from '../../../components/useViolationText';
 import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
 import { RecordFormAttributeEditor } from './RecordFormAttributeEditor';
 import { useQueuedFileUploadsContext } from '../../files/queuedFileUploads';
+import { useInitialFocus } from '../../../components/initialFocus';
+import { migrationReviewSelector } from '../constants';
 
 export type RecordFormHandle = {
   /** Removes the persisted draft after a confirmed save. */
@@ -357,6 +359,20 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
 
     useImperativeHandle(ref, () => ({ clearDraft: draft.clear }));
 
+    // The blueprint picker comes first; once a blueprint loads, its first
+    // field, or in a migration the first field to review. A failed save
+    // leaves focus where it is.
+    const formRef = useInitialFocus<HTMLFormElement>(
+      isLoadingBlueprint
+        ? null
+        : blueprint
+          ? `${blueprint.blueprint.id}:${blueprint.blueprint.version}`
+          : lockedBlueprint
+            ? null
+            : '',
+      migrationReviewSelector,
+    );
+
     const missingRequired = missingRequiredAttributes(
       submittedAttributes,
       fields,
@@ -388,6 +404,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       <Paper
         component="form"
         noValidate
+        ref={formRef}
         onSubmit={(event) => {
           event.preventDefault();
           void form.handleSubmit();

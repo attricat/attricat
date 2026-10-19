@@ -2,6 +2,7 @@ import { Box, Paper, Stack } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrandIcon } from '../../components/BrandIcon';
+import { useInitialFocus } from '../../components/initialFocus';
 
 export const authFormWidth = 360;
 
@@ -15,6 +16,7 @@ export const AuthFormShell = ({
   onSubmit: () => void;
 }) => {
   const { t } = useTranslation();
+  const formRef = useInitialFocus<HTMLFormElement>();
   return (
     <Stack
       sx={{
@@ -28,6 +30,7 @@ export const AuthFormShell = ({
       </Box>
       {header}
       <Paper
+        ref={formRef}
         component="form"
         onSubmit={(event) => {
           event.preventDefault();
