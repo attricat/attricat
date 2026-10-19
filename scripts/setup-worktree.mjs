@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import net from "node:net";
+import { fileURLToPath } from "node:url";
 
 /**
  * Provision this worktree's development environment.
@@ -11,10 +12,26 @@ import net from "node:net";
  * `just dev` can be stopped and restarted without changing its URLs. The
  * script creates `.env` from `.env.example` when necessary, while preserving
  * existing non-port configuration in an existing `.env` file.
+ *
+ * The API reads secrets only from files, as Docker secrets, so the script also
+ * writes them to the ignored `.secrets` directory and points
+ * `ATTRICAT_SECRETS_DIR` at it. Secrets an older `.env` still carries as
+ * variables move there, because the API refuses them in its environment.
  */
 const stateFile = new URL("../.worktree", import.meta.url);
 const envFile = new URL("../.env", import.meta.url);
 const exampleEnvFile = new URL("../.env.example", import.meta.url);
+const secretsDir = fileURLToPath(new URL("../.secrets/", import.meta.url));
+/** Variables that used to carry a secret, and the file that now holds it. */
+const retiredSecretVariables = {
+  S3_SECRET_ACCESS_KEY: "s3_secret_access_key",
+  SMTP_PASSWORD: "smtp_password",
+  LLM_API_KEY: "llm_api_key",
+  REDIS_URL: "redis_url",
+  ATTRICAT_BOOTSTRAP_OWNER_PASSWORD: "bootstrap_owner_password",
+  ATTRICAT_E2E_FIXTURE_PASSWORD: "e2e_fixture_password",
+  FILE_WORKER_METRICS_TOKEN: "file_worker_metrics_token",
+};
 const portNames = [
   "POSTGRES_PORT",
   "API_PORT",
@@ -63,6 +80,22 @@ const setEnvValue = (contents, name, value) => {
   return `${lines.join("\n")}\n`;
 };
 
+/** Remove one .env entry, returning its unquoted value. */
+const takeEnvValue = (contents, name) => {
+  const lines = contents.split("\n");
+  const index = lines.findIndex((line) => line.startsWith(`${name}=`));
+  if (index === -1) return [contents, undefined];
+  const value = lines[index]
+    .slice(name.length + 1)
+    .replace(/^(["'])(.*)\1$/, "$2");
+  lines.splice(index, 1);
+  return [lines.join("\n"), value];
+};
+
+const secretPath = (name) => `${secretsDir}${name}`;
+const writeSecret = (name, value) =>
+  writeFileSync(secretPath(name), `${value}\n`, { mode: 0o600 });
+
 // Keep generated port assignments out of version control but stable per worktree.
 let ports = existsSync(stateFile)
   ? parseEnv(readFileSync(stateFile, "utf8"))
@@ -98,11 +131,21 @@ if (!/^ATTRICAT_SAMPLE_ACCOUNTS=/m.test(env)) {
   env = setEnvValue(env, "ATTRICAT_SAMPLE_ACCOUNTS", "true");
 }
 
-env = setEnvValue(
-  env,
-  "DATABASE_URL",
-  `postgres://postgres:postgres@localhost:${ports.POSTGRES_PORT}/attricat`,
-);
+mkdirSync(secretsDir, { recursive: true, mode: 0o700 });
+for (const [variable, secret] of Object.entries(retiredSecretVariables)) {
+  let value;
+  [env, value] = takeEnvValue(env, variable);
+  if (value && !existsSync(secretPath(secret))) writeSecret(secret, value);
+}
+env = setEnvValue(env, "ATTRICAT_SECRETS_DIR", secretsDir);
+if (!existsSync(secretPath("bootstrap_owner_password"))) {
+  writeSecret("bootstrap_owner_password", "test");
+}
+
+// SQLx tooling and the Rust tests read DATABASE_URL; the API reads the secret.
+const databaseUrl = `postgres://postgres:postgres@localhost:${ports.POSTGRES_PORT}/attricat`;
+env = setEnvValue(env, "DATABASE_URL", databaseUrl);
+writeSecret("database_url", databaseUrl);
 env = setEnvValue(env, "BIND_ADDR", `127.0.0.1:${ports.API_PORT}`);
 env = setEnvValue(env, "ATTRICAT_API_URL", `http://127.0.0.1:${ports.API_PORT}/api`);
 env = setEnvValue(env, "WEB_PORT", ports.WEB_PORT);
@@ -120,7 +163,7 @@ env = setEnvValue(
 env = setEnvValue(env, "RUSTFS_PORT", ports.RUSTFS_PORT);
 // The query cache stays in memory unless CACHE_BACKEND=redis is set.
 env = setEnvValue(env, "REDIS_PORT", ports.REDIS_PORT);
-env = setEnvValue(env, "REDIS_URL", `redis://127.0.0.1:${ports.REDIS_PORT}`);
+writeSecret("redis_url", `redis://127.0.0.1:${ports.REDIS_PORT}`);
 env = setEnvValue(env, "RUSTFS_CONSOLE_PORT", ports.RUSTFS_CONSOLE_PORT);
 env = setEnvValue(
   env,
@@ -131,7 +174,7 @@ env = setEnvValue(env, "S3_ENDPOINT", `http://127.0.0.1:${ports.RUSTFS_PORT}`);
 env = setEnvValue(env, "S3_REGION", "us-east-1");
 env = setEnvValue(env, "S3_BUCKET", "attricat-files");
 env = setEnvValue(env, "S3_ACCESS_KEY_ID", "attricat-dev");
-env = setEnvValue(env, "S3_SECRET_ACCESS_KEY", "attricat-dev-secret");
+writeSecret("s3_secret_access_key", "attricat-dev-secret");
 env = setEnvValue(env, "S3_FORCE_PATH_STYLE", "true");
 env = setEnvValue(env, "S3_UPLOAD_TIMEOUT_SECONDS", "30");
 env = setEnvValue(env, "S3_DOWNLOAD_TIMEOUT_SECONDS", "30");

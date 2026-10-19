@@ -173,18 +173,9 @@ impl Default for CacheConfig {
 }
 
 impl CacheConfig {
-    /// Reads `CACHE_BACKEND` (`memory` or `redis`), `REDIS_URL`,
+    /// Parses `CACHE_BACKEND` (`memory` or `redis`), the `redis_url` secret,
     /// `CACHE_MAX_ENTRIES` and `CACHE_KEY_PREFIX`.
-    pub fn from_env() -> Result<Self, String> {
-        Self::parse(
-            std::env::var("CACHE_BACKEND").ok().as_deref(),
-            std::env::var("REDIS_URL").ok().as_deref(),
-            std::env::var("CACHE_MAX_ENTRIES").ok().as_deref(),
-            std::env::var("CACHE_KEY_PREFIX").ok().as_deref(),
-        )
-    }
-
-    fn parse(
+    pub fn parse(
         backend: Option<&str>,
         redis_url: Option<&str>,
         max_entries: Option<&str>,
@@ -196,7 +187,7 @@ impl CacheConfig {
                 url: redis_url
                     .map(str::trim)
                     .filter(|url| !url.is_empty())
-                    .ok_or("CACHE_BACKEND=redis requires REDIS_URL")?
+                    .ok_or("CACHE_BACKEND=redis requires the redis_url secret")?
                     .to_owned(),
             },
             Some(_) => return Err("CACHE_BACKEND must be `memory` or `redis`".to_owned()),
@@ -314,7 +305,7 @@ impl QueryCache {
     /// database.
     /// An unreachable Redis is retried in the background while the process
     /// serves from memory: the shared tier is an optimization, never a
-    /// dependency. Only an invalid `REDIS_URL` is an error.
+    /// dependency. Only an invalid Redis URL is an error.
     pub async fn from_config(
         config: CacheConfig,
         database_identity: &str,
@@ -661,12 +652,16 @@ mod tests {
         shared_behaviour(QueryCache::default(), QueryCache::default(), false).await;
     }
 
-    /// Runs only when `REDIS_URL` points at a Redis server.
+    /// Runs only when the `redis_url` secret in `ATTRICAT_SECRETS_DIR`, which
+    /// `just setup` writes, points at a Redis server.
     #[tokio::test]
     async fn redis_backend_behaviour() {
-        let Some(url) = std::env::var("REDIS_URL")
-            .ok()
-            .filter(|url| !url.trim().is_empty())
+        let Some(url) = std::env::var_os("ATTRICAT_SECRETS_DIR")
+            .and_then(|dir| {
+                std::fs::read_to_string(std::path::Path::new(&dir).join("redis_url")).ok()
+            })
+            .map(|url| url.trim().to_owned())
+            .filter(|url| !url.is_empty())
         else {
             return;
         };

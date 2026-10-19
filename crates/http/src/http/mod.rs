@@ -120,6 +120,9 @@ pub struct AppState {
     /// Seeded per-role accounts that the web sign-in offers to pre-fill.
     pub sample_logins: Option<SampleLogins>,
     pub build_info: BuildInfo,
+    /// Compiled SPA directory served outside `/api`; production images set
+    /// it to the Vite output.
+    pub web_dist_dir: Option<String>,
 }
 
 pub use self::data_health::DataHealthCache;
@@ -1114,8 +1117,7 @@ pub fn router(state: AppState) -> Router {
         .merge(probes.clone())
         .layer(middleware::from_fn_with_state(state.clone(), server_timing));
 
-    // Production images set WEB_DIST_DIR to the compiled Vite output.
-    let web_dist = std::env::var("WEB_DIST_DIR").ok();
+    let web_dist = state.web_dist_dir.clone();
     let web_dist = web_dist
         .as_deref()
         .map(str::trim)

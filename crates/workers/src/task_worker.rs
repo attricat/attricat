@@ -6,7 +6,6 @@
 
 use std::{
     collections::HashMap,
-    env,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -32,18 +31,19 @@ pub struct TaskWorkerConfig {
 }
 
 impl TaskWorkerConfig {
-    pub fn from_env() -> Result<Self, String> {
-        fn positive(name: &str, default: u64) -> Result<u64, String> {
-            match env::var(name) {
-                Ok(value) => value
+    /// Parses the `TASK_WORKER_*` settings, defaulting each unset one.
+    pub fn from_values(get: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
+        let positive = |name: &str, default: u64| -> Result<u64, String> {
+            match get(name) {
+                Some(value) => value
                     .parse()
                     .ok()
                     .filter(|value: &u64| *value > 0)
                     .ok_or_else(|| format!("{name} must be a positive integer")),
-                Err(_) => Ok(default),
+                None => Ok(default),
             }
-        }
-        let worker_id = env::var("TASK_WORKER_ID").unwrap_or_else(|_| Uuid::new_v4().to_string());
+        };
+        let worker_id = get("TASK_WORKER_ID").unwrap_or_else(|| Uuid::new_v4().to_string());
         if worker_id.is_empty() || worker_id.len() > 128 {
             return Err("TASK_WORKER_ID must be 1-128 bytes".to_owned());
         }

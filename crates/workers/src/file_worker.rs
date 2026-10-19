@@ -44,9 +44,10 @@ pub struct WorkerConfig {
 }
 
 impl WorkerConfig {
-    pub fn from_env() -> Result<Self, String> {
+    /// Parses the file worker's processing settings, defaulting each unset one.
+    pub fn from_values(get: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
         let parse = |name: &str, default: u64| -> Result<u64, String> {
-            std::env::var(name).map_or(Ok(default), |value| {
+            get(name).map_or(Ok(default), |value| {
                 value
                     .parse()
                     .map_err(|_| format!("{name} must be a positive integer"))
@@ -65,8 +66,8 @@ impl WorkerConfig {
             return Err("file worker limits must be positive".into());
         }
         Ok(Self {
-            worker_id: std::env::var("FILE_WORKER_ID")
-                .unwrap_or_else(|_| format!("file-worker-{}", Uuid::new_v4())),
+            worker_id: get("FILE_WORKER_ID")
+                .unwrap_or_else(|| format!("file-worker-{}", Uuid::new_v4())),
             max_pixels,
             max_attempts,
             delete_grace: grace,

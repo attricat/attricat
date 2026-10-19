@@ -1,6 +1,11 @@
 name: attricat-release-test
 
 x-app: &app
+  secrets:
+    - database_url
+    - s3_secret_access_key
+    - bootstrap_owner_password
+    - file_worker_metrics_token
   read_only: true
   tmpfs:
     - /tmp:size=256m,mode=1777
@@ -8,17 +13,14 @@ x-app: &app
     - no-new-privileges:true
 
 x-environment: &environment
-  DATABASE_URL: postgres://postgres:postgres@postgres:5432/attricat
   ATTRICAT_AUTO_MIGRATE: "false"
   ATTRICAT_BOOTSTRAP_OWNER_EMAIL: owner@example.test
-  ATTRICAT_BOOTSTRAP_OWNER_PASSWORD: test-release-password
   SESSION_COOKIE_SECURE: "false"
   ATTRICAT_DEVTOOLS: "false"
   S3_ENDPOINT: http://rustfs:9000
   S3_REGION: us-east-1
   S3_BUCKET: attricat-files
   S3_ACCESS_KEY_ID: attricat-ci
-  S3_SECRET_ACCESS_KEY: attricat-ci-secret
   S3_FORCE_PATH_STYLE: "true"
   S3_UPLOAD_TIMEOUT_SECONDS: "10"
   S3_DOWNLOAD_TIMEOUT_SECONDS: "10"
@@ -103,7 +105,6 @@ services:
     environment:
       <<: *environment
       FILE_WORKER_OPERATIONS_BIND_ADDR: 0.0.0.0:3001
-      FILE_WORKER_METRICS_TOKEN: release-test-token
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -113,3 +114,14 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+# Disposable test credentials, committed on purpose.
+secrets:
+  database_url:
+    file: ./ci-secrets/database_url
+  s3_secret_access_key:
+    file: ./ci-secrets/s3_secret_access_key
+  bootstrap_owner_password:
+    file: ./ci-secrets/bootstrap_owner_password
+  file_worker_metrics_token:
+    file: ./ci-secrets/file_worker_metrics_token

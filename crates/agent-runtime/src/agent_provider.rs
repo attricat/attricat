@@ -426,11 +426,13 @@ mod tests {
         let server = tokio::spawn(async move {
             axum::serve(listener, app).await.unwrap();
         });
-        let config = AgentProviderConfig::from_values(|name| match name {
-            "LLM_API_KEY" => Some("test-key".to_owned()),
-            "LLM_BASE_URL" => Some(format!("http://{address}/v1")),
-            _ => None,
-        })
+        let config = AgentProviderConfig::from_values(
+            |name| match name {
+                "LLM_BASE_URL" => Some(format!("http://{address}/v1")),
+                _ => None,
+            },
+            Some(secrecy::SecretString::from("test-key")),
+        )
         .unwrap()
         .unwrap();
         (OpenAiCompatibleClient::new(&config).unwrap(), server)
@@ -461,11 +463,13 @@ mod tests {
 
     #[test]
     fn includes_configured_reasoning_effort() {
-        let config = AgentProviderConfig::from_values(|name| match name {
-            "LLM_API_KEY" => Some("test-key".to_owned()),
-            "LLM_REASONING_EFFORT" => Some("none".to_owned()),
-            _ => None,
-        })
+        let config = AgentProviderConfig::from_values(
+            |name| match name {
+                "LLM_REASONING_EFFORT" => Some("none".to_owned()),
+                _ => None,
+            },
+            Some(secrecy::SecretString::from("test-key")),
+        )
         .unwrap()
         .unwrap();
         let client = OpenAiCompatibleClient::new(&config).unwrap();
@@ -525,11 +529,13 @@ mod tests {
             let server = tokio::spawn(async move {
                 axum::serve(listener, app).await.unwrap();
             });
-            let config = AgentProviderConfig::from_values(|name| match name {
-                "LLM_API_KEY" => Some("test-key".to_owned()),
-                "LLM_BASE_URL" => Some(format!("http://{address}/v1")),
-                _ => None,
-            })
+            let config = AgentProviderConfig::from_values(
+                |name| match name {
+                    "LLM_BASE_URL" => Some(format!("http://{address}/v1")),
+                    _ => None,
+                },
+                Some(secrecy::SecretString::from("test-key")),
+            )
             .unwrap()
             .unwrap();
             let client = OpenAiCompatibleClient::new(&config).unwrap();

@@ -1,8 +1,16 @@
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { chromium, type BrowserContext } from '@playwright/test';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { resolve } from 'node:path';
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import {
   e2eApiPort,
   e2eApiUrl,
@@ -189,6 +197,15 @@ const provisionUser = async (
   }
 };
 
+/** The API reads secrets only from files; this writes a disposable set. */
+const writeSecrets = (secrets: Record<string, string>) => {
+  const dir = mkdtempSync(join(tmpdir(), 'attricat-e2e-secrets-'));
+  for (const [name, value] of Object.entries(secrets)) {
+    writeFileSync(join(dir, name), value, { mode: 0o600 });
+  }
+  return dir;
+};
+
 const stop = (process: ChildProcess) => {
   if (!process.killed) process.kill('SIGTERM');
 };
@@ -264,22 +281,25 @@ export default async () => {
     ],
     { stdio: 'inherit' },
   );
-  const apiEnv = {
+  const secretsDir = writeSecrets({
+    database_url: database.getConnectionUri(),
+    s3_secret_access_key: 'attricat-e2e-secret',
+    bootstrap_owner_password: bootstrapOwnerPassword,
+  });
+  const apiEnv: NodeJS.ProcessEnv = {
     ...process.env,
+    ATTRICAT_SECRETS_DIR: secretsDir,
     BIND_ADDR: `127.0.0.1:${e2eApiPort}`,
     S3_ENDPOINT: e2eS3Url,
     S3_REGION: 'us-east-1',
     S3_BUCKET: 'attricat-files',
     S3_ACCESS_KEY_ID: 'attricat-e2e',
-    S3_SECRET_ACCESS_KEY: 'attricat-e2e-secret',
     S3_FORCE_PATH_STYLE: 'true',
     S3_UPLOAD_TIMEOUT_SECONDS: '30',
     // A cold WASM artifact fetch can exceed the production timeout on Colima.
     S3_DOWNLOAD_TIMEOUT_SECONDS: '120',
-    DATABASE_URL: database.getConnectionUri(),
     ATTRICAT_BOOTSTRAP_OWNER_ID: bootstrapOwnerId,
     ATTRICAT_BOOTSTRAP_OWNER_EMAIL: bootstrapOwnerEmail,
-    ATTRICAT_BOOTSTRAP_OWNER_PASSWORD: bootstrapOwnerPassword,
     // Specs assume the bootstrap owner is the only seeded member.
     ATTRICAT_SAMPLE_ACCOUNTS: 'false',
     ATTRICAT_DEMO_MODE: 'false',
@@ -343,6 +363,7 @@ export default async () => {
       stop(mailpit);
       stop(rustfs);
       await database.stop();
+      rmSync(secretsDir, { recursive: true, force: true });
     };
   } catch (error) {
     if (fileWorker) stop(fileWorker);
@@ -350,6 +371,7 @@ export default async () => {
     stop(mailpit);
     stop(rustfs);
     await database.stop();
+    rmSync(secretsDir, { recursive: true, force: true });
     throw error;
   }
 };

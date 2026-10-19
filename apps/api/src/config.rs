@@ -1,0 +1,729 @@
+//! Deployment configuration shared by the API, file worker and migrate
+//! binaries.
+//!
+//! [`Config::load`] reads every setting once at startup. Plain settings come
+//! from the process environment, after `.env` is loaded. Secrets come only
+//! from files in the Docker secrets directory (`/run/secrets` unless
+//! `ATTRICAT_SECRETS_DIR` names another), never from environment variables, so
+//! they do not appear in `docker inspect`, process listings or crash dumps.
+
+use std::{
+    collections::HashMap, fmt, fs, io, net::SocketAddr, path::PathBuf, str::FromStr, time::Duration,
+};
+
+use secrecy::SecretString;
+use uuid::Uuid;
+
+use crate::{
+    agents::AgentProviderConfig,
+    blueprint_migration_worker::BlueprintMigrationBatchConfig,
+    constants::{
+        DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS, DEFAULT_FILE_UPLOAD_MAX_BYTES,
+        DEFAULT_FILE_UPLOAD_MAX_FILES, DEFAULT_HTTP_DEFAULT_BODY_BYTES,
+        DEFAULT_HTTP_MAX_CONCURRENT_REQUESTS, DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS,
+        DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE, DEFAULT_PREVIEW_RELATIONSHIP_DEPTH,
+        DEFAULT_PREVIEW_RELATIONSHIP_ITEMS, DEFAULT_RECORD_PAGE_SIZE,
+        DEFAULT_RELATIONSHIP_FACET_NODES, REQUEST_POOL_CONNECTIONS, TASK_POOL_CONNECTIONS,
+    },
+    event_dispatcher::DispatcherConfig,
+    extension_policy::ExtensionPolicy,
+    extension_registry::{DEFAULT_OFFICIAL_REGISTRY, GitHubRepository},
+    file_worker::WorkerConfig,
+    repository::ValueHistoryRetentionDays,
+    storage::StorageConfig,
+    task_worker::TaskWorkerConfig,
+};
+use attricat_cache::CacheConfig;
+
+pub const DEFAULT_SECRETS_DIR: &str = "/run/secrets";
+const MAX_GLOBAL_POOL_CONNECTIONS: u32 = 100;
+
+/// Names of the files the secrets directory may hold.
+pub mod secret {
+    pub const DATABASE_URL: &str = "database_url";
+    pub const S3_SECRET_ACCESS_KEY: &str = "s3_secret_access_key";
+    pub const SMTP_PASSWORD: &str = "smtp_password";
+    pub const LLM_API_KEY: &str = "llm_api_key";
+    pub const REDIS_URL: &str = "redis_url";
+    pub const BOOTSTRAP_OWNER_PASSWORD: &str = "bootstrap_owner_password";
+    pub const E2E_FIXTURE_PASSWORD: &str = "e2e_fixture_password";
+    pub const FILE_WORKER_METRICS_TOKEN: &str = "file_worker_metrics_token";
+}
+
+/// Environment variables that used to carry a secret. Startup refuses them
+/// rather than silently ignoring a credential an operator meant to apply.
+/// `DATABASE_URL` is absent: SQLx tooling and tests still read it, so the
+/// binaries ignore it instead.
+const RETIRED_SECRET_VARIABLES: [(&str, &str); 7] = [
+    ("S3_SECRET_ACCESS_KEY", secret::S3_SECRET_ACCESS_KEY),
+    ("SMTP_PASSWORD", secret::SMTP_PASSWORD),
+    ("LLM_API_KEY", secret::LLM_API_KEY),
+    ("REDIS_URL", secret::REDIS_URL),
+    (
+        "ATTRICAT_BOOTSTRAP_OWNER_PASSWORD",
+        secret::BOOTSTRAP_OWNER_PASSWORD,
+    ),
+    (
+        "ATTRICAT_E2E_FIXTURE_PASSWORD",
+        secret::E2E_FIXTURE_PASSWORD,
+    ),
+    (
+        "FILE_WORKER_METRICS_TOKEN",
+        secret::FILE_WORKER_METRICS_TOKEN,
+    ),
+];
+
+/// Every setting the binaries read. Each binary loads all of it, so one
+/// deployment environment configures and validates every role the same way.
+pub struct Config {
+    pub telemetry: TelemetryConfig,
+    pub database: DatabaseConfig,
+    pub storage: StorageConfig,
+    pub http: HttpConfig,
+    pub bootstrap: BootstrapConfig,
+    pub mail: MailConfig,
+    pub cache: CacheConfig,
+    /// `None` when no `llm_api_key` secret is configured: agents are then
+    /// unavailable.
+    pub agent_provider: Option<AgentProviderConfig>,
+    pub extensions: ExtensionsConfig,
+    pub value_history_retention_days: ValueHistoryRetentionDays,
+    pub event_dispatcher: DispatcherConfig,
+    pub task_worker: TaskWorkerConfig,
+    pub blueprint_migration: BlueprintMigrationBatchConfig,
+    pub file_worker: FileWorkerConfig,
+}
+
+pub struct TelemetryConfig {
+    /// `RUST_LOG` directives.
+    pub log_filter: Option<String>,
+    pub otlp_traces_endpoint: Option<String>,
+}
+
+pub struct DatabaseConfig {
+    pub url: SecretString,
+    pub request_pool_connections: u32,
+    pub task_pool_connections: u32,
+    pub auto_migrate: bool,
+}
+
+pub struct HttpConfig {
+    pub bind_addr: SocketAddr,
+    pub web_dist_dir: Option<String>,
+    pub session_cookie_secure: bool,
+    pub devtools_enabled: bool,
+    pub request_timeout: Duration,
+    pub max_concurrent_requests: usize,
+    pub default_body_limit: usize,
+    pub max_event_streams: usize,
+    pub max_event_streams_per_principal: usize,
+    pub event_stream_lifetime: Duration,
+    pub max_preview_relationship_depth: u8,
+    pub max_preview_relationship_items: u32,
+    pub max_record_page_size: u32,
+    pub max_incoming_relationship_page_size: u32,
+    pub max_relationship_facet_nodes: u32,
+    pub max_upload_file_bytes: u64,
+    pub max_upload_files: usize,
+    pub data_health_cache_ttl_seconds: u64,
+}
+
+pub struct BootstrapConfig {
+    pub workspace_id: Uuid,
+    pub workspace_name: String,
+    /// Trimmed and lowercased.
+    pub owner_email: String,
+    pub owner_id: Option<Uuid>,
+    pub owner_password: Option<SecretString>,
+    pub demo_mode: bool,
+    /// Implied by `demo_mode`; requires `owner_password`.
+    pub sample_accounts: bool,
+    pub e2e_fixture: Option<E2eFixture>,
+}
+
+/// An independent principal for browser E2E fixture setup.
+pub struct E2eFixture {
+    /// Trimmed and lowercased.
+    pub email: String,
+    pub password: SecretString,
+}
+
+pub struct MailConfig {
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub smtp_tls_mode: String,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<SecretString>,
+    pub from: String,
+    pub password_reset_url: String,
+    pub workspace_invitation_url: String,
+    pub workspace_onboarding_url: String,
+}
+
+pub struct ExtensionsConfig {
+    pub official_registry: GitHubRepository,
+    pub policy: ExtensionPolicy,
+    /// Development only: solution packs install locally built extensions
+    /// from this directory. Requires `ATTRICAT_DEVTOOLS`.
+    pub local_extensions_dir: Option<String>,
+}
+
+pub struct FileWorkerConfig {
+    pub worker: WorkerConfig,
+    pub operations_bind_addr: SocketAddr,
+    /// Required when `operations_bind_addr` is not loopback.
+    pub metrics_token: Option<SecretString>,
+    pub poll_interval: Duration,
+}
+
+pub struct ConfigError(String);
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+/// `main` reports a returned error with `Debug`; show operators the message.
+impl fmt::Debug for ConfigError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for ConfigError {}
+
+impl From<String> for ConfigError {
+    fn from(message: String) -> Self {
+        Self(message)
+    }
+}
+
+impl From<&str> for ConfigError {
+    fn from(message: &str) -> Self {
+        Self(message.to_owned())
+    }
+}
+
+impl Config {
+    /// Loads `.env` when present, then reads the process environment and the
+    /// secrets directory.
+    pub fn load() -> Result<Self, ConfigError> {
+        dotenvy::dotenv().ok();
+        let vars = std::env::vars_os()
+            .filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?)))
+            .collect();
+        Self::from_source(&Source::new(vars))
+    }
+
+    fn from_source(source: &Source) -> Result<Self, ConfigError> {
+        source.reject_secret_variables()?;
+        let get = |name: &str| source.owned(name);
+
+        let devtools_enabled = source.boolean("ATTRICAT_DEVTOOLS", false)?;
+        let demo_mode = source.boolean("ATTRICAT_DEMO_MODE", false)?;
+        let mut agent_provider =
+            AgentProviderConfig::from_values(get, source.secret(secret::LLM_API_KEY)?)
+                .map_err(|error| format!("invalid agent provider configuration: {error}"))?;
+        // Demo visitors share accounts, so the agent may only read there.
+        if let Some(config) = &mut agent_provider {
+            config.read_only = demo_mode;
+        }
+
+        let local_extensions_dir = source.owned("SOLUTION_PACK_LOCAL_EXTENSIONS_DIR");
+        if local_extensions_dir.is_some() && !devtools_enabled {
+            return Err(
+                "SOLUTION_PACK_LOCAL_EXTENSIONS_DIR requires ATTRICAT_DEVTOOLS=true".into(),
+            );
+        }
+
+        Ok(Self {
+            telemetry: TelemetryConfig {
+                log_filter: source.owned("RUST_LOG"),
+                otlp_traces_endpoint: source.owned("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"),
+            },
+            database: DatabaseConfig {
+                url: source.required_secret(secret::DATABASE_URL)?,
+                request_pool_connections: source.pool_connections(
+                    "DATABASE_REQUEST_POOL_CONNECTIONS",
+                    REQUEST_POOL_CONNECTIONS,
+                )?,
+                task_pool_connections: source
+                    .pool_connections("DATABASE_TASK_POOL_CONNECTIONS", TASK_POOL_CONNECTIONS)?,
+                auto_migrate: source.boolean("ATTRICAT_AUTO_MIGRATE", true)?,
+            },
+            storage: StorageConfig::from_values(get, source.secret(secret::S3_SECRET_ACCESS_KEY)?)
+                .map_err(|error| format!("invalid object storage configuration: {error}"))?,
+            http: HttpConfig {
+                bind_addr: source.parsed("BIND_ADDR", SocketAddr::from(([127, 0, 0, 1], 3000)))?,
+                web_dist_dir: source.owned("WEB_DIST_DIR"),
+                session_cookie_secure: source.boolean("SESSION_COOKIE_SECURE", true)?,
+                devtools_enabled,
+                request_timeout: Duration::from_secs(source.positive(
+                    "HTTP_REQUEST_TIMEOUT_SECONDS",
+                    DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS as u64,
+                )?),
+                max_concurrent_requests: source.positive(
+                    "HTTP_MAX_CONCURRENT_REQUESTS",
+                    DEFAULT_HTTP_MAX_CONCURRENT_REQUESTS,
+                )?,
+                default_body_limit: source
+                    .positive("HTTP_DEFAULT_BODY_BYTES", DEFAULT_HTTP_DEFAULT_BODY_BYTES)?,
+                max_event_streams: source.positive("HTTP_MAX_EVENT_STREAMS", 128)?,
+                max_event_streams_per_principal: source
+                    .positive("HTTP_MAX_EVENT_STREAMS_PER_PRINCIPAL", 4)?,
+                event_stream_lifetime: Duration::from_secs(
+                    source.positive("HTTP_EVENT_STREAM_LIFETIME_SECONDS", 900)?,
+                ),
+                max_preview_relationship_depth: source.parsed(
+                    "PREVIEW_MAX_RELATIONSHIP_DEPTH",
+                    DEFAULT_PREVIEW_RELATIONSHIP_DEPTH,
+                )?,
+                max_preview_relationship_items: source.parsed(
+                    "PREVIEW_MAX_RELATIONSHIP_ITEMS",
+                    DEFAULT_PREVIEW_RELATIONSHIP_ITEMS,
+                )?,
+                max_record_page_size: source
+                    .parsed("RECORD_MAX_PAGE_SIZE", DEFAULT_RECORD_PAGE_SIZE)?,
+                max_incoming_relationship_page_size: source.parsed(
+                    "INCOMING_RELATIONSHIP_MAX_PAGE_SIZE",
+                    DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE,
+                )?,
+                max_relationship_facet_nodes: source.parsed(
+                    "RELATIONSHIP_FACET_MAX_NODES",
+                    DEFAULT_RELATIONSHIP_FACET_NODES,
+                )?,
+                max_upload_file_bytes: source.positive(
+                    "FILE_UPLOAD_MAX_BYTES",
+                    DEFAULT_FILE_UPLOAD_MAX_BYTES as u64,
+                )?,
+                max_upload_files: source
+                    .positive("FILE_UPLOAD_MAX_FILES", DEFAULT_FILE_UPLOAD_MAX_FILES)?,
+                data_health_cache_ttl_seconds: source.parsed(
+                    "DATA_HEALTH_CACHE_TTL_SECONDS",
+                    DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS,
+                )?,
+            },
+            bootstrap: bootstrap(source, demo_mode)?,
+            mail: MailConfig {
+                smtp_host: get("SMTP_HOST").unwrap_or_else(|| "127.0.0.1".to_owned()),
+                smtp_port: source.parsed("SMTP_PORT", 1025)?,
+                smtp_tls_mode: get("SMTP_TLS_MODE").unwrap_or_else(|| "starttls".to_owned()),
+                smtp_username: get("SMTP_USERNAME"),
+                smtp_password: source.secret(secret::SMTP_PASSWORD)?,
+                from: get("MAIL_FROM")
+                    .unwrap_or_else(|| "Attricat <no-reply@attricat.local>".to_owned()),
+                password_reset_url: get("PASSWORD_RESET_URL")
+                    .unwrap_or_else(|| "http://127.0.0.1:5173/password-reset/confirm".to_owned()),
+                workspace_invitation_url: get("WORKSPACE_INVITATION_URL")
+                    .unwrap_or_else(|| "http://127.0.0.1:5173/invitations/accept".to_owned()),
+                workspace_onboarding_url: get("WORKSPACE_ONBOARDING_URL")
+                    .unwrap_or_else(|| "http://127.0.0.1:5173/onboarding".to_owned()),
+            },
+            cache: CacheConfig::parse(
+                source.var("CACHE_BACKEND"),
+                source
+                    .secret(secret::REDIS_URL)?
+                    .as_ref()
+                    .map(secrecy::ExposeSecret::expose_secret),
+                source.var("CACHE_MAX_ENTRIES"),
+                source.var("CACHE_KEY_PREFIX"),
+            )?,
+            agent_provider,
+            extensions: ExtensionsConfig {
+                official_registry: source
+                    .var("EXTENSION_OFFICIAL_REGISTRY")
+                    .unwrap_or(DEFAULT_OFFICIAL_REGISTRY)
+                    .parse()
+                    .map_err(|error| format!("invalid EXTENSION_OFFICIAL_REGISTRY: {error}"))?,
+                policy: ExtensionPolicy::parse(
+                    source.var("EXTENSIONS_MODE"),
+                    source.var("EXTENSION_DENYLIST"),
+                )?,
+                local_extensions_dir,
+            },
+            value_history_retention_days: source
+                .var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
+                .unwrap_or("90")
+                .parse()
+                .map_err(|error| format!("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS {error}"))?,
+            event_dispatcher: DispatcherConfig::from_values(get)
+                .map_err(|error| format!("invalid event dispatcher configuration: {error}"))?,
+            task_worker: TaskWorkerConfig::from_values(get)
+                .map_err(|error| format!("invalid task worker configuration: {error}"))?,
+            blueprint_migration: BlueprintMigrationBatchConfig::from_values(get)
+                .map_err(|error| format!("invalid blueprint migration configuration: {error}"))?,
+            file_worker: file_worker(source)?,
+        })
+    }
+}
+
+fn bootstrap(source: &Source, demo_mode: bool) -> Result<BootstrapConfig, ConfigError> {
+    let owner_email = source
+        .var("ATTRICAT_BOOTSTRAP_OWNER_EMAIL")
+        .unwrap_or("owner@example.test")
+        .trim()
+        .to_lowercase();
+    if !owner_email.contains('@') {
+        return Err("ATTRICAT_BOOTSTRAP_OWNER_EMAIL must be a valid email address".into());
+    }
+    let owner_password = source.secret(secret::BOOTSTRAP_OWNER_PASSWORD)?;
+    // A public demo signs visitors in to the bootstrap workspace with seeded
+    // per-role accounts, which the web app offers to pre-fill.
+    let sample_accounts = demo_mode || source.boolean("ATTRICAT_SAMPLE_ACCOUNTS", false)?;
+    if sample_accounts && owner_password.is_none() {
+        return Err(
+            "ATTRICAT_SAMPLE_ACCOUNTS and ATTRICAT_DEMO_MODE require the bootstrap_owner_password secret"
+                .into(),
+        );
+    }
+    // Test-only, and effective only when both halves are configured.
+    let e2e_fixture = source
+        .var("ATTRICAT_E2E_FIXTURE_EMAIL")
+        .zip(source.secret(secret::E2E_FIXTURE_PASSWORD)?)
+        .map(|(email, password)| E2eFixture {
+            email: email.trim().to_lowercase(),
+            password,
+        });
+    Ok(BootstrapConfig {
+        workspace_id: source.parsed(
+            "ATTRICAT_WORKSPACE_ID",
+            Uuid::from_u128(0x00000000_0000_4000_8000_000000000002),
+        )?,
+        workspace_name: source
+            .owned("ATTRICAT_BOOTSTRAP_WORKSPACE_NAME")
+            .unwrap_or_else(|| {
+                if demo_mode {
+                    "Demo"
+                } else {
+                    "Default workspace"
+                }
+                .to_owned()
+            }),
+        owner_email,
+        owner_id: source
+            .var("ATTRICAT_BOOTSTRAP_OWNER_ID")
+            .map(|value| {
+                value
+                    .parse()
+                    .map_err(|_| "ATTRICAT_BOOTSTRAP_OWNER_ID must be a UUID")
+            })
+            .transpose()?,
+        owner_password,
+        demo_mode,
+        sample_accounts,
+        e2e_fixture,
+    })
+}
+
+fn file_worker(source: &Source) -> Result<FileWorkerConfig, ConfigError> {
+    let operations_bind_addr = source.parsed(
+        "FILE_WORKER_OPERATIONS_BIND_ADDR",
+        SocketAddr::from(([127, 0, 0, 1], 3001)),
+    )?;
+    let metrics_token = source.secret(secret::FILE_WORKER_METRICS_TOKEN)?;
+    if !operations_bind_addr.ip().is_loopback() && metrics_token.is_none() {
+        return Err(
+            "the file_worker_metrics_token secret is required when FILE_WORKER_OPERATIONS_BIND_ADDR is not loopback"
+                .into(),
+        );
+    }
+    Ok(FileWorkerConfig {
+        worker: WorkerConfig::from_values(|name| source.owned(name))?,
+        operations_bind_addr,
+        metrics_token,
+        poll_interval: Duration::from_millis(
+            source.positive("FILE_WORKER_POLL_MILLISECONDS", 500)?,
+        ),
+    })
+}
+
+/// The environment snapshot and secrets directory configuration is read from.
+struct Source {
+    vars: HashMap<String, String>,
+    secrets_dir: PathBuf,
+}
+
+impl Source {
+    fn new(vars: HashMap<String, String>) -> Self {
+        let secrets_dir = PathBuf::from(
+            vars.get("ATTRICAT_SECRETS_DIR")
+                .filter(|dir| !dir.is_empty())
+                .map_or(DEFAULT_SECRETS_DIR, String::as_str),
+        );
+        Self { vars, secrets_dir }
+    }
+
+    /// An empty value counts as unset, so `.env` templates can list a
+    /// setting without choosing a value.
+    fn var(&self, name: &str) -> Option<&str> {
+        self.vars
+            .get(name)
+            .map(String::as_str)
+            .filter(|value| !value.is_empty())
+    }
+
+    fn owned(&self, name: &str) -> Option<String> {
+        self.var(name).map(str::to_owned)
+    }
+
+    fn reject_secret_variables(&self) -> Result<(), ConfigError> {
+        for (variable, secret) in RETIRED_SECRET_VARIABLES {
+            if self.var(variable).is_some() {
+                return Err(format!(
+                    "{variable} must not be set in the environment; provide it as the {secret} secret file in {} instead",
+                    self.secrets_dir.display()
+                )
+                .into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Reads one secret file. A missing or empty file is an unset secret;
+    /// trailing line breaks, which editors and `echo` add, are not part of
+    /// the value.
+    fn secret(&self, name: &str) -> Result<Option<SecretString>, ConfigError> {
+        let path = self.secrets_dir.join(name);
+        match fs::read_to_string(&path) {
+            Ok(value) => {
+                let value = value.trim_end_matches(['\r', '\n']);
+                Ok((!value.is_empty()).then(|| SecretString::from(value.to_owned())))
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(format!(
+                "cannot read the {name} secret at {}: {error}",
+                path.display()
+            )
+            .into()),
+        }
+    }
+
+    fn required_secret(&self, name: &str) -> Result<SecretString, ConfigError> {
+        self.secret(name)?.ok_or_else(|| {
+            format!(
+                "the {name} secret must be provided in {}",
+                self.secrets_dir.display()
+            )
+            .into()
+        })
+    }
+
+    fn parsed<T: FromStr>(&self, name: &str, default: T) -> Result<T, ConfigError> {
+        match self.var(name) {
+            Some(value) => value
+                .parse()
+                .map_err(|_| format!("{name} has an invalid value").into()),
+            None => Ok(default),
+        }
+    }
+
+    fn positive<T: FromStr + Default + PartialOrd>(
+        &self,
+        name: &str,
+        default: T,
+    ) -> Result<T, ConfigError> {
+        match self.var(name) {
+            Some(value) => value
+                .parse()
+                .ok()
+                .filter(|value| *value > T::default())
+                .ok_or_else(|| format!("{name} must be a positive integer").into()),
+            None => Ok(default),
+        }
+    }
+
+    fn boolean(&self, name: &str, default: bool) -> Result<bool, ConfigError> {
+        match self.var(name) {
+            None => Ok(default),
+            Some("true") => Ok(true),
+            Some("false") => Ok(false),
+            Some(_) => Err(format!("{name} must be `true` or `false`").into()),
+        }
+    }
+
+    fn pool_connections(&self, name: &str, default: u32) -> Result<u32, ConfigError> {
+        match self.var(name) {
+            Some(value) => value
+                .parse::<u32>()
+                .ok()
+                .filter(|value| (1..=MAX_GLOBAL_POOL_CONNECTIONS).contains(value))
+                .ok_or_else(|| {
+                    format!("{name} must be an integer between 1 and {MAX_GLOBAL_POOL_CONNECTIONS}")
+                        .into()
+                }),
+            None => Ok(default),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use secrecy::ExposeSecret;
+
+    use super::*;
+
+    /// A secrets directory removed when the test ends.
+    struct Secrets(PathBuf);
+
+    impl Secrets {
+        fn new(files: &[(&str, &str)]) -> Self {
+            let dir = std::env::temp_dir().join(format!("attricat-secrets-{}", Uuid::new_v4()));
+            fs::create_dir(&dir).unwrap();
+            for (name, value) in files {
+                fs::write(dir.join(name), value).unwrap();
+            }
+            Self(dir)
+        }
+    }
+
+    impl Drop for Secrets {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn required_secrets() -> Secrets {
+        Secrets::new(&[
+            (secret::DATABASE_URL, "postgres://u:p@db/attricat\n"),
+            (secret::S3_SECRET_ACCESS_KEY, "s3-secret"),
+        ])
+    }
+
+    fn load(secrets: &Secrets, vars: &[(&str, &str)]) -> Result<Config, ConfigError> {
+        let mut map: HashMap<String, String> = [
+            ("S3_ENDPOINT", "http://127.0.0.1:9000"),
+            ("S3_REGION", "us-east-1"),
+            ("S3_BUCKET", "attricat-files"),
+            ("S3_ACCESS_KEY_ID", "attricat-dev"),
+            ("S3_FORCE_PATH_STYLE", "true"),
+            ("S3_UPLOAD_TIMEOUT_SECONDS", "30"),
+            ("S3_DOWNLOAD_TIMEOUT_SECONDS", "30"),
+        ]
+        .into_iter()
+        .map(|(name, value)| (name.to_owned(), value.to_owned()))
+        .collect();
+        map.insert(
+            "ATTRICAT_SECRETS_DIR".to_owned(),
+            secrets.0.display().to_string(),
+        );
+        for (name, value) in vars {
+            map.insert((*name).to_owned(), (*value).to_owned());
+        }
+        Config::from_source(&Source::new(map))
+    }
+
+    #[test]
+    fn minimal_configuration_uses_defaults_and_reads_secret_files() {
+        let secrets = required_secrets();
+        let config = load(&secrets, &[]).unwrap();
+        assert_eq!(
+            config.database.url.expose_secret(),
+            "postgres://u:p@db/attricat"
+        );
+        assert_eq!(
+            config.database.request_pool_connections,
+            REQUEST_POOL_CONNECTIONS
+        );
+        assert!(config.database.auto_migrate);
+        assert_eq!(config.http.bind_addr.to_string(), "127.0.0.1:3000");
+        assert!(config.http.session_cookie_secure);
+        assert!(config.agent_provider.is_none());
+        assert!(config.mail.smtp_password.is_none());
+        assert_eq!(config.bootstrap.owner_email, "owner@example.test");
+        assert!(!config.bootstrap.sample_accounts);
+        assert_eq!(config.file_worker.poll_interval, Duration::from_millis(500));
+    }
+
+    #[test]
+    fn required_secrets_must_be_files() {
+        let secrets = Secrets::new(&[(secret::S3_SECRET_ACCESS_KEY, "s3-secret")]);
+        let error = load(&secrets, &[("DATABASE_URL", "postgres://env")])
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("database_url secret"));
+
+        let secrets = Secrets::new(&[(secret::DATABASE_URL, "postgres://db")]);
+        assert!(load(&secrets, &[]).is_err());
+    }
+
+    #[test]
+    fn secrets_in_the_environment_stop_startup() {
+        let secrets = required_secrets();
+        for (variable, secret) in RETIRED_SECRET_VARIABLES {
+            let error = load(&secrets, &[(variable, "value")]).err().unwrap();
+            assert!(error.to_string().contains(secret), "{error}");
+        }
+        // Empty template entries are unset rather than an error.
+        assert!(load(&secrets, &[("LLM_API_KEY", "")]).is_ok());
+    }
+
+    #[test]
+    fn optional_secrets_configure_their_features() {
+        let secrets = Secrets::new(&[
+            (secret::DATABASE_URL, "postgres://db"),
+            (secret::S3_SECRET_ACCESS_KEY, "s3-secret"),
+            (secret::LLM_API_KEY, "llm-key\n"),
+            (secret::BOOTSTRAP_OWNER_PASSWORD, "owner password"),
+            (secret::SMTP_PASSWORD, "\n"),
+        ]);
+        let config = load(&secrets, &[("ATTRICAT_DEMO_MODE", "true")]).unwrap();
+        assert!(config.agent_provider.unwrap().read_only);
+        assert!(config.bootstrap.sample_accounts);
+        assert_eq!(config.bootstrap.workspace_name, "Demo");
+        assert_eq!(
+            config.bootstrap.owner_password.unwrap().expose_secret(),
+            "owner password"
+        );
+        // An empty file is an unset secret.
+        assert!(config.mail.smtp_password.is_none());
+    }
+
+    #[test]
+    fn dependent_settings_are_validated_together() {
+        let secrets = required_secrets();
+        assert!(load(&secrets, &[("ATTRICAT_SAMPLE_ACCOUNTS", "true")]).is_err());
+        assert!(
+            load(
+                &secrets,
+                &[("FILE_WORKER_OPERATIONS_BIND_ADDR", "0.0.0.0:3001")]
+            )
+            .is_err()
+        );
+        assert!(
+            load(
+                &secrets,
+                &[("SOLUTION_PACK_LOCAL_EXTENSIONS_DIR", "/tmp/x")]
+            )
+            .is_err()
+        );
+        assert!(load(&secrets, &[("CACHE_BACKEND", "redis")]).is_err());
+        assert!(load(&secrets, &[("EXTENSIONS_MODE", "off")]).is_err());
+    }
+
+    #[test]
+    fn boolean_configuration_is_strict() {
+        let secrets = required_secrets();
+        assert!(
+            !load(&secrets, &[("ATTRICAT_AUTO_MIGRATE", "false")])
+                .unwrap()
+                .database
+                .auto_migrate
+        );
+        assert!(load(&secrets, &[("ATTRICAT_AUTO_MIGRATE", "TRUE")]).is_err());
+    }
+
+    #[test]
+    fn numeric_configuration_is_positive_and_bounded() {
+        let secrets = required_secrets();
+        let config = load(&secrets, &[("DATABASE_TASK_POOL_CONNECTIONS", "7")]).unwrap();
+        assert_eq!(config.database.task_pool_connections, 7);
+        for invalid in ["0", "-1", "101", "invalid"] {
+            assert!(load(&secrets, &[("DATABASE_TASK_POOL_CONNECTIONS", invalid)]).is_err());
+        }
+        for invalid in ["0", "n/a"] {
+            assert!(load(&secrets, &[("FILE_WORKER_POLL_MILLISECONDS", invalid)]).is_err());
+        }
+        assert!(load(&secrets, &[("HTTP_MAX_CONCURRENT_REQUESTS", "0")]).is_err());
+    }
+}

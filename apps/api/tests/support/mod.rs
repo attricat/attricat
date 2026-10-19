@@ -436,6 +436,7 @@ async fn start_configured_server(
             branch: env!("ATTRICAT_BUILD_BRANCH"),
             commit: env!("ATTRICAT_BUILD_COMMIT"),
         },
+        web_dist_dir: None,
     };
     configure(&mut state);
     let router = router(state);

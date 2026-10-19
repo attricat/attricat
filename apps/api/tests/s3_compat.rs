@@ -1,14 +1,17 @@
 //! Opt-in compatibility coverage against the local RustFS S3 adapter.
 //!
-//! Run after `just dev` with `set -a; . ./.env; set +a;` so the test uses the
-//! same S3 configuration as the API and file worker.
-use api::storage::{ObjectStore, S3ObjectStore, StorageConfig, StoredObject};
+//! Run after `just dev` with `just test-s3-compat` so the test loads the same
+//! configuration and secrets as the API and file worker.
+use api::{
+    config::Config,
+    storage::{ObjectStore, S3ObjectStore, StoredObject},
+};
 use uuid::Uuid;
 
 #[tokio::test]
 #[ignore = "requires the configured RustFS/S3-compatible endpoint and bucket"]
 async fn rustfs_supports_attricat_s3_operations() {
-    let config = StorageConfig::from_env().expect("valid S3 test configuration");
+    let config = Config::load().expect("valid S3 test configuration").storage;
     let store = S3ObjectStore::new(config).await;
     let key = format!("attricat-s3-compat-test/{}", Uuid::new_v4());
 

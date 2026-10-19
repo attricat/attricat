@@ -78,7 +78,7 @@ normally `default.local`:
 
 ```sh
 cargo run -p acli -- --session-file .acli-session auth discover default.local
-printf '%s' "$ATTRICAT_BOOTSTRAP_OWNER_PASSWORD" | \
+cat .secrets/bootstrap_owner_password | \
   cargo run -p acli -- --session-file .acli-session auth login default.local \
     --email "$ATTRICAT_BOOTSTRAP_OWNER_EMAIL" --password-stdin
 ```

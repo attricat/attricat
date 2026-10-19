@@ -5,6 +5,16 @@ x-app: &app
   env_file:
     - path: ${ATTRICAT_ENV_FILE:-.env.production}
       required: true
+  # Secrets are files, never environment variables. Each role loads the same
+  # configuration, so each receives every secret.
+  secrets:
+    - database_url
+    - s3_secret_access_key
+    - smtp_password
+    - llm_api_key
+    - redis_url
+    - bootstrap_owner_password
+    - file_worker_metrics_token
   restart: unless-stopped
   read_only: true
   tmpfs:
@@ -49,3 +59,21 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+
+# Every file must exist and be readable by uid 10001; an empty file leaves an
+# optional secret unset. See the Operate section of the docs site.
+secrets:
+  database_url:
+    file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/database_url
+  s3_secret_access_key:
+    file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/s3_secret_access_key
+  smtp_password:
+    file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/smtp_password
+  llm_api_key:
+    file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/llm_api_key
+  redis_url:
+    file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/redis_url
+  bootstrap_owner_password:
+    file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/bootstrap_owner_password
+  file_worker_metrics_token:
+    file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/file_worker_metrics_token

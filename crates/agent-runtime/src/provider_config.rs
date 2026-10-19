@@ -3,7 +3,7 @@
 //! Provider credentials and deployment parsing belong with the worker-owned
 //! provider adapter rather than dependency-light domain contracts.
 
-use std::{env, time::Duration};
+use std::time::Duration;
 
 use attricat_domain::agents::MAX_AGENT_MODEL_BYTES;
 use secrecy::{ExposeSecret, SecretString};
@@ -35,17 +35,15 @@ pub struct AgentProviderConfig {
 }
 
 impl AgentProviderConfig {
-    /// Loads a configured provider. A missing or blank API key means agents are
-    /// unavailable; malformed settings are deployment errors rather than a
-    /// reason to silently select another provider.
-    pub fn from_env() -> Result<Option<Self>, AgentConfigError> {
-        Self::from_values(|name| env::var(name).ok())
-    }
-
+    /// Builds a configured provider from `LLM_*` settings and the API key
+    /// secret. A missing or blank API key means agents are unavailable;
+    /// malformed settings are deployment errors rather than a reason to
+    /// silently select another provider.
     pub fn from_values(
         value: impl Fn(&str) -> Option<String>,
+        api_key: Option<SecretString>,
     ) -> Result<Option<Self>, AgentConfigError> {
-        let Some(api_key) = value("LLM_API_KEY").filter(|key| !key.trim().is_empty()) else {
+        let Some(api_key) = api_key.filter(|key| !key.expose_secret().trim().is_empty()) else {
             return Ok(None);
         };
         let base_url = value("LLM_BASE_URL").unwrap_or_else(|| DEFAULT_LLM_BASE_URL.to_owned());
@@ -70,7 +68,7 @@ impl AgentProviderConfig {
             return Err(AgentConfigError::InvalidReasoningEffort);
         }
         Ok(Some(Self {
-            api_key: SecretString::from(api_key),
+            api_key,
             base_url,
             model,
             reasoning_effort,
@@ -136,49 +134,48 @@ pub enum AgentConfigError {
 
 #[cfg(test)]
 mod tests {
+    use secrecy::SecretString;
+
     use super::{AgentConfigError, AgentProviderConfig, DEFAULT_LLM_MODEL};
+
+    fn key(value: &str) -> Option<SecretString> {
+        Some(SecretString::from(value))
+    }
 
     #[test]
     fn missing_or_blank_key_disables_agents() {
         assert!(
-            AgentProviderConfig::from_values(|_| None)
+            AgentProviderConfig::from_values(|_| None, None)
                 .unwrap()
                 .is_none()
         );
         assert!(
-            AgentProviderConfig::from_values(|name| {
-                (name == "LLM_API_KEY").then(|| "  ".to_owned())
-            })
-            .unwrap()
-            .is_none()
+            AgentProviderConfig::from_values(|_| None, key("  "))
+                .unwrap()
+                .is_none()
         );
     }
 
     #[test]
     fn validates_provider_settings_and_uses_safe_defaults() {
-        let configured = AgentProviderConfig::from_values(|name| match name {
-            "LLM_API_KEY" => Some("secret".to_owned()),
-            _ => None,
-        })
-        .unwrap()
-        .unwrap();
+        let configured = AgentProviderConfig::from_values(|_| None, key("secret"))
+            .unwrap()
+            .unwrap();
         assert_eq!(configured.base_url.as_str(), "https://api.openai.com/v1/");
         assert_eq!(configured.model, DEFAULT_LLM_MODEL);
         assert_eq!(configured.reasoning_effort, None);
         assert_eq!(configured.max_tool_rounds, 25);
-        let configured = AgentProviderConfig::from_values(|name| match name {
-            "LLM_API_KEY" => Some("secret".to_owned()),
-            "LLM_REASONING_EFFORT" => Some("none".to_owned()),
-            _ => None,
-        })
+        let configured = AgentProviderConfig::from_values(
+            |name| (name == "LLM_REASONING_EFFORT").then(|| "none".to_owned()),
+            key("secret"),
+        )
         .unwrap()
         .unwrap();
         assert_eq!(configured.reasoning_effort.as_deref(), Some("none"));
-        let configured = AgentProviderConfig::from_values(|name| match name {
-            "LLM_API_KEY" => Some("secret".to_owned()),
-            "LLM_MAX_TOOL_ROUNDS" => Some("40".to_owned()),
-            _ => None,
-        })
+        let configured = AgentProviderConfig::from_values(
+            |name| (name == "LLM_MAX_TOOL_ROUNDS").then(|| "40".to_owned()),
+            key("secret"),
+        )
         .unwrap()
         .unwrap();
         assert_eq!(configured.max_tool_rounds, 40);
@@ -215,11 +212,10 @@ mod tests {
                 AgentConfigError::InvalidToolRounds,
             ),
         ] {
-            let result = AgentProviderConfig::from_values(|key| match key {
-                "LLM_API_KEY" => Some("secret".to_owned()),
-                key if key == name => Some(value.to_owned()),
-                _ => None,
-            });
+            let result = AgentProviderConfig::from_values(
+                |key| (key == name).then(|| value.to_owned()),
+                key("secret"),
+            );
             assert_eq!(result.err(), Some(expected));
         }
     }

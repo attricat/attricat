@@ -3,7 +3,7 @@
 //! Handlers must be idempotent: a lease can expire after a handler has made a
 //! durable change but before its acknowledgement commits, and delivery order is
 //! intentionally not guaranteed.
-use std::{collections::HashSet, env, sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use attricat_repository::round_trips::measure;
@@ -48,17 +48,18 @@ impl DispatcherConfig {
         })
     }
 
-    pub fn from_env() -> Result<Self, String> {
-        fn positive(name: &str, default: u64) -> Result<u64, String> {
-            match env::var(name) {
-                Ok(value) => value
+    /// Parses the `EVENT_DISPATCHER_*` settings, defaulting each unset one.
+    pub fn from_values(get: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
+        let positive = |name: &str, default: u64| -> Result<u64, String> {
+            match get(name) {
+                Some(value) => value
                     .parse::<u64>()
                     .ok()
                     .filter(|value| *value > 0)
                     .ok_or_else(|| format!("{name} must be a positive integer")),
-                Err(_) => Ok(default),
+                None => Ok(default),
             }
-        }
+        };
         Self::new(
             Duration::from_secs(positive("EVENT_DISPATCHER_LEASE_SECONDS", 30)?),
             Duration::from_secs(positive("EVENT_DISPATCHER_RETRY_INITIAL_SECONDS", 1)?),
@@ -326,7 +327,7 @@ mod tests {
 
     #[test]
     fn retry_delay_is_bounded_exponential() {
-        let config = DispatcherConfig::from_env().unwrap();
+        let config = DispatcherConfig::from_values(|_| None).unwrap();
         assert_eq!(config.retry_delay(1), Duration::from_secs(1));
         assert_eq!(config.retry_delay(2), Duration::from_secs(2));
         assert_eq!(config.retry_delay(20), Duration::from_secs(60));

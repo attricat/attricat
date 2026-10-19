@@ -85,11 +85,13 @@ async fn approved_agent_mutation_has_explicit_redacted_provenance(pool: sqlx::Pg
         .await
         .unwrap();
     });
-    let config = AgentProviderConfig::from_values(|name| match name {
-        "LLM_API_KEY" => Some("test-key".to_owned()),
-        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
-        _ => None,
-    })
+    let config = AgentProviderConfig::from_values(
+        |name| match name {
+            "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+            _ => None,
+        },
+        Some(secrecy::SecretString::from("test-key")),
+    )
     .unwrap()
     .unwrap();
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();

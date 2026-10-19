@@ -1119,11 +1119,13 @@ async fn completed_conversation_gets_a_provider_generated_title(pool: PgPool) {
             axum::Json(json!({"choices":[{"message":{"content":"\"Compare product prices\"","tool_calls":[]}}]}))
         }))).await.unwrap();
     });
-    let config = AgentProviderConfig::from_values(|name| match name {
-        "LLM_API_KEY" => Some("test-key".to_owned()),
-        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
-        _ => None,
-    })
+    let config = AgentProviderConfig::from_values(
+        |name| match name {
+            "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+            _ => None,
+        },
+        Some(secrecy::SecretString::from("test-key")),
+    )
     .unwrap()
     .unwrap();
     let provider = api::agent_provider::OpenAiCompatibleClient::new(&config).unwrap();
@@ -1516,11 +1518,13 @@ async fn agent_deltas_are_persisted_before_the_provider_finishes(pool: PgPool) {
             }
         }))).await.unwrap();
     });
-    let config = AgentProviderConfig::from_values(|name| match name {
-        "LLM_API_KEY" => Some("test-key".to_owned()),
-        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
-        _ => None,
-    })
+    let config = AgentProviderConfig::from_values(
+        |name| match name {
+            "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+            _ => None,
+        },
+        Some(secrecy::SecretString::from("test-key")),
+    )
     .unwrap()
     .unwrap();
     let repository = AttricatRepository::system(pool.clone())
@@ -1600,12 +1604,14 @@ async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPo
         .await
         .unwrap();
     });
-    let config = AgentProviderConfig::from_values(|name| match name {
-        "LLM_API_KEY" => Some("test-key".to_owned()),
-        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
-        "LLM_RUN_TIMEOUT_SECONDS" => Some("1".to_owned()),
-        _ => None,
-    })
+    let config = AgentProviderConfig::from_values(
+        |name| match name {
+            "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+            "LLM_RUN_TIMEOUT_SECONDS" => Some("1".to_owned()),
+            _ => None,
+        },
+        Some(secrecy::SecretString::from("test-key")),
+    )
     .unwrap()
     .unwrap();
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
@@ -2644,11 +2650,13 @@ async fn read_only_runs_offer_no_mutations_and_refuse_one_named_anyway(pool: PgP
         .await
         .unwrap();
     });
-    let mut config = AgentProviderConfig::from_values(|name| match name {
-        "LLM_API_KEY" => Some("test-key".to_owned()),
-        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
-        _ => None,
-    })
+    let mut config = AgentProviderConfig::from_values(
+        |name| match name {
+            "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+            _ => None,
+        },
+        Some(secrecy::SecretString::from("test-key")),
+    )
     .unwrap()
     .unwrap();
     config.read_only = true;
@@ -2896,11 +2904,13 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
         .await
         .unwrap();
     });
-    let config = AgentProviderConfig::from_values(|name| match name {
-        "LLM_API_KEY" => Some("test-key".to_owned()),
-        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
-        _ => None,
-    })
+    let config = AgentProviderConfig::from_values(
+        |name| match name {
+            "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+            _ => None,
+        },
+        Some(secrecy::SecretString::from("test-key")),
+    )
     .unwrap()
     .unwrap();
     let conversation = repository
@@ -2972,12 +2982,14 @@ async fn runs_stop_after_the_configured_tool_round_limit(pool: PgPool) {
         .await
         .unwrap();
     });
-    let config = AgentProviderConfig::from_values(|name| match name {
-        "LLM_API_KEY" => Some("test-key".to_owned()),
-        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
-        "LLM_MAX_TOOL_ROUNDS" => Some("2".to_owned()),
-        _ => None,
-    })
+    let config = AgentProviderConfig::from_values(
+        |name| match name {
+            "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+            "LLM_MAX_TOOL_ROUNDS" => Some("2".to_owned()),
+            _ => None,
+        },
+        Some(secrecy::SecretString::from("test-key")),
+    )
     .unwrap()
     .unwrap();
     let repository = AttricatRepository::system(pool.clone())
@@ -3014,9 +3026,10 @@ async fn runs_stop_after_the_configured_tool_round_limit(pool: PgPool) {
 #[sqlx::test]
 async fn conversation_detail_reports_a_read_only_agent(pool: PgPool) {
     let (base_url, server) = start_server_with_config(pool, |state| {
-        let mut config = AgentProviderConfig::from_values(|name| {
-            (name == "LLM_API_KEY").then(|| "test-key".to_owned())
-        })
+        let mut config = AgentProviderConfig::from_values(
+            |_| None,
+            Some(secrecy::SecretString::from("test-key")),
+        )
         .unwrap()
         .unwrap();
         config.read_only = true;
