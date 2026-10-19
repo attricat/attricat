@@ -1,5 +1,19 @@
-import { ListItemText, MenuItem, Stack, TextField } from '@mui/material';
-import { useId } from 'react';
+import {
+  Box,
+  FormControl,
+  FormHelperText,
+  FormLabel,
+  IconButton,
+  ListItemText,
+  MenuItem,
+  Popover,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import { useId, useRef, useState, type ChangeEvent } from 'react';
+import { monoFontFamily } from '../../../app/theme';
 import { useTranslation } from 'react-i18next';
 import { attributeLabel } from '../../records/recordDisplay';
 import {
@@ -12,13 +26,25 @@ import { useStatusTransitionDenialText } from '../../records/useStatusTransition
 import { MarkdownEditor } from '../../markdown/MarkdownEditor';
 import type { ValueEditorProps } from '../components/componentTypes';
 import type { StatusTransitionAccess } from '../../records/api';
-import { COLOR_PICKER_SEED, parseColor, validateColor } from './color';
+import {
+  COLOR_PICKER_SEED,
+  COLOR_POPOVER_WIDTH,
+  COLOR_SWATCH_SIZE,
+  parseColor,
+  validateColor,
+} from './color';
 import { emailHref, validateEmail } from './email';
 import { phoneHref } from './phone';
+import { CopyableText } from './CopyableText';
 import { TextControlEditor } from './TextControl';
 import { safeUrl, validateUrl } from './url';
-import { ExternalLinkIcon, MailIcon, PhoneIcon } from 'lucide-react';
-import { smallIconSize } from '../../../components/iconSizes';
+import {
+  ExternalLinkIcon,
+  MailIcon,
+  PencilIcon,
+  PhoneIcon,
+} from 'lucide-react';
+import { compactIconSize, smallIconSize } from '../../../components/iconSizes';
 
 export const ColorEditor = ({
   attribute,
@@ -30,43 +56,142 @@ export const ColorEditor = ({
   onChange,
 }: ValueEditorProps) => {
   const { t } = useTranslation();
-  const id = useId();
+  const helpId = useId();
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const hexInput = useRef<HTMLInputElement>(null);
+  const label = attributeLabel(attribute);
   const problem = error ?? validateColor(value);
+  const help = problem ?? helperText;
+  const color = parseColor(value);
   const change = (next: string) => {
     if (!disabled) onChange(next);
   };
   return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-      <TextField
-        id={id}
-        fullWidth
-        required={required}
-        label={attributeLabel(attribute)}
-        value={value}
-        disabled={disabled}
-        error={Boolean(problem)}
-        helperText={problem ?? helperText ?? t('views.colorFormat')}
-        onChange={(event) => change(event.target.value)}
-        slotProps={{ htmlInput: { spellCheck: false, autoCapitalize: 'none' } }}
-      />
-      <TextField
-        type="color"
-        label={t('views.colorPicker')}
-        value={parseColor(value) ?? COLOR_PICKER_SEED}
-        disabled={disabled}
-        onChange={(event) => change(event.target.value)}
-        sx={{ minWidth: 100 }}
+    // The picker is the control; typing a hex value is tucked into a
+    // popover for the rare exact adjustment.
+    <FormControl
+      aria-describedby={help ? helpId : undefined}
+      component="fieldset"
+      disabled={disabled}
+      error={Boolean(problem)}
+      fullWidth
+      required={required}
+    >
+      <FormLabel component="legend" sx={{ mb: 0.5, p: 0 }}>
+        {label}
+      </FormLabel>
+      <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+        <Box
+          sx={{
+            borderRadius: 1,
+            flexShrink: 0,
+            height: COLOR_SWATCH_SIZE,
+            position: 'relative',
+            width: COLOR_SWATCH_SIZE,
+            '&:focus-within': {
+              outline: '2px solid',
+              outlineColor: 'primary.main',
+              outlineOffset: 2,
+            },
+          }}
+        >
+          {/* The native picker sits invisibly over the swatch it sets. */}
+          <Box
+            aria-hidden
+            sx={{
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 'inherit',
+              height: '100%',
+              opacity: disabled ? 0.5 : 1,
+              // An unset colour reads as empty, not as the picker's seed.
+              ...(color
+                ? { bgcolor: color }
+                : {
+                    background: (theme) =>
+                      `linear-gradient(to top right, transparent calc(50% - 1px), ${theme.palette.text.disabled} 50%, transparent calc(50% + 1px))`,
+                  }),
+            }}
+          />
+          <Box
+            component="input"
+            type="color"
+            value={color ?? COLOR_PICKER_SEED}
+            disabled={disabled}
+            aria-label={t('views.colorPickerFor', { attribute: label })}
+            aria-describedby={help ? helpId : undefined}
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              change(event.target.value)
+            }
+            sx={{
+              cursor: disabled ? 'default' : 'pointer',
+              height: '100%',
+              inset: 0,
+              m: 0,
+              opacity: 0,
+              p: 0,
+              position: 'absolute',
+              width: '100%',
+            }}
+          />
+        </Box>
+        {value ? (
+          <CopyableText value={value} sx={{ fontFamily: monoFontFamily }} />
+        ) : (
+          <Typography color="text.secondary" variant="body2">
+            {t('views.notSet')}
+          </Typography>
+        )}
+        <Tooltip title={t('views.colorEditValue')}>
+          <span>
+            <IconButton
+              aria-label={t('views.colorEditValueFor', { attribute: label })}
+              disabled={disabled}
+              onClick={(event) => setAnchor(event.currentTarget)}
+            >
+              <PencilIcon size={compactIconSize} />
+            </IconButton>
+          </span>
+        </Tooltip>
+      </Stack>
+      {help && <FormHelperText id={helpId}>{help}</FormHelperText>}
+      <Popover
+        anchorEl={anchor}
+        anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
+        onClose={() => setAnchor(null)}
+        open={Boolean(anchor)}
         slotProps={{
-          inputLabel: { shrink: true },
-          htmlInput: {
-            'aria-label': t('views.colorPickerFor', {
-              attribute: attributeLabel(attribute),
-            }),
-            'aria-describedby': `${id}-helper-text`,
-          },
+          transition: { onEntered: () => hexInput.current?.focus() },
         }}
-      />
-    </Stack>
+      >
+        <Box sx={{ p: 2, width: COLOR_POPOVER_WIDTH }}>
+          <TextField
+            inputRef={hexInput}
+            fullWidth
+            label={label}
+            value={value}
+            disabled={disabled}
+            error={Boolean(problem)}
+            helperText={problem ?? t('views.colorFormat')}
+            onChange={(event) => change(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return;
+              // Focus returns to the edit button as the popover closes; without
+              // this, the same key press would click it open again.
+              event.preventDefault();
+              setAnchor(null);
+            }}
+            slotProps={{
+              htmlInput: {
+                spellCheck: false,
+                autoCapitalize: 'none',
+                style: { fontFamily: monoFontFamily },
+              },
+            }}
+          />
+        </Box>
+      </Popover>
+    </FormControl>
   );
 };
 

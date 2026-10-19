@@ -202,7 +202,7 @@ renderer = { id = "attricat.url_display", version = 1 }
 
 | Kontrolka | Komponenty | Działanie |
 | --- | --- | --- |
-| Kolor | `attricat.color_display`, `attricat.color_edit` | Sześciocyfrowy kod szesnastkowy (`#RRGGBB`), wpisany lub wybrany w próbniku kolorów. Wyświetlany jako próbka obok tekstu. |
+| Kolor | `attricat.color_display`, `attricat.color_edit` | Sześciocyfrowy kod szesnastkowy (`#RRGGBB`), wybierany w próbniku kolorów; przycisk edycji obok otwiera pole do wpisania dokładnej wartości. Wyświetlany jako próbka obok tekstu, który po kliknięciu kopiuje wartość. |
 | E-mail | `attricat.email_display`, `attricat.email_edit` | Jeden zwykły adres ASCII, np. `name+tag@example.com`. Wyświetlany jako link `mailto:`. |
 | URL | `attricat.url_display`, `attricat.url_edit` | Tylko bezwzględne adresy `http://` lub `https://`. Linki otwierają się w nowej karcie. |
 | Telefon | `attricat.phone_display`, `attricat.phone_edit` | Zapisywany tak, jak go wpisano. Numery zaczynające się od `+` i numeru kierunkowego kraju stają się linkami `tel:`; numer wewnętrzny można poprzedzić `ext.` lub `x`. |

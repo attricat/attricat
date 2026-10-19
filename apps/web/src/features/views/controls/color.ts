@@ -12,5 +12,9 @@ export const parseColor = (value: unknown): string | undefined =>
 // This is only a picker seed: opening the picker never writes it to the form.
 export const COLOR_PICKER_SEED = '#000000';
 
+/** The colour field's swatch, sized like a dense control. */
+export const COLOR_SWATCH_SIZE = 40;
+export const COLOR_POPOVER_WIDTH = 280;
+
 export const validateColor = (value: string) =>
   value === '' || parseColor(value) ? undefined : i18n.t('views.colorInvalid');

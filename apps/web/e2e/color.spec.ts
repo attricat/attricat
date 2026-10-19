@@ -46,9 +46,19 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "attricat.col
     await page
       .getByRole('textbox', { name: 'title', exact: true })
       .fill('Color sample');
+    // Only the picker shows; the hex text is typed in a popover.
+    const editHex = page.getByRole('button', {
+      name: 'Edit hex value of hex',
+      exact: true,
+    });
     const text = page.getByRole('textbox', { name: 'hex', exact: true });
-    await expect(text).toHaveValue('');
+    await expect(text).toHaveCount(0);
+    await editHex.click();
+    await expect(text).toBeFocused();
     await text.fill('#fff');
+    await text.press('Enter');
+    await expect(text).toBeHidden();
+    await expect(editHex).toBeFocused();
     await page
       .getByRole('button', { name: 'Create record', exact: true })
       .click();
@@ -58,12 +68,13 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "attricat.col
         exact: true,
       }),
     ).toBeVisible();
+    await editHex.click();
     await text.fill('#aBcDeF');
     await page.screenshot({
       path: testInfo.outputPath(`color-editor-${mode}.png`),
     });
-    await text.press('Tab');
-    await expect(page.getByLabel('Pick color for hex')).toBeFocused();
+    await text.press('Enter');
+    await expect(text).toBeHidden();
     await page
       .getByRole('button', { name: 'Create record', exact: true })
       .click();
@@ -71,8 +82,9 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "attricat.col
     const recordUrl = page.url();
     const recordId = recordUrl.split('/').at(-1)!;
     // The record page edits the value in place; the table displays it.
-    const hex = page.getByRole('textbox', { name: 'hex', exact: true });
-    await expect(hex).toHaveValue('#aBcDeF');
+    await expect(
+      page.getByRole('button', { name: 'Copy #aBcDeF', exact: true }),
+    ).toBeVisible();
     await page.goto(`/?blueprint=${code}`);
     const displayedColor = page.getByText('#aBcDeF', { exact: true });
     await expect(displayedColor).toBeVisible();
@@ -83,12 +95,24 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "attricat.col
       path: testInfo.outputPath(`color-display-${mode}.png`),
     });
     await page.goto(recordUrl);
-    await expect(hex).toHaveValue('#aBcDeF');
     // Picking a color is a final choice and saves at once.
     const picked = recordSave(page, recordId);
     await page.getByLabel('Pick color for hex').fill('#ffffff');
     expect((await picked).ok()).toBe(true);
-    await expect(hex).toHaveValue('#ffffff');
+    const copy = page.getByRole('button', {
+      name: 'Copy #ffffff',
+      exact: true,
+    });
+    await expect(copy).toBeVisible();
+    // The shown value copies itself.
+    await page
+      .context()
+      .grantPermissions(['clipboard-read', 'clipboard-write']);
+    await copy.click();
+    await expect(page.getByText('Copied to clipboard.')).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      '#ffffff',
+    );
     await page.goto(`/?blueprint=${code}`);
     await expect(page.getByText('#ffffff', { exact: true })).toBeVisible();
     await page.goto(recordUrl);
@@ -97,21 +121,25 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "attricat.col
       if (request.method() === 'PUT') saves.push(request.url());
     });
     // An invalid color stays a local edit with its error and is not sent.
-    await hex.fill('#fff');
-    await hex.press('Enter');
-    // The field's own message; the error summary above repeats it.
+    await editHex.click();
+    await text.fill('#fff');
+    await text.press('Enter');
+    await expect(text).toBeHidden();
+    // The field's own message, not the closing popover's.
     await expect(
-      page.getByText('Enter a six-digit hex color, such as #1a2b3c.', {
-        exact: true,
-      }),
+      page
+        .getByRole('group', { name: 'hex' })
+        .getByText('Enter a six-digit hex color, such as #1a2b3c.', {
+          exact: true,
+        }),
     ).toBeVisible();
-    await expect(hex).toHaveValue('#fff');
     expect(saves).toEqual([]);
-    await hex.fill('');
-    // Tab would move to the picker inside the same field, so commit with Enter.
-    await commitField(page, recordId, hex, 'Enter');
+    await editHex.click();
+    await expect(text).toHaveValue('#fff');
+    await text.fill('');
+    await commitField(page, recordId, text, 'Enter');
     await page.reload();
-    await expect(hex).toHaveValue('');
+    await expect(page.getByText('Not set', { exact: true })).toBeVisible();
     await page.goto(`/?blueprint=${code}`);
     await expect(
       page.getByRole('link', { name: 'Color sample', exact: true }),

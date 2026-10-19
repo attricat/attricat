@@ -499,6 +499,21 @@ describe('RecordForm', () => {
     return result;
   };
 
+  // The hex text is typed in a popover opened from beside the picker.
+  const openHexValue = async () => {
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Edit hex value of hex' }),
+    );
+    return screen.getByRole('textbox', { name: 'hex' });
+  };
+  // Enter closes it, returning the rest of the form to assistive technology.
+  const typeHexValue = async (value: string) => {
+    const text = await openHexValue();
+    fireEvent.change(text, { target: { value } });
+    fireEvent.keyDown(text, { key: 'Enter' });
+    return screen.findByRole('button', { name: 'Save' });
+  };
+
   it.each([false, true])(
     'validates and saves configured colors with showAll=%s',
     async (showAllAttributes) => {
@@ -506,15 +521,14 @@ describe('RecordForm', () => {
         blueprint: colorBlueprint(),
         showAllAttributes,
       });
-      const text = screen.getByRole('textbox', { name: 'hex' });
-      fireEvent.change(text, { target: { value: '#fff' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      fireEvent.click(await typeHexValue('#fff'));
       await waitFor(() =>
-        expect(screen.getByText(/Enter a six-digit/)).toBeTruthy(),
+        expect(screen.getAllByText(/Enter a six-digit/).length).toBeGreaterThan(
+          0,
+        ),
       );
       expect(onSubmit).not.toHaveBeenCalled();
-      fireEvent.change(text, { target: { value: '#aBcDeF' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      fireEvent.click(await typeHexValue('#aBcDeF'));
       await waitFor(() =>
         expect(onSubmit).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -537,13 +551,12 @@ describe('RecordForm', () => {
         blueprint: colorBlueprint(overrides),
         contextId: marketContextId,
       });
-      const input = screen.getByRole('textbox', { name: 'hex' });
-      expect(input).toHaveProperty('disabled', true);
-      expect(screen.getByLabelText('Pick color for hex')).toHaveProperty(
-        'disabled',
-        true,
-      );
-      fireEvent.change(input, { target: { value: '#ffffff' } });
+      expect(
+        screen.getByRole('button', { name: 'Edit hex value of hex' }),
+      ).toHaveProperty('disabled', true);
+      const picker = screen.getByLabelText('Pick color for hex');
+      expect(picker).toHaveProperty('disabled', true);
+      fireEvent.change(picker, { target: { value: '#ffffff' } });
       fireEvent.click(screen.getByRole('button', { name: 'Save' }));
       await waitFor(() =>
         expect(onSubmit).toHaveBeenCalledWith(
@@ -559,16 +572,11 @@ describe('RecordForm', () => {
       requiredAttributes: ['hex'],
       initialValues: { hex: '#ffffff' },
     });
-    fireEvent.change(screen.getByRole('textbox', { name: 'hex' }), {
-      target: { value: '' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(await typeHexValue(''));
     await waitFor(() =>
       expect(
-        screen
-          .getByRole('textbox', { name: 'hex' })
-          .getAttribute('aria-invalid'),
-      ).toBe('true'),
+        screen.getByRole('group', { name: 'hex' }).querySelector('.Mui-error'),
+      ).toBeTruthy(),
     );
     expect(onSubmit).not.toHaveBeenCalled();
   });
@@ -585,14 +593,10 @@ describe('RecordForm', () => {
       initialValues: { hex: '' },
     });
     await screen.findByRole('dialog', { name: 'Restore unsaved draft?' });
-    expect(
-      screen.getByRole('textbox', { name: 'hex', hidden: true }),
-    ).toHaveProperty('value', '');
+    expect(screen.queryByText('#aBcDeF')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Restore draft' }));
-    expect(await screen.findByRole('textbox', { name: 'hex' })).toHaveProperty(
-      'value',
-      '#aBcDeF',
-    );
+    expect(await screen.findByText('#aBcDeF')).toBeTruthy();
+    expect(await openHexValue()).toHaveProperty('value', '#aBcDeF');
     expect(screen.getByLabelText('Pick color for hex')).toHaveProperty(
       'value',
       '#abcdef',

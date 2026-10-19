@@ -202,7 +202,7 @@ renderer = { id = "attricat.url_display", version = 1 }
 
 | Control | Components | Behavior |
 | --- | --- | --- |
-| Color | `attricat.color_display`, `attricat.color_edit` | Six-digit hex (`#RRGGBB`), typed or picked with a color picker. Shown as a swatch next to the text. |
+| Color | `attricat.color_display`, `attricat.color_edit` | Six-digit hex (`#RRGGBB`), chosen with a color picker; the edit button beside it opens a field for typing an exact value. Shown as a swatch next to the text, which copies the value when clicked. |
 | Email | `attricat.email_display`, `attricat.email_edit` | One plain ASCII address, such as `name+tag@example.com`. Shown as a `mailto:` link. |
 | URL | `attricat.url_display`, `attricat.url_edit` | Absolute `http://` or `https://` URLs only. Links open in a new tab. |
 | Phone | `attricat.phone_display`, `attricat.phone_edit` | Stored as typed. Numbers starting with `+` and a country code become `tel:` links; extensions can use `ext.` or `x`. |

@@ -8,6 +8,7 @@ import { MarkdownContent } from '../../markdown/MarkdownContent';
 import type { ValueRenderer } from '../components/componentTypes';
 import { NotSetValue } from '../components/values/NotSetValue';
 import { parseColor } from './color';
+import { CopyableText } from './CopyableText';
 import { EachValue } from './EachValue';
 import { emailHref } from './email';
 import { phoneHref } from './phone';
@@ -36,9 +37,13 @@ export const ColorValue: ValueRenderer = ({ value }) => (
               }}
             />
           )}
-          <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
-            {typeof item === 'object' ? JSON.stringify(item) : String(item)}
-          </Typography>
+          {color && typeof item === 'string' ? (
+            <CopyableText value={item} />
+          ) : (
+            <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
+              {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+            </Typography>
+          )}
         </Stack>
       );
     }}

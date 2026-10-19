@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useState } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material';
 import { describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
@@ -59,9 +59,15 @@ describe('color components', () => {
       );
     };
     render(<Editor />);
-    const text = screen.getByRole('textbox', { name: 'hex' });
     const picker = screen.getByLabelText('Pick color for hex');
     fireEvent.click(picker);
+    // Only the picker shows; the hex text waits in a popover.
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.getByText('Not set')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Edit hex value of hex' }),
+    );
+    const text = screen.getByRole('textbox', { name: 'hex' });
     expect(text).toHaveProperty('value', '');
     fireEvent.change(text, { target: { value: '#1' } });
     expect(text).toHaveProperty('value', '#1');
@@ -83,14 +89,32 @@ describe('color components', () => {
         disabled
       />,
     );
-    for (const input of [
-      screen.getByRole('textbox'),
-      screen.getByLabelText('Pick color for hex'),
-    ]) {
-      expect(input).toHaveProperty('disabled', true);
-      fireEvent.change(input, { target: { value: '#000000' } });
-    }
+    expect(
+      screen.getByRole('button', { name: 'Edit hex value of hex' }),
+    ).toHaveProperty('disabled', true);
+    const picker = screen.getByLabelText('Pick color for hex');
+    expect(picker).toHaveProperty('disabled', true);
+    fireEvent.change(picker, { target: { value: '#000000' } });
     expect(onChange).not.toHaveBeenCalled();
+  });
+  it('copies the value on click, even when read-only', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    render(
+      <ColorEditor
+        attribute={attribute}
+        value="#aBcDeF"
+        onChange={vi.fn()}
+        disabled
+      />,
+    );
+    const value = screen.getByRole('button', { name: 'Copy #aBcDeF' });
+    expect(value).toHaveProperty('disabled', false);
+    fireEvent.click(value);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('#aBcDeF'));
   });
   it('uses explicit field configuration only', () => {
     const { container } = render(
@@ -123,7 +147,7 @@ describe('color components', () => {
         }}
       />,
     );
-    fireEvent.change(screen.getByRole('textbox', { name: 'hex' }), {
+    fireEvent.change(screen.getByLabelText('Pick color for hex'), {
       target: { value: '#123456' },
     });
     fireEvent.click(screen.getByRole('tab', { name: 'table' }));
