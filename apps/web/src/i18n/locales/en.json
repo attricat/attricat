@@ -564,7 +564,13 @@
     "editingContext": "You are editing values for the {{context}} context. A field without its own value here shows the value it inherits.",
     "previousValueDiscarded": "Previous value {{value}} will be archived.",
     "discardPreviousValue": "Discard previous value",
-    "undoDiscard": "Undo"
+    "undoDiscard": "Undo",
+    "fieldSaving": "Saving…",
+    "fieldSaved": "Saved",
+    "undoSave": "Undo",
+    "allChangesSaved": "All changes saved",
+    "conflictingChange": "{{field}}: yours “{{mine}}”, now “{{theirs}}”",
+    "empty": "empty"
   },
   "exports": {
     "title": "Exports",

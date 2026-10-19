@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Link, Stack, Typography } from '@mui/material';
 import {
   forwardRef,
   useEffect,
@@ -18,6 +18,10 @@ import {
   EditableRecordLayout,
   EditableRecordSection,
 } from '../../views/components/EditableRecordLayout';
+import { FieldRevealContext, useFieldReveal } from '../../views/fieldReveal';
+import { attributeLabel } from '../recordDisplay';
+import { invalidateRecord } from '../invalidateRecord';
+import { FieldSaveStatus } from './FieldSaveStatus';
 import { RecordView } from '../../views/components/RecordView';
 import type { ResolvedValue } from '../../views/components/ValueField';
 import {
@@ -165,6 +169,19 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
       onPendingChange,
     });
     const hasPending = Object.keys(saves.pending).length > 0;
+    const fieldsRef = useRef<HTMLDivElement>(null);
+    // Leads from the save status to a field whose change was not saved.
+    const { request: revealRequest, reveal: revealField } =
+      useFieldReveal(fieldsRef);
+    // Another editor's values are shown beside this editor's changes.
+    useEffect(() => {
+      if (saves.conflict) void invalidateRecord(client, recordId);
+    }, [client, recordId, saves.conflict]);
+    const latestFields = valuesForForm(
+      allAttributes,
+      existingValues,
+      contextId,
+    );
     // Pending changes left after a failed or conflicting save; leaving the
     // record drops them. Changes still being saved finish on their own.
     const unsaved = hasPending && !saves.saving;
@@ -315,6 +332,12 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
           )}
         </InlineFieldEditor>
       );
+      const status = (
+        <FieldSaveStatus
+          onUndo={saves.undoLastSave}
+          state={saves.fieldState(attribute.code)}
+        />
+      );
       return KeptDisplay ? (
         // Leaves room for the editor's label, which rises above its outline.
         <Stack spacing={4} useFlexGap>
@@ -329,10 +352,17 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
               value={resolvedValues[attribute.code]?.value}
             />
           </Box>
-          {editor}
+          {/* Marks where the field is, to lead to it from the status. */}
+          <Box data-field-code={attribute.code} sx={{ position: 'relative' }}>
+            {editor}
+            {status}
+          </Box>
         </Stack>
       ) : (
-        editor
+        <Box data-field-code={attribute.code} sx={{ position: 'relative' }}>
+          {editor}
+          {status}
+        </Box>
       );
     };
     const viewProps = {
@@ -377,6 +407,26 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
             sx={{ mb: 2 }}
           >
             {t('records.changedByAnotherEditor')}
+            <Box component="ul" sx={{ mb: 0, mt: 1, pl: 2 }}>
+              {changeable
+                .filter((attribute) => attribute.code in saves.pending)
+                .map((attribute) => (
+                  <li key={attribute.code}>
+                    {/* Relationship and file values are IDs; name the field. */}
+                    {attribute.value_type ===
+                      attributeValueTypes.relationship ||
+                    attribute.value_type === attributeValueTypes.file
+                      ? attributeLabel(attribute)
+                      : t('records.conflictingChange', {
+                          field: attributeLabel(attribute),
+                          mine:
+                            saves.pending[attribute.code] || t('records.empty'),
+                          theirs:
+                            latestFields[attribute.code] || t('records.empty'),
+                        })}
+                  </li>
+                ))}
+            </Box>
           </Alert>
         )}
         {generalError && (
@@ -404,41 +454,55 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
           sx={{ display: 'block', minHeight: '1.5em', mb: 1 }}
           variant="caption"
         >
-          {saves.saving
-            ? t('records.savingChanges')
-            : hasPending
-              ? t('records.unsavedChangeCount', {
-                  count: Object.keys(saves.pending).length,
-                })
-              : null}
+          {saves.saving ? (
+            t('records.savingChanges')
+          ) : hasPending ? (
+            <Link
+              color="inherit"
+              component="button"
+              onClick={() => revealField(Object.keys(saves.pending)[0])}
+              type="button"
+              variant="caption"
+            >
+              {t('records.unsavedChangeCount', {
+                count: Object.keys(saves.pending).length,
+              })}
+            </Link>
+          ) : saves.savedAny ? (
+            t('records.allChangesSaved')
+          ) : null}
         </Typography>
-        <EditableRecordLayout
-          {...viewProps}
-          attributes={attributes}
-          fallbackVisibilityScope="detail"
-          headingAttributes={headingEditableAttributes(
-            blueprintChangeable,
-            view,
-          )}
-          otherAttributes={unplacedEditableAttributes(
-            blueprintChangeable,
-            view,
-          )}
-          values={resolvedValues}
-          view={view}
-        />
-        {form.reusable_attributes.length > 0 && (
-          <EditableRecordSection
-            headingLevel="h2"
-            title={t('records.additionalAttributes')}
-          >
-            <RecordView
+        <Box ref={fieldsRef}>
+          <FieldRevealContext value={revealRequest}>
+            <EditableRecordLayout
               {...viewProps}
-              attributes={form.reusable_attributes}
-              values={reusableResolvedValues}
+              attributes={attributes}
+              fallbackVisibilityScope="detail"
+              headingAttributes={headingEditableAttributes(
+                blueprintChangeable,
+                view,
+              )}
+              otherAttributes={unplacedEditableAttributes(
+                blueprintChangeable,
+                view,
+              )}
+              values={resolvedValues}
+              view={view}
             />
-          </EditableRecordSection>
-        )}
+            {form.reusable_attributes.length > 0 && (
+              <EditableRecordSection
+                headingLevel="h2"
+                title={t('records.additionalAttributes')}
+              >
+                <RecordView
+                  {...viewProps}
+                  attributes={form.reusable_attributes}
+                  values={reusableResolvedValues}
+                />
+              </EditableRecordSection>
+            )}
+          </FieldRevealContext>
+        </Box>
         {form.can_write && (
           <Box sx={{ mt: 3 }}>
             {/* Attaching changes the record; wait for field saves first. */}
