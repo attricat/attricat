@@ -88,7 +88,7 @@ value_type = "string"
 
 ### Choice lists
 
-A `string` attribute whose `value_schema` has an `enum` is edited with a dropdown. An optional `x-attricat-enum-labels` object maps enum values to display labels; every key must be an enum value, and labels are 1 to 200 characters. It cannot be combined with `x-attricat-status`. See [Choice lists](/builders/validation/#choice-lists).
+A `string` attribute whose `value_schema` has an `enum` is edited by choosing one value: radio buttons for up to five values, a searchable list for more. An optional `x-attricat-enum-labels` object maps enum values to display labels; every key must be an enum value, and labels are 1 to 200 characters. It cannot be combined with `x-attricat-status`. See [Choice lists](/builders/validation/#choice-lists).
 
 ### Statuses
 

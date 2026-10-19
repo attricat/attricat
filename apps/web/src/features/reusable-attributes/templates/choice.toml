@@ -3,7 +3,7 @@ name = "Size"
 value_type = "string"
 facetable = true
 
-# The form offers these values in a dropdown; saving rejects any other.
+# The form offers these values to choose from; saving rejects any other.
 [value_schema]
 type = "string"
 enum = ["s", "m", "l"]

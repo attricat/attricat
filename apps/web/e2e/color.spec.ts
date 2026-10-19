@@ -52,8 +52,11 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "attricat.col
     await page
       .getByRole('button', { name: 'Create record', exact: true })
       .click();
+    // The field's own message; the error summary above repeats it.
     await expect(
-      page.getByText('Enter a six-digit hex color, such as #1a2b3c.'),
+      page.getByText('Enter a six-digit hex color, such as #1a2b3c.', {
+        exact: true,
+      }),
     ).toBeVisible();
     await text.fill('#aBcDeF');
     await page.screenshot({
@@ -96,8 +99,11 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "attricat.col
     // An invalid color stays a local edit with its error and is not sent.
     await hex.fill('#fff');
     await hex.press('Enter');
+    // The field's own message; the error summary above repeats it.
     await expect(
-      page.getByText('Enter a six-digit hex color, such as #1a2b3c.'),
+      page.getByText('Enter a six-digit hex color, such as #1a2b3c.', {
+        exact: true,
+      }),
     ).toBeVisible();
     await expect(hex).toHaveValue('#fff');
     expect(saves).toEqual([]);

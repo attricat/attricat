@@ -187,8 +187,8 @@ test('creates a record with typed scalar values', async ({ page }) => {
   await page.getByLabel('title').fill('Typed product');
   await page.getByLabel('price').fill('19.95');
   await page.getByLabel('quantity').fill('4');
-  await page.getByLabel('available').click();
-  await page.getByRole('option', { name: 'True' }).click();
+  // Yes and no are toggle buttons, shown together with not set.
+  await page.getByRole('button', { name: 'True', exact: true }).click();
   await page.getByLabel('Launch date').fill('2026-08-20');
   await page.getByLabel('Opening time').fill('09:30:00 America/New_York');
   await page.getByRole('button', { name: 'Create record' }).click();
@@ -198,7 +198,9 @@ test('creates a record with typed scalar values', async ({ page }) => {
   await expect(page.getByLabel('title')).toHaveValue('Typed product');
   await expect(page.getByLabel('price')).toHaveValue('19.95');
   await expect(page.getByLabel('quantity')).toHaveValue('4');
-  await expect(page.getByLabel('available')).toHaveText('True');
+  await expect(
+    page.getByRole('button', { name: 'True', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByLabel('Launch date')).toHaveValue('2026-08-20');
 });
 
