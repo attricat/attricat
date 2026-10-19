@@ -109,12 +109,15 @@ export const Explorer = ({
     (selectedBlueprint.data &&
       lexiconText(selectedBlueprint.data.blueprint.name)) ??
     search.blueprint;
+  // Only the first load shows the spinner; background refetches (such as on
+  // window focus) keep the table in place and show its own progress bar.
   const loading =
     Boolean(search.blueprint) &&
     !blueprintMissing &&
-    (blueprints.isFetching ||
-      selectedBlueprint.isFetching ||
-      (canSearch && results.isPending && !results.data));
+    !results.data &&
+    (blueprints.isLoading ||
+      selectedBlueprint.isLoading ||
+      (canSearch && results.isLoading));
   // Narrower screens open results on their own page.
   const panelOpen = isWideDesktop && panelRecordId !== undefined;
   const showInPanel = (record: string | undefined) =>
