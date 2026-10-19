@@ -601,7 +601,10 @@
     "jsonValid": "Poprawny JSON.",
     "jsonNotValidYet": "To jeszcze nie jest poprawny JSON.",
     "useInheritedValue": "Użyj dziedziczonej wartości",
-    "editingContext": "Edytujesz wartości dla kontekstu {{context}}. Pole bez własnej wartości w tym kontekście pokazuje wartość dziedziczoną."
+    "editingContext": "Edytujesz wartości dla kontekstu {{context}}. Pole bez własnej wartości w tym kontekście pokazuje wartość dziedziczoną.",
+    "previousValueDiscarded": "Poprzednia wartość {{value}} zostanie zarchiwizowana.",
+    "discardPreviousValue": "Odrzuć poprzednią wartość",
+    "undoDiscard": "Cofnij"
   },
   "exports": {
     "title": "Eksporty",

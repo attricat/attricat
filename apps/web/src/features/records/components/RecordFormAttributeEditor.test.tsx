@@ -73,6 +73,38 @@ describe('RecordFormAttributeEditor', () => {
     ).toBeNull();
   });
 
+  it('discards a stored value a migration cannot carry over, and undoes it', () => {
+    const onDiscardChange = vi.fn();
+    const review = {
+      message: 'The value type changed.',
+      previousValue: 'large',
+      fieldValue: 'large',
+      onDiscardChange,
+    };
+    const onChange = renderEditor({
+      contextId: defaultContextId,
+      migrationReviews: { title: review },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Discard previous value' }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith('');
+    expect(onDiscardChange).toHaveBeenLastCalledWith(true);
+
+    cleanup();
+    const undo = renderEditor({
+      contextId: defaultContextId,
+      migrationReviews: { title: { ...review, discarded: true } },
+      value: '',
+    });
+    expect(
+      screen.getByText('Previous value large will be archived.'),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(undo).toHaveBeenLastCalledWith('large');
+    expect(onDiscardChange).toHaveBeenLastCalledWith(false);
+  });
+
   it('keeps a protected value readable and says why it cannot change', () => {
     renderEditor({
       attribute: { ...title, readonly: true, description: 'From the import.' },

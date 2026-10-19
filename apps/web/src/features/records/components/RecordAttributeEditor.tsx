@@ -1,5 +1,5 @@
-import { Box, Stack, Typography, useTheme } from '@mui/material';
-import { InfoIcon } from 'lucide-react';
+import { Box, Button, Stack, Typography, useTheme } from '@mui/material';
+import { InfoIcon, Trash2Icon, Undo2Icon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type {
   Attribute,
@@ -98,7 +98,11 @@ export const RecordAttributeEditor = ({
     // `display: contents` keeps the editor and its note laid out as siblings.
     <Box data-migration-review sx={{ display: 'contents' }}>
       {editor}
-      <MigrationReviewNote review={migrationReview} />
+      <MigrationReviewNote
+        disabled={effectiveDisabled}
+        onFieldChange={onChange}
+        review={migrationReview}
+      />
     </Box>
   ) : (
     editor
@@ -106,9 +110,18 @@ export const RecordAttributeEditor = ({
 };
 
 /** Why a migration asks to review the field, and the value it had before. */
-const MigrationReviewNote = ({ review }: { review: MigrationFieldReview }) => {
+const MigrationReviewNote = ({
+  disabled,
+  onFieldChange,
+  review,
+}: {
+  disabled: boolean;
+  onFieldChange: (value: string) => void;
+  review: MigrationFieldReview;
+}) => {
   const { t } = useTranslation();
   const { palette } = useTheme();
+  const { onDiscardChange } = review;
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
       <Box sx={{ display: 'flex', flexShrink: 0, pt: 0.25 }}>
@@ -122,8 +135,30 @@ const MigrationReviewNote = ({ review }: { review: MigrationFieldReview }) => {
             sx={{ overflowWrap: 'anywhere' }}
             variant="body2"
           >
-            {t('records.previousValue', { value: review.previousValue })}
+            {review.discarded
+              ? t('records.previousValueDiscarded', {
+                  value: review.previousValue,
+                })
+              : t('records.previousValue', { value: review.previousValue })}
           </Typography>
+        )}
+        {onDiscardChange && (
+          <Button
+            disabled={disabled}
+            onClick={() => {
+              // Discarding empties the field the stored value filled; undoing
+              // puts that value back.
+              onFieldChange(review.discarded ? (review.fieldValue ?? '') : '');
+              onDiscardChange(!review.discarded);
+            }}
+            size="small"
+            startIcon={review.discarded ? <Undo2Icon /> : <Trash2Icon />}
+            sx={{ ml: -0.5 }}
+          >
+            {review.discarded
+              ? t('records.undoDiscard')
+              : t('records.discardPreviousValue')}
+          </Button>
         )}
       </Box>
     </Stack>

@@ -40,7 +40,11 @@ vi.mock('./components/RecordForm', () => ({
     children: React.ReactNode;
     migrationReviews: Record<
       string,
-      { message: string; previousValue?: string }
+      {
+        message: string;
+        previousValue?: string;
+        onDiscardChange?: (discard: boolean) => void;
+      }
     >;
     onSubmit: (values: { values: []; relationships: [] }) => void;
     pendingConfirmations: { label: string }[];
@@ -51,6 +55,14 @@ vi.mock('./components/RecordForm', () => ({
         {Object.entries(migrationReviews).map(([code, review]) => (
           <li key={code}>
             {code}: {review.message} ({review.previousValue})
+            {review.onDiscardChange && (
+              <button
+                onClick={() => review.onDiscardChange?.(true)}
+                type="button"
+              >
+                Discard {code}
+              </button>
+            )}
           </li>
         ))}
       </ul>
@@ -194,4 +206,14 @@ it("explains inline issues in the user's language with the previous value", asyn
   ).toBeTruthy();
   expect(screen.getByText('size: Server says ()')).toBeTruthy();
   expect(screen.getByText('2 fields to review')).toBeTruthy();
+  // Only a field with a stored value can discard it.
+  expect(screen.queryByRole('button', { name: 'Discard size' })).toBeNull();
+  vi.mocked(migrateRecord).mockImplementation(() => new Promise(() => {}));
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'Discard supplier' }));
+  await user.click(screen.getByRole('button', { name: 'Submit migration' }));
+  expect(migrateRecord).toHaveBeenCalledWith(
+    'record-1',
+    expect.objectContaining({ discard_attributes: ['supplier'] }),
+  );
 });
