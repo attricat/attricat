@@ -1,4 +1,5 @@
-import { MenuItem, TextField } from '@mui/material';
+import { Box, TextField } from '@mui/material';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   Attribute,
@@ -7,25 +8,67 @@ import type {
 } from '../api';
 import { resolveValueEditor } from '../../views/components/registry';
 import type { ValueEditorProps } from '../../views/components/componentTypes';
-import { ChoiceEditor, StatusEditor } from '../../views/controls/editors';
+import { StatusEditor } from '../../views/controls/editors';
+import {
+  BooleanEditor,
+  ChoiceEditor,
+} from '../../views/controls/choiceControls';
 import { choiceEditorOptions } from '../choices';
 import { attributeLabel } from '../recordDisplay';
 import { attributeValueTypes } from '../valueTypes';
-import {
-  booleanFieldValues,
-  JSON_EDITOR_MIN_ROWS,
-  scalarValuePlaceholders,
-} from '../constants';
+import { JSON_EDITOR_MIN_ROWS, scalarValuePlaceholders } from '../constants';
 import { statusConfiguration } from '../status';
 import { principalConfiguration } from '../../principals/principal';
 import { PrincipalEditor } from '../../principals/PrincipalEditor';
+import { attributeMaxLength } from '../attributeHints';
+
+const isJson = (text: string) => {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const numeric = (attribute: Attribute) =>
   attribute.value_type === attributeValueTypes.number ||
   attribute.value_type === attributeValueTypes.integer;
 
+/** Helper text with a count of the characters used against the limit. */
+const CountedHelperText = ({
+  text,
+  length,
+  max,
+}: {
+  text?: ReactNode;
+  length: number;
+  max: number;
+}) => (
+  <Box
+    component="span"
+    sx={{ display: 'flex', gap: 2, justifyContent: 'space-between' }}
+  >
+    <span>{text}</span>
+    <Box
+      component="span"
+      sx={{ flexShrink: 0, color: length > max ? 'error.main' : undefined }}
+    >
+      {`${length} / ${max}`}
+    </Box>
+  </Box>
+);
+
 /** The built-in input for a scalar value type. */
-const BuiltInEditor = ({
+const BuiltInEditor = (props: ValueEditorProps) =>
+  props.attribute.value_type === attributeValueTypes.boolean ? (
+    <BooleanEditor {...props} />
+  ) : (
+    <TextValueEditor {...props} />
+  );
+
+/** A typed text input, for every scalar type but yes or no. */
+const TextValueEditor = ({
   attribute,
   value,
   disabled,
@@ -35,32 +78,40 @@ const BuiltInEditor = ({
   onChange,
 }: ValueEditorProps) => {
   const { t } = useTranslation();
-  const common = {
-    fullWidth: true,
-    disabled,
-    required,
-    error: Boolean(error),
-    helperText: error ?? helperText,
-    label: attributeLabel(attribute),
-    value,
-    onChange: (event: { target: { value: string } }) =>
-      onChange(event.target.value),
-  };
-  if (attribute.value_type === attributeValueTypes.boolean)
-    return (
-      <TextField {...common} select>
-        <MenuItem value="">{t('records.notSet')}</MenuItem>
-        <MenuItem value={booleanFieldValues.true}>{t('records.true')}</MenuItem>
-        <MenuItem value={booleanFieldValues.false}>
-          {t('records.false')}
-        </MenuItem>
-      </TextField>
-    );
   const json = attribute.value_type === attributeValueTypes.json;
   const date = attribute.value_type === attributeValueTypes.date;
+  const maxLength = attributeMaxLength(attribute);
+  // JSON is checked as it is typed; saving still reports invalid JSON.
+  const jsonNote =
+    json && value.trim()
+      ? isJson(value)
+        ? t('records.jsonValid')
+        : t('records.jsonNotValidYet')
+      : undefined;
+  const text =
+    [error ?? helperText, !error && jsonNote].filter(Boolean).join(' ') ||
+    undefined;
   return (
     <TextField
-      {...common}
+      fullWidth
+      disabled={disabled}
+      required={required}
+      error={Boolean(error)}
+      helperText={
+        maxLength === undefined ? (
+          text
+        ) : (
+          // JSON Schema counts code points, not UTF-16 units.
+          <CountedHelperText
+            length={[...value].length}
+            max={maxLength}
+            text={text}
+          />
+        )
+      }
+      label={attributeLabel(attribute)}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
       multiline={json}
       minRows={json ? JSON_EDITOR_MIN_ROWS : undefined}
       placeholder={scalarValuePlaceholders[attribute.value_type]}

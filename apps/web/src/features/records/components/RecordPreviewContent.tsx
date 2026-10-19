@@ -1,4 +1,4 @@
-import { Box, Paper, Typography } from '@mui/material';
+import { Alert, Box, Paper, Typography } from '@mui/material';
 import { useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
@@ -131,6 +131,16 @@ export const RecordPreviewContent = ({
           onChange={onContextChange}
           value={contextId ?? ''}
         />
+        {form && contextId && contextId !== defaultContextId && (
+          // Says whose values the fields change, and where the rest come from.
+          <Alert severity="info" sx={{ mt: 2 }}>
+            {t('records.editingContext', {
+              context:
+                contexts.find((context) => context.id === contextId)?.code ??
+                contextId,
+            })}
+          </Alert>
+        )}
         {form ? (
           <RecordInlineFields
             key={`${recordId}:${contextId ?? ''}`}

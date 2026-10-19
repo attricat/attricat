@@ -7,10 +7,11 @@ use crate::domain_events::{
 };
 use crate::model::TablePathAttribute;
 use crate::persistence_rows::{Db, IntoDomain};
-use attricat_blueprint::{ViewDefinition, parse};
+use attricat_blueprint::{AttributeDeclaration, ViewDefinition, parse};
 use attricat_cache::{CacheKey, Policy};
 use attricat_validation::validate_json_schema;
 use serde_json::json;
+use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -341,6 +342,7 @@ impl AttricatRepository {
             );
         }
 
+        describe_attributes(&blueprint.definition, &mut attributes);
         Ok(BlueprintWithAttributes {
             blueprint,
             attributes,
@@ -1003,13 +1005,15 @@ impl AttricatRepository {
         }
     }
 
-    /// Adds read-time state to a revision: extension type availability and
-    /// table paths, which follow other blueprints and enabled extensions.
+    /// Adds read-time state to a revision: attribute descriptions from its
+    /// definition, extension type availability, and table paths, which follow
+    /// other blueprints and enabled extensions.
     async fn decorate_revision(
         &self,
         blueprint: Blueprint,
         mut attributes: Vec<Attribute>,
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
+        describe_attributes(&blueprint.definition, &mut attributes);
         // Availability is presentation-only metadata. The pinned
         // declaration remains in the revision even when its provider
         // is disabled, so ordinary blueprint/record reads cannot fail
@@ -1144,5 +1148,30 @@ pub(super) fn blueprint_event(
             version: blueprint.version,
         })
         .expect("blueprint event payload is serializable"),
+    }
+}
+
+/// Fills in attribute descriptions from the revision's definition, where they
+/// live; a stored definition always parses. Attributes selected from a mixin
+/// are not described here.
+fn describe_attributes(definition: &str, attributes: &mut [Attribute]) {
+    let Ok(definition) = parse(definition) else {
+        return;
+    };
+    let descriptions: HashMap<&str, &str> = definition
+        .attributes
+        .iter()
+        .filter_map(|attribute| match attribute {
+            AttributeDeclaration::Local(attribute) => attribute
+                .description
+                .as_deref()
+                .map(|description| (attribute.code.as_str(), description)),
+            _ => None,
+        })
+        .collect();
+    for attribute in attributes {
+        attribute.description = descriptions
+            .get(attribute.code.as_str())
+            .map(|description| (*description).to_owned());
     }
 }

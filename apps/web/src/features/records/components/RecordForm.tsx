@@ -1,6 +1,14 @@
 import { VIEW_EDIT_LAYOUT_SPACING } from '../../views/constants';
 import { useForm, useStore } from '@tanstack/react-form';
-import { Alert, Box, Button, Link, Paper, Stack } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  Link,
+  Paper,
+  Skeleton,
+  Stack,
+} from '@mui/material';
 import type {
   Attribute,
   BlueprintWithAttributes,
@@ -112,6 +120,7 @@ const noStatusParentContextIds: readonly string[] = [];
 const noStatusTransitions: readonly [] = [];
 const noResolvedValues = {};
 const noPendingConfirmations: readonly FormErrorSummaryItem[] = [];
+const fieldSkeletons = ['first', 'second', 'third'];
 
 type RecordFormProps = {
   expectedUpdatedAt?: string;
@@ -646,6 +655,14 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                 />
               )}
             </form.Field>
+          )}
+          {!blueprint && isLoadingBlueprint && (
+            // Holds the form's place while its fields load.
+            <Stack aria-busy spacing={VIEW_EDIT_LAYOUT_SPACING}>
+              {fieldSkeletons.map((key) => (
+                <Skeleton height={40} key={key} variant="rounded" />
+              ))}
+            </Stack>
           )}
           {blueprint && (
             <form.Field name="fields">

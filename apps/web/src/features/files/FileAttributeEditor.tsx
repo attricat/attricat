@@ -2,10 +2,12 @@ import {
   Alert,
   Box,
   Button,
+  FormControl,
+  FormHelperText,
+  FormLabel,
   IconButton,
   Stack,
   Tooltip,
-  Typography,
 } from '@mui/material';
 import { CloudUploadIcon, InfoIcon } from 'lucide-react';
 import { compactIconSize } from '../../components/iconSizes';
@@ -39,8 +41,8 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
   const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);
   const uploads = usePendingFileUploads({ ...props, disabled });
-  const labelId = useId();
   const helpId = useId();
+  const errorId = useId();
   const policy = attribute.file_policy;
   if (!policy) return null;
   const queueDisabled = !uploads.canQueue || !uploads.canQueueFile;
@@ -48,109 +50,123 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
     ? t('files.uploadedOnCreate')
     : !recordId
       ? t('files.saveRecordBeforeUploading')
-      : (!helperText || !disabled) && t('files.savedImmediately');
+      : !disabled && t('files.savedImmediately');
 
   return (
-    <Stack
-      spacing={1}
-      role="group"
-      aria-labelledby={labelId}
-      aria-describedby={helperText ? helpId : undefined}
+    // A fieldset names the drop zone, queue and gallery as one field, with
+    // the same label, required mark and error colour as other fields.
+    <FormControl
+      aria-describedby={
+        [helperText && helpId, error && errorId].filter(Boolean).join(' ') ||
+        undefined
+      }
+      component="fieldset"
+      disabled={disabled}
+      error={Boolean(error)}
+      fullWidth
+      required={required}
     >
-      <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
-        <Typography id={labelId}>
-          {attributeLabel(attribute)}
-          {/* Matches the asterisk MUI adds to required field labels. */}
-          {required && <span aria-hidden> *</span>}
-        </Typography>
-        {savingHelp && (
-          // Focusable so keyboard users can read it; it also describes the
-          // button for assistive technology.
-          <Tooltip describeChild enterTouchDelay={0} title={savingHelp}>
-            <IconButton aria-label={t('files.savingHelp')} size="small">
-              <InfoIcon size={compactIconSize} />
-            </IconButton>
-          </Tooltip>
+      {/* The legend must be the fieldset's first child to name it. */}
+      <FormLabel component="legend" sx={{ mb: 0.5, p: 0 }}>
+        {attributeLabel(attribute)}
+      </FormLabel>
+      <Stack spacing={1}>
+        {(helperText || savingHelp) && (
+          <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
+            {helperText && (
+              <FormHelperText error={false} id={helpId} sx={{ m: 0 }}>
+                {helperText}
+              </FormHelperText>
+            )}
+            {savingHelp && (
+              // Focusable so keyboard users can read it; it also describes
+              // the button for assistive technology.
+              <Tooltip describeChild enterTouchDelay={0} title={savingHelp}>
+                <IconButton aria-label={t('files.savingHelp')} size="small">
+                  <InfoIcon size={compactIconSize} />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
         )}
-      </Box>
-      {helperText && (
-        <Typography id={helpId} variant="body2" color="text.secondary">
-          {helperText}
-        </Typography>
-      )}
-      {error && <Alert severity="error">{error}</Alert>}
-      {uploads.errors.map((message, index) => (
-        <Alert severity="error" key={index}>
-          {message}
-        </Alert>
-      ))}
-      <Box
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          uploads.add(event.dataTransfer.files);
-        }}
-        sx={{
-          border: '1px dashed',
-          borderColor: 'divider',
-          borderRadius: 1,
-          p: 2,
-        }}
-      >
-        <input
-          accept={acceptedFileTypes(policy)}
-          disabled={queueDisabled}
-          hidden
-          multiple={policy.cardinality === fileCardinalities.many}
-          onChange={(event) => {
-            if (event.target.files) uploads.add(event.target.files);
-            event.target.value = '';
+        {error && (
+          <FormHelperText id={errorId} sx={{ m: 0 }}>
+            {error}
+          </FormHelperText>
+        )}
+        {uploads.errors.map((message, index) => (
+          <Alert severity="error" key={index}>
+            {message}
+          </Alert>
+        ))}
+        <Box
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            uploads.add(event.dataTransfer.files);
           }}
-          ref={input}
-          type="file"
-        />
-        <Button
-          disabled={queueDisabled}
-          onClick={() => input.current?.click()}
-          startIcon={<CloudUploadIcon />}
+          sx={{
+            border: '1px dashed',
+            borderColor: 'divider',
+            borderRadius: 1,
+            p: 2,
+          }}
         >
-          {t('files.chooseOrDropFiles')}
-        </Button>
-        {recordId && uploads.pending.length > 0 && (
+          <input
+            accept={acceptedFileTypes(policy)}
+            disabled={queueDisabled}
+            hidden
+            multiple={policy.cardinality === fileCardinalities.many}
+            onChange={(event) => {
+              if (event.target.files) uploads.add(event.target.files);
+              event.target.value = '';
+            }}
+            ref={input}
+            type="file"
+          />
           <Button
-            color="primary"
-            disabled={!uploads.canUpload || !uploads.hasQueuedFiles}
-            onClick={uploads.uploadPending}
-            variant="contained"
+            disabled={queueDisabled}
+            onClick={() => input.current?.click()}
+            startIcon={<CloudUploadIcon />}
           >
-            {t('files.uploadCount', { count: uploads.pending.length })}
+            {t('files.chooseOrDropFiles')}
           </Button>
+          {recordId && uploads.pending.length > 0 && (
+            <Button
+              color="primary"
+              disabled={!uploads.canUpload || !uploads.hasQueuedFiles}
+              onClick={uploads.uploadPending}
+              variant="contained"
+            >
+              {t('files.uploadCount', { count: uploads.pending.length })}
+            </Button>
+          )}
+        </Box>
+        {uploads.pending.map((item) => (
+          <PendingFileRow
+            disabled={!uploads.canQueue}
+            item={item}
+            key={item.id}
+            onRetry={() => uploads.retry(item)}
+            onRemove={() => uploads.removePending(item.id)}
+          />
+        ))}
+        {policy.image_only ? (
+          <ImageGalleryEditor
+            files={uploads.uploaded}
+            disabled={!uploads.canUpload}
+            ordered={policy.ordered}
+            // Queued images are listed above; they are not missing.
+            showEmptyMessage={uploads.pending.length === 0}
+            onChange={uploads.changeReferences}
+          />
+        ) : (
+          uploads.uploaded.map((file) => (
+            <UploadedFileRow file={file} key={file.id} showThumbnail={false} />
+          ))
         )}
-      </Box>
-      {uploads.pending.map((item) => (
-        <PendingFileRow
-          disabled={!uploads.canQueue}
-          item={item}
-          key={item.id}
-          onRetry={() => uploads.retry(item)}
-          onRemove={() => uploads.removePending(item.id)}
-        />
-      ))}
-      {policy.image_only ? (
-        <ImageGalleryEditor
-          files={uploads.uploaded}
-          disabled={!uploads.canUpload}
-          ordered={policy.ordered}
-          // Queued images are listed above; they are not missing.
-          showEmptyMessage={uploads.pending.length === 0}
-          onChange={uploads.changeReferences}
-        />
-      ) : (
-        uploads.uploaded.map((file) => (
-          <UploadedFileRow file={file} key={file.id} showThumbnail={false} />
-        ))
-      )}
-    </Stack>
+      </Stack>
+    </FormControl>
   );
 };
 

@@ -42,6 +42,10 @@ pub struct Attribute {
     pub code: String,
     /// Human-readable label; clients fall back to the humanized code.
     pub name: Option<String>,
+    /// What the attribute holds, from its revision's definition. Filled in
+    /// when the revision is read; it is not stored with the attribute.
+    #[serde(default)]
+    pub description: Option<String>,
     pub value_type: String,
     pub value_schema: Option<Value>,
     /// Immutable provider/type/release metadata for extension-defined types.

@@ -335,7 +335,7 @@
     "statusTransitions": "Unavailable transitions are disabled. Changes apply when you save.",
     "statusInherit": "Use inherited status: {{value}}",
     "statusTransitionDenied": "This transition is not allowed from the saved status.",
-    "managedBySystem": "Managed by system actions",
+    "managedBySystem": "Managed by system actions.",
     "lockedByStatus": "Locked while the record is {{status}}. A permitted correction transition unlocks it.",
     "statusTransitionNotPermitted": "You are not permitted to make this transition",
     "statusSeparationOfDuties": "Must be made by someone other than the previous actor",
@@ -357,9 +357,9 @@
       "holdEnded": "Ended",
       "heldUntil": "Held until"
     },
-    "managedInDefault": "Managed in Default",
-    "inheritedFromContext": "Inherited from {{context}} context",
-    "inheritedValue": "Inherited from {{context}} context: {{value}}",
+    "managedInDefault": "Managed in Default.",
+    "inheritedFromContext": "Inherited from {{context}} context.",
+    "inheritedValue": "Inherited from {{context}} context: {{value}}.",
     "notSet": "Not set",
     "true": "True",
     "false": "False",
@@ -538,7 +538,30 @@
       "context_not_editable": "This field is now edited only in the default context.",
       "attribute_schema_mismatch": "The stored value does not meet the new rules for this field.",
       "missing_required": "This field is now required."
-    }
+    },
+    "hints": {
+      "lengthBetween": "{{min}}–{{max}} characters.",
+      "lengthAtMost_one": "Up to {{count}} character.",
+      "lengthAtMost_other": "Up to {{count}} characters.",
+      "lengthAtLeast_one": "At least {{count}} character.",
+      "lengthAtLeast_other": "At least {{count}} characters.",
+      "rangeBetween": "A number from {{min}} to {{max}}.",
+      "rangeAtLeast": "A number of at least {{min}}.",
+      "rangeAtMost": "A number of at most {{max}}.",
+      "rangeWholeBetween": "A whole number from {{min}} to {{max}}.",
+      "rangeWholeAtLeast": "A whole number of at least {{min}}.",
+      "rangeWholeAtMost": "A whole number of at most {{max}}.",
+      "wholeNumber": "A whole number.",
+      "imagesOnly": "Images",
+      "fileSize": "up to {{size}} each",
+      "fileOne": "one file",
+      "filesMany": "several files",
+      "filesOrdered": "several files, in order"
+    },
+    "jsonValid": "Valid JSON.",
+    "jsonNotValidYet": "Not valid JSON yet.",
+    "useInheritedValue": "Use inherited value",
+    "editingContext": "You are editing values for the {{context}} context. A field without its own value here shows the value it inherits."
   },
   "exports": {
     "title": "Exports",

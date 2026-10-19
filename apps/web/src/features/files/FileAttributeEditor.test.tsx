@@ -76,6 +76,27 @@ beforeEach(() => {
 });
 
 describe('FileAttributeEditor', () => {
+  it('is one named, described field like the other editors', () => {
+    render(
+      <FileAttributeEditor
+        attribute={{ ...attribute, name: 'Manuals' }}
+        contextId={null}
+        disabled={false}
+        error="Add a file."
+        files={[]}
+        helperText="PDF · several files."
+        recordId={recordId}
+        required
+      />,
+    );
+    const group = screen.getByRole('group', { name: /^Manuals/ });
+    expect(group.tagName).toBe('FIELDSET');
+    const described = group.getAttribute('aria-describedby')!.split(' ');
+    expect(
+      described.map((id) => document.getElementById(id)?.textContent),
+    ).toEqual(['PDF · several files.', 'Add a file.']);
+  });
+
   it('queues at most one dropped file for a single-file attribute', () => {
     const single = {
       ...attribute,
