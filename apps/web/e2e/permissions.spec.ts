@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import {
   commitField,
   createBlueprint,
@@ -9,13 +9,7 @@ import {
   scalar,
   signInAsMember,
   suffix,
-  type Context,
 } from './helpers';
-
-const refusal = (scope: Page | Locator) =>
-  scope
-    .getByRole('alert')
-    .filter({ hasText: 'you are not authorized to perform this action' });
 
 const draftDefinition = (code: string) => `format_version = 1
 code = "${code}"
@@ -37,21 +31,18 @@ const latestStatus = async (blueprintId: string) => {
   return latest.status;
 };
 
-const attemptPublish = async (page: Page) => {
-  await page.getByRole('button', { name: 'Publish', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Publish blueprint?' });
-  await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
-  await expect(refusal(dialog)).toBeVisible();
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
-  await expect(dialog).toBeHidden();
+// Without the permission the action is not offered at all.
+const expectPublishHidden = async (page: Page) => {
   await expect(page.getByText('Draft', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Publish', exact: true }),
+  ).toHaveCount(0);
 };
 
 test('a viewer can browse the catalog but every write is refused', async ({
   browser,
 }) => {
   const code = `viewer_${suffix()}`;
-  const contextCode = `viewer_ctx_${suffix()}`;
   const blueprint = await createRecordBlueprint(
     code,
     'Viewer product',
@@ -88,27 +79,23 @@ test('a viewer can browse the catalog but every write is refused', async ({
     }),
   ).toHaveCount(0);
 
+  // Pages for writes the session may not make refuse before any input.
   await page.goto('/records/new');
-  await page.getByLabel('Blueprint').click();
-  await page.getByRole('option', { name: `Viewer product (${code})` }).click();
-  await page.getByRole('button', { name: 'Load blueprint' }).click();
-  await page.getByLabel('title').fill('Unauthorized product');
-  await page.getByRole('button', { name: 'Create record' }).click();
-  await expect(refusal(page)).toBeVisible();
-  await expect(page).toHaveURL(/\/records\/new(\?|$)/);
+  await expect(page.getByRole('alert')).toHaveText(
+    'You are not authorized to create records in this workspace.',
+  );
+  await expect(page.getByRole('combobox', { name: 'Blueprint' })).toHaveCount(
+    0,
+  );
 
   await page.goto(`/manage/blueprints/${draft.blueprint.id}`);
-  await attemptPublish(page);
+  await expectPublishHidden(page);
   expect(await latestStatus(draft.blueprint.id)).toBe('draft');
 
   await page.goto('/manage/contexts/new');
-  await page.getByLabel('Code').fill(contextCode);
-  await page.getByLabel('Parent context').click();
-  await page.getByRole('option', { name: 'default' }).click();
-  await page.getByRole('button', { name: 'Create context' }).click();
-  await expect(refusal(page)).toBeVisible();
-  const contexts = await request<Context[]>('/contexts');
-  expect(contexts.map(({ code }) => code)).not.toContain(contextCode);
+  await expect(page.getByRole('alert')).toHaveText(
+    'You are not authorized to create contexts in this workspace.',
+  );
 
   await page.context().close();
 });
@@ -144,7 +131,7 @@ test('an editor saves blueprint drafts and records but cannot publish', async ({
     page.getByRole('heading', { name: 'Restricted draft' }),
   ).toBeVisible();
 
-  await attemptPublish(page);
+  await expectPublishHidden(page);
   expect(await latestStatus(blueprintId)).toBe('draft');
 
   await page.context().close();
