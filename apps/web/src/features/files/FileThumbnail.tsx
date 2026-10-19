@@ -21,7 +21,8 @@ type ThumbnailFile = Pick<FileMetadata, 'id' | 'filename'>;
 
 type ThumbnailPreviewProps = {
   filename: string;
-  size: number;
+  /** Width and height in pixels; without one, a square filling its parent. */
+  size?: number;
   source?: string;
   unavailable: boolean;
 };
@@ -86,11 +87,12 @@ const ThumbnailPreviewContent = ({
       role="img"
       sx={{
         bgcolor: 'action.hover',
+        aspectRatio: '1',
         borderRadius: 1,
         height: size,
         overflow: 'hidden',
         position: 'relative',
-        width: size,
+        width: size ?? '100%',
       }}
     >
       {source && (
@@ -155,7 +157,7 @@ export const FileThumbnail = ({
   size,
 }: {
   file: ThumbnailFile;
-  size: number;
+  size?: number;
 }) => {
   const metadata = useQuery({
     queryKey: fileQueryKeys.metadata(file.id),

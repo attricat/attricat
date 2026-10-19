@@ -1,7 +1,8 @@
 import { Box, ButtonBase, Pagination, Stack, Typography } from '@mui/material';
-import { useState, type ReactNode } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GALLERY_PAGE_SIZE, GALLERY_THUMBNAIL_SIZE } from './constants';
+import { GALLERY_CARD_MIN_WIDTH, GALLERY_PAGE_SIZE } from './constants';
+import { FileCard } from './FileCard';
 import { FileThumbnail } from './FileThumbnail';
 import { ImagePreviewDialog } from './ImagePreviewDialog';
 
@@ -14,9 +15,7 @@ export const ImageGallery = ({
   renderFilePanel,
   renderActions,
   renderItem = ({ file, children }) => (
-    <Stack key={file.id} spacing={1} sx={{ minWidth: 0 }}>
-      {children}
-    </Stack>
+    <Fragment key={file.id}>{children}</Fragment>
   ),
 }: {
   files: readonly GalleryFile[];
@@ -24,7 +23,7 @@ export const ImageGallery = ({
   pendingTiles?: readonly ReactNode[];
   renderFilePanel?: (fileId: string) => ReactNode;
   renderActions?: (file: GalleryFile, index: number) => ReactNode;
-  /** Wraps each tile, e.g. to make it sortable; must return a keyed element. */
+  /** Wraps each card, e.g. to make it sortable; must return a keyed element. */
   renderItem?: (item: {
     children: ReactNode;
     file: GalleryFile;
@@ -54,7 +53,7 @@ export const ImageGallery = ({
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: `repeat(auto-fill, minmax(${GALLERY_THUMBNAIL_SIZE}px, 1fr))`,
+          gridTemplateColumns: `repeat(auto-fill, minmax(${GALLERY_CARD_MIN_WIDTH}px, 1fr))`,
           gap: 2,
         }}
       >
@@ -63,30 +62,32 @@ export const ImageGallery = ({
             file,
             index: start + index,
             children: (
-              <>
-                <ButtonBase
-                  aria-label={t('files.previewImage', {
-                    filename: file.filename,
-                  })}
-                  onClick={() => setSelectedId(file.id)}
-                  sx={{
-                    alignSelf: 'flex-start',
-                    borderRadius: 1,
-                    '&.Mui-focusVisible': {
-                      outline: '2px solid',
-                      outlineColor: 'primary.main',
-                      outlineOffset: 2,
-                    },
-                  }}
-                >
-                  <FileThumbnail file={file} size={GALLERY_THUMBNAIL_SIZE} />
-                </ButtonBase>
-                <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
-                  {file.filename}
-                </Typography>
-                {renderActions?.(file, start + index)}
+              <FileCard
+                actions={renderActions?.(file, start + index)}
+                filename={file.filename}
+                preview={
+                  <ButtonBase
+                    aria-label={t('files.previewImage', {
+                      filename: file.filename,
+                    })}
+                    onClick={() => setSelectedId(file.id)}
+                    sx={{
+                      borderRadius: 1,
+                      display: 'block',
+                      width: '100%',
+                      '&.Mui-focusVisible': {
+                        outline: '2px solid',
+                        outlineColor: 'primary.main',
+                        outlineOffset: 2,
+                      },
+                    }}
+                  >
+                    <FileThumbnail file={file} />
+                  </ButtonBase>
+                }
+              >
                 {renderFilePanel?.(file.id)}
-              </>
+              </FileCard>
             ),
           }),
         )}

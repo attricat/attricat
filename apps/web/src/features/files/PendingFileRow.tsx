@@ -10,13 +10,14 @@ import { RotateCcwIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  GALLERY_THUMBNAIL_SIZE,
   SUPPORTED_IMAGE_MIME_TYPES,
   UPLOADED_FILE_THUMBNAIL_SIZE,
 } from './constants';
+import { FileCard } from './FileCard';
 import type { PendingFile } from './usePendingFileUploads';
 
-const PendingPreview = ({ file, size }: { file: File; size: number }) => {
+/** A picked image; without a size, a square filling its parent. */
+const PendingPreview = ({ file, size }: { file: File; size?: number }) => {
   const image = useRef<HTMLImageElement>(null);
   useEffect(() => {
     const element = image.current;
@@ -34,10 +35,12 @@ const PendingPreview = ({ file, size }: { file: File; size: number }) => {
       ref={image}
       alt=""
       sx={{
-        width: size,
+        aspectRatio: '1',
+        borderRadius: 1,
+        display: 'block',
         height: size,
         objectFit: 'cover',
-        borderRadius: 1,
+        width: size ?? '100%',
       }}
     />
   ) : null;
@@ -83,8 +86,10 @@ const PendingFileActions = ({
       )}
       <IconButton
         aria-label={t('files.removeQueuedFile', { filename: item.file.name })}
+        color="error"
         disabled={disabled || item.progress > 0}
         onClick={onRemove}
+        sx={{ ml: 'auto' }}
       >
         <XIcon />
       </IconButton>
@@ -129,19 +134,20 @@ export const PendingFileRow = (props: PendingFileProps) => (
 );
 
 /**
- * A queued or uploading image as a gallery tile, laid out like the attached
- * images beside it so a picked image reads as part of the field.
+ * A queued or uploading image on the same card as the attached images beside
+ * it, so a picked image reads as part of the field.
  */
 export const PendingImageTile = (props: PendingFileProps) => (
-  <Stack spacing={1} sx={{ minWidth: 0 }}>
-    <Box sx={{ width: GALLERY_THUMBNAIL_SIZE }}>
-      <PendingPreview file={props.item.file} size={GALLERY_THUMBNAIL_SIZE} />
-      <PendingProgress item={props.item} />
-    </Box>
-    <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
-      {props.item.file.name}
-    </Typography>
-    <PendingFileActions {...props} />
+  <FileCard
+    actions={<PendingFileActions {...props} />}
+    filename={props.item.file.name}
+    preview={
+      <Box>
+        <PendingPreview file={props.item.file} />
+        <PendingProgress item={props.item} />
+      </Box>
+    }
+  >
     <PendingError item={props.item} />
-  </Stack>
+  </FileCard>
 );

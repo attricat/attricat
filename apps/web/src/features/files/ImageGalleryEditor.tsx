@@ -3,6 +3,7 @@ import { move as moveDragged } from '@dnd-kit/helpers';
 import { DragDropProvider } from '@dnd-kit/react';
 import { isSortable, useSortable } from '@dnd-kit/react/sortable';
 import {
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -60,24 +61,19 @@ const SortableTile = ({
     [handleRef, isDragSource],
   );
   return (
-    <Stack
+    <Box
       ref={ref}
-      spacing={1}
       sx={{
-        bgcolor: 'background.paper',
-        borderRadius: 1,
-        boxShadow: isDragSource ? 3 : 0,
         minWidth: 0,
-        // Shadows barely show on dark paper, so outline the lifted tile too.
-        outline: (theme) =>
-          isDragSource ? `1px solid ${theme.palette.divider}` : 'none',
         zIndex: isDragSource ? 1 : undefined,
+        // The card's border keeps the lifted card distinct on dark paper.
+        '& > .MuiCard-root': { boxShadow: isDragSource ? 3 : 'none' },
       }}
     >
       <DragHandleContext.Provider value={handle}>
         {children}
       </DragHandleContext.Provider>
-    </Stack>
+    </Box>
   );
 };
 
@@ -109,12 +105,14 @@ const oppositeMove = { earlier: 'later', later: 'earlier' } as const;
 
 const GalleryAction = ({
   label,
+  color,
   disabled,
   move,
   onClick,
   children,
 }: {
   label: string;
+  color?: 'error';
   disabled: boolean;
   move?: keyof typeof oppositeMove;
   onClick: () => void;
@@ -125,6 +123,7 @@ const GalleryAction = ({
     <span>
       <IconButton
         aria-label={label}
+        color={color}
         disabled={disabled}
         onClick={onClick}
         data-gallery-move={move}
@@ -255,9 +254,13 @@ export const ImageGalleryEditor = ({
           : undefined
       }
       renderActions={(file, index) => (
-        <Stack data-gallery-actions direction="row">
+        <Stack
+          data-gallery-actions
+          direction="row"
+          sx={{ alignItems: 'center', justifyContent: 'space-between' }}
+        >
           {ordered && (
-            <>
+            <Stack direction="row">
               <DragHandle
                 disabled={disabled}
                 label={t('files.dragImage', { filename: file.filename })}
@@ -278,17 +281,21 @@ export const ImageGalleryEditor = ({
               >
                 <ArrowRightIcon />
               </GalleryAction>
-            </>
+            </Stack>
           )}
-          <GalleryAction
-            label={t('files.removeImage', { filename: file.filename })}
-            disabled={disabled}
-            onClick={() => {
-              if (!disabled) setRemoveId(file.id);
-            }}
-          >
-            <Trash2Icon />
-          </GalleryAction>
+          {/* Removal sits apart at the end, in the destructive colour. */}
+          <Box sx={{ ml: 'auto' }}>
+            <GalleryAction
+              label={t('files.removeImage', { filename: file.filename })}
+              color="error"
+              disabled={disabled}
+              onClick={() => {
+                if (!disabled) setRemoveId(file.id);
+              }}
+            >
+              <Trash2Icon />
+            </GalleryAction>
+          </Box>
         </Stack>
       )}
     />
