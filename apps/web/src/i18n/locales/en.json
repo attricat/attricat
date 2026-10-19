@@ -575,7 +575,9 @@
     "changeBlueprint": "Change blueprint",
     "changeBlueprintTitle": "Change the blueprint?",
     "changeBlueprintDescription": "The values and files you entered for this blueprint are discarded.",
-    "changeBlueprintConfirm": "Discard and change"
+    "changeBlueprintConfirm": "Discard and change",
+    "fieldsChanged_one": "{{count}} field changed",
+    "fieldsChanged_other": "{{count}} fields changed"
   },
   "exports": {
     "title": "Exports",

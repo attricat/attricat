@@ -29,6 +29,8 @@ declare module '@mui/material/styles' {
   interface TypeAction {
     /** Hover on navigation items, which sit on the navigation background. */
     navigationHover: string;
+    /** Marks a field changed before an explicit Save. */
+    changed: string;
   }
 }
 
@@ -78,6 +80,7 @@ export const makeTheme = (mode: DesignMode) => {
       action: {
         hover: c.action.hover,
         navigationHover: c.action.navigationHover,
+        changed: c.action.changed,
         selected: c.action.selected,
         disabledBackground: c.action.disabled,
         focus: c.action.hover,

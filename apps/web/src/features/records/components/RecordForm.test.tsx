@@ -396,6 +396,25 @@ describe('RecordForm', () => {
     await waitFor(() => expect(onChangeBlueprint).toHaveBeenCalledTimes(2));
   });
 
+  it('marks and counts the fields the user changed', () => {
+    renderForm({
+      blueprint: blueprint([attribute('title'), attribute('sku')]),
+      initialValues: { title: 'Lamp' },
+    });
+    const changed = () =>
+      [...document.querySelectorAll('[data-changed]')].map(
+        (element) => (element as HTMLElement).dataset.fieldCode,
+      );
+    expect(changed()).toEqual([]);
+    expect(screen.queryByText(/fields? changed/)).toBeNull();
+    fireEvent.change(titleBox(), { target: { value: 'Desk lamp' } });
+    expect(changed()).toEqual(['title']);
+    expect(screen.getByText('1 field changed')).toBeTruthy();
+    // Typing the starting value again is no change.
+    fireEvent.change(titleBox(), { target: { value: 'Lamp' } });
+    expect(changed()).toEqual([]);
+  });
+
   it('submits for another record from its own button', async () => {
     const { onSubmit } = renderForm({
       addAnotherLabel: 'Create and add another',
