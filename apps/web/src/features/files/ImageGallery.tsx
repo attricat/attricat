@@ -10,7 +10,7 @@ export type GalleryFile = { id: string; filename: string };
 /** Presentation only: editing actions belong to the caller, never the viewer. */
 export const ImageGallery = ({
   files,
-  showEmptyMessage = true,
+  pendingTiles = [],
   renderFilePanel,
   renderActions,
   renderItem = ({ file, children }) => (
@@ -20,8 +20,8 @@ export const ImageGallery = ({
   ),
 }: {
   files: readonly GalleryFile[];
-  /** Off while the caller shows images that are not in `files` yet. */
-  showEmptyMessage?: boolean;
+  /** Images picked but not attached yet, shown after the attached ones. */
+  pendingTiles?: readonly ReactNode[];
   renderFilePanel?: (fileId: string) => ReactNode;
   renderActions?: (file: GalleryFile, index: number) => ReactNode;
   /** Wraps each tile, e.g. to make it sortable; must return a keyed element. */
@@ -42,7 +42,7 @@ export const ImageGallery = ({
   const start = (currentPage - 1) * GALLERY_PAGE_SIZE;
   return (
     <Stack spacing={2}>
-      {!files.length && showEmptyMessage && (
+      {!files.length && !pendingTiles.length && (
         <Typography color="text.secondary">{t('files.noImages')}</Typography>
       )}
       <Box
@@ -84,6 +84,7 @@ export const ImageGallery = ({
             ),
           }),
         )}
+        {currentPage === pageCount && pendingTiles}
       </Box>
       {pageCount > 1 && (
         <Pagination

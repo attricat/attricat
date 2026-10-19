@@ -139,12 +139,12 @@ export const ImageGalleryEditor = ({
   files,
   disabled,
   ordered,
-  showEmptyMessage,
+  pendingTiles,
   onChange,
 }: {
   files: readonly GalleryFile[];
   disabled: boolean;
-  showEmptyMessage?: boolean;
+  pendingTiles?: readonly ReactNode[];
   ordered: boolean;
   onChange: (fileIds: string[]) => Promise<boolean>;
 }) => {
@@ -239,7 +239,7 @@ export const ImageGalleryEditor = ({
   const gallery = (
     <ImageGallery
       files={shown}
-      showEmptyMessage={showEmptyMessage}
+      pendingTiles={pendingTiles}
       renderItem={
         ordered
           ? ({ children, file, index }) => (

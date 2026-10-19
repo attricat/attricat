@@ -18,7 +18,7 @@ import type { Attribute } from '../records/api';
 import { attributeLabel } from '../records/recordDisplay';
 import { fileCardinalities } from './constants';
 import { acceptedFileTypes } from './fileAcceptance';
-import { PendingFileRow } from './PendingFileRow';
+import { PendingFileRow, PendingImageTile } from './PendingFileRow';
 import type { FileMetadata } from './schemas';
 import { UploadedFileRow } from './UploadedFileRow';
 import { usePendingFileUploads } from './usePendingFileUploads';
@@ -46,6 +46,12 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
   const policy = attribute.file_policy;
   if (!policy) return null;
   const queueDisabled = !uploads.canQueue || !uploads.canQueueFile;
+  const pendingProps = (item: (typeof uploads.pending)[number]) => ({
+    disabled: !uploads.canQueue,
+    item,
+    onRetry: () => uploads.retry(item),
+    onRemove: () => uploads.removePending(item.id),
+  });
   const savingHelp = uploads.deferred
     ? t('files.uploadedOnCreate')
     : !recordId
@@ -142,28 +148,30 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
             </Button>
           )}
         </Box>
-        {uploads.pending.map((item) => (
-          <PendingFileRow
-            disabled={!uploads.canQueue}
-            item={item}
-            key={item.id}
-            onRetry={() => uploads.retry(item)}
-            onRemove={() => uploads.removePending(item.id)}
-          />
-        ))}
         {policy.image_only ? (
           <ImageGalleryEditor
             files={uploads.uploaded}
             disabled={!uploads.canUpload}
             ordered={policy.ordered}
-            // Queued images are listed above; they are not missing.
-            showEmptyMessage={uploads.pending.length === 0}
+            // Picked images sit in the grid with the attached ones.
+            pendingTiles={uploads.pending.map((item) => (
+              <PendingImageTile key={item.id} {...pendingProps(item)} />
+            ))}
             onChange={uploads.changeReferences}
           />
         ) : (
-          uploads.uploaded.map((file) => (
-            <UploadedFileRow file={file} key={file.id} showThumbnail={false} />
-          ))
+          <>
+            {uploads.pending.map((item) => (
+              <PendingFileRow key={item.id} {...pendingProps(item)} />
+            ))}
+            {uploads.uploaded.map((file) => (
+              <UploadedFileRow
+                file={file}
+                key={file.id}
+                showThumbnail={false}
+              />
+            ))}
+          </>
         )}
       </Stack>
     </FormControl>
