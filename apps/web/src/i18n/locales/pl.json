@@ -107,7 +107,14 @@
     "lexicon": "Tłumaczenia",
     "backgroundProcessing": "Przetwarzanie w tle",
     "documentation": "Dokumentacja",
-    "systemHealth": "Stan systemu"
+    "systemHealth": "Stan systemu",
+    "managementGroups": {
+      "dataModel": "Model danych",
+      "automation": "Automatyzacja",
+      "dataOperations": "Operacje na danych",
+      "access": "Dostęp i nadzór",
+      "system": "System"
+    }
   },
   "auth": {
     "notAuthorized": {

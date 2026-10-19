@@ -1,5 +1,11 @@
+import { Fragment } from 'react';
 import { Link } from '@tanstack/react-router';
-import { ListItemButton, ListItemIcon, ListItemText } from '@mui/material';
+import {
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  ListSubheader,
+} from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import {
   getVisibleManagementNavigationItems,
@@ -36,20 +42,26 @@ export const ManagementNavigationLinks = ({
         </ListItemIcon>
         <ListItemText primary={t('navigation.dashboard')} />
       </ListItemButton>
-      {items.map((item) => (
-        <ListItemButton
-          aria-label={t(item.labelKey)}
-          component={Link}
-          key={item.to}
-          onClick={onNavigate}
-          selected={pathname.startsWith(item.to)}
-          to={item.to}
-        >
-          <ListItemIcon>
-            <NavigationIcon icon={item.icon} />
-          </ListItemIcon>
-          <ListItemText primary={t(item.labelKey)} />
-        </ListItemButton>
+      {items.map((item, index) => (
+        <Fragment key={item.to}>
+          {item.group !== items[index - 1]?.group && (
+            <ListSubheader disableSticky>
+              {t(`navigation.managementGroups.${item.group}`)}
+            </ListSubheader>
+          )}
+          <ListItemButton
+            aria-label={t(item.labelKey)}
+            component={Link}
+            onClick={onNavigate}
+            selected={pathname.startsWith(item.to)}
+            to={item.to}
+          >
+            <ListItemIcon>
+              <NavigationIcon icon={item.icon} />
+            </ListItemIcon>
+            <ListItemText primary={t(item.labelKey)} />
+          </ListItemButton>
+        </Fragment>
       ))}
     </>
   );

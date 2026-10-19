@@ -103,7 +103,14 @@
     "lexicon": "Translations",
     "backgroundProcessing": "Background processing",
     "documentation": "Documentation",
-    "systemHealth": "System health"
+    "systemHealth": "System health",
+    "managementGroups": {
+      "dataModel": "Data model",
+      "automation": "Automation",
+      "dataOperations": "Data operations",
+      "access": "Access and governance",
+      "system": "System"
+    }
   },
   "auth": {
     "notAuthorized": {
