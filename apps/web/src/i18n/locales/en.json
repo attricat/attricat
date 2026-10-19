@@ -570,7 +570,12 @@
     "undoSave": "Undo",
     "allChangesSaved": "All changes saved",
     "conflictingChange": "{{field}}: yours “{{mine}}”, now “{{theirs}}”",
-    "empty": "empty"
+    "empty": "empty",
+    "blueprintChosen": "Blueprint: {{blueprint}}",
+    "changeBlueprint": "Change blueprint",
+    "changeBlueprintTitle": "Change the blueprint?",
+    "changeBlueprintDescription": "The values and files you entered for this blueprint are discarded.",
+    "changeBlueprintConfirm": "Discard and change"
   },
   "exports": {
     "title": "Exports",
