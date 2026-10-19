@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NarrowPage } from '../../components/CenteredPage';
 import { completeOnboarding } from './api';
+import { useInitialFocus } from '../../components/initialFocus';
 
 type Notice = { severity: 'error' | 'success'; text: string };
 
@@ -18,6 +19,7 @@ export const PasswordSetupPage = ({
   initialOnboardingSecret?: string;
 }) => {
   const { t } = useTranslation();
+  const formRef = useInitialFocus<HTMLFormElement>();
   const navigate = useNavigate();
   const [notice, setNotice] = useState<Notice>();
   const form = useForm({
@@ -54,6 +56,7 @@ export const PasswordSetupPage = ({
     <NarrowPage>
       <Typography variant="h4">{t('workspace.setupTitle')}</Typography>
       <Stack
+        ref={formRef}
         component="form"
         onSubmit={(event) => {
           event.preventDefault();

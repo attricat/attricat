@@ -9,6 +9,7 @@ import { draftEditors } from '../../drafts/constants';
 import { draftStorageKey, writeDraft } from '../../drafts/draftStorage';
 import { ApiRequestError } from '../../../api/request';
 import type { BlueprintWithAttributes, Attribute } from '../api';
+import { recordQueryKeys } from '../queryKeys';
 import { RecordForm, type RecordFormHandle } from './RecordForm';
 import { recordHeadingComponentId } from '../../views/components/blocks/RecordHeadingDefinition';
 
@@ -66,6 +67,7 @@ const renderForm = (
     defaultOptions: { queries: { staleTime: Infinity } },
   });
   client.setQueryData(authQueryKeys.session(), session);
+  client.setQueryData(recordQueryKeys.blueprints(), []);
   const tree = (nextProps = props) => (
     <QueryClientProvider client={client}>
       <RecordForm
@@ -115,6 +117,34 @@ afterEach(() => {
 });
 
 describe('RecordForm', () => {
+  it('focuses the blueprint picker, then the first field it can change', () => {
+    const { rerenderForm } = renderForm({ blueprint: undefined });
+    expect(document.activeElement).toBe(
+      screen.getByRole('combobox', { name: 'Blueprint' }),
+    );
+    rerenderForm({ isLoadingBlueprint: true });
+    rerenderForm({
+      blueprint: blueprint([
+        attribute('sku', { readonly: true }),
+        attribute('title'),
+      ]),
+      isLoadingBlueprint: false,
+    });
+    expect(document.activeElement).toBe(titleBox());
+  });
+
+  it('focuses the first field a migration asks to review', () => {
+    renderForm({
+      blueprint: blueprint([attribute('title'), attribute('price')]),
+      expectedUpdatedAt: '2026-01-01T00:00:00Z',
+      highlightedAttributes: ['price'],
+      showAllAttributes: true,
+    });
+    expect(document.activeElement).toBe(
+      screen.getByRole('textbox', { hidden: true, name: 'price' }),
+    );
+  });
+
   it.each([false, true])(
     'preserves the values/version baseline across refetches (edited: %s)',
     async (edited) => {

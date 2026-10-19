@@ -108,3 +108,6 @@ export type StatusTransitionDenialCode =
 export const STALE_RECORD_ERROR_CODE = 'stale_record';
 /** API error code for a write that leaves the record outside its JSON Schema. */
 export const RECORD_SCHEMA_MISMATCH_ERROR_CODE = 'record_schema_mismatch';
+
+/** Matches editors of fields a migration asks the user to review. */
+export const migrationReviewSelector = '[data-migration-review]';

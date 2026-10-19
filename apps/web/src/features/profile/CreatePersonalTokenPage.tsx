@@ -37,6 +37,7 @@ import { ProfileSection } from './ProfileSection';
 import { SecretDialog } from './SecretDialog';
 import { createToken, listTokenPermissions } from './api';
 import { profileQueryKeys } from './queryKeys';
+import { useInitialFocus } from '../../components/initialFocus';
 
 const permissionGroup = (code: string) => code.split('.')[0] ?? code;
 
@@ -66,6 +67,7 @@ const BackToTokens = () => {
 
 export const CreatePersonalTokenPage = () => {
   const { t } = useTranslation();
+  const formRef = useInitialFocus<HTMLFormElement>();
   const { show } = useToast();
   const navigate = useNavigate();
   const client = useQueryClient();
@@ -139,6 +141,7 @@ export const CreatePersonalTokenPage = () => {
         secret={secret}
       />
       <Stack
+        ref={formRef}
         component="form"
         onSubmit={(event) => {
           event.preventDefault();

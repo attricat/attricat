@@ -1,4 +1,4 @@
-import { Tooltip, useTheme } from '@mui/material';
+import { Box, Tooltip, useTheme } from '@mui/material';
 import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type {
@@ -94,13 +94,14 @@ export const RecordAttributeEditor = ({
         onChange={onChange}
       />
     );
-  return (
-    <>
-      {showMigrationBadge && (
-        <MigrationBadge message={migrationReviewMessage} />
-      )}
+  return showMigrationBadge ? (
+    // `display: contents` keeps the badge and editor laid out as siblings.
+    <Box data-migration-review sx={{ display: 'contents' }}>
+      <MigrationBadge message={migrationReviewMessage} />
       {editor}
-    </>
+    </Box>
+  ) : (
+    editor
   );
 };
 

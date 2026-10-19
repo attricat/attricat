@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { createElement } from 'react';
 import { smallIconSize } from '../components/iconSizes';
+import { focusFirstField } from '../components/initialFocus';
 import colors from '../../design/tokens/colors.json';
 import typography from '../../design/tokens/typography.json';
 import radius from '../../design/tokens/radius.json';
@@ -244,6 +245,14 @@ export const makeTheme = (mode: DesignMode) => {
         },
       },
       MuiDialog: {
+        defaultProps: {
+          // A dialog's own `onEntered` replaces this, to focus another field.
+          slotProps: {
+            transition: {
+              onEntered: (node: HTMLElement) => focusFirstField(node),
+            },
+          },
+        },
         styleOverrides: {
           paper: {
             border,
