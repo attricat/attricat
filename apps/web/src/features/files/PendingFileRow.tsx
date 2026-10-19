@@ -10,12 +10,13 @@ import { RotateCcwIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  GALLERY_THUMBNAIL_SIZE,
   SUPPORTED_IMAGE_MIME_TYPES,
   UPLOADED_FILE_THUMBNAIL_SIZE,
 } from './constants';
 import type { PendingFile } from './usePendingFileUploads';
 
-const PendingPreview = ({ file }: { file: File }) => {
+const PendingPreview = ({ file, size }: { file: File; size: number }) => {
   const image = useRef<HTMLImageElement>(null);
   useEffect(() => {
     const element = image.current;
@@ -33,8 +34,8 @@ const PendingPreview = ({ file }: { file: File }) => {
       ref={image}
       alt=""
       sx={{
-        width: UPLOADED_FILE_THUMBNAIL_SIZE,
-        height: UPLOADED_FILE_THUMBNAIL_SIZE,
+        width: size,
+        height: size,
         objectFit: 'cover',
         borderRadius: 1,
       }}
@@ -42,67 +43,105 @@ const PendingPreview = ({ file }: { file: File }) => {
   ) : null;
 };
 
-/** A queued or uploading file with its progress or failure. */
-export const PendingFileRow = ({
-  disabled,
-  item,
-  onRetry,
-  onRemove,
-}: {
+type PendingFileProps = {
   disabled: boolean;
   item: PendingFile;
   onRetry: () => void;
   onRemove: () => void;
-}) => {
+};
+
+/** A queued file's state, with retry after a failure and removal. */
+const PendingFileActions = ({
+  disabled,
+  item,
+  onRetry,
+  onRemove,
+}: PendingFileProps) => {
   const { t } = useTranslation();
   return (
-    <Box>
-      <Stack direction="row" spacing={1}>
-        <PendingPreview file={item.file} />
-        <Typography sx={{ overflowWrap: 'anywhere' }}>
-          {item.file.name}
-        </Typography>
-        {item.error ? (
-          <>
-            <Chip color="error" label={t('files.failed')} size="small" />
-            <IconButton
-              aria-label={t('files.retryFile', { filename: item.file.name })}
-              disabled={disabled}
-              onClick={onRetry}
-            >
-              <RotateCcwIcon />
-            </IconButton>
-          </>
-        ) : (
-          <Chip
-            label={
-              item.progress
-                ? t('files.uploadProgress', { progress: item.progress })
-                : t('files.ready')
-            }
-            size="small"
-          />
-        )}
-        <IconButton
-          aria-label={t('files.removeQueuedFile', { filename: item.file.name })}
-          disabled={disabled || item.progress > 0}
-          onClick={onRemove}
-        >
-          <XIcon />
-        </IconButton>
-      </Stack>
-      {item.progress > 0 && (
-        <LinearProgress
-          aria-label={t('files.uploadProgress', { progress: item.progress })}
-          value={item.progress}
-          variant="determinate"
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      {item.error ? (
+        <>
+          <Chip color="error" label={t('files.failed')} size="small" />
+          <IconButton
+            aria-label={t('files.retryFile', { filename: item.file.name })}
+            disabled={disabled}
+            onClick={onRetry}
+          >
+            <RotateCcwIcon />
+          </IconButton>
+        </>
+      ) : (
+        <Chip
+          label={
+            item.progress
+              ? t('files.uploadProgress', { progress: item.progress })
+              : t('files.ready')
+          }
+          size="small"
         />
       )}
-      {item.error && (
-        <Typography role="alert" color="error" variant="body2">
-          {item.error}
-        </Typography>
-      )}
-    </Box>
+      <IconButton
+        aria-label={t('files.removeQueuedFile', { filename: item.file.name })}
+        disabled={disabled || item.progress > 0}
+        onClick={onRemove}
+      >
+        <XIcon />
+      </IconButton>
+    </Stack>
   );
 };
+
+const PendingProgress = ({ item }: { item: PendingFile }) => {
+  const { t } = useTranslation();
+  return item.progress > 0 ? (
+    <LinearProgress
+      aria-label={t('files.uploadProgress', { progress: item.progress })}
+      value={item.progress}
+      variant="determinate"
+    />
+  ) : null;
+};
+
+const PendingError = ({ item }: { item: PendingFile }) =>
+  item.error ? (
+    <Typography role="alert" color="error" variant="body2">
+      {item.error}
+    </Typography>
+  ) : null;
+
+/** A queued or uploading file with its progress or failure. */
+export const PendingFileRow = (props: PendingFileProps) => (
+  <Box>
+    <Stack direction="row" spacing={1}>
+      <PendingPreview
+        file={props.item.file}
+        size={UPLOADED_FILE_THUMBNAIL_SIZE}
+      />
+      <Typography sx={{ overflowWrap: 'anywhere' }}>
+        {props.item.file.name}
+      </Typography>
+      <PendingFileActions {...props} />
+    </Stack>
+    <PendingProgress item={props.item} />
+    <PendingError item={props.item} />
+  </Box>
+);
+
+/**
+ * A queued or uploading image as a gallery tile, laid out like the attached
+ * images beside it so a picked image reads as part of the field.
+ */
+export const PendingImageTile = (props: PendingFileProps) => (
+  <Stack spacing={1} sx={{ minWidth: 0 }}>
+    <Box sx={{ width: GALLERY_THUMBNAIL_SIZE }}>
+      <PendingPreview file={props.item.file} size={GALLERY_THUMBNAIL_SIZE} />
+      <PendingProgress item={props.item} />
+    </Box>
+    <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
+      {props.item.file.name}
+    </Typography>
+    <PendingFileActions {...props} />
+    <PendingError item={props.item} />
+  </Stack>
+);

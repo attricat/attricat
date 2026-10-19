@@ -99,6 +99,24 @@ describe('ImageGallery', () => {
     expect(screen.getByText(`Panel id-${GALLERY_PAGE_SIZE}`)).toBeTruthy();
   });
 
+  it('shows picked images after the attached ones, on the last page', () => {
+    const many = Array.from({ length: GALLERY_PAGE_SIZE + 1 }, (_, index) => ({
+      id: `id-${index}`,
+      filename: `image-${index}.png`,
+    }));
+    const pending = [<span key="queued">queued.png tile</span>];
+    const view = renderGallery(
+      <ImageGallery files={many} pendingTiles={pending} />,
+    );
+    expect(screen.queryByText('queued.png tile')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Go to page 2' }));
+    expect(screen.getByText('queued.png tile')).toBeTruthy();
+    // Picked images are not missing ones.
+    view.rerender(<ImageGallery files={[]} pendingTiles={pending} />);
+    expect(screen.getByText('queued.png tile')).toBeTruthy();
+    expect(screen.queryByText('No images attached.')).toBeNull();
+  });
+
   it('renders an empty state and closes when the selected attachment disappears', async () => {
     const view = renderGallery(<ImageGallery files={files} />);
     fireEvent.click(screen.getByRole('button', { name: 'Preview front.png' }));
