@@ -97,24 +97,27 @@ pub fn lexicon_texts(definition: &BlueprintDefinition) -> Vec<LexiconText<'_>> {
     texts
 }
 
-/// Status option labels in an attribute's value schema, which resolve lexicon
-/// references like attribute names. `location` names the attribute.
-/// The status option labels and enum value labels of a value schema.
+/// The status option labels, enum value labels and pattern hint in an
+/// attribute's value schema, which resolve lexicon references like attribute
+/// names. `location` names the attribute.
 pub fn option_label_texts<'a>(
     location: &str,
     schema: &'a serde_json::Value,
 ) -> impl Iterator<Item = LexiconText<'a>> {
     let status = attricat_validation::status::status_option_labels(schema)
         .into_iter()
-        .map(move |(code, text)| (format!("status option '{code}'"), text));
+        .map(move |(code, text)| (format!("status option '{code}' label"), text));
     let choices = attricat_validation::choices::enum_value_labels(schema)
         .into_iter()
-        .map(move |(code, text)| (format!("enum value '{code}'"), text));
+        .map(move |(code, text)| (format!("enum value '{code}' label"), text));
+    let hint = attricat_validation::pattern_hint::pattern_hint(schema)
+        .map(|text| ("pattern hint".to_owned(), text));
     let location = location.to_owned();
     status
         .chain(choices)
-        .map(move |(option, text)| LexiconText {
-            location: format!("{location} {option} label"),
+        .chain(hint)
+        .map(move |(item, text)| LexiconText {
+            location: format!("{location} {item}"),
             text,
             counted: false,
         })

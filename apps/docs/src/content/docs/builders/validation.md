@@ -39,6 +39,25 @@ value_schema = '{"enum":["XS","S","M","L","XL"]}'
 
 A value that fails returns `422 attribute_value_schema_mismatch`.
 
+### What forms show
+
+Record forms describe a field's limits under it, after its description: text length (`minLength`, `maxLength`), number bounds (`minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`), steps (`multipleOf`), and the `email` and `uri` formats. When a value breaks a rule, the error names that rule, such as "Enter at least 3 characters." Other keywords are still enforced; a value that fails one of them gets a general message.
+
+A `pattern` is never shown as a regular expression. To tell people what it expects, add an optional `x-attricat-pattern-hint` beside it:
+
+```toml
+[[attributes]]
+code = "sku"
+value_type = "string"
+value_schema = '''{
+  "type": "string",
+  "pattern": "^[A-Z]{3}-[0-9]{4}$",
+  "x-attricat-pattern-hint": "Three capital letters, a hyphen and four digits, such as ABC-1234"
+}'''
+```
+
+The hint is shown under the field and in the error for a value that does not match. It needs a `pattern` in the same schema, is 1 to 200 characters, and can be [translated](/builders/translations/).
+
 ### Choice lists
 
 A `string` attribute whose `value_schema` has an `enum` is edited by choosing one of its values: radio buttons for up to five values, and a list you can search for more. The Explorer filters it by choosing one value, or by whether it is set. To show something friendlier than the stored value, add an optional `x-attricat-enum-labels` map:

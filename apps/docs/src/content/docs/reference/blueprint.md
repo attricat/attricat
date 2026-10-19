@@ -86,6 +86,10 @@ value_type = "string"
 | `relationship` | Links to other records | | See [Relationship keys](#relationship-keys). |
 | `file` | Uploaded files | | See [File keys](#file-keys). |
 
+### Pattern hints
+
+An optional `x-attricat-pattern-hint` string describes the schema's `pattern` in words for record forms. It requires a `pattern` and is 1 to 200 characters. See [What forms show](/builders/validation/#what-forms-show).
+
 ### Choice lists
 
 A `string` attribute whose `value_schema` has an `enum` is edited by choosing one value: radio buttons for up to five values, a searchable list for more. An optional `x-attricat-enum-labels` object maps enum values to display labels; every key must be an enum value, and labels are 1 to 200 characters. It cannot be combined with `x-attricat-status`. See [Choice lists](/builders/validation/#choice-lists).

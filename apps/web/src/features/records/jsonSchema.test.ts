@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { validatesJsonSchema } from './jsonSchema';
+import {
+  jsonSchemaErrorMessage,
+  jsonSchemaValidationErrors,
+  validatesJsonSchema,
+} from './jsonSchema';
 import { attributeSchema, blueprintSchema } from './schemas';
 
 const blueprintIdentity = {
@@ -89,5 +93,37 @@ describe('JSON Schema validation', () => {
   it('allows values when no schema is supplied and rejects invalid schemas', () => {
     expect(validatesJsonSchema({ any: 'value' }, undefined)).toBe(true);
     expect(validatesJsonSchema('value', { type: 'not-a-type' })).toBe(false);
+  });
+
+  it('describes the failed rule in words', () => {
+    const message = (value: unknown, schema: Record<string, unknown>) =>
+      jsonSchemaErrorMessage(jsonSchemaValidationErrors(value, schema) ?? []);
+    expect(message('abcdef', { maxLength: 1 })).toBe(
+      'Enter at most 1 character.',
+    );
+    expect(message(11, { maximum: 10 })).toBe('Enter 10 or less.');
+    expect(message(10, { exclusiveMaximum: 10 })).toBe(
+      'Enter a number less than 10.',
+    );
+    expect(message('x', { enum: ['a', 'b'] })).toBe(
+      'Choose one of the allowed values.',
+    );
+    expect(message('b', { const: 'a' })).toBe('The only allowed value is a.');
+    expect(message('nope', { format: 'email' })).toBe(
+      'Enter an email address.',
+    );
+    expect(message('x', { pattern: '^a$' })).toBe(
+      'Does not match the required format.',
+    );
+    // The hint of the subschema that failed, even inside a composite.
+    expect(
+      message('x', {
+        anyOf: [
+          { pattern: '^a$', 'x-attricat-pattern-hint': 'The letter a' },
+          { pattern: '^b$', 'x-attricat-pattern-hint': 'The letter b' },
+        ],
+      }),
+    ).toBe('Does not match the required format: The letter a');
+    expect(message('x', { not: { const: 'x' } })).toBe(undefined);
   });
 });

@@ -39,6 +39,25 @@ value_schema = '{"enum":["XS","S","M","L","XL"]}'
 
 Wartość, która nie przejdzie walidacji, zwraca `422 attribute_value_schema_mismatch`.
 
+### Co pokazują formularze
+
+Formularze rekordów opisują ograniczenia pola pod nim, po jego opisie: długość tekstu (`minLength`, `maxLength`), granice liczb (`minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`), krok (`multipleOf`) oraz formaty `email` i `uri`. Gdy wartość narusza regułę, błąd wskazuje tę regułę, na przykład „Wprowadź co najmniej 3 znaki.”. Pozostałe słowa kluczowe są nadal egzekwowane; wartość, która ich nie spełnia, otrzymuje ogólny komunikat.
+
+`pattern` nigdy nie jest pokazywany jako wyrażenie regularne. Aby wyjaśnić, czego oczekuje, dodaj obok niego opcjonalny `x-attricat-pattern-hint`:
+
+```toml
+[[attributes]]
+code = "sku"
+value_type = "string"
+value_schema = '''{
+  "type": "string",
+  "pattern": "^[A-Z]{3}-[0-9]{4}$",
+  "x-attricat-pattern-hint": "Trzy wielkie litery, łącznik i cztery cyfry, np. ABC-1234"
+}'''
+```
+
+Wskazówka jest wyświetlana pod polem oraz w błędzie wartości, która nie pasuje. Wymaga `pattern` w tym samym schemacie, ma od 1 do 200 znaków i można ją [przetłumaczyć](/pl/builders/translations/).
+
 ### Listy wyboru
 
 Atrybut `string`, którego `value_schema` ma `enum`, edytuje się przez wybór jednej z jego wartości: przyciski opcji dla najwyżej pięciu wartości, a dla większej liczby lista z wyszukiwaniem. Przeglądarka rekordów filtruje go przez wybór jednej wartości albo według tego, czy jest ustawiony. Aby pokazać coś czytelniejszego niż zapisana wartość, dodaj opcjonalną mapę `x-attricat-enum-labels`:

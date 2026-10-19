@@ -7,8 +7,15 @@ import type {
   FormAttributeValue,
   RelationshipTargets,
 } from './api';
-import { scalarValueForField, valueForField } from './attributeValues';
-import { jsonSchemaValidationErrors } from './jsonSchema';
+import {
+  scalarValueForField,
+  typedScalarValueForField,
+  valueForField,
+} from './attributeValues';
+import {
+  jsonSchemaErrorMessage,
+  jsonSchemaValidationErrors,
+} from './jsonSchema';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 import { RELATIONSHIP_ID_JOINER, RELATIONSHIP_ID_SEPARATOR } from './constants';
 
@@ -184,7 +191,7 @@ export const validateRecordForm = (
       fieldErrors[attribute.code] = configuredError;
       continue;
     }
-    const scalar = scalarValueForField(
+    const scalar = typedScalarValueForField(
       attribute,
       value,
       rules?.preservesWhitespace,
@@ -197,7 +204,8 @@ export const validateRecordForm = (
         attribute.value_schema,
       );
       if (errors === undefined || errors.length > 0)
-        fieldErrors[attribute.code] = messages.schema;
+        fieldErrors[attribute.code] =
+          (errors && jsonSchemaErrorMessage(errors)) ?? messages.schema;
       document[attribute.code] = scalar.value;
     }
   }
@@ -221,7 +229,10 @@ export const validateRecordForm = (
         attributeCode &&
         attributes.some((attribute) => attribute.code === attributeCode)
       ) {
-        fieldErrors[attributeCode] ??= messages.schema;
+        fieldErrors[attributeCode] ??=
+          error.keyword === 'required'
+            ? messages.required
+            : (jsonSchemaErrorMessage([error]) ?? messages.schema);
         return undefined;
       }
       return messages.schema;

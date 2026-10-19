@@ -54,7 +54,11 @@ export const valueForField = (
   return value === undefined ? '' : String(value);
 };
 
-export const scalarValueForField = (
+/**
+ * The value a form field holds for its attribute's type, before its value
+ * schema is checked; `undefined` when blank or not of the type.
+ */
+export const typedScalarValueForField = (
   attribute: Attribute,
   fieldValue: string,
   preserveWhitespace = false,
@@ -73,12 +77,29 @@ export const scalarValueForField = (
     return undefined;
   const schema = scalarValueSchemas[attribute.value_type];
   const result = schema.safeParse(value);
-  return result.success &&
-    validatesJsonSchema(result.data, attribute.value_schema)
+  return result.success
     ? {
         kind: attributeValueKinds.scalar,
         attribute_code: attribute.code,
         value: result.data,
       }
+    : undefined;
+};
+
+/** The value a form field holds, when it also meets the value schema. */
+export const scalarValueForField = (
+  attribute: Attribute,
+  fieldValue: string,
+  preserveWhitespace = false,
+):
+  | Extract<NewAttributeValue, { kind: typeof attributeValueKinds.scalar }>
+  | undefined => {
+  const scalar = typedScalarValueForField(
+    attribute,
+    fieldValue,
+    preserveWhitespace,
+  );
+  return scalar && validatesJsonSchema(scalar.value, attribute.value_schema)
+    ? scalar
     : undefined;
 };

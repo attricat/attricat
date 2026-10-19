@@ -86,6 +86,10 @@ value_type = "string"
 | `relationship` | Powiązania z innymi rekordami | | Zobacz [Klucze relacji](#klucze-relacji). |
 | `file` | Przesłane pliki | | Zobacz [Klucze plików](#klucze-plików). |
 
+### Wskazówki wzorca
+
+Opcjonalny łańcuch `x-attricat-pattern-hint` opisuje słowami `pattern` schematu na potrzeby formularzy rekordów. Wymaga `pattern` i ma od 1 do 200 znaków. Zobacz [Co pokazują formularze](/pl/builders/validation/#co-pokazują-formularze).
+
 ### Listy wyboru
 
 Atrybut `string`, którego `value_schema` ma `enum`, edytuje się przez wybór jednej wartości: przyciski opcji dla najwyżej pięciu wartości, lista z wyszukiwaniem dla większej liczby. Opcjonalny obiekt `x-attricat-enum-labels` przypisuje wartościom `enum` etykiety; każdy klucz musi być wartością `enum`, a etykieta ma od 1 do 200 znaków. Nie można go łączyć z `x-attricat-status`. Zobacz [Listy wyboru](/pl/builders/validation/#listy-wyboru).

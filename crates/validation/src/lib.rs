@@ -5,6 +5,7 @@ use std::{
 
 pub mod choices;
 pub mod files;
+pub mod pattern_hint;
 pub mod predicate;
 pub mod principal;
 pub mod saved_search;
@@ -32,6 +33,7 @@ pub struct JsonSchemaViolation {
 pub fn validate_json_schema_definition(schema: &serde_json::Value) -> Result<(), String> {
     status::validate_status_definition(schema)?;
     choices::validate_enum_labels_definition(schema)?;
+    pattern_hint::validate_pattern_hint_definition(schema)?;
     predicate::record_checks(schema)?;
     principal::validate_principal_definition(schema)?;
     jsonschema::draft202012::options()

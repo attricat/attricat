@@ -41,7 +41,7 @@ describe('sandboxValidation', () => {
           required: ['price'],
         },
       ).fieldErrors,
-    ).toEqual({ size: i18n.t('records.invalidAttributeValue') });
+    ).toEqual({ size: i18n.t('records.schemaErrors.enum') });
   });
 
   it('reports record schema errors once values are valid', () => {
@@ -62,6 +62,8 @@ describe('sandboxValidation', () => {
           properties: { price: { maximum: 3 } },
         },
       ).fieldErrors,
-    ).toEqual({ price: i18n.t('records.schemaValidationFailed') });
+    ).toEqual({
+      price: i18n.t('records.schemaErrors.maximum', { limit: '3' }),
+    });
   });
 });

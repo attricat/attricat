@@ -41,6 +41,52 @@ describe('attributeHint', () => {
     );
   });
 
+  it('describes exclusive bounds and steps', () => {
+    const hint = (
+      value_type: Attribute['value_type'],
+      value_schema: Record<string, unknown>,
+    ) => attributeHint(attribute({ value_type, value_schema }), t);
+    expect(hint('number', { exclusiveMinimum: 0 })).toBe(
+      'A number greater than 0.',
+    );
+    expect(hint('number', { exclusiveMinimum: 0, maximum: 1 })).toBe(
+      'A number greater than 0 and at most 1.',
+    );
+    // The stricter of an inclusive and an exclusive bound applies.
+    expect(hint('integer', { minimum: 5, exclusiveMinimum: 0 })).toBe(
+      'A whole number of at least 5.',
+    );
+    expect(hint('integer', { minimum: 1, exclusiveMaximum: 10 })).toBe(
+      'A whole number of at least 1 and less than 10.',
+    );
+    expect(hint('number', { minimum: 0, multipleOf: 0.5 })).toBe(
+      'A number of at least 0. In steps of 0.5.',
+    );
+    expect(hint('integer', { multipleOf: 1 })).toBe('A whole number.');
+  });
+
+  it('describes a pattern by its hint and names known formats', () => {
+    expect(
+      attributeHint(
+        attribute({
+          value_schema: {
+            maxLength: 8,
+            pattern: '^[A-Z]{3}-[0-9]{4}$',
+            'x-attricat-pattern-hint': 'Such as ABC-1234',
+          },
+        }),
+        t,
+      ),
+    ).toBe('Up to 8 characters. Such as ABC-1234.');
+    // A pattern without a hint is not shown as a regular expression.
+    expect(
+      attributeHint(attribute({ value_schema: { pattern: '^a$' } }), t),
+    ).toBe(undefined);
+    expect(
+      attributeHint(attribute({ value_schema: { format: 'email' } }), t),
+    ).toBe('An email address.');
+  });
+
   it('summarizes a file policy', () => {
     expect(
       attributeHint(

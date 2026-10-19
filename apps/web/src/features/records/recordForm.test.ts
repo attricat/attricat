@@ -301,7 +301,7 @@ describe('record form values', () => {
         },
       ),
     ).toEqual({
-      fieldErrors: { price: 'Does not meet the schema requirements.' },
+      fieldErrors: { price: 'Enter 3 or more.' },
     });
   });
 
@@ -312,7 +312,42 @@ describe('record form values', () => {
         required: ['title'],
       }),
     ).toEqual({
-      fieldErrors: { title: 'Does not meet the schema requirements.' },
+      fieldErrors: { title: 'A value is required for the target schema.' },
     });
+  });
+
+  it('names the value schema rule a field fails', () => {
+    const sku = {
+      code: 'sku',
+      value_type: 'string' as const,
+      value_schema: {
+        type: 'string',
+        minLength: 3,
+        pattern: '^[A-Z]{3}-[0-9]{4}$',
+        'x-attricat-pattern-hint':
+          'Three capital letters, a hyphen and four digits',
+      },
+    };
+    expect(validateRecordForm([sku], { sku: 'AB' }).fieldErrors.sku).toBe(
+      'Enter at least 3 characters.',
+    );
+    expect(validateRecordForm([sku], { sku: 'abc-12' }).fieldErrors.sku).toBe(
+      'Does not match the required format: Three capital letters, a hyphen and four digits',
+    );
+    const quantity = {
+      code: 'quantity',
+      value_type: 'integer' as const,
+      value_schema: { type: 'integer', exclusiveMinimum: 0, multipleOf: 5 },
+    };
+    expect(
+      validateRecordForm([quantity], { quantity: '0' }).fieldErrors.quantity,
+    ).toBe('Enter a number greater than 0.');
+    expect(
+      validateRecordForm([quantity], { quantity: '7' }).fieldErrors.quantity,
+    ).toBe('Enter a multiple of 5.');
+    // A value that is not of the type at all says so.
+    expect(
+      validateRecordForm([quantity], { quantity: 'many' }).fieldErrors.quantity,
+    ).toBe("Enter a value that meets this field's requirements.");
   });
 });

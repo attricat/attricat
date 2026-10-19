@@ -50,6 +50,11 @@ value_schema = '''{
     ]
   }
 }'''
+
+[[attributes]]
+code = "sku"
+value_type = "string"
+value_schema = '{"pattern":"^[A-Z]{3}$","x-attricat-pattern-hint":"{{Three capital letters}}"}'
 "#;
 
 fn reference(key: &str, context: Option<&str>) -> Reference {
@@ -72,6 +77,7 @@ fn extracts_references_from_translatable_labels_only() {
             (reference("Product", None), true),
             (reference("Name", None), false),
             (reference("Draft", Some("status")), false),
+            (reference("Three capital letters", None), false),
             (reference("Overview", None), false),
             (reference("Products in this category", None), false),
             (reference("Title", Some("heading")), false),
