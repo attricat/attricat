@@ -41,7 +41,7 @@ Wartość, która nie przejdzie walidacji, zwraca `422 attribute_value_schema_mi
 
 ### Listy wyboru
 
-Atrybut `string`, którego `value_schema` ma `enum`, edytuje się przez listę rozwijaną jego wartości. Przeglądarka rekordów filtruje go przez wybór jednej wartości albo według tego, czy jest ustawiony. Aby pokazać coś czytelniejszego niż zapisana wartość, dodaj opcjonalną mapę `x-attricat-enum-labels`:
+Atrybut `string`, którego `value_schema` ma `enum`, edytuje się przez wybór jednej z jego wartości: przyciski opcji dla najwyżej pięciu wartości, a dla większej liczby lista z wyszukiwaniem. Przeglądarka rekordów filtruje go przez wybór jednej wartości albo według tego, czy jest ustawiony. Aby pokazać coś czytelniejszego niż zapisana wartość, dodaj opcjonalną mapę `x-attricat-enum-labels`:
 
 ```toml
 [[attributes]]
@@ -55,7 +55,7 @@ value_schema = '''{
 
 - Możesz nadać etykiety części wartości albo wszystkim. Wartość bez etykiety wyświetla się bez zmian.
 - Każda wartość z etykietą musi należeć do `enum`. Etykieta ma od 1 do 200 znaków i można ją [przetłumaczyć](/pl/builders/translations/#etykiety-statusów-i-list-wyboru).
-- Etykietę pokazują lista rozwijana, strony rekordów, tabela i wartości filtrów w Przeglądarce rekordów oraz etykiety filtrów. Wyszukiwanie, zapisane wyszukiwania, API i eksporty używają zapisanej wartości, więc zmiana etykiety nigdy nie zmienia danych.
+- Etykietę pokazują pole wyboru, strony rekordów, tabela i wartości filtrów w Przeglądarce rekordów oraz etykiety filtrów. Wyszukiwanie, zapisane wyszukiwania, API i eksporty używają zapisanej wartości, więc zmiana etykiety nigdy nie zmienia danych.
 - Wartość, której nie ma już w `enum`, pozostaje widoczna i jest oznaczona, aby można było wybrać nową.
 
 Jeśli wartości to etapy, przez które przechodzi rekord, użyj [statusu](#statusy): dodaje kolory, przejścia i kontrolę rekordu.

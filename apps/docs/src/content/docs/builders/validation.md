@@ -41,7 +41,7 @@ A value that fails returns `422 attribute_value_schema_mismatch`.
 
 ### Choice lists
 
-A `string` attribute whose `value_schema` has an `enum` is edited with a dropdown of its values. The Explorer filters it by choosing one value, or by whether it is set. To show something friendlier than the stored value, add an optional `x-attricat-enum-labels` map:
+A `string` attribute whose `value_schema` has an `enum` is edited by choosing one of its values: radio buttons for up to five values, and a list you can search for more. The Explorer filters it by choosing one value, or by whether it is set. To show something friendlier than the stored value, add an optional `x-attricat-enum-labels` map:
 
 ```toml
 [[attributes]]
@@ -55,7 +55,7 @@ value_schema = '''{
 
 - Label some values or all of them. A value without a label shows as itself.
 - Every labelled value must be in the `enum`. Labels are 1 to 200 characters and can be [translated](/builders/translations/#status-and-choice-labels).
-- The dropdown, record pages, Explorer table, filter values, and filter pills show the label. Searches, saved searches, the API, and exports use the stored value, so relabelling never changes data.
+- The choice field, record pages, Explorer table, filter values, and filter pills show the label. Searches, saved searches, the API, and exports use the stored value, so relabelling never changes data.
 - A value that is no longer in the `enum` stays visible and is flagged, so you can choose a new one.
 
 If the values are stages a record moves through, use a [status](#statuses) instead: it adds colors, transitions, and record controls.

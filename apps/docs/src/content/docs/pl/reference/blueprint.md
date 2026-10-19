@@ -88,7 +88,7 @@ value_type = "string"
 
 ### Listy wyboru
 
-Atrybut `string`, którego `value_schema` ma `enum`, edytuje się przez listę rozwijaną. Opcjonalny obiekt `x-attricat-enum-labels` przypisuje wartościom `enum` etykiety; każdy klucz musi być wartością `enum`, a etykieta ma od 1 do 200 znaków. Nie można go łączyć z `x-attricat-status`. Zobacz [Listy wyboru](/pl/builders/validation/#listy-wyboru).
+Atrybut `string`, którego `value_schema` ma `enum`, edytuje się przez wybór jednej wartości: przyciski opcji dla najwyżej pięciu wartości, lista z wyszukiwaniem dla większej liczby. Opcjonalny obiekt `x-attricat-enum-labels` przypisuje wartościom `enum` etykiety; każdy klucz musi być wartością `enum`, a etykieta ma od 1 do 200 znaków. Nie można go łączyć z `x-attricat-status`. Zobacz [Listy wyboru](/pl/builders/validation/#listy-wyboru).
 
 ### Statusy
 
