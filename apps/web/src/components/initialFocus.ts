@@ -37,14 +37,17 @@ export const focusFirstField = (
 };
 
 /**
- * Focuses the first field in `container`, or its first enabled button when it
- * has none, such as a file field, and scrolls it to the middle of the screen
- * so a sticky action bar does not cover it.
+ * Focuses the first field in `container`, or its first enabled button or
+ * checkbox when it has none, such as a file field or a confirmation, and
+ * scrolls it to the middle of the screen so a sticky action bar does not
+ * cover it.
  */
 export const focusControlIn = (container: ParentNode | null | undefined) => {
   const control =
     firstField(container) ??
-    container?.querySelector<HTMLElement>('button:not(:disabled)');
+    container?.querySelector<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled)',
+    );
   if (!control) return false;
   control.focus({ preventScroll: true });
   // Not implemented by every environment, such as jsdom.

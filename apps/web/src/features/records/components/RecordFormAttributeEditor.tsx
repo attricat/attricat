@@ -16,6 +16,7 @@ import {
 import { attributeValueTypes } from '../valueTypes';
 import { RecordAttributeEditor } from './RecordAttributeEditor';
 import { AttributeValue } from '../../views/components/values/AttributeValue';
+import type { MigrationFieldReview } from '../migrationReview';
 
 export type RecordFormAttributeEditorContext = {
   contextId: string | null;
@@ -29,8 +30,7 @@ export type RecordFormAttributeEditorContext = {
   lockedAttributes?: Readonly<Record<string, string>>;
   statusTransitions?: readonly StatusTransitionAccess[];
   fieldErrors: Record<string, string>;
-  highlightedAttributes: readonly string[];
-  migrationReviewMessages: Readonly<Record<string, string>>;
+  migrationReviews?: Readonly<Record<string, MigrationFieldReview>>;
   resolvedValues: ResolvedFormValues;
   onRecordUpdated?: (updatedAt: string) => void;
 };
@@ -58,8 +58,7 @@ export const RecordFormAttributeEditor = ({
   lockedAttributes = {},
   statusTransitions = [],
   fieldErrors,
-  highlightedAttributes,
-  migrationReviewMessages,
+  migrationReviews = {},
   onChange,
   onRecordUpdated,
   resolvedValues,
@@ -124,10 +123,9 @@ export const RecordFormAttributeEditor = ({
         files={filesForAttribute(existingValues, attribute.code, contextId)}
         error={fieldErrors[attribute.code]}
         helperText={helperText}
-        migrationReviewMessage={migrationReviewMessages[attribute.code]}
+        migrationReview={migrationReviews[attribute.code]}
         onChange={onChange}
         onRecordUpdated={onRecordUpdated}
-        showMigrationBadge={highlightedAttributes.includes(attribute.code)}
         value={value}
       />
     </>

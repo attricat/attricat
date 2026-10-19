@@ -6,6 +6,7 @@ import type {
   BlueprintWithAttributes,
   ComponentReference,
   FormAttributeValue,
+  ViewDefinition,
 } from '../api';
 import { attributeLabel } from '../recordDisplay';
 import {
@@ -33,6 +34,7 @@ import { draftEditors, type DraftEditor } from '../../drafts/constants';
 import { DraftRestoreDialog } from '../../drafts/DraftRestoreDialog';
 import { formFieldsDraftSchema } from '../../drafts/schemas';
 import { useEditorDraft } from '../../drafts/useEditorDraft';
+import type { MigrationFieldReview } from '../migrationReview';
 import {
   forwardRef,
   useEffect,
@@ -41,6 +43,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { attributeValueTypes } from '../valueTypes';
@@ -63,7 +66,10 @@ import {
   useInitialFocus,
 } from '../../../components/initialFocus';
 import { FormActionBar } from '../../../components/FormActionBar';
-import { FormErrorSummary } from '../../../components/FormErrorSummary';
+import {
+  FormErrorSummary,
+  type FormErrorSummaryItem,
+} from '../../../components/FormErrorSummary';
 import { UnsavedChangesGuard } from '../../drafts/UnsavedChangesGuard';
 import {
   FieldRevealContext,
@@ -105,6 +111,7 @@ const pickDraftFields = (
 const noStatusParentContextIds: readonly string[] = [];
 const noStatusTransitions: readonly [] = [];
 const noResolvedValues = {};
+const noPendingConfirmations: readonly FormErrorSummaryItem[] = [];
 
 type RecordFormProps = {
   expectedUpdatedAt?: string;
@@ -116,8 +123,16 @@ type RecordFormProps = {
   existingValues?: FormAttributeValue[];
   isLoadingBlueprint?: boolean;
   showAllAttributes?: boolean;
-  highlightedAttributes?: readonly string[];
-  migrationReviewMessages?: Readonly<Record<string, string>>;
+  /** Lays out every editable field instead of the blueprint's detail view. */
+  layout?: ViewDefinition;
+  migrationReviews?: Readonly<Record<string, MigrationFieldReview>>;
+  /**
+   * Choices made outside the fields that must be confirmed before submitting.
+   * Each `id` matches a `data-field-code` element in `children` to go to.
+   */
+  pendingConfirmations?: readonly FormErrorSummaryItem[];
+  /** Shown above the fields, inside the form. */
+  children?: ReactNode;
   requiredAttributes?: readonly string[];
   /** Load or save failure; check violations are placed on their fields. */
   error?: Error | null;
@@ -152,9 +167,11 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       defaultContextId = null,
       existingValues = [],
       isLoadingBlueprint = false,
-      showAllAttributes = false,
-      highlightedAttributes = [],
-      migrationReviewMessages = {},
+      showAllAttributes: showAllProp = false,
+      layout,
+      migrationReviews = {},
+      pendingConfirmations = noPendingConfirmations,
+      children,
       requiredAttributes = [],
       error,
       onLoadBlueprint,
@@ -185,6 +202,9 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     // Records are entered with the detail layout; each display component
     // edits with its paired edit component.
     const detailView = blueprint?.blueprint.views.detail;
+    // A given layout places every field itself, like showing them all.
+    const showAllAttributes = showAllProp || layout !== undefined;
+    const shownView = layout ?? (showAllAttributes ? undefined : detailView);
     const fieldComponents = viewFieldEditComponents(detailView);
     // Required by the caller or, in the default context, by the record schema.
     const requiredCodes = new Set([
@@ -277,9 +297,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     const fieldOrder = [
       ...new Set([
         ...headingFields.map((attribute) => attribute.code),
-        ...(detailView && !showAllAttributes
-          ? viewPlacedFields(detailView)
-          : []),
+        ...viewPlacedFields(shownView),
         ...otherAttributes.map((attribute) => attribute.code),
         ...editableAttributes.map((attribute) => attribute.code),
       ]),
@@ -358,12 +376,16 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
         setSubmitAttempted(true);
         const validation = validateFields(value.fields);
         if (
+          pendingConfirmations.length > 0 ||
           Object.keys(validation.fieldErrors).length > 0 ||
           validation.formError
         ) {
-          const first = fieldOrder.find(
-            (code) => validation.fieldErrors[code] !== undefined,
-          );
+          // Confirmations are shown above the fields, so they come first.
+          const first =
+            pendingConfirmations[0]?.id ??
+            fieldOrder.find(
+              (code) => validation.fieldErrors[code] !== undefined,
+            );
           if (first) revealField(first);
           else focusErrors();
           return;
@@ -469,13 +491,16 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     const attributesByCode = new Map(
       editableAttributes.map((attribute) => [attribute.code, attribute]),
     );
-    const errorItems = fieldOrder.flatMap((code) => {
-      const message = allFieldErrors[code];
-      const attribute = attributesByCode.get(code);
-      return message && attribute
-        ? [{ id: code, label: attributeLabel(attribute), message }]
-        : [];
-    });
+    const errorItems = [
+      ...pendingConfirmations,
+      ...fieldOrder.flatMap((code) => {
+        const message = allFieldErrors[code];
+        const attribute = attributesByCode.get(code);
+        return message && attribute
+          ? [{ id: code, label: attributeLabel(attribute), message }]
+          : [];
+      }),
+    ];
     // A save the server rejected goes to its first misplaced field, or to the
     // errors above the form. An error present on mount, such as a failed
     // blueprint load, is only shown.
@@ -503,8 +528,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       lockedAttributes,
       statusTransitions: noStatusTransitions,
       fieldErrors: allFieldErrors,
-      highlightedAttributes,
-      migrationReviewMessages,
+      migrationReviews,
       resolvedValues: noResolvedValues,
     };
     const submit = (another: boolean) => {
@@ -538,6 +562,18 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           variant="body2"
         >
           {t('records.requiredFieldsLeft', { count: missingRequired.length })}
+        </Link>
+      ) : pendingConfirmations.length > 0 ? (
+        <Link
+          color="text.secondary"
+          component="button"
+          onClick={() => revealField(pendingConfirmations[0].id)}
+          type="button"
+          variant="body2"
+        >
+          {t('records.changesToConfirm', {
+            count: pendingConfirmations.length,
+          })}
         </Link>
       ) : undefined;
 
@@ -600,6 +636,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
               {formError && <Alert severity="error">{formError}</Alert>}
             </Stack>
           )}
+          {children}
           {!blueprint && !lockedBlueprint && (
             <form.Field name="blueprintCode">
               {(field) => (
@@ -659,7 +696,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                       otherAttributes={otherAttributes}
                       renderEditor={renderEditor}
                       values={noResolvedValues}
-                      view={showAllAttributes ? undefined : detailView}
+                      view={shownView}
                     />
                   </FieldRevealContext>
                 );

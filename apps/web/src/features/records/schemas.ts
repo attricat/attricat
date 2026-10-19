@@ -546,13 +546,8 @@ const recordFormResponseSchema = z.object({
 });
 const migrationIssueSchema = z.object({
   attribute_code: z.string().nullable(),
-  kind: z.enum([
-    'removed',
-    'value_type_changed',
-    'relationship_target_changed',
-    'attribute_schema_mismatch',
-    'missing_required',
-  ]),
+  // The kinds the API reports; an unknown one is shown with its message.
+  kind: z.string(),
   message: z.string(),
 });
 export const recordMigrationPreviewSchema = z.object({

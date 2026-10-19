@@ -61,8 +61,6 @@ it.each([
       defaultContextId="default"
       existingValues={[]}
       fieldErrors={{}}
-      highlightedAttributes={[]}
-      migrationReviewMessages={{}}
       resolvedValues={{}}
       onChange={vi.fn()}
       value="+48 22 123 45 67"
