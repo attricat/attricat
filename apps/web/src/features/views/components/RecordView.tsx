@@ -1,14 +1,4 @@
-import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
-  Box,
-  Divider,
-  Paper,
-  Stack,
-  Typography,
-} from '@mui/material';
-import { ChevronDownIcon } from 'lucide-react';
+import { Box, Divider, Paper, Stack, Typography } from '@mui/material';
 import { createElement, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -40,6 +30,7 @@ import {
 } from '../constants';
 import { ValueField, type ResolvedValue } from './ValueField';
 import { ViewTabs } from './ViewTabs';
+import { ViewAccordionSection } from './ViewAccordionSection';
 import { lexiconText } from '../../lexicon/lexicon';
 
 export type RecordViewProps = {
@@ -164,14 +155,14 @@ export const RecordView = ({
       return (
         <Box key={key}>
           {node.sections.map((section) => (
-            <Accordion key={section.label}>
-              <AccordionSummary expandIcon={<ChevronDownIcon />}>
-                <Typography>{lexiconText(section.label)}</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                {renderNodes(section.children)}
-              </AccordionDetails>
-            </Accordion>
+            <ViewAccordionSection
+              invalidFields={invalidFields}
+              key={section.label}
+              label={section.label}
+              nodes={section.children}
+            >
+              {renderNodes(section.children)}
+            </ViewAccordionSection>
           ))}
         </Box>
       );

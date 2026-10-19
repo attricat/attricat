@@ -41,7 +41,7 @@ describe('UnsavedFieldChangesGuard', () => {
 
     act(() => router.history.push('/?record=b'));
     await user.click(
-      await screen.findByRole('button', { name: 'records.keepEditing' }),
+      await screen.findByRole('button', { name: 'drafts.keepEditing' }),
     );
 
     expect(router.state.location.search).toEqual({ record: 'a' });
@@ -54,7 +54,7 @@ describe('UnsavedFieldChangesGuard', () => {
 
     act(() => router.history.push('/other'));
     await user.click(
-      await screen.findByRole('button', { name: 'records.discardAndLeave' }),
+      await screen.findByRole('button', { name: 'drafts.discardAndLeave' }),
     );
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/other'));

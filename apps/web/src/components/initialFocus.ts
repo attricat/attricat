@@ -37,6 +37,22 @@ export const focusFirstField = (
 };
 
 /**
+ * Focuses the first field in `container`, or its first enabled button when it
+ * has none, such as a file field, and scrolls it to the middle of the screen
+ * so a sticky action bar does not cover it.
+ */
+export const focusControlIn = (container: ParentNode | null | undefined) => {
+  const control =
+    firstField(container) ??
+    container?.querySelector<HTMLElement>('button:not(:disabled)');
+  if (!control) return false;
+  control.focus({ preventScroll: true });
+  // Not implemented by every environment, such as jsdom.
+  control.scrollIntoView?.({ block: 'center' });
+  return true;
+};
+
+/**
  * Focuses the first field of a form as soon as one has rendered. Pass `null`
  * while the form is not ready; a new key focuses again, such as after another
  * blueprint loads. It never takes focus back once the user has clicked or

@@ -69,7 +69,9 @@
     "restoreDescription": "Ta karta zawiera niezapisany szkic z <timestamp/>. Przywróć go, aby zastąpić wczytany formularz, lub odrzuć, aby zachować formularz w obecnej postaci.",
     "sourceChanged": "Źródło zmieniło się od zapisania szkicu. Przywrócenie szkicu zastąpi najnowsze wczytane wartości.",
     "restore": "Przywróć szkic",
-    "discard": "Odrzuć szkic"
+    "discard": "Odrzuć szkic",
+    "keepEditing": "Kontynuuj edycję",
+    "discardAndLeave": "Odrzuć i wyjdź"
   },
   "navigation": {
     "open": "Otwórz nawigację",
@@ -395,8 +397,6 @@
     "changedByAnotherEditor": "Ktoś inny zmienił ten rekord. Wybierz, czy zachować niezapisane zmiany, czy użyć najnowszych wartości.",
     "unsavedFieldChangesTitle": "Niezapisane zmiany",
     "unsavedFieldChangesDescription": "Nie udało się zapisać niektórych zmian tego rekordu. Jeśli wyjdziesz, zostaną odrzucone.",
-    "keepEditing": "Kontynuuj edycję",
-    "discardAndLeave": "Odrzuć i wyjdź",
     "keepMyChanges": "Zachowaj moje zmiany",
     "useLatestValues": "Użyj najnowszych wartości",
     "selectAdditionalAttribute": "Wybierz atrybut",
@@ -482,7 +482,6 @@
     "invalidTimeZone": "Oczekiwano strefy czasowej IANA",
     "invalidJson": "Oczekiwano JSON",
     "blueprintLabel": "Schemat: {{name}}",
-    "fillRequiredFields": "Uzupełnij wymagane pola: {{fields}}",
     "blueprintOption": "{{name}} ({{code}})",
     "reusableAttributeOption": "{{qualifiedCode}} · {{name}} v{{version}}",
     "recordConversationTitle": "Zapytaj o ten rekord · {{recordId}}",
@@ -531,7 +530,20 @@
       "file": "Plik",
       "relationship": "Relacja"
     },
-    "choiceUnknown": "Niedozwolona wartość: {{value}}"
+    "choiceUnknown": "Niedozwolona wartość: {{value}}",
+    "fieldsNeedAttention_one": "{{count}} pole wymaga uwagi",
+    "fieldsNeedAttention_few": "{{count}} pola wymagają uwagi",
+    "fieldsNeedAttention_many": "{{count}} pól wymaga uwagi",
+    "fieldsNeedAttention_other": "{{count}} pola wymaga uwagi",
+    "requiredFieldsLeft_one": "Pozostało {{count}} wymagane pole do uzupełnienia",
+    "requiredFieldsLeft_few": "Pozostały {{count}} wymagane pola do uzupełnienia",
+    "requiredFieldsLeft_many": "Pozostało {{count}} wymaganych pól do uzupełnienia",
+    "requiredFieldsLeft_other": "Pozostało {{count}} wymaganego pola do uzupełnienia",
+    "createAndAddAnother": "Utwórz i dodaj kolejny",
+    "recordCreated": "Utworzono rekord.",
+    "openRecord": "Otwórz",
+    "unsavedFormTitle": "Odrzucić wprowadzone wartości?",
+    "unsavedFormDescription": "Nie zostały jeszcze zapisane. Jeśli wyjdziesz, zostaną odrzucone."
   },
   "exports": {
     "title": "Eksporty",

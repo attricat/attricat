@@ -10,10 +10,13 @@ import { uploadStagedFiles } from '../files/api';
 import { useQueuedFileUploadsContext } from '../files/queuedFileUploads';
 import { createRecord, getBlueprintByCode } from './api';
 import { CreateRecordPage } from './CreateRecordPage';
+import { useToastStore } from '../../components/toastStore';
 
 const navigate = vi.fn();
 vi.mock('@tanstack/react-router', () => ({
+  useCanGoBack: () => false,
   useNavigate: () => navigate,
+  useRouter: () => ({ history: { back: vi.fn() } }),
 }));
 vi.mock('../contexts/api', () => ({ listContexts: vi.fn() }));
 vi.mock('../files/api', () => ({ uploadStagedFiles: vi.fn() }));
@@ -31,9 +34,14 @@ vi.mock('./components/RecordForm', () => ({
     onSubmit,
   }: {
     error?: Error | null;
-    onSubmit: (values: { values: []; relationships: [] }) => void;
+    onSubmit: (values: {
+      values: [];
+      relationships: [];
+      addAnother: boolean;
+    }) => void;
   }) => {
     const queue = useQueuedFileUploadsContext();
+    const queued = Object.values(queue?.pending ?? {}).flat().length;
     return (
       <>
         <button
@@ -52,11 +60,22 @@ vi.mock('./components/RecordForm', () => ({
           Queue photo
         </button>
         <button
-          onClick={() => onSubmit({ values: [], relationships: [] })}
+          onClick={() =>
+            onSubmit({ values: [], relationships: [], addAnother: false })
+          }
           type="button"
         >
           Create record
         </button>
+        <button
+          onClick={() =>
+            onSubmit({ values: [], relationships: [], addAnother: true })
+          }
+          type="button"
+        >
+          Create another
+        </button>
+        <p>{queued} queued</p>
         {error && <p role="alert">{error.message}</p>}
       </>
     );
@@ -138,4 +157,30 @@ it('does not create the record when a file fails to upload', async () => {
   );
   expect(createRecord).not.toHaveBeenCalled();
   expect(navigate).not.toHaveBeenCalled();
+});
+
+it('stays on an empty form after creating a record to add another', async () => {
+  vi.mocked(uploadStagedFiles).mockResolvedValue({
+    files: [{ id: fileId }],
+  } as unknown as Awaited<ReturnType<typeof uploadStagedFiles>>);
+  vi.mocked(createRecord).mockResolvedValue({
+    id: recordId,
+  } as unknown as Awaited<ReturnType<typeof createRecord>>);
+  const user = await renderPage();
+  await user.click(screen.getByRole('button', { name: 'Queue photo' }));
+  expect(screen.getByText('1 queued')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Create another' }));
+
+  await vi.waitFor(() => expect(screen.getByText('0 queued')).toBeTruthy());
+  expect(navigate).not.toHaveBeenCalled();
+  const toast = useToastStore.getState().toasts.at(-1);
+  expect(toast).toMatchObject({
+    message: 'Record created.',
+    severity: 'success',
+  });
+  render(<>{toast?.action}</>);
+  await user.click(screen.getByRole('button', { name: 'Open' }));
+  expect(navigate).toHaveBeenCalledWith(
+    expect.objectContaining({ params: { recordId } }),
+  );
 });
