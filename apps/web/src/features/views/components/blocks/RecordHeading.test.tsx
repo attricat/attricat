@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import '../../../../i18n';
+import { STATUS_SCHEMA_KEY } from '../../../records/status';
 import type { Attribute, ViewDefinition } from '../../../records/api';
 import { RecordHeading } from './RecordHeading';
 
@@ -15,6 +19,8 @@ const view = {
   ],
 } satisfies ViewDefinition;
 
+afterEach(cleanup);
+
 describe('RecordHeading', () => {
   it('renders a configured field heading', () => {
     expect(() =>
@@ -25,5 +31,32 @@ describe('RecordHeading', () => {
         view,
       }),
     ).not.toThrow();
+  });
+
+  it('renders a status field as its chip', () => {
+    const status = {
+      code: 'state',
+      value_type: 'string',
+      context_fallback: 'default',
+      value_schema: {
+        [STATUS_SCHEMA_KEY]: {
+          version: 1,
+          options: [{ code: 'live', label: 'Live', tone: 'success' }],
+        },
+      },
+    } satisfies Attribute;
+    const { container } = render(
+      <RecordHeading
+        attributes={[...attributes, status]}
+        recordId="record-1"
+        values={{ title: { value: 'Product 001' }, state: { value: 'live' } }}
+        view={{
+          ...view,
+          children: [...view.children, { type: 'field', field: 'state' }],
+        }}
+      />,
+    );
+    expect(screen.getByText('Live')).toBeTruthy();
+    expect(container.querySelector('.MuiChip-colorSuccess')).toBeTruthy();
   });
 });
