@@ -4,11 +4,19 @@ import {
   Alert,
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Link,
   Paper,
   Skeleton,
   Stack,
+  Typography,
 } from '@mui/material';
+import { PencilIcon } from 'lucide-react';
+import { lexiconText } from '../../lexicon/lexicon';
 import type {
   Attribute,
   BlueprintWithAttributes,
@@ -142,6 +150,8 @@ type RecordFormProps = {
   onLoadBlueprint?: (code: string, version?: number) => void;
   lockedBlueprint?: boolean;
   onCancel?: () => void;
+  /** Lets the user go back to choosing a blueprint. */
+  onChangeBlueprint?: () => void;
   /** Offers a second submit that keeps the form open for the next record. */
   addAnotherLabel?: string;
   /** Asks before an in-app navigation drops entered values; needs a router. */
@@ -180,6 +190,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       onLoadBlueprint,
       lockedBlueprint = false,
       onCancel,
+      onChangeBlueprint,
       addAnotherLabel,
       guardUnsavedChanges = false,
       onSubmit,
@@ -373,6 +384,9 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     // The submit button that was used, read when the form submits.
     const addAnother = useRef(false);
     const [submitAttempted, setSubmitAttempted] = useState(false);
+    const [confirmingBlueprintChange, setConfirmingBlueprintChange] =
+      useState(false);
+    const changeConfirmed = useRef(false);
     const form = useForm({
       defaultValues: {
         blueprintCode: blueprint?.blueprint.code ?? '',
@@ -577,6 +591,47 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
         }}
         sx={{ mt: 4, p: formPadding }}
       >
+        <Dialog
+          // Changing removes the button that opened it; focus moves to the
+          // blueprint picker instead.
+          disableRestoreFocus
+          onClose={() => setConfirmingBlueprintChange(false)}
+          open={confirmingBlueprintChange}
+          slotProps={{
+            transition: {
+              // The page is hidden from assistive technology until the
+              // dialog has closed, so the picker can only take focus then.
+              onExited: () => {
+                if (!changeConfirmed.current) return;
+                changeConfirmed.current = false;
+                onChangeBlueprint?.();
+              },
+            },
+          }}
+        >
+          <DialogTitle>{t('records.changeBlueprintTitle')}</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              {t('records.changeBlueprintDescription')}
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setConfirmingBlueprintChange(false)}>
+              {t('drafts.keepEditing')}
+            </Button>
+            <Button
+              color="error"
+              onClick={() => {
+                changeConfirmed.current = true;
+                setConfirmingBlueprintChange(false);
+                draft.clear();
+              }}
+              variant="contained"
+            >
+              {t('records.changeBlueprintConfirm')}
+            </Button>
+          </DialogActions>
+        </Dialog>
         <DraftRestoreDialog
           draft={draft.pending}
           onDiscard={draft.discard}
@@ -629,6 +684,27 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                 />
               )}
             </form.Field>
+          )}
+          {blueprint && onChangeBlueprint && !lockedBlueprint && (
+            <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
+              <Typography>
+                {t('records.blueprintChosen', {
+                  blueprint: lexiconText(blueprint.blueprint.name),
+                })}
+              </Typography>
+              <Button
+                disabled={isLoadingBlueprint}
+                onClick={() =>
+                  fieldsChanged || hasQueuedFiles
+                    ? setConfirmingBlueprintChange(true)
+                    : onChangeBlueprint()
+                }
+                size="small"
+                startIcon={<PencilIcon />}
+              >
+                {t('records.changeBlueprint')}
+              </Button>
+            </Box>
           )}
           {!blueprint && isLoadingBlueprint && (
             // Holds the form's place while its fields load.

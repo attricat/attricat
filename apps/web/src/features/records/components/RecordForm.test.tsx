@@ -371,6 +371,31 @@ describe('RecordForm', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
   });
 
+  it('goes back to choosing a blueprint, asking first once values are entered', async () => {
+    const onChangeBlueprint = vi.fn();
+    renderForm({
+      blueprint: blueprint([attribute('title')]),
+      onChangeBlueprint,
+    });
+    expect(screen.getByText('Blueprint: Product')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Change blueprint' }));
+    expect(onChangeBlueprint).toHaveBeenCalledOnce();
+
+    fireEvent.change(titleBox(), { target: { value: 'Shirt' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Change blueprint' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.textContent).toContain('Change the blueprint?');
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(onChangeBlueprint).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'Change blueprint' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Discard and change' }),
+    );
+    // The blueprint changes once the dialog has closed.
+    await waitFor(() => expect(onChangeBlueprint).toHaveBeenCalledTimes(2));
+  });
+
   it('submits for another record from its own button', async () => {
     const { onSubmit } = renderForm({
       addAnotherLabel: 'Create and add another',

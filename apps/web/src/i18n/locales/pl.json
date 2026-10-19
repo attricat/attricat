@@ -610,7 +610,12 @@
     "undoSave": "Cofnij",
     "allChangesSaved": "Wszystkie zmiany zapisane",
     "conflictingChange": "{{field}}: Twoja wartość „{{mine}}”, obecnie „{{theirs}}”",
-    "empty": "pusto"
+    "empty": "pusto",
+    "blueprintChosen": "Schemat: {{blueprint}}",
+    "changeBlueprint": "Zmień schemat",
+    "changeBlueprintTitle": "Zmienić schemat?",
+    "changeBlueprintDescription": "Wartości i pliki wprowadzone dla tego schematu zostaną odrzucone.",
+    "changeBlueprintConfirm": "Odrzuć i zmień"
   },
   "exports": {
     "title": "Eksporty",
