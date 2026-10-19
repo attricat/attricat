@@ -359,9 +359,11 @@ impl Config {
 }
 
 fn bootstrap(source: &Source, demo_mode: bool) -> Result<BootstrapConfig, ConfigError> {
+    // A blank address is a mistake, not a request for the test default.
     let owner_email = source
-        .var("ATTRICAT_BOOTSTRAP_OWNER_EMAIL")
-        .unwrap_or("owner@example.test")
+        .vars
+        .get("ATTRICAT_BOOTSTRAP_OWNER_EMAIL")
+        .map_or("owner@example.test", String::as_str)
         .trim()
         .to_lowercase();
     if !owner_email.contains('@') {
@@ -633,6 +635,15 @@ mod tests {
         assert_eq!(config.bootstrap.owner_email, "owner@example.test");
         assert!(!config.bootstrap.sample_accounts);
         assert_eq!(config.file_worker.poll_interval, Duration::from_millis(500));
+    }
+
+    #[test]
+    fn blank_bootstrap_owner_email_stops_startup() {
+        let secrets = required_secrets();
+        let error = load(&secrets, &[("ATTRICAT_BOOTSTRAP_OWNER_EMAIL", "")])
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("ATTRICAT_BOOTSTRAP_OWNER_EMAIL"));
     }
 
     #[test]

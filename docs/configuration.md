@@ -88,13 +88,13 @@ or inaccessible configured bucket.
 | `MAILPIT_UI_PORT` | `8025` | Docker Compose | Worktree-specific host port for Mailpit's UI and REST API. |
 | `JAEGER_OTLP_GRPC_PORT` | `4317` | Docker Compose | Worktree-specific host port for Jaeger's OTLP/gRPC receiver. |
 | `JAEGER_UI_PORT` | `16686` | Docker Compose | Worktree-specific host port for Jaeger's trace UI. |
-| `S3_ENDPOINT` | Required | API and file worker | Absolute HTTP(S) URL for the S3-compatible endpoint. Local development uses RustFS. |
-| `S3_REGION` | Required | API and file worker | S3 signing region. |
-| `S3_BUCKET` | Required | API and file worker | Existing bucket used for catalog objects. Local startup creates it. |
-| `S3_ACCESS_KEY_ID` | Required | API and file worker | S3 access key ID. Its secret half is the `s3_secret_access_key` secret. |
-| `S3_FORCE_PATH_STYLE` | Required | API and file worker | Strict `true`/`false` setting for S3 path-style addressing. Set `true` for local RustFS. |
-| `S3_UPLOAD_TIMEOUT_SECONDS` | Required | API and file worker | Positive timeout for object uploads and deletes. |
-| `S3_DOWNLOAD_TIMEOUT_SECONDS` | Required | API and file worker | Positive timeout for object downloads and bucket readiness. |
+| `S3_ENDPOINT` | Required | API, file worker, migrate | Absolute HTTP(S) URL for the S3-compatible endpoint. Local development uses RustFS. |
+| `S3_REGION` | Required | API, file worker, migrate | S3 signing region. |
+| `S3_BUCKET` | Required | API, file worker, migrate | Existing bucket used for catalog objects. Local startup creates it. |
+| `S3_ACCESS_KEY_ID` | Required | API, file worker, migrate | S3 access key ID. Its secret half is the `s3_secret_access_key` secret. |
+| `S3_FORCE_PATH_STYLE` | Required | API, file worker, migrate | Strict `true`/`false` setting for S3 path-style addressing. Set `true` for local RustFS. |
+| `S3_UPLOAD_TIMEOUT_SECONDS` | Required | API, file worker, migrate | Positive timeout for object uploads and deletes. |
+| `S3_DOWNLOAD_TIMEOUT_SECONDS` | Required | API, file worker, migrate | Positive timeout for object downloads and bucket readiness. |
 | `FILE_UPLOAD_MAX_BYTES` | `52428800` | API | Positive request-level byte limit for each streamed upload. A file attribute may set a lower `max_bytes` policy. |
 | `FILE_UPLOAD_MAX_FILES` | `10` | API | Positive request-level number of file parts. A `cardinality = "one"` attribute accepts exactly one. |
 | `FILE_WORKER_ID` | Random process UUID | File worker | Stable identifier written with claimed jobs. |
@@ -120,7 +120,7 @@ exists but cannot be read stops startup.
 | Secret file | Default | Used by | Purpose |
 | --- | --- | --- | --- |
 | `database_url` | Required | API, file worker, migrate | PostgreSQL connection string, including its password. |
-| `s3_secret_access_key` | Required | API and file worker | S3 secret access key paired with `S3_ACCESS_KEY_ID`. Do not log or expose it. |
+| `s3_secret_access_key` | Required | API, file worker, migrate | S3 secret access key paired with `S3_ACCESS_KEY_ID`. Do not log or expose it. |
 | `smtp_password` | Unset | API | SMTP password, paired with `SMTP_USERNAME`. |
 | `llm_api_key` | Unset (agents unavailable) | API only | API key for the OpenAI-compatible agent provider. Never send, persist, or log it. |
 | `redis_url` | Unset | API | Redis URL, required when `CACHE_BACKEND=redis`. It is a secret because it usually carries the Redis password. `redis://` and TLS `rediss://` (rustls, platform root certificates) are supported, as are the `valkey` schemes and the `-cluster` and `-sentinel` forms. |

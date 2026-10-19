@@ -42,12 +42,14 @@ reuses those service definitions from `apps/api/compose.yml`, so run it from a
 checkout of this repository:
 
 ```sh
-export ATTRICAT_OWNER_PASSWORD='pick-a-password'
 docker compose -f deploy/compose.quickstart.yml up -d --wait
 ```
 
 Open <http://localhost:3000/login> and sign in with workspace `default.local`,
-email `owner@example.com` and the password you exported. Email the server
+email `owner@example.com` and password `change-me-now`, from
+[`deploy/quickstart-secrets/`](deploy/quickstart-secrets/). To choose other
+credentials, set `ATTRICAT_SECRETS_HOST_DIR` to a directory holding your own
+`database_url`, `s3_secret_access_key` and `bootstrap_owner_password` files. Email the server
 sends, such as password resets, shows up in Mailpit at <http://localhost:8025>.
 
 To use different host ports, set `ATTRICAT_PORT` or `MAILPIT_UI_PORT`. To run a

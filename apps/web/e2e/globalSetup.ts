@@ -289,6 +289,8 @@ export default async () => {
   const apiEnv: NodeJS.ProcessEnv = {
     ...process.env,
     ATTRICAT_SECRETS_DIR: secretsDir,
+    // The temporary secrets have no redis_url, whatever .env chooses.
+    CACHE_BACKEND: 'memory',
     BIND_ADDR: `127.0.0.1:${e2eApiPort}`,
     S3_ENDPOINT: e2eS3Url,
     S3_REGION: 'us-east-1',

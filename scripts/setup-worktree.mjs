@@ -135,7 +135,8 @@ mkdirSync(secretsDir, { recursive: true, mode: 0o700 });
 for (const [variable, secret] of Object.entries(retiredSecretVariables)) {
   let value;
   [env, value] = takeEnvValue(env, variable);
-  if (value && !existsSync(secretPath(secret))) writeSecret(secret, value);
+  // A value still in .env is newer than the secret file it replaces.
+  if (value) writeSecret(secret, value);
 }
 env = setEnvValue(env, "ATTRICAT_SECRETS_DIR", secretsDir);
 if (!existsSync(secretPath("bootstrap_owner_password"))) {
