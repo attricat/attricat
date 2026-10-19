@@ -319,7 +319,12 @@ async fn wait_until(pool: &PgPool, sql: &str, timeout: Duration) -> bool {
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "measurement harness; run explicitly with --ignored --nocapture"]
 async fn database_round_trips(pool: PgPool) {
-    init_tracing("round-trip-baseline").unwrap();
+    init_tracing(
+        "round-trip-baseline",
+        std::env::var("RUST_LOG").ok().as_deref(),
+        None,
+    )
+    .unwrap();
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let owner = authenticated_client();
@@ -460,7 +465,7 @@ async fn database_round_trips(pool: PgPool) {
         rule_runtime::add_to_registry(workflow_runtime::add_to_registry(
             EventHandlerRegistry::default_handlers(),
         )),
-        DispatcherConfig::from_env().unwrap(),
+        DispatcherConfig::from_values(|_| None).unwrap(),
         shutdown.clone(),
     ));
     let task_worker = task_worker::start(
@@ -478,7 +483,7 @@ async fn database_round_trips(pool: PgPool) {
             rule_runtime::task_handler(system.clone()),
         ])
         .unwrap(),
-        TaskWorkerConfig::from_env().unwrap(),
+        TaskWorkerConfig::from_values(|_| None).unwrap(),
         shutdown.clone(),
     );
     // Let startup work and the first coordinator ticks settle.

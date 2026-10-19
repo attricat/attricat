@@ -1,101 +1,103 @@
 //! Deployment-wide extension containment policy.
 //!
-//! The environment is consulted at each runtime gate rather than only at
-//! startup. This lets an operator stop new extension work without changing an
-//! installation, its grants, or its lifecycle history.
+//! The API parses the policy with the rest of its configuration and installs
+//! it once at startup; every runtime gate then consults the installed policy.
+//! It stops new extension work without changing an installation, its grants,
+//! or its lifecycle history.
 
-use std::env;
+use std::sync::OnceLock;
 
 use uuid::Uuid;
 
+static INSTALLED: OnceLock<ExtensionPolicy> = OnceLock::new();
+
+/// `EXTENSIONS_MODE` (`enabled` by default, or `disabled` to stop all
+/// execution) and `EXTENSION_DENYLIST`, a comma-separated list of extension
+/// IDs or `extension-id@release-uuid` items.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ExtensionPolicy {
+    disabled: bool,
+    denylist: Vec<String>,
+}
+
+impl ExtensionPolicy {
+    pub fn parse(mode: Option<&str>, denylist: Option<&str>) -> Result<Self, String> {
+        let disabled = match mode {
+            None | Some("enabled") => false,
+            Some("disabled") => true,
+            Some(_) => return Err("EXTENSIONS_MODE must be `enabled` or `disabled`".to_owned()),
+        };
+        let denylist = denylist
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+            .map(str::to_owned)
+            .collect();
+        Ok(Self { disabled, denylist })
+    }
+
+    pub fn allows(&self, extension_id: &str, release_id: Uuid) -> bool {
+        !self.disabled && !self.denylisted(extension_id, release_id)
+    }
+
+    fn denylisted(&self, extension_id: &str, release_id: Uuid) -> bool {
+        let release = format!("{extension_id}@{release_id}");
+        self.denylist
+            .iter()
+            .any(|entry| entry == extension_id || *entry == release)
+    }
+}
+
+/// Installs this process's policy. Call once, before serving requests or
+/// starting workers.
+pub fn install(policy: ExtensionPolicy) {
+    INSTALLED
+        .set(policy)
+        .expect("the extension policy is installed once");
+}
+
 /// Returns whether this deployment permits a particular extension release to
-/// execute or serve client assets. `EXTENSIONS_MODE` defaults to `enabled` for
-/// existing deployments but is fail-closed for invalid configured values; the
-/// exact value `disabled` stops execution. `EXTENSION_DENYLIST` is a
-/// comma-separated list of extension IDs or `extension-id@release-uuid` items.
+/// execute or serve client assets. A process that never installed a policy,
+/// such as a test harness, allows every extension.
 pub fn allows(extension_id: &str, release_id: Uuid) -> bool {
-    allows_with(
-        extension_id,
-        release_id,
-        env::var("EXTENSIONS_MODE").ok().as_deref(),
-        env::var("EXTENSION_DENYLIST").ok().as_deref(),
-    )
-}
-
-fn allows_with(
-    extension_id: &str,
-    release_id: Uuid,
-    mode: Option<&str>,
-    denylist: Option<&str>,
-) -> bool {
-    deployment_enabled(mode) && !denylisted(extension_id, release_id, denylist)
-}
-
-fn deployment_enabled(mode: Option<&str>) -> bool {
-    mode.is_none_or(|value| value == "enabled")
-}
-
-fn denylisted(extension_id: &str, release_id: Uuid, value: Option<&str>) -> bool {
-    value
-        .unwrap_or_default()
-        .split(',')
-        .map(str::trim)
-        .any(|entry| entry == extension_id || entry == format!("{extension_id}@{release_id}"))
+    INSTALLED
+        .get()
+        .is_none_or(|policy| policy.allows(extension_id, release_id))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{allows_with, denylisted};
+    use super::ExtensionPolicy;
     use uuid::Uuid;
 
     #[test]
-    fn deployment_controls_are_fail_closed_and_targeted() {
+    fn deployment_controls_are_strict_and_targeted() {
         let release = Uuid::new_v4();
-        assert!(allows_with("acme.extension", release, None, None));
-        assert!(!allows_with(
-            "acme.extension",
-            release,
-            Some("disabled"),
-            None
-        ));
-        assert!(!allows_with(
-            "acme.extension",
-            release,
-            Some("invalid"),
-            None
-        ));
-        assert!(!allows_with(
-            "acme.extension",
-            release,
-            Some("enabled"),
-            Some("acme.extension")
-        ));
-
-        assert!(allows_with(
-            "acme.extension",
-            release,
-            Some("enabled"),
-            Some("other.extension")
-        ));
+        let allows = |mode, denylist| {
+            ExtensionPolicy::parse(mode, denylist)
+                .unwrap()
+                .allows("acme.extension", release)
+        };
+        assert!(allows(None, None));
+        assert!(!allows(Some("disabled"), None));
+        assert!(ExtensionPolicy::parse(Some("invalid"), None).is_err());
+        assert!(!allows(Some("enabled"), Some("acme.extension")));
+        assert!(allows(Some("enabled"), Some("other.extension")));
     }
 
     #[test]
     fn denylist_matches_extension_ids_and_specific_releases() {
         let release = Uuid::new_v4();
-        assert!(denylisted(
-            "acme.extension",
-            release,
-            Some("other, acme.extension")
-        ));
-        assert!(denylisted(
-            "acme.extension",
-            release,
-            Some(&format!("acme.extension@{release}"))
-        ));
-        assert!(!denylisted(
-            "acme.extension",
-            release,
-            Some("acme.extension@00000000-0000-0000-0000-000000000000")
+        let denied = |denylist: &str| {
+            !ExtensionPolicy::parse(None, Some(denylist))
+                .unwrap()
+                .allows("acme.extension", release)
+        };
+        assert!(denied("other, acme.extension"));
+        assert!(denied(&format!("acme.extension@{release}")));
+        assert!(!denied(
+            "acme.extension@00000000-0000-0000-0000-000000000000"
         ));
     }
 }

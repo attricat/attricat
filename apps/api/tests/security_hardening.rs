@@ -127,11 +127,13 @@ async fn role_cannot_retire_into_itself_and_delete_its_grants(pool: PgPool) {
 #[sqlx::test]
 async fn queued_agent_runs_retain_and_enforce_the_initiating_token(pool: PgPool) {
     let (base, server) = start_server_with_config(pool.clone(), |state| {
-        state.agent_provider = AgentProviderConfig::from_values(|key| match key {
-            "LLM_API_KEY" => Some("test-only".into()),
-            "LLM_BASE_URL" => Some("http://127.0.0.1:1/v1".into()),
-            _ => None,
-        })
+        state.agent_provider = AgentProviderConfig::from_values(
+            |key| match key {
+                "LLM_BASE_URL" => Some("http://127.0.0.1:1/v1".into()),
+                _ => None,
+            },
+            Some(secrecy::SecretString::from("test-only")),
+        )
         .unwrap();
     })
     .await;
@@ -292,11 +294,13 @@ async fn queued_agent_runs_retain_and_enforce_the_initiating_token(pool: PgPool)
             }
         }))).await.unwrap();
     });
-    let config = AgentProviderConfig::from_values(|key| match key {
-        "LLM_API_KEY" => Some("test-only".into()),
-        "LLM_BASE_URL" => Some(format!("http://{address}/v1")),
-        _ => None,
-    })
+    let config = AgentProviderConfig::from_values(
+        |key| match key {
+            "LLM_BASE_URL" => Some(format!("http://{address}/v1")),
+            _ => None,
+        },
+        Some(secrecy::SecretString::from("test-only")),
+    )
     .unwrap()
     .unwrap();
     let provider = api::agent_provider::OpenAiCompatibleClient::new(&config).unwrap();
@@ -337,9 +341,10 @@ async fn queued_agent_runs_retain_and_enforce_the_initiating_token(pool: PgPool)
 #[sqlx::test]
 async fn approving_another_users_agent_change_requires_the_mutation_permission(pool: PgPool) {
     let (base, server) = start_server_with_config(pool.clone(), |state| {
-        state.agent_provider = AgentProviderConfig::from_values(|key| {
-            (key == "LLM_API_KEY").then(|| "test-only".into())
-        })
+        state.agent_provider = AgentProviderConfig::from_values(
+            |_| None,
+            Some(secrecy::SecretString::from("test-only")),
+        )
         .unwrap();
     })
     .await;

@@ -1,8 +1,9 @@
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use api::{
-    file_worker::{FileWorker, WorkerConfig},
-    storage::{ObjectStore, S3ObjectStore, StorageConfig},
+    config::Config,
+    file_worker::FileWorker,
+    storage::{ObjectStore, S3ObjectStore},
     telemetry::{init_metrics, init_tracing},
 };
 use axum::{
@@ -13,6 +14,7 @@ use axum::{
     routing::get,
 };
 use metrics_exporter_prometheus::PrometheusHandle;
+use secrecy::ExposeSecret;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use subtle::ConstantTimeEq;
 
@@ -26,24 +28,21 @@ struct OperationsState {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    dotenvy::dotenv().ok();
-    init_tracing("attricat-file-worker")?;
+    let config = Config::load()?;
+    init_tracing(
+        "attricat-file-worker",
+        config.telemetry.log_filter.as_deref(),
+        config.telemetry.otlp_traces_endpoint.as_deref(),
+    )?;
     let metrics = init_metrics()?;
-    let database_url = std::env::var("DATABASE_URL")
-        .map_err(|_| "DATABASE_URL must be set to start the file worker")?;
-    let config = StorageConfig::from_env()
-        .map_err(|error| format!("invalid object storage configuration: {error}"))?;
-    let object_store = Arc::new(S3ObjectStore::new(config).await);
+    let file_worker = config.file_worker;
+    let object_store = Arc::new(S3ObjectStore::new(config.storage).await);
     object_store.readiness().await.map_err(|_| "file worker storage readiness failed: cannot access the configured S3 bucket; check S3_ENDPOINT, S3_BUCKET, and credentials")?;
     let pool = PgPoolOptions::new()
         .max_connections(4)
-        .connect(&database_url)
+        .connect(config.database.url.expose_secret())
         .await?;
-    let worker = FileWorker::new(
-        pool.clone(),
-        object_store.clone(),
-        WorkerConfig::from_env()?,
-    );
+    let worker = FileWorker::new(pool.clone(), object_store.clone(), file_worker.worker);
     let args: Vec<_> = std::env::args().skip(1).collect();
     if let Some(job_id) = args
         .windows(2)
@@ -54,16 +53,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         return Ok(());
     }
 
-    let operations_addr: SocketAddr = std::env::var("FILE_WORKER_OPERATIONS_BIND_ADDR")
-        .unwrap_or_else(|_| "127.0.0.1:3001".to_owned())
-        .parse()?;
-    let operations_token = std::env::var("FILE_WORKER_METRICS_TOKEN")
-        .ok()
-        .filter(|value| !value.is_empty())
-        .map(Arc::<str>::from);
-    if !operations_addr.ip().is_loopback() && operations_token.is_none() {
-        return Err("FILE_WORKER_METRICS_TOKEN is required when FILE_WORKER_OPERATIONS_BIND_ADDR is not loopback".into());
-    }
+    let operations_addr = file_worker.operations_bind_addr;
+    let operations_token = file_worker
+        .metrics_token
+        .map(|token| Arc::<str>::from(token.expose_secret()));
     let operations_listener = tokio::net::TcpListener::bind(operations_addr).await?;
     let operations_state = OperationsState {
         pool,
@@ -85,8 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .await
     });
 
-    let configured_poll = std::env::var("FILE_WORKER_POLL_MILLISECONDS").ok();
-    let poll = poll_interval(configured_poll.as_deref())?;
+    let poll = file_worker.poll_interval;
     tracing::info!(operations_address = %operations_addr, "file worker started");
     let shutdown = shutdown_signal();
     tokio::pin!(shutdown);
@@ -104,17 +96,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     operations_server.await??;
     tracing::info!("file worker stopped");
     Ok(())
-}
-
-fn poll_interval(raw: Option<&str>) -> Result<Duration, String> {
-    let millis = raw
-        .unwrap_or("500")
-        .parse::<u64>()
-        .map_err(|_| "FILE_WORKER_POLL_MILLISECONDS must be a positive integer")?;
-    if millis == 0 {
-        return Err("FILE_WORKER_POLL_MILLISECONDS must be a positive integer".into());
-    }
-    Ok(Duration::from_millis(millis))
 }
 
 async fn shutdown_signal() {
@@ -170,16 +151,4 @@ async fn worker_metrics(State(state): State<OperationsState>, headers: HeaderMap
         state.metrics.render(),
     )
         .into_response()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn poll_interval_rejects_zero_and_invalid_input() {
-        assert_eq!(poll_interval(None).unwrap(), Duration::from_millis(500));
-        assert!(poll_interval(Some("0")).is_err());
-        assert!(poll_interval(Some("n/a")).is_err());
-    }
 }

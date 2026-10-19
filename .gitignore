@@ -1,6 +1,7 @@
 /target
 .env
 .worktree
+/.secrets/
 .acli-session
 .catalog-generator/
 /node_modules
@@ -14,3 +15,4 @@ apps/web/playwright-report/
 /deployment-evidence/
 
 apps/web/e2e/.auth.json
+/deploy/secrets/

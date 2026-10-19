@@ -9,7 +9,6 @@ use crate::{
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
 use async_trait::async_trait;
-use std::env;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug)]
@@ -28,17 +27,18 @@ impl Default for BlueprintMigrationBatchConfig {
 }
 
 impl BlueprintMigrationBatchConfig {
-    pub fn from_env() -> Result<Self, String> {
+    /// Parses the `BLUEPRINT_MIGRATION_*` settings, defaulting each unset one.
+    pub fn from_values(get: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
         Ok(Self {
             page_size: bounded_config_value(
                 "BLUEPRINT_MIGRATION_PAGE_SIZE",
-                env::var("BLUEPRINT_MIGRATION_PAGE_SIZE").ok().as_deref(),
+                get("BLUEPRINT_MIGRATION_PAGE_SIZE").as_deref(),
                 100,
                 1000,
             )?,
             concurrency: bounded_config_value(
                 "BLUEPRINT_MIGRATION_CONCURRENCY",
-                env::var("BLUEPRINT_MIGRATION_CONCURRENCY").ok().as_deref(),
+                get("BLUEPRINT_MIGRATION_CONCURRENCY").as_deref(),
                 4,
                 64,
             )?,

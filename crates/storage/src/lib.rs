@@ -5,7 +5,6 @@
 
 use std::{
     collections::BTreeMap,
-    env,
     path::Path,
     pin::Pin,
     sync::atomic::{AtomicBool, Ordering},
@@ -35,7 +34,9 @@ const READINESS_OPERATION: &str = "readiness";
 ///
 /// All values are deployment configuration. In particular, credentials are not
 /// inferred from the ambient AWS environment so a missing deployment setting
-/// cannot silently select a different account or bucket.
+/// cannot silently select a different account or bucket. The secret access
+/// key arrives separately because it is read from a secret file, not a
+/// setting.
 #[derive(Clone)]
 pub struct StorageConfig {
     endpoint: Url,
@@ -49,11 +50,10 @@ pub struct StorageConfig {
 }
 
 impl StorageConfig {
-    pub fn from_env() -> Result<Self, StorageConfigError> {
-        Self::from_values(|name| env::var(name).ok())
-    }
-
-    fn from_values(get: impl Fn(&str) -> Option<String>) -> Result<Self, StorageConfigError> {
+    pub fn from_values(
+        get: impl Fn(&str) -> Option<String>,
+        secret_access_key: Option<SecretString>,
+    ) -> Result<Self, StorageConfigError> {
         let endpoint = required(&get, "S3_ENDPOINT")?;
         let endpoint = Url::parse(&endpoint).map_err(|_| StorageConfigError::InvalidEndpoint)?;
         if !matches!(endpoint.scheme(), "http" | "https") || endpoint.host_str().is_none() {
@@ -63,12 +63,13 @@ impl StorageConfig {
         let region = required(&get, "S3_REGION")?;
         let bucket = required(&get, "S3_BUCKET")?;
         let access_key_id = required(&get, "S3_ACCESS_KEY_ID")?;
-        let secret_access_key = SecretString::from(required(&get, "S3_SECRET_ACCESS_KEY")?);
+        let secret_access_key =
+            secret_access_key.ok_or(StorageConfigError::MissingSecret("s3_secret_access_key"))?;
         let force_path_style = required(&get, "S3_FORCE_PATH_STYLE")?
             .parse()
             .map_err(|_| StorageConfigError::InvalidBoolean("S3_FORCE_PATH_STYLE"))?;
-        let upload_timeout = timeout_from_env(&get, "S3_UPLOAD_TIMEOUT_SECONDS")?;
-        let download_timeout = timeout_from_env(&get, "S3_DOWNLOAD_TIMEOUT_SECONDS")?;
+        let upload_timeout = timeout_setting(&get, "S3_UPLOAD_TIMEOUT_SECONDS")?;
+        let download_timeout = timeout_setting(&get, "S3_DOWNLOAD_TIMEOUT_SECONDS")?;
 
         Ok(Self {
             endpoint,
@@ -97,7 +98,7 @@ fn required(
     }
 }
 
-fn timeout_from_env(
+fn timeout_setting(
     get: &impl Fn(&str) -> Option<String>,
     name: &'static str,
 ) -> Result<Duration, StorageConfigError> {
@@ -114,6 +115,8 @@ fn timeout_from_env(
 pub enum StorageConfigError {
     #[error("{0} must be set")]
     Missing(&'static str),
+    #[error("the {0} secret must be provided")]
+    MissingSecret(&'static str),
     #[error("S3_ENDPOINT must be an absolute HTTP or HTTPS URL")]
     InvalidEndpoint,
     #[error("{0} must be `true` or `false`")]
@@ -658,7 +661,6 @@ mod tests {
             ("S3_REGION", "us-east-1"),
             ("S3_BUCKET", "attricat-files"),
             ("S3_ACCESS_KEY_ID", "attricat-dev"),
-            ("S3_SECRET_ACCESS_KEY", "attricat-dev-secret"),
             ("S3_FORCE_PATH_STYLE", "true"),
             ("S3_UPLOAD_TIMEOUT_SECONDS", "30"),
             ("S3_DOWNLOAD_TIMEOUT_SECONDS", "30"),
@@ -667,38 +669,54 @@ mod tests {
         .find_map(|(key, value)| (key == name).then(|| value.to_owned()))
     }
 
+    fn secret() -> SecretString {
+        SecretString::from("attricat-dev-secret")
+    }
+
     #[test]
     fn storage_config_requires_each_setting() {
-        let error = StorageConfig::from_values(|name| {
-            (name != "S3_BUCKET").then(|| values(name)).flatten()
-        });
+        let error = StorageConfig::from_values(
+            |name| (name != "S3_BUCKET").then(|| values(name)).flatten(),
+            Some(secret()),
+        );
         assert!(matches!(
             error,
             Err(StorageConfigError::Missing("S3_BUCKET"))
+        ));
+        let error = StorageConfig::from_values(values, None);
+        assert!(matches!(
+            error,
+            Err(StorageConfigError::MissingSecret("s3_secret_access_key"))
         ));
     }
 
     #[test]
     fn storage_config_rejects_invalid_path_style_and_timeouts() {
-        let error = StorageConfig::from_values(|name| {
-            if name == "S3_FORCE_PATH_STYLE" {
-                Some("yes".to_owned())
-            } else {
-                values(name)
-            }
-        });
+        let error = StorageConfig::from_values(
+            |name| {
+                if name == "S3_FORCE_PATH_STYLE" {
+                    Some("yes".to_owned())
+                } else {
+                    values(name)
+                }
+            },
+            Some(secret()),
+        );
         assert!(matches!(
             error,
             Err(StorageConfigError::InvalidBoolean("S3_FORCE_PATH_STYLE"))
         ));
 
-        let error = StorageConfig::from_values(|name| {
-            if name == "S3_UPLOAD_TIMEOUT_SECONDS" {
-                Some("0".to_owned())
-            } else {
-                values(name)
-            }
-        });
+        let error = StorageConfig::from_values(
+            |name| {
+                if name == "S3_UPLOAD_TIMEOUT_SECONDS" {
+                    Some("0".to_owned())
+                } else {
+                    values(name)
+                }
+            },
+            Some(secret()),
+        );
         assert!(matches!(
             error,
             Err(StorageConfigError::InvalidTimeout(

@@ -258,11 +258,13 @@ struct Run {
 }
 
 async fn start_run(pool: &PgPool, initiator: Uuid, provider: &str) -> Run {
-    let config = AgentProviderConfig::from_values(|name| match name {
-        "LLM_API_KEY" => Some("test-key".to_owned()),
-        "LLM_BASE_URL" => Some(provider.to_owned()),
-        _ => None,
-    })
+    let config = AgentProviderConfig::from_values(
+        |name| match name {
+            "LLM_BASE_URL" => Some(provider.to_owned()),
+            _ => None,
+        },
+        Some(secrecy::SecretString::from("test-key")),
+    )
     .unwrap()
     .unwrap();
     let repository = scoped(pool).await;

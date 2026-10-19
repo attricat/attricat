@@ -3,10 +3,10 @@
 #
 #   curl -fsSL https://docs.attricat.com/install.sh | sh
 #
-# Creates ./attricat with a Compose file and a .env holding a generated owner
-# password, then starts the published image with PostgreSQL, RustFS and
-# Mailpit. Running it again keeps .env, refreshes compose.yml and pulls the
-# newest image. For production, see https://docs.attricat.com/operate/deployment/.
+# Creates ./attricat with a Compose file, a .env with its settings and a
+# secrets directory holding a generated owner password, then starts the
+# published image with PostgreSQL, RustFS and Mailpit. Running it again keeps
+# .env and secrets, refreshes compose.yml and pulls the newest image. For production, see https://docs.attricat.com/operate/deployment/.
 #
 # Settings, read from the environment on first run:
 #   ATTRICAT_DIR             directory to create (default: ./attricat)
@@ -35,6 +35,7 @@ main() {
 		write_env
 		say "Wrote $(pwd)/.env"
 	fi
+	write_secrets
 	write_compose
 	say "Wrote $(pwd)/compose.yml"
 
@@ -45,6 +46,7 @@ main() {
 
 	# shellcheck disable=SC1091
 	. ./.env
+	password=$(cat secrets/bootstrap_owner_password)
 	cat <<EOF
 
 Attricat is running.
@@ -52,10 +54,10 @@ Attricat is running.
   Open:       http://localhost:${ATTRICAT_PORT}/login
   Workspace:  default.local
   Email:      ${ATTRICAT_OWNER_EMAIL}
-  Password:   ${ATTRICAT_OWNER_PASSWORD}
+  Password:   ${password}
   Mail:       http://localhost:${MAILPIT_UI_PORT}
 
-The password is stored in $(pwd)/.env.
+The password is stored in $(pwd)/secrets/bootstrap_owner_password.
 From $(pwd):
   docker compose pull && docker compose up -d   update to the newest image
   docker compose down                           stop
@@ -80,24 +82,40 @@ generate_password() {
 }
 
 write_env() {
-	password=${ATTRICAT_OWNER_PASSWORD:-$(generate_password)}
-	[ -n "$password" ] || fail "Could not generate a password. Set ATTRICAT_OWNER_PASSWORD."
 	umask 077
 	cat >.env <<EOF
 ATTRICAT_IMAGE=${ATTRICAT_IMAGE:-ghcr.io/attricat/attricat:latest}
 ATTRICAT_PORT=${ATTRICAT_PORT:-3000}
 MAILPIT_UI_PORT=${MAILPIT_UI_PORT:-8025}
 ATTRICAT_OWNER_EMAIL=${ATTRICAT_OWNER_EMAIL:-owner@example.com}
-ATTRICAT_OWNER_PASSWORD=${password}
 EOF
 	umask 022
+}
+
+# Attricat reads secrets only from files, mounted as Docker secrets. The
+# directory is private to you; the files stay readable so the container's
+# unprivileged user can read them.
+write_secrets() {
+	mkdir -p secrets
+	chmod 700 secrets
+	if [ ! -s secrets/bootstrap_owner_password ]; then
+		# Earlier versions of this script kept the password in .env.
+		password=${ATTRICAT_OWNER_PASSWORD:-$(sed -n 's/^ATTRICAT_OWNER_PASSWORD=//p' .env)}
+		password=${password:-$(generate_password)}
+		[ -n "$password" ] || fail "Could not generate a password. Set ATTRICAT_OWNER_PASSWORD."
+		printf '%s\n' "$password" >secrets/bootstrap_owner_password
+		sed -i.bak '/^ATTRICAT_OWNER_PASSWORD=/d' .env && rm -f .env.bak
+	fi
+	printf '%s\n' postgres://postgres:postgres@postgres:5432/attricat >secrets/database_url
+	printf '%s\n' attricat-dev-secret >secrets/s3_secret_access_key
+	chmod 644 secrets/*
 }
 
 # Keep in step with deploy/compose.quickstart.yml and apps/api/compose.yml.
 write_compose() {
 	cat >compose.yml <<'EOF'
 # Written by https://docs.attricat.com/install.sh; rerunning it replaces this
-# file. Settings live in .env next to it.
+# file. Settings live in .env next to it, and secrets in ./secrets.
 name: attricat
 
 x-app: &app
@@ -109,20 +127,21 @@ x-app: &app
     - /tmp:size=256m,mode=1777
   security_opt:
     - no-new-privileges:true
+  secrets:
+    - database_url
+    - s3_secret_access_key
+    - bootstrap_owner_password
   restart: unless-stopped
 
 x-environment: &environment
-  DATABASE_URL: postgres://postgres:postgres@postgres:5432/attricat
   ATTRICAT_AUTO_MIGRATE: "false"
   ATTRICAT_BOOTSTRAP_OWNER_EMAIL: ${ATTRICAT_OWNER_EMAIL:-owner@example.com}
-  ATTRICAT_BOOTSTRAP_OWNER_PASSWORD: ${ATTRICAT_OWNER_PASSWORD:?Set ATTRICAT_OWNER_PASSWORD in .env}
   SESSION_COOKIE_SECURE: "false"
   ATTRICAT_DEVTOOLS: "false"
   S3_ENDPOINT: http://rustfs:9000
   S3_REGION: us-east-1
   S3_BUCKET: attricat-files
   S3_ACCESS_KEY_ID: attricat-dev
-  S3_SECRET_ACCESS_KEY: attricat-dev-secret
   S3_FORCE_PATH_STYLE: "true"
   S3_UPLOAD_TIMEOUT_SECONDS: "30"
   S3_DOWNLOAD_TIMEOUT_SECONDS: "30"
@@ -229,6 +248,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 30
+
+secrets:
+  database_url:
+    file: ./secrets/database_url
+  s3_secret_access_key:
+    file: ./secrets/s3_secret_access_key
+  bootstrap_owner_password:
+    file: ./secrets/bootstrap_owner_password
 
 volumes:
   postgres-data:

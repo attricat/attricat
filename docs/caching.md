@@ -20,8 +20,8 @@ repository decides what is cached and under which key; the crate provides:
   once; a failed load is never cached.
 - `RateLimiter`: the sliding-window limit on extension network requests,
   shared through Redis when it is configured.
-- `CacheConfig`: `CACHE_BACKEND`, `REDIS_URL`, `CACHE_MAX_ENTRIES` and
-  `CACHE_KEY_PREFIX` (see [Configuration](configuration.md)).
+- `CacheConfig`: `CACHE_BACKEND`, the `redis_url` secret, `CACHE_MAX_ENTRIES`
+  and `CACHE_KEY_PREFIX` (see [Configuration](configuration.md)).
 
 `apps/api` builds one `QueryCache` at startup and hands it to every request and
 worker repository with `AttricatRepository::with_cache`. Repositories built
@@ -183,7 +183,7 @@ content:
 
 - **A copy that runs alongside its source** (staging cloned from production,
   a restore rehearsal) must use a different `CACHE_KEY_PREFIX` or a different
-  Redis database (the number in `REDIS_URL`) than the source. Flushing Redis
+  Redis database (the number in the `redis_url` secret) than the source. Flushing Redis
   does not help: the source writes the shared keys again.
 - **A restore in place**, which replaces the database a Redis served: flush
   that Redis database (`FLUSHDB`) or change `CACHE_KEY_PREFIX` before starting

@@ -36,6 +36,8 @@ pub use attricat_workers::{
     solution_pack_housekeeping, task_worker, workflow_runtime,
 };
 
+pub mod config;
+
 use sqlx::migrate::Migrator;
 
 pub static MIGRATOR: Migrator = sqlx::migrate!("./migrations");

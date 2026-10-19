@@ -1,7 +1,14 @@
 # Configuration Reference
 
-The API loads `.env` from the working directory at startup. Run `just setup`
-once before `just dev`; it creates `.env` from `.env.example` and assigns
+The API, file worker and migrate binaries read their configuration once at
+startup into a single `Config` (`apps/api/src/config.rs`). Each binary loads
+all of it, so one deployment environment configures and validates every role
+the same way, and an invalid setting stops startup. Plain settings come from
+the environment, after `.env` in the working directory is loaded. Secrets come
+only from files; see [Secrets](#secrets).
+
+Run `just setup` once before `just dev`; it creates `.env` from `.env.example`,
+writes local secrets to the ignored `.secrets` directory and assigns
 persistent, worktree-specific ports. Those port assignments, plus ready-to-open
 `WEB_URL`, `MAILPIT_UI_URL`, `JAEGER_UI_URL`, and `RUSTFS_UI_URL` values, are recorded in the ignored
 `.worktree` file. The API and file worker validate object-storage
@@ -10,7 +17,8 @@ or inaccessible configured bucket.
 
 | Setting | Default | Used by | Purpose |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | Required | API and SQLx | PostgreSQL connection string. |
+| `ATTRICAT_SECRETS_DIR` | `/run/secrets` | API, file worker, migrate | Directory holding the [secret files](#secrets). Docker mounts secrets at the default; `just setup` points it at the worktree's `.secrets`. |
+| `DATABASE_URL` | Unset | SQLx tooling and Rust tests | PostgreSQL connection string for `sqlx`, `just migrate` and `#[sqlx::test]`. The binaries ignore it and read the `database_url` secret. |
 | `DATABASE_REQUEST_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global request/session pool shared by all workspaces. Must be an integer from 1 to 100. |
 | `DATABASE_TASK_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global task/worker pool shared by all workspaces. Must be an integer from 1 to 100. The API logs the request + task + maintenance total at startup. Background coordinators hold up to three further connections outside both pools; see [Coordinator leadership](#coordinator-leadership). |
 | `BIND_ADDR` | `127.0.0.1:3000` | API | Listener address. The production image sets `0.0.0.0:3000`. |
@@ -20,14 +28,12 @@ or inaccessible configured bucket.
 | `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | API | Display name recorded while initializing the configured workspace. |
 | `ATTRICAT_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | API | Initial owner email. Startup trims and lowercases it before idempotently creating the bootstrap user, membership, and owner grant. Set a real deployment email; it is never an API input. |
 | `ATTRICAT_BOOTSTRAP_OWNER_ID` | Random UUID | API | Optional stable UUID for the bootstrap owner. |
-| `ATTRICAT_BOOTSTRAP_OWNER_PASSWORD` | Unset | API | Optional one-time local password for a newly bootstrapped owner. It is hashed before persistence and never updates an existing credential. |
 | `ATTRICAT_DEMO_MODE` | `false` | API | Public demo deployments only. Implies `ATTRICAT_SAMPLE_ACCOUNTS`, sets the bootstrap workspace's sign-in identifier to `demo.attricat.com` and its default name to `Demo`, and makes the web sign-in skip the workspace step and pre-select the editor account. Password reset, membership state, role grants, ownership transfer, invitations and user creation return `403 disabled_in_demo`, so visitors cannot lock the shared accounts out or send mail. When an agent provider is configured, the agent is read-only: it is offered no mutation tools, a mutation it names anyway fails the run, and the conversation view says so. Never enable it for a workspace holding private data. |
-| `ATTRICAT_SAMPLE_ACCOUNTS` | `false`; `true` in `.env.example` | API | Seeds `viewer@`, `editor@` and `admin@` accounts on the bootstrap owner's email domain with those built-in roles and the `ATTRICAT_BOOTSTRAP_OWNER_PASSWORD` password, which it then requires. `GET /auth/sample-logins` publishes these accounts and the password so the sign-in page can offer them. Development and demos only. |
+| `ATTRICAT_SAMPLE_ACCOUNTS` | `false`; `true` in `.env.example` | API | Seeds `viewer@`, `editor@` and `admin@` accounts on the bootstrap owner's email domain with those built-in roles and the `bootstrap_owner_password` secret as their password, which it then requires. `GET /auth/sample-logins` publishes these accounts and the password so the sign-in page can offer them. Development and demos only. |
 | `SESSION_COOKIE_SECURE` | `true` | API | Adds `Secure` to browser session and CSRF cookies. Set `false` only for local HTTP development or test servers. |
-| `RUST_LOG` | `info` | API | Structured tracing filter (for example, `api=debug`). |
+| `RUST_LOG` | `info` | API and file worker | Structured tracing filter (for example, `api=debug`). |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Unset | API and file worker | Optional OTLP/gRPC trace collector endpoint. Local development sends traces to Jaeger. Unset it to disable trace export. |
 | `ATTRICAT_DEVTOOLS` | `true` locally | API process and Vite | Shared switch for development tooling. It controls the web Inspector and sanitized Explorer `Server-Timing` metrics, including aggregate SQL execution time and query count; these Explorer metrics are absent when disabled. Other builds, including production, load the Inspector on demand only in a browser where local storage `attricat.inspector-enabled` is `true`; it then shows server status, the running build, and the session, but no Explorer timings unless the API also enables this setting. SQL statements and bind values are never exposed. |
-| `LLM_API_KEY` | Unset (agents unavailable) | API only | Secret API key for the OpenAI-compatible provider. Never send, persist, or log it. |
 | `LLM_BASE_URL` | `https://api.openai.com/v1` | API only | Absolute HTTP(S) base URL for OpenAI-compatible Chat Completions. |
 | `LLM_MODEL` | `gpt-4o-mini` | API only | Provider model identifier captured on each run, never a browser-selected setting. |
 | `LLM_REASONING_EFFORT` | Unset | API only | Optional Chat Completions `reasoning_effort` value sent on every agent provider request when configured. Use a value supported by your provider/model (for example, `none` for models that reject function tools with reasoning enabled); omitted by default for providers that do not support it. This does not switch the adapter to the Responses API. |
@@ -39,7 +45,6 @@ or inaccessible configured bucket.
 | `RECORD_MAX_PAGE_SIZE` | `100` | API | Maximum page size for relationship browsing. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | API | Data-health response cache lifetime. Any recorded catalog change also makes the next request a miss. |
 | `CACHE_BACKEND` | `memory` | API | Query cache backend: `memory` keeps cached definitions in each process; `redis` also shares cached values and extension network rate limits between replicas. Nothing is invalidated through Redis: correctness never depends on the backend (see [Caching](caching.md)). An unreachable Redis degrades to memory while the API reconnects in the background. |
-| `REDIS_URL` | Unset | API | Redis URL, required when `CACHE_BACKEND=redis`. `redis://` and TLS `rediss://` (rustls, platform root certificates) are supported, as are the `valkey` schemes and the `-cluster` and `-sentinel` forms. `just setup` writes the local development Redis URL. |
 | `CACHE_MAX_ENTRIES` | `20000` | API | Positive maximum number of in-memory query cache entries per process. |
 | `CACHE_KEY_PREFIX` | `attricat` | API | First segment of every Redis key, followed by the database's random identity. A copy of a database (a clone or restored backup) keeps that identity: a copy that runs alongside its source needs a different prefix or Redis database. After an in-place restore, change it or flush Redis. Must not contain whitespace. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | API | Maximum page size for incoming-relationship browsing. |
@@ -64,8 +69,8 @@ or inaccessible configured bucket.
 | `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | API | Maximum concurrent record attempts within one migration batch; must be between 1 and 64. |
 | `ATTRICAT_API_URL` | `http://127.0.0.1:3000/api` | Vite, CLI | API base URL, including `/api`. The web app's development proxy forwards `/api` to its origin. |
 | `EXTENSION_OFFICIAL_REGISTRY` | `attricat/attricat-extensions` | API | Canonical public GitHub `owner/repository` used as every workspace's immutable official extension source. |
-| `EXTENSIONS_MODE` | `enabled` | API | Deployment emergency gate. Set exactly `disabled` to block all new extension execution, artifacts, runtime descriptors, commands, storage, host calls, and event delivery without changing installations or grants. Invalid configured values fail closed. |
-| `EXTENSION_DENYLIST` | Empty | API | Comma-separated targeted containment entries. Each entry is an extension ID (`acme.extension`) or exact release (`acme.extension@uuid`). Evaluated at every runtime gate. |
+| `EXTENSIONS_MODE` | `enabled` | API | Deployment emergency gate. Set `disabled` to block all new extension execution, artifacts, runtime descriptors, commands, storage, host calls, and event delivery without changing installations or grants. Any other value stops startup. Changing it takes a restart. |
+| `EXTENSION_DENYLIST` | Empty | API | Comma-separated targeted containment entries. Each entry is an extension ID (`acme.extension`) or exact release (`acme.extension@uuid`). Read at startup and applied at every runtime gate. |
 | `POSTGRES_DB` | `attricat` | Docker Compose | Local PostgreSQL database name. |
 | `POSTGRES_USER` | `postgres` | Docker Compose | Local PostgreSQL user. |
 | `POSTGRES_PASSWORD` | `postgres` | Docker Compose | Local PostgreSQL password. |
@@ -74,8 +79,7 @@ or inaccessible configured bucket.
 | `SMTP_HOST` | `127.0.0.1` | API local development | Mailpit SMTP host. |
 | `SMTP_PORT` | `1025` | API local development | Mailpit SMTP port; `just setup` sets it to the worktree-specific port. |
 | `SMTP_TLS_MODE` | `starttls` | API | Required SMTP encryption mode: `starttls` or `implicit` in production. `disabled` is only for the trusted local Mailpit relay. Opportunistic TLS is rejected. |
-| `SMTP_USERNAME` | Unset | API | Optional SMTP username. |
-| `SMTP_PASSWORD` | Unset | API | Optional SMTP password; keep it in a secret manager outside local development. |
+| `SMTP_USERNAME` | Unset | API | Optional SMTP username; requires the `smtp_password` secret, and the password requires it. |
 | `MAIL_FROM` | `Attricat <no-reply@attricat.local>` | API local development | Sender address for lifecycle email. |
 | `PASSWORD_RESET_URL` | Local web confirmation URL | API local development | Absolute web URL used in reset email; `just setup` uses the worktree's `WEB_PORT`. |
 | `WORKSPACE_INVITATION_URL` | Local invitation URL | API local development | Absolute web URL used for delivered existing-user workspace invitations. |
@@ -87,8 +91,7 @@ or inaccessible configured bucket.
 | `S3_ENDPOINT` | Required | API and file worker | Absolute HTTP(S) URL for the S3-compatible endpoint. Local development uses RustFS. |
 | `S3_REGION` | Required | API and file worker | S3 signing region. |
 | `S3_BUCKET` | Required | API and file worker | Existing bucket used for catalog objects. Local startup creates it. |
-| `S3_ACCESS_KEY_ID` | Required | API and file worker | S3 access key. |
-| `S3_SECRET_ACCESS_KEY` | Required | API and file worker | S3 secret access key. Do not log or expose it. |
+| `S3_ACCESS_KEY_ID` | Required | API and file worker | S3 access key ID. Its secret half is the `s3_secret_access_key` secret. |
 | `S3_FORCE_PATH_STYLE` | Required | API and file worker | Strict `true`/`false` setting for S3 path-style addressing. Set `true` for local RustFS. |
 | `S3_UPLOAD_TIMEOUT_SECONDS` | Required | API and file worker | Positive timeout for object uploads and deletes. |
 | `S3_DOWNLOAD_TIMEOUT_SECONDS` | Required | API and file worker | Positive timeout for object downloads and bucket readiness. |
@@ -96,16 +99,50 @@ or inaccessible configured bucket.
 | `FILE_UPLOAD_MAX_FILES` | `10` | API | Positive request-level number of file parts. A `cardinality = "one"` attribute accepts exactly one. |
 | `FILE_WORKER_ID` | Random process UUID | File worker | Stable identifier written with claimed jobs. |
 | `FILE_WORKER_POLL_MILLISECONDS` | `500` | File worker | Delay between durable-job polls. Queue metrics are refreshed during idle polls. |
-| `FILE_WORKER_OPERATIONS_BIND_ADDR` | `127.0.0.1:3001` | File worker | Private listener for `/health/live`, dependency-aware `/health/ready`, and `/metrics`. |
-| `FILE_WORKER_METRICS_TOKEN` | Unset on loopback | File worker | Bearer token for `/metrics`; required at startup when the operations listener is not loopback. |
+| `FILE_WORKER_OPERATIONS_BIND_ADDR` | `127.0.0.1:3001` | File worker | Private listener for `/health/live`, dependency-aware `/health/ready`, and `/metrics`. A non-loopback address requires the `file_worker_metrics_token` secret. |
 | `FILE_WORKER_MAX_PIXELS` | `40000000` | File worker | Maximum decoded image pixels accepted for processing. |
 | `FILE_WORKER_MAX_ATTEMPTS` | `5` | File worker | Attempts before a job becomes terminally failed. |
 | `FILE_DELETE_GRACE_SECONDS` | `86400` | File worker | Delay between an unreferenced file being soft-deleted and its object purge. |
-| `ATTRICAT_E2E_FIXTURE_EMAIL` | Unset | API test environments | Optional test fixture user email. It takes effect only when paired with `ATTRICAT_E2E_FIXTURE_PASSWORD`; do not set either in production. |
-| `ATTRICAT_E2E_FIXTURE_PASSWORD` | Unset | API test environments | Optional test fixture user password paired with `ATTRICAT_E2E_FIXTURE_EMAIL`; do not set either in production. |
+| `ATTRICAT_E2E_FIXTURE_EMAIL` | Unset | API test environments | Optional test fixture user email. It takes effect only when paired with the `e2e_fixture_password` secret; do not set either in production. |
 | `RUSTFS_PORT` | `9000` | Docker Compose | Worktree-specific host port for the local RustFS S3 API. |
 | `RUSTFS_CONSOLE_PORT` | `9001` | Docker Compose | Worktree-specific host port for the local RustFS console. |
 | `REDIS_PORT` | `6379` | Docker Compose | Worktree-specific host port for the local Redis that `just dev` starts. The API uses it only with `CACHE_BACKEND=redis`. |
+
+## Secrets
+
+Secrets are never read from environment variables, where they would show in
+`docker inspect`, process listings and crash reports. Each is one file in
+`ATTRICAT_SECRETS_DIR`, which is how Docker and Compose mount secrets
+(`/run/secrets/<name>`). Trailing line breaks are not part of the value, and a
+missing or empty file leaves an optional secret unset. A secret file that
+exists but cannot be read stops startup.
+
+| Secret file | Default | Used by | Purpose |
+| --- | --- | --- | --- |
+| `database_url` | Required | API, file worker, migrate | PostgreSQL connection string, including its password. |
+| `s3_secret_access_key` | Required | API and file worker | S3 secret access key paired with `S3_ACCESS_KEY_ID`. Do not log or expose it. |
+| `smtp_password` | Unset | API | SMTP password, paired with `SMTP_USERNAME`. |
+| `llm_api_key` | Unset (agents unavailable) | API only | API key for the OpenAI-compatible agent provider. Never send, persist, or log it. |
+| `redis_url` | Unset | API | Redis URL, required when `CACHE_BACKEND=redis`. It is a secret because it usually carries the Redis password. `redis://` and TLS `rediss://` (rustls, platform root certificates) are supported, as are the `valkey` schemes and the `-cluster` and `-sentinel` forms. |
+| `bootstrap_owner_password` | Unset | API | Optional one-time local password for a newly bootstrapped owner. It is hashed before persistence and never updates an existing credential. Required by `ATTRICAT_SAMPLE_ACCOUNTS` and `ATTRICAT_DEMO_MODE`. |
+| `e2e_fixture_password` | Unset | API test environments | Test fixture user password paired with `ATTRICAT_E2E_FIXTURE_EMAIL`; never provide it in production. |
+| `file_worker_metrics_token` | Unset on loopback | File worker | Bearer token for `/metrics`; required at startup when the operations listener is not loopback. |
+
+Startup refuses the environment variables that carried these secrets before
+(`S3_SECRET_ACCESS_KEY`, `SMTP_PASSWORD`, `LLM_API_KEY`, `REDIS_URL`,
+`ATTRICAT_BOOTSTRAP_OWNER_PASSWORD`, `ATTRICAT_E2E_FIXTURE_PASSWORD` and
+`FILE_WORKER_METRICS_TOKEN`), so a credential is never silently ignored.
+`DATABASE_URL` is the exception: SQLx tooling and tests still read it, so the
+binaries ignore it. `just setup` moves any of them it finds in `.env` into
+`.secrets`.
+
+Locally, `just setup` writes `database_url`, `s3_secret_access_key`,
+`redis_url` and `bootstrap_owner_password` (`test`). To enable agents, write
+the provider key to `.secrets/llm_api_key`:
+
+```sh
+printf '%s\n' 'sk-…' > .secrets/llm_api_key
+```
 
 ## Coordinator leadership
 
@@ -139,10 +176,10 @@ and `file_processing_jobs` table.
 
 ## Agent provider
 
-Agents are disabled when `LLM_API_KEY` is absent or blank; ordinary catalog API
-startup continues. Set the key, base URL, and model only in the API process
-environment (or its secret manager), never in browser configuration or source
-control. The provider is OpenAI Chat-Completions compatible. The API validates
+Agents are disabled when the `llm_api_key` secret is absent or blank; ordinary
+catalog API startup continues. Provide the key only as that secret file, and the
+base URL and model only in the API process environment, never in browser
+configuration or source control. The provider is OpenAI Chat-Completions compatible. The API validates
 the URL and bounded timeouts at startup, logs only whether agents are
 available, and stores provider base URL/model snapshots—not credentials—in
 durable agent records.
@@ -233,7 +270,7 @@ Mailpit is a local-development and E2E adapter only; it is not production mail
 configuration. Source `.worktree` after `just dev`, open
 `$MAILPIT_UI_URL` for manual inspection, and use its REST API
 for E2E mailbox retrieval. Production SMTP requires `SMTP_TLS_MODE=starttls`
-or `implicit`; `disabled` is restricted to an unauthenticated trusted local relay. Startup rejects credentials with `disabled` and also rejects partial username/password configuration. See
+or `implicit`; `disabled` is restricted to an unauthenticated trusted local relay. Startup rejects credentials with `disabled` and also rejects a `SMTP_USERNAME` without the `smtp_password` secret, or the reverse. See
 [Deployment](../apps/docs/src/content/docs/operate/deployment.md) for rollout, rotation, and recovery.
 
 A failed durable job can be returned to the queue by an operator with
@@ -242,7 +279,8 @@ its attempt counter only when the job is terminally failed.
 
 RustFS is a local-development S3-compatible adapter, replacing the deprecated
 MinIO local stack. It is not a production provider selection: production uses
-the same generic `S3_*` settings for its chosen S3-compatible service. The
+the same generic `S3_*` settings and `s3_secret_access_key` secret for its
+chosen S3-compatible service. The
 local bucket is initialized as `attricat-files`; open `$RUSTFS_UI_URL` after
 sourcing `.worktree` to inspect it. Back up PostgreSQL file metadata
 and the configured bucket together once file uploads are enabled.

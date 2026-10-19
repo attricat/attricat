@@ -82,10 +82,11 @@ Start from [`deploy/compose.yml`](deploy/compose.yml). It binds the API to
 
 Users can ask an LLM to read and change the catalog.
 
-To turn it on, set `LLM_API_KEY` in the API's environment, and `LLM_BASE_URL`
-or `LLM_MODEL` if you need them. Restart the API, then open **Conversations**
-in the web app. Without a key, agents are off and everything else works as
-usual.
+To turn it on, write the provider key to the `llm_api_key` secret file
+(`.secrets/llm_api_key` locally, `/run/secrets/llm_api_key` in Docker), and
+set `LLM_BASE_URL` or `LLM_MODEL` in the API's environment if you need them.
+Restart the API, then open **Conversations** in the web app. Without a key,
+agents are off and everything else works as usual.
 
 Before you turn it on:
 

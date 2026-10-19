@@ -36,7 +36,7 @@ services:
     command: "/data"
     environment:
       RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:-attricat-dev}
-      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-attricat-dev-secret}
+      RUSTFS_SECRET_KEY: attricat-dev-secret
     ports:
       - "${RUSTFS_PORT:-9000}:9000"
       - "${RUSTFS_CONSOLE_PORT:-9001}:9001"
@@ -55,7 +55,7 @@ services:
         condition: service_healthy
     environment:
       AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-attricat-dev}
-      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-attricat-dev-secret}
+      AWS_SECRET_ACCESS_KEY: attricat-dev-secret
       AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
       S3_BUCKET: ${S3_BUCKET:-attricat-files}
     entrypoint:
