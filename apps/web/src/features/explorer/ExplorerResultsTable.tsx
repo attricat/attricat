@@ -72,6 +72,8 @@ type Props = {
   panelRecordId?: string;
   /** The selected context followed by its ancestors. */
   contextCodes: readonly string[];
+  /** Size the table to its rows instead of filling the viewport. */
+  fitRows?: boolean;
   publicationContextCode: string;
   publicationContextId: string | undefined;
   publicationSortAvailable: boolean;
@@ -96,6 +98,7 @@ export const ExplorerResultsTable = ({
   onOpenPanel,
   panelRecordId,
   contextCodes,
+  fitRows,
   publicationContextCode,
   publicationContextId,
   publicationSortAvailable,
@@ -272,6 +275,7 @@ export const ExplorerResultsTable = ({
         isFetchingNextPage={isFetchingNextPage}
         onLoadMore={onLoadMore}
         panelRecordId={panelRecordId}
+        fitRows={fitRows}
       />
       {items.length === 0 && (
         <EmptyState icon={RecordIcon} title={t('explorer.noMatchingRecords')} />

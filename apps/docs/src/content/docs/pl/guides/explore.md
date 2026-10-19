@@ -3,11 +3,13 @@ title: Przeglądanie rekordów
 description: Znajduj rekordy za pomocą wyszukiwania, filtrów, faset relacji i sortowania, a następnie zapisuj i udostępniaj wyniki.
 ---
 
-**Przeglądarka rekordów** to strona główna Attricat. Wyświetla rekordy jednego schematu naraz i pozwala zawęzić je zapytaniem wyszukiwania, filtrami atrybutów i fasetami relacji.
+**Przeglądarka rekordów** to strona główna Attricat. Wyświetla rekordy jednego schematu naraz albo podgląd wszystkich schematów i pozwala zawęzić je zapytaniem wyszukiwania, filtrami atrybutów i fasetami relacji.
 
 ## Wybierz, co chcesz przeglądać
 
 Wybierz schemat z selektora lub ze skrótu na pasku bocznym. Administratorzy obszaru roboczego decydują, które schematy pojawiają się jako skróty na pasku bocznym.
+
+Wybierz **Wszystkie schematy**, aby zobaczyć osobną sekcję dla każdego schematu z pierwszymi pięcioma pasującymi rekordami. Zapytanie wyszukiwania dotyczy wszystkich schematów, a schematy bez dopasowań lub takie, do których pól zapytanie nie pasuje, są pomijane. Wybierz **Pokaż wszystkie** lub nagłówek kolumny, aby otworzyć dany schemat. Przeglądarka zapamiętuje w karcie przeglądarki ostatnio otwarty schemat, dopóki ponownie nie wybierzesz **Wszystkie schematy**.
 
 Selektor **Zakres wersji** określa, które wersje schematu widzisz:
 
@@ -21,33 +23,33 @@ Wpisz tekst w polu wyszukiwania i naciśnij Enter. Zwykły termin, taki jak `lin
 
 Aby wyszukiwać szerzej, dodaj kwalifikator do terminu:
 
-| Zapytanie | Znajduje |
-| --- | --- |
-| `linen` | Rekordy, które mają „linen” w dowolnej ze swoich wartości tekstowych. |
-| `sku:ABC*` | Rekordy, których `sku` zaczyna się od `ABC`. |
-| `colors:red` | Rekordy powiązane przez `colors` z rekordem, który ma „red” w dowolnej wartości. |
-| `colors.name:red` | To samo, ale tylko w `name` powiązanego rekordu. |
-| `family.product_type.name:laptop` | Przechodzi przez dwie relacje, a następnie dopasowuje `name`. |
-| `*:red` | Rekordy, które mają „red” w swoich wartościach lub w czymkolwiek powiązanym w odległości do trzech kroków. |
-| `@id:ID-1,ID-2` | Dokładnie wskazane rekordy. |
-| `colors.@id:ID-1,ID-2` | Rekordy powiązane przez `colors` z jednym ze wskazanych rekordów. |
+| Zapytanie                         | Znajduje                                                                                                   |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `linen`                           | Rekordy, które mają „linen” w dowolnej ze swoich wartości tekstowych.                                      |
+| `sku:ABC*`                        | Rekordy, których `sku` zaczyna się od `ABC`.                                                               |
+| `colors:red`                      | Rekordy powiązane przez `colors` z rekordem, który ma „red” w dowolnej wartości.                           |
+| `colors.name:red`                 | To samo, ale tylko w `name` powiązanego rekordu.                                                           |
+| `family.product_type.name:laptop` | Przechodzi przez dwie relacje, a następnie dopasowuje `name`.                                              |
+| `*:red`                           | Rekordy, które mają „red” w swoich wartościach lub w czymkolwiek powiązanym w odległości do trzech kroków. |
+| `@id:ID-1,ID-2`                   | Dokładnie wskazane rekordy.                                                                                |
+| `colors.@id:ID-1,ID-2`            | Rekordy powiązane przez `colors` z jednym ze wskazanych rekordów.                                          |
 
 Kilka terminów oddzielonych spacjami musi pasować jednocześnie. Pełną gramatykę opisuje [Składnia wyszukiwania](/pl/guides/search-syntax/).
 
-Otwórz **Informacje o wyszukiwaniu** przy wyniku, aby zobaczyć, dlaczego został dopasowany, na przykład *red przez 1 relację*.
+Otwórz **Informacje o wyszukiwaniu** przy wyniku, aby zobaczyć, dlaczego został dopasowany, na przykład _red przez 1 relację_.
 
 ## Filtry
 
 **Dodaj filtr** zawęża wyniki według wartości atrybutu w wybranym [kontekście](#kontekst). Dostępne operatory zależą od typu:
 
-| Typ | Operatory |
-| --- | --- |
-| Łańcuch znaków | Równa się, Zawiera, Zaczyna się od |
-| Liczba, liczba całkowita, data, data i godzina, godzina | Równa się, Większe niż, Większe lub równe, Mniejsze niż, Mniejsze lub równe |
-| Wartość logiczna | Równa się |
-| Status | Równa się, z wyborem spośród etykiet statusu |
-| Użytkownik lub zespół | Równa się osobie lub zespołowi albo **Przypisane do mnie (lub moich zespołów)** |
-| Plik | Tylko Obecność wartości |
+| Typ                                                     | Operatory                                                                       |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Łańcuch znaków                                          | Równa się, Zawiera, Zaczyna się od                                              |
+| Liczba, liczba całkowita, data, data i godzina, godzina | Równa się, Większe niż, Większe lub równe, Mniejsze niż, Mniejsze lub równe     |
+| Wartość logiczna                                        | Równa się                                                                       |
+| Status                                                  | Równa się, z wyborem spośród etykiet statusu                                    |
+| Użytkownik lub zespół                                   | Równa się osobie lub zespołowi albo **Przypisane do mnie (lub moich zespołów)** |
+| Plik                                                    | Tylko Obecność wartości                                                         |
 
 Każdy typ ma też operator **Obecność wartości**: wybierz **Ma wartość** lub **Brak wartości**. Dla atrybutu plikowego **Ma wartość** znajduje rekordy z co najmniej jednym załączonym plikiem, a **Brak wartości** rekordy bez żadnego pliku.
 
@@ -73,7 +75,7 @@ Gdy sam schemat jest hierarchią, na przykład kategorie, panel może wyświetli
 
 W polu **Przeglądaj według** wybierz inny atrybut relacji albo ukryj panel. Domyślnie panel otwiera się dla atrybutu wskazanego przez schemat w `views.explorer`, a w przeciwnym razie dla pierwszej relacji powiązanej z hierarchią. Schemat może też domyślnie pozostawiać panel zamknięty. Attricat zapamiętuje Twój wybór dla każdego schematu w tej przeglądarce, a zapisane i udostępnione wyszukiwania go zachowują.
 
-Aby wybrać kilka celów jednego atrybutu, użyj **Dodaj filtr** i wybierz atrybut relacji. Kilka zaznaczeń w jednym atrybucie oznacza *dowolny z nich*. Zaznaczenia w różnych atrybutach muszą pasować jednocześnie.
+Aby wybrać kilka celów jednego atrybutu, użyj **Dodaj filtr** i wybierz atrybut relacji. Kilka zaznaczeń w jednym atrybucie oznacza _dowolny z nich_. Zaznaczenia w różnych atrybutach muszą pasować jednocześnie.
 
 ## Kontekst
 

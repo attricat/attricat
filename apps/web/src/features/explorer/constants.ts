@@ -45,6 +45,8 @@ export const publishedRevisionStatus = 'published';
 
 export const relationshipPathSortErrorCode =
   'relationship_path_sort_requires_single_result_version';
+/** Returned when a query names fields the searched blueprint lacks. */
+export const invalidInputErrorCode = 'invalid_input';
 
 export const explorerColumnIds = {
   actions: 'actions',
@@ -82,6 +84,10 @@ export const maximumExplorerCellFrames = 32;
 // Result table virtualization.
 export const estimatedResultRowHeight = 53;
 export const resultRowOverscan = 10;
+/** Records previewed per blueprint when no blueprint is chosen. */
+export const overviewRecordsPerBlueprint = 5;
+/** React Query's default retry count for unexpected failures. */
+export const defaultQueryRetries = 3;
 
 // Layout dimensions.
 /** The record panel floats over the results; keep most of them visible. */

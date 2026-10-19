@@ -15,3 +15,11 @@ export const setLastBlueprint = (blueprint: string) => {
     // Storage can be unavailable in hardened browser contexts.
   }
 };
+
+export const clearLastBlueprint = () => {
+  try {
+    sessionStorage.removeItem(lastBlueprintStorageKey);
+  } catch {
+    // Storage can be unavailable in hardened browser contexts.
+  }
+};

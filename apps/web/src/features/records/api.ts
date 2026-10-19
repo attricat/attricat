@@ -81,6 +81,8 @@ export type SearchRecordsOptions = {
   cursor?: string | null;
   filters?: import('./schemas').RecordSearchFilter[];
   includeTotal?: boolean;
+  /** Defaults to `RECORD_SEARCH_PAGE_SIZE`. */
+  pageSize?: number;
   query?: string;
   relationshipFilters?: {
     field: string;
@@ -104,6 +106,7 @@ export const searchRecords = ({
   cursor = null,
   filters = [],
   includeTotal = false,
+  pageSize = RECORD_SEARCH_PAGE_SIZE,
   query = '',
   relationshipFilters = [],
   relationshipTreeFacets = [],
@@ -127,7 +130,7 @@ export const searchRecords = ({
     sort,
     ...(contextCode === undefined ? {} : { context_code: contextCode }),
     ...(includeTotal ? { include_total: true } : {}),
-    page: { size: RECORD_SEARCH_PAGE_SIZE, cursor },
+    page: { size: pageSize, cursor },
   });
   return request('/api/v1/records/search', recordSearchResponseSchema, {
     method: 'POST',

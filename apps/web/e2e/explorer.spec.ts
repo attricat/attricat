@@ -44,7 +44,10 @@ test('shows explorer empty states and configured table fields', async ({
 
   await page.goto('/');
   await expect(
-    page.getByText('Enter a blueprint code to start exploring.'),
+    page
+      .getByRole('region', { name: 'Explorer products' })
+      .getByRole('cell', { name: 'Table product' })
+      .first(),
   ).toBeVisible();
   await page.getByLabel('Select a Blueprint').click();
   await page

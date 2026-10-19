@@ -79,6 +79,24 @@ export const recordQueryKeys = {
       relationships,
       pageSize,
     ] as const,
+  blueprintOverview: ({
+    blueprint,
+    contextCode,
+    pageSize,
+    query,
+    version,
+  }: {
+    blueprint: string;
+    contextCode: string;
+    pageSize: number;
+    query: string;
+    version: number;
+  }) =>
+    [
+      ...recordQueryKeys.searches(),
+      'blueprint-overview',
+      { blueprint, contextCode, pageSize, query, version },
+    ] as const,
   search: ({
     allVersions = false,
     blueprint,

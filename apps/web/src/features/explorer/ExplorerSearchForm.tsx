@@ -239,16 +239,20 @@ export const ExplorerSearchForm = ({
           <form.Field name="blueprint">
             {(field) => (
               <TextField
-                required
                 label={t('explorer.selectBlueprint')}
                 onChange={(event) => {
                   field.handleChange(event.target.value);
                   onBlueprintChange?.(event.target.value);
                 }}
                 select
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  select: { displayEmpty: true },
+                }}
                 sx={{ flexShrink: 0, width: blueprintSelectWidth }}
                 value={field.state.value}
               >
+                <MenuItem value="">{t('explorer.allBlueprints')}</MenuItem>
                 {blueprints.map((blueprint) => (
                   <MenuItem key={blueprint.code} value={blueprint.code}>
                     {t('explorer.blueprintOption', {

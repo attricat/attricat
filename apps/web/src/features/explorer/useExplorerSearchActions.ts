@@ -11,7 +11,12 @@ import {
   type RelationshipFilter,
 } from './explorerSearchState';
 import type { RelationshipFacetUpdate } from './relationshipFilterTypes';
-import type { AttributeFilter, BrowseBy, ExplorerSearch } from './search';
+import type {
+  AttributeFilter,
+  BrowseBy,
+  ExplorerSearch,
+  ExplorerSort,
+} from './search';
 
 /** URL-backed Explorer search transitions. */
 export const useExplorerSearchActions = (
@@ -67,13 +72,21 @@ export const useExplorerSearchActions = (
       }),
     changeContext: (context: string) => go({ ...search, context }),
     changeBrowseBy: (browseBy: BrowseBy) => go({ ...search, browseBy }),
-    selectBlueprint: (blueprint: string) =>
+    selectBlueprint: (blueprint: string | undefined) =>
       go({
         blueprint,
         sourceView: search.sourceView,
         query: search.query,
         relationshipFacets: undefined,
         attributeFilters: undefined,
+      }),
+    exploreBlueprint: (blueprint: string, sort?: ExplorerSort) =>
+      go({
+        blueprint,
+        context: search.context,
+        sourceView: search.sourceView,
+        query: search.query,
+        sort,
       }),
     showAllVersions: () =>
       go({
