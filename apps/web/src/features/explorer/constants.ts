@@ -86,6 +86,10 @@ export const estimatedResultRowHeight = 53;
 export const resultRowOverscan = 10;
 /** Records previewed per blueprint when no blueprint is chosen. */
 export const overviewRecordsPerBlueprint = 5;
+/** Overview searches sent at once; the rest wait their turn. */
+export const overviewConcurrentSearches = 4;
+/** How long an overview stays fresh through focus changes and remounts. */
+export const overviewStaleTimeMs = 30_000;
 /** React Query's default retry count for unexpected failures. */
 export const defaultQueryRetries = 3;
 

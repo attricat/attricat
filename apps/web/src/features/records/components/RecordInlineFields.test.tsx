@@ -262,7 +262,9 @@ describe('RecordInlineFields', () => {
 
     expect(await screen.findByText('Saved')).toBeTruthy();
     expect(screen.getByText('All changes saved')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    await user.click(screen.getByRole('button', { name: 'Undo saving name' }));
+    // The link gives way to the saving status; focus stays on the field.
+    expect(document.activeElement).toBe(name);
     await waitFor(() => expect(updateRecord).toHaveBeenCalledTimes(2));
     expect(vi.mocked(updateRecord).mock.calls[1]![1]).toEqual(
       expect.objectContaining({

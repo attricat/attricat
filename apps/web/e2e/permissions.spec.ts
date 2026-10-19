@@ -4,11 +4,13 @@ import {
   createBlueprint,
   createRecord,
   createRecordBlueprint,
+  defaultContext,
   replaceDefinition,
   request,
   scalar,
   signInAsMember,
   suffix,
+  type Context,
 } from './helpers';
 
 const draftDefinition = (code: string) => `format_version = 1
@@ -29,6 +31,19 @@ const latestStatus = async (blueprintId: string) => {
     `/blueprints/${blueprintId}/versions`,
   );
   return latest.status;
+};
+
+// The UI hides refused actions; the API must still refuse them itself.
+const expectRefusedWrite = async (page: Page, path: string, data?: object) => {
+  const csrf = (await page.context().cookies()).find(
+    ({ name }) => name === 'attricat_csrf',
+  );
+  if (!csrf) throw new Error('The member session has no CSRF cookie');
+  const response = await page.request.post(`/api${path}`, {
+    data,
+    headers: { 'X-Attricat-Csrf': csrf.value },
+  });
+  expect(response.status()).toBe(403);
 };
 
 // Without the permission the action is not offered at all.
@@ -88,14 +103,34 @@ test('a viewer can browse the catalog but every write is refused', async ({
     0,
   );
 
+  const context = await defaultContext();
+  await expectRefusedWrite(page, '/v1/records', {
+    blueprint: { code, version: blueprint.blueprint.version },
+    values: [
+      { ...scalar('title', 'Unauthorized product'), context_id: context.id },
+    ],
+  });
+
   await page.goto(`/manage/blueprints/${draft.blueprint.id}`);
   await expectPublishHidden(page);
+  await expectRefusedWrite(
+    page,
+    `/blueprints/${draft.blueprint.id}/versions/${draft.blueprint.version}/publish`,
+  );
   expect(await latestStatus(draft.blueprint.id)).toBe('draft');
 
   await page.goto('/manage/contexts/new');
   await expect(page.getByRole('alert')).toHaveText(
     'You are not authorized to create contexts in this workspace.',
   );
+  const contextCode = `viewer_ctx_${suffix()}`;
+  await expectRefusedWrite(page, '/contexts', {
+    code: contextCode,
+    parent_id: context.id,
+    data: {},
+  });
+  const contexts = await request<Context[]>('/contexts');
+  expect(contexts.map(({ code }) => code)).not.toContain(contextCode);
 
   await page.context().close();
 });
@@ -132,6 +167,13 @@ test('an editor saves blueprint drafts and records but cannot publish', async ({
   ).toBeVisible();
 
   await expectPublishHidden(page);
+  const [latest] = await request<Array<{ version: number }>>(
+    `/blueprints/${blueprintId}/versions`,
+  );
+  await expectRefusedWrite(
+    page,
+    `/blueprints/${blueprintId}/versions/${latest.version}/publish`,
+  );
   expect(await latestStatus(blueprintId)).toBe('draft');
 
   await page.context().close();

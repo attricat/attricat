@@ -1,7 +1,9 @@
 import { Box, Link } from '@mui/material';
 import { CheckIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../../components/iconSizes';
+import { focusControlIn } from '../../../components/initialFocus';
 import type { FieldSaveState } from '../useRecordFieldSaves';
 
 /**
@@ -11,12 +13,31 @@ import type { FieldSaveState } from '../useRecordFieldSaves';
  */
 export const FieldSaveStatus = ({
   state,
+  onHold,
   onUndo,
+  undoFields,
 }: {
   state?: FieldSaveState;
+  /** Keeps undo available while the user points at or focuses it. */
+  onHold: (held: boolean) => void;
   onUndo: () => void;
+  /** Names of every field the undo puts back. */
+  undoFields: readonly string[];
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  // The link can go while focused or pointed at, without a blur or leave.
+  if (state !== 'saved' && (focused || hovered)) {
+    setFocused(false);
+    setHovered(false);
+  }
+  const holding = state === 'saved' && (focused || hovered);
+  useEffect(() => {
+    if (!holding) return;
+    onHold(true);
+    return () => onHold(false);
+  }, [holding, onHold]);
   if (state !== 'saving' && state !== 'saved') return null;
   return (
     <Box
@@ -42,8 +63,21 @@ export const FieldSaveStatus = ({
           <CheckIcon aria-hidden size={compactIconSize} />
           {t('records.fieldSaved')}
           <Link
+            aria-label={t('records.undoSaveOf', {
+              fields: new Intl.ListFormat(i18n.language).format(undoFields),
+            })}
             component="button"
-            onClick={onUndo}
+            onBlur={() => setFocused(false)}
+            onClick={(event) => {
+              // The link gives way to the saving status; keep focus on the
+              // field it belongs to.
+              const field = event.currentTarget.closest('[data-field-code]');
+              onUndo();
+              focusControlIn(field);
+            }}
+            onFocus={() => setFocused(true)}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
             type="button"
             variant="caption"
           >

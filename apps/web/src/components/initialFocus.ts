@@ -10,13 +10,16 @@ const fieldSelector = [
   '[role="combobox"]',
 ].join(', ');
 
+// Skips controls in collapsed sections; not every environment implements it.
+const isVisible = (element: HTMLElement) =>
+  element.checkVisibility?.({ visibilityProperty: true }) ?? true;
+
 const canFocus = (element: HTMLElement) =>
   !element.matches(
     ':disabled, [readonly], [aria-disabled="true"], [tabindex="-1"]',
   ) &&
   !element.closest('[hidden], [aria-hidden="true"]') &&
-  // Skips fields in collapsed sections; not every environment implements it.
-  (element.checkVisibility?.({ visibilityProperty: true }) ?? true);
+  isVisible(element);
 
 const firstField = (root: ParentNode | null | undefined) =>
   [...(root?.querySelectorAll<HTMLElement>(fieldSelector) ?? [])].find(
@@ -43,19 +46,21 @@ export const focusFirstField = (
  * Focuses the first field in `container`, or its first enabled button or
  * checkbox when it has none, such as a file field or a confirmation, and
  * scrolls it to the middle of the screen so a sticky action bar does not
- * cover it.
+ * cover it; returns whether focus moved there.
  */
 export const focusControlIn = (container: ParentNode | null | undefined) => {
   const control =
     firstField(container) ??
-    container?.querySelector<HTMLElement>(
-      'button:not(:disabled), input:not(:disabled)',
-    );
+    [
+      ...(container?.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled)',
+      ) ?? []),
+    ].find(isVisible);
   if (!control) return false;
   control.focus({ preventScroll: true });
   // Not implemented by every environment, such as jsdom.
   control.scrollIntoView?.({ block: 'center' });
-  return true;
+  return control.ownerDocument.activeElement === control;
 };
 
 /**

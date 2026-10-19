@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../../api/request';
 import { updateRecord, type Attribute } from './api';
+import { RECENT_SAVE_DURATION_MS } from './constants';
 import { fieldSaveRequest, schemaMismatchField } from './recordFieldSaves';
 import { useRecordFieldSaves } from './useRecordFieldSaves';
 
@@ -142,6 +143,49 @@ describe('useRecordFieldSaves', () => {
       values: [expect.objectContaining({ attribute_code: 'summary' })],
     });
     expect(result.current.pending).toEqual({});
+  });
+
+  it('undoes every save of a chain, back to the values before it', async () => {
+    const first = deferred<ReturnType<typeof savedRecord>>();
+    vi.mocked(updateRecord)
+      .mockReturnValueOnce(first.promise as never)
+      .mockResolvedValue(savedRecord('v3') as never);
+    const { result } = renderSaves({ title: 'Old', summary: 'Before' });
+
+    act(() => result.current.commit('title', 'A'));
+    act(() => result.current.commit('summary', 'B'));
+    await act(async () => first.resolve(savedRecord('v2')));
+    await waitFor(() => expect(result.current.saving).toBe(false));
+
+    expect(result.current.lastSaveFields.sort()).toEqual(['summary', 'title']);
+    act(() => result.current.undoLastSave());
+    await waitFor(() => expect(updateRecord).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(updateRecord).mock.calls[2]![1].values).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ attribute_code: 'summary', value: 'Before' }),
+        expect.objectContaining({ attribute_code: 'title', value: 'Old' }),
+      ]),
+    );
+  });
+
+  it('keeps a save undoable while its undo control is held', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(updateRecord).mockResolvedValue(savedRecord('v2') as never);
+      const { result } = renderSaves({ title: 'Old' });
+      act(() => result.current.commit('title', 'A'));
+      await waitFor(() =>
+        expect(result.current.fieldState('title')).toBe('saved'),
+      );
+
+      act(() => result.current.holdLastSave(true));
+      act(() => vi.advanceTimersByTime(RECENT_SAVE_DURATION_MS));
+      expect(result.current.fieldState('title')).toBe('saved');
+      act(() => result.current.holdLastSave(false));
+      expect(result.current.fieldState('title')).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps a rejected change pending and resends it with the next commit', async () => {

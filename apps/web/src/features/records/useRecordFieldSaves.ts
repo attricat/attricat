@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError } from '../../api/request';
 import { updateRecord, type Attribute } from './api';
 import { RECENT_SAVE_DURATION_MS, STALE_RECORD_ERROR_CODE } from './constants';
@@ -146,9 +146,14 @@ export const useRecordFieldSaves = ({
         saving: false,
         sending: [],
         lastSave: {
-          previous: Object.fromEntries(
-            Object.keys(batch).map((code) => [code, saved[code] ?? '']),
-          ),
+          // A batch chained after a still-recent save extends what undo puts
+          // back; the earlier save's values come first.
+          previous: {
+            ...Object.fromEntries(
+              Object.keys(batch).map((code) => [code, saved[code] ?? '']),
+            ),
+            ...current.current.lastSave?.previous,
+          },
         },
         savedAny: true,
         error: null,
@@ -188,15 +193,31 @@ export const useRecordFieldSaves = ({
     void flush();
   };
 
-  // A save can be undone only while it is recent.
+  // A save can be undone only while it is recent, and for as long as the
+  // user is on its undo control.
+  const undoHolds = useRef(0);
+  const lastSaveExpired = useRef(false);
+  const expireLastSave = useCallback(() => {
+    lastSaveExpired.current = false;
+    current.current = { ...current.current, lastSave: null };
+    setState(current.current);
+  }, []);
   useEffect(() => {
     if (!state.lastSave) return;
+    lastSaveExpired.current = false;
     const timer = setTimeout(() => {
-      current.current = { ...current.current, lastSave: null };
-      setState(current.current);
+      if (undoHolds.current > 0) lastSaveExpired.current = true;
+      else expireLastSave();
     }, RECENT_SAVE_DURATION_MS);
     return () => clearTimeout(timer);
-  }, [state.lastSave]);
+  }, [state.lastSave, expireLastSave]);
+  const holdLastSave = useCallback(
+    (held: boolean) => {
+      undoHolds.current += held ? 1 : -1;
+      if (undoHolds.current === 0 && lastSaveExpired.current) expireLastSave();
+    },
+    [expireLastSave],
+  );
 
   return {
     /** Saved values overlaid with changes that are not saved yet. */
@@ -216,6 +237,10 @@ export const useRecordFieldSaves = ({
           : state.lastSave && code in state.lastSave.previous
             ? 'saved'
             : undefined,
+    /** The fields the last save changed, while it can be undone. */
+    lastSaveFields: Object.keys(state.lastSave?.previous ?? {}),
+    /** Keeps the last save undoable while `held`; calls must pair. */
+    holdLastSave,
     /** Puts back the values the last save replaced, as a new save. */
     undoLastSave: () => {
       const last = current.current.lastSave;

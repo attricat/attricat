@@ -60,6 +60,10 @@ export const RecordAttributeEditor = ({
 }) => {
   const effectiveDisabled =
     disabled || attribute.extension_type?.available === false;
+  // Discarded files are no longer the field's; it shows none and takes none.
+  const filesDiscarded =
+    attribute.value_type === attributeValueTypes.file &&
+    Boolean(migrationReview?.discarded);
   const editor =
     attribute.value_type === attributeValueTypes.relationship ? (
       <RelationshipField
@@ -77,9 +81,11 @@ export const RecordAttributeEditor = ({
       <FileAttributeEditor
         attribute={attribute}
         contextId={contextId}
-        disabled={effectiveDisabled}
+        disabled={effectiveDisabled || filesDiscarded}
+        // Remounts so the editor's own list of files follows the discard.
+        key={filesDiscarded ? 'discarded' : 'kept'}
         recordId={recordId}
-        files={files}
+        files={filesDiscarded ? [] : files}
         error={error}
         helperText={helperText}
         onRecordUpdated={onRecordUpdated}

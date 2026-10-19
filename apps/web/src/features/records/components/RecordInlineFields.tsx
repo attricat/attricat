@@ -21,6 +21,7 @@ import {
 import { FieldRevealContext, useFieldReveal } from '../../views/fieldReveal';
 import { attributeLabel } from '../recordDisplay';
 import { invalidateRecord } from '../invalidateRecord';
+import { ConflictingChange } from './ConflictingChange';
 import { FieldSaveStatus } from './FieldSaveStatus';
 import { RecordView } from '../../views/components/RecordView';
 import type { ResolvedValue } from '../../views/components/ValueField';
@@ -169,6 +170,10 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
       onPendingChange,
     });
     const hasPending = Object.keys(saves.pending).length > 0;
+    const undoFields = saves.lastSaveFields.map((code) => {
+      const attribute = allAttributes.find((item) => item.code === code);
+      return attribute ? attributeLabel(attribute) : code;
+    });
     const fieldsRef = useRef<HTMLDivElement>(null);
     // Leads from the save status to a field whose change was not saved.
     const { request: revealRequest, reveal: revealField } =
@@ -334,8 +339,10 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
       );
       const status = (
         <FieldSaveStatus
+          onHold={saves.holdLastSave}
           onUndo={saves.undoLastSave}
           state={saves.fieldState(attribute.code)}
+          undoFields={undoFields}
         />
       );
       return KeptDisplay ? (
@@ -412,18 +419,11 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
                 .filter((attribute) => attribute.code in saves.pending)
                 .map((attribute) => (
                   <li key={attribute.code}>
-                    {/* Relationship and file values are IDs; name the field. */}
-                    {attribute.value_type ===
-                      attributeValueTypes.relationship ||
-                    attribute.value_type === attributeValueTypes.file
-                      ? attributeLabel(attribute)
-                      : t('records.conflictingChange', {
-                          field: attributeLabel(attribute),
-                          mine:
-                            saves.pending[attribute.code] || t('records.empty'),
-                          theirs:
-                            latestFields[attribute.code] || t('records.empty'),
-                        })}
+                    <ConflictingChange
+                      attribute={attribute}
+                      mine={saves.pending[attribute.code] ?? ''}
+                      theirs={latestFields[attribute.code] ?? ''}
+                    />
                   </li>
                 ))}
             </Box>
