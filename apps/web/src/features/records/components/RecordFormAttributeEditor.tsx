@@ -153,6 +153,7 @@ export const RecordFormAttributeEditor = ({
           required={required}
           contextId={contextId}
           disabled={disabled || protectedValue}
+          reviewDisabled={disabled}
           statusBaseline={savedStatus.current}
           inheritedStatus={savedStatus.inherited}
           statusTransitions={statusTransitions.filter(

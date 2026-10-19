@@ -23,6 +23,7 @@ export const RecordAttributeEditor = ({
   statusTransitions,
   contextId,
   disabled,
+  reviewDisabled = disabled,
   required,
   recordId,
   files,
@@ -40,6 +41,11 @@ export const RecordAttributeEditor = ({
   statusTransitions?: readonly StatusTransitionAccess[];
   contextId: string | null;
   disabled: boolean;
+  /**
+   * Whether the migration review's actions are unavailable. A field the user
+   * may not edit can still have its incompatible value discarded.
+   */
+  reviewDisabled?: boolean;
   required?: boolean;
   recordId?: string;
   files: FileMetadata[];
@@ -99,7 +105,8 @@ export const RecordAttributeEditor = ({
     <Box data-migration-review sx={{ display: 'contents' }}>
       {editor}
       <MigrationReviewNote
-        disabled={effectiveDisabled}
+        disabled={reviewDisabled}
+        fieldValue={value}
         onFieldChange={onChange}
         review={migrationReview}
       />
@@ -112,10 +119,12 @@ export const RecordAttributeEditor = ({
 /** Why a migration asks to review the field, and the value it had before. */
 const MigrationReviewNote = ({
   disabled,
+  fieldValue,
   onFieldChange,
   review,
 }: {
   disabled: boolean;
+  fieldValue: string;
   onFieldChange: (value: string) => void;
   review: MigrationFieldReview;
 }) => {
@@ -147,8 +156,10 @@ const MigrationReviewNote = ({
             disabled={disabled}
             onClick={() => {
               // Discarding empties the field the stored value filled; undoing
-              // puts that value back.
-              onFieldChange(review.discarded ? (review.fieldValue ?? '') : '');
+              // puts that value back unless the user has typed a replacement.
+              if (!review.discarded) onFieldChange('');
+              else if (fieldValue === '')
+                onFieldChange(review.fieldValue ?? '');
               onDiscardChange(!review.discarded);
             }}
             size="small"

@@ -112,15 +112,15 @@ export const Explorer = ({
     (selectedBlueprint.data &&
       lexiconText(selectedBlueprint.data.blueprint.name)) ??
     search.blueprint;
-  // Only the first load shows the spinner; background refetches (such as on
-  // window focus) keep the table in place and show its own progress bar.
+  // Only a first load shows the spinner: a new blueprint, or results still
+  // waiting to run. Background refetches (such as on window focus) and
+  // search changes keep the table in place and show its own progress bar.
   const loading =
     Boolean(search.blueprint) &&
     !blueprintMissing &&
-    !results.data &&
     (blueprints.isLoading ||
       selectedBlueprint.isLoading ||
-      (canSearch && results.isLoading));
+      (canSearch && results.isPending));
   // Narrower screens open results on their own page.
   const panelOpen = isWideDesktop && panelRecordId !== undefined;
   const showInPanel = (record: string | undefined) =>
@@ -250,15 +250,19 @@ export const Explorer = ({
               />
             )}
             <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-              <ExplorerResults
-                data={data}
-                onFilterCell={requestFilter}
-                onOpenPanel={isWideDesktop ? openPanel : undefined}
-                panelRecordId={panelOpen ? panelRecordId : undefined}
-                onShowAllVersions={actions.showAllVersions}
-                onSortChange={actions.toggleSort}
-                search={search}
-              />
+              {/* Kept results of the last blueprint must not show under the
+                  overview. */}
+              {search.blueprint && (
+                <ExplorerResults
+                  data={data}
+                  onFilterCell={requestFilter}
+                  onOpenPanel={isWideDesktop ? openPanel : undefined}
+                  panelRecordId={panelOpen ? panelRecordId : undefined}
+                  onShowAllVersions={actions.showAllVersions}
+                  onSortChange={actions.toggleSort}
+                  search={search}
+                />
+              )}
             </Box>
           </Box>
         </PageContainer>

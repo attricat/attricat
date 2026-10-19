@@ -11,6 +11,7 @@ import { statusConfiguration } from '../../../records/status';
 import { StatusValue } from '../../controls/values';
 import { FieldErrorBoundary } from '../boundaries/FieldErrorBoundary';
 import { resolveValueRenderer } from '../registry';
+import { attributeLabel } from '../../../records/recordDisplay';
 import { AttributeValueText } from '../values/AttributeValueText';
 import { findRecordHeading } from './RecordHeadingDefinition';
 
@@ -19,12 +20,14 @@ type ResolvedValue = { value: unknown };
 export const RecordHeading = ({
   attributes,
   compact = false,
+  contextId,
   recordId,
   values,
   view,
 }: {
   attributes: readonly Attribute[];
   compact?: boolean;
+  contextId?: string;
   recordId: string;
   values: Record<string, ResolvedValue>;
   view?: ViewDefinition;
@@ -77,13 +80,21 @@ export const RecordHeading = ({
             const Renderer = resolveValueRenderer(child.component);
             if (Renderer)
               return (
-                <Renderer
-                  attribute={attribute}
-                  component={child.component}
+                <FieldErrorBoundary
+                  fallbackMessage={i18n.t('views.unableToRenderAttribute', {
+                    attribute: attributeLabel(attribute),
+                  })}
                   key={index}
-                  recordId={recordId}
-                  value={value}
-                />
+                  logLabel={attributeLabel(attribute)}
+                >
+                  <Renderer
+                    attribute={attribute}
+                    component={child.component}
+                    contextId={contextId}
+                    recordId={recordId}
+                    value={value}
+                  />
+                </FieldErrorBoundary>
               );
             const status = statusConfiguration(attribute);
             if (status)

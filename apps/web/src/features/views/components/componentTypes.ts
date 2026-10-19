@@ -37,6 +37,8 @@ export type HeadingRenderer = ComponentType<{
   attributes: readonly Attribute[];
   /** Renders a smaller section heading for a panel beside another page. */
   compact?: boolean;
+  /** The context the record is shown in, for fields that resolve within it. */
+  contextId?: string;
   recordId: string;
   values: Record<string, { value: unknown }>;
   view?: ViewDefinition;

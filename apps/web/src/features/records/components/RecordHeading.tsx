@@ -40,13 +40,21 @@ const FallbackRecordHeading = ({
 export const RecordHeading = ({
   attributes,
   compact,
+  contextId,
   recordId,
   values,
   view,
 }: Props) => {
   const renderer = resolveHeadingRenderer(findRecordHeading(view)?.component);
   return renderer ? (
-    createElement(renderer, { attributes, compact, recordId, values, view })
+    createElement(renderer, {
+      attributes,
+      compact,
+      contextId,
+      recordId,
+      values,
+      view,
+    })
   ) : (
     <FallbackRecordHeading compact={compact} recordId={recordId} />
   );

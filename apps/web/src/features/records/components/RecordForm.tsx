@@ -612,6 +612,8 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
         onKeyDown={(event: KeyboardEvent<HTMLFormElement>) => {
           if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey))
             return;
+          // Keys bubble from the form's dialogs through their portals.
+          if (!event.currentTarget.contains(event.target as Node)) return;
           event.preventDefault();
           if (!isLoadingBlueprint) submit(false);
         }}

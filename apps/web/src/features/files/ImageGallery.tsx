@@ -38,6 +38,12 @@ export const ImageGallery = ({
     setSelectedId(null);
   }
   const pageCount = Math.max(1, Math.ceil(files.length / GALLERY_PAGE_SIZE));
+  // Newly picked images join the last page, so show it.
+  const [pendingCount, setPendingCount] = useState(pendingTiles.length);
+  if (pendingTiles.length !== pendingCount) {
+    if (pendingTiles.length > pendingCount) setPage(pageCount);
+    setPendingCount(pendingTiles.length);
+  }
   const currentPage = Math.min(page, pageCount);
   const start = (currentPage - 1) * GALLERY_PAGE_SIZE;
   return (

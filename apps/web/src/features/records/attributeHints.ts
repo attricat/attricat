@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+import i18n from '../../i18n';
 import { formatBytes } from '../data-health/dataHealthFormat';
 import { lexiconText } from '../lexicon/lexicon';
 import type { Attribute } from './api';
@@ -31,8 +32,11 @@ const lengthHint = (attribute: Attribute, t: TFunction) => {
 };
 
 const rangeHint = (attribute: Attribute, t: TFunction) => {
-  const min = schemaNumber(attribute, 'minimum');
-  const max = schemaNumber(attribute, 'maximum');
+  const number = new Intl.NumberFormat(i18n.language);
+  const minimum = schemaNumber(attribute, 'minimum');
+  const maximum = schemaNumber(attribute, 'maximum');
+  const min = minimum === undefined ? undefined : number.format(minimum);
+  const max = maximum === undefined ? undefined : number.format(maximum);
   const whole = attribute.value_type === attributeValueTypes.integer;
   const kind = whole ? 'Whole' : '';
   if (min !== undefined && max !== undefined)

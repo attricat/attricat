@@ -149,6 +149,7 @@ export const RecordPreview = ({
                 <RecordHeading
                   attributes={blueprint.data.attributes}
                   compact={compact}
+                  contextId={selectedContextId}
                   recordId={recordId}
                   values={resolved.data.values}
                   view={blueprint.data.blueprint.views.detail}

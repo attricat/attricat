@@ -13,7 +13,10 @@ const fieldSelector = [
 const canFocus = (element: HTMLElement) =>
   !element.matches(
     ':disabled, [readonly], [aria-disabled="true"], [tabindex="-1"]',
-  ) && !element.closest('[hidden], [aria-hidden="true"]');
+  ) &&
+  !element.closest('[hidden], [aria-hidden="true"]') &&
+  // Skips fields in collapsed sections; not every environment implements it.
+  (element.checkVisibility?.({ visibilityProperty: true }) ?? true);
 
 const firstField = (root: ParentNode | null | undefined) =>
   [...(root?.querySelectorAll<HTMLElement>(fieldSelector) ?? [])].find(
@@ -33,7 +36,7 @@ export const focusFirstField = (
     : undefined;
   const field = preferred ?? firstField(root);
   field?.focus();
-  return field !== undefined;
+  return field !== undefined && field.ownerDocument.activeElement === field;
 };
 
 /**
