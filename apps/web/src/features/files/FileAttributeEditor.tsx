@@ -10,6 +10,7 @@ import {
   Tooltip,
 } from '@mui/material';
 import { CloudUploadIcon, InfoIcon } from 'lucide-react';
+import { IconLabel } from '../../components/IconLabel';
 import { compactIconSize } from '../../components/iconSizes';
 import { useId, useRef } from 'react';
 import { ImageGalleryEditor } from './ImageGalleryEditor';
@@ -18,6 +19,7 @@ import type { Attribute } from '../records/api';
 import { attributeLabel } from '../records/recordDisplay';
 import { fileCardinalities } from './constants';
 import { acceptedFileTypes } from './fileAcceptance';
+import { fileAttributeIcon } from './fileAttributeIcon';
 import { PendingFileRow, PendingImageTile } from './PendingFileRow';
 import type { FileMetadata } from './schemas';
 import { UploadedFileRow } from './UploadedFileRow';
@@ -74,7 +76,9 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
     >
       {/* The legend must be the fieldset's first child to name it. */}
       <FormLabel component="legend" sx={{ mb: 0.5, p: 0 }}>
-        {attributeLabel(attribute)}
+        <IconLabel icon={fileAttributeIcon(attribute)}>
+          {attributeLabel(attribute)}
+        </IconLabel>
       </FormLabel>
       <Stack spacing={1}>
         {(helperText || savingHelp) && (

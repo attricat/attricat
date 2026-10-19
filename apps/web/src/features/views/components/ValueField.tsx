@@ -1,8 +1,11 @@
 import { Box, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { IconLabel } from '../../../components/IconLabel';
+import { fileAttributeIcon } from '../../files/fileAttributeIcon';
 import type { Attribute, ComponentReference } from '../../records/api';
 import { attributeLabel } from '../../records/recordDisplay';
+import { attributeValueTypes } from '../../records/valueTypes';
 import { FieldErrorBoundary } from './boundaries/FieldErrorBoundary';
 import { resolveValueRenderer } from './registry';
 import { AttributeValue } from './values/AttributeValue';
@@ -52,7 +55,13 @@ export const ValueField = ({
           <>
             <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
               <Typography sx={{ fontWeight: 700 }} variant="subtitle2">
-                {attributeLabel(attribute)}
+                {attribute.value_type === attributeValueTypes.file ? (
+                  <IconLabel icon={fileAttributeIcon(attribute)}>
+                    {label}
+                  </IconLabel>
+                ) : (
+                  label
+                )}
               </Typography>
               {renderAttributeDecoration?.(attribute)}
             </Box>
@@ -66,7 +75,8 @@ export const ValueField = ({
                   contextId={contextId}
                   recordId={recordId}
                   renderFilePanel={
-                    renderFilePanel && attribute.value_type === 'file'
+                    renderFilePanel &&
+                    attribute.value_type === attributeValueTypes.file
                       ? (fileId) => renderFilePanel(attribute, fileId)
                       : undefined
                   }
