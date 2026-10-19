@@ -1,7 +1,6 @@
-import { Box, Typography, useMediaQuery, useTheme } from '@mui/material';
+import { Box, useMediaQuery, useTheme } from '@mui/material';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import {
   SavedSearchesButton,
@@ -13,6 +12,7 @@ import { ExplorerRecordPanel } from './ExplorerRecordPanel';
 import { ExplorerFilterBar } from './ExplorerFilterBar';
 import { ExplorerLoadErrors } from './ExplorerLoadErrors';
 import { ExplorerLoadingIndicator } from './ExplorerLoadingIndicator';
+import { ExplorerOverview } from './ExplorerOverview';
 import { ExplorerPageHeader } from './ExplorerPageHeader';
 import { ExplorerResults } from './ExplorerResults';
 import { ExplorerSearchForm } from './ExplorerSearchForm';
@@ -24,7 +24,11 @@ import {
   relationshipFacetSources,
   selectedRelationshipFacets,
 } from './explorerSearchState';
-import { getLastBlueprint, setLastBlueprint } from './lastBlueprint';
+import {
+  clearLastBlueprint,
+  getLastBlueprint,
+  setLastBlueprint,
+} from './lastBlueprint';
 import type { ExplorerSearch } from './search';
 import type { OpenRecordPanel } from './ExplorerTableCells';
 import { useBrowseBy } from './useBrowseBy';
@@ -45,7 +49,6 @@ export const Explorer = ({
   search: urlSearch,
   savedView,
 }: Props) => {
-  const { t } = useTranslation();
   const queryInputRef = useRef<HTMLInputElement>(null);
   const theme = useTheme();
   const isWideDesktop = useMediaQuery(theme.breakpoints.up('lg'));
@@ -161,7 +164,11 @@ export const Explorer = ({
             revisionsLoading={revisions.isPending}
             onRetryRevisions={() => void revisions.refetch()}
             lockedBlueprint={Boolean(search.locked)}
-            onBlueprintChange={actions.selectBlueprint}
+            onBlueprintChange={(value) => {
+              // Otherwise the remembered blueprint is restored at once.
+              if (!value) clearLastBlueprint();
+              actions.selectBlueprint(value || undefined);
+            }}
             contextCode={contextCode}
             contexts={contexts.data}
             onContextChange={actions.changeContext}
@@ -197,7 +204,17 @@ export const Explorer = ({
             />
           )}
           {!search.blueprint && (
-            <Typography sx={{ py: 3 }}>{t('explorer.start')}</Typography>
+            <ExplorerOverview
+              blueprints={blueprints.data}
+              contextCode={contextCode}
+              contextCodes={data.contextCodes}
+              contextId={data.contextId}
+              onExplore={actions.exploreBlueprint}
+              onOpenPanel={isWideDesktop ? openPanel : undefined}
+              panelRecordId={panelOpen ? panelRecordId : undefined}
+              publicationSortAvailable={data.publicationSortAvailable}
+              search={search}
+            />
           )}
           {loading && <ExplorerLoadingIndicator />}
           <Box sx={{ alignItems: 'flex-start', display: 'flex', gap: 2 }}>

@@ -62,6 +62,8 @@ type Props = {
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
   panelRecordId?: string;
+  /** Size the table to its rows instead of filling the viewport. */
+  fitRows?: boolean;
 };
 
 export const VirtualizedExplorerTable = ({
@@ -78,6 +80,7 @@ export const VirtualizedExplorerTable = ({
   isFetchingNextPage,
   onLoadMore,
   panelRecordId,
+  fitRows = false,
 }: Props) => {
   const { t } = useTranslation();
   const rows = table.getRowModel().rows;
@@ -120,7 +123,7 @@ export const VirtualizedExplorerTable = ({
       sx={{
         // On desktop this leaves room for the sticky search form and result
         // summary while using the rest of the viewport for rows.
-        height: resultsTableHeight,
+        height: fitRows ? 'auto' : resultsTableHeight,
         overflowY: 'auto',
       }}
     >

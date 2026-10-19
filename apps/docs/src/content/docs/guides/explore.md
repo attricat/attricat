@@ -3,11 +3,13 @@ title: Explore records
 description: Find records with search, filters, relationship facets, and sorting, then save and share the result.
 ---
 
-The **Record explorer** is the home page of Attricat. It lists the records of one blueprint at a time and lets you narrow them down with a search query, attribute filters, and relationship facets.
+The **Record explorer** is the home page of Attricat. It lists the records of one blueprint at a time, or a preview of every blueprint, and lets you narrow them down with a search query, attribute filters, and relationship facets.
 
 ## Choose what to browse
 
 Pick a blueprint from the selector, or from a shortcut in the sidebar. Workspace administrators decide which blueprints appear as sidebar shortcuts.
+
+Choose **All blueprints** to see one section per blueprint with its first five matching records. A search query applies to every blueprint, and blueprints with no matches, or whose fields the query does not fit, are left out. Select **Show all** or a column header to open that blueprint. The Explorer remembers the last blueprint you opened in the browser tab until you choose **All blueprints** again.
 
 The **Version scope** selector controls which blueprint revisions you see:
 
@@ -21,33 +23,33 @@ Type in the search box and press Enter. A plain term such as `linen` matches val
 
 To search further, qualify the term:
 
-| Query | Finds |
-| --- | --- |
-| `linen` | Records with "linen" in any of their own text values. |
-| `sku:ABC*` | Records whose `sku` starts with `ABC`. |
-| `colors:red` | Records linked through `colors` to a record with "red" in any value. |
-| `colors.name:red` | Same, but only the linked record's `name`. |
-| `family.product_type.name:laptop` | Follows two relationships, then matches `name`. |
-| `*:red` | Records with "red" on themselves or on anything linked within three steps. |
-| `@id:ID-1,ID-2` | Exactly the listed records. |
-| `colors.@id:ID-1,ID-2` | Records linked through `colors` to one of the listed records. |
+| Query                             | Finds                                                                      |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| `linen`                           | Records with "linen" in any of their own text values.                      |
+| `sku:ABC*`                        | Records whose `sku` starts with `ABC`.                                     |
+| `colors:red`                      | Records linked through `colors` to a record with "red" in any value.       |
+| `colors.name:red`                 | Same, but only the linked record's `name`.                                 |
+| `family.product_type.name:laptop` | Follows two relationships, then matches `name`.                            |
+| `*:red`                           | Records with "red" on themselves or on anything linked within three steps. |
+| `@id:ID-1,ID-2`                   | Exactly the listed records.                                                |
+| `colors.@id:ID-1,ID-2`            | Records linked through `colors` to one of the listed records.              |
 
 Several terms separated by spaces must all match. The full grammar is in [Search syntax](/guides/search-syntax/).
 
-Open **Search info** on a result to see why it matched, for example *red via 1 relationship*.
+Open **Search info** on a result to see why it matched, for example _red via 1 relationship_.
 
 ## Filters
 
 **Add filter** narrows results by an attribute's value in the selected [context](#context). Operators depend on the type:
 
-| Type | Operators |
-| --- | --- |
-| String | Equals, Contains, Starts with |
+| Type                                  | Operators                                                                  |
+| ------------------------------------- | -------------------------------------------------------------------------- |
+| String                                | Equals, Contains, Starts with                                              |
 | Number, integer, date, datetime, time | Equals, Greater than, Greater than or equal, Less than, Less than or equal |
-| Boolean | Equals |
-| Status | Equals, chosen from the status labels |
-| User or team | Equals a person or team, or **Assigned to me (or my teams)** |
-| File | Presence only |
+| Boolean                               | Equals                                                                     |
+| Status                                | Equals, chosen from the status labels                                      |
+| User or team                          | Equals a person or team, or **Assigned to me (or my teams)**               |
+| File                                  | Presence only                                                              |
 
 Every type also offers **Presence**: choose **Has a value** or **Not set**. For a file attribute, **Has a value** finds records with at least one attached file, and **Not set** finds records without one.
 
@@ -73,7 +75,7 @@ When the blueprint itself is a hierarchy, such as categories, the panel can list
 
 Pick another relationship attribute under **Browse by**, or hide the panel. The panel opens by default for the field the blueprint names in `views.explorer`, or else for the first relationship linked to a hierarchy. A blueprint can also keep it closed by default. Attricat remembers your choice for each blueprint in this browser, and saved and shared searches keep it.
 
-To select several targets of one attribute, use **Add filter** and pick the relationship attribute. Several selections in one attribute mean *any of these*. Selections in different attributes must all match.
+To select several targets of one attribute, use **Add filter** and pick the relationship attribute. Several selections in one attribute mean _any of these_. Selections in different attributes must all match.
 
 ## Context
 
