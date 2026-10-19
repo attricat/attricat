@@ -5,12 +5,14 @@ import {
   Paper,
   Tooltip,
 } from '@mui/material';
+import { useQueryClient } from '@tanstack/react-query';
 import { Maximize2Icon, XIcon } from 'lucide-react';
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
 import { compactIconSize } from '../../components/iconSizes';
 import { RecordPreview } from '../records/components/RecordPreview';
+import { refreshStaleRecordSearches } from '../records/invalidateRecord';
 import { RecordCommentsLink } from '../record-comments/RecordCommentsLink';
 import { lexiconText } from '../lexicon/lexicon';
 import { recordPanelOpenerAttribute, recordPanelWidth } from './constants';
@@ -52,7 +54,15 @@ export const ExplorerRecordPanel = ({
   onOpenRecord,
 }: Props) => {
   const { t } = useTranslation();
+  const client = useQueryClient();
   const panelRef = useRef<HTMLElement>(null);
+
+  // Edits only mark the results stale so rows stay put while the panel is
+  // open; bring them up to date once it closes or shows another record.
+  useEffect(
+    () => () => void refreshStaleRecordSearches(client),
+    [client, recordId],
+  );
 
   // Moves keyboard and screen reader users to the record they opened.
   useEffect(() => {

@@ -1,8 +1,9 @@
-import { QueryClient } from '@tanstack/react-query';
-import { describe, expect, it } from 'vitest';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
+import { describe, expect, it, vi } from 'vitest';
 import {
   invalidateRecord,
   invalidateRecordPublications,
+  refreshStaleRecordSearches,
   removeRecord,
 } from './invalidateRecord';
 import { recordQueryKeys } from './queryKeys';
@@ -57,5 +58,27 @@ describe('record mutation cache policy', () => {
     for (const key of projections)
       expect(client.getQueryState(key)).toBeUndefined();
     expect(client.getQueryState(search)?.isInvalidated).toBe(true);
+  });
+  it('keeps searches on screen until they are refreshed after an edit', async () => {
+    const client = new QueryClient();
+    const fetchSearch = vi.fn().mockResolvedValue([]);
+    const observer = new QueryObserver(client, {
+      queryKey: search,
+      queryFn: fetchSearch,
+    });
+    const unsubscribe = observer.subscribe(() => undefined);
+    await vi.waitFor(() =>
+      expect(observer.getCurrentResult().isSuccess).toBe(true),
+    );
+
+    await invalidateRecord(client, 'record');
+    expect(client.getQueryState(search)?.isInvalidated).toBe(true);
+    expect(fetchSearch).toHaveBeenCalledTimes(1);
+
+    await refreshStaleRecordSearches(client);
+    expect(fetchSearch).toHaveBeenCalledTimes(2);
+    await refreshStaleRecordSearches(client);
+    expect(fetchSearch).toHaveBeenCalledTimes(2);
+    unsubscribe();
   });
 });

@@ -4,6 +4,17 @@ import { recordQueryKeys } from './queryKeys';
 export const invalidateRecordSearches = (client: QueryClient) =>
   client.invalidateQueries({ queryKey: recordQueryKeys.searches() });
 
+/**
+ * Refetches searches on screen that a record edit marked stale, such as the
+ * Explorer results once its record panel closes.
+ */
+export const refreshStaleRecordSearches = (client: QueryClient) =>
+  client.refetchQueries({
+    queryKey: recordQueryKeys.searches(),
+    predicate: (query) => query.state.isInvalidated,
+    type: 'active',
+  });
+
 /** Publication changes also affect server-side search ordering. */
 export const invalidateRecordPublications = (client: QueryClient, id: string) =>
   Promise.all([
@@ -23,7 +34,12 @@ const recordProjections = (id: string) => [
   recordQueryKeys.incomingRelationshipResults(id),
 ];
 
-/** Every projection of a record must be refreshed after its values change. */
+/**
+ * Every projection of a record must be refreshed after its values change.
+ * Searches are only marked stale: results on screen, such as the Explorer
+ * behind its record panel, keep their rows while the record is edited and
+ * refetch when shown again or when the panel closes.
+ */
 export const invalidateRecord = (client: QueryClient, id: string) =>
   Promise.all([
     ...recordProjections(id).map((queryKey) =>
@@ -34,7 +50,10 @@ export const invalidateRecord = (client: QueryClient, id: string) =>
       queryKey: recordQueryKeys.allLabels(),
       predicate: (query) => query.queryKey.includes(id),
     }),
-    invalidateRecordSearches(client),
+    client.invalidateQueries({
+      queryKey: recordQueryKeys.searches(),
+      refetchType: 'none',
+    }),
   ]);
 
 /** Do not refetch a deleted record; discard its cached projections instead. */

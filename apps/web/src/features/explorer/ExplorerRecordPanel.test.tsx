@@ -1,10 +1,17 @@
 // @vitest-environment jsdom
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryObserver,
+} from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import type { RecordPreviewFrame } from '../records/components/RecordPreview';
+import { invalidateRecord } from '../records/invalidateRecord';
+import { recordQueryKeys } from '../records/queryKeys';
 import { recordPanelOpenerAttribute } from './constants';
 import { ExplorerRecordPanel } from './ExplorerRecordPanel';
 
@@ -57,6 +64,11 @@ vi.mock('../../components/RouterLink', () => ({
   ),
 }));
 
+let queryClient = new QueryClient();
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+);
+
 /** ClickAwayListener starts listening one tick after it mounts. */
 const activateClickAway = () =>
   act(() => new Promise((resolve) => setTimeout(resolve, 0)));
@@ -76,6 +88,7 @@ const renderPanel = () => {
         onOpenRecord={onOpenRecord}
       />
     </>,
+    { wrapper },
   );
   return { onClose, onOpenRecord };
 };
@@ -183,7 +196,7 @@ describe('ExplorerRecordPanel', () => {
         onOpenRecord={vi.fn()}
       />
     );
-    const { rerender } = render(panel(recordId));
+    const { rerender } = render(panel(recordId), { wrapper });
     fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), {
       target: { value: 'Unsaved' },
     });
@@ -193,5 +206,33 @@ describe('ExplorerRecordPanel', () => {
     expect(
       screen.getByRole<HTMLInputElement>('textbox', { name: 'Title' }).value,
     ).toBe('');
+  });
+
+  it('refreshes results edited from the panel once it closes', async () => {
+    queryClient = new QueryClient();
+    const fetchResults = vi.fn().mockResolvedValue([]);
+    const results = new QueryObserver(queryClient, {
+      queryKey: recordQueryKeys.search({ blueprint: 'product' }),
+      queryFn: fetchResults,
+    });
+    const unsubscribe = results.subscribe(() => undefined);
+    await vi.waitFor(() =>
+      expect(results.getCurrentResult().isSuccess).toBe(true),
+    );
+    const { unmount } = render(
+      <ExplorerRecordPanel
+        recordId={recordId}
+        onClose={vi.fn()}
+        onOpenRecord={vi.fn()}
+      />,
+      { wrapper },
+    );
+
+    await invalidateRecord(queryClient, recordId);
+    expect(fetchResults).toHaveBeenCalledTimes(1);
+
+    unmount();
+    await vi.waitFor(() => expect(fetchResults).toHaveBeenCalledTimes(2));
+    unsubscribe();
   });
 });
