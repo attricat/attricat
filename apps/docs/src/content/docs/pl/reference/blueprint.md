@@ -60,7 +60,7 @@ value_type = "string"
 | --- | --- | --- | --- |
 | `code` | kod | Wymagany | Unikalny w obrębie schematu, łącznie z atrybutami pobranymi z domieszek. |
 | `name` | ciąg znaków | `code` w czytelnej formie | Czytelna etykieta wyświetlana w formularzach, filtrach, podglądach oraz jako domyślny nagłówek kolumny tabeli. Nie może być pusta. Niedozwolona razem z `from`; wybrany atrybut zachowuje nazwę atrybutu mixinu. |
-| `description` | ciąg znaków | | Co przechowuje atrybut, do 500 znaków. Czyta go agent; aplikacja webowa jeszcze go nie wyświetla. Niedozwolony razem z `from`. |
+| `description` | ciąg znaków | | Co przechowuje atrybut, do 500 znaków. Formularze rekordów pokazują go pod polem, a agent go czyta. Niedozwolony razem z `from`. |
 | `value_type` | ciąg znaków | | Jeden z [typów wartości](#typy-wartości). |
 | `from` | ciąg znaków | | `"<include-alias>.<attribute-code>"`. Materializuje atrybut z mixinu wskazanego przez include. `code` musi być równy kodowi atrybutu mixinu. |
 | `extension_type` | ciąg znaków | | `"<extension-id>:<type-id>@<semver-range>"`. Używa typu atrybutu zadeklarowanego przez włączone rozszerzenie. Zobacz [Typy atrybutów z rozszerzeń](#typy-atrybutów-z-rozszerzeń). |

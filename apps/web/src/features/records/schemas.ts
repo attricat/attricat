@@ -263,6 +263,8 @@ export const attributeSchema = z
   .object({
     code: z.string(),
     name: z.string().nullish(),
+    /** What the attribute holds, as its blueprint describes it. */
+    description: z.string().nullish(),
     value_type: valueTypeSchema,
     target_blueprint_code: z.string().nullable().optional(),
     /** Every allowed target blueprint; empty means any blueprint. */

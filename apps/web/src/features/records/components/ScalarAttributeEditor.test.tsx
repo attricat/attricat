@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
 import type { Attribute } from '../api';
@@ -57,7 +57,7 @@ describe('ScalarAttributeEditor', () => {
     expect(screen.getByRole('textbox').getAttribute('type')).toBe('url');
     cleanup();
     renderEditor(site, null);
-    expect(screen.getByRole('combobox', { name: 'site' })).toBeTruthy();
+    expect(screen.getByRole('radiogroup', { name: 'site' })).toBeTruthy();
   });
 
   it('falls back to the built-in input for unsupported components', () => {
@@ -90,12 +90,28 @@ describe('ScalarAttributeEditor', () => {
   });
 
   it.each([
-    ['boolean', 'combobox'],
     ['date', null],
     ['time', 'textbox'],
   ] as const)('renders the built-in %s input', (valueType, role) => {
     const { container } = renderEditor({ code: 'v', value_type: valueType });
     if (role) expect(screen.getByRole(role)).toBeTruthy();
     else expect(container.querySelector('input[type="date"]')).toBeTruthy();
+  });
+
+  it('shows yes, no and not set at once for a boolean', () => {
+    const onChange = vi.fn();
+    render(
+      <ScalarAttributeEditor
+        attribute={{ code: 'active', value_type: 'boolean' }}
+        disabled={false}
+        onChange={onChange}
+        value="true"
+      />,
+    );
+    expect(
+      screen.getByRole('button', { name: 'True' }).getAttribute('aria-pressed'),
+    ).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Not set' }));
+    expect(onChange).toHaveBeenCalledWith('');
   });
 });

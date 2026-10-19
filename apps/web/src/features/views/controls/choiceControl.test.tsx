@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../../i18n';
 import type { Attribute } from '../../records/api';
@@ -24,7 +31,7 @@ const size = {
 afterEach(cleanup);
 
 describe('enum choices', () => {
-  it('edits with a select of labelled values', () => {
+  it('edits a short list with labelled radio buttons', () => {
     const onChange = vi.fn();
     render(
       <ScalarAttributeEditor
@@ -34,12 +41,57 @@ describe('enum choices', () => {
         value=""
       />,
     );
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Size' }));
+    const group = screen.getByRole('radiogroup', { name: 'Size' });
     expect(
-      screen.getAllByRole('option').map((option) => option.textContent),
+      within(group)
+        .getAllByRole('radio')
+        .map((radio) => radio.closest('label')?.textContent),
     ).toEqual(['Not set', 'Small', 'l']);
-    fireEvent.click(screen.getByRole('option', { name: 'Small' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Small' }));
     expect(onChange).toHaveBeenCalledWith('s');
+  });
+
+  it('offers no way back to unset when a value is required', () => {
+    render(
+      <ScalarAttributeEditor
+        attribute={size}
+        disabled={false}
+        onChange={vi.fn()}
+        required
+        value="s"
+      />,
+    );
+    expect(screen.queryByRole('radio', { name: 'Not set' })).toBeNull();
+  });
+
+  it('searches a long list of choices', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const country = {
+      code: 'country',
+      name: 'Country',
+      value_type: 'string',
+      value_schema: {
+        type: 'string',
+        enum: ['pl', 'de', 'fr', 'es', 'it', 'nl'],
+        'x-attricat-enum-labels': { pl: 'Poland', nl: 'Netherlands' },
+      },
+    } as Attribute;
+    render(
+      <ScalarAttributeEditor
+        attribute={country}
+        disabled={false}
+        onChange={onChange}
+        value="pl"
+      />,
+    );
+    const input = screen.getByRole('combobox', { name: 'Country' });
+    expect(input).toHaveProperty('value', 'Poland');
+    await user.clear(input);
+    expect(onChange).not.toHaveBeenCalled();
+    await user.type(input, 'nether');
+    await user.click(screen.getByRole('option', { name: 'Netherlands' }));
+    expect(onChange).toHaveBeenCalledWith('nl');
   });
 
   it('keeps a value that is no longer allowed visible', () => {

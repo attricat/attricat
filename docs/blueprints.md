@@ -16,9 +16,10 @@ records.
 An optional `description`, up to 500 characters, says what the blueprint's
 records are, such as `description = "Product groupings, such as Basic tools"`.
 Inline attributes accept the same `description` for what they hold; an
-attribute selected with `from` uses the mixin's. The web app does not show
-descriptions yet. The agent reads them in its catalog map, so describe a
-blueprint or field in the words people use for it.
+attribute selected with `from` uses the mixin's. Record forms show an inline
+attribute's description below its field, and the agent reads descriptions in
+its catalog map, so describe a blueprint or field in the words people use for
+it.
 
 Blueprint codes, attribute codes, include codes, and relationship target
 blueprint codes contain only ASCII letters, numbers, hyphens, and underscores.

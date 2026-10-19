@@ -84,7 +84,7 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
 }
 
 #[sqlx::test]
-async fn persists_readonly_attribute_metadata(pool: PgPool) {
+async fn persists_readonly_attribute_metadata_and_describes_attributes(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(
@@ -106,6 +106,7 @@ value_type = "string"
 
 [[attributes]]
 code = "external_id"
+description = "The ID in the supplier's system"
 value_type = "string"
 readonly = true
 "#,
@@ -114,6 +115,28 @@ readonly = true
 
     assert_eq!(blueprint["attributes"][0]["readonly"], false);
     assert_eq!(blueprint["attributes"][1]["readonly"], true);
+    // Descriptions come from the definition, on create and on every read.
+    assert_eq!(blueprint["attributes"][0]["description"], Value::Null);
+    assert_eq!(
+        blueprint["attributes"][1]["description"],
+        "The ID in the supplier's system"
+    );
+    let read: Value = client
+        .get(format!(
+            "{base_url}/blueprints/by-code/system_managed_product"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        read["attributes"][1]["description"],
+        "The ID in the supplier's system"
+    );
 
     server.abort();
 }

@@ -1,3 +1,5 @@
+import { Box, Button, type SxProps, type Theme } from '@mui/material';
+import { Undo2Icon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { savedStatusState } from '../status';
 import type {
@@ -14,9 +16,26 @@ import {
   type ResolvedFormValues,
 } from '../recordFormAttributes';
 import { attributeValueTypes } from '../valueTypes';
+import { attributeContextFallbacks } from '../constants';
 import { RecordAttributeEditor } from './RecordAttributeEditor';
 import { AttributeValue } from '../../views/components/values/AttributeValue';
 import type { MigrationFieldReview } from '../migrationReview';
+import { attributeHint } from '../attributeHints';
+
+/**
+ * A value that cannot be changed here is still content: show it in secondary
+ * text rather than the faded disabled colour, and leave the reason in the
+ * helper text.
+ */
+const protectedValueSx: SxProps<Theme> = {
+  display: 'contents',
+  '& .MuiInputBase-root.Mui-disabled, & .MuiFormLabel-root.Mui-disabled, & .MuiFormControlLabel-label.Mui-disabled, & .MuiToggleButton-root.Mui-disabled.Mui-selected':
+    { color: 'text.secondary' },
+  '& .MuiInputBase-input.Mui-disabled, & .MuiSelect-select.Mui-disabled': {
+    WebkitTextFillColor: (theme) => theme.palette.text.secondary,
+  },
+  '& .MuiChip-root.Mui-disabled': { opacity: 1 },
+};
 
 export type RecordFormAttributeEditorContext = {
   contextId: string | null;
@@ -77,6 +96,17 @@ export const RecordFormAttributeEditor = ({
   );
   const readonly = attribute.readonly === true;
   const lockedBy = lockedAttributes[attribute.code];
+  const protectedValue = readonly || defaultOnly || lockedBy !== undefined;
+  // Clearing a scalar's own value in a context lets it inherit again; an
+  // empty relationship or file list would replace the inherited one instead.
+  const canInherit =
+    !disabled &&
+    !protectedValue &&
+    contextId !== defaultContextId &&
+    attribute.context_fallback !== attributeContextFallbacks.none &&
+    attribute.value_type !== attributeValueTypes.relationship &&
+    attribute.value_type !== attributeValueTypes.file &&
+    hasLocalFormValue(existingValues, attribute.code, contextId);
   const savedStatus = savedStatusState(
     attribute,
     statusSavedValues,
@@ -95,39 +125,60 @@ export const RecordFormAttributeEditor = ({
           value: formatResolvedValue(resolvedValue.value),
         });
   };
-  const helperText = readonly
-    ? t('records.managedBySystem')
-    : lockedBy !== undefined
-      ? t('records.lockedByStatus', { status: lockedBy })
-      : defaultOnly
-        ? t('records.managedInDefault')
-        : inheritedHelperText();
+  // Why the field cannot be changed here, or where its value comes from,
+  // then what it holds and accepts.
+  const helperText =
+    [
+      readonly
+        ? t('records.managedBySystem')
+        : lockedBy !== undefined
+          ? t('records.lockedByStatus', { status: lockedBy })
+          : defaultOnly
+            ? t('records.managedInDefault')
+            : inheritedHelperText(),
+      attributeHint(attribute, t),
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined;
 
   return (
     <>
       {inherited && attribute.value_type === attributeValueTypes.file && (
         <AttributeValue attribute={attribute} value={resolvedValue.value} />
       )}
-      <RecordAttributeEditor
-        attribute={attribute}
-        component={component}
-        required={required}
-        contextId={contextId}
-        disabled={disabled || readonly || defaultOnly || lockedBy !== undefined}
-        statusBaseline={savedStatus.current}
-        inheritedStatus={savedStatus.inherited}
-        statusTransitions={statusTransitions.filter(
-          (edge) => edge.attribute_code === attribute.code,
-        )}
-        recordId={recordId}
-        files={filesForAttribute(existingValues, attribute.code, contextId)}
-        error={fieldErrors[attribute.code]}
-        helperText={helperText}
-        migrationReview={migrationReviews[attribute.code]}
-        onChange={onChange}
-        onRecordUpdated={onRecordUpdated}
-        value={value}
-      />
+      <Box sx={protectedValue ? protectedValueSx : { display: 'contents' }}>
+        <RecordAttributeEditor
+          attribute={attribute}
+          component={component}
+          required={required}
+          contextId={contextId}
+          disabled={disabled || protectedValue}
+          statusBaseline={savedStatus.current}
+          inheritedStatus={savedStatus.inherited}
+          statusTransitions={statusTransitions.filter(
+            (edge) => edge.attribute_code === attribute.code,
+          )}
+          recordId={recordId}
+          files={filesForAttribute(existingValues, attribute.code, contextId)}
+          error={fieldErrors[attribute.code]}
+          helperText={helperText}
+          migrationReview={migrationReviews[attribute.code]}
+          onChange={onChange}
+          onRecordUpdated={onRecordUpdated}
+          value={value}
+        />
+      </Box>
+      {canInherit && (
+        <Box>
+          <Button
+            onClick={() => onChange('')}
+            size="small"
+            startIcon={<Undo2Icon />}
+          >
+            {t('records.useInheritedValue')}
+          </Button>
+        </Box>
+      )}
     </>
   );
 };

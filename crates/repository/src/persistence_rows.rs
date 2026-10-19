@@ -117,6 +117,7 @@ impl DomainRow for Attribute {
             blueprint_version: row.try_get("blueprint_version")?,
             code: row.try_get("code")?,
             name: row.try_get("name")?,
+            description: None,
             value_type: row.try_get("value_type")?,
             value_schema: row.try_get("value_schema")?,
             extension_type: row.try_get("extension_type")?,
