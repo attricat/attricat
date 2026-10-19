@@ -615,7 +615,11 @@
     "changeBlueprint": "Zmień schemat",
     "changeBlueprintTitle": "Zmienić schemat?",
     "changeBlueprintDescription": "Wartości i pliki wprowadzone dla tego schematu zostaną odrzucone.",
-    "changeBlueprintConfirm": "Odrzuć i zmień"
+    "changeBlueprintConfirm": "Odrzuć i zmień",
+    "fieldsChanged_one": "{{count}} pole zmienione",
+    "fieldsChanged_few": "{{count}} pola zmienione",
+    "fieldsChanged_many": "{{count}} pól zmienionych",
+    "fieldsChanged_other": "{{count}} pola zmienionego"
   },
   "exports": {
     "title": "Eksporty",

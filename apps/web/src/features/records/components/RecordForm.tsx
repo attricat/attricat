@@ -124,6 +124,25 @@ const noResolvedValues = {};
 const noPendingConfirmations: readonly FormErrorSummaryItem[] = [];
 const fieldSkeletons = ['first', 'second', 'third'];
 
+/**
+ * A field the user changed carries an `action.changed` bar at its leading
+ * edge, outside the control; the action bar counts them, so color is never
+ * the only sign.
+ */
+const changedFieldSx = {
+  position: 'relative',
+  '&[data-changed]::before': {
+    bgcolor: 'action.changed',
+    borderRadius: 0.5,
+    bottom: 6,
+    content: '""',
+    left: -12,
+    position: 'absolute',
+    top: 6,
+    width: 3,
+  },
+} as const;
+
 type RecordFormProps = {
   expectedUpdatedAt?: string;
   blueprint?: BlueprintWithAttributes;
@@ -515,6 +534,17 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     const hasQueuedFiles = Object.values(fileCounts ?? {}).some(
       (count) => count > 0,
     );
+    // Fields whose value differs from the one the form started with.
+    const changedCodes = new Set(
+      editableAttributes
+        .filter((attribute) =>
+          attribute.value_type === attributeValueTypes.file
+            ? (fileCounts?.[attribute.code] ?? 0) > 0
+            : (fields[attribute.code] ?? '') !==
+              (initialFields[attribute.code] ?? ''),
+        )
+        .map((attribute) => attribute.code),
+    );
     const editorContext = {
       statusParentContextIds: noStatusParentContextIds,
       disabled: isLoadingBlueprint,
@@ -721,10 +751,12 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                   attribute: Attribute,
                   component?: ComponentReference | null,
                 ) => (
-                  // Marks where the field is, to focus it from an error.
+                  // Marks where the field is, to focus it from an error, and
+                  // that the user changed it.
                   <Box
+                    data-changed={changedCodes.has(attribute.code) || undefined}
                     data-field-code={attribute.code}
-                    sx={{ display: 'contents' }}
+                    sx={changedFieldSx}
                   >
                     <RecordFormAttributeEditor
                       {...editorContext}
@@ -772,6 +804,15 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           )}
         </Stack>
         <FormActionBar inset={formPadding} status={status}>
+          {changedCodes.size > 0 && (
+            <Typography
+              color="text.secondary"
+              sx={{ alignSelf: 'center' }}
+              variant="body2"
+            >
+              {t('records.fieldsChanged', { count: changedCodes.size })}
+            </Typography>
+          )}
           {onCancel && (
             <Button disabled={isLoadingBlueprint} onClick={onCancel}>
               {t('common.cancel')}
