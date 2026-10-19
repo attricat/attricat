@@ -67,7 +67,9 @@
     "restoreDescription": "This tab has an unsaved draft from <timestamp/>. Restore it to replace the loaded form, or discard it to keep the form as loaded.",
     "sourceChanged": "The source has changed since this draft was saved. Restoring the draft replaces the latest loaded values.",
     "restore": "Restore draft",
-    "discard": "Discard draft"
+    "discard": "Discard draft",
+    "keepEditing": "Keep editing",
+    "discardAndLeave": "Discard and leave"
   },
   "navigation": {
     "open": "Open navigation",
@@ -377,8 +379,6 @@
     "changedByAnotherEditor": "Someone else changed this record. Choose whether to keep your unsaved changes or use the latest values.",
     "unsavedFieldChangesTitle": "Unsaved changes",
     "unsavedFieldChangesDescription": "Some changes to this record could not be saved. If you leave, they will be discarded.",
-    "keepEditing": "Keep editing",
-    "discardAndLeave": "Discard and leave",
     "keepMyChanges": "Keep my changes",
     "useLatestValues": "Use latest values",
     "selectAdditionalAttribute": "Select an attribute",
@@ -460,7 +460,6 @@
     "invalidTimeZone": "Expected an IANA time zone",
     "invalidJson": "Expected JSON",
     "blueprintLabel": "Blueprint: {{name}}",
-    "fillRequiredFields": "Fill in the required fields: {{fields}}",
     "blueprintOption": "{{name}} ({{code}})",
     "reusableAttributeOption": "{{qualifiedCode}} · {{name}} v{{version}}",
     "recordConversationTitle": "Ask about this record · {{recordId}}",
@@ -507,7 +506,16 @@
       "file": "File",
       "relationship": "Relationship"
     },
-    "choiceUnknown": "Not an allowed value: {{value}}"
+    "choiceUnknown": "Not an allowed value: {{value}}",
+    "fieldsNeedAttention_one": "{{count}} field needs attention",
+    "fieldsNeedAttention_other": "{{count}} fields need attention",
+    "requiredFieldsLeft_one": "{{count}} required field left to fill",
+    "requiredFieldsLeft_other": "{{count}} required fields left to fill",
+    "createAndAddAnother": "Create and add another",
+    "recordCreated": "Record created.",
+    "openRecord": "Open",
+    "unsavedFormTitle": "Discard the values you entered?",
+    "unsavedFormDescription": "They are not saved yet. If you leave, they will be discarded."
   },
   "exports": {
     "title": "Exports",

@@ -254,20 +254,108 @@ describe('RecordForm', () => {
     );
   });
 
-  it('disables saving until a required field has a value', () => {
+  it('lists missing required fields and goes to them instead of saving', async () => {
     const { onSubmit } = renderForm({
       blueprint: emailBlueprint(),
       requiredAttributes: ['contact'],
     });
-    const save = screen.getByRole('button', { name: 'Save' });
-    expect(screen.getByRole('textbox')).toHaveProperty('required', true);
-    expect(save).toHaveProperty('disabled', true);
-    fireEvent.click(save);
+    const contact = screen.getByRole('textbox');
+    expect(contact).toHaveProperty('required', true);
+    expect(
+      screen.getByRole('button', { name: '1 required field left to fill' }),
+    ).toBeTruthy();
+    contact.blur();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    // The summary heading and the action bar status.
+    expect(await screen.findAllByText('1 field needs attention')).toHaveLength(
+      2,
+    );
     expect(onSubmit).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByRole('textbox'), {
-      target: { value: 'name@example.com' },
+    await waitFor(() => expect(document.activeElement).toBe(contact));
+
+    contact.blur();
+    fireEvent.click(screen.getByRole('button', { name: 'contact' }));
+    await waitFor(() => expect(document.activeElement).toBe(contact));
+    fireEvent.change(contact, { target: { value: 'name@example.com' } });
+    expect(screen.queryByText('1 field needs attention')).toBeNull();
+    fireEvent.keyDown(contact, { key: 'Enter', ctrlKey: true });
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ addAnother: false }),
+      ),
+    );
+  });
+
+  it('opens the tab holding the first field with an error', async () => {
+    const result = blueprint([attribute('title'), attribute('price')]);
+    result.blueprint.views.detail = {
+      type: 'tabs',
+      tabs: [
+        { label: 'General', children: [{ type: 'field', field: 'title' }] },
+        { label: 'Pricing', children: [{ type: 'field', field: 'price' }] },
+      ],
+    };
+    renderForm({ blueprint: result, requiredAttributes: ['price'] });
+    expect(
+      screen.queryByRole('textbox', { hidden: true, name: 'price' }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const price = await screen.findByRole('textbox', {
+      hidden: true,
+      name: 'price',
     });
-    expect(save).toHaveProperty('disabled', false);
+    expect(
+      screen
+        .getByRole('tab', { name: /Pricing/ })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    await waitFor(() => expect(document.activeElement).toBe(price));
+  });
+
+  it('opens the accordion holding a missing required field', async () => {
+    const result = blueprint([attribute('title'), attribute('price')]);
+    result.blueprint.views.detail = {
+      type: 'stack',
+      children: [
+        { type: 'field', field: 'title' },
+        {
+          type: 'accordion',
+          sections: [
+            {
+              label: 'Pricing',
+              children: [{ type: 'field', field: 'price' }],
+            },
+          ],
+        },
+      ],
+    };
+    renderForm({ blueprint: result, requiredAttributes: ['price'] });
+    const summary = screen.getByRole('button', { name: /Pricing/ });
+    expect(summary.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(
+      screen.getByRole('button', { name: '1 required field left to fill' }),
+    );
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('textbox', { hidden: true, name: 'price' }),
+      ),
+    );
+    expect(summary.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('submits for another record from its own button', async () => {
+    const { onSubmit } = renderForm({
+      addAnotherLabel: 'Create and add another',
+      blueprint: blueprint([attribute('title')]),
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create and add another' }),
+    );
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ addAnother: true }),
+      ),
+    );
   });
 
   it.each([
@@ -543,16 +631,15 @@ describe('RecordForm', () => {
     const result = blueprint([attribute('title')]);
     result.blueprint.record_schema = { type: 'object', required: ['title'] };
     renderForm({ blueprint: result });
-    const save = screen.getByRole('button', { name: 'Save' });
     expect(titleBox()).toHaveProperty('required', true);
-    expect(save).toHaveProperty('disabled', true);
 
     fireEvent.change(titleBox(), { target: { value: 'Shirt' } });
-    expect(save).toHaveProperty('disabled', false);
     fireEvent.change(titleBox(), { target: { value: '   ' } });
 
     expect(screen.getByText('A value is required.')).toBeTruthy();
-    expect(save).toHaveProperty('disabled', true);
+    expect(
+      screen.getByRole('button', { name: '1 required field left to fill' }),
+    ).toBeTruthy();
   });
 
   it('offers a required field hidden from forms once when the detail view has no layout', () => {

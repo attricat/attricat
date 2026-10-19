@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef } from 'react';
-import { useNavigate } from '@tanstack/react-router';
+import { Button } from '@mui/material';
+import { useRef, useState } from 'react';
+import { useCanGoBack, useNavigate, useRouter } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/queryKeys';
@@ -19,6 +20,7 @@ import { recordQueryKeys } from './queryKeys';
 import { invalidateRecordSearches } from './invalidateRecord';
 import { attributeValueKinds } from './valueTypes';
 import { invalidFileReferencesCode } from '../files/constants';
+import { useToast } from '../../components/useToast';
 
 export const CreateRecordPage = ({
   search,
@@ -28,7 +30,12 @@ export const CreateRecordPage = ({
   const { t } = useTranslation();
   const client = useQueryClient();
   const navigate = useNavigate({ from: '/records/new' });
+  const router = useRouter();
+  const canGoBack = useCanGoBack();
+  const { show } = useToast();
   const recordFormRef = useRef<RecordFormHandle>(null);
+  // A new key starts an empty form for the next record.
+  const [formKey, setFormKey] = useState(0);
   // The chosen blueprint lives in the URL so a refresh reloads the same form
   // and can offer its saved draft.
   const blueprintCode = search.blueprint;
@@ -51,6 +58,8 @@ export const CreateRecordPage = ({
     (context) => context.code === defaultContextCode,
   )?.id;
   const create = useMutation({
+    // Says which record was created instead of the generic notice.
+    meta: { toast: false },
     mutationFn: async ({
       values,
       relationships,
@@ -59,6 +68,7 @@ export const CreateRecordPage = ({
       values: Parameters<typeof createRecord>[0]['values'];
       relationships: { attribute_code: string; target_record_ids: string[] }[];
       files: QueuedFiles;
+      addAnother: boolean;
     }) => {
       const resolved = blueprint.data;
       if (!resolved) throw new Error(t('records.chooseBeforeCreate'));
@@ -116,12 +126,29 @@ export const CreateRecordPage = ({
         throw error;
       }
     },
-    onSuccess: (record) => {
+    onSuccess: (record, { addAnother }) => {
       recordFormRef.current?.clearDraft();
       void invalidateRecordSearches(client);
-      void navigate({
-        to: '/records/$recordId',
-        params: { recordId: record.id },
+      const openRecord = () =>
+        void navigate({
+          to: '/records/$recordId',
+          params: { recordId: record.id },
+        });
+      if (!addAnother) {
+        show({ message: t('records.recordCreated'), severity: 'success' });
+        openRecord();
+        return;
+      }
+      queuedFiles.clear();
+      setFormKey((key) => key + 1);
+      show({
+        action: (
+          <Button color="inherit" onClick={openRecord} size="small">
+            {t('records.openRecord')}
+          </Button>
+        ),
+        message: t('records.recordCreated'),
+        severity: 'success',
       });
     },
   });
@@ -132,6 +159,7 @@ export const CreateRecordPage = ({
     >
       <QueuedFileUploadsContext value={queuedFiles.queue}>
         <RecordForm
+          addAnotherLabel={t('records.createAndAddAnother')}
           blueprint={blueprint.data}
           contextId={defaultContextId}
           draft={
@@ -143,20 +171,26 @@ export const CreateRecordPage = ({
           }
           defaultContextId={defaultContextId}
           error={blueprint.error ?? create.error}
+          guardUnsavedChanges
+          key={formKey}
           // A background refresh must not disable the fields being filled in.
           isLoadingBlueprint={blueprint.isLoading || create.isPending}
           lockedBlueprint={search.locked}
+          onCancel={() =>
+            canGoBack ? router.history.back() : void navigate({ to: '/' })
+          }
           onLoadBlueprint={(code) =>
             void navigate({
               replace: true,
               search: { ...search, blueprint: code },
             })
           }
-          onSubmit={({ values, relationships }) =>
+          onSubmit={({ values, relationships, addAnother }) =>
             create.mutate({
               values,
               relationships,
               files: queuedFiles.queue.pending,
+              addAnother,
             })
           }
           ref={recordFormRef}

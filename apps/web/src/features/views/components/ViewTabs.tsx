@@ -7,6 +7,7 @@ import { lexiconText } from '../../lexicon/lexicon';
 import { nodesPlacedFields } from '../viewFieldComponents';
 import { compactIconSize } from '../../../components/iconSizes';
 import { VIEW_TAB_PANEL_SPACING } from '../constants';
+import { useFieldRevealRequest } from '../fieldReveal';
 
 export const ViewTabs = ({
   invalidFields,
@@ -24,6 +25,12 @@ export const ViewTabs = ({
   const { t } = useTranslation();
   const [value, setValue] = useState(0);
   const tabId = useId();
+  useFieldRevealRequest((code) => {
+    const index = tabs.findIndex((tab) =>
+      nodesPlacedFields(tab.children).has(code),
+    );
+    if (index >= 0) setValue(index);
+  });
   const tabHasErrors = (children: readonly ViewNode[]) =>
     Boolean(invalidFields?.size) &&
     [...nodesPlacedFields(children)].some((code) => invalidFields!.has(code));

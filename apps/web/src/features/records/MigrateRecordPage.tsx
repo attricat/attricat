@@ -133,6 +133,7 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
             contextId={defaultContextId}
             defaultContextId={defaultContextId}
             error={migrate.error}
+            guardUnsavedChanges
             existingValues={migrationValues}
             highlightedAttributes={Object.keys(migrationReviewMessages)}
             migrationReviewMessages={migrationReviewMessages}
@@ -145,6 +146,12 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
               defaultContextId,
             )}
             isLoadingBlueprint={migrate.isPending}
+            onCancel={() =>
+              void navigate({
+                to: '/records/$recordId',
+                params: { recordId },
+              })
+            }
             onSubmit={({ values, relationships, expected_updated_at }) =>
               migrate.mutate({
                 expected_updated_at,

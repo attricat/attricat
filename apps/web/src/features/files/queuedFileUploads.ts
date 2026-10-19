@@ -124,5 +124,7 @@ export const useQueuedFileUploads = (scope: string | undefined) => {
         ]),
       ),
     }));
-  return { queue, stageQueued, forgetStaged };
+  /** Empties the queue, such as after its files were created with a record. */
+  const clear = () => setState({ scope, pending: {} });
+  return { queue, stageQueued, forgetStaged, clear };
 };
