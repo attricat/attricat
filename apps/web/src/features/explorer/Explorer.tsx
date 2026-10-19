@@ -129,7 +129,12 @@ export const Explorer = ({
       search: (previous) => ({ ...previous, record }),
       replace: true,
     });
+  // Clicking the record already in the panel again opens its full page.
   const openPanel: OpenRecordPanel = (recordId, opener) => {
+    if (panelOpen && recordId === panelRecordId) {
+      void navigate({ to: '/records/$recordId', params: { recordId } });
+      return;
+    }
     panelOpenerRef.current = opener;
     showInPanel(recordId);
   };

@@ -83,6 +83,27 @@ test('closes the record panel on a click outside it', async ({ page }) => {
   await expect(panel).toHaveCount(0);
 });
 
+test('opens the full page when the record in the panel is clicked again', async ({
+  page,
+}) => {
+  const code = `product_panel_again_${suffix()}`;
+  const blueprint = await createRecordBlueprint(
+    code,
+    'Panel again products',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+  );
+  const record = await createRecord(blueprint, [
+    scalar('title', 'Clicked twice'),
+  ]);
+
+  await page.goto(`/?blueprint=${code}`);
+  const result = page.getByRole('link', { name: 'Clicked twice' });
+  await result.click();
+  await expect(page).toHaveURL(new RegExp(`record=${record.id}`));
+  await result.click();
+  await expect(page).toHaveURL(new RegExp(`/records/${record.id}$`));
+});
+
 test('keeps the record panel open while choosing from a select in it', async ({
   page,
 }) => {
