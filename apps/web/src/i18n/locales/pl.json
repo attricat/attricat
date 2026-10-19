@@ -604,7 +604,13 @@
     "editingContext": "Edytujesz wartości dla kontekstu {{context}}. Pole bez własnej wartości w tym kontekście pokazuje wartość dziedziczoną.",
     "previousValueDiscarded": "Poprzednia wartość {{value}} zostanie zarchiwizowana.",
     "discardPreviousValue": "Odrzuć poprzednią wartość",
-    "undoDiscard": "Cofnij"
+    "undoDiscard": "Cofnij",
+    "fieldSaving": "Zapisywanie…",
+    "fieldSaved": "Zapisano",
+    "undoSave": "Cofnij",
+    "allChangesSaved": "Wszystkie zmiany zapisane",
+    "conflictingChange": "{{field}}: Twoja wartość „{{mine}}”, obecnie „{{theirs}}”",
+    "empty": "pusto"
   },
   "exports": {
     "title": "Eksporty",

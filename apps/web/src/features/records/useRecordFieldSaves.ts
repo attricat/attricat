@@ -1,8 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ApiRequestError } from '../../api/request';
 import { updateRecord, type Attribute } from './api';
-import { STALE_RECORD_ERROR_CODE } from './constants';
+import { RECENT_SAVE_DURATION_MS, STALE_RECORD_ERROR_CODE } from './constants';
 import type { FieldEditRules } from './recordForm';
 import { fieldSaveRequest } from './recordFieldSaves';
 import { invalidateRecord } from './invalidateRecord';
@@ -29,9 +29,18 @@ type State = {
   saved: Record<string, string>;
   pending: Record<string, string>;
   saving: boolean;
+  /** Fields of the save that is running. */
+  sending: readonly string[];
+  /** The last save's fields and their values before it, while it is recent. */
+  lastSave: { previous: Readonly<Record<string, string>> } | null;
+  /** Whether a change has been saved since the fields opened. */
+  savedAny: boolean;
   error: Error | null;
   conflict: boolean;
 };
+
+/** Where a field's change is on its way to the server. */
+export type FieldSaveState = 'saving' | 'saved' | 'unsaved';
 
 const isStaleRecord = (error: unknown) =>
   error instanceof ApiRequestError && error.code === STALE_RECORD_ERROR_CODE;
@@ -61,6 +70,9 @@ export const useRecordFieldSaves = ({
     saved: { ...savedFields },
     pending: {},
     saving: false,
+    sending: [],
+    lastSave: null,
+    savedAny: false,
     error: null,
     conflict: false,
   }));
@@ -104,7 +116,7 @@ export const useRecordFieldSaves = ({
     const batch = { ...pending };
     inFlight.current = batch;
     const sentVersion = version;
-    publish({ saving: true });
+    publish({ saving: true, sending: Object.keys(batch) });
     try {
       const record = await updateRecord(recordId, {
         ...(version ? { expected_updated_at: version } : {}),
@@ -132,6 +144,13 @@ export const useRecordFieldSaves = ({
         saved: { ...current.current.saved, ...batch },
         pending: remaining,
         saving: false,
+        sending: [],
+        lastSave: {
+          previous: Object.fromEntries(
+            Object.keys(batch).map((code) => [code, saved[code] ?? '']),
+          ),
+        },
+        savedAny: true,
         error: null,
       });
       void invalidateRecord(client, recordId);
@@ -141,11 +160,12 @@ export const useRecordFieldSaves = ({
       // This editor's own file change moved the version while the save ran;
       // resend against it instead of reporting another editor's change.
       if (isStaleRecord(error) && current.current.version !== sentVersion) {
-        publish({ saving: false });
+        publish({ saving: false, sending: [] });
         return flush();
       }
       publish({
         saving: false,
+        sending: [],
         error: error instanceof Error ? error : new Error(String(error)),
         conflict: isStaleRecord(error),
       });
@@ -163,9 +183,20 @@ export const useRecordFieldSaves = ({
         delete next[code];
       else next[code] = value;
     }
-    publish({ pending: next });
+    // A new change supersedes what the last save could undo.
+    publish({ pending: next, lastSave: null });
     void flush();
   };
+
+  // A save can be undone only while it is recent.
+  useEffect(() => {
+    if (!state.lastSave) return;
+    const timer = setTimeout(() => {
+      current.current = { ...current.current, lastSave: null };
+      setState(current.current);
+    }, RECENT_SAVE_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [state.lastSave]);
 
   return {
     /** Saved values overlaid with changes that are not saved yet. */
@@ -175,6 +206,21 @@ export const useRecordFieldSaves = ({
     },
     pending: state.pending,
     saving: state.saving,
+    savedAny: state.savedAny,
+    /** Whether a field's change is being saved, was just saved, or failed. */
+    fieldState: (code: string): FieldSaveState | undefined =>
+      state.sending.includes(code)
+        ? 'saving'
+        : state.error && state.pending[code] !== undefined
+          ? 'unsaved'
+          : state.lastSave && code in state.lastSave.previous
+            ? 'saved'
+            : undefined,
+    /** Puts back the values the last save replaced, as a new save. */
+    undoLastSave: () => {
+      const last = current.current.lastSave;
+      if (last) commitMany(last.previous);
+    },
     error: state.error,
     conflict: state.conflict,
     commit: (code: string, value: string) => commitMany({ [code]: value }),

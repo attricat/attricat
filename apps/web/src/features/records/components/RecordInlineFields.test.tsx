@@ -247,8 +247,31 @@ describe('RecordInlineFields', () => {
     await user.type(screen.getByRole('textbox', { name: 'name' }), '!');
     await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
 
-    await waitFor(() => expect(screen.getByText('Saving…')).toBeTruthy());
+    // The page's status and the field's own.
+    await waitFor(() => expect(screen.getAllByText('Saving…')).toHaveLength(2));
     expect(screen.queryByText('This change is not saved yet.')).toBeNull();
+  });
+
+  it('says a field was saved and puts the previous value back on undo', async () => {
+    const user = userEvent.setup();
+    renderFields();
+
+    const name = screen.getByRole('textbox', { name: 'name' });
+    await user.type(name, '!');
+    await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+
+    expect(await screen.findByText('Saved')).toBeTruthy();
+    expect(screen.getByText('All changes saved')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(updateRecord).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(updateRecord).mock.calls[1]![1]).toEqual(
+      expect.objectContaining({
+        expected_updated_at: '2026-10-07T10:01:00Z',
+        values: [
+          expect.objectContaining({ attribute_code: 'name', value: 'Lamp' }),
+        ],
+      }),
+    );
   });
 
   it('marks fields the record schema requires', () => {

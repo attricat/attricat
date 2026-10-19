@@ -117,3 +117,6 @@ export const RECORD_SCHEMA_MISMATCH_ERROR_CODE = 'record_schema_mismatch';
 
 /** Matches editors of fields a migration asks the user to review. */
 export const migrationReviewSelector = '[data-migration-review]';
+
+/** How long a field shows that it was saved, and its save can be undone. */
+export const RECENT_SAVE_DURATION_MS = 6000;

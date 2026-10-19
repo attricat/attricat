@@ -69,20 +69,14 @@ import { useViolationText } from '../../../components/useViolationText';
 import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
 import { RecordFormAttributeEditor } from './RecordFormAttributeEditor';
 import { useQueuedFileUploadsContext } from '../../files/queuedFileUploads';
-import {
-  focusControlIn,
-  useInitialFocus,
-} from '../../../components/initialFocus';
+import { useInitialFocus } from '../../../components/initialFocus';
 import { FormActionBar } from '../../../components/FormActionBar';
 import {
   FormErrorSummary,
   type FormErrorSummaryItem,
 } from '../../../components/FormErrorSummary';
 import { UnsavedChangesGuard } from '../../drafts/UnsavedChangesGuard';
-import {
-  FieldRevealContext,
-  type FieldRevealRequest,
-} from '../../views/fieldReveal';
+import { FieldRevealContext, useFieldReveal } from '../../views/fieldReveal';
 import { viewPlacedFields } from '../../views/viewFieldComponents';
 import { migrationReviewSelector } from '../constants';
 
@@ -311,14 +305,22 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
         ...editableAttributes.map((attribute) => attribute.code),
       ]),
     ];
-    const [revealRequest, setRevealRequest] =
-      useState<FieldRevealRequest | null>(null);
-    // Opens the tab or accordion holding the field; an effect focuses it.
-    const revealField = (code: string) =>
-      setRevealRequest((current) => ({
-        code,
-        sequence: (current?.sequence ?? 0) + 1,
-      }));
+    // The blueprint picker comes first; once a blueprint loads, its first
+    // field, or in a migration the first field to review. A failed save
+    // leaves focus where it is.
+    const formRef = useInitialFocus<HTMLFormElement>(
+      isLoadingBlueprint
+        ? null
+        : blueprint
+          ? `${blueprint.blueprint.id}:${blueprint.blueprint.version}`
+          : lockedBlueprint
+            ? null
+            : '',
+      migrationReviewSelector,
+    );
+    // Opens the tab or accordion holding a field and focuses it.
+    const { request: revealRequest, reveal: revealField } =
+      useFieldReveal(formRef);
     const errorsRef = useRef<HTMLDivElement>(null);
     const focusErrors = () => {
       errorsRef.current?.focus({ preventScroll: true });
@@ -456,34 +458,6 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     };
 
     useImperativeHandle(ref, () => ({ clearDraft: draft.clear }));
-
-    // The blueprint picker comes first; once a blueprint loads, its first
-    // field, or in a migration the first field to review. A failed save
-    // leaves focus where it is.
-    const formRef = useInitialFocus<HTMLFormElement>(
-      isLoadingBlueprint
-        ? null
-        : blueprint
-          ? `${blueprint.blueprint.id}:${blueprint.blueprint.version}`
-          : lockedBlueprint
-            ? null
-            : '',
-      migrationReviewSelector,
-    );
-    useEffect(() => {
-      if (!revealRequest) return;
-      // Wait a frame so a tab or accordion opened for the field shows it.
-      const frame = requestAnimationFrame(() =>
-        focusControlIn(
-          [
-            ...(formRef.current?.querySelectorAll<HTMLElement>(
-              '[data-field-code]',
-            ) ?? []),
-          ].find((element) => element.dataset.fieldCode === revealRequest.code),
-        ),
-      );
-      return () => cancelAnimationFrame(frame);
-    }, [formRef, revealRequest]);
 
     const missingRequired = missingRequiredAttributes(
       submittedAttributes,
