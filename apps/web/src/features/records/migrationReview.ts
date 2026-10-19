@@ -128,6 +128,12 @@ export type MigrationFieldReview = {
   message: string;
   /** The stored value before migration, for reference. */
   previousValue?: string;
+  /** Whether the stored value is archived instead of carried over. */
+  discarded?: boolean;
+  /** What the field held from the stored value, restored when undone. */
+  fieldValue?: string;
+  /** Offered when the stored value can be archived instead of replaced. */
+  onDiscardChange?: (discard: boolean) => void;
 };
 
 /** The `data-field-code` of a removal, so an error can lead to it. */

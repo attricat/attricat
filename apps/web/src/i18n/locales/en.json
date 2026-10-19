@@ -561,7 +561,10 @@
     "jsonValid": "Valid JSON.",
     "jsonNotValidYet": "Not valid JSON yet.",
     "useInheritedValue": "Use inherited value",
-    "editingContext": "You are editing values for the {{context}} context. A field without its own value here shows the value it inherits."
+    "editingContext": "You are editing values for the {{context}} context. A field without its own value here shows the value it inherits.",
+    "previousValueDiscarded": "Previous value {{value}} will be archived.",
+    "discardPreviousValue": "Discard previous value",
+    "undoDiscard": "Undo"
   },
   "exports": {
     "title": "Exports",

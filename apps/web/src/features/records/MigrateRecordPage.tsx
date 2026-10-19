@@ -85,15 +85,28 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
     ].find((candidate) => candidate.code === attributeCode);
     return attribute ? attributeLabel(attribute) : attributeCode;
   };
+  const initialFields = valuesForForm(
+    preview.data?.target.attributes ?? [],
+    migrationValues,
+    defaultContextId,
+  );
   const migrationReviews: Record<string, MigrationFieldReview> = {};
   for (const issue of inlineIssues) {
     const code = issue.attribute_code!;
     const message = migrationIssueMessage(issue, t);
+    const stored = previousValue(code) || undefined;
     migrationReviews[code] = {
       message: migrationReviews[code]
         ? `${migrationReviews[code].message} ${message}`
         : message,
-      previousValue: previousValue(code) || undefined,
+      previousValue: stored,
+      // A stored value the new revision cannot take can be archived instead
+      // of replaced, which the API accepts for any attribute.
+      ...(stored && {
+        discarded: discardAttributes.includes(code),
+        fieldValue: initialFields[code] ?? '',
+        onDiscardChange: (discard: boolean) => setDiscarded(code, discard),
+      }),
     };
   }
   const reviewCodes = new Set(Object.keys(migrationReviews));
@@ -199,11 +212,7 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
           migrationReviews={migrationReviews}
           pendingConfirmations={pendingConfirmations}
           requiredAttributes={requiredMigrationAttributes(preview.data.issues)}
-          initialValues={valuesForForm(
-            preview.data.target.attributes,
-            migrationValues,
-            defaultContextId,
-          )}
+          initialValues={initialFields}
           isLoadingBlueprint={migrate.isPending}
           onCancel={() =>
             void navigate({
