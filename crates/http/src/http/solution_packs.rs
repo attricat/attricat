@@ -11,7 +11,7 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{AppState, auth::ScopedRepository, error::ApiError};
+use super::{AppState, auth::ScopedRepository, error::ApiError, pagination::MAX_OFFSET};
 use crate::{
     repository::{
         CreateSolutionPackPlanRequest, SolutionPackApplication, SolutionPackApplicationSummary,
@@ -584,18 +584,28 @@ pub(super) struct ListApplicationsQuery {
     offset: Option<i64>,
 }
 
+const DEFAULT_HISTORY_PAGE_SIZE: i64 = 25;
+const MAX_HISTORY_PAGE_SIZE: i64 = 100;
+
+impl ListApplicationsQuery {
+    fn bounds(&self) -> Result<(i64, i64), ApiError> {
+        let limit = self.limit.unwrap_or(DEFAULT_HISTORY_PAGE_SIZE);
+        let offset = self.offset.unwrap_or(0);
+        if !(1..=MAX_HISTORY_PAGE_SIZE).contains(&limit) || !(0..=MAX_OFFSET).contains(&offset) {
+            return Err(ApiError::invalid_input(format!(
+                "limit must be 1-{MAX_HISTORY_PAGE_SIZE} and offset must be 0-{MAX_OFFSET}"
+            )));
+        }
+        Ok((limit, offset))
+    }
+}
+
 pub(super) async fn list_applications(
     ScopedRepository(repository): ScopedRepository,
     query: Result<Query<ListApplicationsQuery>, QueryRejection>,
 ) -> Result<Json<Vec<SolutionPackApplicationSummary>>, ApiError> {
     let Query(query) = query.map_err(ApiError::from_query_rejection)?;
-    let limit = query.limit.unwrap_or(25);
-    let offset = query.offset.unwrap_or(0);
-    if !(1..=100).contains(&limit) || !(0..=10_000).contains(&offset) {
-        return Err(ApiError::invalid_input(
-            "limit must be 1-100 and offset must be 0-10000".to_owned(),
-        ));
-    }
+    let (limit, offset) = query.bounds()?;
     let applications = repository
         .list_solution_pack_applications(limit, offset)
         .await?;
@@ -659,13 +669,7 @@ pub(super) async fn list_check_runs(
 ) -> Result<Json<Vec<SolutionPackCheckRunSummary>>, ApiError> {
     let Path(application_id) = application_id.map_err(ApiError::from_path_rejection)?;
     let Query(query) = query.map_err(ApiError::from_query_rejection)?;
-    let limit = query.limit.unwrap_or(25);
-    let offset = query.offset.unwrap_or(0);
-    if !(1..=100).contains(&limit) || !(0..=10_000).contains(&offset) {
-        return Err(ApiError::invalid_input(
-            "limit must be 1-100 and offset must be 0-10000".to_owned(),
-        ));
-    }
+    let (limit, offset) = query.bounds()?;
     let runs = repository
         .list_solution_pack_check_runs(application_id, limit, offset)
         .await?;

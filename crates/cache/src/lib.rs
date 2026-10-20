@@ -34,6 +34,10 @@ use serde::{Serialize, de::DeserializeOwned};
 /// returns for a key changes, so a deploy never serves entries the previous
 /// release wrote, which the shared tier may keep for up to a day.
 pub(crate) const CACHE_FORMAT: u32 = 1;
+/// How long the shared tier keeps an entry that has no TTL policy.
+const UNTIMED_REMOTE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+const DEFAULT_MAX_ENTRIES: u64 = 20_000;
+const DEFAULT_KEY_PREFIX: &str = "attricat";
 
 /// A cache key. By convention `namespace:part:part`; the namespace labels
 /// metrics.
@@ -110,9 +114,7 @@ impl Policy {
     fn remote_ttl(self) -> Duration {
         match self {
             // Remote memory is shared; let unused immutable entries age out.
-            Self::Immutable | Self::Generation | Self::LocalGeneration => {
-                Duration::from_secs(24 * 60 * 60)
-            }
+            Self::Immutable | Self::Generation | Self::LocalGeneration => UNTIMED_REMOTE_TTL,
             Self::Ttl { fresh, stale } => fresh + stale,
         }
     }
@@ -166,8 +168,8 @@ impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             backend: CacheBackend::Memory,
-            max_entries: 20_000,
-            key_prefix: "attricat".to_owned(),
+            max_entries: DEFAULT_MAX_ENTRIES,
+            key_prefix: DEFAULT_KEY_PREFIX.to_owned(),
         }
     }
 }
@@ -198,14 +200,14 @@ impl CacheConfig {
                 .ok()
                 .filter(|value| *value > 0)
                 .ok_or("CACHE_MAX_ENTRIES must be a positive integer")?,
-            None => Self::default().max_entries,
+            None => DEFAULT_MAX_ENTRIES,
         };
         let key_prefix = match key_prefix.map(str::trim).filter(|value| !value.is_empty()) {
             Some(prefix) if prefix.chars().any(char::is_whitespace) => {
                 return Err("CACHE_KEY_PREFIX must not contain whitespace".to_owned());
             }
             Some(prefix) => prefix.to_owned(),
-            None => Self::default().key_prefix,
+            None => DEFAULT_KEY_PREFIX.to_owned(),
         };
         Ok(Self {
             backend,

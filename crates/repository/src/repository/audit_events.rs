@@ -112,10 +112,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         sqlx::query("INSERT INTO permissions (code, description) VALUES ('audit.read', 'Read workspace audit events') ON CONFLICT (code) DO NOTHING")
             .execute(&mut *tx)
             .await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
+        for role_id in super::roles::OWNER_AND_ADMIN_ROLE_IDS {
             sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'audit.read') ON CONFLICT DO NOTHING")
                 .bind(role_id)
                 .execute(&mut *tx)

@@ -29,11 +29,13 @@ pub struct ExtensionStoragePage {
 pub enum ExtensionStorageError {
     #[error("extension storage access is denied")]
     Denied,
-    #[error("storage key must be normalized, non-empty, and at most 256 bytes")]
+    #[error(
+        "storage key must be normalized, non-empty, and at most {MAX_EXTENSION_STORAGE_KEY_BYTES} bytes"
+    )]
     InvalidKey,
     #[error("storage value must be valid JSON no larger than 64 KiB")]
     InvalidValue,
-    #[error("storage list limit must be between 1 and 100")]
+    #[error("storage list limit must be between 1 and {MAX_EXTENSION_STORAGE_LIST_LIMIT}")]
     InvalidLimit,
     #[error("storage revision conflict")]
     Conflict,

@@ -14,8 +14,14 @@ use crate::account::{
     MAXIMUM_PASSWORD_BYTES, Password, PasswordHash, hash_password as hash_password_blocking,
 };
 
+/// Concurrent hashes when the available parallelism cannot be determined.
+const FALLBACK_PASSWORD_WORK_PERMITS: usize = 4;
+
 static PASSWORD_WORK: LazyLock<Semaphore> = LazyLock::new(|| {
-    Semaphore::new(std::thread::available_parallelism().map_or(4, NonZeroUsize::get))
+    Semaphore::new(
+        std::thread::available_parallelism()
+            .map_or(FALLBACK_PASSWORD_WORK_PERMITS, NonZeroUsize::get),
+    )
 });
 
 /// Verified in place of a missing credential so a login takes the same time
@@ -80,6 +86,8 @@ pub(super) async fn verify_password(
 mod tests {
     use super::*;
 
+    const PERMIT_RELEASE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
     #[tokio::test]
     async fn cancellation_keeps_the_permit_until_blocking_work_finishes() {
         static PERMITS: Semaphore = Semaphore::const_new(1);
@@ -95,7 +103,7 @@ mod tests {
         assert!(work.await.unwrap_err().is_cancelled());
         assert!(PERMITS.try_acquire().is_err());
         release.send(()).unwrap();
-        let _permit = tokio::time::timeout(std::time::Duration::from_secs(2), PERMITS.acquire())
+        let _permit = tokio::time::timeout(PERMIT_RELEASE_TIMEOUT, PERMITS.acquire())
             .await
             .unwrap()
             .unwrap();

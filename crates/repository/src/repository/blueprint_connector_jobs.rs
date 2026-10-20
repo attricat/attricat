@@ -26,6 +26,9 @@ pub struct BlueprintConnectorJob {
 }
 
 const FIELDS: &str = "id,blueprint_id,blueprint_version,code,direction,extension_id,operation_id,input,context_id,input_file_id,interval_seconds,next_at,enabled";
+const MAX_CONNECTOR_JOB_INPUT_BYTES: usize = 64 * 1024;
+const MAX_RUN_KEY_BYTES: usize = 40;
+
 fn invalid(message: &str) -> RepositoryError {
     RepositoryError::InvalidExtension(message.into())
 }
@@ -47,7 +50,9 @@ impl AttricatRepository {
         for job in blueprint.connector_jobs {
             let input = serde_json::to_value(&job.input)
                 .map_err(|_| invalid("invalid connector job input"))?;
-            if serde_json::to_vec(&input).map_or(true, |bytes| bytes.len() > 65_536) {
+            if serde_json::to_vec(&input)
+                .map_or(true, |bytes| bytes.len() > MAX_CONNECTOR_JOB_INPUT_BYTES)
+            {
                 return Err(invalid("connector job input exceeds 64 KiB"));
             }
             let release = self
@@ -146,7 +151,7 @@ impl AttricatRepository {
         id: Uuid,
         key: &str,
     ) -> Result<Vec<Uuid>, RepositoryError> {
-        if key.is_empty() || key.len() > 40 || !key.is_ascii() {
+        if key.is_empty() || key.len() > MAX_RUN_KEY_BYTES || !key.is_ascii() {
             return Err(invalid("invalid run key"));
         }
         let job: BlueprintConnectorJob = sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND id=$2 AND enabled AND code IS NOT NULL"))

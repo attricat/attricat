@@ -39,6 +39,8 @@ use crate::model::Record;
 
 /// Duplicate groups and hierarchy violations reported when publication fails.
 const MAX_REPORTED_VIOLATIONS: usize = 20;
+/// Unique-key rows written per `UNNEST` insert statement.
+const UNIQUE_KEY_INSERT_BATCH: usize = 1000;
 
 /// One group of records that already share a key value.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -474,7 +476,7 @@ impl AttricatRepository {
                 total,
             });
         }
-        for chunk in rows.chunks(1000) {
+        for chunk in rows.chunks(UNIQUE_KEY_INSERT_BATCH) {
             sqlx::query(
                 r#"INSERT INTO record_unique_key_values
                        (workspace_id, blueprint_id, key_code, context_id, key_hash, key_values, record_id)

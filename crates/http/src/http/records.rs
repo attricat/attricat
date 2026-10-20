@@ -3,6 +3,7 @@ use super::{
     data_health::invalidate_data_health,
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
+    pagination::MAX_OFFSET,
 };
 use crate::{
     attricat_read_service::AttricatReadService,
@@ -24,7 +25,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::agents::{MAX_CONVERSATION_MESSAGE_BYTES, MAX_TOOL_CALL_ARGUMENT_BYTES};
+use crate::agents::{
+    MAX_CONVERSATION_ATTACHMENTS, MAX_CONVERSATION_MESSAGE_BYTES, MAX_TOOL_CALL_ARGUMENT_BYTES,
+};
 use attricat_agent_runtime::{
     agent_provider::{ChatMessage, OpenAiCompatibleClient},
     agent_tools::{ToolDefinition, ToolFunction},
@@ -59,6 +62,21 @@ struct SmartFillField {
     value_schema: Option<Value>,
 }
 
+const MAX_SMART_FILL_DRAFT_VALUES: usize = 256;
+/// Most recent conversation messages replayed to the provider as history.
+const SMART_FILL_HISTORY_MESSAGES: usize = 16;
+/// Combined size of the text attachments inlined from conversation history.
+const SMART_FILL_HISTORY_ATTACHMENT_BYTES: usize = 64 * 1024;
+const MAX_SMART_FILL_TEXT_ATTACHMENT_BYTES: usize = 64 * 1024;
+const MAX_SMART_FILL_IMAGE_BYTES: usize = 1024 * 1024;
+const MAX_SMART_FILL_EXPLANATION_CHARS: usize = 2048;
+/// Largest integer a browser number field represents exactly (2^53 - 1).
+const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
+/// Length of a `YYYY-MM-DD` date.
+const ISO_DATE_LEN: usize = 10;
+const DEFAULT_HISTORY_PAGE_SIZE: i64 = 25;
+const MAX_HISTORY_PAGE_SIZE: i64 = 50;
+
 const SMART_FILL_SYSTEM_PROMPT: &str = "You are a record editing assistant. Answer the user's editing request using the selected record context, current unsaved form draft and conversation history. Propose only fields that should change, using supplied editable scalar field codes. Never invent facts. Return exactly one propose_record_form_values tool call with a short explanation of changes and uncertainties. The values are draft-only and require explicit user application and a separate save; never claim they were saved. Do not propose relationship or file fields.";
 
 fn smart_fill_definition() -> ToolDefinition {
@@ -92,7 +110,7 @@ pub(super) async fn smart_fill_record_form(
 ) -> Result<Json<SmartFillRecordFormResponse>, ApiError> {
     if (input.content.trim().is_empty() && input.attachment_ids.is_empty())
         || input.content.len() > MAX_CONVERSATION_MESSAGE_BYTES
-        || input.draft_values.len() > 256
+        || input.draft_values.len() > MAX_SMART_FILL_DRAFT_VALUES
         || input
             .draft_values
             .iter()
@@ -100,9 +118,9 @@ pub(super) async fn smart_fill_record_form(
             .sum::<usize>()
             > MAX_CONVERSATION_MESSAGE_BYTES
     {
-        return Err(ApiError::invalid_input(
-            "content must be between 1 and 32768 bytes".to_owned(),
-        ));
+        return Err(ApiError::invalid_input(format!(
+            "content must be between 1 and {MAX_CONVERSATION_MESSAGE_BYTES} bytes"
+        )));
     }
     if !repository
         .principal_may(
@@ -138,7 +156,7 @@ pub(super) async fn smart_fill_record_form(
                 .await?
                 .ok_or_else(|| ApiError::invalid_input("unknown context".to_owned()))?
                 .code
-                == "default"
+                == super::DEFAULT_CONTEXT_CODE
         }
         None => true,
     };
@@ -149,11 +167,12 @@ pub(super) async fn smart_fill_record_form(
     }
     let mut editable = Vec::new();
     for attribute in &blueprint.attributes {
-        if !attribute.readonly
-            && attribute.value_type != "relationship"
-            && attribute.value_type != "file"
-            && (is_default_context || attribute.context_editable != "default")
-        {
+        if smart_fill_editable(
+            attribute.readonly,
+            &attribute.value_type,
+            &attribute.context_editable,
+            is_default_context,
+        ) {
             editable.push(SmartFillField {
                 code: attribute.code.clone(),
                 name: attribute.code.clone(),
@@ -163,11 +182,12 @@ pub(super) async fn smart_fill_record_form(
         }
     }
     for attribute in &reusable_attributes {
-        if !attribute.readonly
-            && attribute.value_type != "relationship"
-            && attribute.value_type != "file"
-            && (is_default_context || attribute.context_editable != "default")
-        {
+        if smart_fill_editable(
+            attribute.readonly,
+            &attribute.value_type,
+            &attribute.context_editable,
+            is_default_context,
+        ) {
             editable.push(SmartFillField {
                 code: attribute.code.clone(),
                 name: attribute.name.clone(),
@@ -185,7 +205,7 @@ pub(super) async fn smart_fill_record_form(
         input.context_id,
         &allowed,
     );
-    if input.attachment_ids.len() > 16
+    if input.attachment_ids.len() > MAX_CONVERSATION_ATTACHMENTS
         || input
             .attachment_ids
             .iter()
@@ -215,12 +235,12 @@ pub(super) async fn smart_fill_record_form(
             ));
         }
         let recent = repository.conversation_messages(id).await?;
-        let mut remaining_attachment_bytes = 65536usize;
+        let mut remaining_attachment_bytes = SMART_FILL_HISTORY_ATTACHMENT_BYTES;
         let mut history = Vec::new();
         for message in recent
             .into_iter()
             .rev()
-            .take(16)
+            .take(SMART_FILL_HISTORY_MESSAGES)
             .collect::<Vec<_>>()
             .into_iter()
             .rev()
@@ -270,7 +290,7 @@ pub(super) async fn smart_fill_record_form(
                 .file_object(*file_id, Some("display"))
                 .await
                 .unwrap_or(file);
-            if image.byte_size > 1024 * 1024 {
+            if image.byte_size > MAX_SMART_FILL_IMAGE_BYTES as i64 {
                 return Err(ApiError::invalid_input("image is too large".into()));
             }
             let object = state
@@ -278,12 +298,12 @@ pub(super) async fn smart_fill_record_form(
                 .get(&image.object_key)
                 .await
                 .map_err(|_| ApiError::service_unavailable("attachment unavailable"))?;
-            if object.bytes.len() > 1024 * 1024 {
+            if object.bytes.len() > MAX_SMART_FILL_IMAGE_BYTES {
                 return Err(ApiError::invalid_input("image is too large".into()));
             }
             parts.push(json!({"type":"image_url","image_url":{"url":format!("data:{};base64,{}", image.mime_type, STANDARD.encode(object.bytes))}}));
         } else if file.mime_type.starts_with("text/") || file.mime_type == "application/json" {
-            if file.byte_size > 65536 {
+            if file.byte_size > MAX_SMART_FILL_TEXT_ATTACHMENT_BYTES as i64 {
                 return Err(ApiError::invalid_input(
                     "text attachment is too large".into(),
                 ));
@@ -293,7 +313,7 @@ pub(super) async fn smart_fill_record_form(
                 .get(&file.object_key)
                 .await
                 .map_err(|_| ApiError::service_unavailable("attachment unavailable"))?;
-            if object.bytes.len() > 65536 {
+            if object.bytes.len() > MAX_SMART_FILL_TEXT_ATTACHMENT_BYTES {
                 return Err(ApiError::invalid_input(
                     "text attachment is too large".into(),
                 ));
@@ -348,7 +368,7 @@ pub(super) async fn smart_fill_record_form(
         .and_then(Value::as_str)
         .unwrap_or("")
         .chars()
-        .take(2048)
+        .take(MAX_SMART_FILL_EXPLANATION_CHARS)
         .collect::<String>();
     let fields = Some(arguments)
         .and_then(|value| value.get("fields").cloned())
@@ -394,6 +414,20 @@ pub(super) async fn smart_fill_record_form(
         explanation,
     }))
 }
+/// Smart fill proposes only writable scalar values; non-default contexts may
+/// change only attributes that are editable outside the default context.
+fn smart_fill_editable(
+    readonly: bool,
+    value_type: &str,
+    context_editable: &str,
+    is_default_context: bool,
+) -> bool {
+    !readonly
+        && value_type != "relationship"
+        && value_type != "file"
+        && (is_default_context || context_editable != "default")
+}
+
 /// Parse a suggestion exactly as the browser will parse a scalar form field,
 /// then apply the attribute's JSON schema before offering it to the user.
 fn smart_fill_value_is_valid(field: &SmartFillField, proposed: &str) -> bool {
@@ -411,12 +445,12 @@ fn smart_fill_value_is_valid(field: &SmartFillField, proposed: &str) -> bool {
         "integer" => value
             .parse::<i64>()
             .ok()
-            .filter(|value| (-9_007_199_254_740_991..=9_007_199_254_740_991).contains(value))
+            .filter(|value| (-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(value))
             .map(|value| json!(value)),
         "boolean" => value.parse::<bool>().ok().map(|value| json!(value)),
         "date" => NaiveDate::parse_from_str(value, "%Y-%m-%d")
             .ok()
-            .filter(|_| value.len() == 10)
+            .filter(|_| value.len() == ISO_DATE_LEN)
             .map(|_| json!(value)),
         "datetime" => DateTime::parse_from_rfc3339(value)
             .ok()
@@ -695,12 +729,12 @@ pub(super) struct HistoryPageQuery {
 }
 
 fn checked_history_page(query: &HistoryPageQuery) -> Result<(i64, i64), ApiError> {
-    let limit = query.limit.unwrap_or(25);
+    let limit = query.limit.unwrap_or(DEFAULT_HISTORY_PAGE_SIZE);
     let offset = query.offset.unwrap_or(0);
-    if !(1..=50).contains(&limit) || !(0..=10000).contains(&offset) {
-        return Err(ApiError::invalid_input(
-            "limit must be 1-50 and offset must be 0-10000".into(),
-        ));
+    if !(1..=MAX_HISTORY_PAGE_SIZE).contains(&limit) || !(0..=MAX_OFFSET).contains(&offset) {
+        return Err(ApiError::invalid_input(format!(
+            "limit must be 1-{MAX_HISTORY_PAGE_SIZE} and offset must be 0-{MAX_OFFSET}"
+        )));
     }
     Ok((limit, offset))
 }
@@ -708,7 +742,7 @@ fn checked_history_page(query: &HistoryPageQuery) -> Result<(i64, i64), ApiError
 fn next_history_offset(has_more: bool, offset: i64, limit: i64) -> Option<i64> {
     has_more
         .then_some(offset + limit)
-        .filter(|next| *next <= 10000)
+        .filter(|next| *next <= MAX_OFFSET)
 }
 
 pub(super) async fn get_record_changes(

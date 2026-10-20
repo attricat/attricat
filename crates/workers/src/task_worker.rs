@@ -19,8 +19,16 @@ use uuid::Uuid;
 
 use crate::{
     repository::{ClaimedTask, SystemRepository, TaskError},
-    task_queue::TaskKind,
+    task_queue::{MAX_TASK_ERROR_CODE_BYTES, MAX_TASK_ERROR_MESSAGE_BYTES, TaskKind, TaskStatus},
 };
+
+const MAX_WORKER_ID_BYTES: usize = 128;
+/// How often queue-depth gauges are refreshed.
+const METRICS_INTERVAL: Duration = Duration::from_secs(5);
+/// The pause after a failed claim before the worker polls again.
+const CLAIM_RETRY_DELAY: Duration = Duration::from_secs(1);
+/// How long a task whose handler failed waits before it may run again.
+const HANDLER_FAILURE_RETRY_DELAY: chrono::TimeDelta = chrono::TimeDelta::seconds(1);
 
 #[derive(Debug, Clone)]
 pub struct TaskWorkerConfig {
@@ -44,8 +52,10 @@ impl TaskWorkerConfig {
             }
         };
         let worker_id = get("TASK_WORKER_ID").unwrap_or_else(|| Uuid::new_v4().to_string());
-        if worker_id.is_empty() || worker_id.len() > 128 {
-            return Err("TASK_WORKER_ID must be 1-128 bytes".to_owned());
+        if worker_id.is_empty() || worker_id.len() > MAX_WORKER_ID_BYTES {
+            return Err(format!(
+                "TASK_WORKER_ID must be 1-{MAX_WORKER_ID_BYTES} bytes"
+            ));
         }
         Ok(Self {
             worker_id,
@@ -153,7 +163,7 @@ async fn run(
     }
     let mut running = JoinSet::new();
     let mut stopping = false;
-    let mut metrics_tick = time::interval(Duration::from_secs(5));
+    let mut metrics_tick = time::interval(METRICS_INTERVAL);
     metrics_tick.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
     loop {
         if stopping {
@@ -195,7 +205,7 @@ async fn run(
             // Keep the executor alive across transient database failures;
             // respect shutdown even when the queue cannot be reached.
             tokio::select! {
-                _ = time::sleep(Duration::from_secs(1)) => {}
+                _ = time::sleep(CLAIM_RETRY_DELAY) => {}
                 _ = shutdown.changed() => { stopping = true; }
             }
             continue;
@@ -246,7 +256,11 @@ async fn record_queue_metrics(
     repository: &SystemRepository,
     kinds: &[TaskKind],
 ) -> Result<(), TaskError> {
-    const STATUSES: [&str; 3] = ["queued", "leased", "dead_letter"];
+    const STATUSES: [&str; 3] = [
+        TaskStatus::Queued.as_str(),
+        TaskStatus::Leased.as_str(),
+        TaskStatus::DeadLetter.as_str(),
+    ];
     for kind in kinds {
         for status in STATUSES {
             gauge!("attricat_task_queue_depth", "kind" => kind.as_str(), "status" => status)
@@ -292,7 +306,20 @@ fn truncate_error(value: &str, max_bytes: usize) -> String {
 }
 
 fn bounded_error(code: &str, message: &str) -> (String, String) {
-    (truncate_error(code, 128), truncate_error(message, 1024))
+    (
+        truncate_error(code, MAX_TASK_ERROR_CODE_BYTES),
+        truncate_error(message, MAX_TASK_ERROR_MESSAGE_BYTES),
+    )
+}
+
+/// The metric outcome of a retried task: exhausting its failure budget
+/// dead-letters it.
+fn retry_outcome(status: TaskStatus) -> &'static str {
+    if status == TaskStatus::DeadLetter {
+        "dead_letter"
+    } else {
+        "retry"
+    }
 }
 
 async fn execute(repository: SystemRepository, handler: Arc<dyn TaskHandler>, task: ClaimedTask) {
@@ -346,13 +373,7 @@ async fn execute(repository: SystemRepository, handler: Arc<dyn TaskHandler>, ta
                 "handler requested retry",
             )
             .await
-            .map(|status| {
-                if status.as_str() == "dead_letter" {
-                    "dead_letter"
-                } else {
-                    "retry"
-                }
-            }),
+            .map(retry_outcome),
         Ok(TaskOutcome::Reschedule { at }) => repository
             .reschedule_task_at(task.id, &task.lease_owner, task.lease_token, at)
             .await
@@ -366,18 +387,12 @@ async fn execute(repository: SystemRepository, handler: Arc<dyn TaskHandler>, ta
                     task.id,
                     &task.lease_owner,
                     task.lease_token,
-                    Utc::now() + chrono::Duration::seconds(1),
+                    Utc::now() + HANDLER_FAILURE_RETRY_DELAY,
                     &code,
                     &message,
                 )
                 .await
-                .map(|status| {
-                    if status.as_str() == "dead_letter" {
-                        "dead_letter"
-                    } else {
-                        "retry"
-                    }
-                })
+                .map(retry_outcome)
         }
     };
     let metric_outcome = match result {
@@ -460,7 +475,7 @@ mod error_tests {
     fn handler_errors_are_utf8_safe_and_bounded_before_retry() {
         let (code, message) = bounded_error("x", &"é".repeat(600));
         assert_eq!(code, "x");
-        assert!(message.len() <= 1024);
+        assert!(message.len() <= MAX_TASK_ERROR_MESSAGE_BYTES);
         assert!(std::str::from_utf8(message.as_bytes()).is_ok());
     }
 }

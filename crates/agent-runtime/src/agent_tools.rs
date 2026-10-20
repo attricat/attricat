@@ -10,6 +10,10 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use attricat_validation::saved_search::{
+    EXPLORER_SEARCH_KIND, MAX_BLUEPRINT_BYTES, MAX_SELECTED_IDS, MAX_STATE_BYTES,
+};
+
 use crate::{
     agents::MAX_TOOL_RESULT_BYTES,
     attricat_read_service::AttricatReadService,
@@ -47,11 +51,17 @@ const AUTHORING_GUIDE_TOPICS: [(&str, &str); 6] = [
 /// page of maximum-length comments stays within the tool result bound.
 const MAX_COMMENT_PAGE: usize = 30;
 const MAX_COMMENT_BODY_CHARS: usize = 1_000;
+const DEFAULT_COMMENT_PAGE: usize = 10;
+/// Matches the repository's bound on a comment body.
+const MAX_COMMENT_LENGTH: usize = 10_000;
+/// Characters of a proposed comment quoted in its approval summary.
+const COMMENT_SUMMARY_EXCERPT_CHARS: usize = 200;
 /// Notifications per page and per change the agent handles, and characters
 /// of each notification body it reads, bounded like comments.
 const MAX_NOTIFICATION_PAGE: usize = 30;
 const MAX_NOTIFICATION_IDS: usize = 100;
 const MAX_NOTIFICATION_BODY_CHARS: usize = 500;
+const DEFAULT_NOTIFICATION_PAGE: usize = 10;
 const DATA_HEALTH_SECTIONS: [&str; 5] = [
     "blueprints",
     "freshness",
@@ -70,6 +80,27 @@ const MAX_FIND_RECORDS_LIMIT: usize = 25;
 const MAX_FIND_RECORDS_CANDIDATES: usize = 100;
 const DEFAULT_COUNT_GROUP_LIMIT: usize = 20;
 const MAX_COUNT_GROUP_LIMIT: usize = 50;
+/// Page bounds of the run, finding and connector-job diagnostics.
+const DEFAULT_DIAGNOSTIC_PAGE_LIMIT: i64 = 10;
+const MAX_DIAGNOSTIC_PAGE_LIMIT: i64 = 25;
+const DEFAULT_HISTORY_PAGE_LIMIT: i64 = 20;
+const MAX_HISTORY_PAGE_LIMIT: i64 = 50;
+/// Deepest offset the offset-paginated tools read; no next page lies beyond it.
+const MAX_PAGE_OFFSET: i64 = 10_000;
+/// Characters of a rule finding message returned to the agent.
+const MAX_RULE_FINDING_MESSAGE_CHARS: usize = 512;
+const MAX_EXTENSION_ID_BYTES: usize = 128;
+/// Attribute/context selectors one `remove_record_values` call removes.
+pub(crate) const MAX_REMOVE_VALUES: usize = 20;
+/// Relationship sets per relationship mutation, and targets per set.
+const MAX_RELATIONSHIP_SETS: usize = 20;
+const MAX_RELATIONSHIP_TARGETS: usize = 100;
+const MAX_SYSTEM_TAGS: usize = 100;
+const MAX_SAVED_SEARCH_NAME_BYTES: usize = 120;
+const MAX_SAVED_SEARCH_DESCRIPTION_BYTES: usize = 500;
+const MAX_SAVED_SEARCH_QUERY_BYTES: usize = 4_096;
+const SAVED_SEARCH_VISIBILITIES: [&str; 2] = ["private", "workspace"];
+const DEFAULT_SAVED_SEARCH_VISIBILITY: &str = "private";
 /// Single-record mutations whose approved write must apply to the record
 /// state the proposal was made against; see [`pin_record_versions`].
 const VERSION_PINNED_TOOLS: [&str; 9] = [
@@ -113,8 +144,64 @@ fn valid_saved_filter(filter: &crate::model::SearchFilter) -> bool {
         }
 }
 
+/// The bounded fields of a saved search being created or updated.
+struct SavedSearchInput<'a> {
+    name: &'a str,
+    description: Option<&'a str>,
+    visibility: &'a str,
+    blueprint: &'a str,
+    query: Option<&'a str>,
+    attribute_filters: &'a [crate::model::SearchFilter],
+    relationship_facets: &'a [SavedSearchRelationshipFacet],
+}
+
+fn valid_saved_search_input(input: SavedSearchInput<'_>) -> bool {
+    !input.name.is_empty()
+        && input.name.len() <= MAX_SAVED_SEARCH_NAME_BYTES
+        && input
+            .description
+            .is_none_or(|description| description.len() <= MAX_SAVED_SEARCH_DESCRIPTION_BYTES)
+        && SAVED_SEARCH_VISIBILITIES.contains(&input.visibility)
+        && !input.blueprint.is_empty()
+        && input.blueprint.len() <= MAX_BLUEPRINT_BYTES
+        && input
+            .query
+            .is_none_or(|query| query.len() <= MAX_SAVED_SEARCH_QUERY_BYTES)
+        && input.attribute_filters.len() <= MAX_SEARCH_FILTERS
+        && input.attribute_filters.iter().all(valid_saved_filter)
+        && input.relationship_facets.len() <= MAX_SEARCH_FILTERS
+        && input.relationship_facets.iter().all(|facet| {
+            !facet.field.is_empty()
+                && !facet.selected_ids.is_empty()
+                && facet.selected_ids.len() <= MAX_SELECTED_IDS
+        })
+}
+
+fn check_saved_search_state_size(state: &Value) -> Result<(), ToolError> {
+    if serde_json::to_vec(state)
+        .expect("search state serializes")
+        .len()
+        > MAX_STATE_BYTES
+    {
+        return Err(ToolError::InvalidArguments(
+            "search state exceeds 32 KiB".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn stale_after_days(days: Option<u16>) -> Result<u16, ToolError> {
+    let days = days.unwrap_or(DEFAULT_STALE_AFTER_DAYS);
+    if !(1..=MAX_STALE_AFTER_DAYS).contains(&days) {
+        return Err(ToolError::InvalidArguments(format!(
+            "stale_after_days must be 1-{MAX_STALE_AFTER_DAYS}"
+        )));
+    }
+    Ok(days)
+}
+
 fn attribute_filter_parameters() -> Value {
-    json!({"type":"array","maxItems":20,"items":{"type":"object","required":["field","operator","value"],"properties":{
+    json!({"type":"array","maxItems":MAX_SEARCH_FILTERS,"items":{"type":"object","required":["field","operator","value"],"properties":{
         "field":{"type":"string","description":"Attribute code on the selected blueprint (including a searchable attached reusable attribute), or a path through up to three relationship attributes ending in an attribute of the last target, e.g. family.product_type.name. On a many-valued path the filter matches when any reached value matches."},
         "operator":{"type":"string","enum":attricat_validation::saved_search::FILTER_OPERATORS,"description":"Allowed operators depend on the leaf attribute type. string (including status and user-or-team assignment strings): eq, contains, starts_with (contains and starts_with ignore case). number, integer, date, datetime, time: eq, gt, gte, lt, lte. boolean: eq. file: is_set only. Every listed type also accepts is_set. relationship and json leaves cannot be filtered; use relationship_filters for relationship targets."},
         "value":{"type":["string","number","boolean"],"description":"Typed by the leaf: text for string, a number for number and integer, true or false for boolean, YYYY-MM-DD for date, RFC 3339 for datetime, HH:MM or HH:MM:SS for time. For is_set, use a boolean: true means a present value, false means absent. Empty text, zero and false are present values; a file attribute is present while it has at least one attached file, so is_set false finds records without files. For a user-or-team assignment attribute, eq with \"@me\" matches the person who started this conversation and their teams; other assignment values are \"user:<id>\" or \"team:<id>\"."}
@@ -134,7 +221,7 @@ fn attribute_value_parameters() -> Value {
 
 /// One scalar value a bulk edit sets on each selected record.
 fn bulk_value_parameters() -> Value {
-    json!({"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","required":["attribute_code","value"],"properties":{
+    json!({"type":"array","minItems":1,"maxItems":crate::bulk_edits::MAX_VALUES_PER_RECORD,"items":{"type":"object","required":["attribute_code","value"],"properties":{
         "attribute_code":{"type":"string"},
         "context_id":{"type":["string","null"],"format":"uuid"},
         "value":{"description":"Typed JSON value."}
@@ -145,13 +232,13 @@ fn relationship_targets_parameters() -> Value {
     json!({"type":"array","items":{
         "type":"object","required":["attribute_code","target_record_ids"],"properties":{
             "attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"},
-            "target_record_ids":{"type":"array","maxItems":100,"items":{"type":"string","format":"uuid"}}
+            "target_record_ids":{"type":"array","maxItems":MAX_RELATIONSHIP_TARGETS,"items":{"type":"string","format":"uuid"}}
         },"additionalProperties":false
     }})
 }
 
 fn relationship_filter_parameters() -> Value {
-    json!({"type":"array","maxItems":20,"items":{"type":"object","required":["field","selected_target_ids"],"properties":{"field":{"type":"string"},"selected_target_ids":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}})
+    json!({"type":"array","maxItems":MAX_SEARCH_FILTERS,"items":{"type":"object","required":["field","selected_target_ids"],"properties":{"field":{"type":"string"},"selected_target_ids":{"type":"array","minItems":1,"maxItems":MAX_SELECTED_IDS,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}})
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -318,7 +405,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         definition(
             "list_extension_operation_runs",
             "Read bounded extension and connector-operation status. Filter by extension ID or connector job ID; no progress, checkpoint, or input payloads. Requires extensions.manage.",
-            json!({"type":"object","properties":{"extension_id":{"type":"string"},"connector_job_id":{"type":"string","format":"uuid"},"limit":{"type":"integer","minimum":1,"maximum":25},"offset":{"type":"integer","minimum":0,"maximum":10000}},"additionalProperties":false}),
+            json!({"type":"object","properties":{"extension_id":{"type":"string"},"connector_job_id":{"type":"string","format":"uuid"},"limit":{"type":"integer","minimum":1,"maximum":MAX_DIAGNOSTIC_PAGE_LIMIT},"offset":{"type":"integer","minimum":0,"maximum":MAX_PAGE_OFFSET}},"additionalProperties":false}),
         ),
         definition(
             "get_extension_operation_run",
@@ -328,7 +415,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         definition(
             "list_blueprint_connector_jobs",
             "Read bounded connector-job declarations for one blueprint without stored inputs or file references. Requires extensions.manage.",
-            json!({"type":"object","required":["blueprint_id"],"properties":{"blueprint_id":{"type":"string","format":"uuid"},"limit":{"type":"integer","minimum":1,"maximum":25},"offset":{"type":"integer","minimum":0,"maximum":10000}},"additionalProperties":false}),
+            json!({"type":"object","required":["blueprint_id"],"properties":{"blueprint_id":{"type":"string","format":"uuid"},"limit":{"type":"integer","minimum":1,"maximum":MAX_DIAGNOSTIC_PAGE_LIMIT},"offset":{"type":"integer","minimum":0,"maximum":MAX_PAGE_OFFSET}},"additionalProperties":false}),
         ),
         definition(
             "get_record_preview_link",
@@ -398,7 +485,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         definition(
             "search_records",
             "Search records of a blueprint by scalar values, attribute filters, relationship filters, and system tags. filters use {field, operator, value} with a scalar or file leaf, including is_set presence checks such as records without an attached file (see the filters parameter for operators per attribute type); relationship_filters use {field, selected_target_ids} with a relationship path and target record UUIDs. All filters combine with AND. Filters, sorting and table values read the context_code context (default: default), falling back through its parent contexts per attribute; free text matches values in every context. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). Use @id:uuid1,uuid2 for selected-blueprint record IDs or relationship.@id:uuid1,uuid2 for records linked to those IDs (at most 100 IDs per term). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only records that are not on the latest published revision. Use sort with a configured scalar table-column field, blueprint_version, or publication_status and asc or desc direction; ascending blueprint_version puts older schemas first, ascending publication_status puts unpublished records first and requires sort.context_code for an enabled channel. Relationship table columns use paths of up to three hops. A relationship-path sort without blueprint.version is accepted only when the complete matching result uses one source version. Without sort, results are paginated in ascending creation order.",
-            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"filters":attribute_filter_parameters(),"relationship_filters":relationship_filter_parameters(),"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"context_code":{"type":"string"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]},"context_code":{"type":"string"}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
+            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"filters":attribute_filter_parameters(),"relationship_filters":relationship_filter_parameters(),"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"context_code":{"type":"string"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]},"context_code":{"type":"string"}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":DEFAULT_RECORD_PAGE_SIZE},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
         ),
         definition(
             "find_records",
@@ -486,7 +573,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
                 "Remove current scalar overrides for the specified attribute codes and contexts. Inspect current values first; this change requires approval.",
                 pinned_note!()
             ),
-            json!({"type":"object","required":["record_id","remove_values"],"properties":{"record_id":{"type":"string","format":"uuid"},"expected_updated_at":expected_updated_at_parameter(),"remove_values":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","required":["attribute_code"],"properties":{"attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}}},"additionalProperties":false}),
+            json!({"type":"object","required":["record_id","remove_values"],"properties":{"record_id":{"type":"string","format":"uuid"},"expected_updated_at":expected_updated_at_parameter(),"remove_values":{"type":"array","minItems":1,"maxItems":MAX_REMOVE_VALUES,"items":{"type":"object","required":["attribute_code"],"properties":{"attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}}},"additionalProperties":false}),
         ),
         definition(
             "restore_record_value",
@@ -571,7 +658,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         definition(
             "add_record_comment",
             "Add a comment to a record as the user who started this conversation, for example to record a review note or an explanation. Show the user the exact text first. This change requires approval.",
-            json!({"type":"object","required":["record_id","body"],"properties":{"record_id":{"type":"string","format":"uuid"},"body":{"type":"string","minLength":1,"maxLength":10000}},"additionalProperties":false}),
+            json!({"type":"object","required":["record_id","body"],"properties":{"record_id":{"type":"string","format":"uuid"},"body":{"type":"string","minLength":1,"maxLength":MAX_COMMENT_LENGTH}},"additionalProperties":false}),
         ),
         definition(
             "mark_notifications_read",
@@ -606,12 +693,12 @@ pub fn definitions() -> Vec<ToolDefinition> {
         definition(
             "create_saved_search",
             "Save a named Explorer search for the initiating user. Find the blueprint code with list_blueprints first. attributeFilters use {field, operator, value}; relationshipFacets use {field, selectedIds} of target record UUIDs. The search is private unless visibility is workspace. This change requires approval. Return the saved search link to the user.",
-            json!({"type":"object","required":["name","blueprint"],"properties":{"name":{"type":"string"},"description":{"type":"string"},"visibility":{"type":"string","enum":["private","workspace"]},"blueprint":{"type":"string"},"version":{"type":"integer","minimum":1},"all_versions":{"type":"boolean"},"query":{"type":"string"},"attributeFilters":attribute_filter_parameters(),"relationshipFacets":{"type":"array","maxItems":20,"items":{"type":"object","required":["field","selectedIds"],"properties":{"field":{"type":"string"},"selectedIds":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}}},"additionalProperties":false}),
+            json!({"type":"object","required":["name","blueprint"],"properties":{"name":{"type":"string"},"description":{"type":"string"},"visibility":{"type":"string","enum":SAVED_SEARCH_VISIBILITIES},"blueprint":{"type":"string"},"version":{"type":"integer","minimum":1},"all_versions":{"type":"boolean"},"query":{"type":"string"},"attributeFilters":attribute_filter_parameters(),"relationshipFacets":{"type":"array","maxItems":MAX_SEARCH_FILTERS,"items":{"type":"object","required":["field","selectedIds"],"properties":{"field":{"type":"string"},"selectedIds":{"type":"array","minItems":1,"maxItems":MAX_SELECTED_IDS,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}}},"additionalProperties":false}),
         ),
         definition(
             "update_saved_search",
             "Update an existing saved Explorer search owned by the initiating user, preserving every omitted field. Get its ID with list_saved_searches and inspect it with get_saved_search first. Provide only changed fields; empty attributeFilters or relationshipFacets arrays clear those filters. This change requires approval. Return the existing saved search link.",
-            json!({"type":"object","required":["saved_view_id"],"properties":{"saved_view_id":{"type":"string","format":"uuid"},"name":{"type":"string"},"description":{"type":"string"},"visibility":{"type":"string","enum":["private","workspace"]},"blueprint":{"type":"string"},"version":{"type":"integer","minimum":1},"all_versions":{"type":"boolean"},"query":{"type":"string"},"attributeFilters":attribute_filter_parameters(),"relationshipFacets":{"type":"array","maxItems":20,"items":{"type":"object","required":["field","selectedIds"],"properties":{"field":{"type":"string"},"selectedIds":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}}},"additionalProperties":false}),
+            json!({"type":"object","required":["saved_view_id"],"properties":{"saved_view_id":{"type":"string","format":"uuid"},"name":{"type":"string"},"description":{"type":"string"},"visibility":{"type":"string","enum":SAVED_SEARCH_VISIBILITIES},"blueprint":{"type":"string"},"version":{"type":"integer","minimum":1},"all_versions":{"type":"boolean"},"query":{"type":"string"},"attributeFilters":attribute_filter_parameters(),"relationshipFacets":{"type":"array","maxItems":MAX_SEARCH_FILTERS,"items":{"type":"object","required":["field","selectedIds"],"properties":{"field":{"type":"string"},"selectedIds":{"type":"array","minItems":1,"maxItems":MAX_SELECTED_IDS,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}}},"additionalProperties":false}),
         ),
         definition(
             "update_record_annotations",
@@ -619,7 +706,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
                 "Replace specified system_tags and/or system_metadata on a record without changing values or relationships. Omitted fields remain unchanged; [] or {} clears a field. Inspect get_record first. Requires approval.",
                 pinned_note!()
             ),
-            json!({"type":"object","required":["record_id"],"properties":{"record_id":{"type":"string","format":"uuid"},"expected_updated_at":expected_updated_at_parameter(),"system_tags":{"type":"array","maxItems":100,"items":{"type":"string"}},"system_metadata":{"type":"object"}},"additionalProperties":false}),
+            json!({"type":"object","required":["record_id"],"properties":{"record_id":{"type":"string","format":"uuid"},"expected_updated_at":expected_updated_at_parameter(),"system_tags":{"type":"array","maxItems":MAX_SYSTEM_TAGS,"items":{"type":"string"}},"system_metadata":{"type":"object"}},"additionalProperties":false}),
         ),
         definition(
             "update_context",
@@ -657,8 +744,8 @@ fn safe_workflow_run(run: crate::repository::WorkflowRun) -> Value {
 
 fn diagnostic_page_parameters(filter: Option<&str>) -> Value {
     let mut properties = json!({
-        "limit":{"type":"integer","minimum":1,"maximum":25},
-        "offset":{"type":"integer","minimum":0,"maximum":10000}
+        "limit":{"type":"integer","minimum":1,"maximum":MAX_DIAGNOSTIC_PAGE_LIMIT},
+        "offset":{"type":"integer","minimum":0,"maximum":MAX_PAGE_OFFSET}
     });
     if let Some(filter) = filter {
         properties[filter] = json!({"type":"string","format":"uuid"});
@@ -670,12 +757,13 @@ fn diagnostic_page_arguments(
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<(i64, i64), ToolError> {
-    let limit = limit.unwrap_or(10);
+    let limit = limit.unwrap_or(DEFAULT_DIAGNOSTIC_PAGE_LIMIT);
     let offset = offset.unwrap_or(0);
-    if !(1..=25).contains(&limit) || !(0..=10000).contains(&offset) {
-        return Err(ToolError::InvalidArguments(
-            "limit must be 1-25 and offset must be 0-10000".into(),
-        ));
+    if !(1..=MAX_DIAGNOSTIC_PAGE_LIMIT).contains(&limit) || !(0..=MAX_PAGE_OFFSET).contains(&offset)
+    {
+        return Err(ToolError::InvalidArguments(format!(
+            "limit must be 1-{MAX_DIAGNOSTIC_PAGE_LIMIT} and offset must be 0-{MAX_PAGE_OFFSET}"
+        )));
     }
     Ok((limit, offset))
 }
@@ -683,8 +771,8 @@ fn diagnostic_page_arguments(
 fn history_page_parameters() -> Value {
     json!({"type":"object","required":["record_id"],"properties":{
         "record_id":{"type":"string","format":"uuid"},
-        "limit":{"type":"integer","minimum":1,"maximum":50},
-        "offset":{"type":"integer","minimum":0,"maximum":10000}
+        "limit":{"type":"integer","minimum":1,"maximum":MAX_HISTORY_PAGE_LIMIT},
+        "offset":{"type":"integer","minimum":0,"maximum":MAX_PAGE_OFFSET}
     },"additionalProperties":false})
 }
 
@@ -697,12 +785,12 @@ fn history_page_arguments(arguments: Value) -> Result<(Uuid, i64, i64), ToolErro
         offset: Option<i64>,
     }
     let input: Input = decode(arguments)?;
-    let limit = input.limit.unwrap_or(20);
+    let limit = input.limit.unwrap_or(DEFAULT_HISTORY_PAGE_LIMIT);
     let offset = input.offset.unwrap_or(0);
-    if !(1..=50).contains(&limit) || !(0..=10000).contains(&offset) {
-        return Err(ToolError::InvalidArguments(
-            "limit must be 1-50 and offset must be 0-10000".into(),
-        ));
+    if !(1..=MAX_HISTORY_PAGE_LIMIT).contains(&limit) || !(0..=MAX_PAGE_OFFSET).contains(&offset) {
+        return Err(ToolError::InvalidArguments(format!(
+            "limit must be 1-{MAX_HISTORY_PAGE_LIMIT} and offset must be 0-{MAX_PAGE_OFFSET}"
+        )));
     }
     Ok((input.record_id, limit, offset))
 }
@@ -710,13 +798,13 @@ fn history_page_arguments(arguments: Value) -> Result<(Uuid, i64, i64), ToolErro
 fn next_history_offset(has_more: bool, offset: i64, limit: i64) -> Option<i64> {
     has_more
         .then_some(offset + limit)
-        .filter(|next| *next <= 10000)
+        .filter(|next| *next <= MAX_PAGE_OFFSET)
 }
 
 fn relationship_mutation_parameters() -> Value {
     let mut relationships = relationship_targets_parameters();
     relationships["minItems"] = json!(1);
-    relationships["maxItems"] = json!(20);
+    relationships["maxItems"] = json!(MAX_RELATIONSHIP_SETS);
     json!({"type":"object","required":["record_id","relationships"],"properties":{
         "record_id":{"type":"string","format":"uuid"},
         "expected_updated_at":expected_updated_at_parameter(),
@@ -893,7 +981,7 @@ pub fn change_summary_named(
         "duplicate_record" => Ok(format!("Duplicate record {}.", named("record_id")?)),
         "add_record_comment" => {
             let body = required_string(arguments, "body")?;
-            let mut excerpt: String = body.chars().take(200).collect();
+            let mut excerpt: String = body.chars().take(COMMENT_SUMMARY_EXCERPT_CHARS).collect();
             if excerpt.len() < body.len() {
                 excerpt.push('…');
             }
@@ -1055,7 +1143,7 @@ pub fn change_summary_named(
             arguments
                 .get("visibility")
                 .and_then(Value::as_str)
-                .unwrap_or("private"),
+                .unwrap_or(DEFAULT_SAVED_SEARCH_VISIBILITY),
             required_string(arguments, "name")?,
             required_string(arguments, "blueprint")?,
             arguments
@@ -1301,13 +1389,13 @@ pub async fn execute_read(
         "get_context" => serde_json::to_value(repository.get_context_by_id(parse_uuid(&arguments, "context_id")?).await?
             .ok_or(RepositoryError::NotFound("context"))?).expect("context serializes"),
         "list_saved_searches" => json!(repository.list_saved_views(actor, "").await?
-            .into_iter().filter(|view| view.owner_user_id == actor && view.kind == "explorer_search")
+            .into_iter().filter(|view| view.owner_user_id == actor && view.kind == EXPLORER_SEARCH_KIND)
             .map(|view| json!({"id":view.id,"name":view.name,"description":view.description,"visibility":view.visibility,"blueprint":view.state.get("blueprint"),"updated_at":view.updated_at}))
             .collect::<Vec<_>>()),
         "get_saved_search" => {
             let id = parse_uuid(&arguments, "saved_view_id")?;
             let view = repository.get_saved_view(actor, id, false).await?
-                .filter(|view| view.owner_user_id == actor && view.kind == "explorer_search")
+                .filter(|view| view.owner_user_id == actor && view.kind == EXPLORER_SEARCH_KIND)
                 .ok_or(RepositoryError::NotFound("saved search"))?;
             serde_json::to_value(view).expect("saved view serializes")
         }
@@ -1362,10 +1450,7 @@ pub async fn execute_read(
             #[serde(deny_unknown_fields)]
             struct Input { stale_after_days: Option<u16> }
             let input: Input = decode(arguments)?;
-            let days = input.stale_after_days.unwrap_or(DEFAULT_STALE_AFTER_DAYS);
-            if !(1..=MAX_STALE_AFTER_DAYS).contains(&days) {
-                return Err(ToolError::InvalidArguments("stale_after_days must be 1-3650".into()));
-            }
+            let days = stale_after_days(input.stale_after_days)?;
             serde_json::to_value(repository.data_health_summary(i64::from(days)).await?)
                 .expect("health summary serializes")
         }
@@ -1379,7 +1464,7 @@ pub async fn execute_read(
             json!({"items":items.into_iter().map(|finding| json!({
                 "id":finding.id,"rule_id":finding.rule_id,"record_id":finding.record_id,
                 "context_id":finding.context_id,"severity":finding.severity,
-                "state":finding.state,"message":finding.message.chars().take(512).collect::<String>(),
+                "state":finding.state,"message":finding.message.chars().take(MAX_RULE_FINDING_MESSAGE_CHARS).collect::<String>(),
                 "updated_at":finding.updated_at
             })).collect::<Vec<_>>(),
                 "next_offset":next_history_offset(has_more, offset, limit)})
@@ -1451,8 +1536,8 @@ pub async fn execute_read(
             struct Input { extension_id: Option<String>, connector_job_id: Option<Uuid>, limit: Option<i64>, offset: Option<i64> }
             let input: Input = decode(arguments)?;
             let (limit, offset) = diagnostic_page_arguments(input.limit, input.offset)?;
-            if input.extension_id.as_ref().is_some_and(|id| id.is_empty() || id.len() > 128) {
-                return Err(ToolError::InvalidArguments("extension_id must be 1-128 characters".into()));
+            if input.extension_id.as_ref().is_some_and(|id| id.is_empty() || id.len() > MAX_EXTENSION_ID_BYTES) {
+                return Err(ToolError::InvalidArguments(format!("extension_id must be 1-{MAX_EXTENSION_ID_BYTES} characters")));
             }
             let (items, has_more) = repository.extension_operation_runs_page(input.extension_id.as_deref(), input.connector_job_id, limit, offset).await?;
             json!({"items":items.into_iter().map(safe_extension_operation_run).collect::<Vec<_>>(),
@@ -1604,7 +1689,7 @@ pub async fn execute_read(
             #[serde(deny_unknown_fields)]
             struct Input { record_id: Uuid, limit: Option<usize>, before: Option<Before> }
             let input: Input = decode(arguments)?;
-            let limit = input.limit.unwrap_or(10);
+            let limit = input.limit.unwrap_or(DEFAULT_COMMENT_PAGE);
             if !(1..=MAX_COMMENT_PAGE).contains(&limit) {
                 return Err(ToolError::InvalidArguments(format!("limit must be 1-{MAX_COMMENT_PAGE}")));
             }
@@ -1639,7 +1724,7 @@ pub async fn execute_read(
             #[serde(deny_unknown_fields)]
             struct Input { #[serde(default)] unread_only: bool, limit: Option<usize>, before: Option<Before> }
             let input: Input = decode(arguments)?;
-            let limit = input.limit.unwrap_or(10);
+            let limit = input.limit.unwrap_or(DEFAULT_NOTIFICATION_PAGE);
             if !(1..=MAX_NOTIFICATION_PAGE).contains(&limit) {
                 return Err(ToolError::InvalidArguments(format!("limit must be 1-{MAX_NOTIFICATION_PAGE}")));
             }
@@ -1697,10 +1782,7 @@ pub async fn execute_read(
             #[serde(deny_unknown_fields)]
             struct Input { section: String, blueprint: Option<String>, stale_after_days: Option<u16> }
             let input: Input = decode(arguments)?;
-            let days = input.stale_after_days.unwrap_or(DEFAULT_STALE_AFTER_DAYS);
-            if !(1..=MAX_STALE_AFTER_DAYS).contains(&days) {
-                return Err(ToolError::InvalidArguments("stale_after_days must be 1-3650".into()));
-            }
+            let days = stale_after_days(input.stale_after_days)?;
             let keep = |code: &str| input.blueprint.as_deref().is_none_or(|blueprint| blueprint == code);
             let items = match input.section.as_str() {
                 "blueprints" => json!(repository.data_health_blueprints(days.into()).await?
@@ -2351,7 +2433,7 @@ pub async fn execute_mutation(
             }
             let input: Input = decode(arguments)?;
             if input.remove_values.is_empty()
-                || input.remove_values.len() > 20
+                || input.remove_values.len() > MAX_REMOVE_VALUES
                 || input
                     .remove_values
                     .iter()
@@ -2364,10 +2446,9 @@ pub async fn execute_mutation(
                     .len()
                     != input.remove_values.len()
             {
-                return Err(ToolError::InvalidArguments(
-                    "remove_values must contain 1 to 20 distinct attribute/context selectors"
-                        .into(),
-                ));
+                return Err(ToolError::InvalidArguments(format!(
+                    "remove_values must contain 1 to {MAX_REMOVE_VALUES} distinct attribute/context selectors"
+                )));
             }
             serde_json::to_value(
                 AttricatMutationService::new(repository)
@@ -2545,27 +2626,20 @@ pub async fn execute_mutation(
             let input: Input = decode(arguments)?;
             let name = input.name.trim();
             let blueprint = input.blueprint.trim();
-            let visibility = input.visibility.as_deref().unwrap_or("private");
-            if name.is_empty()
-                || name.len() > 120
-                || blueprint.is_empty()
-                || blueprint.len() > 256
-                || !matches!(visibility, "private" | "workspace")
-                || input.description.as_ref().is_some_and(|s| s.len() > 500)
-                || input.version.is_some_and(|v| v <= 0)
+            let visibility = input
+                .visibility
+                .as_deref()
+                .unwrap_or(DEFAULT_SAVED_SEARCH_VISIBILITY);
+            if !valid_saved_search_input(SavedSearchInput {
+                name,
+                description: input.description.as_deref(),
+                visibility,
+                blueprint,
+                query: input.query.as_deref(),
+                attribute_filters: &input.attribute_filters,
+                relationship_facets: &input.relationship_facets,
+            }) || input.version.is_some_and(|v| v <= 0)
                 || (input.version.is_some() && input.all_versions)
-                || input.query.as_ref().is_some_and(|q| q.len() > 4096)
-                || input.attribute_filters.len() > MAX_SEARCH_FILTERS
-                || input.relationship_facets.len() > MAX_SEARCH_FILTERS
-                || input
-                    .attribute_filters
-                    .iter()
-                    .any(|filter| !valid_saved_filter(filter))
-                || input.relationship_facets.iter().any(|facet| {
-                    facet.field.is_empty()
-                        || facet.selected_ids.is_empty()
-                        || facet.selected_ids.len() > 100
-                })
             {
                 return Err(ToolError::InvalidArguments(
                     "invalid saved search input".to_owned(),
@@ -2623,15 +2697,7 @@ pub async fn execute_mutation(
                         .collect::<Vec<_>>()
                 );
             }
-            if serde_json::to_vec(&state)
-                .expect("search state serializes")
-                .len()
-                > 32_768
-            {
-                return Err(ToolError::InvalidArguments(
-                    "search state exceeds 32 KiB".to_owned(),
-                ));
-            }
+            check_saved_search_state_size(&state)?;
             let view = repository
                 .create_saved_view(
                     actor,
@@ -2669,7 +2735,7 @@ pub async fn execute_mutation(
             let existing = repository
                 .get_saved_view(actor, input.saved_view_id, false)
                 .await?
-                .filter(|view| view.owner_user_id == actor && view.kind == "explorer_search")
+                .filter(|view| view.owner_user_id == actor && view.kind == EXPLORER_SEARCH_KIND)
                 .ok_or(RepositoryError::NotFound("saved search"))?;
             let name = input
                 .name
@@ -2688,26 +2754,15 @@ pub async fn execute_mutation(
                 .unwrap_or_else(|| state["blueprint"].as_str().unwrap_or(""))
                 .trim()
                 .to_owned();
-            if name.is_empty()
-                || name.len() > 120
-                || description.is_some_and(|value| value.len() > 500)
-                || !matches!(visibility, "private" | "workspace")
-                || blueprint.is_empty()
-                || blueprint.len() > 256
-                || input.version.is_some_and(|version| version <= 0)
-                || input.query.as_ref().is_some_and(|query| query.len() > 4096)
-                || input.attribute_filters.as_ref().is_some_and(|filters| {
-                    filters.len() > MAX_SEARCH_FILTERS
-                        || filters.iter().any(|filter| !valid_saved_filter(filter))
-                })
-                || input.relationship_facets.as_ref().is_some_and(|facets| {
-                    facets.len() > MAX_SEARCH_FILTERS
-                        || facets.iter().any(|facet| {
-                            facet.field.is_empty()
-                                || facet.selected_ids.is_empty()
-                                || facet.selected_ids.len() > 100
-                        })
-                })
+            if !valid_saved_search_input(SavedSearchInput {
+                name,
+                description,
+                visibility,
+                blueprint: &blueprint,
+                query: input.query.as_deref(),
+                attribute_filters: input.attribute_filters.as_deref().unwrap_or_default(),
+                relationship_facets: input.relationship_facets.as_deref().unwrap_or_default(),
+            }) || input.version.is_some_and(|version| version <= 0)
             {
                 return Err(ToolError::InvalidArguments(
                     "invalid saved search input".to_owned(),
@@ -2788,15 +2843,7 @@ pub async fn execute_mutation(
                     .await?;
                 }
             }
-            if serde_json::to_vec(&state)
-                .expect("search state serializes")
-                .len()
-                > 32_768
-            {
-                return Err(ToolError::InvalidArguments(
-                    "search state exceeds 32 KiB".to_owned(),
-                ));
-            }
+            check_saved_search_state_size(&state)?;
             let view = repository
                 .update_saved_view(
                     actor,
@@ -2828,15 +2875,15 @@ pub async fn execute_mutation(
             if input
                 .system_tags
                 .as_ref()
-                .is_some_and(|tags| tags.len() > 100)
+                .is_some_and(|tags| tags.len() > MAX_SYSTEM_TAGS)
                 || input
                     .system_metadata
                     .as_ref()
                     .is_some_and(|metadata| !metadata.is_object())
             {
-                return Err(ToolError::InvalidArguments(
-                    "tags must have at most 100 entries and metadata must be an object".into(),
-                ));
+                return Err(ToolError::InvalidArguments(format!(
+                    "tags must have at most {MAX_SYSTEM_TAGS} entries and metadata must be an object"
+                )));
             }
             serde_json::to_value(
                 AttricatMutationService::new(repository)
@@ -2965,10 +3012,10 @@ fn decode_relationship_mutation(
         relationships: Vec<crate::model::RelationshipTargets>,
     }
     let input: Input = decode(arguments)?;
-    if input.relationships.is_empty() || input.relationships.len() > 20 {
-        return Err(ToolError::InvalidArguments(
-            "relationships must contain 1 to 20 sets".into(),
-        ));
+    if input.relationships.is_empty() || input.relationships.len() > MAX_RELATIONSHIP_SETS {
+        return Err(ToolError::InvalidArguments(format!(
+            "relationships must contain 1 to {MAX_RELATIONSHIP_SETS} sets"
+        )));
     }
     let mut seen = std::collections::HashSet::new();
     for relationship in &input.relationships {
@@ -2982,7 +3029,7 @@ fn decode_relationship_mutation(
             ));
         };
         if relationship.attribute_id.is_some()
-            || relationship.target_record_ids.len() > 100
+            || relationship.target_record_ids.len() > MAX_RELATIONSHIP_TARGETS
             || (removing && relationship.target_record_ids.is_empty())
             || !seen.insert((code.to_owned(), relationship.context_id))
             || relationship
@@ -2992,7 +3039,9 @@ fn decode_relationship_mutation(
                 .len()
                 != relationship.target_record_ids.len()
         {
-            return Err(ToolError::InvalidArguments("relationship sets require unique attribute/context and at most 100 unique targets (nonempty when removing)".into()));
+            return Err(ToolError::InvalidArguments(format!(
+                "relationship sets require unique attribute/context and at most {MAX_RELATIONSHIP_TARGETS} unique targets (nonempty when removing)"
+            )));
         }
     }
     Ok((
@@ -3673,7 +3722,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 definition.function.parameters["properties"]["relationships"]["maxItems"],
-                20
+                super::MAX_RELATIONSHIP_SETS
             );
         }
         let id = uuid::Uuid::new_v4();
@@ -4165,7 +4214,10 @@ mod tests {
         let summary =
             change_summary("add_record_comment", &json!({"record_id":"e","body":long})).unwrap();
         assert!(
-            summary.ends_with(&format!("{}…\"", "y".repeat(200))),
+            summary.ends_with(&format!(
+                "{}…\"",
+                "y".repeat(super::COMMENT_SUMMARY_EXCERPT_CHARS)
+            )),
             "{summary}"
         );
         assert_eq!(

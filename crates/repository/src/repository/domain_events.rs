@@ -2,6 +2,8 @@ use async_trait::async_trait;
 use std::time::Duration;
 
 const EVENT_DELIVERY_MATERIALIZATION_BATCH_SIZE: i64 = 100;
+/// How long background loops share one read of the active workspace ids.
+const POLLED_WORKSPACE_IDS_TTL: Duration = Duration::from_secs(5);
 
 use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
@@ -736,8 +738,8 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
                 CacheKey::new("active_workspaces", &[]),
                 &[],
                 Policy::Ttl {
-                    fresh: Duration::from_secs(5),
-                    stale: Duration::from_secs(5),
+                    fresh: POLLED_WORKSPACE_IDS_TTL,
+                    stale: POLLED_WORKSPACE_IDS_TTL,
                 },
                 || self.active_workspace_ids(),
             )

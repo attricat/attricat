@@ -19,6 +19,8 @@ use super::{
 };
 use crate::extensions::valid_contribution_key;
 
+const MAX_CHECKLIST_ITEM_MARKDOWN_BYTES: usize = 4096;
+
 pub(super) fn validate_guidance_and_checks(
     manifest: &SolutionPackManifest,
     files: &BTreeMap<String, Vec<u8>>,
@@ -64,8 +66,11 @@ pub(super) fn validate_guidance_and_checks(
                     return invalid(format!("duplicate setup checklist key '{}'", item.key));
                 }
                 validate_bounded_text(&item.title, "setup checklist title", MAX_NAME_BYTES)?;
-                item.markdown =
-                    validate_markdown(&item.markdown, 4096, "setup checklist markdown")?;
+                item.markdown = validate_markdown(
+                    &item.markdown,
+                    MAX_CHECKLIST_ITEM_MARKDOWN_BYTES,
+                    "setup checklist markdown",
+                )?;
                 if let Some(check) = &item.check {
                     validate_guidance_key(check, "checks/")?;
                 }

@@ -16,6 +16,9 @@ pub const MAX_EXTENSION_LOOKUP_VALUE_BYTES: usize = 512;
 pub const MAX_EXTENSION_BATCH_INTENTS: usize = 100;
 pub const MAX_EXTENSION_BATCH_KEY_BYTES: usize = 256;
 pub const MAX_EXTENSION_INTENT_KEY_BYTES: usize = 128;
+const MAX_EXTENSION_CURSOR_BYTES: usize = 2048;
+/// Catalog page cursors expire before the value history retention window.
+pub(super) const EXTENSION_CURSOR_SNAPSHOT_TTL: chrono::Duration = chrono::Duration::days(30);
 
 /// A bounded, host-owned mutation envelope. The component never receives a
 /// repository handle: this payload is validated then committed through the
@@ -197,7 +200,7 @@ impl AttricatRepository {
             .map(decode_extension_cursor)
             .transpose()?;
         let (snapshot_at, created_at, record_id) = if let Some(cursor) = cursor {
-            if cursor.snapshot_at < Utc::now() - chrono::Duration::days(30)
+            if cursor.snapshot_at < Utc::now() - EXTENSION_CURSOR_SNAPSHOT_TTL
                 || cursor.workspace_id != workspace_id
                 || cursor.blueprint_id != request.blueprint_id
                 || cursor.blueprint_version != request.blueprint_version
@@ -360,9 +363,9 @@ impl AttricatRepository {
         value: &str,
     ) -> Result<Option<Record>, RepositoryError> {
         if value.is_empty() || value.len() > MAX_EXTENSION_LOOKUP_VALUE_BYTES {
-            return Err(RepositoryError::InvalidExtension(
-                "lookup value must be 1-512 bytes".into(),
-            ));
+            return Err(RepositoryError::InvalidExtension(format!(
+                "lookup value must be 1-{MAX_EXTENSION_LOOKUP_VALUE_BYTES} bytes"
+            )));
         }
         // Resolve exactly as an upsert with this lookup would, so a read never
         // names a different record than the one a write would update.
@@ -394,7 +397,7 @@ impl AttricatRepository {
 }
 
 fn decode_extension_cursor(value: &str) -> Result<ExtensionAttricatCursor, RepositoryError> {
-    if value.len() > 2048 {
+    if value.len() > MAX_EXTENSION_CURSOR_BYTES {
         return Err(RepositoryError::InvalidExtension(
             "catalog cursor is invalid".into(),
         ));
@@ -411,7 +414,7 @@ fn encode_extension_cursor(cursor: &ExtensionAttricatCursor) -> String {
 fn decode_extension_change_cursor(
     value: &str,
 ) -> Result<ExtensionAttricatChangeCursor, RepositoryError> {
-    if value.len() > 2048 {
+    if value.len() > MAX_EXTENSION_CURSOR_BYTES {
         return Err(RepositoryError::InvalidExtension(
             "catalog change cursor is invalid".into(),
         ));

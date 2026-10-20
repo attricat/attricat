@@ -6,6 +6,7 @@ pub use attricat_repository::{attricat_read_service, attricat_service, file_acce
 pub use attricat_storage as storage;
 
 pub mod blueprint_migration_worker;
+pub mod coordinator;
 pub mod event_dispatcher;
 pub mod file_worker;
 mod heartbeat;

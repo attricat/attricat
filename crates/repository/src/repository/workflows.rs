@@ -265,10 +265,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     pub async fn ensure_workflow_permissions(&self) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await?;
         sqlx::query("INSERT INTO permissions (code, description) VALUES ('workflows.read', 'Read workspace workflows and revisions'), ('workflows.manage', 'Create and manage workspace workflows') ON CONFLICT (code) DO NOTHING").execute(&mut *tx).await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
+        for role_id in super::roles::OWNER_AND_ADMIN_ROLE_IDS {
             sqlx::query("INSERT INTO role_permissions (role_id, permission_code) SELECT $1, code FROM permissions WHERE code IN ('workflows.read', 'workflows.manage') ON CONFLICT DO NOTHING").bind(role_id).execute(&mut *tx).await?;
         }
         tx.commit().await?;

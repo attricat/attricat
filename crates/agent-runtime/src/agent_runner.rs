@@ -24,6 +24,8 @@ use uuid::Uuid;
 
 const MAX_INLINE_TOOL_IMAGE_BYTES: i64 = 1024 * 1024;
 const MAX_INLINE_TOOL_TEXT_BYTES: i64 = 64 * 1024;
+/// How often streamed assistant text is flushed to subscribers.
+const DELTA_FLUSH_INTERVAL: Duration = Duration::from_millis(200);
 
 /// General tool use: blueprints, records, searches, diagnostics, history
 /// and files.
@@ -330,7 +332,7 @@ async fn drive(
     // The provider callback is synchronous. Flush while its future waits for
     // network frames so subscribers see text before generation completes,
     // without a database write for every token.
-    let mut tick = tokio::time::interval(Duration::from_millis(200));
+    let mut tick = tokio::time::interval(DELTA_FLUSH_INTERVAL);
     tick.tick().await;
     let result = loop {
         tokio::select! {

@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 use super::error::ApiError;
 
 const MAX_ARRAY_LIMIT: i64 = 500;
-const MAX_OFFSET: i64 = 10_000;
+/// Deep OFFSET scans cost linear work, so every offset-paginated list stops here.
+pub(super) const MAX_OFFSET: i64 = 10_000;
 const NEXT_OFFSET: HeaderName = HeaderName::from_static("x-next-offset");
 
 /// Optional `limit`/`offset`. Omitting both returns the newest

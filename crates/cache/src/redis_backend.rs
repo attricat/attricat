@@ -34,6 +34,11 @@ const STARTUP_WAIT: Duration = Duration::from_secs(1);
 /// Consecutive failures after which Redis is skipped for [`COOLDOWN`].
 const FAILURE_THRESHOLD: u32 = 5;
 const COOLDOWN: Duration = Duration::from_secs(5);
+/// Reconnection attempts before giving up; zero keeps reconnecting.
+const RECONNECT_MAX_ATTEMPTS: u32 = 0;
+const RECONNECT_MIN_DELAY_MILLIS: u32 = 100;
+const RECONNECT_MAX_DELAY_MILLIS: u32 = 5_000;
+const RECONNECT_BACKOFF_BASE: u32 = 2;
 
 fn error(error: impl std::fmt::Display) -> CacheError {
     CacheError::Failed(error.to_string())
@@ -205,8 +210,13 @@ impl Redis {
                 // database.
                 connection.max_command_attempts = 1;
             })
-            // Zero attempts: keep reconnecting, between 100 ms and 5 s apart.
-            .set_policy(ReconnectPolicy::new_exponential(0, 100, 5_000, 2));
+            // Keep reconnecting, between 100 ms and 5 s apart.
+            .set_policy(ReconnectPolicy::new_exponential(
+                RECONNECT_MAX_ATTEMPTS,
+                RECONNECT_MIN_DELAY_MILLIS,
+                RECONNECT_MAX_DELAY_MILLIS,
+                RECONNECT_BACKOFF_BASE,
+            ));
         let client = builder.build().map_err(error)?;
         let state = Arc::new(ConnectionState::default());
         metrics::gauge!("attricat_query_cache_redis_connected").set(0.0);

@@ -619,7 +619,9 @@ impl AttricatRepository {
         record_id: Uuid,
         snapshot_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
-        if snapshot_at < chrono::Utc::now() - chrono::Duration::days(30) {
+        if snapshot_at
+            < chrono::Utc::now() - super::extension_attricat_data::EXTENSION_CURSOR_SNAPSHOT_TTL
+        {
             return Err(RepositoryError::InvalidExtension(
                 "catalog snapshot has expired".into(),
             ));

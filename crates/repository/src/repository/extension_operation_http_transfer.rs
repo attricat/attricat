@@ -2,12 +2,15 @@
 //! Delivery is recorded *before* I/O. A crash after that point has an uncertain
 //! outcome and the host will never automatically send it again.
 use super::extension_operation_artifacts::{
-    MAX_OPERATION_RUN_ARTIFACT_BYTES, MAX_OPERATION_WORKSPACE_ARTIFACT_BYTES,
+    MAX_ARTIFACT_MEDIA_TYPE_BYTES, MAX_OPERATION_RUN_ARTIFACT_BYTES,
+    MAX_OPERATION_WORKSPACE_ARTIFACT_BYTES,
 };
 use super::{AttricatRepository, ExtensionOperationArtifact, RepositoryError};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
+
+const MAX_HTTP_INPUT_BYTES: i64 = 16 * 1024 * 1024;
 
 fn denied() -> RepositoryError {
     RepositoryError::InvalidExtension("HTTP transfer is not authorized".into())
@@ -72,8 +75,8 @@ impl AttricatRepository {
         media_type: &str,
     ) -> Result<ExtensionOperationArtifact, RepositoryError> {
         if max_bytes <= 0
-            || max_bytes > 16 * 1024 * 1024
-            || media_type.len() > 255
+            || max_bytes > MAX_HTTP_INPUT_BYTES
+            || media_type.len() > MAX_ARTIFACT_MEDIA_TYPE_BYTES
             || media_type.is_empty()
             || !media_type.is_ascii()
         {

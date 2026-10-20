@@ -15,6 +15,8 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 
+use crate::solution_packs::{MAX_ARCHIVE_PATH_BYTES, MAX_IDENTIFIER_BYTES};
+
 pub const MAX_SAMPLE_DATA_BYTES: usize = 1024 * 1024;
 pub const MAX_SAMPLE_RECORDS: usize = 256;
 pub const MAX_SAMPLE_FACTS_PER_RECORD: usize = 128;
@@ -23,6 +25,7 @@ pub const MAX_SAMPLE_FILES: usize = 64;
 pub const MAX_SAMPLE_FILES_PER_VALUE: usize = 16;
 pub const MAX_SAMPLE_FILE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_SAMPLE_FILENAME_BYTES: usize = 255;
+const MAX_SAMPLE_STRING_BYTES: usize = 4096;
 /// Media types a sample may bundle, with the filename extensions each accepts.
 pub const SAMPLE_FILE_MEDIA_TYPES: &[(&str, &[&str])] = &[
     ("image/png", &["png"]),
@@ -93,7 +96,7 @@ pub struct SampleFile {
 
 /// Archive paths of bundled sample files.
 pub fn valid_sample_file_path(path: &str) -> bool {
-    path.len() <= 512
+    path.len() <= MAX_ARCHIVE_PATH_BYTES
         && path
             .strip_prefix("sample-data/files/")
             .is_some_and(|suffix| {
@@ -430,11 +433,15 @@ pub fn explicit_fact_attribute_codes(record: &SampleRecord) -> BTreeSet<&str> {
 }
 
 fn valid_sample_record_key(value: &str) -> bool {
-    let Some(code) = value.strip_prefix("sample-records/") else {
-        return false;
-    };
+    value
+        .strip_prefix("sample-records/")
+        .is_some_and(valid_sample_code)
+}
+
+/// A sample record or attribute code: lowercase, starting with a letter.
+fn valid_sample_code(code: &str) -> bool {
     !code.is_empty()
-        && code.len() <= 128
+        && code.len() <= MAX_IDENTIFIER_BYTES
         && code.bytes().enumerate().all(|(index, byte)| {
             if index == 0 {
                 byte.is_ascii_lowercase()
@@ -450,16 +457,7 @@ fn validate_attribute_reference(blueprint: &str, attribute: &str) -> Result<(), 
             "sample attribute '{attribute}' is not a logical attribute of '{blueprint}'"
         ));
     };
-    if code.is_empty()
-        || code.len() > 128
-        || !code.bytes().enumerate().all(|(index, byte)| {
-            if index == 0 {
-                byte.is_ascii_lowercase()
-            } else {
-                byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
-            }
-        })
-    {
+    if !valid_sample_code(code) {
         return Err(format!("sample attribute '{attribute}' is invalid"));
     }
     prohibited_attribute_code(code)
@@ -545,8 +543,10 @@ pub fn prohibited_numeric(attribute: &str, canonical: &str) -> Result<(), String
 }
 
 fn validate_string_basics(value: &str) -> Result<(), String> {
-    if value.len() > 4096 {
-        return Err("sample string exceeds 4096 UTF-8 bytes".into());
+    if value.len() > MAX_SAMPLE_STRING_BYTES {
+        return Err(format!(
+            "sample string exceeds {MAX_SAMPLE_STRING_BYTES} UTF-8 bytes"
+        ));
     }
     if value.chars().any(|ch| {
         let code = ch as u32;
@@ -692,6 +692,8 @@ fn scan_prohibited(value: &str, string_rules: bool, telephone: bool) -> Result<(
 }
 
 fn contains_telephone(value: &str) -> bool {
+    /// Digits in a run of digits and separators that reads as a phone number.
+    const TELEPHONE_DIGITS: std::ops::RangeInclusive<usize> = 7..=15;
     let bytes = value.as_bytes();
     let mut index = 0;
     while index < bytes.len() {
@@ -710,7 +712,7 @@ fn contains_telephone(value: &str) -> bool {
             let digits = candidate.bytes().filter(u8::is_ascii_digit).count();
             let before_ok = start == 0 || !bytes[start - 1].is_ascii_digit();
             let after_ok = index == bytes.len() || !bytes[index].is_ascii_digit();
-            if (7..=15).contains(&digits) && before_ok && after_ok {
+            if TELEPHONE_DIGITS.contains(&digits) && before_ok && after_ok {
                 return true;
             }
         }
@@ -750,6 +752,7 @@ fn contains_encoded_blob(value: &str) -> bool {
     // bytes. Fixed windows make true substring matching linear and bounded by
     // the global 4096-byte string limit.
     const MIN_ENCODED_BLOB_BYTES: usize = 32;
+    const MIN_DECODED_BLOB_BYTES: usize = 24;
     value
         .as_bytes()
         .windows(MIN_ENCODED_BLOB_BYTES)
@@ -763,11 +766,11 @@ fn contains_encoded_blob(value: &str) -> bool {
             (standard
                 && general_purpose::STANDARD_NO_PAD
                     .decode(bytes)
-                    .is_ok_and(|decoded| decoded.len() >= 24))
+                    .is_ok_and(|decoded| decoded.len() >= MIN_DECODED_BLOB_BYTES))
                 || (url_safe
                     && general_purpose::URL_SAFE_NO_PAD
                         .decode(bytes)
-                        .is_ok_and(|decoded| decoded.len() >= 24))
+                        .is_ok_and(|decoded| decoded.len() >= MIN_DECODED_BLOB_BYTES))
         })
 }
 

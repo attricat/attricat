@@ -27,7 +27,7 @@ pub const TOOL: &str = "bulk_set_record_values";
 
 /// Values one bulk edit sets on each record; matches the bound on value
 /// removals so a proposal stays reviewable.
-const MAX_VALUES_PER_RECORD: usize = 20;
+pub(crate) const MAX_VALUES_PER_RECORD: usize = agent_tools::MAX_REMOVE_VALUES;
 /// Characters of a failure message quoted in the system comment.
 const MAX_COMMENT_MESSAGE_CHARS: usize = 2_000;
 

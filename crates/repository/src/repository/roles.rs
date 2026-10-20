@@ -5,6 +5,7 @@ use uuid::Uuid;
 use super::{
     AttricatRepository, RepositoryError,
     generations::{Generation, advance_generation},
+    members::MEMBERS_MANAGE_PERMISSION,
 };
 
 #[derive(Debug, serde::Serialize, FromRow)]
@@ -28,7 +29,13 @@ pub struct WorkspaceGrantTarget {
     pub label: String,
 }
 
-const OWNER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000101);
+/// Built-in `owner` system role.
+pub(super) const OWNER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000101);
+/// Built-in `admin` system role.
+pub(super) const ADMIN_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000102);
+/// System roles that receive newly bootstrapped administrative permissions.
+pub(super) const OWNER_AND_ADMIN_ROLE_IDS: [Uuid; 2] = [OWNER_ROLE_ID, ADMIN_ROLE_ID];
+const ROLES_MANAGE_PERMISSION: &str = "roles.manage";
 
 impl<S: super::RepositoryScope> AttricatRepository<S> {
     async fn require_permission(
@@ -128,7 +135,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         actor_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<Vec<WorkspaceRole>, RepositoryError> {
-        self.require_permission(actor_id, workspace_id, "roles.manage")
+        self.require_permission(actor_id, workspace_id, ROLES_MANAGE_PERMISSION)
             .await?;
         Ok(sqlx::query_as("SELECT r.id, r.code, r.is_system, coalesce(array_agg(rp.permission_code ORDER BY rp.permission_code) FILTER (WHERE rp.permission_code IS NOT NULL), ARRAY[]::text[]) AS permissions, r.created_at FROM roles r LEFT JOIN role_permissions rp ON rp.role_id = r.id WHERE r.is_system OR r.workspace_id = $1 GROUP BY r.id ORDER BY r.is_system DESC, r.code").bind(workspace_id).fetch_all(&self.pool).await?)
     }
@@ -138,7 +145,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         actor_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<Vec<WorkspaceRole>, RepositoryError> {
-        self.require_permission(actor_id, workspace_id, "members.manage")
+        self.require_permission(actor_id, workspace_id, MEMBERS_MANAGE_PERMISSION)
             .await?;
         Ok(sqlx::query_as("SELECT r.id, r.code, r.is_system, coalesce(array_agg(rp.permission_code ORDER BY rp.permission_code) FILTER (WHERE rp.permission_code IS NOT NULL), ARRAY[]::text[]) AS permissions, r.created_at FROM roles r LEFT JOIN role_permissions rp ON rp.role_id = r.id WHERE r.is_system OR r.workspace_id = $1 GROUP BY r.id ORDER BY r.is_system DESC, r.code").bind(workspace_id).fetch_all(&self.pool).await?)
     }
@@ -148,7 +155,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         actor_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<Vec<Permission>, RepositoryError> {
-        self.require_permission(actor_id, workspace_id, "roles.manage")
+        self.require_permission(actor_id, workspace_id, ROLES_MANAGE_PERMISSION)
             .await?;
         Ok(
             sqlx::query_as("SELECT code, description FROM permissions ORDER BY code")
@@ -173,7 +180,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         workspace_id: Uuid,
         scope_type: &str,
     ) -> Result<Vec<WorkspaceGrantTarget>, RepositoryError> {
-        self.require_permission(actor_id, workspace_id, "members.manage")
+        self.require_permission(actor_id, workspace_id, MEMBERS_MANAGE_PERMISSION)
             .await?;
         let query = match scope_type {
             "workspace" => "SELECT id, name AS label FROM workspaces WHERE id = $1",
@@ -201,11 +208,17 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         code: &str,
         permissions: &[String],
     ) -> Result<Uuid, RepositoryError> {
-        self.require_permission(actor_id, workspace_id, "roles.manage")
+        self.require_permission(actor_id, workspace_id, ROLES_MANAGE_PERMISSION)
             .await?;
         let id = Uuid::new_v4();
         let mut tx = self.pool.begin().await?;
-        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, "roles.manage").await?;
+        Self::lock_workspace_permission_on(
+            &mut tx,
+            actor_id,
+            workspace_id,
+            ROLES_MANAGE_PERMISSION,
+        )
+        .await?;
         Self::validate_role_input_on(&mut tx, actor_id, workspace_id, code, permissions).await?;
         self.ensure_token_can_delegate_on(&mut tx, actor_id, workspace_id, permissions)
             .await?;
@@ -236,10 +249,16 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         code: &str,
         permissions: &[String],
     ) -> Result<(), RepositoryError> {
-        self.require_permission(actor_id, workspace_id, "roles.manage")
+        self.require_permission(actor_id, workspace_id, ROLES_MANAGE_PERMISSION)
             .await?;
         let mut tx = self.pool.begin().await?;
-        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, "roles.manage").await?;
+        Self::lock_workspace_permission_on(
+            &mut tx,
+            actor_id,
+            workspace_id,
+            ROLES_MANAGE_PERMISSION,
+        )
+        .await?;
         Self::validate_role_input_on(&mut tx, actor_id, workspace_id, code, permissions).await?;
         self.ensure_token_can_delegate_on(&mut tx, actor_id, workspace_id, permissions)
             .await?;
@@ -294,13 +313,19 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         role_id: Uuid,
         replacement_role_id: Option<Uuid>,
     ) -> Result<(), RepositoryError> {
-        self.require_permission(actor_id, workspace_id, "roles.manage")
+        self.require_permission(actor_id, workspace_id, ROLES_MANAGE_PERMISSION)
             .await?;
         if role_id == OWNER_ROLE_ID || replacement_role_id == Some(role_id) {
             return Err(RepositoryError::NotFound("workspace-local role"));
         }
         let mut tx = self.pool.begin().await?;
-        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, "roles.manage").await?;
+        Self::lock_workspace_permission_on(
+            &mut tx,
+            actor_id,
+            workspace_id,
+            ROLES_MANAGE_PERMISSION,
+        )
+        .await?;
         let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM roles WHERE id = $1 AND workspace_id = $2 AND NOT is_system FOR UPDATE)").bind(role_id).bind(workspace_id).fetch_one(&mut *tx).await?;
         if !exists {
             return Err(RepositoryError::NotFound("workspace role"));

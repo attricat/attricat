@@ -16,7 +16,11 @@ use tracing_subscriber::{
     util::SubscriberInitExt,
 };
 
-use crate::http::RequestTiming;
+use crate::http::{MILLIS_PER_SECOND, RequestTiming};
+
+/// Content type of the Prometheus text exposition format.
+pub const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4; charset=utf-8";
+const DEFAULT_LOG_FILTER: &str = "info";
 
 static METRICS: Mutex<Option<PrometheusHandle>> = Mutex::new(None);
 static REQUEST_TIMINGS: OnceLock<Mutex<HashMap<Id, RequestTiming>>> = OnceLock::new();
@@ -109,7 +113,7 @@ where
             }
         }
         if let Some(timing) = timing {
-            timing.record_sql(label.as_deref(), elapsed_seconds * 1_000.0);
+            timing.record_sql(label.as_deref(), elapsed_seconds * MILLIS_PER_SECOND);
         }
     }
 }
@@ -154,7 +158,7 @@ pub fn init_tracing(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let filter = log_filter
         .and_then(|directives| EnvFilter::try_new(directives).ok())
-        .unwrap_or_else(|| EnvFilter::new("info"));
+        .unwrap_or_else(|| EnvFilter::new(DEFAULT_LOG_FILTER));
     let subscriber = tracing_subscriber::registry()
         .with(fmt::layer().with_target(false).with_filter(filter))
         .with(SqlTimingLayer);

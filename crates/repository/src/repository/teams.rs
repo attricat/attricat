@@ -18,6 +18,8 @@ use attricat_domain::model::Record;
 
 pub const MAX_TEAMS: i64 = 1000;
 pub const MAX_TEAM_MEMBERS: usize = 1000;
+const MAX_TEAM_CODE_BYTES: usize = 128;
+const MAX_TEAM_NAME_CHARS: usize = 200;
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct Team {
@@ -58,13 +60,15 @@ pub struct WorkspaceDirectory {
 const TEAM_FIELDS: &str = "t.id, t.code, t.name, t.created_at, t.updated_at, COALESCE(array_agg(m.user_id ORDER BY m.user_id) FILTER (WHERE m.user_id IS NOT NULL), '{}') AS member_user_ids";
 
 fn validate_team_input(code: Option<&str>, name: &str) -> Result<(), RepositoryError> {
-    if code.is_some_and(|code| !attricat_validation::is_valid_code(code) || code.len() > 128) {
+    if code.is_some_and(|code| {
+        !attricat_validation::is_valid_code(code) || code.len() > MAX_TEAM_CODE_BYTES
+    }) {
         return Err(RepositoryError::InvalidCode);
     }
-    if name.trim().is_empty() || name.chars().count() > 200 {
-        return Err(RepositoryError::InvalidTeam(
-            "name must contain 1 to 200 characters".into(),
-        ));
+    if name.trim().is_empty() || name.chars().count() > MAX_TEAM_NAME_CHARS {
+        return Err(RepositoryError::InvalidTeam(format!(
+            "name must contain 1 to {MAX_TEAM_NAME_CHARS} characters"
+        )));
     }
     Ok(())
 }

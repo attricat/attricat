@@ -1,4 +1,6 @@
-use super::{auth::ScopedRepository, error::ApiError, extractors::ApiQuery};
+use super::{
+    auth::ScopedRepository, error::ApiError, extractors::ApiQuery, pagination::MAX_OFFSET,
+};
 use crate::{
     constants::DEFAULT_LIST_PAGE_SIZE,
     repository::{AuditEventFilter, AuditEventPage},
@@ -7,6 +9,8 @@ use axum::Json;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use uuid::Uuid;
+
+const MAX_AUDIT_EVENT_PAGE_SIZE: i64 = 100;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -29,11 +33,10 @@ pub(super) async fn list(
 ) -> Result<Json<AuditEventPage>, ApiError> {
     let limit = query.limit.unwrap_or(i64::from(DEFAULT_LIST_PAGE_SIZE));
     let offset = query.offset.unwrap_or(0);
-    // Deep OFFSET scans cost linear work; match the record history bound.
-    if !(1..=100).contains(&limit) || !(0..=10_000).contains(&offset) {
-        return Err(ApiError::invalid_input(
-            "limit must be between 1 and 100 and offset must be between 0 and 10000".to_owned(),
-        ));
+    if !(1..=MAX_AUDIT_EVENT_PAGE_SIZE).contains(&limit) || !(0..=MAX_OFFSET).contains(&offset) {
+        return Err(ApiError::invalid_input(format!(
+            "limit must be between 1 and {MAX_AUDIT_EVENT_PAGE_SIZE} and offset must be between 0 and {MAX_OFFSET}"
+        )));
     }
     if query
         .occurred_after

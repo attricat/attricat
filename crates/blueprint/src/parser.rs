@@ -4,6 +4,7 @@ use attricat_validation::{CODE_PATTERN, is_valid_code, validate_json_schema_defi
 use schemars::{JsonSchema, generate::SchemaSettings};
 use serde::Deserialize;
 
+use crate::ast::{MAX_CONNECTOR_INTERVAL_SECONDS, MIN_CONNECTOR_INTERVAL_SECONDS};
 use crate::{
     AttributeDeclaration, BlueprintDefinition, BlueprintError, BlueprintKind,
     CONNECTOR_JOB_DIRECTIONS, ConnectorJobDefinition, FilePolicy, IncludeRef, KNOWN_VIEW_NAMES,
@@ -289,9 +290,10 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         if !CONNECTOR_JOB_DIRECTIONS.contains(&job.direction.as_str())
             || (job.direction == "import") != job.context.is_some()
             || (job.direction == "export" && job.input_file_id.is_some())
-            || job
-                .interval_seconds
-                .is_some_and(|seconds| !(60..=2_592_000).contains(&seconds))
+            || job.interval_seconds.is_some_and(|seconds| {
+                !(MIN_CONNECTOR_INTERVAL_SECONDS..=MAX_CONNECTOR_INTERVAL_SECONDS)
+                    .contains(&seconds)
+            })
             || !job.input.is_table()
         {
             return Err(BlueprintError::InvalidConnectorJob(format!(

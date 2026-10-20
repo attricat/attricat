@@ -1,5 +1,6 @@
 use super::*;
 use super::{record_projection::display_label, system_annotations::validate_system_tags};
+use attricat_validation::saved_search::MAX_RELATIONSHIP_HOPS;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use std::{
@@ -177,6 +178,9 @@ pub struct RecordSearchFilter {
     pub value_type: String,
     pub value: String,
 }
+
+/// Format version of [`SortedSearchCursor`]; cursors of other versions are rejected.
+const SORTED_SEARCH_CURSOR_VERSION: u8 = 4;
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 struct SortedSearchCursor {
@@ -1207,7 +1211,7 @@ impl AttricatRepository {
                 || cursor.effective_source_version != sort.effective_source_version
                 || cursor.publication_context_id != sort.publication_context_id
                 || cursor.context_id != Some(sort.context.requested_id())
-                || cursor.version != 4)
+                || cursor.version != SORTED_SEARCH_CURSOR_VERSION)
         {
             return Err(RepositoryError::InvalidBlueprintDefinition(
                 "page.cursor does not match sort".to_owned(),
@@ -1780,7 +1784,7 @@ impl AttricatRepository {
             .iter()
             .filter_map(|(path, leaf_type)| {
                 let parts: Vec<_> = path.split('.').collect();
-                (2..=4)
+                (2..=MAX_RELATIONSHIP_HOPS + 1)
                     .contains(&parts.len())
                     .then_some((path.as_str(), leaf_type.as_str(), parts))
             })
@@ -2691,16 +2695,19 @@ impl AttricatRepository {
                 .await;
             if global {
                 match &result {
-                    Ok(_) => metrics::counter!("attricat_global_relationship_search_total", "outcome" => "success").increment(1),
+                    Ok(_) => metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "success")
+                        .increment(1),
                     Err(RepositoryError::RelationshipSearchBudgetExceeded { dimension }) => {
-                        metrics::counter!("attricat_global_relationship_search_total", "outcome" => "budget_exceeded", "dimension" => *dimension).increment(1);
+                        metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "budget_exceeded", "dimension" => *dimension).increment(1);
                         tracing::warn!(dimension, "global relationship search budget exceeded");
                     }
                     Err(RepositoryError::RelationshipSearchTimedOut) => {
-                        metrics::counter!("attricat_global_relationship_search_total", "outcome" => "timed_out").increment(1);
+                        metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "timed_out")
+                            .increment(1);
                         tracing::warn!("global relationship search statement timed out");
                     }
-                    Err(_) => metrics::counter!("attricat_global_relationship_search_total", "outcome" => "failed").increment(1),
+                    Err(_) => metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "failed")
+                        .increment(1),
                 }
             }
             per_term.push(result?);
@@ -2738,7 +2745,7 @@ impl AttricatRepository {
             return Ok(TermPlan::Reachable);
         }
         let parts: Vec<_> = selector.split('.').collect();
-        if parts.len() > 4 || parts.iter().any(|part| part.is_empty()) {
+        if parts.len() > MAX_RELATIONSHIP_HOPS + 1 || parts.iter().any(|part| part.is_empty()) {
             return Err(RepositoryError::InvalidBlueprintDefinition(
                 "search selector may contain at most three relationship hops and a scalar leaf"
                     .into(),
@@ -3196,7 +3203,7 @@ impl AttricatRepository {
 
         // Each level is read as one ordered batch. Ordering makes the first
         // discovered witness stable even when several incoming paths converge.
-        for depth in 1..=3 {
+        for depth in 1..=MAX_RELATIONSHIP_HOPS as u8 {
             let level: Vec<_> = frontier.drain(..).collect();
             if level.is_empty() {
                 break;
@@ -3286,6 +3293,12 @@ const MAX_GLOBAL_SEARCH_MATCHES: usize = 1_000;
 const MAX_GLOBAL_SEARCH_RECORDS: usize = 5_000;
 const MAX_GLOBAL_SEARCH_EDGES: usize = 10_000;
 const MAX_GLOBAL_SEARCH_FRONTIER: usize = 5_000;
+const GLOBAL_SEARCH_TOTAL_METRIC: &str = "attricat_global_relationship_search_total";
+/// Budget dimensions reported by [`RepositoryError::RelationshipSearchBudgetExceeded`].
+const MATCHES_DIMENSION: &str = "matching_values";
+const RECORDS_DIMENSION: &str = "records";
+const EDGES_DIMENSION: &str = "relationship_edges";
+const FRONTIER_DIMENSION: &str = "frontier";
 
 #[derive(Default)]
 struct GlobalSearchBudget {
@@ -3296,10 +3309,10 @@ struct GlobalSearchBudget {
 
 impl GlobalSearchBudget {
     fn remaining_matches_plus_one(&self) -> Result<usize, RepositoryError> {
-        Self::remaining(MAX_GLOBAL_SEARCH_MATCHES, self.matches, "matching_values")
+        Self::remaining(MAX_GLOBAL_SEARCH_MATCHES, self.matches, MATCHES_DIMENSION)
     }
     fn remaining_edges_plus_one(&self) -> Result<usize, RepositoryError> {
-        Self::remaining(MAX_GLOBAL_SEARCH_EDGES, self.edges, "relationship_edges")
+        Self::remaining(MAX_GLOBAL_SEARCH_EDGES, self.edges, EDGES_DIMENSION)
     }
     fn remaining(
         limit: usize,
@@ -3313,18 +3326,18 @@ impl GlobalSearchBudget {
     }
     fn consume_matches(&mut self, count: usize) -> Result<(), RepositoryError> {
         self.matches += count;
-        self.check(self.matches, MAX_GLOBAL_SEARCH_MATCHES, "matching_values")
+        self.check(self.matches, MAX_GLOBAL_SEARCH_MATCHES, MATCHES_DIMENSION)
     }
     fn consume_frontier(&mut self, count: usize) -> Result<(), RepositoryError> {
-        self.check(count, MAX_GLOBAL_SEARCH_FRONTIER, "frontier")
+        self.check(count, MAX_GLOBAL_SEARCH_FRONTIER, FRONTIER_DIMENSION)
     }
     fn consume_records(&mut self, count: usize) -> Result<(), RepositoryError> {
         self.records += count;
-        self.check(self.records, MAX_GLOBAL_SEARCH_RECORDS, "records")
+        self.check(self.records, MAX_GLOBAL_SEARCH_RECORDS, RECORDS_DIMENSION)
     }
     fn consume_edges(&mut self, count: usize) -> Result<(), RepositoryError> {
         self.edges += count;
-        self.check(self.edges, MAX_GLOBAL_SEARCH_EDGES, "relationship_edges")
+        self.check(self.edges, MAX_GLOBAL_SEARCH_EDGES, EDGES_DIMENSION)
     }
     fn check(
         &self,
@@ -3340,10 +3353,13 @@ impl GlobalSearchBudget {
     }
 }
 
+/// PostgreSQL `query_canceled`, raised when `statement_timeout` expires.
+const QUERY_CANCELED_SQLSTATE: &str = "57014";
+
 fn global_search_error(error: sqlx::Error) -> RepositoryError {
     if error
         .as_database_error()
-        .is_some_and(|database| database.code().as_deref() == Some("57014"))
+        .is_some_and(|database| database.code().as_deref() == Some(QUERY_CANCELED_SQLSTATE))
     {
         RepositoryError::RelationshipSearchTimedOut
     } else {
@@ -3496,7 +3512,7 @@ mod global_search_budget_tests {
         assert!(matches!(
             budget.consume_matches(1),
             Err(RepositoryError::RelationshipSearchBudgetExceeded {
-                dimension: "matching_values"
+                dimension: MATCHES_DIMENSION
             })
         ));
 
@@ -3505,7 +3521,7 @@ mod global_search_budget_tests {
         assert!(matches!(
             budget.consume_records(1),
             Err(RepositoryError::RelationshipSearchBudgetExceeded {
-                dimension: "records"
+                dimension: RECORDS_DIMENSION
             })
         ));
 
@@ -3514,14 +3530,14 @@ mod global_search_budget_tests {
         assert!(matches!(
             budget.consume_edges(1),
             Err(RepositoryError::RelationshipSearchBudgetExceeded {
-                dimension: "relationship_edges"
+                dimension: EDGES_DIMENSION
             })
         ));
     }
 }
 
 fn relationship_sort_reverse_joins(depth: usize) -> Result<String, RepositoryError> {
-    if !(1..=3).contains(&depth) {
+    if !(1..=MAX_RELATIONSHIP_HOPS).contains(&depth) {
         return Err(RepositoryError::InvalidBlueprintDefinition(
             "relationship sort path must contain one to three hops".to_owned(),
         ));
@@ -3571,7 +3587,7 @@ fn relationship_sort_reverse_joins(depth: usize) -> Result<String, RepositoryErr
 }
 
 fn relationship_sort_forward_joins(depth: usize) -> Result<String, RepositoryError> {
-    if !(1..=3).contains(&depth) {
+    if !(1..=MAX_RELATIONSHIP_HOPS).contains(&depth) {
         return Err(RepositoryError::InvalidBlueprintDefinition(
             "relationship sort path must contain one to three hops".to_owned(),
         ));
@@ -3652,7 +3668,7 @@ fn decode_sorted_search_cursor(cursor: &str) -> Result<SortedSearchCursor, Repos
 
 fn encode_sorted_search_cursor(sort: &RecordSearchSort, row: &SortedRecordPreviewRow) -> String {
     let cursor = SortedSearchCursor {
-        version: 4,
+        version: SORTED_SEARCH_CURSOR_VERSION,
         field: sort.field.clone(),
         descending: sort.descending,
         effective_source_version: sort.effective_source_version,

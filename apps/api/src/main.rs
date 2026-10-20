@@ -3,7 +3,7 @@ use std::sync::Arc;
 use api::{
     MIGRATOR, agent_worker, blueprint_migration_worker,
     config::{BootstrapConfig, Config},
-    constants::MAINTENANCE_POOL_CONNECTIONS,
+    constants::{MAINTENANCE_POOL_CONNECTIONS, READINESS_PROBE_PERMITS},
     event_dispatcher, extension_policy,
     extension_registry::GitHubRegistry,
     extension_runtime::{self, ExtensionRuntime, ExtensionRuntimeConfig},
@@ -363,7 +363,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             request_permits: Arc::new(Semaphore::new(http.max_concurrent_requests)),
             request_timeout: http.request_timeout,
             stream_control: stream_control.clone(),
-            readiness_permits: Arc::new(Semaphore::new(2)),
+            readiness_permits: Arc::new(Semaphore::new(READINESS_PROBE_PERMITS)),
             default_body_limit: http.default_body_limit,
             devtools_enabled: http.devtools_enabled,
             demo_mode,

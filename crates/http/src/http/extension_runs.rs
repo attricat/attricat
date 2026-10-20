@@ -319,6 +319,8 @@ pub(super) async fn cancel(
     }
 }
 
+const MAX_DOWNLOAD_FILENAME_CHARS: usize = 128;
+
 /// Keeps a safe, ASCII filename from an extension-chosen output name.
 fn download_filename(name: Option<&str>, artifact_id: Uuid) -> String {
     let cleaned: String = name
@@ -326,7 +328,7 @@ fn download_filename(name: Option<&str>, artifact_id: Uuid) -> String {
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
         .skip_while(|c| *c == '.')
-        .take(128)
+        .take(MAX_DOWNLOAD_FILENAME_CHARS)
         .collect();
     if cleaned.is_empty() {
         format!("output-{artifact_id}")
@@ -407,7 +409,7 @@ pub(super) async fn download(
     );
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static("sandbox; default-src 'none'"),
+        HeaderValue::from_static(super::extensions::SANDBOXED_CONTENT_POLICY),
     );
     Ok(response)
 }

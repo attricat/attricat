@@ -25,12 +25,16 @@ pub const SUPPORTED_HOST_API: &str = "1.0.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
+/// Tar header and padding allowance per archive entry when bounding the
+/// decompressed archive size.
+const TAR_ENTRY_OVERHEAD_BYTES: usize = 1024;
+pub const MAX_CONTRIBUTION_KEY_BYTES: usize = 256;
 
 pub fn valid_contribution_key(value: &str) -> bool {
     let Some((extension_id, contribution_id)) = value.split_once(':') else {
         return false;
     };
-    value.len() <= 256
+    value.len() <= MAX_CONTRIBUTION_KEY_BYTES
         && !extension_id.is_empty()
         && !contribution_id.is_empty()
         && !contribution_id.contains(':')
@@ -114,6 +118,8 @@ pub const MAX_HOST_REQUEST_BYTES: u64 = DEFAULT_HOST_REQUEST_BYTES;
 pub const MAX_HOST_RESPONSE_BYTES: u64 = DEFAULT_HOST_REQUEST_BYTES;
 pub const MAX_NETWORK_RESPONSE_BYTES: u64 = DEFAULT_HOST_RESPONSE_BYTES;
 pub const MAX_HOST_TIMEOUT_MILLIS: u64 = 60_000;
+/// The largest bulk transfer a host permission may grant.
+pub const MAX_HOST_TRANSFER_BYTES: u64 = 1024 * 1024 * 1024;
 pub const MAX_EXTENSION_IDENTIFIER_BYTES: usize = 128;
 /// Initial interactive operations keep the Explorer bulk-selection bound; a
 /// larger, server-managed selection resource is a separate contract.
@@ -923,7 +929,7 @@ impl Manifest {
                 )
             {
                 return Err(ManifestError::Invalid(format!(
-                    "selection action contribution '{}' supports versions 1 and 2",
+                    "selection action contribution '{}' supports versions 1 and {SELECTION_ACTION_CONTRIBUTION_VERSION}",
                     contribution.id
                 )));
             }
@@ -1105,7 +1111,7 @@ impl HostPermission {
             || self.max_request_bytes > MAX_HOST_REQUEST_BYTES
             || self.max_response_bytes > MAX_NETWORK_RESPONSE_BYTES
             || self.timeout_ms > MAX_HOST_TIMEOUT_MILLIS
-            || self.max_transfer_bytes > 1024 * 1024 * 1024
+            || self.max_transfer_bytes > MAX_HOST_TRANSFER_BYTES
         {
             return Err(ManifestError::Invalid(format!(
                 "host permission '{}' has empty or unbounded rules",
@@ -1150,7 +1156,7 @@ impl EventContractExport {
             || self.max_payload_bytes > MAX_HOST_REQUEST_BYTES
         {
             return Err(ManifestError::Invalid(format!(
-                "event contract '{}' requires an owned versioned type, object schema, and 1-65536 byte payload limit",
+                "event contract '{}' requires an owned versioned type, object schema, and 1-{MAX_HOST_REQUEST_BYTES} byte payload limit",
                 self.id
             )));
         }
@@ -1417,7 +1423,8 @@ impl ExtensionPackage {
         // Include tar headers and padding, not just regular-file payloads.
         Self::from_tar_zst_with_expanded_limit(
             archive,
-            MAX_EXTENSION_UNPACKED_BYTES + (MAX_EXTENSION_ARCHIVE_ENTRIES + 1) * 1024,
+            MAX_EXTENSION_UNPACKED_BYTES
+                + (MAX_EXTENSION_ARCHIVE_ENTRIES + 1) * TAR_ENTRY_OVERHEAD_BYTES,
         )
     }
 

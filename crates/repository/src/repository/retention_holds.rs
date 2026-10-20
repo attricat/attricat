@@ -24,6 +24,8 @@ pub struct FileRetentionHold {
     pub active: bool,
 }
 
+const MAX_HOLD_REASON_CHARS: usize = 1000;
+
 const HOLD_COLUMNS: &str = "id, file_id, source, record_id, attribute_code, status, reason, held_until, created_by_user_id, created_at, released_at, released_by_user_id, (released_at IS NULL AND held_until > now()) AS active";
 
 impl AttricatRepository {
@@ -69,10 +71,10 @@ impl AttricatRepository {
             )));
         }
         let reason = reason.trim();
-        if reason.is_empty() || reason.chars().count() > 1000 {
-            return Err(RepositoryError::InvalidRetentionHold(
-                "reason must contain 1 to 1000 characters".to_owned(),
-            ));
+        if reason.is_empty() || reason.chars().count() > MAX_HOLD_REASON_CHARS {
+            return Err(RepositoryError::InvalidRetentionHold(format!(
+                "reason must contain 1 to {MAX_HOLD_REASON_CHARS} characters"
+            )));
         }
         let mut transaction = self.pool.begin().await?;
         // Lock the file so a concurrent reconciliation cannot mark it deleted
@@ -148,10 +150,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         sqlx::query("INSERT INTO permissions (code, description) VALUES ('files.hold', 'Place and release retention holds on files') ON CONFLICT (code) DO NOTHING")
             .execute(&mut *tx)
             .await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
+        for role_id in super::roles::OWNER_AND_ADMIN_ROLE_IDS {
             sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'files.hold') ON CONFLICT DO NOTHING")
                 .bind(role_id)
                 .execute(&mut *tx)

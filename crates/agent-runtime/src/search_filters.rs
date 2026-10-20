@@ -1,4 +1,5 @@
 //! Resolve agent filter inputs using the same attribute and relationship semantics as Explorer.
+use attricat_validation::saved_search::{MAX_RELATIONSHIP_HOPS, MAX_SELECTED_IDS};
 use std::collections::HashSet;
 use uuid::Uuid;
 
@@ -73,7 +74,7 @@ pub(crate) async fn resolve_agent_filter(
     actor: Uuid,
 ) -> Result<RecordSearchFilter, ToolError> {
     let parts: Vec<_> = filter.field.split('.').collect();
-    if parts.len() > 4 || parts.iter().any(|part| part.is_empty()) {
+    if parts.len() > MAX_RELATIONSHIP_HOPS + 1 || parts.iter().any(|part| part.is_empty()) {
         return Err(invalid(
             "filters.field may contain at most three relationship hops and a scalar or file leaf",
         ));
@@ -232,13 +233,14 @@ pub(crate) async fn resolve_agent_relationship_filter(
     blueprint: &BlueprintWithAttributes,
     filter: &RelationshipFilter,
 ) -> Result<RecordRelationshipFilter, ToolError> {
-    if filter.selected_target_ids.is_empty() || filter.selected_target_ids.len() > 100 {
-        return Err(invalid(
-            "relationship_filters.selected_target_ids must contain 1–100 IDs",
-        ));
+    if filter.selected_target_ids.is_empty() || filter.selected_target_ids.len() > MAX_SELECTED_IDS
+    {
+        return Err(invalid(format!(
+            "relationship_filters.selected_target_ids must contain 1–{MAX_SELECTED_IDS} IDs"
+        )));
     }
     let path: Vec<_> = filter.field.split('.').collect();
-    if path.len() > 3 || path.iter().any(|segment| segment.is_empty()) {
+    if path.len() > MAX_RELATIONSHIP_HOPS || path.iter().any(|segment| segment.is_empty()) {
         return Err(invalid(
             "relationship_filters.field must contain one to three relationship hops",
         ));

@@ -386,10 +386,7 @@ impl AttricatRepository {
         rule_id: Uuid,
         input: CreateManualRuleRun,
     ) -> Result<Uuid, RepositoryError> {
-        if input.idempotency_key.is_empty()
-            || input.idempotency_key.len() > 128
-            || !input.idempotency_key.is_ascii()
-        {
+        if !super::workflow_runs::valid_manual_idempotency_key(&input.idempotency_key) {
             return Err(RepositoryError::InvalidRuleDefinition(
                 "manual idempotency_key must be 1-128 ASCII bytes".into(),
             ));
@@ -456,8 +453,7 @@ impl AttricatRepository {
         record_id: Uuid,
         idempotency_key: &str,
     ) -> Result<Vec<Uuid>, RepositoryError> {
-        if idempotency_key.is_empty() || idempotency_key.len() > 128 || !idempotency_key.is_ascii()
-        {
+        if !super::workflow_runs::valid_manual_idempotency_key(idempotency_key) {
             return Err(RepositoryError::InvalidRuleDefinition(
                 "manual idempotency_key must be 1-128 ASCII bytes".into(),
             ));
@@ -685,7 +681,7 @@ impl AttricatRepository {
                         "schedule has no future occurrence".into(),
                     )
                 })?;
-                let missed = due < now - chrono::Duration::minutes(5);
+                let missed = due < now - super::workflow_runs::MISSED_SCHEDULE_GRACE;
                 let is_active = match active {
                     Some(active) => active,
                     None => {
@@ -1168,10 +1164,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     pub async fn ensure_rule_permissions(&self) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await?;
         sqlx::query("INSERT INTO permissions(code,description) VALUES ('rules.read','Read workspace data quality rules and findings'),('rules.manage','Create and operate workspace data quality rules') ON CONFLICT(code) DO NOTHING").execute(&mut *tx).await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
+        for role_id in super::roles::OWNER_AND_ADMIN_ROLE_IDS {
             sqlx::query("INSERT INTO role_permissions(role_id,permission_code) SELECT $1,code FROM permissions WHERE code IN ('rules.read','rules.manage') ON CONFLICT DO NOTHING").bind(role_id).execute(&mut *tx).await?;
         }
         tx.commit().await?;

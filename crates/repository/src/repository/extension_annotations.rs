@@ -15,7 +15,7 @@ use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use super::EventPublisher;
-use super::{AttricatRepository, RepositoryError, system_annotations};
+use super::{AttricatRepository, RepositoryError, SAMPLE_SYSTEM_TAG, system_annotations};
 use crate::domain_events::RECORD_ANNOTATIONS_CHANGED_V1;
 
 /// Maximum add/remove/set/delete operations in one patch.
@@ -29,7 +29,7 @@ const TAG_SEPARATOR: char = ':';
 /// Core-owned names that no extension may claim as an annotation namespace.
 /// Core tags never contain `:`, so they cannot collide with extension tags;
 /// these names also keep Core's metadata keys out of extension ownership.
-const RESERVED_NAMESPACES: &[&str] = &["attricat", "attricat.sample", "catalog", "core", "system"];
+const RESERVED_NAMESPACES: &[&str] = &["attricat", SAMPLE_SYSTEM_TAG, "catalog", "core", "system"];
 
 /// A bounded, explicit patch of one extension's annotation namespace. Setting
 /// a key replaces that key's whole JSON value; JSON `null` is a valid value,

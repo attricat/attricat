@@ -4,12 +4,12 @@ use api::{
     config::Config,
     file_worker::FileWorker,
     storage::{ObjectStore, S3ObjectStore},
-    telemetry::{init_metrics, init_tracing},
+    telemetry::{PROMETHEUS_CONTENT_TYPE, init_metrics, init_tracing},
 };
 use axum::{
     Router,
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
     routing::get,
 };
@@ -17,6 +17,10 @@ use metrics_exporter_prometheus::PrometheusHandle;
 use secrecy::ExposeSecret;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use subtle::ConstantTimeEq;
+
+const POOL_CONNECTIONS: u32 = 4;
+/// Back-off after a failed iteration, so a persistent fault does not spin.
+const FAILED_ITERATION_BACKOFF: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
 struct OperationsState {
@@ -39,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let object_store = Arc::new(S3ObjectStore::new(config.storage).await);
     object_store.readiness().await.map_err(|_| "file worker storage readiness failed: cannot access the configured S3 bucket; check S3_ENDPOINT, S3_BUCKET, and credentials")?;
     let pool = PgPoolOptions::new()
-        .max_connections(4)
+        .max_connections(POOL_CONNECTIONS)
         .connect(config.database.url.expose_secret())
         .await?;
     let worker = FileWorker::new(pool.clone(), object_store.clone(), file_worker.worker);
@@ -84,7 +88,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tokio::pin!(shutdown);
     loop {
         tokio::select! {
-            result = worker.run_once() => { if let Err(error) = result { tracing::error!(%error, "file worker iteration failed"); tokio::time::sleep(Duration::from_secs(1)).await; } }
+            result = worker.run_once() => {
+                if let Err(error) = result {
+                    tracing::error!(%error, "file worker iteration failed");
+                    tokio::time::sleep(FAILED_ITERATION_BACKOFF).await;
+                }
+            }
             _ = &mut shutdown => break,
         }
         tokio::select! {
@@ -136,7 +145,7 @@ async fn worker_readiness(State(state): State<OperationsState>) -> Response {
 async fn worker_metrics(State(state): State<OperationsState>, headers: HeaderMap) -> Response {
     if let Some(expected) = state.token.as_deref() {
         let supplied = headers
-            .get("authorization")
+            .get(header::AUTHORIZATION)
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.strip_prefix("Bearer "))
             .unwrap_or_default();
@@ -147,7 +156,7 @@ async fn worker_metrics(State(state): State<OperationsState>, headers: HeaderMap
         }
     }
     (
-        [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
+        [(header::CONTENT_TYPE, PROMETHEUS_CONTENT_TYPE)],
         state.metrics.render(),
     )
         .into_response()

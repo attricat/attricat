@@ -1,5 +1,5 @@
 //! Strict, inert workflow definition parsing. Execution is owned by the API runtime.
-use attricat_validation::is_valid_code;
+use attricat_validation::{is_valid_code, predicate::MAX_TAG_LENGTH};
 use cron::Schedule;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -169,6 +169,13 @@ pub const DEFAULT_REFERENCING_TARGETS: u32 = 100;
 pub const MAX_REFERENCING_TARGETS: u32 = 500;
 const MAX_NESTED_ACTIONS: usize = 20;
 const MAX_TRIGGER_ATTRIBUTES: usize = 100;
+const MAX_EXTENSION_PROVIDER_BYTES: usize = 128;
+/// Tags one system tag action may add or remove.
+const MAX_TAGS_PER_ACTION: usize = 100;
+/// Keys one system metadata delete action may remove.
+const MAX_METADATA_KEYS_PER_ACTION: usize = 100;
+/// Fields of a schedule cron expression, including seconds.
+const CRON_FIELDS: usize = 6;
 
 pub fn parse(source: &str) -> Result<WorkflowDefinition, WorkflowError> {
     let raw: Raw = toml::from_str(source)?;
@@ -320,7 +327,7 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
                 }
                 "extension_event" => {
                     let provider = required(provider, "extension provider")?;
-                    if provider.len() > 128
+                    if provider.len() > MAX_EXTENSION_PROVIDER_BYTES
                         || !provider
                             .chars()
                             .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_')
@@ -361,14 +368,13 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
 /// The cron crate also accepts alternative field counts, so validate the
 /// whitespace-delimited contract before delegating expression parsing.
 pub fn parse_six_field_cron(value: &str) -> Result<Schedule, WorkflowError> {
-    if value.split_whitespace().count() != 6 {
-        return Err(WorkflowError::Invalid(
-            "schedule cron must be a valid six-field UTC cron expression".into(),
-        ));
-    }
-    Schedule::from_str(value).map_err(|_| {
+    let invalid = || {
         WorkflowError::Invalid("schedule cron must be a valid six-field UTC cron expression".into())
-    })
+    };
+    if value.split_whitespace().count() != CRON_FIELDS {
+        return Err(invalid());
+    }
+    Schedule::from_str(value).map_err(|_| invalid())
 }
 
 fn required(value: Option<String>, name: &str) -> Result<String, WorkflowError> {
@@ -402,10 +408,10 @@ const ENVELOPE_FIELDS: &[&str] = &["event_type", "aggregate_kind", "source_kind"
 fn action(a: RawAction) -> Result<Action, WorkflowError> {
     match a {
         RawAction::SystemTagsAdd { tags } => Ok(Action::SystemTagsAdd {
-            tags: limited_strings(tags, "tag", 100)?,
+            tags: limited_strings(tags, "tag", MAX_TAGS_PER_ACTION)?,
         }),
         RawAction::SystemTagsRemove { tags } => Ok(Action::SystemTagsRemove {
-            tags: limited_strings(tags, "tag", 100)?,
+            tags: limited_strings(tags, "tag", MAX_TAGS_PER_ACTION)?,
         }),
         RawAction::SystemMetadataMerge { values } => {
             if values.is_empty() {
@@ -417,7 +423,7 @@ fn action(a: RawAction) -> Result<Action, WorkflowError> {
             Ok(Action::SystemMetadataMerge { values })
         }
         RawAction::SystemMetadataDelete { keys } => Ok(Action::SystemMetadataDelete {
-            keys: limited_strings(keys, "metadata key", 100)?,
+            keys: limited_strings(keys, "metadata key", MAX_METADATA_KEYS_PER_ACTION)?,
         }),
         RawAction::AttributeWrite {
             attribute_code,
@@ -598,10 +604,10 @@ fn limited_strings(
     let mut seen = HashSet::new();
     for v in &values {
         non_empty(v, name)?;
-        if name == "tag" && v.len() > 128 {
-            return Err(WorkflowError::Invalid(
-                "tag must be no longer than 128 bytes".into(),
-            ));
+        if name == "tag" && v.len() > MAX_TAG_LENGTH {
+            return Err(WorkflowError::Invalid(format!(
+                "tag must be no longer than {MAX_TAG_LENGTH} bytes"
+            )));
         }
         if !seen.insert(v) {
             return Err(WorkflowError::Invalid(format!("duplicate {name}")));

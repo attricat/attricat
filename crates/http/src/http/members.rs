@@ -138,8 +138,8 @@ pub(super) async fn create_workspace_user(
             ));
         }
     };
-    let invitation_secret = opaque_secret("cat_inv_");
-    let onboarding_secret = opaque_secret("cat_onb_");
+    let invitation_secret = opaque_secret(INVITATION_SECRET_PREFIX);
+    let onboarding_secret = opaque_secret(ONBOARDING_SECRET_PREFIX);
     let user = repository
         .create_workspace_user(
             actor,
@@ -265,8 +265,13 @@ pub(super) fn action_url(base: &str, parameters: &[(&str, &str)]) -> Result<Stri
     Ok(url.into())
 }
 
-fn opaque_secret(prefix: &str) -> String {
-    let mut bytes = [0u8; 32];
+const OPAQUE_SECRET_BYTES: usize = 32;
+const INVITATION_SECRET_PREFIX: &str = "cat_inv_";
+const ONBOARDING_SECRET_PREFIX: &str = "cat_onb_";
+
+/// A random URL-safe secret; only its SHA-256 digest is ever stored.
+pub(super) fn opaque_secret(prefix: &str) -> String {
+    let mut bytes = [0u8; OPAQUE_SECRET_BYTES];
     rand::rngs::OsRng.fill_bytes(&mut bytes);
     format!("{prefix}{}", URL_SAFE_NO_PAD.encode(bytes))
 }
@@ -360,9 +365,7 @@ pub(super) async fn create_invitation(
 ) -> Result<(StatusCode, Json<CreatedInvitation>), ApiError> {
     reject_in_demo(&state)?;
     let email = deliverable_email(&input.email)?;
-    let mut bytes = [0u8; 32];
-    rand::rngs::OsRng.fill_bytes(&mut bytes);
-    let secret = format!("cat_inv_{}", URL_SAFE_NO_PAD.encode(bytes));
+    let secret = opaque_secret(INVITATION_SECRET_PREFIX);
     let id = Uuid::new_v4();
     repository
         .create_workspace_invitation(

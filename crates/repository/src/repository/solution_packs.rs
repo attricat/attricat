@@ -26,21 +26,39 @@ use crate::{
         BlueprintMappingRequest, BlueprintPublication, ExistingBlueprintSnapshot,
         ExistingPresentationAssetSnapshot, InstalledExtensionSnapshot,
         MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES, MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
-        MappingKind, PlanActionKind, PlanResourceKind, PlannedAction, PlannedMapping,
-        PlanningExploreNavigationEntry, PlanningWorkspaceSnapshot, PresentationAssetMappingRequest,
-        SOLUTION_PACK_PLAN_EXPIRY_HOURS, SolutionPackCheckDefinition, SolutionPackCheckPredicate,
-        SolutionPackExtensionRequirement, SolutionPackPlanDraft, ValidatedSolutionPack,
-        build_solution_pack_plan, evaluate_extension_requirement, json_deep_contains,
-        parse_version_req, physical_code, validate_blueprint_mapping_requests,
-        validate_presentation_asset_mapping_requests,
+        MAX_SOLUTION_PACK_PRESENTATION_ASSET_BYTES, MappingKind, PlanActionKind, PlanResourceKind,
+        PlannedAction, PlannedMapping, PlanningExploreNavigationEntry, PlanningWorkspaceSnapshot,
+        PresentationAssetMappingRequest, SOLUTION_PACK_PLAN_EXPIRY_HOURS,
+        SolutionPackCheckDefinition, SolutionPackCheckPredicate, SolutionPackExtensionRequirement,
+        SolutionPackPlanDraft, ValidatedSolutionPack, build_solution_pack_plan,
+        evaluate_extension_requirement, json_deep_contains, parse_version_req, physical_code,
+        validate_blueprint_mapping_requests, validate_presentation_asset_mapping_requests,
     },
     storage::{ObjectStore, ObjectStoreError, StoredObject, get_object_for_integrity},
 };
 
 use super::{
-    AttricatRepository, EventPublisher, ExploreNavigationEntry, RepositoryError,
-    blueprints::blueprint_event, record_commands::ChosenIdRecordCreate,
+    AttricatRepository, EventPublisher, ExploreNavigationEntry, RepositoryError, SAMPLE_SYSTEM_TAG,
+    blueprints::blueprint_event, extensions::empty_workspace_extension_layout,
+    record_commands::ChosenIdRecordCreate, roles::OWNER_AND_ADMIN_ROLE_IDS,
 };
+
+/// Length of a hex-encoded SHA-256 digest.
+const SHA256_HEX_LEN: usize = 64;
+/// Largest presentation asset a persisted plan or step may reference.
+const MAX_PRESENTATION_ASSET_BYTES: i64 = MAX_SOLUTION_PACK_PRESENTATION_ASSET_BYTES as i64;
+/// How long a sample application stays resumable after it starts.
+const SAMPLE_APPLICATION_RESUMABLE_DAYS: i64 = 30;
+/// How long sample files being staged stay pending before upload cleanup.
+const SAMPLE_FILE_STAGING_HOURS: i64 = 1;
+/// Extra time staged sample files are kept after the plan could last be applied.
+const SAMPLE_FILE_CLEANUP_MARGIN_HOURS: i64 = 1;
+/// Most staged asset objects one reconciliation pass examines.
+const MAX_ASSET_CLEANUP_OBJECTS_PER_PASS: usize = 64;
+/// Expired plans or applications cleaned up per sample-staging batch.
+const SAMPLE_STAGING_CLEANUP_BATCH: usize = 64;
+/// Longest step failure diagnostic stored on an application, in characters.
+const MAX_STEP_DIAGNOSTIC_CHARS: usize = 1024;
 
 pub struct CreateSolutionPackPlanRequest<'a> {
     pub prefix: &'a str,
@@ -1186,8 +1204,11 @@ impl AttricatRepository {
             .iter()
             .map(|file| file.object_key.clone())
             .collect::<Vec<_>>();
-        self.begin_file_uploads(&keys, Utc::now() + Duration::hours(1))
-            .await?;
+        self.begin_file_uploads(
+            &keys,
+            Utc::now() + Duration::hours(SAMPLE_FILE_STAGING_HOURS),
+        )
+        .await?;
         for file in &staged {
             let bytes = pack.file(&file.path).expect("validated sample file exists");
             let stored = object_store
@@ -1225,7 +1246,7 @@ impl AttricatRepository {
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let reconciliation_started_at = Utc::now();
-        for _ in 0..64 {
+        for _ in 0..MAX_ASSET_CLEANUP_OBJECTS_PER_PASS {
             let mut tx = self.pool.begin().await?;
             // Lock the plan and staging row in the same order as application preparation.
             // A plan with any durable application is never cleanup-eligible: applications
@@ -1305,9 +1326,9 @@ impl AttricatRepository {
             // Preparation and cleanup lock the same plan row. Cleanup skips a plan
             // while preparation owns it, then rechecks application absence while
             // holding the lock, so expiry cannot strand a started application.
-            let expired_plan_ids = sqlx::query_scalar::<_, Uuid>(
-                "SELECT p.id FROM solution_pack_plans p WHERE p.workspace_id=$1 AND p.expires_at <= now() AND EXISTS (SELECT 1 FROM solution_pack_plan_sample_records s WHERE s.workspace_id=p.workspace_id AND s.plan_id=p.id) AND NOT EXISTS (SELECT 1 FROM solution_pack_applications a WHERE a.workspace_id=p.workspace_id AND a.plan_id=p.id) ORDER BY p.expires_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT 64",
-            )
+            let expired_plan_ids = sqlx::query_scalar::<_, Uuid>(&format!(
+                "SELECT p.id FROM solution_pack_plans p WHERE p.workspace_id=$1 AND p.expires_at <= now() AND EXISTS (SELECT 1 FROM solution_pack_plan_sample_records s WHERE s.workspace_id=p.workspace_id AND s.plan_id=p.id) AND NOT EXISTS (SELECT 1 FROM solution_pack_applications a WHERE a.workspace_id=p.workspace_id AND a.plan_id=p.id) ORDER BY p.expires_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT {SAMPLE_STAGING_CLEANUP_BATCH}",
+            ))
             .bind(workspace_id)
             .fetch_all(&mut *tx)
             .await?;
@@ -1319,7 +1340,7 @@ impl AttricatRepository {
                 .bind(workspace_id).bind(&expired_plan_ids).execute(&mut *tx).await?;
             expire_sample_file_staging(&mut tx, workspace_id, &expired_plan_ids).await?;
             tx.commit().await?;
-            if expired_plan_ids.len() < 64 {
+            if expired_plan_ids.len() < SAMPLE_STAGING_CLEANUP_BATCH {
                 break;
             }
         }
@@ -1327,9 +1348,9 @@ impl AttricatRepository {
         // Each application is independently locked so an active step either commits
         // before abandonment or observes the terminal state before beginning.
         loop {
-            let expired = sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM solution_pack_applications WHERE workspace_id=$1 AND resumable_until <= now() AND state IN ('running','failed') ORDER BY resumable_until LIMIT 64",
-            ).bind(workspace_id).fetch_all(&self.pool).await?;
+            let expired = sqlx::query_scalar::<_, Uuid>(&format!(
+                "SELECT id FROM solution_pack_applications WHERE workspace_id=$1 AND resumable_until <= now() AND state IN ('running','failed') ORDER BY resumable_until LIMIT {SAMPLE_STAGING_CLEANUP_BATCH}",
+            )).bind(workspace_id).fetch_all(&self.pool).await?;
             if expired.is_empty() {
                 break;
             }
@@ -1533,7 +1554,7 @@ impl AttricatRepository {
         let extension_layout = settings_object
             .and_then(|settings| settings.get("extension_layout"))
             .cloned()
-            .unwrap_or_else(|| serde_json::json!({"version":1,"outlets":{}}));
+            .unwrap_or_else(empty_workspace_extension_layout);
         let extension_layout_valid = settings_object.is_some()
             && super::extensions::validate_workspace_extension_layout(&extension_layout).is_ok();
         let (explore_navigation, explore_navigation_valid) = match settings_object.and_then(|_| {
@@ -1796,7 +1817,7 @@ impl AttricatRepository {
                 // Make the target unavailable to the ordinary planner so its
                 // existing dependency propagation and workspace-setting
                 // semantics remain authoritative.
-                snapshot.canonical_definition_hash = "0".repeat(64);
+                snapshot.canonical_definition_hash = "0".repeat(SHA256_HEX_LEN);
             }
             existing_blueprints.insert(prior.logical_key.clone(), snapshot);
         }
@@ -2464,7 +2485,11 @@ impl AttricatRepository {
             sqlx::query("UPDATE file_upload_intents SET cleanup_after=$3 WHERE workspace_id=$1 AND object_key=ANY($2) AND state='pending'")
                 .bind(workspace_id)
                 .bind(staged_sample_files.iter().map(|file| file.object_key.clone()).collect::<Vec<_>>())
-                .bind(expires_at + Duration::days(30) + Duration::hours(1))
+                .bind(
+                    expires_at
+                        + Duration::days(SAMPLE_APPLICATION_RESUMABLE_DAYS)
+                        + Duration::hours(SAMPLE_FILE_CLEANUP_MARGIN_HOURS),
+                )
                 .execute(&mut *tx)
                 .await?;
         }
@@ -3849,9 +3874,9 @@ impl AttricatRepository {
                         "image/png" | "image/jpeg" | "image/webp" | "image/svg+xml"
                     )
                     || snapshot.byte_size <= 0
-                    || snapshot.byte_size > 2 * 1024 * 1024
-                    || snapshot.sha256.len() != 64
-                    || snapshot.source_sha256.len() != 64
+                    || snapshot.byte_size > MAX_PRESENTATION_ASSET_BYTES
+                    || snapshot.sha256.len() != SHA256_HEX_LEN
+                    || snapshot.source_sha256.len() != SHA256_HEX_LEN
                 {
                     return Err(RepositoryError::InvalidSolutionPackPlan(
                         "existing asset mapping snapshot does not match its target".into(),
@@ -3880,16 +3905,8 @@ impl AttricatRepository {
                     || snapshot.code != mapping.target_code
                     || Some(snapshot.version) != mapping.target_version
                     || !matches!(snapshot.kind.as_str(), "record" | "mixin")
-                    || snapshot.definition_hash.len() != 64
-                    || snapshot.canonical_definition_hash.len() != 64
-                    || !snapshot
-                        .definition_hash
-                        .bytes()
-                        .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-                    || !snapshot
-                        .canonical_definition_hash
-                        .bytes()
-                        .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+                    || !is_lowercase_sha256_hex(&snapshot.definition_hash)
+                    || !is_lowercase_sha256_hex(&snapshot.canonical_definition_hash)
                     || snapshot.status != "published"
                     || snapshot.deleted
                 {
@@ -4230,13 +4247,16 @@ impl AttricatRepository {
         .bind(&plan.readme_markdown)
         .bind(&plan.release_notes_markdown)
         .bind(&plan.setup_checklist)
-        .bind(plan.sample_data_selected.then(|| Utc::now() + Duration::days(30)))
+        .bind(
+            plan.sample_data_selected
+                .then(|| Utc::now() + Duration::days(SAMPLE_APPLICATION_RESUMABLE_DAYS)),
+        )
         .fetch_optional(&mut *tx)
         .await?;
         let application_id = match inserted {
             Some(id) => {
                 if plan.sample_data_selected {
-                    sqlx::query("UPDATE solution_pack_applications SET resumable_until=started_at + interval '30 days' WHERE workspace_id=$1 AND id=$2")
+                    sqlx::query(&format!("UPDATE solution_pack_applications SET resumable_until=started_at + interval '{SAMPLE_APPLICATION_RESUMABLE_DAYS} days' WHERE workspace_id=$1 AND id=$2"))
                         .bind(workspace_id).bind(id).execute(&mut *tx).await?;
                 }
                 sqlx::query(
@@ -5159,7 +5179,7 @@ impl AttricatRepository {
                                 blueprint_version,
                                 values,
                                 files: super::record_commands::CreateFileValues::None,
-                                system_tags: vec!["attricat.sample".to_owned()],
+                                system_tags: vec![SAMPLE_SYSTEM_TAG.to_owned()],
                                 system_metadata: serde_json::json!({}),
                                 host_sample_marker: true,
                             },
@@ -5216,12 +5236,12 @@ impl AttricatRepository {
                             "invalid presentation asset payload".into(),
                         )
                     })?;
-                    if payload.source_sha256.len() != 64
-                        || payload.stored_sha256.len() != 64
+                    if payload.source_sha256.len() != SHA256_HEX_LEN
+                        || payload.stored_sha256.len() != SHA256_HEX_LEN
                         || payload.byte_size <= 0
-                        || payload.byte_size > 2 * 1024 * 1024
+                        || payload.byte_size > MAX_PRESENTATION_ASSET_BYTES
                         || payload.source_byte_size <= 0
-                        || payload.source_byte_size > 2 * 1024 * 1024
+                        || payload.source_byte_size > MAX_PRESENTATION_ASSET_BYTES
                     {
                         return Err(RepositoryError::InvalidSolutionPackPlan(
                             "invalid presentation asset payload evidence".into(),
@@ -6047,7 +6067,7 @@ async fn evaluate_solution_pack_check(
             let layout = settings
                 .get("extension_layout")
                 .cloned()
-                .unwrap_or_else(|| serde_json::json!({"version":1,"outlets":{}}));
+                .unwrap_or_else(empty_workspace_extension_layout);
             let placement = classify_extension_layout_placement(
                 &layout,
                 contribution,
@@ -6941,7 +6961,14 @@ impl AttricatRepository {
 }
 
 fn bounded_diagnostic(message: &str) -> String {
-    message.chars().take(1024).collect()
+    message.chars().take(MAX_STEP_DIAGNOSTIC_CHARS).collect()
+}
+
+fn is_lowercase_sha256_hex(value: &str) -> bool {
+    value.len() == SHA256_HEX_LEN
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
 impl<S: super::RepositoryScope> AttricatRepository<S> {
@@ -6952,10 +6979,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         sqlx::query("INSERT INTO permissions (code, description) VALUES ('solution_packs.manage', 'Inspect and manage solution packs') ON CONFLICT (code) DO NOTHING")
             .execute(&mut *tx)
             .await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
+        for role_id in OWNER_AND_ADMIN_ROLE_IDS {
             sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'solution_packs.manage') ON CONFLICT DO NOTHING")
                 .bind(role_id)
                 .execute(&mut *tx)

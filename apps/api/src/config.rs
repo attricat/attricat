@@ -8,7 +8,12 @@
 //! they do not appear in `docker inspect`, process listings or crash dumps.
 
 use std::{
-    collections::HashMap, fmt, fs, io, net::SocketAddr, path::PathBuf, str::FromStr, time::Duration,
+    collections::HashMap,
+    fmt, fs, io,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    path::PathBuf,
+    str::FromStr,
+    time::Duration,
 };
 
 use secrecy::SecretString;
@@ -20,10 +25,12 @@ use crate::{
     constants::{
         DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS, DEFAULT_FILE_UPLOAD_MAX_BYTES,
         DEFAULT_FILE_UPLOAD_MAX_FILES, DEFAULT_HTTP_DEFAULT_BODY_BYTES,
-        DEFAULT_HTTP_MAX_CONCURRENT_REQUESTS, DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS,
-        DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE, DEFAULT_PREVIEW_RELATIONSHIP_DEPTH,
-        DEFAULT_PREVIEW_RELATIONSHIP_ITEMS, DEFAULT_RECORD_PAGE_SIZE,
-        DEFAULT_RELATIONSHIP_FACET_NODES, REQUEST_POOL_CONNECTIONS, TASK_POOL_CONNECTIONS,
+        DEFAULT_HTTP_EVENT_STREAM_LIFETIME_SECONDS, DEFAULT_HTTP_MAX_CONCURRENT_REQUESTS,
+        DEFAULT_HTTP_MAX_EVENT_STREAMS, DEFAULT_HTTP_MAX_EVENT_STREAMS_PER_PRINCIPAL,
+        DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS, DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE,
+        DEFAULT_PREVIEW_RELATIONSHIP_DEPTH, DEFAULT_PREVIEW_RELATIONSHIP_ITEMS,
+        DEFAULT_RECORD_PAGE_SIZE, DEFAULT_RELATIONSHIP_FACET_NODES, REQUEST_POOL_CONNECTIONS,
+        TASK_POOL_CONNECTIONS,
     },
     event_dispatcher::DispatcherConfig,
     extension_policy::ExtensionPolicy,
@@ -37,6 +44,21 @@ use attricat_cache::CacheConfig;
 
 pub const DEFAULT_SECRETS_DIR: &str = "/run/secrets";
 const MAX_GLOBAL_POOL_CONNECTIONS: u32 = 100;
+const DEFAULT_BIND_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 3000);
+const DEFAULT_FILE_WORKER_OPERATIONS_BIND_ADDR: SocketAddr =
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 3001);
+const DEFAULT_FILE_WORKER_POLL_MILLISECONDS: u64 = 500;
+const DEFAULT_VALUE_HISTORY_RETENTION_DAYS: &str = "90";
+const DEFAULT_WORKSPACE_ID: Uuid = Uuid::from_u128(0x00000000_0000_4000_8000_000000000002);
+const DEFAULT_BOOTSTRAP_OWNER_EMAIL: &str = "owner@example.test";
+// Local development defaults: a mail catcher and the Vite dev server.
+const DEFAULT_SMTP_HOST: &str = "127.0.0.1";
+const DEFAULT_SMTP_PORT: u16 = 1025;
+const DEFAULT_SMTP_TLS_MODE: &str = "starttls";
+const DEFAULT_MAIL_FROM: &str = "Attricat <no-reply@attricat.local>";
+const DEFAULT_PASSWORD_RESET_URL: &str = "http://127.0.0.1:5173/password-reset/confirm";
+const DEFAULT_WORKSPACE_INVITATION_URL: &str = "http://127.0.0.1:5173/invitations/accept";
+const DEFAULT_WORKSPACE_ONBOARDING_URL: &str = "http://127.0.0.1:5173/onboarding";
 
 /// Names of the files the secrets directory may hold.
 pub mod secret {
@@ -255,7 +277,7 @@ impl Config {
             storage: StorageConfig::from_values(get, source.secret(secret::S3_SECRET_ACCESS_KEY)?)
                 .map_err(|error| format!("invalid object storage configuration: {error}"))?,
             http: HttpConfig {
-                bind_addr: source.parsed("BIND_ADDR", SocketAddr::from(([127, 0, 0, 1], 3000)))?,
+                bind_addr: source.parsed("BIND_ADDR", DEFAULT_BIND_ADDR)?,
                 web_dist_dir: source.owned("WEB_DIST_DIR"),
                 session_cookie_secure: source.boolean("SESSION_COOKIE_SECURE", true)?,
                 devtools_enabled,
@@ -269,12 +291,16 @@ impl Config {
                 )?,
                 default_body_limit: source
                     .positive("HTTP_DEFAULT_BODY_BYTES", DEFAULT_HTTP_DEFAULT_BODY_BYTES)?,
-                max_event_streams: source.positive("HTTP_MAX_EVENT_STREAMS", 128)?,
-                max_event_streams_per_principal: source
-                    .positive("HTTP_MAX_EVENT_STREAMS_PER_PRINCIPAL", 4)?,
-                event_stream_lifetime: Duration::from_secs(
-                    source.positive("HTTP_EVENT_STREAM_LIFETIME_SECONDS", 900)?,
-                ),
+                max_event_streams: source
+                    .positive("HTTP_MAX_EVENT_STREAMS", DEFAULT_HTTP_MAX_EVENT_STREAMS)?,
+                max_event_streams_per_principal: source.positive(
+                    "HTTP_MAX_EVENT_STREAMS_PER_PRINCIPAL",
+                    DEFAULT_HTTP_MAX_EVENT_STREAMS_PER_PRINCIPAL,
+                )?,
+                event_stream_lifetime: Duration::from_secs(source.positive(
+                    "HTTP_EVENT_STREAM_LIFETIME_SECONDS",
+                    DEFAULT_HTTP_EVENT_STREAM_LIFETIME_SECONDS,
+                )?),
                 max_preview_relationship_depth: source.parsed(
                     "PREVIEW_MAX_RELATIONSHIP_DEPTH",
                     DEFAULT_PREVIEW_RELATIONSHIP_DEPTH,
@@ -306,19 +332,19 @@ impl Config {
             },
             bootstrap: bootstrap(source, demo_mode)?,
             mail: MailConfig {
-                smtp_host: get("SMTP_HOST").unwrap_or_else(|| "127.0.0.1".to_owned()),
-                smtp_port: source.parsed("SMTP_PORT", 1025)?,
-                smtp_tls_mode: get("SMTP_TLS_MODE").unwrap_or_else(|| "starttls".to_owned()),
+                smtp_host: get("SMTP_HOST").unwrap_or_else(|| DEFAULT_SMTP_HOST.to_owned()),
+                smtp_port: source.parsed("SMTP_PORT", DEFAULT_SMTP_PORT)?,
+                smtp_tls_mode: get("SMTP_TLS_MODE")
+                    .unwrap_or_else(|| DEFAULT_SMTP_TLS_MODE.to_owned()),
                 smtp_username: get("SMTP_USERNAME"),
                 smtp_password: source.secret(secret::SMTP_PASSWORD)?,
-                from: get("MAIL_FROM")
-                    .unwrap_or_else(|| "Attricat <no-reply@attricat.local>".to_owned()),
+                from: get("MAIL_FROM").unwrap_or_else(|| DEFAULT_MAIL_FROM.to_owned()),
                 password_reset_url: get("PASSWORD_RESET_URL")
-                    .unwrap_or_else(|| "http://127.0.0.1:5173/password-reset/confirm".to_owned()),
+                    .unwrap_or_else(|| DEFAULT_PASSWORD_RESET_URL.to_owned()),
                 workspace_invitation_url: get("WORKSPACE_INVITATION_URL")
-                    .unwrap_or_else(|| "http://127.0.0.1:5173/invitations/accept".to_owned()),
+                    .unwrap_or_else(|| DEFAULT_WORKSPACE_INVITATION_URL.to_owned()),
                 workspace_onboarding_url: get("WORKSPACE_ONBOARDING_URL")
-                    .unwrap_or_else(|| "http://127.0.0.1:5173/onboarding".to_owned()),
+                    .unwrap_or_else(|| DEFAULT_WORKSPACE_ONBOARDING_URL.to_owned()),
             },
             cache: CacheConfig::parse(
                 source.var("CACHE_BACKEND"),
@@ -344,7 +370,7 @@ impl Config {
             },
             value_history_retention_days: source
                 .var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
-                .unwrap_or("90")
+                .unwrap_or(DEFAULT_VALUE_HISTORY_RETENTION_DAYS)
                 .parse()
                 .map_err(|error| format!("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS {error}"))?,
             event_dispatcher: DispatcherConfig::from_values(get)
@@ -363,7 +389,7 @@ fn bootstrap(source: &Source, demo_mode: bool) -> Result<BootstrapConfig, Config
     let owner_email = source
         .vars
         .get("ATTRICAT_BOOTSTRAP_OWNER_EMAIL")
-        .map_or("owner@example.test", String::as_str)
+        .map_or(DEFAULT_BOOTSTRAP_OWNER_EMAIL, String::as_str)
         .trim()
         .to_lowercase();
     if !owner_email.contains('@') {
@@ -388,10 +414,7 @@ fn bootstrap(source: &Source, demo_mode: bool) -> Result<BootstrapConfig, Config
             password,
         });
     Ok(BootstrapConfig {
-        workspace_id: source.parsed(
-            "ATTRICAT_WORKSPACE_ID",
-            Uuid::from_u128(0x00000000_0000_4000_8000_000000000002),
-        )?,
+        workspace_id: source.parsed("ATTRICAT_WORKSPACE_ID", DEFAULT_WORKSPACE_ID)?,
         workspace_name: source
             .owned("ATTRICAT_BOOTSTRAP_WORKSPACE_NAME")
             .unwrap_or_else(|| {
@@ -421,7 +444,7 @@ fn bootstrap(source: &Source, demo_mode: bool) -> Result<BootstrapConfig, Config
 fn file_worker(source: &Source) -> Result<FileWorkerConfig, ConfigError> {
     let operations_bind_addr = source.parsed(
         "FILE_WORKER_OPERATIONS_BIND_ADDR",
-        SocketAddr::from(([127, 0, 0, 1], 3001)),
+        DEFAULT_FILE_WORKER_OPERATIONS_BIND_ADDR,
     )?;
     let metrics_token = source.secret(secret::FILE_WORKER_METRICS_TOKEN)?;
     if !operations_bind_addr.ip().is_loopback() && metrics_token.is_none() {
@@ -434,9 +457,10 @@ fn file_worker(source: &Source) -> Result<FileWorkerConfig, ConfigError> {
         worker: WorkerConfig::from_values(|name| source.owned(name))?,
         operations_bind_addr,
         metrics_token,
-        poll_interval: Duration::from_millis(
-            source.positive("FILE_WORKER_POLL_MILLISECONDS", 500)?,
-        ),
+        poll_interval: Duration::from_millis(source.positive(
+            "FILE_WORKER_POLL_MILLISECONDS",
+            DEFAULT_FILE_WORKER_POLL_MILLISECONDS,
+        )?),
     })
 }
 

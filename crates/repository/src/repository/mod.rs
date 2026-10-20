@@ -129,10 +129,17 @@ mod workflows;
 mod workspace_navigation;
 mod write_context;
 
+/// System tag that marks records created as solution-pack sample data. Only
+/// the host may add it; ordinary tag writes and record copies drop it.
+pub(crate) const SAMPLE_SYSTEM_TAG: &str = "attricat.sample";
+
+/// Violations named in a summary message; the rest are omitted.
+const MAX_SUMMARIZED_VIOLATIONS: usize = 5;
+
 fn summarize_violations(violations: &[CheckViolation]) -> String {
     violations
         .iter()
-        .take(5)
+        .take(MAX_SUMMARIZED_VIOLATIONS)
         .map(|violation| format!("{} ({})", violation.message, violation.code))
         .collect::<Vec<_>>()
         .join("; ")
@@ -404,7 +411,10 @@ pub struct StatusTransitionDenial {
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
-    #[error("comment must contain 1 to 10000 characters and no null characters")]
+    #[error(
+        "comment must contain 1 to {} characters and no null characters",
+        record_comments::MAX_COMMENT_LENGTH
+    )]
     InvalidComment,
     #[error("comment changed; reload before saving again")]
     CommentConflict,
@@ -469,10 +479,15 @@ pub enum RepositoryError {
     InvalidCode,
     #[error("context data must be a JSON object")]
     InvalidContextData,
-    #[error("system metadata must be a JSON object no larger than 64 KiB")]
+    #[error(
+        "system metadata must be a JSON object no larger than {} KiB",
+        system_annotations::MAX_SYSTEM_METADATA_BYTES / 1024
+    )]
     InvalidSystemMetadata,
     #[error(
-        "system tags must contain at most 100 unique, non-blank strings no longer than 128 bytes"
+        "system tags must contain at most {} unique, non-blank strings no longer than {} bytes",
+        system_annotations::MAX_SYSTEM_TAGS,
+        system_annotations::MAX_SYSTEM_TAG_BYTES
     )]
     InvalidSystemTags,
     #[error("context was not found")]
@@ -794,13 +809,13 @@ impl AttricatRepository {
             initiating_actor_token_id: event_metadata_uuid(event, "initiating_actor_token_id"),
             workflow_causal_depth: event
                 .metadata
-                .get("workflow_causal_depth")
+                .get(workflow_runs::CAUSAL_DEPTH_METADATA_KEY)
                 .and_then(Value::as_u64)
-                .filter(|depth| *depth <= 8)
+                .filter(|depth| *depth <= workflow_runs::MAX_WORKFLOW_CAUSAL_DEPTH as u64)
                 .unwrap_or(0) as usize,
             workflow_root_trigger_event_id: event
                 .metadata
-                .get("workflow_root_trigger_event_id")
+                .get(workflow_runs::ROOT_TRIGGER_EVENT_METADATA_KEY)
                 .and_then(Value::as_str)
                 .and_then(|id| id.parse().ok())
                 .unwrap_or(event.id),
