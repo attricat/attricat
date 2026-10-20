@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { getBlueprintRevision } from './api';
+import { getBlueprintRevision, type BlueprintWithAttributes } from './api';
 import { recordQueryKeys } from './queryKeys';
 import {
   recordFormOptions,
@@ -16,6 +16,7 @@ export const useRecordBlueprintRevision = (
   record: { blueprint_id: string; blueprint_version: number } | undefined,
 ) => {
   const { t } = useTranslation();
+  const client = useQueryClient();
   return useQuery({
     queryKey: recordQueryKeys.blueprintRevision(
       record?.blueprint_id,
@@ -29,6 +30,22 @@ export const useRecordBlueprintRevision = (
       );
     },
     enabled: Boolean(record?.blueprint_id && record.blueprint_version),
+    // Published revisions never change.
+    staleTime: Infinity,
+    // Most records use their blueprint's latest revision, which pages such as
+    // a relationship field's picker have often loaded by code already.
+    initialData: () =>
+      record &&
+      client
+        .getQueriesData<BlueprintWithAttributes>({
+          queryKey: recordQueryKeys.blueprintsByCode(),
+        })
+        .map(([, data]) => data)
+        .find(
+          (data) =>
+            data?.blueprint.id === record.blueprint_id &&
+            data.blueprint.version === record.blueprint_version,
+        ),
   });
 };
 

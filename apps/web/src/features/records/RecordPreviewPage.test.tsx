@@ -178,6 +178,7 @@ describe('RecordPreviewPage', () => {
         blueprint_version: 1,
       },
       values: {},
+      reusable_values: {},
     } as never);
     vi.mocked(api.getBlueprintRevision).mockResolvedValue({
       blueprint: {
@@ -273,6 +274,10 @@ describe('RecordPreviewPage', () => {
     } as never);
     vi.mocked(api.getRecordForm).mockResolvedValue({
       can_write: true,
+      blueprint: {
+        blueprint: { id: '22222222-2222-4222-8222-222222222222', version: 1 },
+        attributes: [],
+      },
     } as never);
     navigate.mockClear();
     renderPage();
@@ -357,6 +362,7 @@ describe('RecordPreviewPage', () => {
         is_sample: true,
       },
       values: {},
+      reusable_values: {},
     } as never);
     const blueprint = {
       blueprint: {

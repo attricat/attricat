@@ -20,12 +20,11 @@ import { UserAvatar } from '../../components/UserAvatar';
 import { Timestamp } from '../../time/Timestamp';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
-import { listComments } from './api';
 import { commentsSectionId, systemAuthorKind } from './constants';
 import { CommentComposer } from './CommentComposer';
 import { MarkdownContent } from '../markdown/MarkdownContent';
-import { commentQueryKeys } from './queryKeys';
-import type { CommentCursor, RecordComment } from './schemas';
+import { recordCommentsOptions } from './queryOptions';
+import type { RecordComment } from './schemas';
 import { EmptyState } from '../../components/EmptyState';
 import { CommentIcon } from '../../components/systemIcons';
 
@@ -134,23 +133,12 @@ export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const key = commentQueryKeys.record(
-    session.data?.workspace_id,
-    session.data?.user_id,
+  const commentsOptions = recordCommentsOptions(
+    session.data ?? undefined,
     recordId,
   );
-  const comments = useInfiniteQuery({
-    queryKey: key,
-    queryFn: ({ pageParam }) => listComments(recordId, pageParam),
-    initialPageParam: undefined as CommentCursor | undefined,
-    getNextPageParam: (page) => {
-      const last = page.items.at(-1);
-      return page.has_more && last
-        ? { before_time: last.created_at, before_id: last.id }
-        : undefined;
-    },
-    enabled: Boolean(session.data),
-  });
+  const key = commentsOptions.queryKey;
+  const comments = useInfiniteQuery(commentsOptions);
   const saved = () => {
     setNotice(t('comments.saved'));
     void client.invalidateQueries({ queryKey: key });

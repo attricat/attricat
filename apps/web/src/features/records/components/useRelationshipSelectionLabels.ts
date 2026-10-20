@@ -1,5 +1,7 @@
 import { useQueries } from '@tanstack/react-query';
+import { use } from 'react';
 import { getBlueprintByCode, getRecordPreview } from '../api';
+import { KnownRecordLabelsContext } from '../knownRecordLabels';
 import { dropdownOptionLabel } from '../recordDisplay';
 import { recordQueryKeys } from '../queryKeys';
 
@@ -17,20 +19,23 @@ export const useRelationshipSelectionLabels = (
   const codes = (
     Array.isArray(blueprintCodes) ? blueprintCodes : [blueprintCodes]
   ).filter((code): code is string => Boolean(code));
+  const knownLabels = use(KnownRecordLabelsContext);
   const resolvedIds = [...new Set(ids)].slice(
     0,
     MAX_RESOLVED_RELATIONSHIP_SELECTIONS,
   );
+  // Records the page already labels need no preview of their own.
+  const unknownIds = resolvedIds.filter((id) => !knownLabels.has(id));
   const blueprints = useQueries({
     queries: codes.map((code) => ({
       queryKey: recordQueryKeys.blueprintByCode(code, undefined),
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         getBlueprintByCode(code, undefined, signal),
-      enabled: resolvedIds.length > 0,
+      enabled: unknownIds.length > 0,
     })),
   });
   const previews = useQueries({
-    queries: resolvedIds.map((id) => ({
+    queries: unknownIds.map((id) => ({
       queryKey: recordQueryKeys.preview(id),
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         getRecordPreview(id, signal),
@@ -45,9 +50,15 @@ export const useRelationshipSelectionLabels = (
     ),
   );
 
+  const previewsById = new Map(
+    unknownIds.map((id, index) => [id, previews[index]?.data]),
+  );
+
   return new Map(
-    resolvedIds.map((id, index) => {
-      const preview = previews[index]?.data;
+    resolvedIds.map((id) => {
+      const known = knownLabels.get(id);
+      if (known !== undefined) return [id, known];
+      const preview = previewsById.get(id);
       const views =
         preview && viewsByBlueprintId.get(preview.record.blueprint_id);
       return [

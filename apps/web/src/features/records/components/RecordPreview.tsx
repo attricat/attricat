@@ -1,19 +1,38 @@
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Box, CircularProgress, Typography } from '@mui/material';
-import { lazy, Suspense, useRef, useState, type ReactNode } from 'react';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
 import { BlueprintLink } from '../../blueprints/BlueprintLink';
 import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
 import { useCan, useCanOn } from '../../auth/useCan';
-import { getCurrentBlueprint, type AttricatRecord } from '../api';
+import {
+  getCurrentBlueprint,
+  type AttricatRecord,
+  type Attribute,
+} from '../api';
+import { attributeCardinalities } from '../constants';
+import { attributeValueTypes } from '../valueTypes';
 import {
   RECORD_HEADER_CONTEXT_VERSION,
   FALLBACK_BLUEPRINT_VERSION,
 } from '../constants';
 import { RelatedRecordPreviewContext } from '../linkedRecord';
 import { recordQueryKeys } from '../queryKeys';
+import { useRecordReadAhead } from '../useRecordReadAhead';
+import {
+  KnownRecordLabelsContext,
+  relationshipTargetLabels,
+} from '../knownRecordLabels';
 import { statusParentContexts } from '../status';
 import { useRecordContextSelection } from '../useRecordContexts';
 import { useRecordPreviewData } from '../useRecordPreviewData';
@@ -32,8 +51,10 @@ import { RecordControlsPanel } from './RecordControlsPanel';
 import { RelationshipPickerActionBar } from './RelationshipPickerActionBar';
 import { useRecordPublications } from './useRecordPublications';
 
+const loadRecordCommentsPanel = () =>
+  import('../../record-comments/RecordCommentsPanel');
 const RecordCommentsPanel = lazy(() =>
-  import('../../record-comments/RecordCommentsPanel').then((module) => ({
+  loadRecordCommentsPanel().then((module) => ({
     default: module.RecordCommentsPanel,
   })),
 );
@@ -94,7 +115,32 @@ export const RecordPreview = ({
   const publications = useRecordPublications(recordId, contextId, canPublish);
   const { blueprint, recordForm, resolved, statusTransitions } =
     useRecordPreviewData(recordId, contextId);
+  useRecordReadAhead(
+    recordId,
+    showComments,
+    // A panel beside another page keeps related records to links.
+    // The form arrives first and carries the same revision.
+    compact
+      ? []
+      : previewedRelationshipBlueprints(
+          blueprint.data?.attributes ?? recordForm.data?.blueprint.attributes,
+        ),
+  );
+  // The comments chunk downloads while the record loads.
+  useEffect(() => {
+    if (showComments) void loadRecordCommentsPanel();
+  }, [showComments]);
   const resolvedRecord = resolved.data?.record;
+  const knownLabels = useMemo(
+    () =>
+      resolved.data
+        ? relationshipTargetLabels(
+            resolved.data,
+            contextId !== null && contextId === defaultContextId,
+          )
+        : new Map<string, string>(),
+    [contextId, defaultContextId, resolved.data],
+  );
   const currentBlueprint = useQuery({
     queryKey: recordQueryKeys.currentBlueprint(
       resolvedRecord?.blueprint_id ?? '',
@@ -245,33 +291,35 @@ export const RecordPreview = ({
                 {resolved.data && blueprint.data && (
                   // A single relationship shows its record on the full page;
                   // a panel beside another page keeps to links.
-                  <RelatedRecordPreviewContext.Provider
-                    value={compact ? null : (contextId ?? null)}
-                  >
-                    <RecordPreviewContent
-                      blueprint={blueprint.data}
-                      contextId={selectedContextId}
-                      contexts={contexts.data}
-                      defaultContextId={defaultContextId}
-                      recordId={recordId}
-                      // A cached form must not become the save baseline before
-                      // the opening refresh has completed.
-                      form={
-                        recordForm.isFetchedAfterMount
-                          ? recordForm.data
-                          : undefined
-                      }
-                      statusParentContextIds={statusParentContexts(
-                        contexts.data,
-                        contextId,
-                      )}
-                      statusTransitions={statusTransitions.data}
-                      inlineFieldsRef={inlineFieldsRef}
-                      onContextChange={setSelectedContext}
-                      resolved={resolved.data}
-                      singleColumn={compact}
-                    />
-                  </RelatedRecordPreviewContext.Provider>
+                  <KnownRecordLabelsContext value={knownLabels}>
+                    <RelatedRecordPreviewContext.Provider
+                      value={compact ? null : (contextId ?? null)}
+                    >
+                      <RecordPreviewContent
+                        blueprint={blueprint.data}
+                        contextId={selectedContextId}
+                        contexts={contexts.data}
+                        defaultContextId={defaultContextId}
+                        recordId={recordId}
+                        // A cached form must not become the save baseline before
+                        // the opening refresh has completed.
+                        form={
+                          recordForm.isFetchedAfterMount
+                            ? recordForm.data
+                            : undefined
+                        }
+                        statusParentContextIds={statusParentContexts(
+                          contexts.data,
+                          contextId,
+                        )}
+                        statusTransitions={statusTransitions.data}
+                        inlineFieldsRef={inlineFieldsRef}
+                        onContextChange={setSelectedContext}
+                        resolved={resolved.data}
+                        singleColumn={compact}
+                      />
+                    </RelatedRecordPreviewContext.Provider>
+                  </KnownRecordLabelsContext>
                 )}
               </>
             )}
@@ -357,3 +405,13 @@ export const RecordPreview = ({
     </>
   );
 };
+
+/** Target blueprints of the relationships whose record a full page previews. */
+const previewedRelationshipBlueprints = (attributes: Attribute[] = []) =>
+  attributes.flatMap((attribute) =>
+    attribute.value_type === attributeValueTypes.relationship &&
+    attribute.cardinality === attributeCardinalities.one &&
+    attribute.target_blueprint_code
+      ? [attribute.target_blueprint_code]
+      : [],
+  );

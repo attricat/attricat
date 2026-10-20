@@ -17,8 +17,6 @@ import { Timestamp } from '../../time/Timestamp';
 import { useCan } from '../auth/useCan';
 import {
   acknowledgeFinding,
-  listFindings,
-  listRecordRuleRuns,
   recheckRecord,
   type Finding,
   type RuleRun,
@@ -32,7 +30,11 @@ import {
   recordFindingsPanelId,
 } from './constants';
 import { ruleQueryKeys } from './queryKeys';
-import { ruleDefinitionsOptions } from './queryOptions';
+import {
+  recordFindingsOptions,
+  recordRuleRunsOptions,
+  ruleDefinitionsOptions,
+} from './queryOptions';
 import { isWatchingRecordRuleChecks } from './recordRuleChecks';
 import { RuleRevisionCell } from './RuleCells';
 import { ruleRevisionsByKey, type RuleRevisions } from './ruleRevisions';
@@ -153,13 +155,11 @@ export const RecordFindingsPanel = ({
   const canManage = useCan('rules_manage');
   const rules = useQuery({ ...ruleDefinitionsOptions(), enabled: canRead });
   const findings = useQuery({
-    queryKey: ruleQueryKeys.findings(recordId),
-    queryFn: () => listFindings(recordId),
+    ...recordFindingsOptions(recordId),
     enabled: canRead,
   });
   const runs = useQuery({
-    queryKey: ruleQueryKeys.recordRuns(recordId),
-    queryFn: () => listRecordRuleRuns(recordId),
+    ...recordRuleRunsOptions(recordId),
     enabled: canRead,
     // Keep checking while runs are pending or an edit's runs may still start.
     refetchInterval: (query) =>

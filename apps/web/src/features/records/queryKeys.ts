@@ -24,10 +24,8 @@ export const recordQueryKeys = {
   searches: () => ['records'] as const,
   blueprints: () => ['record-blueprints'] as const,
   contexts: () => ['attribute-contexts'] as const,
-  /** Published revisions by ID and version, which never change. */
-  pinnedBlueprintRevisions: () => ['blueprint-revision'] as const,
   blueprintRevision: (id: string | undefined, version: number | undefined) =>
-    [...recordQueryKeys.pinnedBlueprintRevisions(), id, version] as const,
+    ['blueprint-revision', id, version] as const,
   blueprintsByCode: () => ['blueprint-by-code'] as const,
   blueprintByCode: (code: string | undefined, version: number | undefined) =>
     [...recordQueryKeys.blueprintsByCode(), code, version] as const,

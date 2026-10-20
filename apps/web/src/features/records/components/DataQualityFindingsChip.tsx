@@ -1,12 +1,11 @@
 import { Chip } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { listFindings } from '../../rules/api';
 import {
   FINDING_STATE_RESOLVED,
   recordFindingsPanelId,
 } from '../../rules/constants';
-import { ruleQueryKeys } from '../../rules/queryKeys';
+import { recordFindingsOptions } from '../../rules/queryOptions';
 import { useCan } from '../../auth/useCan';
 
 /**
@@ -17,8 +16,7 @@ export const DataQualityFindingsChip = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
   const canReadRules = useCan('rules_read');
   const findings = useQuery({
-    queryKey: ruleQueryKeys.findings(recordId),
-    queryFn: () => listFindings(recordId),
+    ...recordFindingsOptions(recordId),
     enabled: canReadRules,
   });
   const unresolvedCount =

@@ -11,6 +11,7 @@ import { router } from './app/router';
 import { authQueryKeys } from './features/auth/queryKeys';
 import { contextQueryKeys } from './features/contexts/queryKeys';
 import { recordQueryKeys } from './features/records/queryKeys';
+import { reusableAttributeQueryKeys } from './features/reusable-attributes/queryKeys';
 
 const queryClient = new QueryClient({
   mutationCache: new MutationCache({
@@ -30,15 +31,13 @@ for (const queryKey of [
   contextQueryKeys.all(),
   recordQueryKeys.blueprints(),
   recordQueryKeys.blueprintsByCode(),
+  reusableAttributeQueryKeys.root(),
+  reusableAttributeQueryKeys.groups(),
 ])
   queryClient.setQueryDefaults(queryKey, {
     staleTime: Infinity,
     refetchOnWindowFocus: 'always',
   });
-// Published revisions never change.
-queryClient.setQueryDefaults(recordQueryKeys.pinnedBlueprintRevisions(), {
-  staleTime: Infinity,
-});
 
 declare module '@tanstack/react-router' {
   interface Register {

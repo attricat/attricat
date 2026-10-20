@@ -13,9 +13,10 @@ import { recordQueryKeys } from './queryKeys';
 // Revisited virtual rows reuse their result; mutations explicitly invalidate it.
 const publicationStaleTimeMs = 60_000;
 
-// A preview loaded ahead, such as when its link is pointed at, is not fetched
-// again when it opens; edits invalidate it.
-export const resolvedPreviewStaleTimeMs = 10_000;
+// Record data loaded ahead, such as a preview whose link is pointed at or a
+// side panel's data started with the record, is not fetched again when the
+// component showing it mounts; edits invalidate it.
+export const readAheadStaleTimeMs = 10_000;
 
 /** A record's values as seen from a context. */
 export const resolvedRecordPreviewOptions = (
@@ -25,14 +26,26 @@ export const resolvedRecordPreviewOptions = (
   queryOptions({
     queryKey: recordQueryKeys.resolvedPreview(recordId, contextId),
     queryFn: () => getResolvedRecordPreview(recordId, contextId),
-    staleTime: resolvedPreviewStaleTimeMs,
+    staleTime: readAheadStaleTimeMs,
   });
 
-/** The record's values and blueprint as an editor needs them. */
+/**
+ * The record's values and blueprint as an editor needs them. The form carries
+ * the revision its values belong to, which previews then read from the cache
+ * instead of loading it after the record.
+ */
 export const recordFormOptions = (recordId: string) =>
   queryOptions({
     queryKey: recordQueryKeys.form(recordId),
-    queryFn: ({ signal }) => getRecordForm(recordId, signal),
+    queryFn: async ({ client, signal }) => {
+      const form = await getRecordForm(recordId, signal);
+      const { id, version } = form.blueprint.blueprint;
+      client.setQueryData(
+        recordQueryKeys.blueprintRevision(id, version),
+        (cached) => cached ?? form.blueprint,
+      );
+      return form;
+    },
   });
 
 export const recordPublicationOptions = (recordId: string) =>
@@ -53,12 +66,14 @@ export const recordApprovalsOptions = (recordId: string) =>
   queryOptions({
     queryKey: recordQueryKeys.approvals(recordId),
     queryFn: ({ signal }) => getRecordApprovals(recordId, signal),
+    staleTime: readAheadStaleTimeMs,
   });
 
 export const recordRetentionHoldsOptions = (recordId: string) =>
   queryOptions({
     queryKey: recordQueryKeys.retentionHolds(recordId),
     queryFn: ({ signal }) => getRecordRetentionHolds(recordId, signal),
+    staleTime: readAheadStaleTimeMs,
   });
 
 /** The caller's access to declared status edges from the saved status. */

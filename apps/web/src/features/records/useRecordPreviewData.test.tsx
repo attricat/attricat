@@ -32,15 +32,27 @@ const wrapper = ({ children }: { children: ReactNode }) => (
   </QueryClientProvider>
 );
 
-const mockRecord = (canWrite: boolean) => {
-  vi.mocked(getResolvedRecordPreview).mockResolvedValue({
+const revision = { blueprint: { id: blueprintId, version: 3 }, attributes: [] };
+
+const later = <T,>(value: T) =>
+  new Promise<T>((resolve) => setTimeout(() => resolve(value), 20));
+
+const mockRecord = (
+  canWrite: boolean,
+  { formFirst = false }: { formFirst?: boolean } = {},
+) => {
+  const resolved = {
     record: { id: recordId, blueprint_id: blueprintId, blueprint_version: 3 },
     values: {},
-  } as never);
-  vi.mocked(getRecordForm).mockResolvedValue({ can_write: canWrite } as never);
-  vi.mocked(getBlueprintRevision).mockResolvedValue({
-    attributes: [],
-  } as never);
+  } as never;
+  const form = { can_write: canWrite, blueprint: revision } as never;
+  vi.mocked(getResolvedRecordPreview).mockImplementation(() =>
+    formFirst ? later(resolved) : Promise.resolve(resolved),
+  );
+  vi.mocked(getRecordForm).mockImplementation(() =>
+    formFirst ? Promise.resolve(form) : later(form),
+  );
+  vi.mocked(getBlueprintRevision).mockResolvedValue(revision as never);
   vi.mocked(getStatusTransitions).mockResolvedValue([] as never);
 };
 
@@ -65,6 +77,18 @@ describe('useRecordPreviewData', () => {
       recordId,
       contextId,
     ]);
+  });
+
+  it('reuses the revision the form carries when it arrives first', async () => {
+    mockRecord(true, { formFirst: true });
+    const { result } = renderHook(
+      () => useRecordPreviewData(recordId, contextId),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.blueprint.isSuccess).toBe(true));
+    expect(result.current.blueprint.data).toEqual(revision);
+    expect(getBlueprintRevision).not.toHaveBeenCalled();
   });
 
   it('asks for status transitions only when the user can edit', async () => {
