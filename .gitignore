@@ -3,7 +3,6 @@
 .worktree
 /.secrets/
 .acli-session
-.catalog-generator/
 /node_modules
 /apps/web/node_modules
 /apps/web/dist

@@ -18,26 +18,11 @@ timings when comparing results.
 
 ## Explorer performance validation
 
-Explorer performance is measured locally against the deterministic ByteForge Components demo catalog. The generator writes all catalog data through the public API; the load test measures API reads only.
+Explorer performance is measured locally against a large catalog written through the public API; the load test measures API reads only.
 
 ## Prepare a dataset
 
-Use a dedicated local database for performance work. Start a release-mode API against it, then create one of the documented [demo catalog profiles](../examples/generate.md):
-
-```sh
-ATTRICAT_TOKEN=cat_pat_... just generate medium
-# Full benchmark dataset (1,000,000 records; this can take substantial time):
-ATTRICAT_TOKEN=cat_pat_... just generate large
-```
-
-The generator prints throughput, retries, and estimated ready time. It persists a resumable checkpoint under `.catalog-generator/`; inspect or resume it with:
-
-```sh
-node examples/generate.mjs --size large --status
-ATTRICAT_TOKEN=cat_pat_... just generate-resume large
-```
-
-Do not run a benchmark until its checkpoint reports `benchmark_ready: true`.
+Use a dedicated local database for performance work. Start a release-mode API against it and load the catalog through the API before benchmarking; Core no longer ships a catalog generator. Point `ATTRICAT_BLUEPRINT` at the blueprint the workload searches. `perf/explorer.js` sorts by `price`, `sku`, and the `manufacturer.name` relationship path, and expands a relationship facet, so the blueprint needs those fields. Finish loading, including file processing, before running a benchmark.
 
 ## Run the local workload
 
@@ -51,7 +36,7 @@ ATTRICAT_TOKEN=cat_pat_... just perf load
 
 `perf/explorer.js` covers scalar text/price sorting, related-manufacturer sorting, keyset pagination, and relationship-facet root expansion. It fails on request errors or missing `Server-Timing`; latency measurements are reported locally rather than treated as a gate until a stable hardware baseline is established.
 
-Save the k6 JSON summary, the generator checkpoint, API git revision, PostgreSQL version/settings, host CPU/RAM, and the selected profile when comparing runs. Keep cold-start and warmed runs separate.
+Save the k6 JSON summary, a description of the dataset, API git revision, PostgreSQL version/settings, host CPU/RAM, and the selected profile when comparing runs. Keep cold-start and warmed runs separate.
 
 Latency often follows the number of database round trips per request.
 [Database round trips](../perf/round-trips.md) records the per-path baseline and
