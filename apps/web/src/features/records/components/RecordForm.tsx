@@ -352,10 +352,21 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     const { request: revealRequest, reveal: revealField } =
       useFieldReveal(formRef);
     const errorsRef = useRef<HTMLDivElement>(null);
+    // Set when the errors should take focus once they first render.
+    const errorFocusPending = useRef(false);
     const focusErrors = () => {
-      errorsRef.current?.focus({ preventScroll: true });
-      errorsRef.current?.scrollIntoView?.({ block: 'nearest' });
+      if (!errorsRef.current) {
+        errorFocusPending.current = true;
+        return;
+      }
+      errorsRef.current.focus({ preventScroll: true });
+      errorsRef.current.scrollIntoView?.({ block: 'nearest' });
     };
+    useEffect(() => {
+      if (!errorFocusPending.current || !errorsRef.current) return;
+      errorFocusPending.current = false;
+      focusErrors();
+    });
     const validateFields = (fields: Record<string, string>) => {
       if (!blueprint) return { fieldErrors: {} };
       const validation = validateRecordForm(

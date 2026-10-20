@@ -3,6 +3,7 @@ import i18n from '../../i18n';
 import { formatBytes } from '../data-health/dataHealthFormat';
 import { lexiconText } from '../lexicon/lexicon';
 import type { Attribute } from './api';
+import { attributeCardinalities } from './constants';
 import { patternHint } from './jsonSchema';
 import { attributeValueTypes } from './valueTypes';
 
@@ -123,7 +124,7 @@ const fileHint = (attribute: Attribute, t: TFunction) => {
     policy.max_bytes
       ? t('records.hints.fileSize', { size: formatBytes(policy.max_bytes) })
       : undefined,
-    policy.cardinality === 'many'
+    policy.cardinality === attributeCardinalities.many
       ? policy.ordered
         ? t('records.hints.filesOrdered')
         : t('records.hints.filesMany')

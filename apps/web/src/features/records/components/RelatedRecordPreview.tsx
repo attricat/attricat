@@ -6,6 +6,7 @@ import {
   Skeleton,
   Stack,
   Typography,
+  useTheme,
 } from '@mui/material';
 import { ChevronDownIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -80,6 +81,7 @@ export const RelatedRecordPreviewToggle = ({
   preview: RelatedRecordPreviewState;
 }) => {
   const { t } = useTranslation();
+  const { transitions } = useTheme();
   return (
     <IconButton
       aria-controls={preview.detailsId}
@@ -93,7 +95,9 @@ export const RelatedRecordPreviewToggle = ({
         size={compactIconSize}
         style={{
           transform: preview.expanded ? 'rotate(180deg)' : undefined,
-          transition: 'transform 150ms',
+          transition: transitions.create('transform', {
+            duration: transitions.duration.shortest,
+          }),
         }}
       />
     </IconButton>

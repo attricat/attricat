@@ -208,7 +208,7 @@ export const Explorer = ({
               relationshipAttributes={relationshipFields}
             />
           )}
-          {!search.blueprint && (
+          {!search.blueprint && !blueprints.error && (
             <ExplorerOverview
               blueprints={blueprints.data}
               contextCode={contextCode}
