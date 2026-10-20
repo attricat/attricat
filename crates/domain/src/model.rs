@@ -348,7 +348,7 @@ pub struct BlueprintWithAttributes {
     pub table_path_attributes: Vec<TablePathAttribute>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TablePathAttribute {
     pub code: String,
     pub value_type: String,

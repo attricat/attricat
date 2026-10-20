@@ -803,6 +803,41 @@ impl AttricatRepository {
         .into_domain())
     }
 
+    /// Table paths of a revision. A published revision's paths only follow
+    /// other published revisions, so they are cached for the request's
+    /// catalog generation, which publication advances. Drafts and reads
+    /// without generations resolve them every time.
+    async fn table_path_attributes(
+        &self,
+        blueprint: &Blueprint,
+        attributes: &[Attribute],
+    ) -> Result<Vec<TablePathAttribute>, RepositoryError> {
+        let generations = self
+            .generations()
+            .filter(|_| blueprint.status == "published");
+        let Some(generations) = generations else {
+            return self
+                .resolve_table_path_attributes(blueprint, attributes)
+                .await;
+        };
+        let key = CacheKey::new(
+            "blueprint_table_paths",
+            &[
+                &self.workspace_id.0,
+                &blueprint.id,
+                &blueprint.version,
+                &generations.attricat_generation,
+            ],
+        );
+        let paths = self
+            .cache
+            .fetch(key, &[], Policy::Generation, || {
+                self.resolve_table_path_attributes(blueprint, attributes)
+            })
+            .await?;
+        Ok((*paths).clone())
+    }
+
     async fn resolve_table_path_attributes(
         &self,
         blueprint: &Blueprint,
@@ -1040,9 +1075,7 @@ impl AttricatRepository {
                 }
             }
         }
-        let table_path_attributes = self
-            .resolve_table_path_attributes(&blueprint, &attributes)
-            .await?;
+        let table_path_attributes = self.table_path_attributes(&blueprint, &attributes).await?;
         Ok(BlueprintWithAttributes {
             blueprint,
             attributes,
