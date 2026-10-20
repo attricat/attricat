@@ -130,15 +130,6 @@ reset-db: _assert-env
 
     sqlx database reset -y --force --source ./apps/api/migrations --database-url "$DATABASE_URL"
 
-generate size="small" industry="pc-components": _assert-env
-    ATTRICAT_SERVER="$ATTRICAT_API_URL" node examples/generate.mjs --industry "{{industry}}" --size "{{size}}" --concurrency 8
-
-generate-resume size="small" industry="pc-components": _assert-env
-    ATTRICAT_SERVER="$ATTRICAT_API_URL" node examples/generate.mjs --industry "{{industry}}" --size "{{size}}" --resume
-
-test-generator:
-    node --test examples/generator/industries/*.test.mjs
-
 perf profile="smoke": _assert-env
     test -n "$ATTRICAT_TOKEN" || { echo "Set ATTRICAT_TOKEN before running performance tests." >&2; exit 1; }
     command -v k6 >/dev/null || { echo "Install k6 before running performance tests." >&2; exit 1; }

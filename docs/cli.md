@@ -551,19 +551,20 @@ attribute_code = "subtitle"
 
 ## Manual Test Data
 
-The Node.js generator creates a deterministic fictional PC-parts catalog with
-manufacturers, categories, families, SKUs, and reference data. See
-[the generator guide](../examples/generate.md) for profiles and safety limits.
-Start the local stack, then run:
+Data generators write catalog data through the public API with a personal
+access token. `token create --generator` issues one labelled
+`catalog-generator` with the least-privilege set for creating and publishing
+blueprints, contexts, and records:
 
 ```sh
 cargo run -p acli -- --session-file .acli-session auth login <workspace-login-identifier> --email <email> --password-stdin
 export ATTRICAT_TOKEN="$(cargo run -p acli -- --session-file .acli-session token create --generator | jq -r .secret)"
-just generate
 ```
 
-The CLI loads the worktree's `.env`; keep the generated personal token out of
-committed files and shell history.
+A generator that also manages rules, workflows, or teams needs a token created
+with `--label` and an explicit `--permissions` list instead. The CLI loads the
+worktree's `.env`; keep the generated personal token out of committed files and
+shell history.
 
 ## Errors
 

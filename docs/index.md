@@ -76,8 +76,6 @@ runs the ignored RustFS compatibility test.
   graph traversal and structured query-language semantics.
 - [Relationships walkthrough](../examples/relationships/README.md): create
   blueprints, records, contextual values, and relationships end to end.
-- [Demo catalog generator](../examples/generate.md): create deterministic,
-  industry-scoped demo and local performance data sets.
 
 ## Customize The Web App
 

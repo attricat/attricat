@@ -70,4 +70,3 @@ transactions.
 
 - [Database model](docs/database.md)
 - [Building and side-loading extensions](docs/extensions.md#local-extension-integration-testing)
-- [Demo catalog generator](examples/generate.md)
