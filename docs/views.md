@@ -14,8 +14,11 @@ that do not define them.
   to place required attributes.
 - `table`: configured columns in the record explorer.
 - `explorer`: Explorer defaults. `browse_by` names the single-target
-  relationship the browse rail lists first, or is `false` to keep the rail
-  closed (see [Relationship tree facets](search-facets.md)).
+  relationship the browse rail lists first, a relationship path of up to three
+  hops with `cardinality = "one"` such as `model.brand`, or is `false` to keep
+  the rail closed (see [Relationship tree facets](search-facets.md)). The
+  compiler checks the first hop; saving and publishing resolve the rest
+  through the published target blueprints, as for table column paths.
 
 `detail` uses a recursive layout root. A table column may reference a
 local scalar field or a scalar leaf through at most three relationship hops.

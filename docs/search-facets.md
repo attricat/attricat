@@ -8,9 +8,9 @@ relationship such as `category.parent` supplies the tree edges.
 ## Use In The Explorer
 
 On `lg` screens the Explorer shows a **Browse by** rail beside the results
-(`ExplorerBrowseRail`). It lists the targets of one direct relationship field of
-the selected blueprint, through the children endpoint below, and loads a node's
-children when it is expanded.
+(`ExplorerBrowseRail`). It lists the targets of one relationship field of the
+selected blueprint, or of the last hop of a relationship path, through the
+children endpoint below, and loads a node's children when it is expanded.
 
 1. Candidate fields are relationships with a single target blueprint. A field
    is a tree when its target has a self-targeting relationship with
@@ -18,9 +18,19 @@ children when it is expanded.
    one-level list. Plain self-relationships are never treated as trees.
    The selected blueprint's own hierarchy field is its **own tree**: the rail
    labels it with the blueprint's name and lists the blueprint's records.
+   After the direct fields, the picker offers relationship paths such as
+   `model.brand`, labelled by their hops ("Model → Brand"), built by
+   `useBrowseBy` from the target blueprints. A path follows up to three
+   relationships that each have a single target blueprint and
+   `cardinality = "one"`, are not hidden from Explorer, and never return to a
+   blueprint the path has passed. At most 15 paths are offered, shortest
+   first, plus the URL, stored and blueprint-default choices when they are
+   paths beyond that. A path is a tree when its last target has a hierarchy.
 2. The field comes from the URL's `browseBy`, then the person's last choice for
    the blueprint (local storage, keyed by blueprint ID), then the blueprint's
-   `views.explorer.browse_by`, then the own tree, then the first tree field. `browseBy: false`
+   `views.explorer.browse_by`, then the own tree, then the first direct tree
+   field (a path opens the rail only when one of the earlier sources names
+   it). `browseBy: false`
    in the URL or storage, or `browse_by = false` in the blueprint, hides the
    rail. A field the current revision no longer has falls through to the
    next source.
@@ -29,8 +39,10 @@ children when it is expanded.
    sends it as a `relationship_tree_facets` item so descendants match; entries
    without one are sent as exact `relationship_filters`. An own-tree entry
    also stores `ownTree: true` and is sent without `source_relationship_field`.
-   The selection shows as a filter pill and is kept by saved views like other
-   facets.
+   For a path, the entry's `field` is the dotted path, which the API resolves
+   hop by hop in both cases. The selection shows as a filter pill and is kept
+   by saved views and share links like other facets; saved states also keep
+   `browseBy`, `hierarchyField` and `ownTree`.
 
 Tree edges and facet assignments resolve in the Explorer's selected context.
 
@@ -39,6 +51,14 @@ Tree edges and facet assignments resolve in the Explorer's selected context.
 The source attribute must be a relationship with a target blueprint. A
 hierarchy field, when supplied, must be a relationship on that target blueprint
 that targets the same blueprint. Without one, the facet is a one-level picker.
+
+A source may also be a relationship path of up to three hops, such as
+`model.brand` on a vehicle whose `model` targets `model` and whose model's
+`brand` targets `brand`. Every hop must be a relationship with a single target
+blueprint and `cardinality = "one"`, the rule for sortable relationship table
+paths, so each source reaches at most one node. Hops after the first are read
+from the latest published revision of the previous hop's target. The last
+hop's target holds the facet's nodes and supplies the hierarchy field.
 
 ```toml
 # Product
@@ -64,7 +84,10 @@ without a self-targeting relationship is rendered as a one-level facet.
 The selected context applies to both category parent edges and source-to-category
 relationships. Values are resolved through the selected context's ancestor
 chain, respecting each attribute's `context_fallback` policy. This ensures the
-displayed tree and the filter use the same effective relationships.
+displayed tree and the filter use the same effective relationships. On a path,
+every hop resolves this way on its own: a vehicle's model and that model's
+brand may each come from a different context on the chain, and a hop with
+`context_fallback = "none"` reads only the selected context.
 
 The facet's context is chosen separately from the search's `context_code`,
 which resolves the result table, filters, and sorting (see
@@ -82,7 +105,8 @@ counts after choosing a category. Attribute filters apply to the main Explorer
 search but are not included in the separately loaded facet-child request, so
 they do not currently affect facet counts.
 
-Without a search term, counts are cached for the workspace and may lag record
+Without a search term, counts are cached for the workspace, per source
+blueprint, version, field or path, hierarchy field and context, and may lag record
 changes by about 30 seconds. The next request after that reloads them, and
 requests arriving during the reload keep receiving the previous counts. Nodes themselves are always
 current: a new or moved category appears at once, with the count it had when
@@ -117,6 +141,13 @@ Add `relationship_tree_facets` to `POST /v1/records/search`:
   "page": { "size": 25, "cursor": null }
 }
 ```
+
+`source_relationship_field` may be a dotted relationship path, as in
+`relationship_filters` and table columns: `"model.brand"` lists brands and
+counts the vehicles that reach each one through their model. A path with more
+than three hops, a hop that is not a relationship with a single target, or a
+hop of a multi-hop path without `cardinality = "one"` is rejected with
+`422 invalid_input`. Single-field requests are unchanged.
 
 Omit `source_relationship_field` to facet the searched blueprint by its own
 `hierarchy_field`, which is then required. Each record is its own node, so a
@@ -156,7 +187,11 @@ pagination, but the API only returns the requested root or child page. A page
 reads the tree's parent edges fresh and takes counts from the cache described
 in [Counts And Selection](#counts-and-selection); with a search term, it
 resolves every matching source edge and counts the page's subtrees in memory.
-`apps/api/tests/facet_latency.rs` measures both paths (see `perf/facets.md`). `RELATIONSHIP_FACET_MAX_NODES` sets the server-side maximum number of
+For a relationship path, counting resolves each hop's edges concurrently, one
+query per hop, and joins them in memory; a selection walks down the selected
+subtrees and then back one hop per query through the target-side indexes.
+`apps/api/tests/facet_latency.rs` measures both cases, for a direct field and a
+two-hop path (see `perf/facets.md`). `RELATIONSHIP_FACET_MAX_NODES` sets the server-side maximum number of
 nodes returned for each page (default: 100).
 
 Large taxonomies should retain indexes for relationship target lookups. The

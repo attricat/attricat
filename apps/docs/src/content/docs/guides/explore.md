@@ -73,7 +73,9 @@ When the target blueprint has a hierarchy, such as a `category.parent` field wit
 
 When the blueprint itself is a hierarchy, such as categories, the panel can list its own tree under the blueprint's name. Choosing a node then keeps that record and everything below it.
 
-Pick another relationship attribute under **Browse by**, or hide the panel. The panel opens by default for the field the blueprint names in `views.explorer`, or else for the first relationship linked to a hierarchy. A blueprint can also keep it closed by default. Attricat remembers your choice for each blueprint in this browser, and saved and shared searches keep it.
+**Browse by** also offers relationship paths after the blueprint's own relationships, such as **Model → Brand** to browse vehicles by the brand of their model. A path follows single-value relationships only, at most three deep. It shows a tree when the blueprint it ends on has a hierarchy, and selecting a node works as for a direct relationship.
+
+Pick another relationship attribute or path under **Browse by**, or hide the panel. The panel opens by default for the field the blueprint names in `views.explorer`, or else for the first relationship linked to a hierarchy. A blueprint can also keep it closed by default. Attricat remembers your choice for each blueprint in this browser, and saved and shared searches keep it.
 
 To select several targets of one attribute, use **Add filter** and pick the relationship attribute. Several selections in one attribute mean _any of these_. Selections in different attributes must all match.
 

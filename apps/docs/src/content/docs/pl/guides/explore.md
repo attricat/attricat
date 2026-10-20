@@ -73,7 +73,9 @@ Gdy schemat docelowy ma hierarchię, na przykład pole `category.parent` z `tree
 
 Gdy sam schemat jest hierarchią, na przykład kategorie, panel może wyświetlić jego własne drzewo pod nazwą schematu. Wybranie węzła zachowuje wtedy ten rekord i wszystko, co znajduje się pod nim.
 
-W polu **Przeglądaj według** wybierz inny atrybut relacji albo ukryj panel. Domyślnie panel otwiera się dla atrybutu wskazanego przez schemat w `views.explorer`, a w przeciwnym razie dla pierwszej relacji powiązanej z hierarchią. Schemat może też domyślnie pozostawiać panel zamknięty. Attricat zapamiętuje Twój wybór dla każdego schematu w tej przeglądarce, a zapisane i udostępnione wyszukiwania go zachowują.
+Pole **Przeglądaj według** proponuje też ścieżki relacji, po relacjach samego schematu, na przykład **Model → Marka**, aby przeglądać pojazdy według marki ich modelu. Ścieżka przechodzi tylko przez relacje jednowartościowe, maksymalnie przez trzy. Wyświetla drzewo, gdy schemat, na którym się kończy, ma hierarchię, a wybór węzła działa tak samo jak dla relacji bezpośredniej.
+
+W polu **Przeglądaj według** wybierz inny atrybut relacji lub ścieżkę albo ukryj panel. Domyślnie panel otwiera się dla atrybutu wskazanego przez schemat w `views.explorer`, a w przeciwnym razie dla pierwszej relacji powiązanej z hierarchią. Schemat może też domyślnie pozostawiać panel zamknięty. Attricat zapamiętuje Twój wybór dla każdego schematu w tej przeglądarce, a zapisane i udostępnione wyszukiwania go zachowują.
 
 Aby wybrać kilka celów jednego atrybutu, użyj **Dodaj filtr** i wybierz atrybut relacji. Kilka zaznaczeń w jednym atrybucie oznacza _dowolny z nich_. Zaznaczenia w różnych atrybutach muszą pasować jednocześnie.
 

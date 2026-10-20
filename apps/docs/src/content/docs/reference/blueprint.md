@@ -371,9 +371,9 @@ browse_by = "categories"
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `browse_by` | attribute code or `false` | Relationship attribute the **Browse by** panel lists until a person picks another. It must have a single target blueprint. `false` keeps the panel closed until a person opens it. |
+| `browse_by` | attribute code, relationship path, or `false` | Relationship attribute the **Browse by** panel lists until a person picks another. It must have a single target blueprint. A dotted path such as `model.brand` follows up to three relationships, each with a single target blueprint and `cardinality = "one"`, and lists the last one's targets. `false` keeps the panel closed until a person opens it. |
 
-Only a record blueprint can define it, and only under the name `explorer`. Without `browse_by`, the panel opens for the first relationship whose target has a hierarchy.
+Only a record blueprint can define it, and only under the name `explorer`. Without `browse_by`, the panel opens for the first relationship whose target has a hierarchy. Relationships after the first on a path are checked against the published target blueprints when the blueprint is saved and published.
 
 ### Layout blocks
 

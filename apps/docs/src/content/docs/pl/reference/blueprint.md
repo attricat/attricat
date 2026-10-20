@@ -371,9 +371,9 @@ browse_by = "categories"
 
 | Klucz | Typ | Opis |
 | --- | --- | --- |
-| `browse_by` | kod atrybutu lub `false` | Atrybut relacji wyświetlany w panelu **Przeglądaj według**, dopóki użytkownik nie wybierze innego. Musi mieć jeden schemat docelowy. `false` pozostawia panel zamknięty, dopóki użytkownik go nie otworzy. |
+| `browse_by` | kod atrybutu, ścieżka relacji lub `false` | Atrybut relacji wyświetlany w panelu **Przeglądaj według**, dopóki użytkownik nie wybierze innego. Musi mieć jeden schemat docelowy. Ścieżka z kropkami, na przykład `model.brand`, przechodzi przez maksymalnie trzy relacje, z których każda ma jeden schemat docelowy i `cardinality = "one"`, i wyświetla cele ostatniej z nich. `false` pozostawia panel zamknięty, dopóki użytkownik go nie otworzy. |
 
-Może go zdefiniować tylko schemat rekordów i tylko pod nazwą `explorer`. Bez `browse_by` panel otwiera się dla pierwszej relacji, której schemat docelowy ma hierarchię.
+Może go zdefiniować tylko schemat rekordów i tylko pod nazwą `explorer`. Bez `browse_by` panel otwiera się dla pierwszej relacji, której schemat docelowy ma hierarchię. Kolejne relacje na ścieżce są sprawdzane względem opublikowanych schematów docelowych podczas zapisywania i publikowania schematu.
 
 ### Bloki układu
 

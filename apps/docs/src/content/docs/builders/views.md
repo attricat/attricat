@@ -183,6 +183,16 @@ browse_by = "brand"
 
 The field must be a relationship with a single target blueprint. A field whose target has no hierarchy is listed flat. Set `browse_by = false` to keep the panel closed until someone opens it. People can still pick another field or hide the panel; their choice takes precedence in their browser.
 
+To browse by a blueprint that is a few relationships away, name a path of up to three relationships, separated by dots. On a vehicle linked to a model, which is linked to a brand, this lists brands and counts each brand's vehicles:
+
+```toml
+[views.explorer]
+type = "explorer"
+browse_by = "model.brand"
+```
+
+Every relationship on a path must have a single target blueprint and `cardinality = "one"`. When the last target has a hierarchy, the panel shows its tree. The panel's **Browse by** list also offers such paths after the direct relationships, labelled like "Model → Brand".
+
 ## Field controls
 
 A `string` attribute is plain text by default. To show it as a color, email address, URL, phone number, or Markdown, name a display component on its detail field (or table column). Where the field is editable, the web app uses the paired edit component, such as `attricat.url_edit` for `attricat.url_display`:

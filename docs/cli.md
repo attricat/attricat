@@ -327,7 +327,8 @@ When no token is supplied, the saved login session is used.
 
 Search `--filters` is the API array of field/operator/value objects;
 `--relationship-tree-facets` is the array of objects with
-optional `source_relationship_field`, `context_id`, optional `hierarchy_field`,
+optional `source_relationship_field` (a field or a dotted relationship path),
+`context_id`, optional `hierarchy_field`,
 and optional `selected_target_ids`; omit the source field (also
 `facet-children --source-relationship-field`) to use the blueprint's own
 tree. `facet-children --selected-target-ids` and `--include-ids` are
