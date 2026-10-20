@@ -10,6 +10,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import { attributeLabel } from '../../records/recordDisplay';
 import type { ValueEditorProps } from '../components/componentTypes';
 import { EachValue } from './EachValue';
+import { FieldHint } from '../../../components/FieldHint';
 
 /** Opens a field's value, such as a website, mail client or phone call. */
 export type TextControlLink = {
@@ -46,6 +47,7 @@ export const TextControlEditor = ({
   link?: TextControlLink;
 }) => {
   const message = error ?? validate?.(value);
+  const hint = helperText ?? defaultHelperText;
   const target = link && !message ? link.href(value.trim()) : undefined;
   const linkLabel = target && link ? link.label(value.trim()) : undefined;
   return (
@@ -57,7 +59,7 @@ export const TextControlEditor = ({
       disabled={disabled}
       required={required}
       error={Boolean(message)}
-      helperText={message ?? helperText ?? defaultHelperText}
+      helperText={message ?? (hint && <FieldHint>{hint}</FieldHint>)}
       onChange={(event) => {
         if (!disabled) onChange(event.target.value);
       }}

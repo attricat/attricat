@@ -45,6 +45,7 @@ import {
   PhoneIcon,
 } from 'lucide-react';
 import { compactIconSize, smallIconSize } from '../../../components/iconSizes';
+import { FieldHint } from '../../../components/FieldHint';
 
 export const ColorEditor = ({
   attribute,
@@ -61,7 +62,7 @@ export const ColorEditor = ({
   const hexInput = useRef<HTMLInputElement>(null);
   const label = attributeLabel(attribute);
   const problem = error ?? validateColor(value);
-  const help = problem ?? helperText;
+  const help = problem ?? (helperText && <FieldHint>{helperText}</FieldHint>);
   const color = parseColor(value);
   const change = (next: string) => {
     if (!disabled) onChange(next);
@@ -324,16 +325,20 @@ export const StatusEditor = ({
       error={Boolean(error) || !known}
       helperText={
         error ??
-        (!known
-          ? t('records.statusUnknown', { value })
-          : [
+        (!known ? (
+          t('records.statusUnknown', { value })
+        ) : (
+          <FieldHint>
+            {[
               helperText,
               terminal
                 ? t('records.statusTerminal')
                 : t('records.statusTransitions'),
             ]
               .filter(Boolean)
-              .join(' '))
+              .join(' ')}
+          </FieldHint>
+        ))
       }
       onChange={(event) => {
         if (!disabled && allowed(event.target.value))
