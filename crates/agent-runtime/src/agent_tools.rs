@@ -2157,11 +2157,9 @@ pub async fn execute_read(
             }
             let table_paths = agent_table_paths(&sort_blueprint);
             repository
-                .hydrate_table_path_values(&mut items, &table_paths, &context)
-                .await?;
-            repository
-                .hydrate_related_table_previews(
+                .hydrate_table_values(
                     &mut items,
+                    &table_paths,
                     &agent_table_relationships(&sort_blueprint),
                     &context,
                 )

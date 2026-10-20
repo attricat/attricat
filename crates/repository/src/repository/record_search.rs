@@ -205,15 +205,21 @@ struct RelationshipTreeNodeRow {
 #[derive(sqlx::FromRow)]
 struct TablePathEdgeRow {
     source_id: Uuid,
+    code: String,
     target_id: Uuid,
 }
 
 #[derive(sqlx::FromRow)]
 struct TablePathLeafRow {
     id: Uuid,
+    code: String,
+    value_type: String,
     inherit: bool,
     preview: Option<Value>,
 }
+
+/// Table cell values by record and column path.
+type TableValues = HashMap<Uuid, HashMap<String, Vec<Value>>>;
 
 #[derive(sqlx::FromRow)]
 struct RelatedTablePreviewRow {
@@ -1624,20 +1630,44 @@ impl AttricatRepository {
         ))
     }
 
-    /// Resolves configured table paths in bounded, page-level batches. Relationship
-    /// metadata is selected from every record's pinned blueprint revision and scalar
-    /// leaves come from preview projections. Every hop and leaf is resolved for `context`.
-    pub async fn hydrate_table_path_values(
+    /// Fills the table cells of a page: configured table paths and direct
+    /// relationship targets, resolved concurrently for `context`.
+    pub async fn hydrate_table_values(
         &self,
         items: &mut [RecordPreview],
         paths: &HashMap<String, String>,
+        relationships: &HashMap<String, String>,
         context: &SearchContext,
     ) -> Result<(), RepositoryError> {
+        let (mut values, related) = tokio::try_join!(
+            self.table_path_values(items, paths, context),
+            self.related_table_previews(items, relationships, context),
+        )?;
+        for item in items.iter_mut() {
+            item.table_values = values.remove(&item.id).unwrap_or_default();
+        }
+        if let Some(mut related) = related {
+            for item in items.iter_mut() {
+                item.related = related.remove(&item.id).unwrap_or_default();
+            }
+        }
+        Ok(())
+    }
+
+    /// Resolves configured table paths in bounded, page-level batches. Relationship
+    /// metadata is selected from every record's pinned blueprint revision and scalar
+    /// leaves come from preview projections. Every hop and leaf is resolved for `context`.
+    async fn table_path_values(
+        &self,
+        items: &[RecordPreview],
+        paths: &HashMap<String, String>,
+        context: &SearchContext,
+    ) -> Result<TableValues, RepositoryError> {
+        let mut values_by_root = TableValues::new();
         if items.is_empty() {
-            return Ok(());
+            return Ok(values_by_root);
         }
         let roots: Vec<_> = items.iter().map(|item| item.id).collect();
-        let mut values_by_root: HashMap<Uuid, HashMap<String, Vec<Value>>> = HashMap::new();
         // Direct columns of every type are resolved with one query for file
         // columns and one for scalar columns; dotted paths walk per hop.
         let direct_files: Vec<&str> = paths
@@ -1738,111 +1768,166 @@ impl AttricatRepository {
                 }
             }
         }
-        for (path, expected_leaf_type) in paths {
-            let parts: Vec<_> = path.split('.').collect();
-            if parts.is_empty() || parts.len() > 4 || parts.len() == 1 {
-                continue;
-            }
-            let mut reached: Vec<(Uuid, Uuid)> = roots.iter().map(|id| (*id, *id)).collect();
-            for relationship in &parts[..parts.len() - 1] {
-                let current_ids: Vec<_> = reached
-                    .iter()
-                    .map(|(_, current)| *current)
-                    .collect::<HashSet<_>>()
-                    .into_iter()
-                    .collect();
-                if current_ids.is_empty() {
-                    break;
-                }
-                let edges = sqlx::query_as::<_, TablePathEdgeRow>(
-                    &r#"SELECT av.record_id AS source_id, target.id AS target_id
-                       FROM attribute_values av
-                       JOIN records source ON source.id = av.record_id
-                        AND source.workspace_id = $3 AND source.deleted_at IS NULL
-                       JOIN attributes a ON a.id = av.attribute_id
-                        AND a.blueprint_id = source.blueprint_id
-                        AND a.blueprint_version = source.blueprint_version
-                        AND a.workspace_id = $3
-                        AND a.code = $2 AND a.value_type = 'relationship'
-                       JOIN records target ON target.id = av.relationship_target_record_id
-                        AND target.workspace_id = $3 AND target.deleted_at IS NULL
-                       JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
-                        AND target_blueprint.version = target.blueprint_version
-                        AND target_blueprint.code = a.target_blueprint_code
-                      WHERE av.record_id = ANY($1) AND av.workspace_id = $3
-                        AND {edge_context}
-                        AND av.active AND av.relationship_target_record_id IS NOT NULL"#
-                        .replace("{edge_context}", &resolved_context("av", "a", "$4")),
-                )
-                .bind(current_ids)
-                .bind(relationship)
-                .bind(self.workspace_id.0)
-                .bind(&context.ids)
-                .fetch_all(&self.pool)
-                .await?;
-                let mut targets: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
-                for edge in edges {
-                    targets
-                        .entry(edge.source_id)
-                        .or_default()
-                        .push(edge.target_id);
-                }
-                reached = reached
-                    .into_iter()
-                    .flat_map(|(root, current)| {
-                        targets
-                            .get(&current)
-                            .into_iter()
-                            .flatten()
-                            .map(move |target| (root, *target))
-                    })
-                    .collect();
-            }
-            if reached.is_empty() {
-                continue;
-            }
-            let leaf = parts[parts.len() - 1];
-            let leaf_ids: Vec<_> = reached
+        // Relationship paths are walked one depth at a time for every column
+        // together, so columns sharing a prefix share its hops and each depth
+        // costs one query. `reached` maps a hop prefix to the (root, record)
+        // pairs at its end.
+        let relationship_paths: Vec<(&str, &str, Vec<&str>)> = paths
+            .iter()
+            .filter_map(|(path, leaf_type)| {
+                let parts: Vec<_> = path.split('.').collect();
+                (2..=4)
+                    .contains(&parts.len())
+                    .then_some((path.as_str(), leaf_type.as_str(), parts))
+            })
+            .collect();
+        let mut reached: HashMap<String, Vec<(Uuid, Uuid)>> =
+            HashMap::from([(String::new(), roots.iter().map(|id| (*id, *id)).collect())]);
+        let depths = relationship_paths
+            .iter()
+            .map(|(_, _, parts)| parts.len() - 1)
+            .max()
+            .unwrap_or(0);
+        for depth in 0..depths {
+            let hops: HashSet<(String, &str)> = relationship_paths
                 .iter()
-                .map(|(_, id)| *id)
-                .collect::<HashSet<_>>()
-                .into_iter()
+                .filter(|(_, _, parts)| parts.len() - 1 > depth)
+                .map(|(_, _, parts)| (parts[..depth].join("."), parts[depth]))
                 .collect();
-            // Only the leaf attribute of each context's preview is selected.
-            let leaves = sqlx::query_as::<_, TablePathLeafRow>(
-                r#"SELECT e.id, a.context_fallback <> 'none' AS inherit,
-                          (SELECT jsonb_object_agg(context.key, jsonb_build_object($2, context.value -> $2))
-                             FROM jsonb_each(e.projections -> 'preview') context
-                            WHERE context.value ? $2) AS preview
-                   FROM records e
-                   JOIN attributes a ON a.blueprint_id = e.blueprint_id
-                    AND a.blueprint_version = e.blueprint_version
-                    AND a.code = $2 AND a.value_type = $3
-                    AND a.workspace_id = $4 AND a.deleted_at IS NULL
-                  WHERE e.id = ANY($1) AND e.workspace_id = $4 AND e.deleted_at IS NULL"#,
-            )
-            .bind(leaf_ids)
-            .bind(leaf)
-            .bind(expected_leaf_type)
-            .bind(self.workspace_id.0)
-            .fetch_all(&self.pool)
-            .await?;
-            let leaves: HashMap<_, _> = leaves
-                .into_iter()
-                .filter_map(|row| {
-                    let preview = row.preview?;
-                    context
-                        .resolve_preview(&preview, leaf, row.inherit)
-                        .cloned()
-                        .map(|value| (row.id, value))
+            let requested: HashSet<(Uuid, &str)> = hops
+                .iter()
+                .flat_map(|(prefix, relationship)| {
+                    reached
+                        .get(prefix)
+                        .into_iter()
+                        .flatten()
+                        .map(|(_, current)| (*current, *relationship))
                 })
                 .collect();
-            for (root, id) in reached {
-                if let Some(value) = leaves.get(&id) {
+            if requested.is_empty() {
+                break;
+            }
+            let (sources, codes): (Vec<Uuid>, Vec<&str>) = requested.into_iter().unzip();
+            let edges = sqlx::query_as::<_, TablePathEdgeRow>(
+                &r#"SELECT av.record_id AS source_id, a.code, target.id AS target_id
+                   FROM UNNEST($1::uuid[], $2::text[]) AS hop(source_id, code)
+                   JOIN attribute_values av ON av.record_id = hop.source_id
+                    AND av.workspace_id = $3 AND av.active
+                    AND av.relationship_target_record_id IS NOT NULL
+                   JOIN records source ON source.id = av.record_id
+                    AND source.workspace_id = $3 AND source.deleted_at IS NULL
+                   JOIN attributes a ON a.id = av.attribute_id
+                    AND a.blueprint_id = source.blueprint_id
+                    AND a.blueprint_version = source.blueprint_version
+                    AND a.workspace_id = $3
+                    AND a.code = hop.code AND a.value_type = 'relationship'
+                   JOIN records target ON target.id = av.relationship_target_record_id
+                    AND target.workspace_id = $3 AND target.deleted_at IS NULL
+                   JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
+                    AND target_blueprint.version = target.blueprint_version
+                    AND target_blueprint.code = a.target_blueprint_code
+                  WHERE {edge_context}"#
+                    .replace("{edge_context}", &resolved_context("av", "a", "$4")),
+            )
+            .bind(&sources)
+            .bind(&codes)
+            .bind(self.workspace_id.0)
+            .bind(&context.ids)
+            .fetch_all(&self.pool)
+            .await?;
+            let mut targets: HashMap<(Uuid, String), Vec<Uuid>> = HashMap::new();
+            for edge in edges {
+                targets
+                    .entry((edge.source_id, edge.code))
+                    .or_default()
+                    .push(edge.target_id);
+            }
+            for (prefix, relationship) in hops {
+                let next: Vec<_> = reached
+                    .get(&prefix)
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|(root, current)| {
+                        targets
+                            .get(&(*current, relationship.to_owned()))
+                            .into_iter()
+                            .flatten()
+                            .map(move |target| (*root, *target))
+                    })
+                    .collect();
+                let path = if prefix.is_empty() {
+                    relationship.to_owned()
+                } else {
+                    format!("{prefix}.{relationship}")
+                };
+                reached.insert(path, next);
+            }
+        }
+        // Every leaf of every path is read in one query; only the leaf
+        // attribute of each context's preview is selected.
+        let requested: HashSet<(Uuid, &str, &str)> = relationship_paths
+            .iter()
+            .flat_map(|(_, leaf_type, parts)| {
+                let leaf = parts[parts.len() - 1];
+                reached
+                    .get(&parts[..parts.len() - 1].join("."))
+                    .into_iter()
+                    .flatten()
+                    .map(move |(_, id)| (*id, leaf, *leaf_type))
+            })
+            .collect();
+        if requested.is_empty() {
+            return Ok(values_by_root);
+        }
+        let mut leaf_ids = Vec::with_capacity(requested.len());
+        let mut leaf_codes = Vec::with_capacity(requested.len());
+        let mut leaf_types = Vec::with_capacity(requested.len());
+        for (id, code, value_type) in requested {
+            leaf_ids.push(id);
+            leaf_codes.push(code);
+            leaf_types.push(value_type);
+        }
+        let leaves: HashMap<(Uuid, String, String), Value> = sqlx::query_as::<_, TablePathLeafRow>(
+            r#"SELECT e.id, leaf.code, leaf.value_type, a.context_fallback <> 'none' AS inherit,
+                      (SELECT jsonb_object_agg(context.key, jsonb_build_object(leaf.code, context.value -> leaf.code))
+                         FROM jsonb_each(e.projections -> 'preview') context
+                        WHERE context.value ? leaf.code) AS preview
+               FROM UNNEST($1::uuid[], $2::text[], $3::text[]) AS leaf(id, code, value_type)
+               JOIN records e ON e.id = leaf.id
+                AND e.workspace_id = $4 AND e.deleted_at IS NULL
+               JOIN attributes a ON a.blueprint_id = e.blueprint_id
+                AND a.blueprint_version = e.blueprint_version
+                AND a.code = leaf.code AND a.value_type = leaf.value_type
+                AND a.workspace_id = $4 AND a.deleted_at IS NULL"#,
+        )
+        .bind(&leaf_ids)
+        .bind(&leaf_codes)
+        .bind(&leaf_types)
+        .bind(self.workspace_id.0)
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .filter_map(|row| {
+            let preview = row.preview?;
+            let value = context
+                .resolve_preview(&preview, &row.code, row.inherit)
+                .cloned()?;
+            Some(((row.id, row.code, row.value_type), value))
+        })
+        .collect();
+        for (path, leaf_type, parts) in &relationship_paths {
+            let leaf = parts[parts.len() - 1];
+            for (root, id) in reached
+                .get(&parts[..parts.len() - 1].join("."))
+                .into_iter()
+                .flatten()
+            {
+                let key = (*id, leaf.to_owned(), (*leaf_type).to_owned());
+                if let Some(value) = leaves.get(&key) {
                     let values = values_by_root
-                        .entry(root)
+                        .entry(*root)
                         .or_default()
-                        .entry(path.clone())
+                        .entry((*path).to_owned())
                         .or_default();
                     if !values.contains(value) {
                         values.push(value.clone());
@@ -1850,32 +1935,35 @@ impl AttricatRepository {
                 }
             }
         }
-        for item in items {
-            item.table_values = values_by_root.remove(&item.id).unwrap_or_default();
-        }
-        Ok(())
+        Ok(values_by_root)
     }
 
     /// Adds direct relationship targets used by table columns in one query for the entire page.
     /// The requested target code is matched against the pinned source attribute, so an older
     /// source revision with removed or incompatible relationship metadata gets an empty cell.
     /// Relationship values are resolved for `context`.
-    pub async fn hydrate_related_table_previews(
+    /// `None` leaves the items' `related` maps untouched.
+    async fn related_table_previews(
         &self,
-        items: &mut [RecordPreview],
+        items: &[RecordPreview],
         relationships: &HashMap<String, String>,
         context: &SearchContext,
-    ) -> Result<(), RepositoryError> {
+    ) -> Result<Option<HashMap<Uuid, HashMap<String, Vec<RelatedRecordPreview>>>>, RepositoryError>
+    {
         if items.is_empty() || relationships.is_empty() {
-            return Ok(());
+            return Ok(None);
         }
-        for item in items.iter_mut() {
-            item.related = relationships
-                .keys()
-                .cloned()
-                .map(|code| (code, Vec::new()))
-                .collect();
-        }
+        let mut related: HashMap<Uuid, HashMap<String, Vec<RelatedRecordPreview>>> = items
+            .iter()
+            .map(|item| {
+                let targets = relationships
+                    .keys()
+                    .cloned()
+                    .map(|code| (code, Vec::new()))
+                    .collect();
+                (item.id, targets)
+            })
+            .collect();
         let requested = serde_json::to_value(
             relationships
                 .iter()
@@ -1928,10 +2016,10 @@ impl AttricatRepository {
         .bind(&context.ids)
         .fetch_all(&self.pool)
         .await?;
-        let mut by_id: HashMap<_, _> = items.iter_mut().map(|item| (item.id, item)).collect();
         for row in rows {
-            if let Some(item) = by_id.get_mut(&row.source_id)
-                && let Some(targets) = item.related.get_mut(&row.attribute_code)
+            if let Some(targets) = related
+                .get_mut(&row.source_id)
+                .and_then(|item| item.get_mut(&row.attribute_code))
             {
                 targets.push(RelatedRecordPreview {
                     id: row.id,
@@ -1949,7 +2037,7 @@ impl AttricatRepository {
                 });
             }
         }
-        Ok(())
+        Ok(Some(related))
     }
 
     // Facet traversal inputs are explicit to keep query scope auditable.

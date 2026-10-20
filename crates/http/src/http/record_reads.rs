@@ -480,21 +480,15 @@ pub(super) async fn search_record_previews(
     let related_started = Instant::now();
     let table_paths = table_paths(&result_blueprint);
     repository
-        .hydrate_table_path_values(&mut items, &table_paths, &context)
-        .instrument(tracing::info_span!(
-            "sql.operation",
-            label = "table-path-hydrate"
-        ))
-        .await?;
-    repository
-        .hydrate_related_table_previews(
+        .hydrate_table_values(
             &mut items,
+            &table_paths,
             &table_relationships(&result_blueprint),
             &context,
         )
         .instrument(tracing::info_span!(
             "sql.operation",
-            label = "related-hydrate"
+            label = "table-values-hydrate"
         ))
         .await?;
     timing.record("related", related_started);

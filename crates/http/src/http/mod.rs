@@ -138,7 +138,7 @@ const EXPLORER_TIMING_ROUTES: [&str; 2] = [
     "/v1/records/facets/relationship-tree/children",
 ];
 /// SQL breakdowns are limited to Explorer result and facet retrieval.
-const SQL_TIMING_LABELS: [&str; 3] = ["relationship-facet", "records-page", "related-hydrate"];
+const SQL_TIMING_LABELS: [&str; 3] = ["relationship-facet", "records-page", "table-values-hydrate"];
 
 /// Request-local, aggregate timings. Its API only permits fixed metric names,
 /// so headers cannot accidentally contain SQL, identifiers, parameters, or bodies.
