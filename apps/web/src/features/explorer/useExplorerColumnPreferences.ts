@@ -8,7 +8,7 @@ import {
 
 /**
  * Column preferences are read once per mounted table; the results table is
- * remounted whenever the search, and therefore the blueprint, changes.
+ * remounted whenever its rows belong to another blueprint revision.
  */
 export const useExplorerColumnPreferences = (
   blueprintId: string,

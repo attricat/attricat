@@ -3,7 +3,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCoreRowModel, useLegacyTable } from '@tanstack/react-table/legacy';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Paper } from '@mui/material';
-import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes, RecordItem } from '../records/api';
 import { DeleteRecordDialog } from '../records/components/DeleteRecordDialog';
@@ -88,6 +96,8 @@ type Props = {
   contextCodes: readonly string[];
   /** Size the table to its rows instead of filling the viewport. */
   fitRows?: boolean;
+  /** Changes when the rows belong to another search; the table then returns to the top. */
+  resultsKey?: string;
   publicationContextCode: string;
   publicationContextId: string | undefined;
   publicationSortAvailable: boolean;
@@ -116,6 +126,7 @@ export const ExplorerResultsTable = ({
   publicationContextId,
   publicationSortAvailable,
   relationshipSortAvailable = true,
+  resultsKey,
   selection,
   showExplorerActions = false,
   sort,
@@ -155,13 +166,16 @@ export const ExplorerResultsTable = ({
     getScrollElement: () => tableContainerRef.current,
     measureElement: (element) => {
       const height = element.getBoundingClientRect().height;
-      if (Number(element.dataset.index) < items.length)
+      if (Number(element.getAttribute('data-index')) < items.length)
         rememberRowHeight(blueprint.blueprint.id, height);
       return height;
     },
     overscan: resultRowOverscan,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
+  useEffect(() => {
+    if (tableContainerRef.current) tableContainerRef.current.scrollTop = 0;
+  }, [resultsKey]);
   const publicationItems = new Map(
     virtualRows.flatMap(({ index }) =>
       items[index] ? [[items[index].id, items[index]] as const] : [],

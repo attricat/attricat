@@ -1,6 +1,6 @@
-import { flexRender, type Row } from '@tanstack/react-table';
+import { flexRender } from '@tanstack/react-table';
 import type { VirtualItem } from '@tanstack/react-virtual';
-import type { useLegacyTable } from '@tanstack/react-table/legacy';
+import type { LegacyRow, useLegacyTable } from '@tanstack/react-table/legacy';
 import {
   Box,
   Checkbox,
@@ -231,7 +231,7 @@ const ExplorerResultRow = memo(function ExplorerResultRow({
   onToggleRecord: (record: RecordItem) => void;
   /** Only compared, to re-render the row. */
   renderToken: object | undefined;
-  row: Row<RecordItem>;
+  row: LegacyRow<RecordItem>;
   selected: boolean;
   selectionDisabled: boolean;
   /** Only compared: rows keep their identity when columns change. */

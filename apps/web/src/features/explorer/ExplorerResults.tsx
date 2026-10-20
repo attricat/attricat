@@ -52,9 +52,14 @@ export const ExplorerResults = ({
     () => (results.data?.pages ?? []).flatMap((page) => page.items),
     [results.data?.pages],
   );
-  // The table remounts for every search; selection outlives it. Until the
-  // new search's rows arrive, the previous rows stay in the previous table
-  // rather than mounting a new table for them only to replace them.
+  // The table remounts for the rows of another blueprint revision, whose
+  // columns and preferences differ; selection outlives it. Another search of
+  // the same revision keeps the table, and any menu open in it, and returns
+  // to the top once the new search's rows arrive.
+  const tableKey = JSON.stringify([
+    resultBlueprint?.blueprint.id,
+    resultBlueprint?.blueprint.version,
+  ]);
   const searchKey = JSON.stringify([
     search.blueprint,
     effectiveVersion,
@@ -65,9 +70,9 @@ export const ExplorerResults = ({
     relationshipFilters,
     relationshipTreeSelections,
   ]);
-  const [tableKey, setTableKey] = useState(searchKey);
-  if (tableKey !== searchKey && !results.isPlaceholderData)
-    setTableKey(searchKey);
+  const [shownSearch, setShownSearch] = useState(searchKey);
+  if (shownSearch !== searchKey && !results.isPlaceholderData)
+    setShownSearch(searchKey);
   const selection = useExplorerSelection(search.blueprint, items);
   const [savedSearchSelection, setSavedSearchSelection] = useState<
     RecordItem[] | null
@@ -96,6 +101,7 @@ export const ExplorerResults = ({
             <ExplorerResultsTable
               blueprint={resultBlueprint}
               key={tableKey}
+              resultsKey={shownSearch}
               hasNextPage={results.hasNextPage}
               isFetching={results.isFetching}
               isFetchingNextPage={results.isFetchingNextPage}
