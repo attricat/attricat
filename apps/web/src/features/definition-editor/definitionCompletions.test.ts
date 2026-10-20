@@ -163,6 +163,24 @@ describe('definitionCompletions', () => {
     expect(labels).toContain('category');
   });
 
+  it('follows relationships only in browse_by paths', async () => {
+    const attributes = `\n[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "category"\nvalue_type = "relationship"\ntarget_blueprint = "category"\n`;
+    const first = await complete(
+      `${header}[views.explorer]\ntype = "explorer"\nbrowse_by = "|"\n${attributes}`,
+    );
+    expect(first.labels).toEqual(['category']);
+    expect(first.suggestions[0].insertText).toBe('category.');
+    const second = await complete(
+      `${header}[views.explorer]\ntype = "explorer"\nbrowse_by = "category.|"\n${attributes}`,
+    );
+    expect(second.labels).toEqual(['parent']);
+    // A third hop is the last one a browse path follows.
+    const third = await complete(
+      `${header}[views.explorer]\ntype = "explorer"\nbrowse_by = "category.parent.|"\n${attributes}`,
+    );
+    expect(third.suggestions[0]).toMatchObject({ insertText: 'parent' });
+  });
+
   it('follows relationship hops in table column paths', async () => {
     const attributes = `\n[[attributes]]\ncode = "category"\nvalue_type = "relationship"\ntarget_blueprint = "category"\n`;
     const first = await complete(

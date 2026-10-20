@@ -1,9 +1,14 @@
 import { useQueries } from '@tanstack/react-query';
-import { getBlueprintByCode } from '../records/api';
+import {
+  getBlueprintByCode,
+  type BlueprintWithAttributes,
+} from '../records/api';
 import { recordQueryKeys } from '../records/queryKeys';
 import {
   browseByFields,
+  browsePathFields,
   defaultBrowseByField,
+  extendBrowsePaths,
   getStoredBrowseBy,
   resolveBrowseBy,
   setStoredBrowseBy,
@@ -11,10 +16,25 @@ import {
 import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
 import type { BrowseBy } from './search';
 
+/** The latest revisions of the given blueprints. */
+const useBlueprints = (codes: string[]) =>
+  // Shares cache entries with relationship filter path discovery.
+  useQueries({
+    queries: [...new Set(codes)].map((code) => ({
+      queryKey: recordQueryKeys.blueprintByCode(code, undefined),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        getBlueprintByCode(code, undefined, signal),
+    })),
+  });
+
+const lastTargets = (paths: RelationshipFilterAttribute[][]) =>
+  paths.map((path) => path.at(-1)!.target_blueprint_code);
+
 /**
- * The browse rail's candidate fields and current choice for one blueprint.
- * A change is written to the URL, so saved views keep it, and remembered as
- * the person's default for the blueprint.
+ * The browse rail's candidate fields and current choice for one blueprint:
+ * its direct relationship fields, then relationship paths through
+ * single-valued hops. A change is written to the URL, so saved views keep
+ * it, and remembered as the person's default for the blueprint.
  */
 export const useBrowseBy = ({
   blueprintCode,
@@ -32,25 +52,44 @@ export const useBrowseBy = ({
   relationshipFields: RelationshipFilterAttribute[];
   requested: BrowseBy | undefined;
 }) => {
-  // Shares cache entries with relationship filter path discovery.
-  const targets = useQueries({
-    queries: relationshipFields.map((attribute) => ({
-      queryKey: recordQueryKeys.blueprintByCode(
-        attribute.target_blueprint_code,
-        undefined,
-      ),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        getBlueprintByCode(attribute.target_blueprint_code, undefined, signal),
-    })),
-  });
+  // Each level loads the targets the next hop starts from.
+  const blueprints = new Map<string, BlueprintWithAttributes>();
+  const targetOf = (code: string) => blueprints.get(code);
+  const collect = <Result extends { data?: BlueprintWithAttributes }>(
+    results: Result[],
+  ) => {
+    for (const result of results) {
+      if (result.data) blueprints.set(result.data.blueprint.code, result.data);
+    }
+    return results;
+  };
+  const direct = collect(
+    useBlueprints(
+      relationshipFields.map((attribute) => attribute.target_blueprint_code),
+    ),
+  );
+  const twoHops = extendBrowsePaths(
+    blueprintCode,
+    relationshipFields.map((attribute) => [attribute]),
+    targetOf,
+  );
+  const second = collect(useBlueprints(lastTargets(twoHops)));
+  const threeHops = extendBrowsePaths(blueprintCode, twoHops, targetOf);
+  const third = collect(useBlueprints(lastTargets(threeHops)));
+
   const stored =
     blueprintId === undefined ? undefined : getStoredBrowseBy(blueprintId);
-  const fields = browseByFields(
-    blueprintCode,
-    relationshipFields,
-    targets.map((target) => target.data),
+  const fields = [
+    ...browseByFields(blueprintCode, relationshipFields, targetOf),
+    ...browsePathFields([...twoHops, ...threeHops], targetOf, [
+      requested,
+      stored,
+      blueprintDefault,
+    ]),
+  ];
+  const pending = [...direct, ...second, ...third].some(
+    (target) => target.isPending,
   );
-  const pending = targets.some((target) => target.isPending);
 
   return {
     field: pending

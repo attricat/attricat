@@ -104,8 +104,17 @@ export const Explorer = ({
     relationshipFields,
     requested: search.browseBy,
   });
+  // Browse rail paths name their facets by their hops, as in the rail.
   const facets = selectedRelationshipFacets(
-    relationshipFacetSources(relationshipFields, search),
+    relationshipFacetSources(
+      [
+        ...relationshipFields,
+        ...browseBy.fields.flatMap((field) =>
+          field.hops ? [field.attribute] : [],
+        ),
+      ],
+      search,
+    ),
     search,
   );
   const blueprintName =

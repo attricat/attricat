@@ -42,6 +42,7 @@ const referenceKinds = [
   'mixin',
   'mixin_version',
   'relationship_attribute',
+  'relationship_path',
   'role',
   'view_component',
 ] as const;

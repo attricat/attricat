@@ -506,10 +506,14 @@ const referenceCandidates = async (
           detail: attributeDetail(attribute),
           value: attribute.code,
         }));
-    case 'attribute_path': {
+    case 'attribute_path':
+    case 'relationship_path': {
+      // A relationship path ends on a relationship rather than past one.
+      const relationshipsOnly = reference === 'relationship_path';
+      const maxHops = maxAttributePathHops - (relationshipsOnly ? 1 : 0);
       const segments = pathSegments(prefix);
       const hops = segments.length - 1;
-      if (hops > maxAttributePathHops) return [];
+      if (hops > maxHops) return [];
       let attributes: DocumentAttribute[] = documentAttributes(outline);
       for (const segment of segments.slice(0, -1)) {
         const target = attributes.find(
@@ -518,22 +522,26 @@ const referenceCandidates = async (
         if (!target) return [];
         attributes = await references.blueprintAttributes(target);
       }
-      return attributes.map((attribute) => {
-        const continues =
-          attribute.valueType === relationshipValueType &&
-          hops < maxAttributePathHops;
-        return {
-          continues,
-          detail: attributeDetail(attribute),
-          label: attribute.code,
-          value: [
-            ...segments.slice(0, -1),
-            continues
-              ? `${attribute.code}${attributePathSeparator}`
-              : attribute.code,
-          ].join(attributePathSeparator),
-        };
-      });
+      return attributes
+        .filter(
+          (attribute) =>
+            !relationshipsOnly || attribute.valueType === relationshipValueType,
+        )
+        .map((attribute) => {
+          const continues =
+            attribute.valueType === relationshipValueType && hops < maxHops;
+          return {
+            continues,
+            detail: attributeDetail(attribute),
+            label: attribute.code,
+            value: [
+              ...segments.slice(0, -1),
+              continues
+                ? `${attribute.code}${attributePathSeparator}`
+                : attribute.code,
+            ].join(attributePathSeparator),
+          };
+        });
     }
     case 'include_attribute': {
       const [alias, ...rest] = pathSegments(prefix);
@@ -689,7 +697,9 @@ const valueSuggestions = async (
   const literalType = unquotedTypes.has(primaryType(node) ?? '');
   const range =
     cursor.quoted &&
-    (reference === 'attribute_path' || reference === 'include_attribute')
+    (reference === 'attribute_path' ||
+      reference === 'relationship_path' ||
+      reference === 'include_attribute')
       ? segmentRange(cursor.range, prefix)
       : cursor.range;
   const segmentOffset = range.start - cursor.range.start;

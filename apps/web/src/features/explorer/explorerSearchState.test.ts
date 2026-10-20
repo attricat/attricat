@@ -20,6 +20,38 @@ const search: ExplorerSearch = {
 };
 
 describe('relationship facet requests', () => {
+  it('sends Browse rail paths like direct fields', () => {
+    const paths: ExplorerSearch = {
+      blueprint: 'vehicle',
+      browseBy: 'model.body_type',
+      relationshipFacets: [
+        { field: 'model.brand', selectedIds: [brandId] },
+        {
+          field: 'model.body_type',
+          hierarchyField: 'parent',
+          selectedIds: [shoesId],
+          targetBlueprint: 'body_type',
+        },
+      ],
+    };
+    expect(relationshipFiltersFromSearch(paths)).toEqual([
+      { field: 'model.brand', selected_target_ids: [brandId] },
+    ]);
+    expect(
+      relationshipTreeFacetsRequest(
+        relationshipTreeSelectionsFromSearch(paths),
+        contextId,
+      ),
+    ).toEqual([
+      {
+        context_id: contextId,
+        hierarchy_field: 'parent',
+        selected_target_ids: [shoesId],
+        source_relationship_field: 'model.body_type',
+      },
+    ]);
+  });
+
   it('sends hierarchy selections as tree facets so descendants match', () => {
     expect(relationshipFiltersFromSearch(search)).toEqual([
       { field: 'brand', selected_target_ids: [brandId] },
