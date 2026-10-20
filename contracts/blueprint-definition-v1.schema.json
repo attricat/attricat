@@ -17,7 +17,7 @@
     "BrowseBy": {
       "anyOf": [
         {
-          "description": "Relationship attribute code.",
+          "description": "Relationship attribute code, or a dotted path of up to three\nrelationship hops.",
           "type": "string"
         },
         {
@@ -26,8 +26,8 @@
           "type": "boolean"
         }
       ],
-      "description": "The Explorer browse rail's default: a relationship field, or `false`.",
-      "x-attricat-reference": "attribute"
+      "description": "The Explorer browse rail's default: a relationship field or path, or `false`.",
+      "x-attricat-reference": "relationship_path"
     },
     "CompareOp": {
       "description": "Comparison operator. `lt`–`gte` order numbers, dates and datetimes;\n`eq`/`ne` compare any scalar or relationship target set; `disjoint`\nrequires two relationship target sets without a common target.",
@@ -1186,7 +1186,7 @@
                 }
               ],
               "default": null,
-              "description": "Relationship field the browse rail lists until a person picks\nanother, or `false` to keep the rail closed. The field must have\na single target blueprint."
+              "description": "Relationship field the browse rail lists until a person picks\nanother, or `false` to keep the rail closed. The field must have\na single target blueprint. A dotted path such as `model.brand`\nfollows up to three such relationships, each with\n`cardinality = \"one\"`, and lists the last one's targets."
             },
             "type": {
               "const": "explorer",

@@ -11,6 +11,10 @@ OTEL_EXPORTER_OTLP_TRACES_ENDPOINT= RUST_LOG=warn \
   cargo test --release -p api --test facet_latency -- --ignored --nocapture
 ```
 
+The products also link to 1,000 product lines, each in a leaf category, so
+the same scenarios run over the two-hop path `line.category` (every tenth
+product and line overrides its hop in the child context).
+
 `FACET_BENCH_PRODUCTS` changes the product count. Each scenario runs once and
 then ten more times, which is past the five executions after which PostgreSQL
 may switch a pooled prepared statement to a generic plan. The test reports the
@@ -66,6 +70,29 @@ of generic plans (see below).
   is computed once per blueprint, field, hierarchy, context and version, and
   shared by the workspace for 30 seconds, so counts may lag writes by that
   long. The tree's nodes are always read fresh.
+
+## Relationship paths
+
+A facet may follow up to three relationship hops (`source_relationship_field
+= "line.category"`). Browse rail counts resolve each hop's edges concurrently,
+one query per hop, and join them in memory; search selections walk down the
+selected subtrees and then back one hop per query through the target-side
+indexes. Medians for the same 100,000 products (release build, cached counts
+apply as for a direct field and are keyed by the path):
+
+| Scenario | Direct `category` | Path `line.category` |
+| --- | ---: | ---: |
+| Browse: root level, first request | 213 ms | 182 ms |
+| Browse: root level, cached | 14 ms | 14 ms |
+| Browse: root level, child context, first request | 176 ms | 160 ms |
+| Browse: expand a level-2 node | 13 ms | 15 ms |
+| Browse: root level, query "Product 1" | 451 ms | 497 ms |
+| Search: root selected | 99 ms | 97 ms |
+| Search: root selected, child context | 102 ms | 101 ms |
+| Search: level-2 node selected | 8 ms | 11 ms |
+
+The second hop adds one small edge query (1,000 lines) and a hash join over
+the first hop's 100,000 edges, which is within run-to-run noise.
 
 ## Remaining cost
 

@@ -2,9 +2,10 @@ use std::collections::HashSet;
 
 use crate::extensions::Manifest;
 use attricat_blueprint::{
-    BlueprintKind, CompiledBlueprint, ResolvedInclude, ViewDefinition, compile, parse,
+    BlueprintKind, BrowseBy, CompiledBlueprint, ResolvedInclude, ViewDefinition, compile, parse,
     validate_table_renderer,
 };
+use attricat_validation::saved_search::browse_path_hop;
 use attricat_validation::validate_json_schema;
 use semver::VersionReq;
 use serde_json::{Value, json};
@@ -94,6 +95,7 @@ async fn compile_source(
         .map_err(RepositoryError::invalid_blueprint_definition)?;
     resolve_extension_attribute_types(transaction, workspace_id, &mut compiled).await?;
     validate_table_columns(transaction, workspace_id, &compiled).await?;
+    validate_browse_by(transaction, workspace_id, &compiled).await?;
     validate_status_coverage(&compiled)?;
     Ok(compiled)
 }
@@ -274,6 +276,74 @@ fn parse_extension_type_reference(
     Ok((provider, type_id, requirement))
 }
 
+/// An attribute of the latest published revision of a blueprint, as a
+/// relationship path following it from another blueprint sees it.
+#[derive(sqlx::FromRow)]
+struct PathSegment {
+    value_type: String,
+    target_blueprint: Option<String>,
+    cardinality: Option<String>,
+}
+
+async fn published_path_segment(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    blueprint_code: &str,
+    field: &str,
+) -> Result<Option<PathSegment>, RepositoryError> {
+    Ok(sqlx::query_as::<_, PathSegment>(
+        "SELECT a.value_type, a.target_blueprint_code AS target_blueprint, a.cardinality FROM blueprints b JOIN attributes a ON a.blueprint_id = b.id AND a.blueprint_version = b.version WHERE b.code = $1 AND b.workspace_id = $2 AND b.status = 'published' AND b.deleted_at IS NULL AND a.code = $3 AND a.deleted_at IS NULL ORDER BY b.version DESC LIMIT 1",
+    )
+    .bind(blueprint_code)
+    .bind(workspace_id)
+    .bind(field)
+    .fetch_optional(&mut **transaction)
+    .await?)
+}
+
+/// Follows the hops of a `views.explorer.browse_by` path past the first,
+/// which the compiler checked, through the published target blueprints.
+async fn validate_browse_by(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    compiled: &CompiledBlueprint,
+) -> Result<(), RepositoryError> {
+    let Some(ViewDefinition::Explorer {
+        browse_by: Some(BrowseBy::Field(path)),
+    }) = compiled.views.get("explorer")
+    else {
+        return Ok(());
+    };
+    let hops: Vec<_> = path.split('.').collect();
+    let mut target = compiled
+        .attributes
+        .iter()
+        .find(|attribute| attribute.code == hops[0])
+        .and_then(|attribute| attribute.target_blueprint.clone())
+        .expect("compiler validated the first browse_by hop");
+    for hop in &hops[1..] {
+        let segment = published_path_segment(transaction, workspace_id, &target, hop)
+            .await?
+            .filter(|segment| {
+                browse_path_hop(
+                    &segment.value_type,
+                    segment.target_blueprint.as_deref(),
+                    segment.cardinality.as_deref(),
+                    hops.len(),
+                )
+            })
+            .ok_or_else(|| {
+                RepositoryError::InvalidBlueprintDefinition(format!(
+                    "views.explorer browse_by '{path}' segment '{hop}' must be a relationship of published blueprint '{target}' with a single target blueprint and cardinality = \"one\""
+                ))
+            })?;
+        target = segment
+            .target_blueprint
+            .expect("browse_by hop has a target");
+    }
+    Ok(())
+}
+
 async fn validate_table_columns(
     transaction: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
@@ -311,17 +381,18 @@ async fn validate_table_columns(
                 })?;
                 let mut leaf_type = None;
                 for (index, field) in parts[1..].iter().enumerate() {
-                    let (value_type, next_target) = sqlx::query_as::<_, (String, Option<String>)>(
-                        "SELECT a.value_type, a.target_blueprint_code FROM blueprints b JOIN attributes a ON a.blueprint_id = b.id AND a.blueprint_version = b.version WHERE b.code = $1 AND b.workspace_id = $2 AND b.status = 'published' AND b.deleted_at IS NULL AND a.code = $3 AND a.deleted_at IS NULL ORDER BY b.version DESC LIMIT 1",
-                    )
-                    .bind(&target)
-                    .bind(workspace_id)
-                    .bind(field)
-                    .fetch_optional(&mut **transaction)
-                    .await?
-                    .ok_or_else(|| RepositoryError::InvalidBlueprintDefinition(format!(
-                        "table column '{}' path segment '{}' was not found", column.field, field
-                    )))?;
+                    let PathSegment {
+                        value_type,
+                        target_blueprint: next_target,
+                        ..
+                    } = published_path_segment(transaction, workspace_id, &target, field)
+                        .await?
+                        .ok_or_else(|| {
+                            RepositoryError::InvalidBlueprintDefinition(format!(
+                                "table column '{}' path segment '{}' was not found",
+                                column.field, field
+                            ))
+                        })?;
                     let is_leaf = index + 1 == parts.len() - 1;
                     if is_leaf {
                         if value_type == "relationship" || value_type == "file" {

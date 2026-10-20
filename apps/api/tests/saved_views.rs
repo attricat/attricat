@@ -162,3 +162,54 @@ async fn saved_views_are_scoped_and_link_snapshots_are_reusable(pool: PgPool) {
         422
     );
 }
+
+#[sqlx::test]
+async fn saved_views_and_links_keep_the_browse_rail(pool: PgPool) {
+    let (base_url, _server) = start_server(pool).await;
+    let client = authenticated_client();
+    let state = json!({
+        "blueprint": "vehicle",
+        "browseBy": "model.body_type",
+        "relationshipFacets": [{
+            "field": "model.body_type",
+            "selectedIds": ["00000000-0000-4000-8000-0000000000aa"],
+            "targetBlueprint": "body_type",
+            "hierarchyField": "parent",
+        }],
+    });
+    let view: Value = client
+        .post(format!("{base_url}/saved-views"))
+        .json(
+            &json!({"kind":"explorer_search","name":"Sedans","visibility":"private","state":state}),
+        )
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(view["state"], state);
+    let link: Value = client
+        .post(format!("{base_url}/view-state-links"))
+        .json(&json!({"kind":"explorer_search","state":{"blueprint":"vehicle","browseBy":false}}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(link["state"]["browseBy"], false);
+    let invalid = client
+        .post(format!("{base_url}/view-state-links"))
+        .json(
+            &json!({"kind":"explorer_search","state":{"blueprint":"vehicle","browseBy":"a.b.c.d"}}),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), 422);
+}

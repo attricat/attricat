@@ -12,10 +12,11 @@ use crate::{
         SearchRecordsRequest, SearchResultVersionScope,
     },
     repository::{
-        RecordRelationshipFilter, RecordSearchFilter, RecordSearchSort, RepositoryError,
-        SearchContext, decode_search_cursor,
+        RecordRelationshipFilter, RecordSearchFilter, RecordSearchSort, RelationshipFacetHop,
+        RepositoryError, SearchContext, decode_search_cursor,
     },
 };
+use attricat_validation::saved_search;
 use axum::{
     Json,
     extract::{Extension, State},
@@ -298,7 +299,7 @@ pub(super) async fn search_record_previews(
         matching = Some(intersect_record_ids(matching, filtered));
     }
     for facet in input.relationship_tree_facets {
-        let target = resolve_tree_facet_target(
+        let (target, source_path) = resolve_tree_facet_target(
             &repository,
             &search_blueprint,
             &current,
@@ -313,7 +314,7 @@ pub(super) async fn search_record_previews(
         let facet_matching = repository
             .relationship_tree_facet_matches(
                 current.blueprint.id,
-                facet.source_relationship_field.as_deref(),
+                &source_path,
                 target.blueprint.id,
                 facet.hierarchy_field.as_deref(),
                 facet.context_id,
@@ -691,10 +692,11 @@ async fn resolve_search_filter(
     })
 }
 
-/// The blueprint whose records are a tree facet's nodes: the source
-/// relationship's target, or `current` itself when the facet has no source
-/// relationship and walks the searched blueprint's own hierarchy. `prefix`
-/// names the request field in errors.
+/// The blueprint whose records are a tree facet's nodes, and the hops its
+/// sources reach them by: the source relationship or path's last target, or
+/// `current` itself with no hops when the facet has no source relationship
+/// and walks the searched blueprint's own hierarchy. `prefix` names the
+/// request field in errors.
 async fn resolve_tree_facet_target(
     repository: &crate::repository::AttricatRepository,
     source: &crate::model::BlueprintWithAttributes,
@@ -702,37 +704,70 @@ async fn resolve_tree_facet_target(
     source_field: Option<&str>,
     hierarchy_field: Option<&str>,
     prefix: &str,
-) -> Result<crate::model::BlueprintWithAttributes, ApiError> {
+) -> Result<
+    (
+        crate::model::BlueprintWithAttributes,
+        Vec<RelationshipFacetHop>,
+    ),
+    ApiError,
+> {
     let invalid = |message: &str| ApiError::invalid_input(format!("{prefix}{message}"));
-    let target = match source_field {
+    let (target, source_path) = match source_field {
         Some(source_field) => {
-            let relationship = source
-                .attributes
-                .iter()
-                .find(|a| a.code == source_field)
-                .filter(|a| a.value_type == "relationship")
-                .ok_or_else(|| {
-                    invalid("source_relationship_field must be a relationship attribute")
-                })?;
-            let target_code = relationship
-                .target_blueprint_code
-                .as_deref()
-                .ok_or_else(|| invalid("source_relationship_field has no target blueprint"))?;
-            repository
-                .get_blueprint_by_code(target_code)
-                .instrument(tracing::info_span!(
-                    "sql.operation",
-                    label = "blueprint-load"
-                ))
-                .await?
-                .ok_or_else(|| ApiError::not_found("target blueprint"))?
+            // A dotted path follows relationships like table column paths.
+            let hops: Vec<_> = source_field.split('.').collect();
+            if hops.len() > saved_search::MAX_RELATIONSHIP_HOPS {
+                return Err(invalid(
+                    "source_relationship_field must follow at most three relationship hops",
+                ));
+            }
+            let mut target = source.clone();
+            let mut source_path = Vec::with_capacity(hops.len());
+            for hop in &hops {
+                let relationship = target
+                    .attributes
+                    .iter()
+                    .find(|a| a.code == *hop)
+                    .filter(|a| a.value_type == "relationship")
+                    .ok_or_else(|| {
+                        invalid("source_relationship_field must be a relationship attribute")
+                    })?;
+                let target_code = relationship
+                    .target_blueprint_code
+                    .clone()
+                    .ok_or_else(|| invalid("source_relationship_field has no target blueprint"))?;
+                if !saved_search::browse_path_hop(
+                    &relationship.value_type,
+                    Some(&target_code),
+                    relationship.cardinality.as_deref(),
+                    hops.len(),
+                ) {
+                    return Err(invalid(
+                        "source_relationship_field path hops must have cardinality \"one\"",
+                    ));
+                }
+                let field = relationship.code.clone();
+                target = repository
+                    .get_blueprint_by_code(&target_code)
+                    .instrument(tracing::info_span!(
+                        "sql.operation",
+                        label = "blueprint-load"
+                    ))
+                    .await?
+                    .ok_or_else(|| ApiError::not_found("target blueprint"))?;
+                source_path.push(RelationshipFacetHop {
+                    field,
+                    target_blueprint_id: target.blueprint.id,
+                });
+            }
+            (target, source_path)
         }
         None if hierarchy_field.is_none() => {
             return Err(invalid(
                 "hierarchy_field is required without source_relationship_field",
             ));
         }
-        None => current.clone(),
+        None => (current.clone(), Vec::new()),
     };
     if let Some(hierarchy_field) = hierarchy_field {
         let hierarchy = target
@@ -748,7 +783,7 @@ async fn resolve_tree_facet_target(
             ));
         }
     }
-    Ok(target)
+    Ok((target, source_path))
 }
 
 async fn resolve_relationship_filter(
@@ -1038,7 +1073,7 @@ pub(super) async fn relationship_tree_facet_children(
         None => None,
     };
     let version = published.as_ref().map(|b| b.blueprint.version);
-    let target = resolve_tree_facet_target(
+    let (target, source_path) = resolve_tree_facet_target(
         &repository,
         &source,
         &source,
@@ -1070,7 +1105,7 @@ pub(super) async fn relationship_tree_facet_children(
                 source.blueprint.id,
                 version,
                 resolved.as_ref().map(|resolved| &resolved.ids),
-                input.source_relationship_field.as_deref(),
+                &source_path,
                 target.blueprint.id,
                 input.hierarchy_field.as_deref(),
                 input.context_id,

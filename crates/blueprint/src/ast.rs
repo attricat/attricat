@@ -204,7 +204,9 @@ pub enum ViewDefinition {
     Explorer {
         /// Relationship field the browse rail lists until a person picks
         /// another, or `false` to keep the rail closed. The field must have
-        /// a single target blueprint.
+        /// a single target blueprint. A dotted path such as `model.brand`
+        /// follows up to three such relationships, each with
+        /// `cardinality = "one"`, and lists the last one's targets.
         #[serde(default)]
         browse_by: Option<BrowseBy>,
     },
@@ -260,12 +262,13 @@ pub enum ViewDefinition {
     },
 }
 
-/// The Explorer browse rail's default: a relationship field, or `false`.
+/// The Explorer browse rail's default: a relationship field or path, or `false`.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(untagged)]
-#[schemars(extend("x-attricat-reference" = "attribute"))]
+#[schemars(extend("x-attricat-reference" = "relationship_path"))]
 pub enum BrowseBy {
-    /// Relationship attribute code.
+    /// Relationship attribute code, or a dotted path of up to three
+    /// relationship hops.
     Field(String),
     /// `false` keeps the rail closed until a person opens it.
     #[schemars(extend("const" = false))]

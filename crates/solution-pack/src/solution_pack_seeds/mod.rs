@@ -778,6 +778,29 @@ fn validate_saved_search(
         let relationship =
             validate_relationship_path(target, field, &by_code, &mut referenced_blueprints)
                 .map_err(|reason| invalid_state(&reason))?;
+        if let Some(hierarchy) = facet.get("hierarchyField").and_then(Value::as_str) {
+            // A tree facet's nodes are its relationship's single target, or
+            // the searched blueprint itself for its own tree.
+            let nodes = if facet.get("ownTree").is_some() {
+                Some(target)
+            } else {
+                relationship
+                    .target_blueprint
+                    .as_deref()
+                    .and_then(|code| by_code.get(code).copied())
+            };
+            if !nodes.is_some_and(|nodes| {
+                nodes.effective_attributes().iter().any(|attribute| {
+                    attribute.code == hierarchy
+                        && attribute.value_type == "relationship"
+                        && attribute.target_blueprint.as_deref() == Some(nodes.code())
+                })
+            }) {
+                return Err(invalid_state(&format!(
+                    "relationship facet '{field}' hierarchyField '{hierarchy}' must be a self-targeting relationship of its target"
+                )));
+            }
+        }
         if let Some(target) = facet.get("targetBlueprint") {
             let target = target.as_str().expect("validated targetBlueprint");
             let target_blueprint = record_blueprint(key, target, blueprints)?;
@@ -793,6 +816,10 @@ fn validate_saved_search(
             }
             referenced_blueprints.insert(target.to_owned());
         }
+    }
+    if let Some(path) = state.get("browseBy").and_then(Value::as_str) {
+        validate_browse_path(target, path, &by_code, &mut referenced_blueprints)
+            .map_err(|reason| invalid_state(&reason))?;
     }
     Ok(SeedSavedSearch {
         key: key.to_owned(),
@@ -873,6 +900,33 @@ fn validate_relationship_path<'a>(
     } else {
         Err(format!("relationship facet '{path}' is not a relationship"))
     }
+}
+
+/// Validates a browse rail path: relationship hops through pack blueprints
+/// that `views.explorer.browse_by` would accept.
+fn validate_browse_path(
+    start: &SolutionPackBlueprint,
+    path: &str,
+    by_code: &HashMap<&str, &SolutionPackBlueprint>,
+    referenced: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    let segments = saved_search::field_path(path)?;
+    for end in 1..=segments.len() {
+        let attribute =
+            walk_attribute_path(start, &segments[..end].join("."), by_code, referenced)?;
+        if !saved_search::browse_path_hop(
+            &attribute.value_type,
+            attribute.target_blueprint.as_deref(),
+            attribute.cardinality.as_deref(),
+            segments.len(),
+        ) {
+            return Err(format!(
+                "browseBy '{path}' segment '{}' must be a relationship with a single target blueprint and cardinality = \"one\"",
+                segments[end - 1]
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]

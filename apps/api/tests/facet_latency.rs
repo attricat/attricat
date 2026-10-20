@@ -8,7 +8,10 @@
 //!
 //! `FACET_BENCH_PRODUCTS` (default 100000) sets the number of products. They
 //! link to a four-level category tree of 4,110 nodes, and every tenth product
-//! overrides its category in a child context. See `perf/facets.md` for results.
+//! overrides its category in a child context. Products also link to one of
+//! 1,000 product lines, each in a leaf category, for the two-hop path
+//! `line.category`; every tenth product and line overrides its hop in the
+//! child context. See `perf/facets.md` for results.
 
 mod support;
 
@@ -69,6 +72,33 @@ value_type = "string"
 code = "category"
 value_type = "relationship"
 target_blueprint = "bench_category"
+
+[[attributes]]
+code = "line"
+value_type = "relationship"
+target_blueprint = "bench_line"
+cardinality = "one"
+"#;
+
+const LINE: &str = r#"
+format_version = 1
+code = "bench_line"
+name = "Bench line"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "category"
+value_type = "relationship"
+target_blueprint = "bench_category"
+cardinality = "one"
 "#;
 
 /// Bulk rows bypass the record API, which would take minutes at this size.
@@ -104,6 +134,29 @@ INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relations
 SELECT gen_random_uuid(), id, $11, $8, category FROM bench_product;
 INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relationship_target_record_id)
 SELECT gen_random_uuid(), id, $11, $9, override FROM bench_product WHERE i % 10 = 0;
+
+CREATE TEMP TABLE bench_line AS
+SELECT gen_random_uuid() AS id, i,
+       (SELECT id FROM bench_leaf WHERE rn = 1 + (hashint4(i + 3) & 2147483647) % (SELECT count(*) FROM bench_leaf)) AS category,
+       (SELECT id FROM bench_leaf WHERE rn = 1 + (hashint4(i + 5) & 2147483647) % (SELECT count(*) FROM bench_leaf)) AS override
+FROM generate_series(1, 1000) i;
+INSERT INTO records (id, blueprint_id, blueprint_version, projections)
+SELECT id, $12, 1, jsonb_build_object('preview', jsonb_build_object('name', 'Line ' || i))
+FROM bench_line;
+INSERT INTO attribute_values (id, record_id, attribute_id, context_id, value_text)
+SELECT gen_random_uuid(), id, $13, $8, 'Line ' || i FROM bench_line;
+INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relationship_target_record_id)
+SELECT gen_random_uuid(), id, $14, $8, category FROM bench_line;
+INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relationship_target_record_id)
+SELECT gen_random_uuid(), id, $14, $9, override FROM bench_line WHERE i % 10 = 0;
+CREATE TEMP TABLE bench_line_rn AS SELECT row_number() OVER () AS rn, id FROM bench_line;
+INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relationship_target_record_id)
+SELECT gen_random_uuid(), p.id, $15, $8, l.id
+FROM bench_product p JOIN bench_line_rn l ON l.rn = 1 + (hashint4(p.i + 11) & 2147483647) % 1000;
+INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relationship_target_record_id)
+SELECT gen_random_uuid(), p.id, $15, $9, l.id
+FROM bench_product p JOIN bench_line_rn l ON l.rn = 1 + (hashint4(p.i + 13) & 2147483647) % 1000
+WHERE p.i % 10 = 0;
 "#;
 
 #[sqlx::test]
@@ -112,6 +165,7 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
     let (base_url, server) = start_server_with_devtools(pool.clone()).await;
     let client = authenticated_client();
     let category = create_blueprint(&client, &base_url, CATEGORY).await;
+    let line = create_blueprint(&client, &base_url, LINE).await;
     let product = create_blueprint(&client, &base_url, PRODUCT).await;
     let child_context: Value = client
         .post(format!("{base_url}/contexts"))
@@ -128,6 +182,7 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
     let child_context: Uuid = child_context["id"].as_str().unwrap().parse().unwrap();
     let category_id = blueprint_id(&category);
     let product_id = blueprint_id(&product);
+    let line_id = blueprint_id(&line);
     let attribute = |blueprint: Uuid, code: &'static str| {
         let pool = pool.clone();
         async move {
@@ -164,6 +219,10 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
                 9 => query.bind(child_context),
                 10 => query.bind(products),
                 11 => query.bind(attribute(product_id, "category").await),
+                12 => query.bind(line_id),
+                13 => query.bind(attribute(line_id, "name").await),
+                14 => query.bind(attribute(line_id, "category").await),
+                15 => query.bind(attribute(product_id, "line").await),
                 _ => unreachable!(),
             };
         }
@@ -203,10 +262,10 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
     let level_1 = first_child(root).await;
     let level_2 = first_child(level_1).await;
 
-    let children = |context: Uuid, parent: Option<Uuid>, query: Option<&str>| {
+    let children = |source: &str, context: Uuid, parent: Option<Uuid>, query: Option<&str>| {
         let mut body = json!({
             "blueprint": { "code": "bench_product" },
-            "source_relationship_field": "category",
+            "source_relationship_field": source,
             "hierarchy_field": "parent",
             "context_id": context,
         });
@@ -218,14 +277,14 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
         }
         ("/v1/records/facets/relationship-tree/children", body)
     };
-    let search = |context: Uuid, selected: Option<Uuid>, version: Option<i64>| {
+    let search = |source: &str, context: Uuid, selected: Option<Uuid>, version: Option<i64>| {
         let mut body = json!({ "blueprint": { "code": "bench_product" }, "include_total": true });
         if let Some(version) = version {
             body["blueprint"]["version"] = json!(version);
         }
         if let Some(selected) = selected {
             body["relationship_tree_facets"] = json!([{
-                "source_relationship_field": "category",
+                "source_relationship_field": source,
                 "hierarchy_field": "parent",
                 "context_id": context,
                 "selected_target_ids": [selected],
@@ -234,46 +293,78 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
         ("/v1/records/search", body)
     };
     let scenarios = [
-        ("browse: root level", children(default_context, None, None)),
+        (
+            "browse: root level",
+            children("category", default_context, None, None),
+        ),
         (
             "browse: root level, child context",
-            children(child_context, None, None),
+            children("category", child_context, None, None),
         ),
         (
             "browse: expand root",
-            children(default_context, Some(root), None),
+            children("category", default_context, Some(root), None),
         ),
         (
             "browse: expand level 1",
-            children(default_context, Some(level_1), None),
+            children("category", default_context, Some(level_1), None),
         ),
         (
             "browse: expand level 2",
-            children(default_context, Some(level_2), None),
+            children("category", default_context, Some(level_2), None),
         ),
         (
             "browse: root level, query \"Product 1\"",
-            children(default_context, None, Some("Product 1")),
+            children("category", default_context, None, Some("Product 1")),
         ),
         (
             "search: no facet (reference)",
-            search(default_context, None, None),
+            search("category", default_context, None, None),
         ),
         (
             "search: root selected",
-            search(default_context, Some(root), None),
+            search("category", default_context, Some(root), None),
         ),
         (
             "search: root selected, child context",
-            search(child_context, Some(root), None),
+            search("category", child_context, Some(root), None),
         ),
         (
             "search: root selected, version 1",
-            search(default_context, Some(root), Some(1)),
+            search("category", default_context, Some(root), Some(1)),
         ),
         (
             "search: level 2 selected",
-            search(default_context, Some(level_2), None),
+            search("category", default_context, Some(level_2), None),
+        ),
+        // The two-hop path keeps its own cached counts.
+        (
+            "path browse: root level",
+            children("line.category", default_context, None, None),
+        ),
+        (
+            "path browse: root level, child context",
+            children("line.category", child_context, None, None),
+        ),
+        (
+            "path browse: expand level 2",
+            children("line.category", default_context, Some(level_2), None),
+        ),
+        (
+            "path browse: root level, query \"Product 1\"",
+            children("line.category", default_context, None, Some("Product 1")),
+        ),
+        (
+            "path search: root selected",
+            search("line.category", default_context, Some(root), None),
+        ),
+        (
+            "path search: root selected, child context",
+            search("line.category", child_context, Some(root), None),
+        ),
+        (
+            "path search: level 2 selected",
+            search("line.category", default_context, Some(level_2), None),
         ),
     ];
     // Ten samples after the first exceed the five executions after which

@@ -335,6 +335,114 @@ cardinality = "one"
     server.abort();
 }
 
+#[sqlx::test]
+async fn explorer_browse_by_paths_resolve_through_published_targets(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    for definition in [
+        r#"
+format_version = 1
+code = "browse_brand"
+name = "Browse brand"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+"#,
+        r#"
+format_version = 1
+code = "browse_model"
+name = "Browse model"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "brand"
+value_type = "relationship"
+target_blueprint = "browse_brand"
+cardinality = "one"
+
+[[attributes]]
+code = "brands"
+value_type = "relationship"
+target_blueprint = "browse_brand"
+cardinality = "many"
+"#,
+    ] {
+        create_blueprint(&client, &base_url, definition).await;
+    }
+    let vehicle = |browse_by: &str| {
+        format!(
+            r#"
+format_version = 1
+code = "browse_vehicle"
+name = "Browse vehicle"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["vin"]
+
+[views.explorer]
+type = "explorer"
+browse_by = "{browse_by}"
+
+[[attributes]]
+code = "vin"
+value_type = "string"
+
+[[attributes]]
+code = "model"
+value_type = "relationship"
+target_blueprint = "browse_model"
+cardinality = "one"
+"#
+        )
+    };
+    for (path, error) in [
+        ("model.brands", "segment 'brands' must be a relationship"),
+        ("model.name", "segment 'name' must be a relationship"),
+        ("model.missing", "segment 'missing' must be a relationship"),
+        (
+            "model.brand.name.other",
+            "browse_by 'model.brand.name.other'",
+        ),
+        ("vin.brand", "browse_by 'vin.brand'"),
+    ] {
+        let response = client
+            .post(format!("{base_url}/blueprints"))
+            .json(&json!({ "definition": vehicle(path) }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{path}"
+        );
+        let body = response.text().await.unwrap();
+        assert!(body.contains(error), "{path}: {body}");
+    }
+    let saved = create_blueprint(&client, &base_url, &vehicle("model.brand")).await;
+    assert_eq!(
+        saved["blueprint"]["views"]["explorer"]["browse_by"],
+        "model.brand"
+    );
+    server.abort();
+}
+
 fn blueprint_with_rule(code: &str) -> String {
     format!(
         r#"format_version = 1

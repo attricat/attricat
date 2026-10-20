@@ -532,9 +532,12 @@ pub struct SearchRecordsRequest {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RelationshipTreeFacetRequest {
-    /// Relationship whose targets form the tree. Omit it to facet the searched
-    /// blueprint by its own `hierarchy_field`: a record then matches when it
-    /// is a selected node or one of its descendants.
+    /// Relationship whose targets form the tree, or a dotted path of up to
+    /// three relationships, such as `model.brand`, whose last targets do;
+    /// each hop of a path needs a single target blueprint and
+    /// `cardinality = "one"`. Omit it to facet the searched blueprint by its
+    /// own `hierarchy_field`: a record then matches when it is a selected
+    /// node or one of its descendants.
     #[serde(default)]
     pub source_relationship_field: Option<String>,
     #[serde(default)]
@@ -550,7 +553,8 @@ pub struct RelationshipTreeFacetChildrenRequest {
     pub blueprint: SearchBlueprint,
     #[serde(default)]
     pub query: Option<String>,
-    /// Omit it to list the blueprint's own tree; see [`RelationshipTreeFacetRequest`].
+    /// A relationship or relationship path. Omit it to list the blueprint's
+    /// own tree; see [`RelationshipTreeFacetRequest`].
     #[serde(default)]
     pub source_relationship_field: Option<String>,
     #[serde(default)]
