@@ -211,6 +211,8 @@ POST /api/v1/records/search
 - `sort.field` must be a scalar column in the blueprint's table view, `blueprint_version`, or `publication_status` (with `sort.context_code` naming a channel).
 - Responses contain `items`, `next_cursor`, `result_version_scope`, and, for each item, `table_values` and `match_explanations`. Pass `next_cursor` back as `page.cursor` with the same sort.
 - `include_total` returns a first-page total, capped at 500.
+- `include_blueprint: false` leaves `blueprint` out of the response, for later pages when you kept the first page's.
+- `include_previews: false` leaves out each item's `preview` and `related` records, unless a table column uses an extension renderer. `display` and `table_values` are always returned.
 
 ### Files
 

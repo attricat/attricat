@@ -239,6 +239,36 @@ value_type = "integer"
             .is_none()
     );
 
+    // Without extension renderers, excluded previews drop row previews and
+    // related records; table values and labels remain.
+    let lean: Value = client
+        .post(format!("{base_url}/v1/records/search"))
+        .json(&json!({
+            "blueprint": { "code": "search_projection_product" },
+            "include_blueprint": false,
+            "include_previews": false,
+            "page": { "size": 25 }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(lean.get("blueprint").is_none());
+    let lean_first = lean["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == first_source["id"])
+        .unwrap();
+    assert!(lean_first.get("preview").is_none());
+    assert_eq!(lean_first["related"], json!({}));
+    assert_eq!(lean_first["table_values"], first["table_values"]);
+    assert_eq!(lean_first["display"], first["display"]);
+
     let unlinked_current_source = create_record(&client, &base_url, &source_v2).await;
     for (record, rank) in [
         (&first_source, 1),

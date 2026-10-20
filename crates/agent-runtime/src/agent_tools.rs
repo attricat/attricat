@@ -2188,7 +2188,7 @@ pub async fn execute_read(
                     None
                 };
             serde_json::to_value(crate::model::RecordSearchResponse {
-                blueprint: sort_blueprint,
+                blueprint: Some(sort_blueprint),
                 items,
                 next_cursor,
                 total_count: total_count.map(|count| count.min(SEARCH_TOTAL_COUNT_CAP)),

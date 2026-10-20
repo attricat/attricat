@@ -17,6 +17,7 @@ import {
   recordPreviewResponseSchema,
   recordSchema,
   recordSearchResponseSchema,
+  recordSearchPageSchema,
   relationshipTreeFacetChildrenRequestSchema,
   relationshipTreeFacetChildrenResponseSchema,
   getBlueprintRequestSchema,
@@ -55,6 +56,7 @@ export type {
   RecordItem,
   RecordSearchFilter,
   RecordSearchResponse,
+  RecordSearchPage,
   JsonSchema,
   NewAttributeValue,
   NewFileAttributeValue,
@@ -100,20 +102,23 @@ export type SearchRecordsOptions = {
   version?: number;
 };
 
-export const searchRecords = ({
-  blueprint,
-  contextCode,
-  cursor = null,
-  filters = [],
-  includeTotal = false,
-  pageSize = RECORD_SEARCH_PAGE_SIZE,
-  query = '',
-  relationshipFilters = [],
-  relationshipTreeFacets = [],
-  signal,
-  sort,
-  version,
-}: SearchRecordsOptions) => {
+const searchRecordsInit = (
+  {
+    blueprint,
+    contextCode,
+    cursor = null,
+    filters = [],
+    includeTotal = false,
+    pageSize = RECORD_SEARCH_PAGE_SIZE,
+    query = '',
+    relationshipFilters = [],
+    relationshipTreeFacets = [],
+    signal,
+    sort,
+    version,
+  }: SearchRecordsOptions,
+  include: { include_blueprint?: boolean; include_previews?: boolean } = {},
+): RequestInit => {
   const payload = searchRecordsRequestSchema.parse({
     blueprint: {
       code: blueprint,
@@ -130,15 +135,38 @@ export const searchRecords = ({
     sort,
     ...(contextCode === undefined ? {} : { context_code: contextCode }),
     ...(includeTotal ? { include_total: true } : {}),
+    ...include,
     page: { size: pageSize, cursor },
   });
-  return request('/api/v1/records/search', recordSearchResponseSchema, {
+  return {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
     ...(signal === undefined ? {} : { signal }),
-  });
+  };
 };
+
+export const searchRecords = (options: SearchRecordsOptions) =>
+  request(
+    '/api/v1/records/search',
+    recordSearchResponseSchema,
+    searchRecordsInit(options),
+  );
+
+/**
+ * A results page for a table: later pages leave out the blueprint the first
+ * page carried, and rows carry previews and related records only when an
+ * extension cell renderer needs them.
+ */
+export const searchRecordTablePage = (options: SearchRecordsOptions) =>
+  request(
+    '/api/v1/records/search',
+    recordSearchPageSchema,
+    searchRecordsInit(options, {
+      include_blueprint: options.cursor == null,
+      include_previews: false,
+    }),
+  );
 
 /** One page of a relationship facet's root nodes or of one node's children. */
 export const getRelationshipTreeFacetChildren = (

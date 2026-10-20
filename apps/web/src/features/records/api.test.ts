@@ -16,6 +16,7 @@ import {
   previewRecordMigration,
   getResolvedRecordPreview,
   searchRecords,
+  searchRecordTablePage,
   smartFillRecordForm,
   unpublishRecord,
   updateRecord,
@@ -325,6 +326,40 @@ describe('record API client', () => {
       }),
       signal: controller.signal,
     });
+  });
+
+  it('asks table pages to leave out previews and later blueprints', async () => {
+    respond({
+      items: [
+        {
+          id: recordId,
+          blueprint_version: 2,
+          schema_outdated: false,
+          is_sample: false,
+          display: { default: 'Trail shoes' },
+        },
+      ],
+      next_cursor: null,
+    });
+    const page = await searchRecordTablePage({
+      blueprint: 'product',
+      cursor: 'next',
+    });
+    expect(page.blueprint).toBeUndefined();
+    expect(page.items[0]?.preview).toEqual({});
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/v1/records/search',
+      expect.objectContaining({
+        body: JSON.stringify({
+          blueprint: { code: 'product' },
+          query: '',
+          filters: [],
+          include_blueprint: false,
+          include_previews: false,
+          page: { size: 25, cursor: 'next' },
+        }),
+      }),
+    );
   });
 
   it('uses the backend default ordering', async () => {

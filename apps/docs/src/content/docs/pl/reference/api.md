@@ -211,6 +211,8 @@ POST /api/v1/records/search
 - `sort.field` musi być kolumną skalarną w widoku tabeli schematu, `blueprint_version` lub `publication_status` (z `sort.context_code` wskazującym kanał).
 - Odpowiedzi zawierają `items`, `next_cursor`, `result_version_scope`, a dla każdego elementu `table_values` i `match_explanations`. Przekaż `next_cursor` z powrotem jako `page.cursor` przy tym samym sortowaniu.
 - `include_total` zwraca łączną liczbę wyników dla pierwszej strony, ograniczoną do 500.
+- `include_blueprint: false` pomija `blueprint` w odpowiedzi, na przykład na kolejnych stronach, gdy klient ma już blueprint z pierwszej strony.
+- `include_previews: false` pomija `preview` i rekordy `related` każdego elementu, chyba że kolumna tabeli używa renderera z rozszerzenia. `display` i `table_values` są zwracane zawsze.
 
 ### Pliki
 

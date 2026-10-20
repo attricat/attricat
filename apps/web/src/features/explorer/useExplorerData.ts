@@ -15,7 +15,7 @@ import { contextQueryKeys } from '../contexts/queryKeys';
 import {
   getBlueprintByCode,
   listRecordBlueprints,
-  searchRecords,
+  searchRecordTablePage,
 } from '../records/api';
 import { isHiddenByDefault } from '../records/attributeVisibility';
 import { contextAncestorCodes } from '../records/previewContext';
@@ -140,7 +140,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
       contextCode,
     ),
     queryFn: ({ pageParam, signal }) =>
-      searchRecords({
+      searchRecordTablePage({
         blueprint: search.blueprint ?? '',
         contextCode,
         cursor: pageParam,

@@ -379,6 +379,8 @@ pub struct RecordPreview {
     pub is_sample: bool,
     #[serde(skip_serializing)]
     pub created_at: DateTime<Utc>,
+    /// Omitted when a search excludes previews.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
     pub preview: Value,
     pub display: Value,
     /// Table values keyed by their configured local or relationship path. Direct file
@@ -525,8 +527,21 @@ pub struct SearchRecordsRequest {
     /// Include a bounded result count. Clients should request this only for the first page.
     #[serde(default)]
     pub include_total: bool,
+    /// `false` omits `blueprint` from the response, for later pages of a
+    /// client that kept the first page's.
+    #[serde(default = "default_true")]
+    pub include_blueprint: bool,
+    /// `false` omits each item's `preview` and `related` records unless a
+    /// table column uses an extension renderer, whose cell context carries
+    /// them. Table values and display labels are always returned.
+    #[serde(default = "default_true")]
+    pub include_previews: bool,
     #[serde(default)]
     pub page: SearchPage,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -640,7 +655,9 @@ pub enum SearchResultVersionScope {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct RecordSearchResponse {
-    pub blueprint: BlueprintWithAttributes,
+    /// Omitted when the request excludes it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blueprint: Option<BlueprintWithAttributes>,
     pub items: Vec<RecordPreview>,
     pub next_cursor: Option<String>,
     pub total_count: Option<i64>,

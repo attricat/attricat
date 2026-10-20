@@ -479,22 +479,28 @@ pub(super) async fn search_record_previews(
     }
     let related_started = Instant::now();
     let table_paths = table_paths(&result_blueprint);
+    let previews = input.include_previews || has_extension_table_renderer(&result_blueprint);
+    let relationships = if previews {
+        table_relationships(&result_blueprint)
+    } else {
+        HashMap::new()
+    };
     repository
-        .hydrate_table_values(
-            &mut items,
-            &table_paths,
-            &table_relationships(&result_blueprint),
-            &context,
-        )
+        .hydrate_table_values(&mut items, &table_paths, &relationships, &context)
         .instrument(tracing::info_span!(
             "sql.operation",
             label = "table-values-hydrate"
         ))
         .await?;
     timing.record("related", related_started);
+    if !previews {
+        for item in &mut items {
+            item.preview = serde_json::Value::Null;
+        }
+    }
     let serialization_started = Instant::now();
     let response = Json(RecordSearchResponse {
-        blueprint: result_blueprint,
+        blueprint: input.include_blueprint.then_some(result_blueprint),
         items,
         next_cursor,
         total_count,
@@ -860,6 +866,26 @@ fn table_paths(blueprint: &crate::model::BlueprintWithAttributes) -> HashMap<Str
 }
 
 /// Only direct relationship hops used by legacy rich table columns need hydration.
+/// Whether a table column renders through an extension, whose cell context
+/// carries the row's preview and related records.
+fn has_extension_table_renderer(blueprint: &crate::model::BlueprintWithAttributes) -> bool {
+    blueprint
+        .blueprint
+        .views
+        .get("table")
+        .and_then(|table| table.get("columns"))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|columns| {
+            columns.iter().any(|column| {
+                column
+                    .get("renderer")
+                    .and_then(|renderer| renderer.get("id"))
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|id| !id.starts_with("attricat."))
+            })
+        })
+}
+
 fn table_relationships(
     blueprint: &crate::model::BlueprintWithAttributes,
 ) -> HashMap<String, String> {

@@ -391,7 +391,8 @@ const recordItemSchema = z.object({
   schema_outdated: z.boolean(),
   is_sample: z.boolean(),
   display: z.record(z.string(), z.string()),
-  preview: z.record(z.string(), jsonObjectSchema),
+  /** Omitted by searches that exclude previews. */
+  preview: z.record(z.string(), jsonObjectSchema).default({}),
   table_values: z.record(z.string(), z.array(z.unknown())).default({}),
   related: z
     .record(
@@ -478,6 +479,10 @@ const recordSearchResponseSchema = z.object({
     .nullable()
     .default(null),
   hidden_outdated_count_capped: z.boolean().default(false),
+});
+/** A search page whose request may have excluded the blueprint. */
+const recordSearchPageSchema = recordSearchResponseSchema.extend({
+  blueprint: blueprintWithAttributesSchema.optional(),
 });
 const incomingRelationshipItemSchema = z.object({
   id: uuidSchema,
@@ -622,6 +627,8 @@ export const searchRecordsRequestSchema = z.object({
     .optional(),
   context_code: z.string().min(1).optional(),
   include_total: z.boolean().optional(),
+  include_blueprint: z.boolean().optional(),
+  include_previews: z.boolean().optional(),
   page: z.object({
     size: z.number().int().positive(),
     cursor: z.string().nullable(),
@@ -740,6 +747,7 @@ export type RecordAuditChange = z.infer<typeof recordAuditChangeSchema>;
 export type RecordItem = z.infer<typeof recordItemSchema>;
 export type RecordSearchFilter = z.infer<typeof recordSearchFilterSchema>;
 export type RecordSearchResponse = z.infer<typeof recordSearchResponseSchema>;
+export type RecordSearchPage = z.infer<typeof recordSearchPageSchema>;
 export type RecordFormResponse = z.infer<typeof recordFormResponseSchema>;
 export type ResolvedRecordPreview = z.infer<typeof resolvedRecordPreviewSchema>;
 export type RecordMigrationPreview = z.infer<
@@ -749,6 +757,7 @@ export type RecordMigrationPreview = z.infer<
 export {
   recordFormResponseSchema,
   recordSearchResponseSchema,
+  recordSearchPageSchema,
   getBlueprintRequestSchema,
   getBlueprintRevisionRequestSchema,
   resolvedRecordPreviewSchema,
