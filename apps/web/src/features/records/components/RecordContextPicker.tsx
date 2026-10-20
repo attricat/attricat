@@ -17,7 +17,8 @@ type RecordContextPickerProps = {
 
 /**
  * Chooses a record attribute context, prioritizing the first five as tabs.
- * Hidden while the workspace has only its default context.
+ * The default context always comes first. Hidden while the workspace has only
+ * its default context.
  */
 export const RecordContextPicker = ({
   contexts,
@@ -27,8 +28,12 @@ export const RecordContextPicker = ({
 }: RecordContextPickerProps) => {
   const { t } = useTranslation();
   if (contexts.length <= 1) return null;
-  const tabContexts = contexts.slice(0, CONTEXT_TAB_LIMIT);
-  const remainingContexts = contexts.slice(CONTEXT_TAB_LIMIT);
+  const orderedContexts = [
+    ...contexts.filter((context) => context.code === defaultContextCode),
+    ...contexts.filter((context) => context.code !== defaultContextCode),
+  ];
+  const tabContexts = orderedContexts.slice(0, CONTEXT_TAB_LIMIT);
+  const remainingContexts = orderedContexts.slice(CONTEXT_TAB_LIMIT);
   const tabValue = tabContexts.some((context) => context.id === value)
     ? value
     : false;

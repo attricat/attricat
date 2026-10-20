@@ -34,4 +34,18 @@ describe('RecordContextPicker', () => {
       'storefront',
     ]);
   });
+
+  it('renders the default context first', () => {
+    render(
+      <RecordContextPicker
+        contexts={[context('2', 'storefront'), defaultContext]}
+        onChange={vi.fn()}
+        value="1"
+      />,
+    );
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Default',
+      'storefront',
+    ]);
+  });
 });
