@@ -12,6 +12,7 @@ import {
   RECORD_HEADER_CONTEXT_VERSION,
   FALLBACK_BLUEPRINT_VERSION,
 } from '../constants';
+import { RelatedRecordPreviewContext } from '../linkedRecord';
 import { recordQueryKeys } from '../queryKeys';
 import { statusParentContexts } from '../status';
 import { useRecordContextSelection } from '../useRecordContexts';
@@ -241,29 +242,35 @@ export const RecordPreview = ({
                   </Alert>
                 )}
                 {resolved.data && blueprint.data && (
-                  <RecordPreviewContent
-                    blueprint={blueprint.data}
-                    contextId={selectedContextId}
-                    contexts={contexts.data}
-                    defaultContextId={defaultContextId}
-                    recordId={recordId}
-                    // A cached form must not become the save baseline before
-                    // the opening refresh has completed.
-                    form={
-                      recordForm.isFetchedAfterMount
-                        ? recordForm.data
-                        : undefined
-                    }
-                    statusParentContextIds={statusParentContexts(
-                      contexts.data,
-                      contextId,
-                    )}
-                    statusTransitions={statusTransitions.data}
-                    inlineFieldsRef={inlineFieldsRef}
-                    onContextChange={setSelectedContext}
-                    resolved={resolved.data}
-                    singleColumn={compact}
-                  />
+                  // A single relationship shows its record on the full page;
+                  // a panel beside another page keeps to links.
+                  <RelatedRecordPreviewContext.Provider
+                    value={compact ? null : (contextId ?? null)}
+                  >
+                    <RecordPreviewContent
+                      blueprint={blueprint.data}
+                      contextId={selectedContextId}
+                      contexts={contexts.data}
+                      defaultContextId={defaultContextId}
+                      recordId={recordId}
+                      // A cached form must not become the save baseline before
+                      // the opening refresh has completed.
+                      form={
+                        recordForm.isFetchedAfterMount
+                          ? recordForm.data
+                          : undefined
+                      }
+                      statusParentContextIds={statusParentContexts(
+                        contexts.data,
+                        contextId,
+                      )}
+                      statusTransitions={statusTransitions.data}
+                      inlineFieldsRef={inlineFieldsRef}
+                      onContextChange={setSelectedContext}
+                      resolved={resolved.data}
+                      singleColumn={compact}
+                    />
+                  </RelatedRecordPreviewContext.Provider>
                 )}
               </>
             )}

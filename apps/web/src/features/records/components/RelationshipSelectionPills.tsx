@@ -1,6 +1,8 @@
 import { Box, Chip } from '@mui/material';
 import type { MouseEvent, ReactNode } from 'react';
+import { NewTabIcon } from '../../../components/NewTabIcon';
 import { RouterChip } from '../../../components/RouterLink';
+import { relatedRecordLinkProps } from '../linkedRecord';
 
 export const RelationshipSelectionPills = ({
   action,
@@ -15,7 +17,7 @@ export const RelationshipSelectionPills = ({
   gap?: number;
   ids: string[];
   labels: Map<string, string>;
-  /** Each pill opens its record; removing one stays on the page. */
+  /** Each pill opens its record in a new tab; removing one stays on the page. */
   linkToRecords?: boolean;
   onRemove?: (id: string) => void;
 }) => {
@@ -33,6 +35,8 @@ export const RelationshipSelectionPills = ({
         linkToRecords ? (
           <RouterChip
             clickable
+            // Sized for a small chip.
+            icon={<NewTabIcon size={12} />}
             key={id}
             label={labels.get(id) ?? id}
             onDelete={
@@ -48,6 +52,7 @@ export const RelationshipSelectionPills = ({
             size="small"
             sx={{ maxWidth: '100%' }}
             to="/records/$recordId"
+            {...relatedRecordLinkProps}
           />
         ) : (
           <Chip

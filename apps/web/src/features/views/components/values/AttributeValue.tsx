@@ -1,10 +1,11 @@
-import { Chip, Stack, Typography } from '@mui/material';
+import { Box, Chip, Stack, Typography } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import type { ReactNode } from 'react';
 import type { Attribute } from '../../../records/api';
 import { fileDownloadUrl } from '../../../files/api';
 import { ImageGallery } from '../../../files/ImageGallery';
+import { NewTabIcon } from '../../../../components/NewTabIcon';
 import { AttributeValueText } from './AttributeValueText';
 import { formatAttributeValue } from './formatAttributeValue';
 import { attributeValueTypes } from '../../../records/valueTypes';
@@ -12,6 +13,15 @@ import { statusConfiguration } from '../../../records/status';
 import { StatusValue } from '../../controls/values';
 import { principalConfiguration } from '../../../principals/principal';
 import { PrincipalValue } from '../../../principals/PrincipalValue';
+import {
+  relatedRecordLinkProps,
+  singleLinkedRecord,
+  useRelatedRecordPreview,
+} from '../../../records/linkedRecord';
+import {
+  RelatedRecordPreviewDetails,
+  RelatedRecordPreviewToggle,
+} from '../../../records/components/RelatedRecordPreview';
 
 type RelationshipValue = {
   items?: { id: string; display?: string }[];
@@ -55,6 +65,10 @@ export const AttributeValue = ({
   renderFilePanel?: (fileId: string) => ReactNode;
 }) => {
   const { t } = useTranslation();
+  const linkedRecord = compact
+    ? undefined
+    : singleLinkedRecord(attribute, value);
+  const preview = useRelatedRecordPreview(attribute, linkedRecord?.id);
   const status = statusConfiguration(attribute);
   if (status) return <StatusValue config={status} value={value} />;
   if (principalConfiguration(attribute))
@@ -72,15 +86,26 @@ export const AttributeValue = ({
             : t('views.notSet')}
         </Typography>
       );
-    return (
-      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+    const links = (
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+        // A gap rather than margins lets the preview toggle align right.
+        useFlexGap
+      >
         {items.map((item) => (
           <Link
             key={item.id}
             params={{ recordId: item.id }}
             to="/records/$recordId"
+            {...relatedRecordLinkProps}
           >
-            <Chip label={item.display ?? item.id} clickable />
+            <Chip
+              clickable
+              icon={<NewTabIcon />}
+              label={item.display ?? item.id}
+            />
           </Link>
         ))}
         {value.truncated && (
@@ -89,7 +114,24 @@ export const AttributeValue = ({
         {!items.length && (
           <Typography color="text.secondary">{t('views.notSet')}</Typography>
         )}
+        {preview && linkedRecord && (
+          <RelatedRecordPreviewToggle
+            label={linkedRecord.display ?? linkedRecord.id}
+            preview={preview}
+          />
+        )}
       </Stack>
+    );
+    if (!preview || !linkedRecord) return links;
+    // The link and the record it opens read as one field.
+    return (
+      <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+        {links}
+        <RelatedRecordPreviewDetails
+          label={linkedRecord.display ?? linkedRecord.id}
+          preview={preview}
+        />
+      </Box>
     );
   }
   if (attribute.value_type === attributeValueTypes.file) {

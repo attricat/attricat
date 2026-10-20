@@ -26,8 +26,13 @@ import {
   allowedTargetBlueprints,
   relationshipIdsForField,
 } from '../recordForm';
+import { useRelatedRecordPreview } from '../linkedRecord';
 import { attributeLabel } from '../recordDisplay';
 import { RelationshipDraftSelection } from './RelationshipDraftSelection';
+import {
+  RelatedRecordPreviewDetails,
+  RelatedRecordPreviewToggle,
+} from './RelatedRecordPreview';
 import { RelationshipSelectionPills } from './RelationshipSelectionPills';
 import { RelationshipTargetOption } from './RelationshipTargetOption';
 import { useRelationshipSelectionLabels } from './useRelationshipSelectionLabels';
@@ -151,6 +156,10 @@ export const RelationshipField = ({
     query,
     selectorOpen,
   );
+  const preview = useRelatedRecordPreview(
+    attribute,
+    targetBlueprint && selectedIds.length === 1 ? selectedIds[0] : undefined,
+  );
 
   if (!targetBlueprint) {
     return (
@@ -170,6 +179,9 @@ export const RelationshipField = ({
 
   const labelForId = (id: string) =>
     knownLabels[id] ?? labelById.get(id) ?? selectionLabels.get(id) ?? id;
+  const previewLabel = preview
+    ? (selectionLabels.get(preview.recordId) ?? preview.recordId)
+    : '';
   const availableOptions = options.filter(
     (target) => !draftIds.includes(target.id),
   );
@@ -210,38 +222,56 @@ export const RelationshipField = ({
           htmlInput: {
             'aria-labelledby': `${fieldId}-label`,
             children: (
-              <RelationshipSelectionPills
-                action={
-                  <Button
-                    aria-label={t('records.openRelationshipSelectorFor', {
-                      field: attributeLabel(attribute),
-                    })}
-                    color="primary"
-                    disabled={disabled}
-                    onClick={openSelector}
-                    size="small"
-                    startIcon={<RelationshipPickerIcon size={smallIconSize} />}
-                    sx={compactOutlinedActionButtonSx}
-                    variant="outlined"
-                  >
-                    {t('records.openRelationshipSelector')}
-                  </Button>
-                }
-                gap={1}
-                ids={selectedIds}
-                labels={selectionLabels}
-                linkToRecords={linkToRecords}
-                onRemove={
-                  disabled
-                    ? undefined
-                    : (id) =>
-                        onChange(
-                          selectedIds
-                            .filter((selectedId) => selectedId !== id)
-                            .join(RELATIONSHIP_ID_JOINER),
-                        )
-                }
-              />
+              <Stack sx={{ minWidth: 0 }}>
+                <RelationshipSelectionPills
+                  action={
+                    <>
+                      <Button
+                        aria-label={t('records.openRelationshipSelectorFor', {
+                          field: attributeLabel(attribute),
+                        })}
+                        color="primary"
+                        disabled={disabled}
+                        onClick={openSelector}
+                        size="small"
+                        startIcon={
+                          <RelationshipPickerIcon size={smallIconSize} />
+                        }
+                        sx={compactOutlinedActionButtonSx}
+                        variant="outlined"
+                      >
+                        {t('records.openRelationshipSelector')}
+                      </Button>
+                      {preview && (
+                        <RelatedRecordPreviewToggle
+                          label={previewLabel}
+                          preview={preview}
+                        />
+                      )}
+                    </>
+                  }
+                  gap={1}
+                  ids={selectedIds}
+                  labels={selectionLabels}
+                  linkToRecords={linkToRecords}
+                  onRemove={
+                    disabled
+                      ? undefined
+                      : (id) =>
+                          onChange(
+                            selectedIds
+                              .filter((selectedId) => selectedId !== id)
+                              .join(RELATIONSHIP_ID_JOINER),
+                          )
+                  }
+                />
+                {preview && (
+                  <RelatedRecordPreviewDetails
+                    label={previewLabel}
+                    preview={preview}
+                  />
+                )}
+              </Stack>
             ),
           },
           input: {
