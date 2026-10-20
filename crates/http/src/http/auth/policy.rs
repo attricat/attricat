@@ -450,7 +450,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path == "/v1/records/batch" {
         return Some(write(TargetKind::RecordBatch));
     }
-    if path == "/v1/records/labels" {
+    if path == "/v1/records/labels" || path == "/v1/records/publications" {
         return Some(read(TargetKind::RecordList));
     }
     if path == "/v1/records/search"
@@ -509,6 +509,13 @@ mod tests {
         .unwrap();
         assert_eq!(policy.permission, "records.read");
         assert!(matches!(policy.target, TargetKind::RecordId));
+    }
+
+    #[test]
+    fn record_publication_lookups_are_reads_filtered_by_the_handler() {
+        let lookup = policy(&Method::POST, "/v1/records/publications").unwrap();
+        assert_eq!(lookup.permission, "records.read");
+        assert!(matches!(lookup.target, TargetKind::RecordList));
     }
 
     #[test]

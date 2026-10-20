@@ -252,6 +252,7 @@ Add `context_id` to an entry for a context other than the default. Uploaded file
 | `GET` | `/publication-channels` | Channel contexts. |
 | `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}` to make a context a channel. Optional `required_rule_codes` (up to 32 rule codes) and `require_valid_record` set the checks publication requires; omitted fields keep their current value. Invalid or repeated codes, or codes that name no rule in the workspace, return `422 invalid_input`. |
 | `GET`, `POST` | `/v1/records/{id}/publications` | Publication status, or publish with `{"context_id": "…"}`. |
+| `POST` | `/v1/records/publications` | Publication statuses for up to 100 record IDs: `{"record_ids": [...]}` returns `{"items": [{"record_id", "publications"}]}`. Returns only live records you can read; other IDs are left out. |
 | `POST` | `/v1/records/{id}/publications/unpublish` | Unpublish from one channel. |
 | `POST` | `/v1/records/{id}/publications/publish-all` | Publish to every channel. |
 | `GET` | `/v1/records/{id}/publications/readiness` | For each enabled channel: `{context_id, context_code, ready, violations}`. |

@@ -327,6 +327,25 @@ export const getRecordPublications = (id: string, signal?: AbortSignal) =>
     z.array(recordPublicationStatusSchema),
     signal === undefined ? undefined : { signal },
   );
+const recordsPublicationsResponseSchema = z.object({
+  items: z.array(
+    z.object({
+      record_id: uuidSchema,
+      publications: z.array(recordPublicationStatusSchema),
+    }),
+  ),
+});
+/** Statuses of up to 100 records; unreadable and unknown records are left out. */
+export const getRecordsPublications = (
+  recordIds: string[],
+  signal?: AbortSignal,
+) =>
+  request('/api/v1/records/publications', recordsPublicationsResponseSchema, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ record_ids: recordIds }),
+    ...(signal === undefined ? {} : { signal }),
+  });
 /** Whether the record passes each enabled channel's publication checks. */
 export const getRecordPublicationReadiness = (
   id: string,

@@ -56,7 +56,11 @@ vi.mock('@tanstack/react-virtual', () => ({
 vi.mock('../records/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../records/api')>()),
   deleteRecord: vi.fn(),
-  getRecordPublications: vi.fn().mockResolvedValue([]),
+  getRecordsPublications: vi.fn((recordIds: string[]) =>
+    Promise.resolve({
+      items: recordIds.map((record_id) => ({ record_id, publications: [] })),
+    }),
+  ),
 }));
 vi.mock('../extensions/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../extensions/api')>()),
@@ -76,7 +80,7 @@ vi.mock('../agents/api', () => ({
 }));
 
 import { createConversation, sendMessage } from '../agents/api';
-import { deleteRecord, getRecordPublications } from '../records/api';
+import { deleteRecord, getRecordsPublications } from '../records/api';
 
 const blueprint = {
   blueprint: {
@@ -179,7 +183,9 @@ const renderTable = (
 
 describe('ExplorerResultsTable', () => {
   it('bounds publication requests to virtual rows and reuses fresh results when scrolling back', async () => {
-    vi.mocked(getRecordPublications).mockResolvedValue([]);
+    vi.mocked(getRecordsPublications).mockClear();
+    const requestedIds = () =>
+      vi.mocked(getRecordsPublications).mock.calls.flatMap(([ids]) => ids);
     virtualWindow.size = 5;
     const items = Array.from({ length: 1000 }, (_, index) => ({
       ...item,
@@ -196,13 +202,11 @@ describe('ExplorerResultsTable', () => {
       vi.fn(),
       'context',
     );
-    await waitFor(() => expect(getRecordPublications).toHaveBeenCalledTimes(5));
-    expect(
-      vi.mocked(getRecordPublications).mock.calls.map(([id]) => id),
-    ).toEqual(items.slice(0, 5).map(({ id }) => id));
-    expect(vi.mocked(getRecordPublications).mock.calls[0][1]).toBeInstanceOf(
-      AbortSignal,
+    // The visible rows share one lookup.
+    await waitFor(() =>
+      expect(getRecordsPublications).toHaveBeenCalledTimes(1),
     );
+    expect(requestedIds()).toEqual(items.slice(0, 5).map(({ id }) => id));
     await waitFor(() => expect(view.queryClient.isFetching()).toBe(0));
     await userEvent.setup().click(
       screen.getByRole('button', {
@@ -212,8 +216,9 @@ describe('ExplorerResultsTable', () => {
     virtualWindow.start = 200;
     view.search(items, 'initial');
     await waitFor(() =>
-      expect(getRecordPublications).toHaveBeenCalledTimes(10),
+      expect(getRecordsPublications).toHaveBeenCalledTimes(2),
     );
+    expect(requestedIds()).toHaveLength(10);
     await waitFor(() => expect(view.queryClient.isFetching()).toBe(0));
     expect(screen.getByRole('menu')).toBeTruthy();
     virtualWindow.start = 0;
@@ -223,7 +228,7 @@ describe('ExplorerResultsTable', () => {
         screen.getAllByRole('row', { hidden: true }).length,
       ).toBeGreaterThan(1),
     );
-    expect(getRecordPublications).toHaveBeenCalledTimes(10);
+    expect(getRecordsPublications).toHaveBeenCalledTimes(2);
   });
 
   it('offers revision-scoped Explorer actions only for single-version results', () => {

@@ -1143,6 +1143,64 @@ pub(super) async fn relationship_tree_facet_children(
     ))
 }
 
+/// Most records one publication status lookup may name.
+const MAX_RECORD_PUBLICATION_IDS: usize = 100;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct RecordPublicationsRequest {
+    record_ids: Vec<Uuid>,
+}
+
+#[derive(serde::Serialize)]
+pub(super) struct RecordPublicationsResponse {
+    items: Vec<RecordPublications>,
+}
+
+#[derive(serde::Serialize)]
+struct RecordPublications {
+    record_id: Uuid,
+    publications: Vec<crate::model::RecordPublicationStatus>,
+}
+
+/// Channel publication statuses of several records, such as the rows of an
+/// Explorer page. Unreadable, deleted and unknown IDs are omitted alike.
+pub(super) async fn record_publications(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    super::auth::AuthenticatedPrincipal(caller, _): super::auth::AuthenticatedPrincipal,
+    super::auth::ActiveWorkspace(workspace): super::auth::ActiveWorkspace,
+    ApiJson(input): ApiJson<RecordPublicationsRequest>,
+) -> Result<Json<RecordPublicationsResponse>, ApiError> {
+    let mut record_ids = input.record_ids;
+    record_ids.sort_unstable();
+    record_ids.dedup();
+    if record_ids.is_empty() || record_ids.len() > MAX_RECORD_PUBLICATION_IDS {
+        return Err(ApiError::invalid_input(format!(
+            "record_ids must contain between 1 and {MAX_RECORD_PUBLICATION_IDS} distinct IDs"
+        )));
+    }
+    let readable = repository
+        .authorized_record_ids(caller, workspace, "records.read", &record_ids)
+        .await?;
+    record_ids.retain(|id| readable.contains(id));
+    let mut statuses = repository
+        .publication_statuses_by_record(&record_ids)
+        .await?;
+    Ok(Json(RecordPublicationsResponse {
+        items: record_ids
+            .into_iter()
+            .filter_map(|record_id| {
+                statuses
+                    .remove(&record_id)
+                    .map(|publications| RecordPublications {
+                        record_id,
+                        publications,
+                    })
+            })
+            .collect(),
+    }))
+}
+
 /// Most records one label lookup may name.
 const MAX_RECORD_LABEL_IDS: usize = 100;
 

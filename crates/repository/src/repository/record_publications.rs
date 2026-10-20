@@ -8,7 +8,9 @@ use super::*;
 use crate::domain_events::{RECORD_PUBLISHED_V1, RECORD_UNPUBLISHED_V1, RecordPublicationV1};
 use crate::persistence_rows::{Db, IntoDomain};
 use attricat_validation::predicate::Predicate;
+use chrono::Utc;
 use sqlx::{PgConnection, Postgres, Transaction};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Channel columns as `PublicationChannel` reads them; `$1` is the workspace.
@@ -369,6 +371,54 @@ impl AttricatRepository {
         .fetch_all(&self.pool)
         .await?
         .into_domain())
+    }
+
+    /// Channel publication statuses of the live records among `record_ids`,
+    /// keyed by record. Callers authorize the IDs first; unknown and deleted
+    /// IDs are omitted.
+    pub async fn publication_statuses_by_record(
+        &self,
+        record_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Vec<RecordPublicationStatus>>, RepositoryError> {
+        if record_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let rows = sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                Option<Uuid>,
+                Option<String>,
+                Option<DateTime<Utc>>,
+                Option<Uuid>,
+            ),
+        >(
+            "SELECT r.id, c.context_id, a.code, p.published_at, p.published_by_user_id FROM records r LEFT JOIN (publication_channels c JOIN attribute_contexts a ON a.workspace_id = c.workspace_id AND a.id = c.context_id) ON c.workspace_id = r.workspace_id AND c.enabled LEFT JOIN record_channel_publications p ON p.workspace_id = c.workspace_id AND p.record_id = r.id AND p.context_id = c.context_id WHERE r.workspace_id = $1 AND r.id = ANY($2) AND r.deleted_at IS NULL ORDER BY r.id, a.code",
+        )
+        .bind(self.workspace_id.0)
+        .bind(record_ids)
+        .fetch_all(&self.pool)
+        .await?;
+        // A live record without enabled channels answers with no statuses.
+        let mut statuses: HashMap<Uuid, Vec<RecordPublicationStatus>> = HashMap::new();
+        for (record_id, context_id, context_code, published_at, published_by_user_id) in rows {
+            let record = statuses.entry(record_id).or_default();
+            if let (Some(context_id), Some(context_code)) = (context_id, context_code) {
+                record.push(RecordPublicationStatus {
+                    context_id,
+                    context_code,
+                    status: if published_at.is_some() {
+                        "published"
+                    } else {
+                        "not_published"
+                    }
+                    .to_owned(),
+                    published_at,
+                    published_by_user_id,
+                });
+            }
+        }
+        Ok(statuses)
     }
 
     pub async fn publish_record(

@@ -964,6 +964,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/v1/records/labels", post(record_reads::record_labels))
         .route(
+            "/v1/records/publications",
+            post(record_reads::record_publications),
+        )
+        .route(
             "/v1/records/facets/relationship-tree/children",
             post(record_reads::relationship_tree_facet_children),
         )

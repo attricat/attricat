@@ -18,6 +18,7 @@ import {
   recordPublicationReadinessOptions,
 } from '../records/queryOptions';
 import { invalidateRecordPublications } from '../records/invalidateRecord';
+import { loadRecordPublications } from '../records/recordPublicationsLoader';
 
 /**
  * Observe only visible rows (plus an open action menu), never all loaded pages.
@@ -33,6 +34,8 @@ export const useRecordPublicationActions = (
   const publicationQueries = useQueries({
     queries: items.map((record) => ({
       ...recordPublicationOptions(record.id),
+      // Visible rows share one lookup instead of one request each.
+      queryFn: () => loadRecordPublications(record.id),
       enabled: Boolean(publicationContextId),
     })),
   });

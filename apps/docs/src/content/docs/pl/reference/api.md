@@ -252,6 +252,7 @@ Dodaj `context_id` do wpisu dla kontekstu innego niż domyślny. Przesłanych pl
 | `GET` | `/publication-channels` | Konteksty będące kanałami. |
 | `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}`, aby uczynić kontekst kanałem. Opcjonalne `required_rule_codes` (do 32 kodów reguł) i `require_valid_record` ustawiają kontrole wymagane przed publikacją; pominięte pola zachowują bieżącą wartość. Nieprawidłowe lub powtórzone kody albo kody, które nie wskazują żadnej reguły w obszarze roboczym, zwracają `422 invalid_input`. |
 | `GET`, `POST` | `/v1/records/{id}/publications` | Stan publikacji lub publikacja z `{"context_id": "…"}`. |
+| `POST` | `/v1/records/publications` | Stany publikacji dla maksymalnie 100 identyfikatorów rekordów: `{"record_ids": [...]}` zwraca `{"items": [{"record_id", "publications"}]}`. Zwraca tylko istniejące rekordy, które możesz odczytać; pozostałe identyfikatory są pomijane. |
 | `POST` | `/v1/records/{id}/publications/unpublish` | Wycofuje publikację z jednego kanału. |
 | `POST` | `/v1/records/{id}/publications/publish-all` | Publikuje we wszystkich kanałach. |
 | `GET` | `/v1/records/{id}/publications/readiness` | Dla każdego włączonego kanału: `{context_id, context_code, ready, violations}`. |
