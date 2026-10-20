@@ -26,7 +26,7 @@ Options:
   --checkpoint <path>     Override checkpoint location
   --help                  Show this help
 
-ATTRICAT_TOKEN is required for writes. ATTRICAT_SERVER defaults to http://127.0.0.1:3000.
+ATTRICAT_TOKEN is required for writes. ATTRICAT_SERVER is the API base URL, including /api; it defaults to http://127.0.0.1:3000/api.
 The generator refuses non-local targets unless ALLOW_NON_LOCAL_GENERATOR_TARGET=1.`;
 
 const parseArgs = (argv) => {
@@ -94,7 +94,8 @@ const assertLocalTarget = (server) => {
       `Refusing non-local generator target ${url.origin}; set ALLOW_NON_LOCAL_GENERATOR_TARGET=1 to override deliberately.`,
     );
   }
-  return url.origin.replace(/\/$/, "");
+  // Keeps the API base path, such as `/api`.
+  return `${url.origin}${url.pathname}`.replace(/\/$/, "");
 };
 
 const scalar = (attribute_code, value, context_id = rootContextId) => ({
@@ -381,7 +382,7 @@ const run = async () => {
     );
   }
   const server = assertLocalTarget(
-    process.env.ATTRICAT_SERVER ?? "http://127.0.0.1:3000",
+    process.env.ATTRICAT_SERVER ?? "http://127.0.0.1:3000/api",
   );
   const token = `${process.env.ATTRICAT_TOKEN ?? ""}`.trim();
   if (!token)
