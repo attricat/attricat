@@ -1203,3 +1203,376 @@ target_blueprint = "paged_category"
 
     server.abort();
 }
+
+#[sqlx::test]
+async fn relationship_tree_facet_paths_resolve_every_hop_in_its_nearest_context(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    for definition in [
+        r#"
+format_version = 1
+code = "path_style"
+name = "Path style"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "path_style"
+cardinality = "one"
+tree = true
+context_editable = "default"
+"#,
+        r#"
+format_version = 1
+code = "path_brand"
+name = "Path brand"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+"#,
+        r#"
+format_version = 1
+code = "path_model"
+name = "Path model"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "brand"
+value_type = "relationship"
+target_blueprint = "path_brand"
+cardinality = "one"
+
+[[attributes]]
+code = "style"
+value_type = "relationship"
+target_blueprint = "path_style"
+cardinality = "one"
+
+[[attributes]]
+code = "local_style"
+value_type = "relationship"
+target_blueprint = "path_style"
+cardinality = "one"
+context_fallback = "none"
+
+[[attributes]]
+code = "styles"
+value_type = "relationship"
+target_blueprint = "path_style"
+cardinality = "many"
+"#,
+        r#"
+format_version = 1
+code = "path_vehicle"
+name = "Path vehicle"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["vin"]
+
+[views.explorer]
+type = "explorer"
+browse_by = "model.brand"
+
+[[attributes]]
+code = "vin"
+value_type = "string"
+
+[[attributes]]
+code = "model"
+value_type = "relationship"
+target_blueprint = "path_model"
+cardinality = "one"
+"#,
+    ] {
+        create_blueprint(&client, &base_url, definition).await;
+    }
+    let blueprint = |code: &str| json!({ "blueprint": { "code": code, "version": 1 } });
+    let body = create_record(&client, &base_url, &blueprint("path_style")).await;
+    let sedan = create_record(&client, &base_url, &blueprint("path_style")).await;
+    let coupe = create_record(&client, &base_url, &blueprint("path_style")).await;
+    let alpha = create_record(&client, &base_url, &blueprint("path_brand")).await;
+    let beta = create_record(&client, &base_url, &blueprint("path_brand")).await;
+    let first_model = create_record(&client, &base_url, &blueprint("path_model")).await;
+    let second_model = create_record(&client, &base_url, &blueprint("path_model")).await;
+    let first = create_record(&client, &base_url, &blueprint("path_vehicle")).await;
+    let second = create_record(&client, &base_url, &blueprint("path_vehicle")).await;
+    let switched = create_record(&client, &base_url, &blueprint("path_vehicle")).await;
+    create_record(&client, &base_url, &blueprint("path_vehicle")).await;
+    let context: Value = client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({ "code": "path_child", "data": {} }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    // The child context overrides one record on each hop: the second model's
+    // style, and the model of the switched vehicle.
+    for (record, field, context_id, target) in [
+        (&sedan, "parent", Value::Null, &body),
+        (&first_model, "brand", Value::Null, &alpha),
+        (&first_model, "style", Value::Null, &sedan),
+        (&first_model, "local_style", Value::Null, &body),
+        (&second_model, "brand", Value::Null, &beta),
+        (&second_model, "style", Value::Null, &coupe),
+        (&second_model, "style", context["id"].clone(), &sedan),
+        (&first, "model", Value::Null, &first_model),
+        (&second, "model", Value::Null, &second_model),
+        (&switched, "model", Value::Null, &first_model),
+        (&switched, "model", context["id"].clone(), &second_model),
+    ] {
+        client
+            .put(format!(
+                "{base_url}/v1/records/{}",
+                record["id"].as_str().unwrap()
+            ))
+            .json(&json!({
+                "relationships": [{
+                    "attribute_code": field,
+                    "context_id": context_id,
+                    "target_record_ids": [target["id"]],
+                }]
+            }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+    client
+        .post(format!(
+            "{base_url}/records/{}/values",
+            second["id"].as_str().unwrap()
+        ))
+        .json(&json!({ "values": [{ "kind": "scalar", "attribute_code": "vin", "value": "Second" }] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let default_id = json!("00000000-0000-4000-8000-000000000001");
+    let child_id = context["id"].clone();
+    let search = |path: &'static str, context_id: &Value, selected: &Value| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        let mut facet = json!({
+            "source_relationship_field": path,
+            "context_id": context_id,
+            "selected_target_ids": [selected["id"]],
+        });
+        if path.ends_with("style") {
+            facet["hierarchy_field"] = json!("parent");
+        }
+        async move {
+            let response: Value = client
+                .post(format!("{base_url}/v1/records/search"))
+                .json(&json!({
+                    "blueprint": { "code": "path_vehicle" },
+                    "relationship_tree_facets": [facet],
+                }))
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            let mut ids: Vec<_> = response["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item["id"].as_str().unwrap().to_owned())
+                .collect();
+            ids.sort();
+            ids
+        }
+    };
+    let ids = |records: &[&Value]| {
+        let mut ids: Vec<_> = records
+            .iter()
+            .map(|record| record["id"].as_str().unwrap().to_owned())
+            .collect();
+        ids.sort();
+        ids
+    };
+
+    // A flat path lists the last hop's targets.
+    assert_eq!(
+        search("model.brand", &default_id, &alpha).await,
+        ids(&[&first, &switched])
+    );
+    assert_eq!(
+        search("model.brand", &child_id, &alpha).await,
+        ids(&[&first])
+    );
+    assert_eq!(
+        search("model.brand", &child_id, &beta).await,
+        ids(&[&second, &switched])
+    );
+    // A tree path matches records reaching the node or any descendant, with
+    // each hop resolved in its nearest context.
+    assert_eq!(
+        search("model.style", &default_id, &body).await,
+        ids(&[&first, &switched])
+    );
+    assert_eq!(
+        search("model.style", &default_id, &coupe).await,
+        ids(&[&second])
+    );
+    assert_eq!(
+        search("model.style", &child_id, &body).await,
+        ids(&[&first, &second, &switched])
+    );
+    assert!(search("model.style", &child_id, &coupe).await.is_empty());
+    // A hop without fallback reads only the requested context.
+    assert_eq!(
+        search("model.local_style", &default_id, &body).await,
+        ids(&[&first, &switched])
+    );
+    assert!(
+        search("model.local_style", &child_id, &body)
+            .await
+            .is_empty()
+    );
+
+    let children = |path: &'static str, context_id: &Value, query: Option<&'static str>| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        let mut request = json!({
+            "blueprint": { "code": "path_vehicle" },
+            "source_relationship_field": path,
+            "context_id": context_id,
+        });
+        if path.ends_with("style") {
+            request["hierarchy_field"] = json!("parent");
+        }
+        if let Some(query) = query {
+            request["query"] = json!(query);
+        }
+        async move {
+            let page: Value = client
+                .post(format!(
+                    "{base_url}/v1/records/facets/relationship-tree/children"
+                ))
+                .json(&request)
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            let mut items: Vec<_> = page["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| {
+                    (
+                        item["id"].as_str().unwrap().to_owned(),
+                        item["count"].as_i64().unwrap(),
+                        item["has_children"].as_bool().unwrap(),
+                    )
+                })
+                .collect();
+            items.sort();
+            items
+        }
+    };
+    let node = |record: &Value, count: i64, has_children: bool| {
+        (
+            record["id"].as_str().unwrap().to_owned(),
+            count,
+            has_children,
+        )
+    };
+    let sorted = |mut items: Vec<(String, i64, bool)>| {
+        items.sort();
+        items
+    };
+    assert_eq!(
+        children("model.brand", &default_id, None).await,
+        sorted(vec![node(&alpha, 2, false), node(&beta, 1, false)])
+    );
+    assert_eq!(
+        children("model.brand", &child_id, None).await,
+        sorted(vec![node(&alpha, 1, false), node(&beta, 2, false)])
+    );
+    // Tree counts roll up from descendants; the path is part of the cache key.
+    assert_eq!(
+        children("model.style", &default_id, None).await,
+        sorted(vec![node(&body, 2, true), node(&coupe, 1, false)])
+    );
+    assert_eq!(
+        children("model.local_style", &default_id, None).await,
+        sorted(vec![node(&body, 2, true), node(&coupe, 0, false)])
+    );
+    assert_eq!(
+        children("model.style", &child_id, None).await,
+        sorted(vec![node(&body, 3, true), node(&coupe, 0, false)])
+    );
+    // A search term counts its matches exactly.
+    assert_eq!(
+        children("model.style", &child_id, Some("Second")).await,
+        sorted(vec![node(&body, 1, true), node(&coupe, 0, false)])
+    );
+
+    for (path, message) in [
+        ("model.styles", "cardinality"),
+        ("model.name", "must be a relationship attribute"),
+        ("model.brand.name.other", "at most three relationship hops"),
+        ("model.missing", "must be a relationship attribute"),
+    ] {
+        let response = client
+            .post(format!(
+                "{base_url}/v1/records/facets/relationship-tree/children"
+            ))
+            .json(&json!({
+                "blueprint": { "code": "path_vehicle" },
+                "source_relationship_field": path,
+                "context_id": default_id,
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{path}"
+        );
+        let error = response.text().await.unwrap();
+        assert!(error.contains(message), "{path}: {error}");
+    }
+
+    server.abort();
+}

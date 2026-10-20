@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { Attribute, BlueprintWithAttributes } from '../records/api';
 import {
   browseByFields,
+  browsePathFields,
   defaultBrowseByField,
+  extendBrowsePaths,
   hierarchyFieldOf,
   resolveBrowseBy,
   type BrowseByField,
 } from './browseBy';
+import { maximumBrowsePaths } from './constants';
 import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
 
 const blueprint = (
@@ -28,13 +31,21 @@ const blueprint = (
 const relationship = (
   code: string,
   target: string,
-  extra: Pick<Attribute, 'hierarchy' | 'target_blueprint_codes'> = {},
+  extra: Pick<
+    Attribute,
+    'cardinality' | 'hierarchy' | 'name' | 'tags' | 'target_blueprint_codes'
+  > = {},
 ): RelationshipFilterAttribute => ({
   ...extra,
   code,
   target_blueprint_code: target,
   value_type: 'relationship',
 });
+
+const lookup =
+  (...blueprints: BlueprintWithAttributes[]) =>
+  (code: string) =>
+    blueprints.find((candidate) => candidate.blueprint.code === code);
 
 describe('hierarchyFieldOf', () => {
   it('finds a self-targeting hierarchy, preferring tree over acyclic', () => {
@@ -65,14 +76,13 @@ describe('browseByFields', () => {
     const fields = browseByFields(
       'product',
       [categories, brand, related, supplier],
-      [
+      lookup(
         blueprint('category', [
           relationship('parent', 'category', { hierarchy: 'tree' }),
         ]),
         blueprint('brand'),
         blueprint('product'),
-        undefined,
-      ],
+      ),
     );
     expect(fields).toEqual([
       { attribute: categories, hierarchyField: 'parent' },
@@ -85,11 +95,149 @@ describe('browseByFields', () => {
     const related = relationship('related', 'category');
     const category = blueprint('category', [parent]);
     expect(
-      browseByFields('category', [related, parent], [category, category]),
+      browseByFields('category', [related, parent], lookup(category)),
     ).toEqual([
       { attribute: related, hierarchyField: 'parent' },
       { attribute: parent, hierarchyField: 'parent', ownTree: true },
     ]);
+  });
+});
+
+describe('browse paths', () => {
+  const model = relationship('model', 'model', {
+    cardinality: 'one',
+    name: 'Model',
+  });
+  const brand = relationship('brand', 'brand', {
+    cardinality: 'one',
+    name: 'Brand',
+  });
+  const bodyType = relationship('body_type', 'body_type', {
+    cardinality: 'one',
+    name: 'Body type',
+  });
+  const group = relationship('group', 'group', {
+    cardinality: 'one',
+    name: 'Group',
+  });
+  const blueprints = lookup(
+    blueprint('model', [
+      brand,
+      bodyType,
+      // Several values, several targets, hidden, or back to a passed blueprint.
+      relationship('options', 'option', { cardinality: 'many' }),
+      relationship('related', 'any', {
+        cardinality: 'one',
+        target_blueprint_codes: ['brand', 'group'],
+      }),
+      relationship('internal', 'brand', {
+        cardinality: 'one',
+        tags: ['hidden'],
+      }),
+      relationship('flagship', 'vehicle', { cardinality: 'one' }),
+      relationship('successor', 'model', { cardinality: 'one' }),
+      relationship('name_brand', 'brand'),
+    ]),
+    blueprint('brand', [group, relationship('model', 'model', model)]),
+    blueprint('body_type', [
+      relationship('parent', 'body_type', {
+        cardinality: 'one',
+        hierarchy: 'tree',
+      }),
+    ]),
+    blueprint('group', [
+      relationship('owner', 'company', { cardinality: 'one' }),
+    ]),
+    blueprint('company'),
+  );
+
+  it('follows single-valued, single-target hops up to three deep', () => {
+    const twoHops = extendBrowsePaths(
+      'vehicle',
+      [[model], [relationship('options', 'option')]],
+      blueprints,
+    );
+    expect(twoHops).toEqual([
+      [model, brand],
+      [model, bodyType],
+    ]);
+    const threeHops = extendBrowsePaths('vehicle', twoHops, blueprints);
+    expect(threeHops).toEqual([[model, brand, group]]);
+    expect(extendBrowsePaths('vehicle', threeHops, blueprints)).toEqual([]);
+  });
+
+  it('labels paths by their hops and lists trees as trees', () => {
+    expect(
+      browsePathFields(
+        [
+          [model, brand, group],
+          [model, brand],
+          [model, bodyType],
+        ],
+        blueprints,
+      ),
+    ).toEqual([
+      {
+        attribute: {
+          cardinality: 'one',
+          code: 'model.brand',
+          name: 'Model → Brand',
+          target_blueprint_code: 'brand',
+          value_type: 'relationship',
+        },
+        hierarchyField: undefined,
+        hops: [model, brand],
+      },
+      {
+        attribute: {
+          cardinality: 'one',
+          code: 'model.body_type',
+          name: 'Model → Body type',
+          target_blueprint_code: 'body_type',
+          value_type: 'relationship',
+        },
+        hierarchyField: 'parent',
+        hops: [model, bodyType],
+      },
+      {
+        attribute: {
+          cardinality: 'one',
+          code: 'model.brand.group',
+          name: 'Model → Brand → Group',
+          target_blueprint_code: 'group',
+          value_type: 'relationship',
+        },
+        hierarchyField: undefined,
+        hops: [model, brand, group],
+      },
+    ]);
+  });
+
+  it('bounds the list but keeps a chosen path', () => {
+    const many = Array.from({ length: maximumBrowsePaths + 2 }, (_, index) => [
+      model,
+      relationship(`brand_${index}`, 'brand', { cardinality: 'one' }),
+    ]);
+    const fields = browsePathFields(many, blueprints, [
+      `model.brand_${maximumBrowsePaths + 1}`,
+      undefined,
+      false,
+    ]);
+    expect(fields.map((field) => field.attribute.code)).toEqual([
+      ...many
+        .slice(0, maximumBrowsePaths)
+        .map((path) => `model.${path[1].code}`),
+      `model.brand_${maximumBrowsePaths + 1}`,
+    ]);
+  });
+
+  it('opens on a path only when the blueprint names it', () => {
+    const fields = browsePathFields([[model, bodyType]], blueprints);
+    expect(defaultBrowseByField(fields, undefined)).toBeUndefined();
+    expect(defaultBrowseByField(fields, 'model.body_type')).toBe(fields[0]);
+    expect(resolveBrowseBy(fields, 'model.body_type', undefined)).toBe(
+      fields[0],
+    );
   });
 });
 

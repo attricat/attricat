@@ -232,6 +232,68 @@ describe('ExplorerBrowseRail', () => {
     );
   });
 
+  it('browses a relationship path as a tree of its last target', async () => {
+    const model = {
+      cardinality: 'one' as const,
+      code: 'model',
+      name: 'Model',
+      target_blueprint_code: 'model',
+      value_type: 'relationship' as const,
+    };
+    const bodyType = {
+      ...model,
+      code: 'body_type',
+      name: 'Body type',
+      target_blueprint_code: 'body_type',
+    };
+    const path: BrowseByField = {
+      attribute: {
+        cardinality: 'one',
+        code: 'model.body_type',
+        name: 'Model → Body type',
+        target_blueprint_code: 'body_type',
+        value_type: 'relationship',
+      },
+      hierarchyField: 'parent',
+      hops: [model, bodyType],
+    };
+    const { onFieldChange, onSelect } = renderRail({
+      field: path,
+      fields: [categories, brand, path],
+      selectedIds: [sneakersId],
+    });
+    expect(
+      await screen.findByRole('complementary', {
+        name: 'Browse by Model → Body type',
+      }),
+    ).toBeTruthy();
+    // The selected node's branch opens, as for a direct field.
+    expect(await screen.findByText('Sneakers')).toBeTruthy();
+    expect(getRelationshipTreeFacetChildren).toHaveBeenCalledWith(
+      {
+        blueprint: { code: 'product', version: 2 },
+        context_id: contextId,
+        cursor: null,
+        hierarchy_field: 'parent',
+        query: 'linen',
+        selected_target_ids: [sneakersId],
+        source_relationship_field: 'model.body_type',
+      },
+      expect.anything(),
+    );
+    await userEvent.click(screen.getByText('Apparel'));
+    expect(onSelect).toHaveBeenLastCalledWith([apparelId]);
+
+    // The field picker lists paths after the direct fields.
+    await userEvent.click(screen.getByRole('combobox', { name: 'Browse by' }));
+    const options = screen
+      .getAllByRole('option')
+      .map((option) => option.textContent);
+    expect(options).toEqual(['Categories', 'Brand', 'Model → Body type']);
+    await userEvent.click(screen.getByRole('option', { name: 'Categories' }));
+    expect(onFieldChange).toHaveBeenLastCalledWith('categories');
+  });
+
   it('hides the rail', async () => {
     const { onFieldChange } = renderRail();
     await userEvent.click(

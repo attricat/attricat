@@ -34,7 +34,7 @@
       "required": [
         "blueprint"
       ],
-      "$comment": "Runtime also resolves blueprint, context, field, and targetBlueprint references against the pack. Fields follow at most three single-target relationship hops, and a facet targetBlueprint must be a target of its relationship.",
+      "$comment": "Runtime also resolves blueprint, context, field, and targetBlueprint references against the pack. Fields follow at most three single-target relationship hops, a facet targetBlueprint must be a target of its relationship, and a facet hierarchyField must be a self-targeting relationship of its target (of the searched blueprint with ownTree). Every browseBy hop must have a single target blueprint and, on a path of several hops, cardinality one.",
       "properties": {
         "blueprint": {
           "type": "string",
@@ -157,9 +157,31 @@
                 "type": "string",
                 "maxLength": 128,
                 "pattern": "^blueprints/[a-z][a-z0-9_-]*$"
+              },
+              "hierarchyField": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              "ownTree": {
+                "const": true
               }
             }
           }
+        },
+        "browseBy": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+){0,2}$"
+            },
+            {
+              "const": false
+            }
+          ]
         }
       }
     }

@@ -183,6 +183,16 @@ browse_by = "brand"
 
 Atrybut musi być relacją z jednym schematem docelowym. Jeśli schemat docelowy nie ma hierarchii, cele są wyświetlane jako płaska lista. Ustaw `browse_by = false`, aby panel pozostawał zamknięty, dopóki ktoś go nie otworzy. Użytkownicy nadal mogą wybrać inny atrybut lub ukryć panel; ich wybór ma pierwszeństwo w ich przeglądarce.
 
+Aby przeglądać według schematu oddalonego o kilka relacji, wskaż ścieżkę złożoną z maksymalnie trzech relacji rozdzielonych kropkami. W przypadku pojazdu powiązanego z modelem, który jest powiązany z marką, panel wyświetli marki i policzy pojazdy każdej z nich:
+
+```toml
+[views.explorer]
+type = "explorer"
+browse_by = "model.brand"
+```
+
+Każda relacja na ścieżce musi mieć jeden schemat docelowy i `cardinality = "one"`. Jeśli ostatni schemat docelowy ma hierarchię, panel wyświetla jego drzewo. Lista **Przeglądaj według** w panelu również proponuje takie ścieżki, po relacjach bezpośrednich, z etykietami w rodzaju „Model → Marka”.
+
 ## Kontrolki pól
 
 Atrybut `string` jest domyślnie zwykłym tekstem. Aby pokazać go jako kolor, adres e-mail, URL, numer telefonu lub Markdown, wskaż komponent wyświetlania w jego polu szczegółów (lub kolumnie tabeli). Tam, gdzie pole jest edytowalne, aplikacja internetowa używa sparowanego komponentu edycji, na przykład `attricat.url_edit` dla `attricat.url_display`:

@@ -3123,6 +3123,97 @@ target_blueprint = "blueprints/main"
 }
 
 #[test]
+fn browse_by_paths_resolve_within_the_pack_and_order_publish_targets() {
+    let vehicle = br#"format_version = 1
+code = "vehicle"
+name = "Vehicle"
+kind = "record"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["vin"]
+[views.explorer]
+type = "explorer"
+browse_by = "model.brand"
+[[attributes]]
+code = "vin"
+value_type = "string"
+[[attributes]]
+code = "model"
+value_type = "relationship"
+target_blueprint = "blueprints/model"
+cardinality = "one"
+"#;
+    let model = br#"format_version = 1
+code = "model"
+name = "Model"
+kind = "record"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[[attributes]]
+code = "name"
+value_type = "string"
+[[attributes]]
+code = "brand"
+value_type = "relationship"
+target_blueprint = "blueprints/brand"
+cardinality = "one"
+"#;
+    let brand = br#"format_version = 1
+code = "brand"
+name = "Brand"
+kind = "record"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[[attributes]]
+code = "name"
+value_type = "string"
+"#;
+    let pack_with = |model: &[u8]| {
+        let manifest = json!({
+            "manifest_version": 1,
+            "id": "attricat.browse",
+            "name": "Browse",
+            "version": "1.0.0",
+            "description": "Browse paths",
+            "attricat": {"host_api": "^1.0"},
+            "resources": {"blueprints": [
+                resource("blueprints/vehicle", "blueprints/vehicle.toml", vehicle),
+                resource("blueprints/model", "blueprints/model.toml", model),
+                resource("blueprints/brand", "blueprints/brand.toml", brand)
+            ]}
+        });
+        let files = [
+            ("blueprints/vehicle.toml", vehicle.as_slice()),
+            ("blueprints/model.toml", model),
+            ("blueprints/brand.toml", brand.as_slice()),
+        ];
+        ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files))
+    };
+    let pack = pack_with(model).unwrap();
+    let vehicle_blueprint = &pack.blueprints["blueprints/vehicle"];
+    // The second hop is read from the model blueprint when vehicle is published.
+    assert_eq!(
+        vehicle_blueprint.table_path_dependencies(),
+        &BTreeSet::from(["blueprints/model".to_owned()])
+    );
+
+    let many_brands = String::from_utf8(model.to_vec())
+        .unwrap()
+        .replace("cardinality = \"one\"", "cardinality = \"many\"");
+    let error = pack_with(many_brands.as_bytes()).unwrap_err().to_string();
+    assert!(
+        error.contains("browse_by 'model.brand' segment 'brand' must be a relationship"),
+        "{error}"
+    );
+    let unknown = String::from_utf8(model.to_vec())
+        .unwrap()
+        .replace("code = \"brand\"", "code = \"maker\"");
+    assert!(pack_with(unknown.as_bytes()).is_err());
+}
+
+#[test]
 fn planner_blocks_draft_relationship_paths_and_orders_publish_targets() {
     let product = br#"format_version = 1
 code = "product"
@@ -3516,7 +3607,7 @@ type = "manual"
 type = "system_tags_add"
 tags = ["reviewed"]
 "#;
-const UNNAMED_SEARCH: &[u8] = br#"{"format_version":1,"kind":"solution_pack_saved_search","name":"Unnamed products","description":"Products without a name","state":{"blueprint":"blueprints/product","context":"contexts/pl","sort":{"field":"categories.name","direction":"asc"},"attributeFilters":[{"field":"name","operator":"eq","value":""}],"relationshipFacets":[{"field":"categories","targetBlueprint":"blueprints/category"}],"locked":false}}"#;
+const UNNAMED_SEARCH: &[u8] = br#"{"format_version":1,"kind":"solution_pack_saved_search","name":"Unnamed products","description":"Products without a name","state":{"blueprint":"blueprints/product","context":"contexts/pl","sort":{"field":"categories.name","direction":"asc"},"attributeFilters":[{"field":"name","operator":"eq","value":""}],"relationshipFacets":[{"field":"categories","targetBlueprint":"blueprints/category"}],"browseBy":"categories","locked":false}}"#;
 
 /// The name rule with its predicate (and anything after it) replaced.
 fn rule_with_predicate(predicate: &str) -> Vec<u8> {
@@ -3853,6 +3944,7 @@ fn seed_resources_plan_with_physical_references_in_dependency_order() {
             "sort": {"field": "categories.name", "direction": "asc"},
             "attributeFilters": [{"field": "name", "operator": "eq", "value": ""}],
             "relationshipFacets": [{"field": "categories", "targetBlueprint": "ecom_category"}],
+            "browseBy": "categories",
         })
     );
     assert_eq!(
@@ -4117,6 +4209,27 @@ fn invalid_seed_resources_are_rejected_offline() {
                 )
                 .into_bytes(),
             "cannot target 'blueprints/product'",
+        ),
+        (
+            "saved_searches",
+            "saved-searches/unnamed.json",
+            String::from_utf8(UNNAMED_SEARCH.to_vec())
+                .unwrap()
+                .replace("\"browseBy\":\"categories\"", "\"browseBy\":\"name\"")
+                .into_bytes(),
+            "browseBy 'name' segment 'name' must be a relationship",
+        ),
+        (
+            "saved_searches",
+            "saved-searches/unnamed.json",
+            String::from_utf8(UNNAMED_SEARCH.to_vec())
+                .unwrap()
+                .replace(
+                    "\"targetBlueprint\":\"blueprints/category\"",
+                    "\"targetBlueprint\":\"blueprints/category\",\"hierarchyField\":\"name\"",
+                )
+                .into_bytes(),
+            "hierarchyField 'name' must be a self-targeting relationship",
         ),
         (
             "contexts",
@@ -4663,6 +4776,21 @@ fn published_seed_schemas_accept_the_seed_fixtures() {
     assert!(!accepts(&search, &fixture));
     fixture = serde_json::from_slice(UNNAMED_SEARCH).unwrap();
     fixture["state"]["version"] = json!(1);
+    assert!(!accepts(&search, &fixture));
+    for (browse_by, accepted) in [
+        (json!(false), true),
+        (json!("model.brand.group"), true),
+        (json!(true), false),
+        (json!("a.b.c.d"), false),
+    ] {
+        fixture = serde_json::from_slice(UNNAMED_SEARCH).unwrap();
+        fixture["state"]["browseBy"] = browse_by;
+        assert_eq!(accepts(&search, &fixture), accepted);
+    }
+    fixture = serde_json::from_slice(UNNAMED_SEARCH).unwrap();
+    fixture["state"]["relationshipFacets"][0]["hierarchyField"] = json!("parent");
+    assert!(accepts(&search, &fixture));
+    fixture["state"]["relationshipFacets"][0]["ownTree"] = json!(false);
     assert!(!accepts(&search, &fixture));
 
     let sample = schema(include_str!(

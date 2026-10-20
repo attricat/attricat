@@ -16,6 +16,12 @@ export const explorerVisibilityScope = 'explorer';
 
 // Relationship paths such as `brand.country` join attribute codes with a dot.
 export const relationshipPathSeparator = '.';
+/** Joins the hop labels of a relationship path, as in "Model → Brand". */
+export const relationshipPathLabelSeparator = ' → ';
+/** Most relationship hops a Browse rail path follows. */
+export const maximumBrowsePathHops = 3;
+/** Most relationship paths the Browse rail offers after the direct fields. */
+export const maximumBrowsePaths = 15;
 
 export const defaultAttributeFilterOperator = 'eq';
 /** Cell shortcuts always filter by equality rather than guessing an operator. */

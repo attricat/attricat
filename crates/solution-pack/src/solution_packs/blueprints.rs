@@ -4,9 +4,10 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use attricat_blueprint::{
-    BlueprintDefinition, BlueprintError, BlueprintKind, CompiledBlueprint, ResolvedInclude,
-    ViewDefinition, ViewNode,
+    BlueprintDefinition, BlueprintError, BlueprintKind, BrowseBy, CompiledBlueprint,
+    ResolvedInclude, ViewDefinition, ViewNode,
 };
+use attricat_validation::saved_search::browse_path_hop;
 use serde_json::Value;
 
 use super::{
@@ -535,6 +536,9 @@ fn compile_pack_blueprint(
     Ok(())
 }
 
+/// Resolves table column and `views.explorer.browse_by` paths within the
+/// pack, returning the blueprints each one's later hops are read from: those
+/// must be published before it.
 fn validate_table_paths(
     blueprints: &HashMap<String, CompiledBlueprint>,
 ) -> Result<BTreeMap<String, BTreeSet<String>>, SolutionPackError> {
@@ -609,6 +613,46 @@ fn validate_table_paths(
                         column.field
                     ));
                 }
+            }
+        }
+        if let Some(ViewDefinition::Explorer {
+            browse_by: Some(BrowseBy::Field(path)),
+        }) = owner.views.get("explorer")
+        {
+            let hops = path.split('.').collect::<Vec<_>>();
+            let mut current = owner;
+            for (index, hop) in hops.iter().enumerate() {
+                let attribute = current
+                    .attributes
+                    .iter()
+                    .find(|attribute| attribute.code == *hop)
+                    .filter(|attribute| {
+                        browse_path_hop(
+                            &attribute.value_type,
+                            attribute.target_blueprint.as_deref(),
+                            attribute.cardinality.as_deref(),
+                            hops.len(),
+                        )
+                    })
+                    .ok_or_else(|| {
+                        SolutionPackError::Invalid(format!(
+                            "blueprint '{owner_key}' views.explorer browse_by '{path}' segment '{hop}' must be a relationship with a single target blueprint and cardinality = \"one\""
+                        ))
+                    })?;
+                if index + 1 == hops.len() {
+                    break;
+                }
+                let target_code = attribute
+                    .target_blueprint
+                    .as_deref()
+                    .expect("browse_by hop has a target");
+                let target_key = by_code.get(target_code).ok_or_else(|| {
+                    SolutionPackError::Invalid(format!(
+                        "blueprint '{owner_key}' views.explorer browse_by '{path}' target '{target_code}' is not declared by the pack"
+                    ))
+                })?;
+                owner_dependencies.insert((*target_key).to_owned());
+                current = &blueprints[*target_key];
             }
         }
         dependencies.insert(owner_key.clone(), owner_dependencies);

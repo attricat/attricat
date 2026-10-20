@@ -23,6 +23,7 @@ pub const STATE_KEYS: &[&str] = &[
     "sort",
     "relationshipFacets",
     "attributeFilters",
+    "browseBy",
 ];
 pub const FILTER_OPERATOR_IS_SET: &str = "is_set";
 pub const FILTER_OPERATORS: &[&str] = &[
@@ -68,7 +69,12 @@ fn valid_relationship_facet(facet: &Value) -> bool {
     facet.as_object().is_some_and(|facet| {
         facet
             .keys()
-            .all(|key| matches!(key.as_str(), "field" | "selectedIds" | "targetBlueprint"))
+            .all(|key| {
+                matches!(
+                    key.as_str(),
+                    "field" | "selectedIds" | "targetBlueprint" | "hierarchyField" | "ownTree"
+                )
+            })
             && non_empty_str(facet.get("field")).is_some()
             && facet.get("selectedIds").is_none_or(|ids| {
                 ids.as_array().is_some_and(|ids| {
@@ -80,7 +86,27 @@ fn valid_relationship_facet(facet: &Value) -> bool {
                 })
             })
             && facet.get("targetBlueprint").is_none_or(Value::is_string)
+            // A browse rail tree: the target's hierarchy field, or the
+            // searched blueprint's own tree.
+            && facet
+                .get("hierarchyField")
+                .is_none_or(|field| non_empty_str(Some(field)).is_some())
+            && facet
+                .get("ownTree")
+                .is_none_or(|own_tree| own_tree == &Value::Bool(true))
     })
+}
+
+/// The browse rail's field: `false` when hidden, or a relationship path of
+/// at most [`MAX_RELATIONSHIP_HOPS`] hops.
+fn valid_browse_by(browse_by: &Value) -> bool {
+    match browse_by {
+        Value::Bool(hidden) => !hidden,
+        Value::String(path) => {
+            field_path(path).is_ok_and(|segments| segments.len() <= MAX_RELATIONSHIP_HOPS)
+        }
+        _ => false,
+    }
 }
 
 /// Validates the shape of an Explorer search state. It does not resolve
@@ -132,6 +158,9 @@ pub fn validate_state(kind: &str, state: &Value) -> Result<(), String> {
     });
     if invalid_sort
         || object
+            .get("browseBy")
+            .is_some_and(|value| !valid_browse_by(value))
+        || object
             .get("version")
             .is_some_and(|version| version.as_u64().is_none_or(|version| version == 0))
         || ["allVersions", "locked"]
@@ -180,6 +209,21 @@ pub fn normalize_state(state: &Value) -> Value {
         object.remove("query");
     }
     state
+}
+
+/// Whether one hop of a relationship path of `hops` hops can be browsed: a
+/// relationship with one target blueprint and, on a path of several hops, a
+/// single value (`cardinality = "one"`), as for sortable table paths. Each
+/// source then reaches at most one node of the browsed blueprint.
+pub fn browse_path_hop(
+    value_type: &str,
+    target_blueprint: Option<&str>,
+    cardinality: Option<&str>,
+    hops: usize,
+) -> bool {
+    value_type == "relationship"
+        && target_blueprint.is_some()
+        && (hops == 1 || cardinality == Some("one"))
 }
 
 /// Splits an Explorer field path into relationship hops and the leaf, and
@@ -241,6 +285,50 @@ mod tests {
                             "field":"assignee","operator":"is_set","value":value
                         }]
                     })
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn browse_rail_state_round_trips() {
+        let id = uuid::Uuid::new_v4();
+        for browse_by in [json!("model.brand"), json!("category"), json!(false)] {
+            let state = json!({
+                "blueprint": "vehicle",
+                "browseBy": browse_by,
+                "relationshipFacets": [
+                    {"field": "model.body_type", "selectedIds": [id], "targetBlueprint": "body_type", "hierarchyField": "parent"},
+                    {"field": "parent", "selectedIds": [id], "hierarchyField": "parent", "ownTree": true},
+                ],
+            });
+            validate_state(EXPLORER_SEARCH_KIND, &state).unwrap();
+            assert_eq!(normalize_state(&state), state);
+        }
+        for browse_by in [
+            json!(true),
+            json!(""),
+            json!("a.b.c.d"),
+            json!("a..b"),
+            json!(1),
+        ] {
+            assert!(
+                validate_state(
+                    EXPLORER_SEARCH_KIND,
+                    &json!({"blueprint": "vehicle", "browseBy": browse_by})
+                )
+                .is_err()
+            );
+        }
+        for facet in [
+            json!({"field": "model.brand", "hierarchyField": ""}),
+            json!({"field": "parent", "ownTree": false}),
+        ] {
+            assert!(
+                validate_state(
+                    EXPLORER_SEARCH_KIND,
+                    &json!({"blueprint": "vehicle", "relationshipFacets": [facet]})
                 )
                 .is_err()
             );

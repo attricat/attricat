@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use attricat_validation::saved_search::{MAX_RELATIONSHIP_HOPS, browse_path_hop};
+
 use crate::{
     BlueprintError, BlueprintKind, BrowseBy, ComponentReference, EXTENSION_LAYOUT_OUTLETS,
     EffectiveAttribute, TableColumn, ViewDefinition, ViewNode,
@@ -71,15 +73,7 @@ pub(crate) fn validate_view(
                 Some(BrowseBy::Hidden(true)) => {
                     return Err(BlueprintError::InvalidBrowseByField("true".to_owned()));
                 }
-                Some(BrowseBy::Field(field)) => {
-                    if !attributes.iter().any(|attribute| {
-                        attribute.code == *field
-                            && attribute.value_type == "relationship"
-                            && attribute.target_blueprint.is_some()
-                    }) {
-                        return Err(BlueprintError::InvalidBrowseByField(field.clone()));
-                    }
-                }
+                Some(BrowseBy::Field(path)) => validate_browse_by_path(path, attributes)?,
             }
         }
         ViewDefinition::Stack {
@@ -343,6 +337,39 @@ fn validate_table_columns(
                 });
             }
         }
+    }
+    Ok(())
+}
+
+/// Checks the local part of a browse path: one to three relationship hops,
+/// the first of which this blueprint declares. Each hop needs a single target
+/// blueprint and, on a multi-hop path, `cardinality = "one"`, as for sortable
+/// relationship table paths. Hops past the first are resolved against the
+/// published target blueprints when the blueprint is saved.
+fn validate_browse_by_path(
+    path: &str,
+    attributes: &[EffectiveAttribute],
+) -> Result<(), BlueprintError> {
+    let invalid = || BlueprintError::InvalidBrowseByField(path.to_owned());
+    let hops: Vec<_> = path.split('.').collect();
+    if hops.len() > MAX_RELATIONSHIP_HOPS
+        || hops
+            .iter()
+            .any(|hop| validate_code(hop, "views.explorer browse_by").is_err())
+    {
+        return Err(invalid());
+    }
+    let first = attributes
+        .iter()
+        .find(|attribute| attribute.code == hops[0])
+        .ok_or_else(invalid)?;
+    if !browse_path_hop(
+        &first.value_type,
+        first.target_blueprint.as_deref(),
+        first.cardinality.as_deref(),
+        hops.len(),
+    ) {
+        return Err(invalid());
     }
     Ok(())
 }

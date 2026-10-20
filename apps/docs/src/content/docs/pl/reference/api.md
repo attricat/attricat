@@ -204,6 +204,7 @@ POST /api/v1/records/search
 
 - Pomiń `blueprint.version`, aby przeszukać wszystkie opublikowane wersje.
 - `query` używa [składni wyszukiwania](/pl/guides/search-syntax/).
+- `source_relationship_field` może być ścieżką relacji o maksymalnie trzech krokach, na przykład `model.brand`. Każdy krok musi mieć jeden schemat docelowy i `cardinality = "one"` i jest rozstrzygany w kontekście fasety z własnym dziedziczeniem kontekstu. Punkt końcowy elementów podrzędnych przyjmuje te same ścieżki.
 - Element `relationship_tree_facets` bez `source_relationship_field` filtruje przeszukiwany schemat według jego własnego `hierarchy_field`: rekord pasuje, gdy jest wybranym węzłem lub jednym z jego potomków. Punkt końcowy elementów podrzędnych przyjmuje to samo pominięcie, aby wyświetlić własne drzewo schematu, licząc każdy węzeł wraz ze wszystkim, co znajduje się pod nim.
 - Operatory filtrów to `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt` i `lte`. `field` może być ścieżką relacji o maksymalnie trzech krokach.
 - `context_code` (domyślnie `default`) to kontekst, w którym rozstrzygane są filtry, sortowanie i `table_values`, z dziedziczeniem z kontekstów nadrzędnych zależnie od atrybutu. `query` dopasowuje wartości we wszystkich kontekstach.

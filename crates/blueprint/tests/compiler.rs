@@ -1152,7 +1152,7 @@ value_type = "string"
 }
 
 #[test]
-fn explorer_view_browse_by_requires_a_single_target_relationship() {
+fn explorer_view_browse_by_requires_a_single_target_relationship_or_path() {
     let source = r#"
 format_version = 1
 code = "product"
@@ -1180,6 +1180,18 @@ target_blueprint = "category"
 code = "related"
 value_type = "relationship"
 target_blueprints = ["category", "brand"]
+
+[[attributes]]
+code = "model"
+value_type = "relationship"
+target_blueprint = "model"
+cardinality = "one"
+
+[[attributes]]
+code = "tags"
+value_type = "relationship"
+target_blueprint = "tag"
+cardinality = "many"
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert_eq!(
@@ -1199,10 +1211,47 @@ target_blueprints = ["category", "brand"]
         })
     );
 
+    // Later hops resolve against published targets when the blueprint is saved.
+    for path in ["model.brand", "model.brand.group", "tags"] {
+        let valid = source.replace(
+            "browse_by = \"categories\"",
+            &format!("browse_by = \"{path}\""),
+        );
+        assert_eq!(
+            compile(parse(&valid).unwrap(), &[], &valid)
+                .unwrap()
+                .views
+                .get("explorer"),
+            Some(&ViewDefinition::Explorer {
+                browse_by: Some(BrowseBy::Field(path.to_owned()))
+            })
+        );
+    }
+
     for (invalid, error) in [
         (
             source.replace("browse_by = \"categories\"", "browse_by = \"title\""),
             "title",
+        ),
+        // A path's hops must hold one value each.
+        (
+            source.replace("browse_by = \"categories\"", "browse_by = \"tags.parent\""),
+            "tags.parent",
+        ),
+        (
+            source.replace("browse_by = \"categories\"", "browse_by = \"title.brand\""),
+            "title.brand",
+        ),
+        (
+            source.replace(
+                "browse_by = \"categories\"",
+                "browse_by = \"model.brand.group.parent\"",
+            ),
+            "model.brand.group.parent",
+        ),
+        (
+            source.replace("browse_by = \"categories\"", "browse_by = \"model..brand\""),
+            "model..brand",
         ),
         (
             source.replace("browse_by = \"categories\"", "browse_by = \"related\""),
