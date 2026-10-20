@@ -66,8 +66,16 @@ export const SideNavigation = ({
 }: SideNavigationProps) => {
   const { t } = useTranslation();
   const documentationUrl = useDocumentationUrl();
+  // Only what the links show, so other search changes do not re-render it.
   const { pathname, search } = useRouterState({
-    select: (state) => state.location,
+    select: ({ location }) => ({
+      pathname: location.pathname,
+      search: {
+        blueprint: location.search.blueprint,
+        locked: location.search.locked,
+      },
+    }),
+    structuralSharing: true,
   });
   const [mobileSection, setMobileSection] =
     useMobileNavigationSection(pathname);

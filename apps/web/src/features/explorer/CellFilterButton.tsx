@@ -1,9 +1,10 @@
 import { Box, IconButton, Tooltip } from '@mui/material';
-import type { ReactNode } from 'react';
+import { use, type ReactNode } from 'react';
 import { FunnelPlusIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
 import { attributeFilterValueLabel } from './attributeFilters';
+import { RowInterestContext } from './rowInterest';
 import type { AttributeFilter } from './search';
 
 type Props = {
@@ -50,17 +51,21 @@ export const CellFilterButton = ({ fieldLabel, filter, onFilter }: Props) => {
 export const FilterableCell = ({
   children,
   ...props
-}: Partial<Props> & { children: ReactNode }) =>
-  props.filter && props.onFilter ? (
+}: Partial<Props> & { children: ReactNode }) => {
+  const rowInterest = use(RowInterestContext);
+  return props.filter && props.onFilter ? (
     // The shortcut overlays the cell edge so it never widens the column.
     <Box sx={{ position: 'relative' }}>
       {children}
-      <CellFilterButton
-        fieldLabel={props.fieldLabel ?? props.filter.field}
-        filter={props.filter}
-        onFilter={props.onFilter}
-      />
+      {rowInterest && (
+        <CellFilterButton
+          fieldLabel={props.fieldLabel ?? props.filter.field}
+          filter={props.filter}
+          onFilter={props.onFilter}
+        />
+      )}
     </Box>
   ) : (
     children
   );
+};

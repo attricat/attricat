@@ -5,12 +5,28 @@ import {
   getRecordPublicationReadiness,
   getRecordPublications,
   getRecordRetentionHolds,
+  getResolvedRecordPreview,
   getStatusTransitions,
 } from './api';
 import { recordQueryKeys } from './queryKeys';
 
 // Revisited virtual rows reuse their result; mutations explicitly invalidate it.
 const publicationStaleTimeMs = 60_000;
+
+// A preview loaded ahead, such as when its link is pointed at, is not fetched
+// again when it opens; edits invalidate it.
+export const resolvedPreviewStaleTimeMs = 10_000;
+
+/** A record's values as seen from a context. */
+export const resolvedRecordPreviewOptions = (
+  recordId: string,
+  contextId: string,
+) =>
+  queryOptions({
+    queryKey: recordQueryKeys.resolvedPreview(recordId, contextId),
+    queryFn: () => getResolvedRecordPreview(recordId, contextId),
+    staleTime: resolvedPreviewStaleTimeMs,
+  });
 
 /** The record's values and blueprint as an editor needs them. */
 export const recordFormOptions = (recordId: string) =>

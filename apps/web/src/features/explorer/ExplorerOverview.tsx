@@ -18,7 +18,6 @@ type Props = {
   contextId: string | undefined;
   onExplore: (blueprint: string, sort?: ExplorerSort) => void;
   onOpenPanel?: OpenRecordPanel;
-  panelRecordId?: string;
   publicationSortAvailable: boolean;
   search: ExplorerSearch;
 };
@@ -31,7 +30,6 @@ export const ExplorerOverview = ({
   contextId,
   onExplore,
   onOpenPanel,
-  panelRecordId,
   publicationSortAvailable,
   search,
 }: Props) => {
@@ -86,7 +84,6 @@ export const ExplorerOverview = ({
       onExplore={onExplore}
       onOpenPanel={onOpenPanel}
       page={result.data}
-      panelRecordId={panelRecordId}
       publicationSortAvailable={publicationSortAvailable}
       query={search.query}
     />

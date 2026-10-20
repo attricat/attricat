@@ -24,10 +24,13 @@ export const recordQueryKeys = {
   searches: () => ['records'] as const,
   blueprints: () => ['record-blueprints'] as const,
   contexts: () => ['attribute-contexts'] as const,
+  /** Published revisions by ID and version, which never change. */
+  pinnedBlueprintRevisions: () => ['blueprint-revision'] as const,
   blueprintRevision: (id: string | undefined, version: number | undefined) =>
-    ['blueprint-revision', id, version] as const,
+    [...recordQueryKeys.pinnedBlueprintRevisions(), id, version] as const,
+  blueprintsByCode: () => ['blueprint-by-code'] as const,
   blueprintByCode: (code: string | undefined, version: number | undefined) =>
-    ['blueprint-by-code', code, version] as const,
+    [...recordQueryKeys.blueprintsByCode(), code, version] as const,
   currentBlueprint: (id: string) => ['current-blueprint', id] as const,
   blueprintRevisions: (id: string | undefined) =>
     ['blueprint-revisions', id] as const,

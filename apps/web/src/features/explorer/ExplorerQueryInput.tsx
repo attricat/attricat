@@ -101,7 +101,9 @@ const HighlightedInput = ({
       overlayRef.current.scrollLeft = inputRef.current.scrollLeft;
     }
   };
-  useLayoutEffect(syncScroll);
+  // Reading the input's scroll position forces a layout, so it is synced only
+  // when the query text changes; scrolling and selection sync it below.
+  useLayoutEffect(syncScroll, [props.value]);
   return (
     <Box
       sx={{

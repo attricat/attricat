@@ -244,7 +244,22 @@ value_type = "string"`,
   const filterButton = page.getByRole('button', {
     name: 'Filter by color = red…',
   });
-  await expect(filterButton).toHaveCSS('opacity', '0');
+  // Shortcuts mount only in the row under the pointer or keyboard focus.
+  await expect(filterButton).toHaveCount(0);
+  // Keyboard focus entering the row through its record link reaches them.
+  await page.getByRole('link', { name: /Red laptop/ }).focus();
+  for (let step = 0; step < 6; step += 1) {
+    if (
+      await filterButton
+        .evaluate((button) => button === document.activeElement)
+        .catch(() => false)
+    )
+      break;
+    await page.keyboard.press('Tab');
+  }
+  await expect(filterButton).toBeFocused();
+  await filterButton.blur();
+  await expect(filterButton).toHaveCount(0);
   await page.getByRole('cell').filter({ hasText: /^red$/ }).hover();
   await expect(filterButton).toHaveCSS('opacity', '1');
   await filterButton.click();

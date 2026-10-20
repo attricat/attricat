@@ -4,7 +4,7 @@ import {
   useQuery,
 } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ApiRequestError } from '../../api/request';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
@@ -122,7 +122,10 @@ export const useExplorerData = (search: ExplorerSearch) => {
   const contextId = contexts.data?.find(
     (context) => context.code === contextCode,
   )?.id;
-  const contextCodes = contextAncestorCodes(contexts.data ?? [], contextCode);
+  const contextCodes = useMemo(
+    () => contextAncestorCodes(contexts.data ?? [], contextCode),
+    [contexts.data, contextCode],
+  );
   const publicationSortAvailable =
     channels.data?.some(
       (channel) => channel.context_code === contextCode && channel.enabled,

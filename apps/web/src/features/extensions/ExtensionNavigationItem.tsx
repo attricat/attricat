@@ -14,7 +14,9 @@ export const ExtensionNavigationItem = ({
   contribution,
   onNavigate,
 }: ExtensionNavigationItemProps) => {
-  const { pathname } = useRouterState({ select: (state) => state.location });
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
   if (contribution.kind !== 'navigation' || !contribution.route) return null;
   const target = `/extensions/${contribution.extension_id}/${contribution.route}`;
   const label = contribution.title ?? contribution.id;

@@ -26,7 +26,6 @@ type Props = {
   onExplore: (blueprint: string, sort?: ExplorerSort) => void;
   onOpenPanel?: OpenRecordPanel;
   page: RecordSearchResponse | undefined;
-  panelRecordId?: string;
   publicationSortAvailable: boolean;
   query: string | undefined;
 };
@@ -42,7 +41,6 @@ export const ExplorerOverviewSection = ({
   onExplore,
   onOpenPanel,
   page,
-  panelRecordId,
   publicationSortAvailable,
   query,
 }: Props) => {
@@ -94,7 +92,6 @@ export const ExplorerOverviewSection = ({
             onSortChange={(field) =>
               onExplore(blueprint.code, toggledSort(undefined, field))
             }
-            panelRecordId={panelRecordId}
             publicationContextCode={contextCode}
             publicationContextId={contextId}
             publicationSortAvailable={publicationSortAvailable}

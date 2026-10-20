@@ -1,4 +1,4 @@
-import { flexRender } from '@tanstack/react-table';
+import { flexRender, type Row } from '@tanstack/react-table';
 import type { VirtualItem } from '@tanstack/react-virtual';
 import type { useLegacyTable } from '@tanstack/react-table/legacy';
 import {
@@ -14,6 +14,7 @@ import {
   type SxProps,
   type Theme,
 } from '@mui/material';
+import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import type { RecordItem } from '../records/api';
@@ -28,6 +29,9 @@ import {
   stickyBodyLayer,
   stickyHeaderLayer,
 } from './constants';
+import { useLatestCallback } from '../../components/useLatestCallback';
+import { useIsPanelRecord } from './panelRecord';
+import { RowInterestContext } from './rowInterest';
 import type { ExplorerSelection } from './useExplorerSelection';
 
 const resultColumnCellSx = (
@@ -61,7 +65,10 @@ type Props = {
   isFetching: boolean;
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
-  panelRecordId?: string;
+  /** Mark the row whose record is open in the panel. */
+  highlightPanelRecord?: boolean;
+  /** A new token re-renders every row, as extension cells require. */
+  renderToken?: object;
   /** Size the table to its rows instead of filling the viewport. */
   fitRows?: boolean;
 };
@@ -79,7 +86,8 @@ export const VirtualizedExplorerTable = ({
   isFetching,
   isFetchingNextPage,
   onLoadMore,
-  panelRecordId,
+  highlightPanelRecord = false,
+  renderToken,
   fitRows = false,
 }: Props) => {
   const { t } = useTranslation();
@@ -99,23 +107,8 @@ export const VirtualizedExplorerTable = ({
       }}
     />
   );
-  const selectionCheckbox = (record: RecordItem) => (
-    <Checkbox
-      checked={selection.isSelected(record.id)}
-      disabled={
-        !selection.isSelected(record.id) &&
-        selection.selectedItems.length >= maximumAgentSelection
-      }
-      onChange={() => selection.toggleRecord(record)}
-      slotProps={{
-        input: {
-          'aria-label': t('explorer.selectRecord', {
-            record: displayLabel(record.display, record.id),
-          }),
-        },
-      }}
-    />
-  );
+  const toggleRecord = useLatestCallback(selection.toggleRecord);
+  const selectionFull = selection.selectedItems.length >= maximumAgentSelection;
 
   return (
     <TableContainer
@@ -188,27 +181,20 @@ export const VirtualizedExplorerTable = ({
             }
             const row = rows[virtualRow.index];
             return (
-              <TableRow
-                aria-current={row.id === panelRecordId || undefined}
-                data-index={virtualRow.index}
+              <ExplorerResultRow
+                highlightPanelRecord={highlightPanelRecord}
+                index={virtualRow.index}
                 key={row.id}
-                ref={measureElement}
-                selected={row.id === panelRecordId}
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell
-                    key={cell.id}
-                    sx={resultColumnCellSx(cell.column.id, stickyBodyLayer)}
-                  >
-                    {cell.column.id === explorerColumnIds.select
-                      ? selectionCheckbox(row.original)
-                      : flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
-                  </TableCell>
-                ))}
-              </TableRow>
+                measureElement={measureElement}
+                onToggleRecord={toggleRecord}
+                renderToken={renderToken}
+                row={row}
+                selected={selection.isSelected(row.id)}
+                selectionDisabled={
+                  selectionFull && !selection.isSelected(row.id)
+                }
+                visibleColumns={table.getVisibleLeafColumns()}
+              />
             );
           })}
           {paddingBottom > 0 && (
@@ -224,3 +210,79 @@ export const VirtualizedExplorerTable = ({
     </TableContainer>
   );
 };
+
+/**
+ * One result row. It renders again only when its own record, selection or
+ * panel highlight changes, so scrolling and selecting render the rows they
+ * touch instead of the whole table.
+ */
+const ExplorerResultRow = memo(function ExplorerResultRow({
+  highlightPanelRecord,
+  index,
+  measureElement,
+  onToggleRecord,
+  row,
+  selected,
+  selectionDisabled,
+}: {
+  highlightPanelRecord: boolean;
+  index: number;
+  measureElement: (element: HTMLTableRowElement | null) => void;
+  onToggleRecord: (record: RecordItem) => void;
+  /** Only compared, to re-render the row. */
+  renderToken: object | undefined;
+  row: Row<RecordItem>;
+  selected: boolean;
+  selectionDisabled: boolean;
+  /** Only compared: rows keep their identity when columns change. */
+  visibleColumns: unknown[];
+}) {
+  const { t } = useTranslation();
+  const inPanel = useIsPanelRecord(row.id) && highlightPanelRecord;
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  return (
+    <TableRow
+      aria-current={inPanel || undefined}
+      data-index={index}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget))
+          setFocused(false);
+      }}
+      onFocus={() => setFocused(true)}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      ref={measureElement}
+      selected={inPanel}
+    >
+      <RowInterestContext value={hovered || focused}>
+        {row.getVisibleCells().map((cell) => (
+          <TableCell
+            key={cell.id}
+            sx={resultColumnCellSx(cell.column.id, stickyBodyLayer)}
+          >
+            {cell.column.id === explorerColumnIds.select ? (
+              <Checkbox
+                checked={selected}
+                disabled={selectionDisabled}
+                onChange={() => onToggleRecord(row.original)}
+                slotProps={{
+                  input: {
+                    'aria-label': t('explorer.selectRecord', {
+                      record: displayLabel(
+                        row.original.display,
+                        row.original.id,
+                      ),
+                    }),
+                  },
+                }}
+              />
+            ) : (
+              flexRender(cell.column.columnDef.cell, cell.getContext())
+            )}
+          </TableCell>
+        ))}
+      </RowInterestContext>
+    </TableRow>
+  );
+});

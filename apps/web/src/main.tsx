@@ -8,6 +8,9 @@ import { AppProviders } from './app/AppProviders';
 import { toast } from './components/toast';
 import i18n, { i18nReady } from './i18n';
 import { router } from './app/router';
+import { authQueryKeys } from './features/auth/queryKeys';
+import { contextQueryKeys } from './features/contexts/queryKeys';
+import { recordQueryKeys } from './features/records/queryKeys';
 
 const queryClient = new QueryClient({
   mutationCache: new MutationCache({
@@ -16,6 +19,25 @@ const queryClient = new QueryClient({
       toast.success(i18n.t('common.actionCompleted'));
     },
   }),
+});
+
+// Reads that many views mount at once, such as the Explorer and its record
+// panel, would otherwise be fetched again by every component that mounts
+// them. Changes made in the app invalidate them; changes made elsewhere show
+// within the stale time or on window focus once it has passed.
+const sharedReadStaleTimeMs = 60_000;
+for (const queryKey of [
+  authQueryKeys.session(),
+  contextQueryKeys.all(),
+  recordQueryKeys.blueprints(),
+  recordQueryKeys.blueprintsByCode(),
+])
+  queryClient.setQueryDefaults(queryKey, {
+    staleTime: sharedReadStaleTimeMs,
+  });
+// Published revisions never change.
+queryClient.setQueryDefaults(recordQueryKeys.pinnedBlueprintRevisions(), {
+  staleTime: Infinity,
 });
 
 declare module '@tanstack/react-router' {

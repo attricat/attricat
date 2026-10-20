@@ -3,11 +3,7 @@ import {
   type LegacyColumnDef,
 } from '@tanstack/react-table/legacy';
 import type { TFunction } from 'i18next';
-import type {
-  BlueprintWithAttributes,
-  RecordItem,
-  RecordPublicationStatus,
-} from '../records/api';
+import type { BlueprintWithAttributes, RecordItem } from '../records/api';
 import { RecordIdPopover } from '../records/components/RecordIdPopover';
 import type { getExtensionRuntime } from '../extensions/api';
 import { FilterableCell } from './CellFilterButton';
@@ -45,7 +41,7 @@ import {
   type ExplorerTableColumn,
 } from './explorerTableColumns';
 import type { ExplorerColumnPreferences } from './columnPreferences';
-import type { AttributeFilter, ExplorerSort } from './search';
+import type { AttributeFilter } from './search';
 
 type ExtensionRuntime = Awaited<ReturnType<typeof getExtensionRuntime>>;
 type ExplorerColumnDef = LegacyColumnDef<RecordItem, unknown>;
@@ -56,14 +52,14 @@ type ColumnOptions = {
   /** The selected context followed by its ancestors. */
   contextCodes: readonly string[];
   publicationContextCode: string;
+  publicationContextId: string | undefined;
   publicationSortAvailable: boolean;
-  publicationsByRecordId: Map<string, RecordPublicationStatus | undefined>;
   runtime: ExtensionRuntime | undefined;
-  sort?: ExplorerSort;
   onSortChange: (field: string) => void;
   onFilterCell?: (draft: AttributeFilterDraft) => void;
   onOpenActions: (recordId: string, position: ActionMenuPosition) => void;
   onOpenPanel?: OpenRecordPanel;
+  onPrefetchPanel?: (record: RecordItem) => void;
   takeCellFrame: () => boolean;
   t: TFunction;
   /** The user's effective zone, used to edit datetime cell filters. */
@@ -93,14 +89,14 @@ export const buildExplorerColumnDefinitions = ({
   tableColumns,
   contextCodes,
   publicationContextCode,
+  publicationContextId,
   publicationSortAvailable,
-  publicationsByRecordId,
   runtime,
-  sort,
   onSortChange,
   onFilterCell,
   onOpenActions,
   onOpenPanel,
+  onPrefetchPanel,
   takeCellFrame,
   t,
   timeZone,
@@ -136,11 +132,7 @@ export const buildExplorerColumnDefinitions = ({
       columnHelper.display({
         id: column.field,
         header: () => (
-          <ConfiguredColumnHeader
-            column={column}
-            onSortChange={onSortChange}
-            sort={sort}
-          />
+          <ConfiguredColumnHeader column={column} onSortChange={onSortChange} />
         ),
         // Frames are allocated while rendering visible cells only.
         cell: (info) => (
@@ -175,6 +167,7 @@ export const buildExplorerColumnDefinitions = ({
           contextCodes={contextCodes}
           record={info.row.original}
           onOpenPanel={onOpenPanel}
+          onPrefetchPanel={onPrefetchPanel}
         />
       ),
     }) as ExplorerColumnDef,
@@ -190,13 +183,13 @@ export const buildExplorerColumnDefinitions = ({
             field={explorerSortFields.publicationStatus}
             label={label}
             onSortChange={onSortChange}
-            sort={sort}
           />
         );
       },
       cell: (info) => (
         <PublicationStatusCell
-          publication={publicationsByRecordId.get(info.row.original.id)}
+          contextId={publicationContextId}
+          recordId={info.row.original.id}
         />
       ),
     }) as ExplorerColumnDef,
@@ -207,7 +200,6 @@ export const buildExplorerColumnDefinitions = ({
           field={explorerSortFields.blueprintVersion}
           label={t('explorer.schema')}
           onSortChange={onSortChange}
-          sort={sort}
         />
       ),
       cell: (info) => <SchemaVersionCell record={info.row.original} />,

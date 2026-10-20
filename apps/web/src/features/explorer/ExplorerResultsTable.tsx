@@ -1,9 +1,9 @@
 import { useNavigate } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCoreRowModel, useLegacyTable } from '@tanstack/react-table/legacy';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Paper } from '@mui/material';
-import { lazy, Suspense, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes, RecordItem } from '../records/api';
 import { DeleteRecordDialog } from '../records/components/DeleteRecordDialog';
@@ -17,6 +17,8 @@ import {
   loadMoreRowKey,
   resultRowOverscan,
 } from './constants';
+import { ExplorerSortContext } from './explorerSortContext';
+import { prefetchRecordPanel } from './prefetchRecordPanel';
 import { RecordActionsMenu } from './RecordActionsMenu';
 import { ExplorerExtensionActions } from './ExplorerExtensionActions';
 import {
@@ -30,6 +32,7 @@ import {
   configurableColumnIds,
   explorerColumnLabel,
   explorerColumnValueType,
+  usesExtensionRenderer,
 } from './explorerTableColumns';
 import type { AttributeFilterDraft } from './attributeFilterValues';
 import type { ExplorerSort } from './search';
@@ -45,6 +48,7 @@ import { lexiconText } from '../lexicon/lexicon';
 import { EmptyState } from '../../components/EmptyState';
 import { RecordIcon } from '../../components/systemIcons';
 import { useCanOn } from '../auth/useCan';
+import { useLatestCallback } from '../../components/useLatestCallback';
 
 // The column dialog carries drag-and-drop; load it when first opened so it
 // stays out of the Explorer's startup bundle.
@@ -68,8 +72,6 @@ type Props = {
   onSaveSelectionAsSearch: (records: RecordItem[]) => void;
   /** Opens a result in the record panel instead of navigating to its page. */
   onOpenPanel?: OpenRecordPanel;
-  /** The result open in the record panel. */
-  panelRecordId?: string;
   /** The selected context followed by its ancestors. */
   contextCodes: readonly string[];
   /** Size the table to its rows instead of filling the viewport. */
@@ -96,7 +98,6 @@ export const ExplorerResultsTable = ({
   onFilterCell,
   onSaveSelectionAsSearch,
   onOpenPanel,
-  panelRecordId,
   contextCodes,
   fitRows,
   publicationContextCode,
@@ -111,6 +112,7 @@ export const ExplorerResultsTable = ({
 }: Props) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [deleteRecordId, setDeleteRecordId] = useState<string | null>(null);
   const [duplicateRecordId, setDuplicateRecordId] = useState<string | null>(
     null,
@@ -172,9 +174,9 @@ export const ExplorerResultsTable = ({
       publicationContextId,
       canPublish ? activeActionRecord?.id : undefined,
     );
-  const tableColumns = buildExplorerTableColumns(
-    blueprint,
-    relationshipSortAvailable,
+  const tableColumns = useMemo(
+    () => buildExplorerTableColumns(blueprint, relationshipSortAvailable),
+    [blueprint, relationshipSortAvailable],
   );
   const columnIds = configurableColumnIds(tableColumns);
   const columnPreferences = useExplorerColumnPreferences(
@@ -188,32 +190,83 @@ export const ExplorerResultsTable = ({
     refetchInterval: extensionRuntimeRefetchInterval,
     retry: false,
   });
-  // `flexRender` is only called for virtual rows; see
-  // `maximumExplorerCellFrames` for why frames are bounded per render.
-  let cellFrames = 0;
-  const takeCellFrame = () => cellFrames++ < maximumExplorerCellFrames;
-  const columnDefinitions = buildExplorerColumnDefinitions({
-    blueprint,
-    tableColumns,
-    contextCodes,
-    publicationContextCode,
-    publicationSortAvailable,
-    publicationsByRecordId,
-    runtime: runtime.data,
-    sort,
-    onSortChange,
-    onFilterCell,
-    onOpenActions: (recordId, position) =>
+  // Rows render only when their own data changes, so the column definitions
+  // and every callback they close over keep their identity across renders.
+  const sortChange = useLatestCallback(onSortChange);
+  const filterCell = useLatestCallback((draft: AttributeFilterDraft) =>
+    onFilterCell?.(draft),
+  );
+  const openPanel = useLatestCallback<Parameters<OpenRecordPanel>, void>(
+    (recordId, opener) => onOpenPanel?.(recordId, opener),
+  );
+  const prefetchPanel = useLatestCallback((record: RecordItem) =>
+    prefetchRecordPanel(queryClient, record, blueprint, publicationContextId),
+  );
+  const openActions = useCallback(
+    (recordId: string, position: ActionMenuPosition) =>
       setActionMenu({ recordId, position }),
-    onOpenPanel,
-    takeCellFrame,
-    t,
-    timeZone,
-  });
-  const columns = arrangeExplorerColumns(
-    columnDefinitions,
-    columnPreferences.preferences,
-    selection.selectionMode,
+    [],
+  );
+  const hasPanel = Boolean(onOpenPanel);
+  const hasCellFilter = Boolean(onFilterCell);
+  // Extension cell frames are allocated while visible rows render; see
+  // `maximumExplorerCellFrames`. Such tables re-render every row each time
+  // so the allocation stays bounded.
+  const extensionCells = tableColumns.some(usesExtensionRenderer);
+  const frameAllocation = extensionCells ? {} : undefined;
+  const takeCellFrame = useMemo(() => {
+    let cellFrames = 0;
+    return () => cellFrames++ < maximumExplorerCellFrames;
+    // A new allocation is the only input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frameAllocation]);
+  const columnDefinitions = useMemo(
+    () =>
+      buildExplorerColumnDefinitions({
+        blueprint,
+        tableColumns,
+        contextCodes,
+        publicationContextCode,
+        publicationContextId,
+        publicationSortAvailable,
+        runtime: runtime.data,
+        onSortChange: sortChange,
+        onFilterCell: hasCellFilter ? filterCell : undefined,
+        onOpenActions: openActions,
+        onOpenPanel: hasPanel ? openPanel : undefined,
+        onPrefetchPanel: hasPanel ? prefetchPanel : undefined,
+        takeCellFrame,
+        t,
+        timeZone,
+      }),
+    [
+      blueprint,
+      contextCodes,
+      filterCell,
+      hasCellFilter,
+      hasPanel,
+      openActions,
+      openPanel,
+      prefetchPanel,
+      publicationContextCode,
+      publicationContextId,
+      publicationSortAvailable,
+      runtime.data,
+      sortChange,
+      t,
+      tableColumns,
+      takeCellFrame,
+      timeZone,
+    ],
+  );
+  const columns = useMemo(
+    () =>
+      arrangeExplorerColumns(
+        columnDefinitions,
+        columnPreferences.preferences,
+        selection.selectionMode,
+      ),
+    [columnDefinitions, columnPreferences.preferences, selection.selectionMode],
   );
   const preferenceColumns = columnIds.map((id) => ({
     id,
@@ -261,22 +314,25 @@ export const ExplorerResultsTable = ({
           }
         />
       )}
-      <VirtualizedExplorerTable
-        table={table}
-        columnsLength={columns.length}
-        virtualRows={virtualRows}
-        paddingTop={paddingTop}
-        paddingBottom={paddingBottom}
-        measureElement={rowVirtualizer.measureElement}
-        tableContainerRef={tableContainerRef}
-        selection={selection}
-        items={items}
-        isFetching={isFetching}
-        isFetchingNextPage={isFetchingNextPage}
-        onLoadMore={onLoadMore}
-        panelRecordId={panelRecordId}
-        fitRows={fitRows}
-      />
+      <ExplorerSortContext value={sort}>
+        <VirtualizedExplorerTable
+          table={table}
+          columnsLength={columns.length}
+          virtualRows={virtualRows}
+          paddingTop={paddingTop}
+          paddingBottom={paddingBottom}
+          measureElement={rowVirtualizer.measureElement}
+          tableContainerRef={tableContainerRef}
+          selection={selection}
+          items={items}
+          isFetching={isFetching}
+          isFetchingNextPage={isFetchingNextPage}
+          onLoadMore={onLoadMore}
+          highlightPanelRecord={hasPanel}
+          renderToken={frameAllocation}
+          fitRows={fitRows}
+        />
+      </ExplorerSortContext>
       {items.length === 0 && (
         <EmptyState icon={RecordIcon} title={t('explorer.noMatchingRecords')} />
       )}

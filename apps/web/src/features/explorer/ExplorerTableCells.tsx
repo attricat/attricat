@@ -2,7 +2,9 @@ import { Box, Chip, IconButton } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { EllipsisVerticalIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { RecordItem, RecordPublicationStatus } from '../records/api';
+import { useQuery } from '@tanstack/react-query';
+import type { RecordItem } from '../records/api';
+import { recordPublicationOptions } from '../records/queryOptions';
 import { contextDisplayLabel } from '../records/recordDisplay';
 import {
   emptyValuePlaceholder,
@@ -23,16 +25,22 @@ export const RecordDisplayCell = ({
   contextCodes,
   record,
   onOpenPanel,
+  onPrefetchPanel,
 }: {
   contextCodes: readonly string[];
   record: RecordItem;
   onOpenPanel?: OpenRecordPanel;
+  /** Starts loading the panel when the link is pointed at or focused. */
+  onPrefetchPanel?: (record: RecordItem) => void;
 }) => {
   const { t } = useTranslation();
+  const prefetch = onPrefetchPanel && (() => onPrefetchPanel(record));
   return (
     <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
       <Link
         {...(onOpenPanel && { [recordPanelOpenerAttribute]: true })}
+        onFocus={prefetch}
+        onPointerEnter={prefetch}
         onClick={(event) => {
           if (
             !onOpenPanel ||
@@ -58,13 +66,26 @@ export const RecordDisplayCell = ({
   );
 };
 
+/**
+ * The record's status in the publication context. The table loads the
+ * statuses of its visible rows together; each cell only follows its own, so a
+ * status that arrives re-renders one cell.
+ */
 export const PublicationStatusCell = ({
-  publication,
+  contextId,
+  recordId,
 }: {
-  publication: RecordPublicationStatus | undefined;
+  contextId: string | undefined;
+  recordId: string;
 }) => {
   const { t } = useTranslation();
-  if (!publication) return emptyValuePlaceholder;
+  const { data: publication } = useQuery({
+    ...recordPublicationOptions(recordId),
+    enabled: false,
+    select: (publications) =>
+      publications.find((item) => item.context_id === contextId),
+  });
+  if (!contextId || !publication) return emptyValuePlaceholder;
   return (
     <Chip
       color={

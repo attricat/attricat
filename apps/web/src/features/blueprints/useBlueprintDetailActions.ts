@@ -38,6 +38,13 @@ export const useBlueprintDetailActions = (
         queryClient.invalidateQueries({
           queryKey: blueprintQueryKeys.revision(blueprintId, version),
         }),
+        // Views that load the latest revision by code keep it for a while.
+        queryClient.invalidateQueries({
+          queryKey: recordQueryKeys.blueprintsByCode(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: recordQueryKeys.blueprints(),
+        }),
       ]);
     },
   });

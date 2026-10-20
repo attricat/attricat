@@ -100,6 +100,15 @@ export const parseExplorerRouteSearch = (
   input: Record<string, unknown>,
 ): ExplorerRouteSearch => explorerRouteSearchSchema.parse(input);
 
+/** The search itself, without the record open in the panel. */
+export const withoutPanelRecord = (
+  routeSearch: ExplorerRouteSearch,
+): ExplorerSearch => {
+  const search = { ...routeSearch };
+  delete search.record;
+  return search;
+};
+
 export type ExplorerSort = NonNullable<ExplorerSearch['sort']>;
 
 /**

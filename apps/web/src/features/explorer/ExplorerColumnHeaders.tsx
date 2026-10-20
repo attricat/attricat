@@ -1,25 +1,25 @@
 import { ButtonBase, TableSortLabel, Tooltip } from '@mui/material';
+import { use } from 'react';
 import { useTranslation } from 'react-i18next';
 import { sortDirections } from './constants';
 import {
   configuredColumnLabel,
   type ExplorerTableColumn,
 } from './explorerTableColumns';
-import type { ExplorerSort } from './search';
+import { ExplorerSortContext } from './explorerSortContext';
 
 type SortableHeaderProps = {
   field: string;
   label: string;
   onSortChange: (field: string) => void;
-  sort?: ExplorerSort;
 };
 
 export const SortableColumnHeader = ({
   field,
   label,
   onSortChange,
-  sort,
 }: SortableHeaderProps) => {
+  const sort = use(ExplorerSortContext);
   const active = sort?.field === field;
   return (
     <TableSortLabel
@@ -35,13 +35,11 @@ export const SortableColumnHeader = ({
 type ConfiguredHeaderProps = {
   column: ExplorerTableColumn;
   onSortChange: (field: string) => void;
-  sort?: ExplorerSort;
 };
 
 export const ConfiguredColumnHeader = ({
   column,
   onSortChange,
-  sort,
 }: ConfiguredHeaderProps) => {
   const { t } = useTranslation();
   const label = configuredColumnLabel(column);
@@ -69,7 +67,6 @@ export const ConfiguredColumnHeader = ({
       field={column.field}
       label={label}
       onSortChange={onSortChange}
-      sort={sort}
     />
   );
 };

@@ -9,6 +9,7 @@ import {
 import type { SavedView } from '../saved-views/schemas';
 import { ExplorerBrowseRail } from './ExplorerBrowseRail';
 import { ExplorerRecordPanel } from './ExplorerRecordPanel';
+import { usePanelRecordId, usePanelRecordReader } from './panelRecord';
 import { ExplorerFilterBar } from './ExplorerFilterBar';
 import { ExplorerLoadErrors } from './ExplorerLoadErrors';
 import { ExplorerLoadingIndicator } from './ExplorerLoadingIndicator';
@@ -38,22 +39,17 @@ import { useExplorerSearchActions } from './useExplorerSearchActions';
 import { lexiconText } from '../lexicon/lexicon';
 
 type Props = {
-  /** The result open in the record panel on wide screens. */
-  panelRecordId?: string;
   search: ExplorerSearch;
   savedView?: SavedView;
 };
 
-export const Explorer = ({
-  panelRecordId,
-  search: urlSearch,
-  savedView,
-}: Props) => {
+export const Explorer = ({ search: urlSearch, savedView }: Props) => {
   const queryInputRef = useRef<HTMLInputElement>(null);
   const theme = useTheme();
   const isWideDesktop = useMediaQuery(theme.breakpoints.up('lg'));
   const navigate = useNavigate({ from: '/' });
   const panelOpenerRef = useRef<HTMLElement | null>(null);
+  const readPanelRecordId = usePanelRecordReader();
   const search = useMemo(
     () => ({
       ...urlSearch,
@@ -130,8 +126,6 @@ export const Explorer = ({
     (blueprints.isLoading ||
       selectedBlueprint.isLoading ||
       (canSearch && results.isPending));
-  // Narrower screens open results on their own page.
-  const panelOpen = isWideDesktop && panelRecordId !== undefined;
   const showInPanel = (record: string | undefined) =>
     void navigate({
       to: '/',
@@ -142,7 +136,7 @@ export const Explorer = ({
     });
   // Clicking the record already in the panel again opens its full page.
   const openPanel: OpenRecordPanel = (recordId, opener) => {
-    if (panelOpen && recordId === panelRecordId) {
+    if (recordId === readPanelRecordId()) {
       void navigate({ to: '/records/$recordId', params: { recordId } });
       return;
     }
@@ -227,7 +221,6 @@ export const Explorer = ({
               contextId={data.contextId}
               onExplore={actions.exploreBlueprint}
               onOpenPanel={isWideDesktop ? openPanel : undefined}
-              panelRecordId={panelOpen ? panelRecordId : undefined}
               publicationSortAvailable={data.publicationSortAvailable}
               search={search}
             />
@@ -273,7 +266,6 @@ export const Explorer = ({
                   data={data}
                   onFilterCell={requestFilter}
                   onOpenPanel={isWideDesktop ? openPanel : undefined}
-                  panelRecordId={panelOpen ? panelRecordId : undefined}
                   onShowAllVersions={actions.showAllVersions}
                   onSortChange={actions.toggleSort}
                   search={search}
@@ -283,15 +275,37 @@ export const Explorer = ({
           </Box>
         </PageContainer>
       </Box>
-      {panelOpen && (
-        <ExplorerRecordPanel
+      {/* Narrower screens open results on their own page. */}
+      {isWideDesktop && (
+        <ExplorerPanelSlot
           contextId={data.contextId}
-          recordId={panelRecordId}
-          key={panelRecordId}
           onClose={closePanel}
           onOpenRecord={showInPanel}
         />
       )}
     </Box>
+  );
+};
+
+/** The record panel, re-rendered on its own when the panel record changes. */
+const ExplorerPanelSlot = ({
+  contextId,
+  onClose,
+  onOpenRecord,
+}: {
+  contextId: string | undefined;
+  onClose: () => void;
+  onOpenRecord: (recordId: string) => void;
+}) => {
+  const recordId = usePanelRecordId();
+  if (recordId === undefined) return null;
+  return (
+    <ExplorerRecordPanel
+      contextId={contextId}
+      recordId={recordId}
+      key={recordId}
+      onClose={onClose}
+      onOpenRecord={onOpenRecord}
+    />
   );
 };

@@ -6,6 +6,7 @@ import { defaultContextCode } from '../contexts/constants';
 import { contextQueryKeys } from '../contexts/queryKeys';
 import { getResolvedRecordPreview } from './api';
 import { recordQueryKeys } from './queryKeys';
+import { resolvedPreviewStaleTimeMs } from './queryOptions';
 
 /**
  * Loads attribute contexts and tracks the selected one. Until a context is
@@ -41,5 +42,7 @@ export const useResolvedRecordPreview = (
       return getResolvedRecordPreview(recordId, contextId);
     },
     enabled: contextId !== null,
+    // Shares a preview loaded ahead with `resolvedRecordPreviewOptions`.
+    staleTime: resolvedPreviewStaleTimeMs,
   });
 };
