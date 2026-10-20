@@ -2,3 +2,5 @@
 // standalone icons. Use these sizes for icons inside dense controls.
 export const compactIconSize = 18;
 export const smallIconSize = 20;
+// Leads caption-sized text, such as a field's helper text.
+export const captionIconSize = 14;

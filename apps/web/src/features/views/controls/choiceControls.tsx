@@ -16,6 +16,7 @@ import type { ChoiceOption } from '../../records/choices';
 import { booleanFieldValues } from '../../records/constants';
 import { attributeLabel } from '../../records/recordDisplay';
 import type { ValueEditorProps } from '../components/componentTypes';
+import { FieldHint } from '../../../components/FieldHint';
 
 /** Choices at most this many are radio buttons; longer lists are searched. */
 export const RADIO_CHOICE_LIMIT = 5;
@@ -41,7 +42,7 @@ const ChoiceFieldFrame = ({
 }) => {
   const labelId = useId();
   const helpId = useId();
-  const help = error ?? helperText;
+  const help = error ?? (helperText && <FieldHint>{helperText}</FieldHint>);
   return (
     <FormControl
       aria-describedby={help ? helpId : undefined}
@@ -150,7 +151,9 @@ export const ChoiceEditor = ({
           <TextField
             {...params}
             error={Boolean(problem)}
-            helperText={problem ?? helperText}
+            helperText={
+              problem ?? (helperText && <FieldHint>{helperText}</FieldHint>)
+            }
             label={attributeLabel(attribute)}
             required={required}
           />

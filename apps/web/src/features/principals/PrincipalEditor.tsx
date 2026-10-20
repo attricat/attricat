@@ -6,6 +6,7 @@ import { assignableOptions, isAssignable, resolvePrincipal } from './principal';
 import { PrincipalKindIcon } from './PrincipalValue';
 import type { PrincipalConfiguration } from './schemas';
 import { usePrincipalDirectory } from './usePrincipalDirectory';
+import { FieldHint } from '../../components/FieldHint';
 
 /**
  * Picks a workspace user or team. A saved assignee who can no longer be
@@ -95,7 +96,7 @@ export const PrincipalEditor = ({
               ? t('principals.loadFailed')
               : unknown
                 ? t('principals.unknown', { value })
-                : helperText)
+                : helperText && <FieldHint>{helperText}</FieldHint>)
           }
         />
       )}

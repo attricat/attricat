@@ -37,6 +37,7 @@ import {
   useRecentlyPreviewedRecords,
 } from './useRecentlyPreviewedRecords';
 import { smallIconSize } from '../../../components/iconSizes';
+import { FieldHint } from '../../../components/FieldHint';
 
 const relationshipAdornment = (
   <InputAdornment position="start">
@@ -160,7 +161,15 @@ export const RelationshipField = ({
         error={Boolean(error)}
         label={attributeLabel(attribute)}
         required={required}
-        helperText={error ?? t('records.commaSeparatedUuids')}
+        helperText={
+          error ?? (
+            <FieldHint>
+              {[helperText, t('records.commaSeparatedUuids')]
+                .filter(Boolean)
+                .join(' ')}
+            </FieldHint>
+          )
+        }
         onChange={(event) => onChange(event.target.value)}
         slotProps={{ input: { startAdornment: relationshipAdornment } }}
         value={value}
@@ -202,7 +211,9 @@ export const RelationshipField = ({
         error={Boolean(error)}
         disabled={disabled}
         fullWidth
-        helperText={error ?? helperText}
+        helperText={
+          error ?? (helperText && <FieldHint>{helperText}</FieldHint>)
+        }
         id={fieldId}
         label={attributeLabel(attribute)}
         required={required}

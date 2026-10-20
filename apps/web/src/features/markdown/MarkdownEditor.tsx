@@ -2,6 +2,7 @@ import { Box, Tab, Tabs, TextField } from '@mui/material';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MarkdownContent } from './MarkdownContent';
+import { FieldHint } from '../../components/FieldHint';
 
 export const MarkdownEditor = ({
   label,
@@ -55,7 +56,9 @@ export const MarkdownEditor = ({
           disabled={disabled}
           required={required}
           error={Boolean(error)}
-          helperText={error ?? helperText}
+          helperText={
+            error ?? (helperText && <FieldHint>{helperText}</FieldHint>)
+          }
           onChange={(event) => {
             if (!disabled) onChange(event.target.value);
           }}

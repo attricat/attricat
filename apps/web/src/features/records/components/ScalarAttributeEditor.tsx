@@ -21,6 +21,7 @@ import { statusConfiguration } from '../status';
 import { principalConfiguration } from '../../principals/principal';
 import { PrincipalEditor } from '../../principals/PrincipalEditor';
 import { attributeMaxLength } from '../attributeHints';
+import { FieldHint } from '../../../components/FieldHint';
 
 const isJson = (text: string) => {
   try {
@@ -88,9 +89,8 @@ const TextValueEditor = ({
         ? t('records.jsonValid')
         : t('records.jsonNotValidYet')
       : undefined;
-  const text =
-    [error ?? helperText, !error && jsonNote].filter(Boolean).join(' ') ||
-    undefined;
+  const hint = [helperText, jsonNote].filter(Boolean).join(' ');
+  const text = error ?? (hint && <FieldHint>{hint}</FieldHint>);
   return (
     <TextField
       fullWidth

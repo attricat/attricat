@@ -24,6 +24,7 @@ import { PendingFileRow, PendingImageTile } from './PendingFileRow';
 import type { FileMetadata } from './schemas';
 import { UploadedFileRow } from './UploadedFileRow';
 import { usePendingFileUploads } from './usePendingFileUploads';
+import { FieldHint } from '../../components/FieldHint';
 
 type FileAttributeEditorProps = {
   attribute: Attribute;
@@ -85,7 +86,7 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
           <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
             {helperText && (
               <FormHelperText error={false} id={helpId} sx={{ m: 0 }}>
-                {helperText}
+                <FieldHint>{helperText}</FieldHint>
               </FormHelperText>
             )}
             {savingHelp && (
