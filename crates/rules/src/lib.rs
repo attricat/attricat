@@ -370,6 +370,13 @@ fn non_empty(value: &str, name: &str) -> Result<(), RuleError> {
         Ok(())
     }
 }
+/// Whether `event_type` changes a record's values or relationships. Every
+/// enabled rule re-evaluates the changed record on these events, whatever its
+/// triggers, so its findings follow the saved state.
+pub fn is_record_change_event(event_type: &str) -> bool {
+    RECORD_EVENTS.contains(&event_type)
+}
+
 const RECORD_EVENTS: &[&str] = &[
     "record.created.v1",
     "record.updated.v1",

@@ -238,7 +238,8 @@ describe('RecordPreviewPage', () => {
     ).toBeNull();
     unmount();
 
-    vi.mocked(currentSession).mockResolvedValueOnce({
+    // Panels that mount later refetch the session, so keep the grant.
+    vi.mocked(currentSession).mockResolvedValue({
       capabilities: { records_delete: true },
     } as never);
     vi.mocked(api.deleteRecord).mockResolvedValue(undefined);

@@ -1841,7 +1841,16 @@
     "ruleRevision": "{{name}} v{{version}}",
     "unknownRule": "Reguła {{id}} v{{version}}",
     "allRecords": "Wszystkie rekordy",
-    "recordWithoutLabel": "Rekord {{id}}"
+    "recordWithoutLabel": "Rekord {{id}}",
+    "recordFindings": {
+      "title": "Jakość danych",
+      "checking": "Sprawdzanie reguł…",
+      "recheck": "Sprawdź ponownie",
+      "contexts": "Konteksty: {{contexts}}",
+      "firstFound": "Pierwsze wykrycie <timestamp/>",
+      "noFindings": "Brak otwartych ustaleń.",
+      "noFindingsCheckedAt": "Brak otwartych ustaleń. Ostatnio sprawdzono <timestamp/>."
+    }
   },
   "reusableAttributes": {
     "editor": {

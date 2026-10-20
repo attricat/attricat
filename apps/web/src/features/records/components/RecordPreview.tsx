@@ -17,6 +17,7 @@ import { recordQueryKeys } from '../queryKeys';
 import { statusParentContexts } from '../status';
 import { useRecordContextSelection } from '../useRecordContexts';
 import { useRecordPreviewData } from '../useRecordPreviewData';
+import { RecordFindingsPanel } from '../../rules/RecordFindingsPanel';
 import { DataQualityFindingsChip } from './DataQualityFindingsChip';
 import { DeleteRecordDialog } from './DeleteRecordDialog';
 import { DuplicateRecordDialog } from './DuplicateRecordDialog';
@@ -273,6 +274,13 @@ export const RecordPreview = ({
                   </RelatedRecordPreviewContext.Provider>
                 )}
               </>
+            )}
+            {resolvedRecord && (
+              <RecordFindingsPanel
+                blueprintId={resolvedRecord.blueprint_id}
+                blueprintVersion={resolvedRecord.blueprint_version}
+                recordId={recordId}
+              />
             )}
             {resolved.data && (
               <RecordControlsPanel

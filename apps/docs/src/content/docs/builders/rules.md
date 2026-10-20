@@ -52,6 +52,8 @@ attribute_code = "title"
 | `event` | `event_type` | For the changed record, after one of: `record.created.v1`, `record.updated.v1`, `record.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
 | `post_import` | | Reserved for future import integration. |
 
+Triggers decide when a rule checks every record of its blueprint revision. Editing a record always re-checks that record against every enabled rule of its revision, whatever their triggers, so the record's findings match what was saved. An `event` trigger adds the re-runs for [dependent records](#changes-to-linked-records).
+
 ### Predicates
 
 A record **fails** when the predicate is not satisfied. Rules use the same predicates as [record checks](/builders/validation/#compare-attributes-with-checks), [status transition conditions](/builders/validation/#conditions-on-transitions), and [publication channel checks](/guides/publishing/#require-checks-before-publication). The [blueprint reference](/reference/blueprint/#predicates) lists every key.
@@ -231,6 +233,8 @@ A record that already violates an enforcing rule cannot be saved until a save fi
 **Manage → Data quality rules → Findings** lists findings with their rule, record, context, and status. There is one finding per rule, record, and context. When a later evaluation passes, the finding is resolved. If the problem comes back, the same finding reopens.
 
 **Acknowledge** a finding to record that someone has seen it. It stays until the record passes.
+
+A record's own page lists its open and acknowledged findings under **Data quality**; the data quality chip in the record's header jumps there. After an edit, the list refreshes once the record's checks finish. **Re-run checks** checks the record against every enabled rule of its revision straight away, for example after a rule changed.
 
 ```sh
 acli rule findings --record-id <uuid>

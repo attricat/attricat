@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { request } from '../../api/request';
+import { RECORD_RULE_RUNS_LIMIT } from './constants';
 import { findingSchema, ruleRunSchema, ruleSchema } from './schemas';
 export type { Finding, Rule, RuleRun } from './schemas';
 const id = (value: string) => encodeURIComponent(z.uuid().parse(value));
@@ -26,6 +27,26 @@ export const createRule = (input: {
   });
 export const listRuleRuns = () =>
   request('/api/rule-runs', z.array(ruleRunSchema));
+/** The most recent runs scoped to one record. */
+export const listRecordRuleRuns = (recordId: string) =>
+  request(
+    `/api/rule-runs?record_id=${id(recordId)}&limit=${RECORD_RULE_RUNS_LIMIT}`,
+    z.array(ruleRunSchema),
+  );
+/** Re-checks one record against every enabled rule of its blueprint revision. */
+export const recheckRecord = (recordId: string) =>
+  request(
+    '/api/rule-findings/recheck',
+    z.object({ run_ids: z.array(z.uuid()) }),
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        record_id: z.uuid().parse(recordId),
+        idempotency_key: crypto.randomUUID(),
+      }),
+    },
+  );
 export const listFindings = (recordId?: string) =>
   request(
     recordId

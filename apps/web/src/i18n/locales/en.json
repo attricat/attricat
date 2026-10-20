@@ -1765,7 +1765,16 @@
     "ruleRevision": "{{name}} v{{version}}",
     "unknownRule": "Rule {{id}} v{{version}}",
     "allRecords": "All records",
-    "recordWithoutLabel": "Record {{id}}"
+    "recordWithoutLabel": "Record {{id}}",
+    "recordFindings": {
+      "title": "Data quality",
+      "checking": "Checking rules…",
+      "recheck": "Re-run checks",
+      "contexts": "Contexts: {{contexts}}",
+      "firstFound": "First found <timestamp/>",
+      "noFindings": "No open findings.",
+      "noFindingsCheckedAt": "No open findings. Last checked <timestamp/>."
+    }
   },
   "reusableAttributes": {
     "editor": {
