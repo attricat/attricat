@@ -17,6 +17,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { getIncomingRelationships } from '../../records/api';
+import { NewTabIcon } from '../../../components/NewTabIcon';
+import { relatedRecordLinkProps } from '../../records/linkedRecord';
 import { displayLabel } from '../../records/recordDisplay';
 import { recordQueryKeys } from '../../records/queryKeys';
 import type { ViewComponentDefinition } from './componentTypes';
@@ -88,8 +90,19 @@ export const IncomingRelationshipListDisplay = ({
                       <Link
                         params={{ recordId: item.id }}
                         to="/records/$recordId"
+                        {...relatedRecordLinkProps}
                       >
-                        {displayLabel(item.display, item.id)}
+                        <Box
+                          component="span"
+                          sx={{
+                            alignItems: 'center',
+                            display: 'inline-flex',
+                            gap: 0.5,
+                          }}
+                        >
+                          <NewTabIcon />
+                          {displayLabel(item.display, item.id)}
+                        </Box>
                       </Link>
                     }
                     secondary={

@@ -2,6 +2,7 @@ import { Box, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconLabel } from '../../../components/IconLabel';
+import { RelationshipIcon } from '../../../components/systemIcons';
 import { fileAttributeIcon } from '../../files/fileAttributeIcon';
 import type { Attribute, ComponentReference } from '../../records/api';
 import { attributeLabel } from '../../records/recordDisplay';
@@ -41,6 +42,13 @@ export const ValueField = ({
 }) => {
   const { t } = useTranslation();
   const label = attributeLabel(attribute);
+  // File and relationship labels lead with what the field holds.
+  const labelIcon =
+    attribute.value_type === attributeValueTypes.file
+      ? fileAttributeIcon(attribute)
+      : attribute.value_type === attributeValueTypes.relationship
+        ? RelationshipIcon
+        : undefined;
   // An editor host returns nothing for a value it does not let the user edit.
   const editor = renderEditor?.(attribute, component) ?? null;
   return (
@@ -55,10 +63,8 @@ export const ValueField = ({
           <>
             <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
               <Typography sx={{ fontWeight: 700 }} variant="subtitle2">
-                {attribute.value_type === attributeValueTypes.file ? (
-                  <IconLabel icon={fileAttributeIcon(attribute)}>
-                    {label}
-                  </IconLabel>
+                {labelIcon ? (
+                  <IconLabel icon={labelIcon}>{label}</IconLabel>
                 ) : (
                   label
                 )}
