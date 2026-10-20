@@ -169,7 +169,9 @@ describe('a single relationship value on the record page', () => {
     const link = screen.getByText('Red shirt').closest('a');
     expect(link?.getAttribute('target')).toBe('_blank');
     expect(link?.getAttribute('rel')).toBe('noopener');
-    expect(link?.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: /Opens in a new tab.*Red shirt/ }),
+    ).toBe(link);
   });
 
   it('closes the linked record from beside its link', async () => {

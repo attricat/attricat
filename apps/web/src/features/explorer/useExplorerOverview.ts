@@ -13,9 +13,12 @@ import {
 let runningSearches = 0;
 const waitingSearches: Array<() => void> = [];
 
+// Hands the slot straight to the next waiting search so no new caller can take
+// it in between.
 const releaseSearch = () => {
-  runningSearches -= 1;
-  waitingSearches.shift()?.();
+  const next = waitingSearches.shift();
+  if (next) next();
+  else runningSearches -= 1;
 };
 
 /** Runs `search` once fewer than the allowed overview searches are running. */
@@ -37,7 +40,7 @@ const limitedSearch = async <T>(
       waitingSearches.push(start);
       signal.addEventListener('abort', cancel, { once: true });
     });
-  runningSearches += 1;
+  else runningSearches += 1;
   try {
     return await search();
   } finally {

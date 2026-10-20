@@ -176,12 +176,15 @@ export const CreateRecordPage = ({
           // A background refresh must not disable the fields being filled in.
           isLoadingBlueprint={blueprint.isLoading || create.isPending}
           lockedBlueprint={search.locked}
-          onChangeBlueprint={() =>
+          onChangeBlueprint={() => {
+            // The values and files chosen for the old blueprint are discarded.
+            queuedFiles.clear();
+            setFormKey((key) => key + 1);
             void navigate({
               replace: true,
               search: { ...search, blueprint: undefined },
-            })
-          }
+            });
+          }}
           onCancel={() =>
             canGoBack ? router.history.back() : void navigate({ to: '/' })
           }

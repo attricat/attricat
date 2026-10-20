@@ -5,6 +5,8 @@ import { scalarValueForField } from '../attributeValues';
 import { attributeLabel } from '../recordDisplay';
 import { attributeValueTypes } from '../valueTypes';
 
+const RawValue = ({ text }: { text: string }) => <>{text}</>;
+
 /** A form field's value as the record shows it, such as a choice's label. */
 const ConflictValue = ({
   attribute,
@@ -22,8 +24,9 @@ const ConflictValue = ({
         value: scalar ? (
           <AttributeValueText attribute={attribute} value={scalar.value} />
         ) : (
-          // A value the field cannot parse shows as typed.
-          <>{fieldValue}</>
+          // A value the field cannot parse shows as typed. Trans replaces a
+          // component's children, so the text comes through a prop.
+          <RawValue text={fieldValue} />
         ),
       }}
       i18nKey="records.quotedValue"
