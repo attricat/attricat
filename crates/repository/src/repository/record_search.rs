@@ -983,7 +983,8 @@ impl AttricatRepository {
                           AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
                 FROM records e
                 JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
-                WHERE e.blueprint_id = $1
+                WHERE e.workspace_id = $11
+                  AND e.blueprint_id = $1
                   AND ($2::bigint IS NULL OR e.blueprint_version = $2)
                  AND e.deleted_at IS NULL
                  AND (
@@ -1028,6 +1029,7 @@ impl AttricatRepository {
             .bind(outdated)
             .bind(current_blueprint_version)
             .bind(limit + 1)
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?;
         let mut items: Vec<_> = rows.into_iter().map(record_preview).collect();
@@ -1061,7 +1063,8 @@ impl AttricatRepository {
                  FROM (
                     SELECT 1
                       FROM {records}
-                     WHERE e.blueprint_id = $1
+                     WHERE e.workspace_id = $8
+                       AND e.blueprint_id = $1
                        AND ($2::bigint IS NULL OR e.blueprint_version = $2)
                        AND e.deleted_at IS NULL
                        {matching}
@@ -1077,6 +1080,7 @@ impl AttricatRepository {
         .bind(outdated)
         .bind(current_blueprint_version)
         .bind(limit)
+        .bind(self.workspace_id.0)
         .fetch_one(&self.pool)
         .await?)
     }
