@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use image::{DynamicImage, GenericImageView, ImageEncoder, ImageReader};
+use image::{DynamicImage, GenericImageView, ImageReader};
 use metrics::{counter, gauge};
 use sha2::Digest;
 use sqlx::{PgPool, Row};
@@ -24,6 +24,8 @@ const DEFAULT_MAX_ATTEMPTS: i32 = 5;
 /// Edge length of the square `thumbnail` variant. Clients show thumbnails in
 /// square tiles of up to 128 CSS pixels, so this covers high-density screens.
 const THUMBNAIL_DIMENSION: u32 = 320;
+/// Lossy WebP quality of every image variant.
+const VARIANT_WEBP_QUALITY: f32 = 80.0;
 /// Longest edge for the high-resolution image variant served to clients.
 const DISPLAY_MAX_DIMENSION: u32 = 1600;
 /// Edge length of the square `avatar` variant, enough for high-density screens.
@@ -447,10 +449,11 @@ struct EncodedVariant {
 fn encode_variant(kind: &'static str, image: &DynamicImage) -> Result<EncodedVariant, WorkerError> {
     let rgba = image.to_rgba8();
     let (width, height) = rgba.dimensions();
-    let mut bytes = Vec::new();
-    image::codecs::webp::WebPEncoder::new_lossless(&mut bytes)
-        .write_image(&rgba, width, height, image::ExtendedColorType::Rgba8)
-        .map_err(|error| WorkerError::Image(error.to_string()))?;
+    // Lossless WebP made photo variants larger than their JPEG originals.
+    let bytes = webp::Encoder::from_rgba(&rgba, width, height)
+        .encode_simple(false, VARIANT_WEBP_QUALITY)
+        .map_err(|error| WorkerError::Image(format!("WebP encoding failed: {error:?}")))?
+        .to_vec();
     Ok(EncodedVariant {
         kind,
         width,

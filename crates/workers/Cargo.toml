@@ -33,6 +33,7 @@ tokio-stream.workspace = true
 tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
+webp.workspace = true
 
 [dev-dependencies]
 axum.workspace = true
