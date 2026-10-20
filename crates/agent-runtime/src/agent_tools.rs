@@ -1419,7 +1419,7 @@ pub async fn execute_read(
             struct Input { rule_id: Option<Uuid>, limit: Option<i64>, offset: Option<i64> }
             let input: Input = decode(arguments)?;
             let (limit, offset) = diagnostic_page_arguments(input.limit, input.offset)?;
-            let (items, has_more) = repository.rule_runs_page(input.rule_id, limit, offset).await?;
+            let (items, has_more) = repository.rule_runs_page(input.rule_id, None, limit, offset).await?;
             json!({"items":items.into_iter().map(|run| json!({
                 "id":run.id,"rule_id":run.rule_id,"rule_version":run.rule_version,
                 "scope_record_id":run.scope_record_id,"source":run.source,

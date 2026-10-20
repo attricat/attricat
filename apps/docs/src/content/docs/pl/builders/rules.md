@@ -52,6 +52,8 @@ attribute_code = "title"
 | `event` | `event_type` | Dla zmienionego rekordu, po jednym z: `record.created.v1`, `record.updated.v1`, `record.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
 | `post_import` | | Zarezerwowany dla przyszłej integracji z importem. |
 
+Wyzwalacze decydują, kiedy reguła sprawdza wszystkie rekordy swojej rewizji Schematu. Edycja rekordu zawsze ponownie sprawdza ten rekord względem każdej włączonej reguły jego rewizji, niezależnie od jej wyzwalaczy, więc ustalenia rekordu odpowiadają temu, co zapisano. Wyzwalacz `event` dodaje ponowne uruchomienia dla [zależnych rekordów](#zmiany-w-powiązanych-rekordach).
+
 ### Predykaty
 
 Rekord **nie spełnia** reguły, gdy predykat nie jest spełniony. Reguły używają tych samych predykatów co [kontrole rekordów](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli), [warunki przejść statusu](/pl/builders/validation/#warunki-przejść) i [kontrole kanałów publikacji](/pl/guides/publishing/#wymagaj-kontroli-przed-publikacją). Wszystkie klucze opisuje [dokumentacja Schematu](/pl/reference/blueprint/#predykaty).
@@ -231,6 +233,8 @@ Rekordu, który już narusza egzekwowaną regułę, nie można zapisać, dopóki
 **Zarządzanie → Reguły jakości danych → Ustalenia** wyświetla ustalenia wraz z regułą, rekordem, kontekstem i stanem. Dla każdej kombinacji reguły, rekordu i kontekstu istnieje jedno ustalenie. Gdy późniejsza ocena zakończy się powodzeniem, ustalenie zostaje rozwiązane. Jeśli problem wróci, to samo ustalenie zostaje ponownie otwarte.
 
 **Potwierdź** ustalenie, aby zapisać, że ktoś je widział. Pozostaje ono, dopóki rekord nie spełni reguły.
+
+Strona rekordu wyświetla jego otwarte i potwierdzone ustalenia w sekcji **Jakość danych**; prowadzi do niej oznaczenie jakości danych w nagłówku rekordu. Po edycji lista odświeża się, gdy sprawdzanie rekordu się zakończy. **Sprawdź ponownie** od razu sprawdza rekord względem każdej włączonej reguły jego rewizji, na przykład po zmianie reguły.
 
 ```sh
 acli rule findings --record-id <uuid>

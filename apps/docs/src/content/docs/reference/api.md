@@ -302,6 +302,7 @@ See [Translate labels](/builders/translations/).
 | `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. A dry run may add `"version": 2` to target a published revision that is not enabled; it defaults to the enabled revision, or the latest published one. |
 | `GET` | `/rule-runs`, `/rule-findings` | Runs and findings. A run's `truncated` is `true` when it stopped at its record limit before checking every record. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Replay a dead letter; acknowledge a finding. |
+| `POST` | `/rule-findings/recheck` | Re-check one record against every enabled rule of its revision. Body `{record_id, idempotency_key}`; returns `202 {run_ids}`. Pass `record_id` to `GET /rule-runs` or `/rule-findings` to follow one record. |
 | `POST` | `/workflows/validate` | Validate workflow TOML. |
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | List or create workflows and revisions. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Lifecycle. |

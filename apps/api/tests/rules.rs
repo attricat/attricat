@@ -371,3 +371,99 @@ async fn manual_run_of_a_disabled_rule_explains_it_is_not_enabled(pool: PgPool) 
         .unwrap();
     server.abort();
 }
+
+/// A record change re-checks the record for every enabled rule of its
+/// revision, even one without an event trigger, and the record can be
+/// re-checked on demand.
+#[sqlx::test]
+async fn record_changes_and_rechecks_run_every_enabled_rule_for_the_record(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
+    let repository = AttricatRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
+    let event = sqlx::query_as::<_, api::domain_events::DomainEvent>(
+        "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload FROM domain_events WHERE aggregate_id=$1 ORDER BY sequence DESC LIMIT 1",
+    )
+    .bind(record_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(repository.fan_out_rule_runs(&event).await.unwrap(), 1);
+    // Event delivery is at least once; a redelivered event adds no run.
+    assert_eq!(repository.fan_out_rule_runs(&event).await.unwrap(), 0);
+
+    let recheck = || async {
+        let response: Value = client
+            .post(format!("{base_url}/rule-findings/recheck"))
+            .json(&json!({"record_id": record_id, "idempotency_key": "recheck"}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        response["run_ids"].as_array().unwrap().clone()
+    };
+    let first = recheck().await;
+    assert_eq!(first.len(), 1);
+    assert_eq!(recheck().await, first);
+
+    let runs: Value = client
+        .get(format!("{base_url}/rule-runs?record_id={record_id}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let runs = runs.as_array().unwrap();
+    assert_eq!(runs.len(), 2);
+    assert!(
+        runs.iter()
+            .all(|run| run["scope_record_id"] == json!(record_id)
+                && run["rule_id"] == json!(rule_id))
+    );
+
+    let handler = rule_runtime::task_handler(repository.clone());
+    while let Some(task) = repository
+        .claim_task("recheck-test", Duration::from_secs(30))
+        .await
+        .unwrap()
+    {
+        assert!(matches!(
+            handler.handle(task.clone()).await.unwrap(),
+            TaskOutcome::Complete
+        ));
+        repository
+            .complete_task(task.id, &task.lease_owner, task.lease_token)
+            .await
+            .unwrap();
+    }
+    let findings: Value = client
+        .get(format!("{base_url}/rule-findings?record_id={record_id}"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(findings.as_array().unwrap().len(), 1);
+    assert_eq!(findings[0]["state"], "open");
+
+    let missing = client
+        .post(format!("{base_url}/rule-findings/recheck"))
+        .json(&json!({"record_id": Uuid::new_v4(), "idempotency_key": "missing"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), 404);
+    server.abort();
+}

@@ -448,6 +448,56 @@ impl AttricatRepository {
             Ok(existing)
         }
     }
+    /// Re-checks one record against every enabled rule of its blueprint
+    /// revision with idempotent record-scoped manual runs. Returns the run of
+    /// each rule, including runs an earlier request with the same key created.
+    pub async fn create_record_rule_runs(
+        &self,
+        record_id: Uuid,
+        idempotency_key: &str,
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        if idempotency_key.is_empty() || idempotency_key.len() > 128 || !idempotency_key.is_ascii()
+        {
+            return Err(RepositoryError::InvalidRuleDefinition(
+                "manual idempotency_key must be 1-128 ASCII bytes".into(),
+            ));
+        }
+        let ws = self.workspace_id.0;
+        let mut tx = self.pool.begin().await?;
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM records WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL)",
+        )
+        .bind(ws)
+        .bind(record_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !exists {
+            return Err(RepositoryError::NotFound("record"));
+        }
+        let rules: Vec<(Uuid, i64)> = sqlx::query_as("SELECT r.id,r.version FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id AND l.enabled_version=r.version JOIN records e ON e.id=$2 AND e.workspace_id=r.workspace_id AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version WHERE r.workspace_id=$1 AND r.status='published' ORDER BY r.id FOR SHARE OF l")
+            .bind(ws).bind(record_id).fetch_all(&mut *tx).await?;
+        let mut ids = Vec::with_capacity(rules.len());
+        let mut created = false;
+        for (rule_id, version) in rules {
+            let id = Uuid::new_v4();
+            let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,scope_record_id,idempotency_key) VALUES($1,$2,$3,$4,'manual',$5,$6) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
+                .bind(id).bind(ws).bind(rule_id).bind(version).bind(record_id).bind(idempotency_key).fetch_optional(&mut *tx).await?;
+            match inserted {
+                Some(id) => {
+                    self.enqueue_rule_task(&mut tx, ws, id, None, None).await?;
+                    created = true;
+                    ids.push(id);
+                }
+                None => ids.push(sqlx::query_scalar("SELECT id FROM rule_runs WHERE workspace_id=$1 AND rule_id=$2 AND rule_version=$3 AND source='manual' AND idempotency_key=$4").bind(ws).bind(rule_id).bind(version).bind(idempotency_key).fetch_one(&mut *tx).await?),
+            }
+        }
+        if created {
+            self.commit_mutation(tx).await?;
+        } else {
+            tx.commit().await?;
+        }
+        Ok(ids)
+    }
     /// Event intake only creates bounded record-scoped work. It never executes on the outbox lease.
     pub async fn fan_out_rule_runs(&self, event: &DomainEvent) -> Result<u64, RepositoryError> {
         if event.aggregate_kind != "record" || event.source_name.starts_with("rule:") {
@@ -458,27 +508,28 @@ impl AttricatRepository {
         // Every enabled rule in one read: whether it targets the event
         // record's own revision, and that record's blueprint code.
         let rows: Vec<EventRuleRow> = sqlx::query_as("SELECT r.id, r.version, r.compiled_plan, r.blueprint_id, r.blueprint_version, (e.id IS NOT NULL) AS direct, (SELECT b.code FROM records x JOIN blueprints b ON b.id=x.blueprint_id AND b.version=x.blueprint_version WHERE x.workspace_id=$1 AND x.id=$3) AS event_blueprint FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id LEFT JOIN records e ON e.id=$3 AND e.workspace_id=r.workspace_id AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version AND e.deleted_at IS NULL WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l").bind(ws).bind(event.sequence).bind(event.aggregate_id).fetch_all(&mut *tx).await?;
+        // A change to the record re-evaluates it for every enabled rule of its
+        // revision; dependents re-run only for rules triggered by the event.
+        let record_changed = attricat_rules::is_record_change_event(&event.event_type);
+        let mut runs: Vec<(Uuid, i64, Uuid, String)> = Vec::new();
         let mut rules = Vec::with_capacity(rows.len());
         for row in rows {
             let compiled: attricat_rules::CompiledRule =
                 serde_json::from_value(row.compiled_plan.clone())
                     .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
-            if compiled.triggers.iter().any(|trigger| matches!(trigger, attricat_rules::Trigger::Event { event_type } if event_type == &event.event_type)) {
-                rules.push((row, compiled));
-            }
-        }
-        let mut runs: Vec<(Uuid, i64, Uuid, String)> = rules
-            .iter()
-            .filter(|(row, _)| row.direct)
-            .map(|(row, _)| {
-                (
+            let triggered = compiled.triggers.iter().any(|trigger| matches!(trigger, attricat_rules::Trigger::Event { event_type } if event_type == &event.event_type));
+            if row.direct && (triggered || record_changed) {
+                runs.push((
                     row.id,
                     row.version,
                     event.aggregate_id,
                     event.id.to_string(),
-                )
-            })
-            .collect();
+                ));
+            }
+            if triggered {
+                rules.push((row, compiled));
+            }
+        }
         let mut inserted = self.insert_event_rule_runs(&mut tx, event, &runs).await?;
         runs.clear();
         for (row, compiled) in &rules {
@@ -673,12 +724,13 @@ impl AttricatRepository {
     pub async fn rule_runs_page(
         &self,
         rule_id: Option<Uuid>,
+        record_id: Option<Uuid>,
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<RuleRun>, bool), RepositoryError> {
         let ws = self.workspace_id.0;
-        let mut rows = sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_record_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 AND ($2::uuid IS NULL OR rule_id=$2) ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4")
-            .bind(ws).bind(rule_id).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
+        let mut rows = sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_record_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 AND ($2::uuid IS NULL OR rule_id=$2) AND ($5::uuid IS NULL OR scope_record_id=$5) ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4")
+            .bind(ws).bind(rule_id).bind(limit + 1).bind(offset).bind(record_id).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
         Ok((rows.into_domain(), has_more))

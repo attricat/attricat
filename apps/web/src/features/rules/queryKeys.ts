@@ -6,4 +6,6 @@ export const ruleQueryKeys = {
       ? ([...ruleQueryKeys.all, 'findings', recordId] as const)
       : ([...ruleQueryKeys.all, 'findings'] as const),
   runs: () => [...ruleQueryKeys.all, 'runs'] as const,
+  recordRuns: (recordId: string) =>
+    [...ruleQueryKeys.runs(), 'record', recordId] as const,
 };

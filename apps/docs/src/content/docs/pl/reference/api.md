@@ -302,6 +302,7 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 | `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. Przebieg próbny może dodać `"version": 2`, aby objąć opublikowaną wersję, która nie jest włączona; domyślnie dotyczy wersji włączonej albo najnowszej opublikowanej. |
 | `GET` | `/rule-runs`, `/rule-findings` | Uruchomienia i ustalenia. Pole `truncated` uruchomienia ma wartość `true`, gdy zatrzymało się ono na limicie rekordów, zanim sprawdziło wszystkie. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Ponawia martwą wiadomość; potwierdza ustalenie. |
+| `POST` | `/rule-findings/recheck` | Ponownie sprawdza jeden rekord względem każdej włączonej reguły jego rewizji. Treść `{record_id, idempotency_key}`; zwraca `202 {run_ids}`. Przekaż `record_id` do `GET /rule-runs` lub `/rule-findings`, aby śledzić jeden rekord. |
 | `POST` | `/workflows/validate` | Weryfikuje TOML przepływu pracy. |
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | Wyświetla lub tworzy przepływy pracy i ich wersje. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Cykl życia. |

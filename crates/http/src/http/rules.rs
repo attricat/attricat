@@ -74,12 +74,20 @@ pub(super) async fn run_now(
     let id = repo.create_manual_rule_run(id, input).await?;
     Ok((StatusCode::ACCEPTED, Json(serde_json::json!({ "id": id }))))
 }
+#[derive(Deserialize)]
+pub struct RunsQuery {
+    record_id: Option<Uuid>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
 pub(super) async fn list_runs(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
-    ApiQuery(page): ApiQuery<ArrayPage>,
+    ApiQuery(query): ApiQuery<RunsQuery>,
 ) -> Result<Response, ApiError> {
-    let (limit, offset) = page.bounds()?;
-    let page_items = repo.rule_runs_page(None, limit, offset).await?;
+    let (limit, offset) = ArrayPage::new(query.limit, query.offset).bounds()?;
+    let page_items = repo
+        .rule_runs_page(None, query.record_id, limit, offset)
+        .await?;
     Ok(array_response(page_items, (limit, offset)))
 }
 pub(super) async fn replay_run(
@@ -119,4 +127,23 @@ pub(super) async fn acknowledge(
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<Json<RuleFinding>, ApiError> {
     Ok(Json(repo.acknowledge_rule_finding(id).await?))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecheckRecord {
+    record_id: Uuid,
+    idempotency_key: String,
+}
+/// Re-checks one record against every enabled rule of its blueprint revision.
+pub(super) async fn recheck_record(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+    ApiJson(input): ApiJson<RecheckRecord>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    let ids = repo
+        .create_record_rule_runs(input.record_id, &input.idempotency_key)
+        .await?;
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({ "run_ids": ids })),
+    ))
 }

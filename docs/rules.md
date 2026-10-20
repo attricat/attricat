@@ -27,6 +27,14 @@ attribute_code = "title"
 
 Schedules are six-field UTC cron expressions. Event triggers accept only catalog record and value event types; post-import is a reserved declarative trigger shape. Rules can be attached to a published blueprint revision and optionally to a context.
 
+Triggers decide when a rule checks its blueprint revision as a whole. Changing
+a record (`record.created.v1`, `record.updated.v1`, `record.migrated.v1`,
+`attribute_value.changed.v1`, `attribute_value.restored.v1`,
+`relationship.changed.v1`) always re-checks that record for every enabled rule
+of its revision, whatever the rule's triggers, so a record's findings follow
+its saved state. Dependent records (below) re-run only for rules with a
+matching event trigger.
+
 ## Predicates
 
 Rules share one declarative predicate engine with record-schema checks
@@ -166,7 +174,8 @@ and fail with `422 publication_checks_failed`. See [API](api.md#errors).
 - `POST /rules/{rule_id}/versions/{version}/enable`, with an optional body `{ "accept_existing_violations": true }` for enforcing revisions
 - `POST /rules/{rule_id}/disable`
 - `POST /rules/{rule_id}/run-now` with `{ "record_id": "optional UUID", "dry_run": false, "idempotency_key": "...", "version": 2 }`; `version` is optional. A normal run uses the enabled revision (`version`, if given, must match it). A dry run uses `version`, else the enabled revision, else the latest published revision.
-- `GET /rule-runs`, `POST /rule-runs/{run_id}/replay`, `GET /rule-findings?record_id=...`
+- `GET /rule-runs?record_id=...`, `POST /rule-runs/{run_id}/replay`, `GET /rule-findings?record_id=...`
+- `POST /rule-findings/recheck` with `{ "record_id": "UUID", "idempotency_key": "..." }` re-checks one record against every enabled rule of its blueprint revision and returns `202 { "run_ids": [...] }`, one record-scoped manual run per rule. Repeating the key returns the same runs.
 - `POST /rule-findings/{finding_id}/acknowledge`
 
 Errors: `422 invalid_rule_definition`, `422 rule_not_enabled` (a normal
