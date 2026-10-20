@@ -15,6 +15,7 @@ import {
   type Rule,
   type RuleRun,
 } from './api';
+import { RECORD_RULE_RUN_POLL_MS } from './constants';
 import { RecordFindingsPanel } from './RecordFindingsPanel';
 
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
@@ -134,8 +135,13 @@ describe('RecordFindingsPanel', () => {
     ]);
     await user.click(screen.getByRole('button', { name: 'Re-run checks' }));
     expect(recheckRecord).toHaveBeenCalledWith(recordId);
-    await waitFor(() =>
-      expect(screen.getByText(/No open findings\. Last checked/)).toBeTruthy(),
+    // The finished run arrives with the next poll, a second later.
+    await waitFor(
+      () =>
+        expect(
+          screen.getByText(/No open findings\. Last checked/),
+        ).toBeTruthy(),
+      { timeout: 3 * RECORD_RULE_RUN_POLL_MS },
     );
     expect(screen.queryByText('title is required')).toBeNull();
   });
