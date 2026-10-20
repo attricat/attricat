@@ -53,15 +53,18 @@ const schemaMismatchDetailsSchema = z.object({
   instance_path: z.string().default(''),
 });
 const requiredPropertyPattern = /"([^"]+)" is a required property/;
+const forbiddenPropertyPattern = /"([^"]+)" is not allowed/;
 
 /**
  * The field an `record_schema_mismatch` rejection is about: the first segment
- * of its instance path, or the missing property of a `required` failure.
+ * of its instance path, or the missing property of a `required` failure. A
+ * property that must be absent is reported at its own path.
  */
 export const schemaMismatchField = (
   error: unknown,
   fieldCodes: readonly string[],
-): { code: string; missing: boolean } | undefined => {
+):
+  { code: string; reason: 'missing' | 'forbidden' | 'invalid' } | undefined => {
   if (
     !(error instanceof ApiRequestError) ||
     error.code !== RECORD_SCHEMA_MISMATCH_ERROR_CODE
@@ -74,7 +77,11 @@ export const schemaMismatchField = (
     ? undefined
     : requiredPropertyPattern.exec(error.message)?.[1];
   const code = segment?.replaceAll('~1', '/').replaceAll('~0', '~') ?? missing;
-  return code && fieldCodes.includes(code)
-    ? { code, missing: missing !== undefined }
-    : undefined;
+  const reason =
+    missing !== undefined
+      ? 'missing'
+      : forbiddenPropertyPattern.exec(error.message)?.[1] === code
+        ? 'forbidden'
+        : 'invalid';
+  return code && fieldCodes.includes(code) ? { code, reason } : undefined;
 };

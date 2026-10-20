@@ -382,6 +382,7 @@
     "editField": "Edit {{field}}",
     "changeNotSaved": "This change is not saved yet.",
     "valueRequired": "A value is required.",
+    "valueNotAllowed": "Must be empty with this record’s other values.",
     "changedByAnotherEditor": "Someone else changed this record. Choose whether to keep your unsaved changes or use the latest values.",
     "unsavedFieldChangesTitle": "Unsaved changes",
     "unsavedFieldChangesDescription": "Some changes to this record could not be saved. If you leave, they will be discarded.",

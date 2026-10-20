@@ -99,7 +99,19 @@ describe('schemaMismatchField', () => {
         ),
         ['name'],
       ),
-    ).toEqual({ code: 'name', missing: true });
+    ).toEqual({ code: 'name', reason: 'missing' });
+  });
+
+  it('recognizes a property that must be absent', () => {
+    expect(
+      schemaMismatchField(
+        mismatch(
+          { context: 'default', instance_path: '/size' },
+          'resolved record values for context \'default\' do not match the record schema at \'/size\': "size" is not allowed when "attribute_profile" is "drinkware"',
+        ),
+        ['size'],
+      ),
+    ).toEqual({ code: 'size', reason: 'forbidden' });
   });
 
   it('uses the instance path and ignores fields not on the page', () => {
@@ -107,7 +119,7 @@ describe('schemaMismatchField', () => {
       schemaMismatchField(mismatch({ instance_path: '/price' }, 'too small'), [
         'price',
       ]),
-    ).toEqual({ code: 'price', missing: false });
+    ).toEqual({ code: 'price', reason: 'invalid' });
     expect(
       schemaMismatchField(mismatch({ instance_path: '/hidden' }), ['price']),
     ).toBeUndefined();

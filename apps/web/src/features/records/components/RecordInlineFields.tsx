@@ -219,9 +219,11 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
     const serverErrors: Record<string, string> = {
       ...placedViolations?.fieldErrors,
       ...(schemaField && {
-        [schemaField.code]: schemaField.missing
-          ? t('records.valueRequired')
-          : t('records.schemaValidationFailed'),
+        [schemaField.code]: {
+          missing: t('records.valueRequired'),
+          forbidden: t('records.valueNotAllowed'),
+          invalid: t('records.schemaValidationFailed'),
+        }[schemaField.reason],
       }),
     };
     // A change only reads as not saved once a save failed; marking fields

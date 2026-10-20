@@ -115,18 +115,73 @@ pub fn validate_json_schema(
     let validator = validator(schema)?;
     Ok(validator
         .iter_errors(instance)
-        .map(|error| JsonSchemaViolation {
-            instance_path: error.instance_path().as_str().to_owned(),
-            message: error.masked().to_string(),
+        .map(|error| {
+            forbidden_property(schema, &error).unwrap_or_else(|| JsonSchemaViolation {
+                instance_path: error.instance_path().as_str().to_owned(),
+                message: error.masked().to_string(),
+            })
         })
         .collect())
+}
+
+/// A `not: {"required": [property]}` failure, reported at the property that
+/// must be absent rather than as the raw negated schema. When the `not` is a
+/// `then` whose `if` compares one property with a `const`, the message names
+/// that condition.
+fn forbidden_property(
+    schema: &serde_json::Value,
+    error: &jsonschema::ValidationError<'_>,
+) -> Option<JsonSchemaViolation> {
+    let jsonschema::error::ValidationErrorKind::Not { schema: negated } = error.kind() else {
+        return None;
+    };
+    let negated = negated.as_object().filter(|negated| negated.len() == 1)?;
+    let [property] = negated.get("required")?.as_array()?.as_slice() else {
+        return None;
+    };
+    let property = property.as_str()?;
+    let escaped = property.replace('~', "~0").replace('/', "~1");
+    let mut message = format!("\"{property}\" is not allowed");
+    if let Some((attribute, value)) = error
+        .schema_path()
+        .as_str()
+        .strip_suffix("/then/not")
+        .and_then(|parent| schema.pointer(&format!("{parent}/if")))
+        .and_then(const_condition)
+    {
+        message.push_str(&format!(" when \"{attribute}\" is {value}"));
+    }
+    Some(JsonSchemaViolation {
+        instance_path: format!("{}/{escaped}", error.instance_path().as_str()),
+        message,
+    })
+}
+
+/// The property and value of an `if` that only requires one property to
+/// equal a `const`: `{"properties": {"profile": {"const": "drinkware"}}}`.
+fn const_condition(condition: &serde_json::Value) -> Option<(&str, &serde_json::Value)> {
+    let condition = condition.as_object()?;
+    if condition
+        .keys()
+        .any(|keyword| !matches!(keyword.as_str(), "properties" | "required"))
+    {
+        return None;
+    }
+    let properties = condition.get("properties")?.as_object()?;
+    let (attribute, comparison) = properties.iter().next().filter(|_| properties.len() == 1)?;
+    let comparison = comparison
+        .as_object()
+        .filter(|comparison| comparison.len() == 1)?;
+    Some((attribute.as_str(), comparison.get("const")?))
 }
 
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
-    use super::{CODE_PATTERN, is_valid_code, validate_json_schema, validator};
+    use super::{
+        CODE_PATTERN, JsonSchemaViolation, is_valid_code, validate_json_schema, validator,
+    };
 
     const VALID_CODES: [&str; 4] = ["product", "en_GB", "en-GB", "v2_item"];
     const INVALID_CODES: [&str; 5] = ["", "product name", "product.name", "produit-été", "café"];
@@ -173,6 +228,47 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn forbidden_properties_are_reported_at_the_property() {
+        let schema = serde_json::json!({
+            "allOf": [
+                {
+                    "if": { "properties": { "profile": { "const": "drinkware" } } },
+                    "then": { "not": { "required": ["size"] } }
+                },
+                { "properties": { "dimensions": { "not": { "required": ["a/b"] } } } }
+            ]
+        });
+        let violations = validate_json_schema(
+            &schema,
+            &serde_json::json!({ "profile": "drinkware", "size": "M", "dimensions": { "a/b": 1 } }),
+        )
+        .unwrap();
+        assert_eq!(
+            violations,
+            [
+                JsonSchemaViolation {
+                    instance_path: "/size".to_owned(),
+                    message: "\"size\" is not allowed when \"profile\" is \"drinkware\"".to_owned(),
+                },
+                JsonSchemaViolation {
+                    instance_path: "/dimensions/a~1b".to_owned(),
+                    message: "\"a/b\" is not allowed".to_owned(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn other_negations_keep_the_validator_message() {
+        let schema = serde_json::json!({ "not": { "required": ["a", "b"] } });
+        let violations =
+            validate_json_schema(&schema, &serde_json::json!({ "a": 1, "b": 2 })).unwrap();
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].instance_path, "");
+        assert!(violations[0].message.contains("is not allowed for"));
     }
 
     #[test]
