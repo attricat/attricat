@@ -2113,16 +2113,14 @@ impl AttricatRepository {
             let Some(matching) = matching_record_ids else {
                 return Ok(Vec::new());
             };
-            let mut sources = self
-                .tree_facet_sources(
-                    source_blueprint_id,
-                    source_blueprint_version,
-                    source_path,
-                    context_id,
-                )
-                .await?;
-            sources.retain(|(source, _)| matching.contains(source));
-            Ok(sources)
+            self.tree_facet_sources(
+                source_blueprint_id,
+                source_blueprint_version,
+                Some(matching),
+                source_path,
+                context_id,
+            )
+            .await
         };
         let (parents, nodes, cached_counts, sources) =
             tokio::try_join!(parents, roots, cached_counts, sources)?;
@@ -2285,6 +2283,7 @@ impl AttricatRepository {
                         self.resolved_relationship_edges(
                             target_blueprint_id,
                             None,
+                            None,
                             field,
                             target_blueprint_id,
                             context_id,
@@ -2298,13 +2297,19 @@ impl AttricatRepository {
             .map(Vec::as_slice)
     }
 
-    /// The `(source, node)` pairs a tree facet counts. Every hop's edges are
-    /// resolved at once, each in one query, and joined here. With an empty
-    /// `source_path`, each source record is its own node.
+    /// The `(source, node)` pairs a tree facet counts, for `source_ids` only
+    /// when given. With an empty `source_path`, each source record is its own
+    /// node. Otherwise each hop's edges are resolved in one query and joined
+    /// here. Up to [`TREE_FACET_LISTED_SOURCES`] sources are followed one hop
+    /// after another, each hop reading only the records the one before
+    /// reached, so the cost follows the sources rather than the size of a
+    /// large middle hop. Past that, or when every source counts, reading
+    /// every hop's whole relationship at once is cheaper.
     async fn tree_facet_sources(
         &self,
         source_blueprint_id: Uuid,
         source_blueprint_version: Option<i64>,
+        source_ids: Option<&HashSet<Uuid>>,
         source_path: &[RelationshipFacetHop],
         context_id: Uuid,
     ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
@@ -2317,35 +2322,32 @@ impl AttricatRepository {
             .fetch_all(&self.pool)
             .await?
             .into_iter()
+            .filter(|id| source_ids.is_none_or(|ids| ids.contains(id)))
             .map(|id| (id, id))
             .collect());
         }
-        let hop_sources = std::iter::once(source_blueprint_id)
-            .chain(source_path.iter().map(|hop| hop.target_blueprint_id));
-        let mut hops =
-            futures_util::future::try_join_all(
-                source_path.iter().zip(hop_sources).enumerate().map(
-                    |(index, (hop, blueprint_id))| {
-                        // Only the searched records are limited to one revision.
-                        self.resolved_relationship_edges(
-                            blueprint_id,
-                            source_blueprint_version.filter(|_| index == 0),
-                            &hop.field,
-                            hop.target_blueprint_id,
-                            context_id,
-                        )
-                    },
-                ),
+        let hop_sources: Vec<_> = std::iter::once(source_blueprint_id)
+            .chain(source_path.iter().map(|hop| hop.target_blueprint_id))
+            .collect();
+        let hop_sources = &hop_sources;
+        // Only the searched records are limited to one revision.
+        let hop_edges = |index: usize, from: Option<Vec<Uuid>>| async move {
+            self.resolved_relationship_edges(
+                hop_sources[index],
+                source_blueprint_version.filter(|_| index == 0),
+                from.as_deref(),
+                &source_path[index].field,
+                source_path[index].target_blueprint_id,
+                context_id,
             )
-            .await?
-            .into_iter();
-        let mut pairs = hops.next().expect("the path has a first hop");
-        for edges in hops {
+            .await
+        };
+        let join = |pairs: Vec<(Uuid, Uuid)>, edges: Vec<(Uuid, Uuid)>| {
             let mut targets: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
             for (source, target) in edges {
                 targets.entry(source).or_default().push(target);
             }
-            pairs = pairs
+            pairs
                 .into_iter()
                 .flat_map(|(source, reached)| {
                     targets
@@ -2353,8 +2355,34 @@ impl AttricatRepository {
                         .into_iter()
                         .flatten()
                         .map(move |target| (source, *target))
+                        .collect::<Vec<_>>()
                 })
-                .collect();
+                .collect::<Vec<_>>()
+        };
+        let Some(source_ids) = source_ids.filter(|ids| ids.len() <= TREE_FACET_LISTED_SOURCES)
+        else {
+            let mut hops = futures_util::future::try_join_all(
+                (0..source_path.len()).map(|index| hop_edges(index, None)),
+            )
+            .await?
+            .into_iter();
+            let first = hops.next().expect("the path has a first hop");
+            let mut pairs = hops.fold(first, join);
+            if let Some(source_ids) = source_ids {
+                pairs.retain(|(source, _)| source_ids.contains(source));
+            }
+            return Ok(pairs);
+        };
+        // Each hop holds one value, so it reaches no more records than the
+        // sources: the later lists stay within the limit too.
+        let mut pairs = hop_edges(0, Some(source_ids.iter().copied().collect())).await?;
+        for index in 1..source_path.len() {
+            let reached: HashSet<_> = pairs.iter().map(|(_, reached)| *reached).collect();
+            if reached.is_empty() {
+                break;
+            }
+            let edges = hop_edges(index, Some(reached.into_iter().collect())).await?;
+            pairs = join(pairs, edges);
         }
         Ok(pairs)
     }
@@ -2404,6 +2432,7 @@ impl AttricatRepository {
                 let sources = self.tree_facet_sources(
                     source_blueprint_id,
                     source_blueprint_version,
+                    None,
                     source_path,
                     context_id,
                 );
@@ -2453,6 +2482,7 @@ impl AttricatRepository {
                 .resolved_relationship_edges(
                     source_blueprint_id,
                     None,
+                    None,
                     field,
                     *target_blueprint_id,
                     context_id,
@@ -2478,19 +2508,26 @@ impl AttricatRepository {
     /// `(source, target)` pairs of one relationship field as resolved in
     /// `context_id`: each source reads its values from the nearest context on
     /// the path to the root that has any, unless the field has no fallback.
-    /// `source_blueprint_version` limits the sources to one revision.
+    /// `source_blueprint_version` limits the sources to one revision, and
+    /// `source_ids` to those records, read through the source-side index.
     async fn resolved_relationship_edges(
         &self,
         source_blueprint_id: Uuid,
         source_blueprint_version: Option<i64>,
+        source_ids: Option<&[Uuid]>,
         field: &str,
         target_blueprint_id: Uuid,
         context_id: Uuid,
     ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
+        let sources = if source_ids.is_some() {
+            "JOIN unnest($6::uuid[]) AS listed(id) ON listed.id = av.record_id"
+        } else {
+            ""
+        };
         // Choosing each source's context in one sorted pass, rather than with a
         // per-source LATERAL subquery, keeps this a few index scans and hash
         // joins whose row counts the planner estimates well.
-        Ok(sqlx::query_as::<_, (Uuid, Uuid)>(
+        let query = format!(
             r#"WITH RECURSIVE context_path AS (
                     SELECT id, parent_id, 0 AS depth FROM attribute_contexts WHERE id = $4
                     UNION ALL
@@ -2502,6 +2539,7 @@ impl AttricatRepository {
                     JOIN context_path path ON path.depth = 0 OR a.context_fallback <> 'none'
                     JOIN attribute_values av ON av.attribute_id = a.id AND av.context_id = path.id
                      AND av.active AND av.relationship_target_record_id IS NOT NULL
+                    {sources}
                     JOIN records source ON source.id = av.record_id AND source.blueprint_id = $1
                      AND source.blueprint_version = a.blueprint_version AND source.deleted_at IS NULL
                     WHERE a.blueprint_id = $1 AND a.code = $2
@@ -2514,15 +2552,18 @@ impl AttricatRepository {
                  AND av.attribute_id = chosen.attribute_id AND av.context_id = chosen.context_id
                  AND av.active AND av.relationship_target_record_id IS NOT NULL
                 JOIN records target ON target.id = av.relationship_target_record_id
-                WHERE target.blueprint_id = $3 AND target.deleted_at IS NULL"#,
-        )
-        .bind(source_blueprint_id)
-        .bind(field)
-        .bind(target_blueprint_id)
-        .bind(context_id)
-        .bind(source_blueprint_version)
-        .fetch_all(&self.pool)
-        .await?)
+                WHERE target.blueprint_id = $3 AND target.deleted_at IS NULL"#
+        );
+        let mut query = sqlx::query_as::<_, (Uuid, Uuid)>(&query)
+            .bind(source_blueprint_id)
+            .bind(field)
+            .bind(target_blueprint_id)
+            .bind(context_id)
+            .bind(source_blueprint_version);
+        if let Some(source_ids) = source_ids {
+            query = query.bind(source_ids);
+        }
+        Ok(query.fetch_all(&self.pool).await?)
     }
 
     /// Resolves the application-owned relationship-aware query plan. SQL only reads
@@ -3532,6 +3573,12 @@ fn encode_sorted_search_cursor(sort: &RecordSearchSort, row: &SortedRecordPrevie
     };
     URL_SAFE_NO_PAD.encode(serde_json::to_vec(&cursor).expect("cursor serializes"))
 }
+
+/// Most matching sources a tree facet reads by listing them, hop by hop. With
+/// 100,000 sources behind a path, listing 11,000 of them reads each hop about
+/// four times faster than its whole relationship, while listing all of them
+/// is slower than reading everything at once (see `perf/facets.md`).
+const TREE_FACET_LISTED_SOURCES: usize = 20_000;
 
 /// How long cached tree facet counts are served before a reload.
 const TREE_FACET_COUNTS_FRESH: Duration = Duration::from_secs(30);

@@ -187,11 +187,16 @@ pagination, but the API only returns the requested root or child page. A page
 reads the tree's parent edges fresh and takes counts from the cache described
 in [Counts And Selection](#counts-and-selection); with a search term, it
 resolves every matching source edge and counts the page's subtrees in memory.
-For a relationship path, counting resolves each hop's edges concurrently, one
-query per hop, and joins them in memory; a selection walks down the selected
+For a relationship path, counting resolves each hop's edges with one query per
+hop and joins them in memory. Without a search term the hops are read
+concurrently in full. With a term matching at most 20,000 sources, the hops are
+read in turn, each only for the records the hop before reached, so a large
+middle hop costs in proportion to the matches; a broader term reads every hop
+in full and keeps the matching sources. A selection walks down the selected
 subtrees and then back one hop per query through the target-side indexes.
-`apps/api/tests/facet_latency.rs` measures both cases, for a direct field and a
-two-hop path (see `perf/facets.md`). `RELATIONSHIP_FACET_MAX_NODES` sets the server-side maximum number of
+`apps/api/tests/facet_latency.rs` measures a direct field, a two-hop path with
+a small middle hop, and two- and three-hop paths whose middle hop has a record
+per source (see `perf/facets.md`). `RELATIONSHIP_FACET_MAX_NODES` sets the server-side maximum number of
 nodes returned for each page (default: 100).
 
 Large taxonomies should retain indexes for relationship target lookups. The

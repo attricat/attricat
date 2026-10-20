@@ -13,7 +13,12 @@ OTEL_EXPORTER_OTLP_TRACES_ENDPOINT= RUST_LOG=warn \
 
 The products also link to 1,000 product lines, each in a leaf category, so
 the same scenarios run over the two-hop path `line.category` (every tenth
-product and line overrides its hop in the child context).
+product and line overrides its hop in the child context). Each product also
+has its own listing, in the product's category and line, for paths whose
+middle hop is as large as the source: `listing.category` and
+`listing.line.category`. Search terms cover three widths: "12" matches 3,970
+products, "7" 40,951 and "Product 1" 40,952 (its terms "Product" and "1" are
+matched separately).
 
 `FACET_BENCH_PRODUCTS` changes the product count. Each scenario runs once and
 then ten more times, which is past the five executions after which PostgreSQL
@@ -74,25 +79,51 @@ of generic plans (see below).
 ## Relationship paths
 
 A facet may follow up to three relationship hops (`source_relationship_field
-= "line.category"`). Browse rail counts resolve each hop's edges concurrently,
-one query per hop, and join them in memory; search selections walk down the
-selected subtrees and then back one hop per query through the target-side
-indexes. Medians for the same 100,000 products (release build, cached counts
-apply as for a direct field and are keyed by the path):
+= "line.category"`). Search selections walk down the selected subtrees and
+then back one hop per query through the target-side indexes. Browse rail
+counts read each hop's edges with one query per hop and join them in memory:
 
-| Scenario | Direct `category` | Path `line.category` |
+- Without a search term every source counts, so each hop reaches nearly all
+  of its records anyway. The hops' whole relationships are read concurrently,
+  and the counts are cached as for a direct field, keyed by the path.
+- With a search term matching at most 20,000 sources
+  (`TREE_FACET_LISTED_SOURCES`), the first hop reads only the matching
+  sources and each later hop only the records the hop before reached, through
+  the source-side index. Every hop is single-valued, so no later list is
+  longer than the first. A broader term reads every hop's whole relationship
+  concurrently and keeps the matching sources, as listing nearly every record
+  is slower than reading the relationship.
+
+Medians for 100,000 products (release build). "Before" read every hop's whole
+relationship for search terms too:
+
+| Scenario | Before | After |
 | --- | ---: | ---: |
-| Browse: root level, first request | 213 ms | 182 ms |
-| Browse: root level, cached | 14 ms | 14 ms |
-| Browse: root level, child context, first request | 176 ms | 160 ms |
-| Browse: expand a level-2 node | 13 ms | 15 ms |
-| Browse: root level, query "Product 1" | 451 ms | 497 ms |
-| Search: root selected | 99 ms | 97 ms |
-| Search: root selected, child context | 102 ms | 101 ms |
-| Search: level-2 node selected | 8 ms | 11 ms |
+| Browse `category`: root level, cached | 15 ms | 14 ms |
+| Browse `category`: query "12" | 211 ms | 98 ms |
+| Browse `line.category`: root level, cached | 14 ms | 14 ms |
+| Browse `line.category`: query "12" | 223 ms | 114 ms |
+| Browse `listing.category`: root level, first request | 392 ms | 378 ms |
+| Browse `listing.category`: root level, cached | 14 ms | 15 ms |
+| Browse `listing.category`: query "12" | 398 ms | 122 ms |
+| Browse `listing.category`: query "7" | 519 ms | 506 ms |
+| Browse `listing.line.category`: query "12" | 387 ms | 124 ms |
+| Search `line.category`: root selected | 105 ms | 104 ms |
+| Search `listing.category`: root selected | 203 ms | 206 ms |
+| Search `listing.line.category`: root selected | 191 ms | 194 ms |
 
-The second hop adds one small edge query (1,000 lines) and a hash join over
-the first hop's 100,000 edges, which is within run-to-run noise.
+Queries matching more than 20,000 sources take the unchanged path; their
+medians varied by up to 100 ms between runs ("Product 1": 547–660 ms for
+`category`, 782–817 ms for `listing.category`), dominated by resolving the
+term. In isolation, the listed read of one 100,000-record hop took 84 ms for
+11,112 sources against 366 ms for the whole relationship, and 422 ms for all
+100,000 sources, which sets the limit.
+
+The first uncached page of a path with a large middle hop still reads that
+hop's whole relationship: about 380 ms for `listing.category` against about
+240 ms for `line.category`, after which counts come from the cache. Selecting
+a root through `listing` reaches about 10,000 listings and products, about
+200 ms against 100 ms through the 1,000 product lines.
 
 ## Remaining cost
 

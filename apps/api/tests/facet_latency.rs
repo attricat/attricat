@@ -11,7 +11,10 @@
 //! overrides its category in a child context. Products also link to one of
 //! 1,000 product lines, each in a leaf category, for the two-hop path
 //! `line.category`; every tenth product and line overrides its hop in the
-//! child context. See `perf/facets.md` for results.
+//! child context. Each product also has its own listing, in the product's
+//! category and line, for paths whose middle hop is as large as the source:
+//! `listing.category` and `listing.line.category`. See `perf/facets.md` for
+//! results.
 
 mod support;
 
@@ -72,6 +75,39 @@ value_type = "string"
 code = "category"
 value_type = "relationship"
 target_blueprint = "bench_category"
+
+[[attributes]]
+code = "line"
+value_type = "relationship"
+target_blueprint = "bench_line"
+cardinality = "one"
+
+[[attributes]]
+code = "listing"
+value_type = "relationship"
+target_blueprint = "bench_listing"
+cardinality = "one"
+"#;
+
+const LISTING: &str = r#"
+format_version = 1
+code = "bench_listing"
+name = "Bench listing"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "category"
+value_type = "relationship"
+target_blueprint = "bench_category"
+cardinality = "one"
 
 [[attributes]]
 code = "line"
@@ -157,6 +193,19 @@ INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relations
 SELECT gen_random_uuid(), p.id, $15, $9, l.id
 FROM bench_product p JOIN bench_line_rn l ON l.rn = 1 + (hashint4(p.i + 13) & 2147483647) % 1000
 WHERE p.i % 10 = 0;
+
+CREATE TEMP TABLE bench_listing AS
+SELECT gen_random_uuid() AS id, p.id AS product, p.category, l.id AS line
+FROM bench_product p JOIN bench_line_rn l ON l.rn = 1 + (hashint4(p.i + 11) & 2147483647) % 1000;
+INSERT INTO records (id, blueprint_id, blueprint_version, projections)
+SELECT id, $16, 1, jsonb_build_object('preview', '{}'::jsonb)
+FROM bench_listing;
+INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relationship_target_record_id)
+SELECT gen_random_uuid(), id, $17, $8, category FROM bench_listing;
+INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relationship_target_record_id)
+SELECT gen_random_uuid(), id, $18, $8, line FROM bench_listing;
+INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relationship_target_record_id)
+SELECT gen_random_uuid(), product, $19, $8, id FROM bench_listing;
 "#;
 
 #[sqlx::test]
@@ -166,6 +215,7 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
     let client = authenticated_client();
     let category = create_blueprint(&client, &base_url, CATEGORY).await;
     let line = create_blueprint(&client, &base_url, LINE).await;
+    let listing = create_blueprint(&client, &base_url, LISTING).await;
     let product = create_blueprint(&client, &base_url, PRODUCT).await;
     let child_context: Value = client
         .post(format!("{base_url}/contexts"))
@@ -183,6 +233,7 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
     let category_id = blueprint_id(&category);
     let product_id = blueprint_id(&product);
     let line_id = blueprint_id(&line);
+    let listing_id = blueprint_id(&listing);
     let attribute = |blueprint: Uuid, code: &'static str| {
         let pool = pool.clone();
         async move {
@@ -223,6 +274,10 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
                 13 => query.bind(attribute(line_id, "name").await),
                 14 => query.bind(attribute(line_id, "category").await),
                 15 => query.bind(attribute(product_id, "line").await),
+                16 => query.bind(listing_id),
+                17 => query.bind(attribute(listing_id, "category").await),
+                18 => query.bind(attribute(listing_id, "line").await),
+                19 => query.bind(attribute(product_id, "listing").await),
                 _ => unreachable!(),
             };
         }
@@ -317,6 +372,11 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
             "browse: root level, query \"Product 1\"",
             children("category", default_context, None, Some("Product 1")),
         ),
+        // "12" matches about 4% of products, "7" about 41%, "Product 1" all.
+        (
+            "browse: root level, query \"12\"",
+            children("category", default_context, None, Some("12")),
+        ),
         (
             "search: no facet (reference)",
             search("category", default_context, None, None),
@@ -355,6 +415,10 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
             children("line.category", default_context, None, Some("Product 1")),
         ),
         (
+            "path browse: root level, query \"12\"",
+            children("line.category", default_context, None, Some("12")),
+        ),
+        (
             "path search: root selected",
             search("line.category", default_context, Some(root), None),
         ),
@@ -365,6 +429,39 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
         (
             "path search: level 2 selected",
             search("line.category", default_context, Some(level_2), None),
+        ),
+        // A middle hop with a record per product.
+        (
+            "large-hop browse: root level",
+            children("listing.category", default_context, None, None),
+        ),
+        (
+            "large-hop browse: root level, query \"Product 1\"",
+            children("listing.category", default_context, None, Some("Product 1")),
+        ),
+        (
+            "large-hop browse: root level, query \"12\"",
+            children("listing.category", default_context, None, Some("12")),
+        ),
+        (
+            "large-hop browse: root level, query \"7\"",
+            children("listing.category", default_context, None, Some("7")),
+        ),
+        (
+            "large-hop search: root selected",
+            search("listing.category", default_context, Some(root), None),
+        ),
+        (
+            "three-hop browse: root level",
+            children("listing.line.category", default_context, None, None),
+        ),
+        (
+            "three-hop browse: root level, query \"12\"",
+            children("listing.line.category", default_context, None, Some("12")),
+        ),
+        (
+            "three-hop search: root selected",
+            search("listing.line.category", default_context, Some(root), None),
         ),
     ];
     // Ten samples after the first exceed the five executions after which
