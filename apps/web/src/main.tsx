@@ -24,8 +24,7 @@ const queryClient = new QueryClient({
 // Reads that many views mount at once, such as the Explorer and its record
 // panel, would otherwise be fetched again by every component that mounts
 // them. Changes made in the app invalidate them; changes made elsewhere show
-// within the stale time or on window focus once it has passed.
-const sharedReadStaleTimeMs = 60_000;
+// when the window regains focus.
 for (const queryKey of [
   authQueryKeys.session(),
   contextQueryKeys.all(),
@@ -33,7 +32,8 @@ for (const queryKey of [
   recordQueryKeys.blueprintsByCode(),
 ])
   queryClient.setQueryDefaults(queryKey, {
-    staleTime: sharedReadStaleTimeMs,
+    staleTime: Infinity,
+    refetchOnWindowFocus: 'always',
   });
 // Published revisions never change.
 queryClient.setQueryDefaults(recordQueryKeys.pinnedBlueprintRevisions(), {
