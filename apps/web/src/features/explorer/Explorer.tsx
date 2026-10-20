@@ -128,6 +128,8 @@ export const Explorer = ({
       to: '/',
       search: (previous) => ({ ...previous, record }),
       replace: true,
+      // The panel floats over the results; keep the reader's place in them.
+      resetScroll: false,
     });
   // Clicking the record already in the panel again opens its full page.
   const openPanel: OpenRecordPanel = (recordId, opener) => {
