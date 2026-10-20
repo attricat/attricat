@@ -12,6 +12,13 @@ import {
 const referencePattern =
   /^(user|team):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
+// Every string cell of a table asks for its column's configuration, so each
+// attribute's configuration is parsed once.
+const principalConfigurations = new WeakMap<
+  Attribute,
+  PrincipalConfiguration | undefined
+>();
+
 /** The assignment configuration of a string attribute, if it has one. */
 export const principalConfiguration = (
   attribute: Attribute,
@@ -22,10 +29,14 @@ export const principalConfiguration = (
     typeof attribute.value_schema !== 'object'
   )
     return undefined;
+  if (principalConfigurations.has(attribute))
+    return principalConfigurations.get(attribute);
   const result = principalConfigurationSchema.safeParse(
     attribute.value_schema[PRINCIPAL_SCHEMA_KEY],
   );
-  return result.success ? result.data : undefined;
+  const configuration = result.success ? result.data : undefined;
+  principalConfigurations.set(attribute, configuration);
+  return configuration;
 };
 
 export type PrincipalReference = { kind: PrincipalKind; id: string };

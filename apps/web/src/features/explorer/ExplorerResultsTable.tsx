@@ -60,6 +60,18 @@ const ExplorerColumnPreferencesDialog = lazy(() =>
   ),
 );
 
+// Rows of one blueprint's table have similar heights. A table mounted again,
+// such as for a new search, starts from the last measured rows so it renders
+// only the rows that fit instead of those the generic estimate allows.
+const measuredRowHeights = new Map<string, number>();
+const rememberRowHeight = (blueprintId: string, height: number) => {
+  const previous = measuredRowHeights.get(blueprintId);
+  measuredRowHeights.set(
+    blueprintId,
+    previous === undefined ? height : (previous * 3 + height) / 4,
+  );
+};
+
 type Props = {
   blueprint: BlueprintWithAttributes;
   hasNextPage: boolean;
@@ -136,10 +148,17 @@ export const ExplorerResultsTable = ({
   // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: items.length + (hasNextPage ? 1 : 0),
-    estimateSize: () => estimatedResultRowHeight,
+    estimateSize: () =>
+      measuredRowHeights.get(blueprint.blueprint.id) ??
+      estimatedResultRowHeight,
     getItemKey: (index) => items[index]?.id ?? loadMoreRowKey,
     getScrollElement: () => tableContainerRef.current,
-    measureElement: (element) => element?.getBoundingClientRect().height,
+    measureElement: (element) => {
+      const height = element.getBoundingClientRect().height;
+      if (Number(element.dataset.index) < items.length)
+        rememberRowHeight(blueprint.blueprint.id, height);
+      return height;
+    },
     overscan: resultRowOverscan,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();

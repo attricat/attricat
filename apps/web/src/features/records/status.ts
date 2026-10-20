@@ -74,6 +74,13 @@ export const statusConfigurationSchema = z
   .strict();
 export type StatusConfiguration = z.infer<typeof statusConfigurationSchema>;
 
+// Every status cell of a table asks for its column's configuration, so each
+// attribute's configuration is parsed once.
+const statusConfigurations = new WeakMap<
+  Attribute,
+  StatusConfiguration | undefined
+>();
+
 export const statusConfiguration = (
   attribute: Attribute,
 ): StatusConfiguration | undefined => {
@@ -83,10 +90,14 @@ export const statusConfiguration = (
     typeof attribute.value_schema !== 'object'
   )
     return undefined;
+  if (statusConfigurations.has(attribute))
+    return statusConfigurations.get(attribute);
   const result = statusConfigurationSchema.safeParse(
     attribute.value_schema[STATUS_SCHEMA_KEY],
   );
-  return result.success ? result.data : undefined;
+  const configuration = result.success ? result.data : undefined;
+  statusConfigurations.set(attribute, configuration);
+  return configuration;
 };
 
 export const statusTransitionAllowed = (

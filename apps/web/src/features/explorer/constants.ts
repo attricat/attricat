@@ -89,7 +89,9 @@ export const maximumExplorerCellFrames = 32;
 
 // Result table virtualization.
 export const estimatedResultRowHeight = 53;
-export const resultRowOverscan = 10;
+// Rows re-render only when their data changes, so a short overscan is enough
+// to keep fast scrolling from showing blank space.
+export const resultRowOverscan = 5;
 /** Records previewed per blueprint when no blueprint is chosen. */
 export const overviewRecordsPerBlueprint = 5;
 /** Overview searches sent at once; the rest wait their turn. */
