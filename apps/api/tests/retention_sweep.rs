@@ -240,17 +240,38 @@ async fn task_retention_keeps_queued_leased_dead_lettered_and_recent_envelopes(p
     let queued = insert("queued", 30).await;
     let leased = insert("leased", 30).await;
     let dead_letter = insert("dead_letter", 30).await;
+    // A replay supersedes an earlier dead-lettered generation.
+    let superseded = Uuid::new_v4();
+    sqlx::query("UPDATE tasks SET generation = 1 WHERE id = $1")
+        .bind(dead_letter)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO tasks (id, workspace_id, kind, envelope_version, subject_id, generation, status, max_failures, created_at, failed_at) SELECT $1, workspace_id, kind, 1, subject_id, 0, 'dead_letter', 3, created_at, created_at FROM tasks WHERE id = $2")
+        .bind(superseded)
+        .bind(dead_letter)
+        .execute(&pool)
+        .await
+        .unwrap();
     let repository = AttricatRepository::system(pool.clone());
     assert_eq!(
         repository.purge_tasks_batch(days(7), 1000).await.unwrap(),
-        1
+        2
     );
     let remaining: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM tasks WHERE id = ANY($1)")
-        .bind(vec![expired, recent, queued, leased, dead_letter])
+        .bind(vec![
+            expired,
+            superseded,
+            recent,
+            queued,
+            leased,
+            dead_letter,
+        ])
         .fetch_all(&pool)
         .await
         .unwrap();
-    assert!(!remaining.contains(&expired));
+    assert!(!remaining.contains(&expired) && !remaining.contains(&superseded));
+    // The latest dead letter stays for replay, however old.
     for live in [recent, queued, leased, dead_letter] {
         assert!(remaining.contains(&live), "{live} was purged");
     }
@@ -270,9 +291,10 @@ async fn event_retention_never_removes_undelivered_or_unconsumed_events(pool: Pg
                 .unwrap()
         }
     };
-    let delivered = event().await;
+    // Held events come first, so the resumable scan has to step past them.
     let pending = event().await;
     let dead_lettered = event().await;
+    let delivered = event().await;
     let unconsumed = event().await;
     let newest = event().await;
     // Every consumer has passed all but the last two events.
@@ -283,7 +305,7 @@ async fn event_retention_never_removes_undelivered_or_unconsumed_events(pool: Pg
         .unwrap();
     sqlx::query("UPDATE event_consumers SET watermark = $2 WHERE workspace_id = $1")
         .bind(workspace())
-        .bind(dead_lettered.1)
+        .bind(delivered.1)
         .execute(&pool)
         .await
         .unwrap();
@@ -325,6 +347,12 @@ async fn event_retention_never_removes_undelivered_or_unconsumed_events(pool: Pg
     let delivered_task = deliver(delivered.0, "completed").await;
     deliver(pending.0, "pending").await;
     deliver(dead_lettered.0, "dead_letter").await;
+    // A replayed delivery also leaves its earlier dead-lettered generation.
+    sqlx::query("INSERT INTO tasks (id, workspace_id, kind, envelope_version, subject_id, generation, status, max_failures, created_at) SELECT gen_random_uuid(), workspace_id, kind, 1, subject_id, 1, 'dead_letter', 3, created_at FROM tasks WHERE id = $1")
+        .bind(delivered_task)
+        .execute(&pool)
+        .await
+        .unwrap();
 
     let repository = AttricatRepository::system(pool.clone());
     // The completed envelope is not purged while its delivery exists.
@@ -339,10 +367,13 @@ async fn event_retention_never_removes_undelivered_or_unconsumed_events(pool: Pg
             .await
             .unwrap();
     assert!(workspace_events >= 5);
-    repository
-        .purge_domain_events_batch(days(90), 1000)
-        .await
-        .unwrap();
+    // One event per batch: two batches step past the held events.
+    for _ in 0..3 {
+        repository
+            .purge_domain_events_batch(days(90), 1)
+            .await
+            .unwrap();
+    }
     let remaining: Vec<Uuid> =
         sqlx::query_scalar("SELECT id FROM domain_events WHERE id = ANY($1)")
             .bind(vec![
@@ -359,8 +390,10 @@ async fn event_retention_never_removes_undelivered_or_unconsumed_events(pool: Pg
     for kept in [pending.0, dead_lettered.0, unconsumed.0, newest.0] {
         assert!(remaining.contains(&kept), "{kept} was purged");
     }
-    let delivered_task_left: i64 = sqlx::query_scalar("SELECT count(*) FROM tasks WHERE id = $1")
-        .bind(delivered_task)
+    let delivered_task_left: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM tasks WHERE subject_id = (SELECT subject_id FROM tasks WHERE id = $1) OR id = $1",
+    )
+    .bind(delivered_task)
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -417,6 +450,16 @@ async fn change_feed_rejects_a_cursor_older_than_purged_events(pool: PgPool) {
         .await
         .unwrap_err();
     assert!(error.to_string().contains("expired"), "{error}");
+    // Paging that starts after the purge reads retained events below it.
+    let fresh = repository
+        .extension_attricat_changes(blueprint, 1, None, 1)
+        .await
+        .unwrap();
+    let fresh = repository
+        .extension_attricat_changes(blueprint, 1, fresh.next_cursor, 1)
+        .await
+        .unwrap();
+    assert_eq!(fresh.events.len(), 1);
     let resumed = repository
         .extension_attricat_changes(blueprint, 1, resumed.next_cursor, 1)
         .await

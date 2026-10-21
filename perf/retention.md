@@ -23,16 +23,22 @@ container (not the development database), with 1,000-row batches. Seeded rows:
 | --- | ---: | --- |
 | `purge_tasks_batch` | 45 ms | `tasks_terminal_retention_idx` range scan, anti-join on `event_deliveries_task_id_unique_idx`. 12 ms is the `event_deliveries.task_id` FK check. |
 | `purge_rule_runs_batch` (select, envelope delete, run delete) | 32 ms | `rule_runs_terminal_retention_idx` range scan. Probes `rule_runs_version_created_idx` ("is there a newer run?"), `rule_runs_enable_gate_idx` and the tasks unique key once per row. |
-| `purge_domain_events_batch` (select, delivery, envelope and event deletes) | 90 ms | `domain_events_occurred_at_idx` range scan. Per-workspace max via `domain_events_workspace_sequence_idx`, unfinished deliveries via `event_deliveries_poll_idx`. |
+| `purge_domain_events_batch` (select, delivery, envelope and event deletes) | 90 ms | Per-workspace range scan of `domain_events_workspace_sequence_idx` from the stored scan cursor to the ceiling. Probes `event_deliveries_event_idx` and the tasks unique key once per examined event. |
 
 With the default 10-second budget, one sweep drains roughly 100k–300k rows per
 family when it is the only family with a backlog. Families share the budget
 round-robin, one batch each in turn.
 
-An earlier draft of the event batch checked unfinished deliveries with
-`d.status <> 'completed'`. The planner ran that as a sequential scan of all
-1M deliveries, taking 48 ms on its own. `d.status IN ('pending', 'leased',
-'dead_letter')` uses the status index and takes 4 ms.
+The event batch examines at most `RETENTION_BATCH_ROWS` events per workspace
+and resumes from `domain_event_retention.scan_after_sequence`. Events held by a
+dead letter therefore cost one pass per cycle rather than one per batch. With
+the first 200k events held by dead-lettered deliveries, the examine query
+still took 5.6 ms (4.5 ms with nothing held, 67 ms cold).
+
+An earlier draft scanned `domain_events_occurred_at_idx` across all
+workspaces and checked unfinished deliveries with `d.status <> 'completed'`.
+The planner ran that as a sequential scan of all 1M deliveries, which took
+48 ms on its own and grew with every held row.
 
 ## Reproduce
 

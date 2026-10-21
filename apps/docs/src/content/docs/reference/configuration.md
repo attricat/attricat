@@ -146,7 +146,7 @@ Every minute the API deletes old operational data in small batches: finished bac
 | `RETENTION_SWEEP_BUDGET_SECONDS` | `10` | Longest one cleanup runs, 1 to 3600 seconds and no longer than the interval. |
 | `RETENTION_BATCH_ROWS` | `1000` | Most rows deleted per table in one transaction, 1 to 10000. Each statement must finish within 2 seconds, so raise the budget before raising this. |
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Earlier attribute values. Current values are never deleted. |
-| `TASK_RETENTION_DAYS` | `7` | Finished background task records. Failed tasks stay until their run is deleted, so they can be retried. |
+| `TASK_RETENTION_DAYS` | `7` | Finished background task records. The latest failed attempt stays until its run is deleted, so it can be retried. |
 | `RULE_RUN_RECORD_RETENTION_DAYS` | `7` | Finished rule checks of a single record. |
 | `RULE_RUN_RETENTION_DAYS` | `90` | Finished full rule runs and failed rule runs. Each rule version keeps its latest run and its latest completed dry run, so enabling it again does not need a new dry run. |
 | `WORKFLOW_RUN_RETENTION_DAYS` | `90` | Finished workflow runs. |
@@ -154,7 +154,7 @@ Every minute the API deletes old operational data in small batches: finished bac
 | `AGENT_RUN_EVENT_RETENTION_DAYS` | `90` | The live progress stream of finished agent runs. Conversations, their messages and tool calls stay. |
 | `FILE_PROCESSING_JOB_RETENTION_DAYS` | `30` | Finished file metadata jobs. File purge jobs stay. |
 | `SOLUTION_PACK_CHECK_RUN_RETENTION_DAYS` | `90` | Manual solution pack check runs. Each application keeps its post-apply check and its latest check. |
-| `DOMAIN_EVENT_RETENTION_DAYS` | `90` | Events that every handler and extension has received. Events with an undelivered or failed delivery stay, so failed deliveries can always be replayed. An extension that resumes the change feed from a cursor older than the deleted events gets a "cursor has expired" error and must take a new snapshot. |
+| `DOMAIN_EVENT_RETENTION_DAYS` | `90` | Events that every handler and extension has received. Events with an undelivered or failed delivery stay, so failed deliveries can always be replayed. An extension that resumes the change feed from a cursor issued before events after it were deleted gets a "cursor has expired" error and must take a new snapshot. An event handler or extension that no longer runs holds back cleanup for its workspace until it is removed. |
 | `BROWSER_SESSION_RETENTION_DAYS` | `7` | Expired and signed-out browser sessions. |
 | `USER_ACTION_TOKEN_RETENTION_DAYS` | `7` | Used or expired email verification and password links. |
 | `WORKSPACE_INVITATION_RETENTION_DAYS` | `30` | Expired or revoked invitations. Accepted invitations stay. |

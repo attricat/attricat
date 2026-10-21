@@ -146,7 +146,7 @@ Co minutę API usuwa w małych partiach stare dane operacyjne: zakończoną prac
 | `RETENTION_SWEEP_BUDGET_SECONDS` | `10` | Najdłuższy czas jednego czyszczenia, od 1 do 3600 sekund i nie dłużej niż odstęp. |
 | `RETENTION_BATCH_ROWS` | `1000` | Najwięcej wierszy usuwanych z tabeli w jednej transakcji, od 1 do 10000. Każda instrukcja musi zakończyć się w ciągu 2 sekund, więc najpierw zwiększ limit czasu przebiegu. |
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Wcześniejsze wartości atrybutów. Bieżące wartości nigdy nie są usuwane. |
-| `TASK_RETENTION_DAYS` | `7` | Wpisy zakończonych zadań w tle. Nieudane zadania zostają do usunięcia ich uruchomienia, aby można je było ponowić. |
+| `TASK_RETENTION_DAYS` | `7` | Wpisy zakończonych zadań w tle. Ostatnia nieudana próba zostaje do usunięcia jej uruchomienia, aby można ją było ponowić. |
 | `RULE_RUN_RECORD_RETENTION_DAYS` | `7` | Zakończone sprawdzenia reguł dla pojedynczego rekordu. |
 | `RULE_RUN_RETENTION_DAYS` | `90` | Zakończone pełne uruchomienia reguł oraz nieudane uruchomienia. Każda wersja reguły zachowuje swoje ostatnie uruchomienie i ostatni ukończony przebieg próbny, więc ponowne włączenie nie wymaga nowego przebiegu próbnego. |
 | `WORKFLOW_RUN_RETENTION_DAYS` | `90` | Zakończone uruchomienia przepływów pracy. |
@@ -154,7 +154,7 @@ Co minutę API usuwa w małych partiach stare dane operacyjne: zakończoną prac
 | `AGENT_RUN_EVENT_RETENTION_DAYS` | `90` | Strumień postępu zakończonych uruchomień agentów. Rozmowy, ich wiadomości i wywołania narzędzi zostają. |
 | `FILE_PROCESSING_JOB_RETENTION_DAYS` | `30` | Zakończone zadania odczytu metadanych plików. Zadania usuwania plików zostają. |
 | `SOLUTION_PACK_CHECK_RUN_RETENTION_DAYS` | `90` | Ręczne uruchomienia sprawdzeń pakietów rozwiązań. Każde zastosowanie zachowuje sprawdzenie po zastosowaniu i ostatnie sprawdzenie. |
-| `DOMAIN_EVENT_RETENTION_DAYS` | `90` | Zdarzenia odebrane przez wszystkie procedury obsługi i rozszerzenia. Zdarzenia z niedostarczonym lub nieudanym dostarczeniem zostają, więc nieudane dostarczenia zawsze można powtórzyć. Rozszerzenie, które wznawia kanał zmian od kursora starszego niż usunięte zdarzenia, otrzymuje błąd wygaśnięcia kursora i musi pobrać nową migawkę. |
+| `DOMAIN_EVENT_RETENTION_DAYS` | `90` | Zdarzenia odebrane przez wszystkie procedury obsługi i rozszerzenia. Zdarzenia z niedostarczonym lub nieudanym dostarczeniem zostają, więc nieudane dostarczenia zawsze można powtórzyć. Rozszerzenie, które wznawia kanał zmian od kursora starszego niż usunięte zdarzenia, otrzymuje błąd wygaśnięcia kursora i musi pobrać nową migawkę. Procedura obsługi lub rozszerzenie, które już nie działa, wstrzymuje czyszczenie w swoim obszarze roboczym, dopóki nie zostanie usunięte. |
 | `BROWSER_SESSION_RETENTION_DAYS` | `7` | Wygasłe i wylogowane sesje przeglądarki. |
 | `USER_ACTION_TOKEN_RETENTION_DAYS` | `7` | Wykorzystane lub wygasłe linki weryfikacji e-mail i ustawienia hasła. |
 | `WORKSPACE_INVITATION_RETENTION_DAYS` | `30` | Wygasłe lub odwołane zaproszenia. Przyjęte zaproszenia zostają. |
