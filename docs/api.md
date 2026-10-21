@@ -848,10 +848,11 @@ gauge `attricat_file_worker_jobs_queued`;
 - `attricat_file_reconciliation_total` (`outcome`),
   `attricat_file_reconciliation_files_marked_total`, and
   `attricat_file_purge_jobs_queued_total`;
-- periodic history cleanup: `attricat_value_history_cleanup_total` (bounded
-  `outcome` of `success`, `failed`, or `budget_exhausted`),
-  `attricat_value_history_entries_purged_total`, and
-  `attricat_value_history_cleanup_duration_seconds`;
+- periodic retention sweep, labelled by bounded table `family`:
+  `attricat_retention_cleanup_total` (`outcome` of `success`, `failed`, or
+  `budget_exhausted`), `attricat_retention_rows_purged_total`, and
+  `attricat_retention_cleanup_duration_seconds`. See
+  [Data retention](configuration.md#data-retention);
 - abandoned-upload cleanup: `attricat_upload_cleanup_total` (`outcome` of
   `success` or `failed`). Failed deletions retain their durable intent for retry.
 

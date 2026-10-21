@@ -115,7 +115,6 @@ Czas trwania sesji (osiem godzin), limit prób logowania (pięć niepowodzeń na
 | `CACHE_BACKEND` | `memory` | Gdzie przechowywane są buforowane definicje: `memory` (w każdym procesie) lub `redis` (wspólnie dla wszystkich replik, które współdzielą wtedy także limity żądań sieciowych rozszerzeń). Przy obu ustawieniach buforowane dane są zawsze poprawne. Gdy Redis jest niedostępny, API działa dalej z pamięci i samo odnawia połączenie. `redis` odczytuje adres z [sekretu](#sekrety) `redis_url`. |
 | `CACHE_MAX_ENTRIES` | `20000` | Maksymalna liczba wpisów bufora w pamięci jednego procesu. |
 | `CACHE_KEY_PREFIX` | `attricat` | Początek każdego klucza w Redis; po nim następuje losowy identyfikator bazy danych. Kopia bazy danych zachowuje ten identyfikator, więc kopia działająca obok źródła (na przykład środowisko testowe sklonowane z produkcji) wymaga innego prefiksu albo innej bazy Redis. Po przywróceniu kopii zapasowej w miejsce dotychczasowej bazy zmień go albo wyczyść Redis. |
-| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Liczba dni przechowywania historii wartości atrybutów. Co minutę API przez maksymalnie 10 sekund usuwa starszą historię, najwyżej 1000 wierszy na transakcję. Nieudane czyszczenie trafia do logu i jest ponawiane; nie zatrzymuje API. |
 | `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | Liczba rekordów odczytywanych na stronę podczas migracji schematu w tle. Od 1 do 1000. |
 | `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | Liczba rekordów migrowanych jednocześnie w ramach jednej partii migracji. Od 1 do 64. |
 
@@ -136,6 +135,35 @@ API uruchamia proces roboczy zadań dla uruchomień agentów, reguł i przepływ
 | `EVENT_DISPATCHER_POLL_MILLIS` | `250` | Opóźnienie między odpytaniami dyspozytora. |
 
 Wszystkie wartości muszą być dodatnimi liczbami całkowitymi. Zero lub wartość niecałkowita przerywa start.
+
+## Retencja danych
+
+Co minutę API usuwa w małych partiach stare dane operacyjne: zakończoną pracę w tle, dostarczone zdarzenia, zakończone sesje i podobne wpisy. Grupy tabel są czyszczone po kolei, więc duża zaległość w jednej nie wstrzymuje pozostałych. Wpisy, które wciąż czekają lub trwają, oraz wszystko, czego potrzebuje bieżąca praca, nigdy nie są usuwane. Nieudane czyszczenie trafia do logu i jest ponawiane przy następnym przebiegu; nie zatrzymuje API.
+
+| Zmienna | Domyślnie | Co jest usuwane po tylu dniach |
+| --- | --- | --- |
+| `RETENTION_SWEEP_INTERVAL_SECONDS` | `60` | Jak często startuje czyszczenie, od 1 do 86400 sekund. |
+| `RETENTION_SWEEP_BUDGET_SECONDS` | `10` | Najdłuższy czas jednego czyszczenia, od 1 do 3600 sekund i nie dłużej niż odstęp. |
+| `RETENTION_BATCH_ROWS` | `1000` | Najwięcej wierszy usuwanych z tabeli w jednej transakcji, od 1 do 10000. |
+| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Wcześniejsze wartości atrybutów. Bieżące wartości nigdy nie są usuwane. |
+| `TASK_RETENTION_DAYS` | `7` | Wpisy zakończonych zadań w tle. Nieudane zadania zostają do usunięcia ich uruchomienia, aby można je było ponowić. |
+| `RULE_RUN_RECORD_RETENTION_DAYS` | `7` | Zakończone sprawdzenia reguł dla pojedynczego rekordu. |
+| `RULE_RUN_RETENTION_DAYS` | `90` | Zakończone pełne uruchomienia reguł oraz nieudane uruchomienia. Każda wersja reguły zachowuje swoje ostatnie uruchomienie i ostatni ukończony przebieg próbny, więc ponowne włączenie nie wymaga nowego przebiegu próbnego. |
+| `WORKFLOW_RUN_RETENTION_DAYS` | `90` | Zakończone uruchomienia przepływów pracy. |
+| `EXTENSION_OPERATION_RUN_RETENTION_DAYS` | `90` | Zakończone operacje rozszerzeń, których wyniki już wygasły. |
+| `AGENT_RUN_EVENT_RETENTION_DAYS` | `90` | Strumień postępu zakończonych uruchomień agentów. Rozmowy, ich wiadomości i wywołania narzędzi zostają. |
+| `FILE_PROCESSING_JOB_RETENTION_DAYS` | `30` | Zakończone zadania przetwarzania plików. |
+| `SOLUTION_PACK_CHECK_RUN_RETENTION_DAYS` | `90` | Ręczne uruchomienia sprawdzeń pakietów rozwiązań. Każde zastosowanie zachowuje sprawdzenie po zastosowaniu i ostatnie sprawdzenie. |
+| `DOMAIN_EVENT_RETENTION_DAYS` | `90` | Zdarzenia odebrane przez wszystkie procedury obsługi i rozszerzenia. Zdarzenia z niedostarczonym lub nieudanym dostarczeniem zostają, więc nieudane dostarczenia zawsze można powtórzyć. Kanał zmian dla rozszerzeń obejmuje tylko ten okres. |
+| `BROWSER_SESSION_RETENTION_DAYS` | `7` | Wygasłe i wylogowane sesje przeglądarki. |
+| `USER_ACTION_TOKEN_RETENTION_DAYS` | `7` | Wykorzystane lub wygasłe linki weryfikacji e-mail i ustawienia hasła. |
+| `WORKSPACE_INVITATION_RETENTION_DAYS` | `30` | Wygasłe lub odwołane zaproszenia. Przyjęte zaproszenia zostają. |
+| `AUDIT_EVENT_RETENTION_DAYS` | Nieustawione | Wpisy dziennika audytu. Bez ustawienia dziennik audytu jest przechowywany bezterminowo. |
+| `READ_NOTIFICATION_RETENTION_DAYS` | Nieustawione | Przeczytane powiadomienia. Nieprzeczytane nigdy nie są usuwane. Bez ustawienia są przechowywane bezterminowo. |
+
+Usuwane są też zakończone okna limitów logowania i resetowania hasła; nie wymagają ustawienia. Rozmowy z agentami, historia statusów i zatwierdzeń rekordów, historia migracji oraz definicje konektorów nigdy nie są usuwane przez czyszczenie.
+
+Liczby dni muszą być dodatnimi liczbami całkowitymi. Nieprawidłowa wartość przerywa start.
 
 ## Magazyn obiektów
 

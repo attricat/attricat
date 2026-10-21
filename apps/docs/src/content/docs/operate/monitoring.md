@@ -52,7 +52,7 @@ Useful series:
 | `attricat_event_deliveries_total{outcome}` | `dead_letter` increases. |
 | `attricat_extension_operation_runs`, `attricat_extension_operation_oldest_age_seconds` | Stuck extension operations. |
 | `attricat_file_uploads_total`, `attricat_file_downloads_total`, `attricat_object_store_operations_total` | Error outcomes. |
-| `attricat_value_history_cleanup_total{outcome}` | `failed`. Repeated `budget_exhausted` means each 10-second run ends with old history still left to delete. |
+| `attricat_retention_cleanup_total{family,outcome}` | `failed`. Repeated `budget_exhausted` for a `family` means each cleanup run ends with old data of that kind still left to delete; raise `RETENTION_SWEEP_BUDGET_SECONDS` or `RETENTION_BATCH_ROWS`. `attricat_retention_rows_purged_total{family}` counts deleted rows. |
 | `attricat_upload_cleanup_total{outcome}` | `failed`. Failed deletions of abandoned uploads are retried. |
 | `attricat_query_cache_requests_total{namespace,outcome}` | A falling share of `hit` and `remote_hit` against `miss`. |
 | `attricat_query_cache_redis_connected` | `0` on any replica: it has lost its Redis connection and caches in memory only until it reconnects. |

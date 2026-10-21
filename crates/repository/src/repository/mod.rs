@@ -33,7 +33,7 @@
 //! locks they need themselves; re-taking a lock the transaction already
 //! holds is a no-op, so a caller that pre-locks must only respect the order.
 
-use std::{collections::HashSet, num::NonZeroI64, str::FromStr, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
 
 use attricat_cache::{CacheKey, Policy};
 
@@ -106,6 +106,7 @@ mod record_publications;
 mod record_search;
 mod record_values;
 mod references;
+mod retention;
 mod retention_holds;
 mod reusable_attributes;
 mod roles;
@@ -219,6 +220,7 @@ pub use record_search::{
     RecordRelationshipFilter, RecordSearchFilter, RecordSearchSort, RelationshipFacetHop,
     SEARCH_FILTER_EQ_ANY, SearchContext, decode_search_cursor,
 };
+pub use retention::RetentionDays;
 pub use retention_holds::FileRetentionHold;
 pub use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub use rules::{ClaimedRuleRun, RuleCandidateResult};
@@ -381,30 +383,6 @@ pub struct AgentAuditAttribution {
     pub tool_name: String,
     pub approval_decision: Option<String>,
     pub approved_by_user_id: Option<Uuid>,
-}
-
-/// A retention interval that is safe to pass to destructive history cleanup.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ValueHistoryRetentionDays(NonZeroI64);
-
-impl ValueHistoryRetentionDays {
-    pub const fn get(self) -> i64 {
-        self.0.get()
-    }
-}
-
-impl FromStr for ValueHistoryRetentionDays {
-    type Err = &'static str;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        value
-            .parse::<i64>()
-            .ok()
-            .and_then(NonZeroI64::new)
-            .filter(|days| days.get() > 0)
-            .map(Self)
-            .ok_or("must be a positive integer")
-    }
 }
 
 /// Why a status transition was refused to its actor.
@@ -1489,26 +1467,6 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         Ok(())
     }
 
-    /// One bounded retention transaction. Concurrent maintenance processes
-    /// skip each other's rows; readers and startup never wait for a full purge.
-    pub async fn purge_value_history_batch(
-        &self,
-        retention_days: ValueHistoryRetentionDays,
-    ) -> Result<u64, RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("SET LOCAL statement_timeout = '2s'")
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("SET LOCAL lock_timeout = '1s'")
-            .execute(&mut *tx)
-            .await?;
-        let deleted = sqlx::query(
-            "WITH expired AS (SELECT workspace_id, id, archived_at FROM attribute_value_history WHERE archived_at < now() - ($1 * interval '1 day') ORDER BY archived_at, id LIMIT 1000 FOR UPDATE SKIP LOCKED) DELETE FROM attribute_value_history h USING expired e WHERE h.workspace_id = e.workspace_id AND h.id = e.id AND h.archived_at = e.archived_at",
-        ).bind(retention_days.get()).execute(&mut *tx).await?.rows_affected();
-        tx.commit().await?;
-        Ok(deleted)
-    }
-
     /// Inserts the request audit row before committing a mutation. An audit
     /// insertion error aborts the surrounding transaction, so success cannot
     /// be returned without durable audit evidence.
@@ -2073,17 +2031,6 @@ mod tests {
     use sqlx::postgres::PgPoolOptions;
 
     use super::*;
-
-    #[test]
-    fn value_history_retention_days_rejects_unsafe_values() {
-        assert_eq!("1".parse::<ValueHistoryRetentionDays>().unwrap().get(), 1);
-        for value in ["0", "-1", "not-a-number", "9223372036854775808"] {
-            assert_eq!(
-                value.parse::<ValueHistoryRetentionDays>().unwrap_err(),
-                "must be a positive integer"
-            );
-        }
-    }
 
     #[test]
     fn reusable_attribute_selectors_require_a_qualified_code() {

@@ -36,7 +36,7 @@ use crate::{
     extension_policy::ExtensionPolicy,
     extension_registry::{DEFAULT_OFFICIAL_REGISTRY, GitHubRepository},
     file_worker::WorkerConfig,
-    repository::ValueHistoryRetentionDays,
+    maintenance::RetentionConfig,
     storage::StorageConfig,
     task_worker::TaskWorkerConfig,
 };
@@ -48,7 +48,6 @@ const DEFAULT_BIND_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCAL
 const DEFAULT_FILE_WORKER_OPERATIONS_BIND_ADDR: SocketAddr =
     SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 3001);
 const DEFAULT_FILE_WORKER_POLL_MILLISECONDS: u64 = 500;
-const DEFAULT_VALUE_HISTORY_RETENTION_DAYS: &str = "90";
 const DEFAULT_WORKSPACE_ID: Uuid = Uuid::from_u128(0x00000000_0000_4000_8000_000000000002);
 const DEFAULT_BOOTSTRAP_OWNER_EMAIL: &str = "owner@example.test";
 // Local development defaults: a mail catcher and the Vite dev server.
@@ -109,7 +108,7 @@ pub struct Config {
     /// unavailable.
     pub agent_provider: Option<AgentProviderConfig>,
     pub extensions: ExtensionsConfig,
-    pub value_history_retention_days: ValueHistoryRetentionDays,
+    pub retention: RetentionConfig,
     pub event_dispatcher: DispatcherConfig,
     pub task_worker: TaskWorkerConfig,
     pub blueprint_migration: BlueprintMigrationBatchConfig,
@@ -368,11 +367,8 @@ impl Config {
                 )?,
                 local_extensions_dir,
             },
-            value_history_retention_days: source
-                .var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
-                .unwrap_or(DEFAULT_VALUE_HISTORY_RETENTION_DAYS)
-                .parse()
-                .map_err(|error| format!("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS {error}"))?,
+            retention: RetentionConfig::from_values(get)
+                .map_err(|error| format!("invalid retention configuration: {error}"))?,
             event_dispatcher: DispatcherConfig::from_values(get)
                 .map_err(|error| format!("invalid event dispatcher configuration: {error}"))?,
             task_worker: TaskWorkerConfig::from_values(get)
