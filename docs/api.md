@@ -29,7 +29,7 @@ Permissions come from role grants on active workspace memberships:
   `blueprints.write`, and `blueprints.publish`, respectively.
 - Workflow reads and management require `workflows.read` and `workflows.manage`.
 - Record operations require `records.read`, `records.write`, `records.delete`,
-  or `records.publish`.
+  `records.publish`, or `records.unlock`.
 - Context operations require `contexts.read` or `contexts.write`.
 - Data-health, metrics, and event-delivery dead-letter inspection require
   `data_health.read`.
@@ -190,6 +190,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/v1/records/{id}/approvals` | Approval decisions with content digests and void reasons, newest first, 20 per page. Returns `{"items","has_more"}`; continue with `before_time` (`approved_at`) and `before_id` of the last item. |
 | `GET` | `/v1/records/{id}/retention-holds` | Retention holds on the record's files, newest first, 20 per page. Returns `{"items","has_more"}`; continue with `before_time` (`created_at`) and `before_id` of the last item. |
 | `GET`, `POST` | `/files/{id}/retention-holds` | List holds, or place an explicit hold (`files.hold`). |
+| `POST` | `/v1/records/{id}/status-unlock` | Leave a locking status for any option of it, outside the declared transitions (`records.unlock`, held by owners and administrators). Body: `attribute_code`, optional `context_id`, `to`, `expected_updated_at`. See [status control](status-control.md#locks). |
 | `POST` | `/files/{id}/retention-holds/{hold_id}/release` | Release an explicit hold early (`files.hold`). |
 | `GET` | `/v1/records/{id}/publications/readiness` | Evaluate each enabled channel's required checks without publishing: `[{ "context_id", "context_code", "ready", "violations" }]`. |
 | `GET`, `PUT` | `/publication-channels`, `/publication-channels/{context_id}` | List channel contexts or update one with `{ "enabled": true, "required_rule_codes": ["has-sku"], "require_valid_record": true }`. The two check fields are optional; omitting one keeps its current value. |
@@ -665,6 +666,7 @@ results report the same `code`, `message` and `details`.
 | `403` | `status_transition_forbidden` | `attribute`, `context`, `from`, `to`, `reason` |
 | `403` | `status_separation_of_duties` | `attribute`, `context`, `edge` (the earlier transition made by this user) |
 | `409` | `record_locked` | `attribute`, `context`, `status` (the locking status) |
+| `409` | `status_not_locked` | `attribute`, `context`, `status`; an unlock named a status that does not lock the record |
 | `409` | `unique_key_conflict` | `key`, `context`, normalized `values`, `conflicting_record_id` |
 | `409` | `unique_key_duplicates` | `duplicates` (up to 20 `{ key, context, values, record_ids }`) and `total`; returned by blueprint publication and context reparenting |
 | `409` | `relationship_cycle` | `attribute`, and `path`: record IDs from the written record back to it |

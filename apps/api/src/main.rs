@@ -112,6 +112,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .ensure_retention_hold_permissions()
         .await?;
     AttricatRepository::system(maintenance_pool.clone())
+        .ensure_record_unlock_permissions()
+        .await?;
+    AttricatRepository::system(maintenance_pool.clone())
         .ensure_extension_registry_permissions()
         .await?;
     AttricatRepository::system(maintenance_pool.clone())

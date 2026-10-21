@@ -140,7 +140,8 @@ A string attribute becomes a status when its `value_schema` has an `enum` and an
 Restricted transitions fail with `403 status_transition_forbidden` or
 `403 status_separation_of_duties`; changes to locked content fail with
 `409 record_locked`. A correction is a separate, restricted transition out of
-the locked status that changes nothing else.
+the locked status that changes nothing else. Owners and administrators can also
+unlock any locking status outside the declared transitions (`records.unlock`).
 
 ```toml
 [[attributes]]

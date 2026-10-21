@@ -37,10 +37,11 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 | `extensions.manage` | Instalowanie, konfigurowanie, przyznawanie uprawnień, włączanie i usuwanie rozszerzeń; rejestry, układ, sekrety, operacje i zadania konektorów. | ✓ | ✓ | | |
 | `solution_packs.manage` | Sprawdzanie, planowanie i stosowanie pakietów rozwiązań; zasoby prezentacyjne. | ✓ | ✓ | | |
 | `files.hold` | Zakładanie i zwalnianie jawnych blokad retencji plików. | ✓ | ✓ | | |
+| `records.unlock` | Odblokowywanie rekordu, którego status go blokuje, przez zmianę na dowolny status, poza przejściami schematu. | ✓ | ✓ | | |
 
 ## Przejścia statusów
 
-Status w schemacie może wymagać do przejścia uprawnienia lub roli albo innej osoby niż ta, która wykonała wcześniejsze przejście, dodatkowo do `records.write` i dla każdego, kto zapisuje dane; zablokowane rekordy odrzucają zmiany niezależnie od uprawnień zapisującego. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/validation/#kontroluj-cykl-życia-rekordu).
+Status w schemacie może wymagać do przejścia uprawnienia lub roli albo innej osoby niż ta, która wykonała wcześniejsze przejście, dodatkowo do `records.write` i dla każdego, kto zapisuje dane; zablokowane rekordy odrzucają zmiany niezależnie od uprawnień zapisującego, dopóki ich status się nie zmieni. Osoby z uprawnieniem `records.unlock` mogą zmienić status blokujący na dowolną opcję. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/validation/#kontroluj-cykl-życia-rekordu).
 
 ## Widoczność atrybutów
 

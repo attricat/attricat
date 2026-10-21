@@ -185,6 +185,8 @@ Locks are enforced on the server for every write path: the record page, API, CLI
 
 A status that declares a lock needs an explicit `transitions` list, so leaving it is always a named, restricted transition. To correct a released record, make the correction transition first, and then edit. A correction must change only the status. Unlocking is recorded in the audit log as `record.unlock`.
 
+Owners and administrators can always unlock a record, even when the blueprint declares no way out or they hold none of the transition's roles. The record page explains each lock, and **Unlock…** lets them move the status to any of its options. Like a correction, this changes only the status. Transition roles, permissions, separation of duties and conditions are skipped, but the new status still applies its own lock or approval. The change is recorded in the status history as an override and audited as `record.unlock` with `override: true`. Other roles can be given this through the [`records.unlock` permission](/reference/permissions/).
+
 Locks apply per context: a record released in one market can still be edited in another market where it is a draft, as long as the change does not reach the locked market through inheritance.
 
 #### Bind approvals to the reviewed content
@@ -321,7 +323,7 @@ A [data quality rule](/builders/rules/#enforce-a-rule) with an `enforcement` tab
 | `publication_checks_failed` | 422 | A channel's required checks fail. See [Publishing](/guides/publishing/#require-checks-before-publication). |
 | `status_transition_forbidden` | 403 | The transition needs a permission or role you do not have. See [Who may make a transition](#who-may-make-a-transition). |
 | `status_separation_of_duties` | 403 | Someone else must make this transition. |
-| `record_locked` | 409 | The record's status locks the content you changed, or the record cannot be deleted. Make the correction transition first. See [Lock finalized records](#lock-finalized-records). |
+| `record_locked` | 409 | The record's status locks the content you changed, or the record cannot be deleted. Make the correction transition first, or ask an owner or administrator to unlock it. See [Lock finalized records](#lock-finalized-records). |
 
 On a save, checks, conditions, and enforcing rules run in that order, after the JSON Schema, and only the first group that fails is reported. The four `422` errors list up to 50 violations in `error.details.violations`, each with the failing `code`, its `message`, the `contexts` it failed in, and the `attributes` involved. The [API reference](/reference/api/#error-details) describes every field.
 

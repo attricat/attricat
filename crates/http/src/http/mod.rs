@@ -1043,6 +1043,10 @@ pub fn router(state: AppState) -> Router {
             get(record_controls::status_transitions),
         )
         .route(
+            "/v1/records/{record_id}/status-unlock",
+            post(record_controls::unlock_status),
+        )
+        .route(
             "/v1/records/{record_id}/approvals",
             get(record_controls::approvals),
         )

@@ -344,6 +344,18 @@
     "statusTransitionDenied": "This transition is not allowed from the saved status.",
     "managedBySystem": "Managed by system actions.",
     "lockedByStatus": "Locked while the record is {{status}}. A permitted correction transition unlocks it.",
+    "statusLock": {
+      "all": "Fields can't be changed while {{attribute}} is {{status}}.",
+      "some": "{{fields}} can't be changed while {{attribute}} is {{status}}.",
+      "unlockBy": "To unlock, first change {{attribute}} to {{targets}}.",
+      "unlockNotPermitted": "You can't make any of the transitions that unlock it.",
+      "unlockNone": "No transition leaves this status, so the lock is permanent.",
+      "unlockAction": "Unlock…",
+      "unlock": "Unlock",
+      "unlockTitle": "Unlock record",
+      "unlockExplanation": "{{attribute}} is {{status}}, which locks this record. As an owner or administrator you can move it to any status, even one the blueprint's transitions don't allow. The change is audited as an unlock.",
+      "unlockTo": "New {{attribute}}"
+    },
     "statusTransitionNotPermitted": "You are not permitted to make this transition",
     "statusSeparationOfDuties": "Must be made by someone other than the previous actor",
     "recordControls": {

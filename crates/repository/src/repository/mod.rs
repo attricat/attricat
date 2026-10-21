@@ -228,7 +228,9 @@ pub use solution_packs::{
     SolutionPackApplicationSummary, SolutionPackCheckRun, SolutionPackCheckRunSummary,
     SolutionPackPlan,
 };
-pub use status::{RECORD_CONTROL_PAGE_SIZE, RecordApproval, StatusTransitionAccess};
+pub use status::{
+    RECORD_CONTROL_PAGE_SIZE, RecordApproval, StatusTransitionAccess, UnlockRecordStatus,
+};
 pub use tasks::{
     BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary, bounded_task_error_message,
 };
@@ -261,6 +263,10 @@ pub struct AttricatRepository<S = WorkspaceScope> {
     /// extension run. It is rechecked at each host call; selection membership
     /// is never treated as permission.
     authorization_actor: Option<AuthorizationActor>,
+    /// The status attribute an owner or administrator is unlocking: this
+    /// write may leave its locking status for any option, outside the
+    /// declared transitions. Set only by `unlock_record_status`.
+    status_unlock: Option<String>,
     /// Shared by every repository derived from the same composition root.
     pub(crate) cache: QueryCache,
     /// The workspace's generations as read by this request's authentication.
@@ -434,6 +440,12 @@ pub enum RepositoryError {
         attribute: String,
         context: String,
         edge: String,
+    },
+    #[error("'{attribute}' is '{status}', which does not lock the record (context: {context})")]
+    StatusNotLocked {
+        attribute: String,
+        context: String,
+        status: String,
     },
     #[error(
         "'{attribute}' is locked while the record is '{status}' (context: {context}); use a permitted correction transition first"
@@ -771,6 +783,7 @@ impl AttricatRepository {
             task_fence: None,
             extension_id: None,
             authorization_actor: None,
+            status_unlock: None,
             cache: QueryCache::default(),
             generations: None,
         }
@@ -790,6 +803,7 @@ impl AttricatRepository {
             task_fence: None,
             extension_id: None,
             authorization_actor: None,
+            status_unlock: None,
             cache: QueryCache::default(),
             generations: None,
         }

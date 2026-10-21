@@ -79,7 +79,7 @@ Image-only file fields show an image gallery. Select an image to open a larger p
 Some blueprints use statuses to control a record's lifecycle. Then:
 
 - The status select disables the transitions you may not make and says why: the transition needs a permission or role you do not have, or someone other than you must make it (for example, the person who submitted a document cannot approve it).
-- In a finalized status, such as *Released*, some or all fields are read-only, files cannot be added or removed, and the record cannot be deleted. To correct the record, change its status with the correction transition the blueprint provides, and then edit. The correction is recorded in the audit log.
+- In a finalized status, such as *Released*, some or all fields are read-only, files cannot be added or removed, and the record cannot be deleted. A notice above the fields names the status that locks them and the statuses you can change it to. To correct the record, change its status with the correction transition the blueprint provides, and then edit. Owners and administrators can also choose **Unlock…** in the notice to move the status to any option, even without a correction transition. Corrections and unlocks are recorded in the audit log.
 - When a record is approved, the approval is tied to the exact content that was reviewed. Editing that content voids the approval, and the record returns to an earlier status in the same save.
 - Files of finalized records can be kept under a retention hold until a set date.
 

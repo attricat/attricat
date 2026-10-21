@@ -56,13 +56,14 @@ import {
 import { schemaMismatchField } from '../recordFieldSaves';
 import { recordFormOptions } from '../queryOptions';
 import { choiceEditorOptions } from '../choices';
-import { statusConfiguration, statusLocks } from '../status';
+import { savedStatusLocks, statusConfiguration, statusLocks } from '../status';
 import {
   useRecordFieldSaves,
   type ConflictResolution,
 } from '../useRecordFieldSaves';
 import { attributeValueTypes } from '../valueTypes';
 import { RecordFormAttributeEditor } from './RecordFormAttributeEditor';
+import { StatusLockNotice } from './StatusLockNotice';
 import { FieldValueAtRest } from './FieldValueAtRest';
 import { InlineFieldEditor } from './InlineFieldEditor';
 import { ReusableAttributeAttachControl } from './ReusableAttributeAttachControl';
@@ -448,6 +449,21 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
             error={generalError}
             violations={placedViolations?.unplaced}
             sx={{ mb: 2 }}
+          />
+        )}
+        {form.can_write && (
+          <StatusLockNotice
+            attributes={allAttributes}
+            locks={savedStatusLocks(
+              allAttributes,
+              existingValues,
+              contextId,
+              statusParentContextIds,
+            )}
+            contextId={contextId}
+            recordId={recordId}
+            transitions={statusTransitions}
+            updatedAt={form.record.updated_at}
           />
         )}
         <Typography

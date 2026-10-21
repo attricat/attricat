@@ -19,6 +19,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             task_fence: self.task_fence.clone(),
             extension_id: self.extension_id.clone(),
             authorization_actor: self.authorization_actor,
+            status_unlock: None,
             cache: self.cache.clone(),
             // Generations belong to the workspace they were read for.
             generations: None,

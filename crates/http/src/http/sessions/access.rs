@@ -30,6 +30,7 @@ impl AccessTargetKind {
                 "records.write",
                 "records.delete",
                 "records.publish",
+                "records.unlock",
             ],
             Self::Blueprint => &["blueprints.write", "blueprints.publish", "records.publish"],
             Self::Context => &["contexts.write"],

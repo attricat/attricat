@@ -7,8 +7,8 @@ use super::write_context::WriteContext;
 use super::*;
 use attricat_validation::status::{
     STATUS_KEY, StatusCoverage, TransitionRequirements, has_record_controls, status_approval,
-    status_lock, status_retention_days, transition_edges, transition_requirements,
-    validate_status_transition,
+    status_lock, status_option_labels, status_retention_days, transition_edges,
+    transition_requirements, validate_status_transition,
 };
 use chrono::Utc;
 use sha2::{Digest, Sha256};
@@ -53,6 +53,9 @@ enum TransitionKind {
     Transition,
     /// Changed content voided an approval and moved to its `void_to` status.
     ApprovalVoid,
+    /// An owner or administrator unlocked the status outside the declared
+    /// transitions.
+    Override,
 }
 
 impl TransitionKind {
@@ -60,6 +63,7 @@ impl TransitionKind {
         match self {
             Self::Transition => "transition",
             Self::ApprovalVoid => "approval_void",
+            Self::Override => "override",
         }
     }
 }
@@ -103,6 +107,43 @@ pub struct RecordApproval {
     pub end_reason: Option<String>,
     pub ended_by_user_id: Option<Uuid>,
     pub void_status: Option<String>,
+}
+
+/// Leaves a locking status outside the declared transitions.
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UnlockRecordStatus {
+    pub attribute_code: String,
+    /// The context whose status is unlocked; the default context when absent.
+    pub context_id: Option<Uuid>,
+    /// The status option to move to.
+    pub to: String,
+    pub expected_updated_at: DateTime<Utc>,
+}
+
+/// Lets owners and administrators leave any locking status.
+const UNLOCK_PERMISSION: &str = "records.unlock";
+
+impl<S: super::RepositoryScope> AttricatRepository<S> {
+    /// Installs the unlock permission in application code, preserving the
+    /// declarative-only migration contract. Only owners and administrators
+    /// receive it.
+    pub async fn ensure_record_unlock_permissions(&self) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("INSERT INTO permissions (code, description) VALUES ($1, 'Unlock records whose status locks them, outside the declared transitions') ON CONFLICT (code) DO NOTHING")
+            .bind(UNLOCK_PERMISSION)
+            .execute(&mut *tx)
+            .await?;
+        for role_id in super::roles::OWNER_AND_ADMIN_ROLE_IDS {
+            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, $2) ON CONFLICT DO NOTHING")
+                .bind(role_id)
+                .bind(UNLOCK_PERMISSION)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
 }
 
 /// A context whose saved effective status locks some of the record.
@@ -223,6 +264,22 @@ fn content_digest(
     )
 }
 
+/// An unlock may leave a locking status for any declared option, but never
+/// clears the status.
+fn validate_unlock_target(schema: &Value, after: &Value) -> Result<(), String> {
+    let code = after
+        .as_str()
+        .ok_or("an unlock must choose a status option")?;
+    if status_option_labels(schema)
+        .iter()
+        .any(|(option, _)| *option == code)
+    {
+        Ok(())
+    } else {
+        Err("unknown status option".into())
+    }
+}
+
 fn label(value: &Value) -> String {
     value.as_str().unwrap_or("not set").to_owned()
 }
@@ -324,13 +381,16 @@ impl AttricatRepository {
                     effective_projection(projection, tree, path, attribute.inherit, &attribute.code)
                 };
                 let (before, after) = (resolve(before), resolve(&after));
-                validate_status_transition(&attribute.schema, &before, &after).map_err(
-                    |message| RepositoryError::AttributeValueSchemaMismatch {
-                        attribute: attribute.code.clone(),
-                        instance_path: String::new(),
-                        message: format!("{message} (context: {})", context.code),
-                    },
-                )?;
+                let validated = if self.unlocks(&attribute.code, &attribute.schema, &before) {
+                    validate_unlock_target(&attribute.schema, &after)
+                } else {
+                    validate_status_transition(&attribute.schema, &before, &after)
+                };
+                validated.map_err(|message| RepositoryError::AttributeValueSchemaMismatch {
+                    attribute: attribute.code.clone(),
+                    instance_path: String::new(),
+                    message: format!("{message} (context: {})", context.code),
+                })?;
                 if before != after {
                     changes.push(StatusChange {
                         attribute_code: attribute.code.clone(),
@@ -377,6 +437,14 @@ impl AttricatRepository {
         let changes = self
             .status_changes(transaction, record, &attributes, write)
             .await?;
+        // An unlock is not an edge: its roles, permissions, separation of
+        // duties and transition conditions do not apply.
+        let (unlocks, changes): (Vec<_>, Vec<_>) = changes
+            .into_iter()
+            .partition(|change| self.unlocks_change(change));
+        if !unlocks.is_empty() && self.acting_principal().is_none() {
+            return Err(RepositoryError::ActorNotAuthorized);
+        }
         let actor = self.acting_principal();
         for change in &changes {
             let requirements =
@@ -391,6 +459,17 @@ impl AttricatRepository {
         self.check_status_locks(transaction, record, &attributes, write)
             .await?;
         Ok(changes)
+    }
+
+    /// Whether this write is an owner's or administrator's unlock of
+    /// `attribute_code` out of the locking status `before`.
+    fn unlocks(&self, attribute_code: &str, schema: &Value, before: &Value) -> bool {
+        self.status_unlock.as_deref() == Some(attribute_code)
+            && status_lock(schema, before).is_some()
+    }
+
+    fn unlocks_change(&self, change: &StatusChange) -> bool {
+        self.unlocks(&change.attribute_code, &change.schema, &change.before)
     }
 
     /// The principal on whose behalf this repository writes: an interactive
@@ -716,15 +795,23 @@ impl AttricatRepository {
         changes: &[StatusChange],
     ) -> Result<(), RepositoryError> {
         for change in changes {
-            let requirements =
-                transition_requirements(&change.schema, &change.before, &change.after);
+            let overridden = self.unlocks_change(change);
+            let edge_code = if overridden {
+                None
+            } else {
+                transition_requirements(&change.schema, &change.before, &change.after).code
+            };
             let unlocked = status_lock(&change.schema, &change.before).is_some();
             self.record_status_transition(
                 transaction,
                 record,
                 change,
-                requirements.code.as_deref(),
-                TransitionKind::Transition,
+                edge_code.as_deref(),
+                if overridden {
+                    TransitionKind::Override
+                } else {
+                    TransitionKind::Transition
+                },
                 unlocked,
             )
             .await?;
@@ -738,7 +825,8 @@ impl AttricatRepository {
                         "context_code": change.context_code,
                         "from": change.before,
                         "to": change.after,
-                        "transition_code": requirements.code,
+                        "transition_code": edge_code,
+                        "override": overridden,
                     }),
                 )
                 .await?;
@@ -1194,6 +1282,68 @@ impl AttricatRepository {
         }
         transaction.rollback().await?;
         Ok(access)
+    }
+
+    /// Moves a locking status to `to` outside the declared transitions, for
+    /// owners and administrators (`records.unlock`). Like any correction it is
+    /// a pure status change: the unlocked content is unchanged. It is recorded
+    /// as an `override` transition and audited as `record.unlock`.
+    pub async fn unlock_record_status(
+        &self,
+        record_id: Uuid,
+        input: UnlockRecordStatus,
+    ) -> Result<Record, RepositoryError> {
+        let actor = self
+            .acting_principal()
+            .ok_or(RepositoryError::ActorNotAuthorized)?;
+        let mut transaction = self.pool.begin().await?;
+        self.ensure_principal_may(&mut transaction, actor, UNLOCK_PERMISSION, &[record_id])
+            .await?;
+        let record = self
+            .get_record(record_id)
+            .await?
+            .ok_or(RepositoryError::NotFound("record"))?;
+        let attribute = Self::status_attributes(&mut transaction, &record)
+            .await?
+            .into_iter()
+            .find(|attribute| attribute.code == input.attribute_code)
+            .ok_or(RepositoryError::NotFound("status attribute"))?;
+        let tree = ContextTree::load(&mut transaction, self.workspace_id.0).await?;
+        let context = match input.context_id {
+            Some(id) => tree.get(id).ok_or(RepositoryError::InvalidContext)?,
+            None => tree.default_context()?,
+        };
+        let projection = record.projections.get("preview").unwrap_or(&Value::Null);
+        let path = tree.path(context.id, true)?;
+        let current =
+            effective_projection(projection, &tree, &path, attribute.inherit, &attribute.code);
+        if status_lock(&attribute.schema, &current).is_none() {
+            return Err(RepositoryError::StatusNotLocked {
+                attribute: attribute.code,
+                context: context.code.clone(),
+                status: label(&current),
+            });
+        }
+        let context_id = context.id;
+        transaction.rollback().await?;
+        let mut repository = self.clone();
+        repository.status_unlock = Some(attribute.code.clone());
+        repository
+            .update_record_with_values_checked(
+                record_id,
+                vec![NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some(attribute.code),
+                    context_id: Some(context_id),
+                    value: Value::String(input.to),
+                }],
+                Vec::new(),
+                Vec::new(),
+                None,
+                None,
+                Some(input.expected_updated_at),
+            )
+            .await
     }
 
     /// Up to `limit` approval decisions recorded on a record, newest first,

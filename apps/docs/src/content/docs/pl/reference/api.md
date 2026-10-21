@@ -48,6 +48,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `status_transition_forbidden` | 403 | Przejście statusu wymaga uprawnienia lub roli, których wywołujący nie ma. |
 | `status_separation_of_duties` | 403 | Przejście statusu musi wykonać ktoś inny niż osoba, która wykonała wcześniejsze przejście. |
 | `record_locked` | 409 | Status rekordu blokuje zmienianą treść albo rekordu nie można usunąć, dopóki jest zablokowany. |
+| `status_not_locked` | 409 | Odblokowanie wskazało status, który nie blokuje rekordu. |
 | `record_id_taken` | 409 | Operacja `create` we wsadzie wybrała `record_id`, który już istnieje. |
 | `relationship_path_sort_requires_single_result_version` | 422 | Sortowanie według powiązanej wartości w kilku wersjach schematu. |
 | `file_processing` | 409 | Plik nie jest jeszcze gotowy do pobrania. |
@@ -224,6 +225,7 @@ POST /api/v1/records/search
 | `GET` | `/files/{file_id}/download` | Oryginalny plik. Obsługuje jeden zakres `Range`. |
 | `GET` | `/files/{file_id}/variants/{kind}/download` | Wariant `thumbnail` lub `display`. |
 | `GET`, `POST` | `/files/{file_id}/retention-holds` | Lista blokad retencji pliku albo założenie jawnej blokady przez `{"days": 365, "reason": "…"}` (`files.hold`). |
+| `POST` | `/v1/records/{id}/status-unlock` | Zmiana statusu blokującego na dowolną z jego opcji, poza przejściami schematu: `{"attribute_code": "…", "context_id": "…", "to": "…", "expected_updated_at": "…"}`; `context_id` jest opcjonalny (kontekst domyślny). Zmienia się tylko status. Wymaga `records.unlock` (właściciele i administratorzy). Zwraca rekord. |
 | `POST` | `/files/{file_id}/retention-holds/{hold_id}/release` | Zwolnienie jawnej blokady przed terminem (`files.hold`). Blokad założonych przez status nie można zwolnić. |
 
 Pobieranie zwraca `409 file_processing`, dopóki plik nie ma stanu `ready`.

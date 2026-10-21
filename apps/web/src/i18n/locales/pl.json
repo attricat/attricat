@@ -360,6 +360,18 @@
     "statusTransitionDenied": "Ta zmiana zapisanego statusu jest niedozwolona.",
     "managedBySystem": "Zarządzane przez działania systemowe.",
     "lockedByStatus": "Zablokowane, gdy rekord ma status {{status}}. Odblokowuje je dozwolone przejście korygujące.",
+    "statusLock": {
+      "all": "Pól nie można zmieniać, gdy {{attribute}} ma status {{status}}.",
+      "some": "Nie można zmieniać pól {{fields}}, gdy {{attribute}} ma status {{status}}.",
+      "unlockBy": "Aby odblokować, najpierw zmień {{attribute}} na {{targets}}.",
+      "unlockNotPermitted": "Żadne z przejść, które odblokowują ten status, nie jest dla Ciebie dostępne.",
+      "unlockNone": "Z tego statusu nie prowadzi żadne przejście, więc blokada jest trwała.",
+      "unlockAction": "Odblokuj…",
+      "unlock": "Odblokuj",
+      "unlockTitle": "Odblokuj rekord",
+      "unlockExplanation": "{{attribute}} ma status {{status}}, który blokuje ten rekord. Jako właściciel lub administrator możesz zmienić go na dowolny status, także taki, na który przejścia schematu nie pozwalają. Zmiana jest rejestrowana w dzienniku audytu jako odblokowanie.",
+      "unlockTo": "Nowa wartość: {{attribute}}"
+    },
     "statusTransitionNotPermitted": "Nie masz uprawnień do tej zmiany statusu",
     "statusSeparationOfDuties": "Musi to zrobić inna osoba niż autor poprzedniego kroku",
     "recordControls": {

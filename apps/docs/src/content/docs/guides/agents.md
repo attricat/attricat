@@ -91,7 +91,7 @@ Changes made through the agent go through the same validation as your own edits,
 - **Hierarchies.** A link that would make a record its own ancestor, such as a location inside itself, is refused with the path of the loop.
 - **Allowed targets.** A relationship can only link to the blueprints it lists.
 - **Publishing constraints.** Publishing a blueprint that adds a unique key or hierarchy fails if existing records break it; the agent lists them so you can fix them first.
-- **Controlled records.** Blueprints can restrict who makes a status transition, lock finalized records, and tie approvals to reviewed content, and the agent follows the same rules as you. A locked record or a transition you are not permitted to make is refused with a clear reason, and the agent can show which transitions you may make, who must act, and which correction transition unlocks the record.
+- **Controlled records.** Blueprints can restrict who makes a status transition, lock finalized records, and tie approvals to reviewed content, and the agent follows the same rules as you. A locked record or a transition you are not permitted to make is refused with a clear reason, and the agent can show which transitions you may make, who must act, and which correction transition unlocks the record. The agent cannot unlock a record itself. When no transition out is open to you, it points you to an owner or administrator, who can use **Unlock…** on the record page.
 - A transition that must be made by a different person than an earlier one counts you as the person, because the change runs as you when you approve it.
 - If a proposed edit touches approved content, approving it voids the approval and returns the record to an earlier status in the same change.
 

@@ -255,6 +255,20 @@ carry final edits, while leaving one must be a pure status change. An effective
 change away from a locking status is recorded with `unlocked = true` and audited
 as `record.unlock` with the attribute, context, endpoints and edge code.
 
+Owners and administrators hold `records.unlock` and can always leave a locking
+status, whatever the blueprint declares: `POST /v1/records/{id}/status-unlock`
+with `attribute_code`, optional `context_id` (default context), `to` (any
+option of the status) and `expected_updated_at`. It writes only the status in
+that context, so it is a pure status change. Edge roles, permissions,
+separation of duties, transition conditions and enforcing rules do not apply.
+The row is recorded with `kind = 'override'`, no edge code and
+`unlocked = true`, and the `record.unlock` audit event carries
+`override: true`. The target status still has its effects: entering an
+approval option records an approval and entering a locking option locks the
+record again. A status that is not locking in that context returns
+`409 status_not_locked`. The record page explains every active lock and shows
+an **Unlock…** action to holders of the permission.
+
 ### Approvals
 
 Entering an option with `approval` records an `record_approvals` row for that

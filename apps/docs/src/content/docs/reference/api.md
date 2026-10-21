@@ -48,6 +48,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `status_transition_forbidden` | 403 | The status transition requires a permission or role the caller does not have. |
 | `status_separation_of_duties` | 403 | The status transition must be made by someone other than the person who made an earlier transition. |
 | `record_locked` | 409 | The record's status locks the content being changed, or the record cannot be deleted while it is locked. |
+| `status_not_locked` | 409 | An unlock named a status that does not lock the record. |
 | `record_id_taken` | 409 | A batch `create` chose an `record_id` that already exists. |
 | `relationship_path_sort_requires_single_result_version` | 422 | Sorting by a related value across several blueprint revisions. |
 | `file_processing` | 409 | The file is not ready to download yet. |
@@ -224,6 +225,7 @@ POST /api/v1/records/search
 | `GET` | `/files/{file_id}/download` | Original file. Supports one `Range`. |
 | `GET` | `/files/{file_id}/variants/{kind}/download` | `thumbnail` or `display` variant. |
 | `GET`, `POST` | `/files/{file_id}/retention-holds` | List a file's retention holds, or place an explicit hold with `{"days": 365, "reason": "…"}` (`files.hold`). |
+| `POST` | `/v1/records/{id}/status-unlock` | Change a locking status to any of its options, outside the blueprint's transitions: `{"attribute_code": "…", "context_id": "…", "to": "…", "expected_updated_at": "…"}`, with `context_id` optional (default context). Only the status changes. Requires `records.unlock` (owners and admins). Returns the record. |
 | `POST` | `/files/{file_id}/retention-holds/{hold_id}/release` | Release an explicit hold early (`files.hold`). Holds placed by a status cannot be released. |
 
 Downloads return `409 file_processing` until the file is `ready`.

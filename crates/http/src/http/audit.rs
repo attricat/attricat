@@ -122,6 +122,8 @@ fn audit_permission(method: &Method, route: &str) -> &'static str {
         }
     } else if route.starts_with("/v1/records/{record_id}/publications") {
         "records.publish"
+    } else if route == "/v1/records/{record_id}/status-unlock" {
+        "records.unlock"
     } else if route.starts_with("/contexts") || route.starts_with("/publication-channels") {
         "contexts.write"
     } else if route.starts_with("/personal-access-tokens") {
