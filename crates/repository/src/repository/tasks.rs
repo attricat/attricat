@@ -8,7 +8,9 @@ use uuid::Uuid;
 
 use super::{AttricatRepository, RepositoryError};
 use crate::task_queue::{
-    ParseTaskKindError, TaskInsert, TaskKind, TaskStatus, TaskValidationError,
+    MAX_TASK_ERROR_CODE_BYTES as MAX_ERROR_CODE_BYTES,
+    MAX_TASK_ERROR_MESSAGE_BYTES as MAX_ERROR_MESSAGE_BYTES, ParseTaskKindError, TaskInsert,
+    TaskKind, TaskStatus, TaskValidationError,
 };
 
 /// Workspace-scoped aggregate diagnostics; never includes task payloads or errors.
@@ -23,8 +25,6 @@ pub struct BackgroundProcessingStatus {
 }
 
 const MAX_LEASE_OWNER_BYTES: usize = 128;
-const MAX_ERROR_CODE_BYTES: usize = 128;
-const MAX_ERROR_MESSAGE_BYTES: usize = 1024;
 
 /// Truncates a task failure message on a UTF-8 boundary so it always fits the
 /// byte limit enforced when a failure is recorded.

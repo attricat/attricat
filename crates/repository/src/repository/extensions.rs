@@ -22,6 +22,23 @@ use crate::{
 use super::generations::{Generation, advance_generation};
 use super::{AttricatRepository, AuditContext, RepositoryError};
 
+/// `extension_grants.grant_kind` values.
+const GRANT_KIND_CAPABILITY: &str = "capability";
+const GRANT_KIND_HOST_PERMISSION: &str = "host_permission";
+const GRANT_KIND_EVENT_PUBLISH: &str = "event_publish";
+const GRANT_KIND_EVENT_SUBSCRIBE: &str = "event_subscribe";
+/// Longest diagnostic code a quarantine records, in bytes.
+const MAX_QUARANTINE_DIAGNOSTIC_CODE_BYTES: usize = 128;
+/// Longest lifecycle `source` description, in bytes.
+const MAX_EXTENSION_SOURCE_BYTES: usize = 512;
+/// The only `version` of the workspace extension layout settings document.
+const WORKSPACE_EXTENSION_LAYOUT_VERSION: u64 = 1;
+
+/// The layout used when a workspace has not configured one.
+pub(crate) fn empty_workspace_extension_layout() -> Value {
+    json!({"version": WORKSPACE_EXTENSION_LAYOUT_VERSION, "outlets": {}})
+}
+
 fn event_contract_grant_id(provider: &str, contract: &str) -> String {
     format!("{provider}:{contract}")
 }
@@ -32,23 +49,23 @@ pub fn required_extension_grants(manifest: &Manifest) -> Vec<(&'static str, Stri
     manifest
         .permissions
         .iter()
-        .map(|id| ("capability", id.clone()))
+        .map(|id| (GRANT_KIND_CAPABILITY, id.clone()))
         .chain(
             manifest
                 .host_permissions
                 .iter()
-                .map(|permission| ("host_permission", permission.id.clone())),
+                .map(|permission| (GRANT_KIND_HOST_PERMISSION, permission.id.clone())),
         )
         .chain(
             manifest
                 .event_contracts
                 .exports
                 .iter()
-                .map(|contract| ("event_publish", contract.id.clone())),
+                .map(|contract| (GRANT_KIND_EVENT_PUBLISH, contract.id.clone())),
         )
         .chain(manifest.event_contracts.consumes.iter().map(|contract| {
             (
-                "event_subscribe",
+                GRANT_KIND_EVENT_SUBSCRIBE,
                 event_contract_grant_id(&contract.provider, &contract.contract),
             )
         }))
@@ -69,7 +86,7 @@ pub fn extension_manifest_sha256(manifest: &Manifest) -> Result<String, Reposito
 pub(crate) fn validate_workspace_extension_layout(layout: &Value) -> Result<(), RepositoryError> {
     let object = layout.as_object().ok_or(RepositoryError::InvalidCode)?;
     if object.len() != 2
-        || object.get("version").and_then(Value::as_u64) != Some(1)
+        || object.get("version").and_then(Value::as_u64) != Some(WORKSPACE_EXTENSION_LAYOUT_VERSION)
         || !object.get("outlets").is_some_and(Value::is_object)
     {
         return Err(RepositoryError::InvalidCode);
@@ -693,7 +710,7 @@ impl AttricatRepository {
         let mut layout = if layout.get("outlets").is_some_and(Value::is_object) {
             layout
         } else {
-            json!({"version": 1, "outlets": {}})
+            empty_workspace_extension_layout()
         };
         if let Some((blueprint_id, blueprint_version)) = blueprint {
             let override_layout = sqlx::query_scalar::<_, Option<Value>>(
@@ -793,7 +810,7 @@ impl AttricatRepository {
         .bind(self.extension_workspace())
         .fetch_optional(&self.pool)
         .await?
-        .unwrap_or_else(|| json!({"version": 1, "outlets": {}})))
+        .unwrap_or_else(empty_workspace_extension_layout))
     }
 
     async fn lock_workspace_settings_in_transaction(
@@ -824,7 +841,7 @@ impl AttricatRepository {
         let layout = settings
             .get("extension_layout")
             .cloned()
-            .unwrap_or_else(|| json!({"version":1,"outlets":{}}));
+            .unwrap_or_else(empty_workspace_extension_layout);
         validate_workspace_extension_layout(&layout)?;
         Ok(layout)
     }
@@ -1101,12 +1118,12 @@ impl AttricatRepository {
             row.grant_kinds.into_iter().zip(row.grant_ids).collect();
         let capability_grants: HashSet<String> = grants
             .iter()
-            .filter(|(kind, _)| kind == "capability")
+            .filter(|(kind, _)| kind == GRANT_KIND_CAPABILITY)
             .map(|(_, id)| id.clone())
             .collect();
         let host_permission_grants: HashSet<String> = grants
             .iter()
-            .filter(|(kind, _)| kind == "host_permission")
+            .filter(|(kind, _)| kind == GRANT_KIND_HOST_PERMISSION)
             .map(|(_, id)| id.clone())
             .collect();
         let authorized = manifest
@@ -1120,11 +1137,11 @@ impl AttricatRepository {
             && manifest.event_contracts.exports.iter().all(|contract| {
                 grants
                     .iter()
-                    .any(|(kind, id)| kind == "event_publish" && id == &contract.id)
+                    .any(|(kind, id)| kind == GRANT_KIND_EVENT_PUBLISH && id == &contract.id)
             })
             && manifest.event_contracts.consumes.iter().all(|contract| {
                 grants.iter().any(|(kind, id)| {
-                    kind == "event_subscribe"
+                    kind == GRANT_KIND_EVENT_SUBSCRIBE
                         && id == &event_contract_grant_id(&contract.provider, &contract.contract)
                 })
             });
@@ -1186,7 +1203,10 @@ impl AttricatRepository {
     ) -> Result<(), RepositoryError> {
         if !matches!(
             grant_kind,
-            "capability" | "host_permission" | "event_publish" | "event_subscribe"
+            GRANT_KIND_CAPABILITY
+                | GRANT_KIND_HOST_PERMISSION
+                | GRANT_KIND_EVENT_PUBLISH
+                | GRANT_KIND_EVENT_SUBSCRIBE
         ) {
             return Err(RepositoryError::InvalidExtension(
                 "grant kind must be capability, host_permission, event_publish, or event_subscribe"
@@ -1198,28 +1218,29 @@ impl AttricatRepository {
         let manifest = self
             .installed_release_manifest(&mut transaction, current.installed_release_id)
             .await?;
-        let declared =
-            match grant_kind {
-                "capability" => manifest
-                    .permissions
-                    .iter()
-                    .chain(&manifest.optional_permissions)
-                    .any(|item| item == grant_id),
-                "host_permission" => manifest
-                    .host_permissions
-                    .iter()
-                    .chain(&manifest.optional_host_permissions)
-                    .any(|item| item.id == grant_id),
-                "event_publish" => manifest
-                    .event_contracts
-                    .exports
-                    .iter()
-                    .any(|item| item.id == grant_id),
-                "event_subscribe" => manifest.event_contracts.consumes.iter().any(|item| {
-                    event_contract_grant_id(&item.provider, &item.contract) == grant_id
-                }),
-                _ => false,
-            };
+        let declared = match grant_kind {
+            GRANT_KIND_CAPABILITY => manifest
+                .permissions
+                .iter()
+                .chain(&manifest.optional_permissions)
+                .any(|item| item == grant_id),
+            GRANT_KIND_HOST_PERMISSION => manifest
+                .host_permissions
+                .iter()
+                .chain(&manifest.optional_host_permissions)
+                .any(|item| item.id == grant_id),
+            GRANT_KIND_EVENT_PUBLISH => manifest
+                .event_contracts
+                .exports
+                .iter()
+                .any(|item| item.id == grant_id),
+            GRANT_KIND_EVENT_SUBSCRIBE => manifest
+                .event_contracts
+                .consumes
+                .iter()
+                .any(|item| event_contract_grant_id(&item.provider, &item.contract) == grant_id),
+            _ => false,
+        };
         if !declared {
             return Err(RepositoryError::InvalidExtension(format!(
                 "'{grant_id}' is not declared by this release"
@@ -1252,27 +1273,28 @@ impl AttricatRepository {
         let manifest = self
             .installed_release_manifest(&mut transaction, current.installed_release_id)
             .await?;
-        let required =
-            match grant_kind {
-                "capability" => manifest.permissions.iter().any(|item| item == grant_id),
-                "host_permission" => manifest
-                    .host_permissions
-                    .iter()
-                    .any(|item| item.id == grant_id),
-                "event_publish" => manifest
-                    .event_contracts
-                    .exports
-                    .iter()
-                    .any(|item| item.id == grant_id),
-                "event_subscribe" => manifest.event_contracts.consumes.iter().any(|item| {
-                    event_contract_grant_id(&item.provider, &item.contract) == grant_id
-                }),
-                _ => {
-                    return Err(RepositoryError::InvalidExtension(
-                        "invalid grant kind".into(),
-                    ));
-                }
-            };
+        let required = match grant_kind {
+            GRANT_KIND_CAPABILITY => manifest.permissions.iter().any(|item| item == grant_id),
+            GRANT_KIND_HOST_PERMISSION => manifest
+                .host_permissions
+                .iter()
+                .any(|item| item.id == grant_id),
+            GRANT_KIND_EVENT_PUBLISH => manifest
+                .event_contracts
+                .exports
+                .iter()
+                .any(|item| item.id == grant_id),
+            GRANT_KIND_EVENT_SUBSCRIBE => manifest
+                .event_contracts
+                .consumes
+                .iter()
+                .any(|item| event_contract_grant_id(&item.provider, &item.contract) == grant_id),
+            _ => {
+                return Err(RepositoryError::InvalidExtension(
+                    "invalid grant kind".into(),
+                ));
+            }
+        };
         if current.state == "enabled" && required {
             return Err(RepositoryError::InvalidExtensionTransition(
                 "disable an extension before revoking a required grant",
@@ -1352,7 +1374,9 @@ impl AttricatRepository {
         extension_id: &str,
         diagnostic_code: &str,
     ) -> Result<ExtensionInstallation, RepositoryError> {
-        if diagnostic_code.is_empty() || diagnostic_code.len() > 128 {
+        if diagnostic_code.is_empty()
+            || diagnostic_code.len() > MAX_QUARANTINE_DIAGNOSTIC_CODE_BYTES
+        {
             return Err(RepositoryError::InvalidExtension(
                 "quarantine diagnostic code is invalid".into(),
             ));
@@ -1565,10 +1589,10 @@ impl AttricatRepository {
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))
     }
     fn validate_extension_source(&self, source: &str) -> Result<(), RepositoryError> {
-        if source.trim().is_empty() || source.len() > 512 {
-            return Err(RepositoryError::InvalidExtension(
-                "source must be non-empty and at most 512 bytes".into(),
-            ));
+        if source.trim().is_empty() || source.len() > MAX_EXTENSION_SOURCE_BYTES {
+            return Err(RepositoryError::InvalidExtension(format!(
+                "source must be non-empty and at most {MAX_EXTENSION_SOURCE_BYTES} bytes"
+            )));
         }
         Ok(())
     }
@@ -1691,7 +1715,7 @@ impl AttricatRepository {
         for id in &manifest.permissions {
             if !grants
                 .iter()
-                .any(|(kind, granted)| kind == "capability" && granted == id)
+                .any(|(kind, granted)| kind == GRANT_KIND_CAPABILITY && granted == id)
             {
                 return Err(RepositoryError::InvalidExtension(format!(
                     "required capability '{id}' has not been granted"
@@ -1699,10 +1723,9 @@ impl AttricatRepository {
             }
         }
         for permission in &manifest.host_permissions {
-            if !grants
-                .iter()
-                .any(|(kind, granted)| kind == "host_permission" && granted == &permission.id)
-            {
+            if !grants.iter().any(|(kind, granted)| {
+                kind == GRANT_KIND_HOST_PERMISSION && granted == &permission.id
+            }) {
                 return Err(RepositoryError::InvalidExtension(format!(
                     "required host permission '{}' has not been granted",
                     permission.id
@@ -1712,7 +1735,7 @@ impl AttricatRepository {
         for contract in &manifest.event_contracts.exports {
             if !grants
                 .iter()
-                .any(|(kind, granted)| kind == "event_publish" && granted == &contract.id)
+                .any(|(kind, granted)| kind == GRANT_KIND_EVENT_PUBLISH && granted == &contract.id)
             {
                 return Err(RepositoryError::InvalidExtension(format!(
                     "event publish grant '{}' has not been granted",
@@ -1724,7 +1747,7 @@ impl AttricatRepository {
             let grant_id = event_contract_grant_id(&contract.provider, &contract.contract);
             if !grants
                 .iter()
-                .any(|(kind, granted)| kind == "event_subscribe" && granted == &grant_id)
+                .any(|(kind, granted)| kind == GRANT_KIND_EVENT_SUBSCRIBE && granted == &grant_id)
             {
                 return Err(RepositoryError::InvalidExtension(format!(
                     "event subscribe grant '{}' has not been granted",

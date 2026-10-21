@@ -80,7 +80,7 @@ pub struct ConnectorJobDefinition {
     /// Uploaded file supplied to an import.
     pub input_file_id: Option<String>,
     /// Run interval in seconds, from 60 to 2592000 (30 days).
-    #[schemars(range(min = 60, max = 2_592_000))]
+    #[schemars(range(min = MIN_CONNECTOR_INTERVAL_SECONDS, max = MAX_CONNECTOR_INTERVAL_SECONDS))]
     pub interval_seconds: Option<i32>,
     /// Whether the job is scheduled. Defaults to `true`.
     #[serde(default = "default_connector_enabled")]
@@ -103,6 +103,10 @@ pub const KNOWN_VIEW_NAMES: &[&str] = &[
 ];
 
 pub const CONNECTOR_JOB_DIRECTIONS: &[&str] = &["import", "export"];
+/// Shortest connector job run interval, in seconds.
+pub const MIN_CONNECTOR_INTERVAL_SECONDS: i32 = 60;
+/// Longest connector job run interval, in seconds (30 days).
+pub const MAX_CONNECTOR_INTERVAL_SECONDS: i32 = 30 * 24 * 60 * 60;
 
 fn default_connector_enabled() -> bool {
     true

@@ -363,7 +363,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         if !matches!(
             purpose,
             "email_verification" | "password_setup" | "password_reset"
-        ) || digest.len() != 32
+        ) || digest.len() != super::tokens::TOKEN_DIGEST_BYTES
             || expires_at <= Utc::now()
         {
             return Err(RepositoryError::NotFound("lifecycle token"));

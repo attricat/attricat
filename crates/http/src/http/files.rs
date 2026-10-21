@@ -32,6 +32,7 @@ use uuid::Uuid;
 /// prefix, so the remainder can be written directly to temporary storage.
 const SIGNATURE_SNIFF_BYTES: usize = 512;
 const MAX_CONTEXT_ID_BYTES: usize = 64;
+const MAX_FILENAME_BYTES: usize = 255;
 
 use attricat_validation::files::{detect_mime as detected_mime, is_supported_upload_mime};
 
@@ -840,7 +841,8 @@ fn sanitize_filename(name: &str) -> Option<String> {
         .chars()
         .filter(|character| !character.is_control())
         .collect();
-    (!clean.is_empty() && clean != "." && clean != ".." && clean.len() <= 255).then_some(clean)
+    (!clean.is_empty() && clean != "." && clean != ".." && clean.len() <= MAX_FILENAME_BYTES)
+        .then_some(clean)
 }
 fn declared_mime_matches(declared: Option<&str>, detected: &str) -> bool {
     let declared = declared

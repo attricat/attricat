@@ -5,7 +5,7 @@
 use super::extension_attricat_data::{
     ExtensionAttricatBatch, ExtensionAttricatIntent, ExtensionAttricatIntentOutcome,
     ExtensionAttricatIntentStatus, MAX_EXTENSION_BATCH_INTENTS, MAX_EXTENSION_BATCH_KEY_BYTES,
-    MAX_EXTENSION_INTENT_KEY_BYTES,
+    MAX_EXTENSION_INTENT_KEY_BYTES, MAX_EXTENSION_LOOKUP_VALUE_BYTES,
 };
 use super::record_commands::{ChosenIdRecordCreate, writes_relationship_values};
 use super::*;
@@ -35,14 +35,14 @@ impl AttricatRepository {
             || batch.batch_key.len() > MAX_EXTENSION_BATCH_KEY_BYTES
             || !batch.batch_key.is_ascii()
         {
-            return Err(RepositoryError::InvalidExtension(
-                "batch key must be 1-256 ASCII bytes".into(),
-            ));
+            return Err(RepositoryError::InvalidExtension(format!(
+                "batch key must be 1-{MAX_EXTENSION_BATCH_KEY_BYTES} ASCII bytes"
+            )));
         }
         if batch.intents.is_empty() || batch.intents.len() > MAX_EXTENSION_BATCH_INTENTS {
-            return Err(RepositoryError::InvalidExtension(
-                "batch must contain 1-100 intents".into(),
-            ));
+            return Err(RepositoryError::InvalidExtension(format!(
+                "batch must contain 1-{MAX_EXTENSION_BATCH_INTENTS} intents"
+            )));
         }
         let extension_id = self.extension_id.as_deref().ok_or_else(|| {
             RepositoryError::InvalidExtension(
@@ -58,9 +58,9 @@ impl AttricatRepository {
                 || !key.is_ascii()
                 || !keys.insert(key.clone())
             {
-                return Err(RepositoryError::InvalidExtension(
-                    "intent keys must be unique 1-128 ASCII bytes".into(),
-                ));
+                return Err(RepositoryError::InvalidExtension(format!(
+                    "intent keys must be unique 1-{MAX_EXTENSION_INTENT_KEY_BYTES} ASCII bytes"
+                )));
             }
             match self
                 .execute_extension_attricat_intent(
@@ -257,13 +257,11 @@ impl AttricatRepository {
                 system_metadata,
                 ..
             } => {
-                if lookup_value.is_empty()
-                    || lookup_value.len()
-                        > super::extension_attricat_data::MAX_EXTENSION_LOOKUP_VALUE_BYTES
+                if lookup_value.is_empty() || lookup_value.len() > MAX_EXTENSION_LOOKUP_VALUE_BYTES
                 {
-                    return Err(RepositoryError::InvalidExtension(
-                        "upsert lookup value must be 1-512 bytes".into(),
-                    ));
+                    return Err(RepositoryError::InvalidExtension(format!(
+                        "upsert lookup value must be 1-{MAX_EXTENSION_LOOKUP_VALUE_BYTES} bytes"
+                    )));
                 }
                 // The lookup locks the matched record row, so the workspace
                 // relationship lock must be taken before it.

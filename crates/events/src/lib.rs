@@ -49,6 +49,8 @@ const CORE_EVENT_PREFIXES: &[&str] = &[
     "context.",
 ];
 const MAX_JSON_BYTES: usize = 64 * 1024;
+/// The longest aggregate kind, source name, or event type segment.
+const MAX_IDENTIFIER_BYTES: usize = 128;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -215,7 +217,7 @@ pub enum EventContractError {
     #[error("plugin event types cannot use a reserved core namespace")]
     ReservedCoreNamespace,
     #[error(
-        "aggregate kind and source name must be non-blank ASCII identifiers no longer than 128 bytes"
+        "aggregate kind and source name must be non-blank ASCII identifiers no longer than {MAX_IDENTIFIER_BYTES} bytes"
     )]
     InvalidRoutingField,
     #[error("event metadata and payload must be JSON objects no larger than 64 KiB")]
@@ -262,7 +264,7 @@ fn validate_event_type(event_type: &str) -> Result<(), EventContractError> {
 
 fn valid_identifier(value: &str) -> bool {
     !value.is_empty()
-        && value.len() <= 128
+        && value.len() <= MAX_IDENTIFIER_BYTES
         && value.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_' || byte == b'-'
         })
@@ -270,7 +272,7 @@ fn valid_identifier(value: &str) -> bool {
 
 fn valid_source_name(value: &str) -> bool {
     !value.is_empty()
-        && value.len() <= 128
+        && value.len() <= MAX_IDENTIFIER_BYTES
         && value.bytes().enumerate().all(|(index, byte)| {
             if index == 0 {
                 byte.is_ascii_alphabetic()

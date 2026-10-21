@@ -86,11 +86,15 @@ pub const MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES: usize = 1024 * 1024;
 pub const MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES: usize = 512 * 1024;
 pub const SOLUTION_PACK_PLAN_EXPIRY_HOURS: i64 = 24;
 pub const MAX_SOLUTION_PACK_PREFIX_BYTES: usize = 32;
-const MAX_ARCHIVE_PATH_BYTES: usize = 512;
+pub(crate) const MAX_ARCHIVE_PATH_BYTES: usize = 512;
 pub(crate) const MAX_IDENTIFIER_BYTES: usize = 128;
 pub(crate) const MAX_NAME_BYTES: usize = 200;
 const MAX_DESCRIPTION_BYTES: usize = 4096;
 pub(crate) const MAX_VERSION_REQUIREMENT_BYTES: usize = 256;
+/// Chunk size for draining the archive after the tar end marker.
+const TRAILING_READ_BUFFER_BYTES: usize = 8 * 1024;
+const SHA256_BYTES: usize = 32;
+const SHA256_HEX_CHARS: usize = SHA256_BYTES * 2;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -587,7 +591,7 @@ impl ValidatedSolutionPack {
         }
 
         let mut bounded_decoder = tar.into_inner();
-        let mut trailing = [0u8; 8192];
+        let mut trailing = [0u8; TRAILING_READ_BUFFER_BYTES];
         loop {
             let count = bounded_decoder.read(&mut trailing).map_err(|_| {
                 SolutionPackError::Invalid("solution-pack archive could not be decompressed".into())
@@ -1150,7 +1154,7 @@ fn validate_declared_files(
     {
         let bytes = &files[path];
         let expected = parse_sha256(digest).expect("digest validated with manifest");
-        let actual: [u8; 32] = Sha256::digest(bytes).into();
+        let actual: [u8; SHA256_BYTES] = Sha256::digest(bytes).into();
         if expected.ct_eq(&actual).unwrap_u8() != 1 {
             return invalid(format!("resource '{key}' does not match its sha256 digest"));
         }
@@ -1840,15 +1844,15 @@ pub fn parse_version_req(value: &str) -> Result<VersionReq, semver::Error> {
     })
 }
 
-pub(crate) fn parse_sha256(value: &str) -> Result<[u8; 32], ()> {
-    if value.len() != 64
+pub(crate) fn parse_sha256(value: &str) -> Result<[u8; SHA256_BYTES], ()> {
+    if value.len() != SHA256_HEX_CHARS
         || !value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     {
         return Err(());
     }
-    let mut digest = [0u8; 32];
+    let mut digest = [0u8; SHA256_BYTES];
     for (index, byte) in digest.iter_mut().enumerate() {
         let offset = index * 2;
         *byte = (hex_nibble(value.as_bytes()[offset])? << 4)
@@ -1867,7 +1871,7 @@ fn hex_nibble(byte: u8) -> Result<u8, ()> {
 
 pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
-    let mut output = String::with_capacity(64);
+    let mut output = String::with_capacity(SHA256_HEX_CHARS);
     for byte in digest {
         use std::fmt::Write;
         write!(&mut output, "{byte:02x}").expect("writing to a String cannot fail");

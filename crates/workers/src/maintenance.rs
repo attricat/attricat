@@ -13,6 +13,11 @@ use tokio::sync::watch;
 
 const INTERVAL: Duration = Duration::from_secs(60);
 const SWEEP_BUDGET: Duration = Duration::from_secs(10);
+/// The most history rows one purge batch deletes (the repository's `LIMIT`); a
+/// smaller batch means nothing expired remains.
+const HISTORY_PURGE_BATCH_ROWS: u64 = 1000;
+/// The most abandoned uploads one sweep deletes.
+const MAX_UPLOAD_CLEANUPS_PER_SWEEP: usize = 100;
 
 pub fn start(
     repository: SystemRepository,
@@ -47,7 +52,7 @@ async fn run_once(
         loop {
             let deleted = repository.purge_value_history_batch(retention).await?;
             metrics::counter!("attricat_value_history_entries_purged_total").increment(deleted);
-            if deleted < 1000 {
+            if deleted < HISTORY_PURGE_BATCH_ROWS {
                 return Ok::<(), RepositoryError>(());
             }
             tokio::task::yield_now().await;
@@ -67,7 +72,7 @@ async fn run_once(
         .record(started.elapsed().as_secs_f64());
 
     let _ = tokio::time::timeout(SWEEP_BUDGET, async {
-        for _ in 0..100 {
+        for _ in 0..MAX_UPLOAD_CLEANUPS_PER_SWEEP {
             match cleanup_upload_once(repository, store).await {
                 Ok(true) => {},
                 Ok(false) => break,

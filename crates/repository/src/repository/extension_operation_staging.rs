@@ -2,8 +2,8 @@
 //! crashes cannot create untracked objects. Batch keys are the current run's
 //! lease-fenced checkpoint key, not caller-chosen idempotency namespaces.
 use super::extension_operation_artifacts::{
-    MAX_OPERATION_ARTIFACT_BYTES, MAX_OPERATION_RUN_ARTIFACT_BYTES,
-    MAX_OPERATION_WORKSPACE_ARTIFACT_BYTES,
+    MAX_ARTIFACT_MEDIA_TYPE_BYTES, MAX_OPERATION_ARTIFACT_BYTES, MAX_OPERATION_RUN_ARTIFACT_BYTES,
+    MAX_OPERATION_WORKSPACE_ARTIFACT_BYTES, SHA256_HEX_LEN,
 };
 use super::{AttricatRepository, ExtensionOperationArtifact, RepositoryError};
 use uuid::Uuid;
@@ -22,13 +22,16 @@ pub struct StagedChunk {
     pub checksum_sha256: String,
 }
 
+const MAX_OUTPUT_CHUNK_NAME_BYTES: usize = 128;
+const MAX_OUTPUT_CHUNK_BYTES: usize = 64 * 1024;
+
 fn invalid(reason: &str) -> RepositoryError {
     RepositoryError::InvalidExtension(reason.into())
 }
 
 fn valid_name(name: &str) -> bool {
     !name.is_empty()
-        && name.len() <= 128
+        && name.len() <= MAX_OUTPUT_CHUNK_NAME_BYTES
         && name
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
@@ -48,11 +51,11 @@ impl AttricatRepository {
     ) -> Result<OutputChunk, RepositoryError> {
         if !valid_name(name)
             || media_type.is_empty()
-            || media_type.len() > 255
+            || media_type.len() > MAX_ARTIFACT_MEDIA_TYPE_BYTES
             || !media_type.is_ascii()
             || length == 0
-            || length > 65536
-            || checksum.len() != 64
+            || length > MAX_OUTPUT_CHUNK_BYTES
+            || checksum.len() != SHA256_HEX_LEN
         {
             return Err(invalid("invalid bounded output chunk"));
         }

@@ -18,6 +18,7 @@ const CHANNEL_SELECT: &str = "SELECT c.context_id, a.code AS context_code, c.ena
 
 /// JSON-schema errors reported per record and channel.
 const MAX_SCHEMA_VIOLATIONS: usize = 10;
+const MAX_REQUIRED_RULE_CODES: usize = 32;
 
 /// One predicate a channel requires before publication.
 struct GateCheck {
@@ -248,13 +249,13 @@ impl AttricatRepository {
         let workspace_id = self.workspace_id.0;
         if let Some(codes) = &input.required_rule_codes {
             let unique: std::collections::HashSet<_> = codes.iter().collect();
-            if codes.len() > 32
+            if codes.len() > MAX_REQUIRED_RULE_CODES
                 || unique.len() != codes.len()
                 || codes.iter().any(|code| !is_valid_code(code))
             {
-                return Err(RepositoryError::InvalidPublicationChannel(
-                    "required_rule_codes must be at most 32 unique rule codes".into(),
-                ));
+                return Err(RepositoryError::InvalidPublicationChannel(format!(
+                    "required_rule_codes must be at most {MAX_REQUIRED_RULE_CODES} unique rule codes"
+                )));
             }
             // A code that names no rule would never fail, silently disabling
             // the gate. Rules created earlier in this transaction count.
@@ -969,10 +970,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         sqlx::query("INSERT INTO permissions (code, description) VALUES ('records.publish', 'Publish catalog records to channel contexts') ON CONFLICT (code) DO NOTHING")
             .execute(&mut *tx)
             .await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
+        for role_id in super::roles::OWNER_AND_ADMIN_ROLE_IDS {
             sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'records.publish') ON CONFLICT DO NOTHING")
                 .bind(role_id)
                 .execute(&mut *tx)

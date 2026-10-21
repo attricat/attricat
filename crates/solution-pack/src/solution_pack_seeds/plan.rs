@@ -15,6 +15,9 @@ use crate::solution_packs::{
     physical_code, resource_code,
 };
 
+/// Saved searches a pack installs are shared with the whole workspace.
+const SAVED_SEARCH_VISIBILITY: &str = "workspace";
+
 /// The logical key of the plan action for a context's publication channel.
 fn publication_channel_key(context_key: &str) -> String {
     format!("channels/{}", resource_code(context_key))
@@ -615,7 +618,7 @@ fn plan_saved_searches(input: &DependentPlanInput<'_>, (mappings, actions): &mut
             serde_json::json!({
                 "name": search.name,
                 "description": search.description,
-                "visibility": "workspace",
+                "visibility": SAVED_SEARCH_VISIBILITY,
                 "state": state,
             })
         });
@@ -625,7 +628,7 @@ fn plan_saved_searches(input: &DependentPlanInput<'_>, (mappings, actions): &mut
             "blueprint": search.blueprint,
             "blueprint_code": blueprint.target_code,
             "context": search.context,
-            "visibility": "workspace",
+            "visibility": SAVED_SEARCH_VISIBILITY,
         });
         if let Some(reason) = invalid_state {
             summary["invalid_state_reason"] = Value::String(reason);

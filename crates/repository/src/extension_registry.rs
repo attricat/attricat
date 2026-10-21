@@ -14,6 +14,8 @@ use thiserror::Error;
 pub const DEFAULT_OFFICIAL_REGISTRY: &str = "attricat/attricat-extensions";
 const GITHUB_API_ORIGIN: &str = "https://api.github.com";
 const GITHUB_RAW_ORIGIN: &str = "https://raw.githubusercontent.com";
+/// Scheme prefix of canonical GitHub registry and extension sources.
+const GITHUB_SOURCE_PREFIX: &str = "github:";
 const MAX_README_BYTES: usize = 256 * 1024;
 const MAX_REGISTRY_INDEX_BYTES: usize = 1024 * 1024;
 const MAX_RELEASE_CATALOGUE_BYTES: usize = 1024 * 1024;
@@ -21,6 +23,13 @@ const MAX_REGISTRY_ENTRIES: usize = 1_000;
 const MAX_REGISTRY_NAME_BYTES: usize = 256;
 const MAX_REGISTRY_DESCRIPTION_BYTES: usize = 4 * 1024;
 const MAX_REGISTRY_ICON_BYTES: usize = 512;
+const MAX_REGISTRY_ID_BYTES: usize = 128;
+/// GitHub limits for account and repository names.
+const MAX_GITHUB_OWNER_BYTES: usize = 39;
+const MAX_GITHUB_REPOSITORY_BYTES: usize = 100;
+/// Redirects followed from a release download to its short-lived asset URL.
+const MAX_ASSET_REDIRECTS: usize = 5;
+const USER_AGENT: &str = "attricat-extension-registry";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct GitHubRepository {
@@ -29,7 +38,7 @@ pub struct GitHubRepository {
 }
 impl GitHubRepository {
     pub fn identity(&self) -> String {
-        format!("github:{}/{}", self.owner, self.repository)
+        format!("{GITHUB_SOURCE_PREFIX}{}/{}", self.owner, self.repository)
     }
     fn release_asset_origin(&self) -> String {
         format!(
@@ -42,7 +51,7 @@ impl FromStr for GitHubRepository {
     type Err = RegistryError;
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         let value = value.trim();
-        let path = value.strip_prefix("github:").unwrap_or(value);
+        let path = value.strip_prefix(GITHUB_SOURCE_PREFIX).unwrap_or(value);
         let path = if path.starts_with("https://") {
             let url = Url::parse(path).map_err(|_| RegistryError::InvalidSource)?;
             if url.scheme() != "https"
@@ -75,7 +84,7 @@ impl FromStr for GitHubRepository {
 }
 fn valid_owner(value: &str) -> bool {
     !value.is_empty()
-        && value.len() <= 39
+        && value.len() <= MAX_GITHUB_OWNER_BYTES
         && value
             .as_bytes()
             .first()
@@ -86,7 +95,7 @@ fn valid_owner(value: &str) -> bool {
 }
 fn valid_repository(value: &str) -> bool {
     !value.is_empty()
-        && value.len() <= 100
+        && value.len() <= MAX_GITHUB_REPOSITORY_BYTES
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
@@ -118,6 +127,14 @@ pub struct DiscoveredExtension {
     pub name: String,
     pub description: String,
     pub icon: Option<String>,
+}
+impl DiscoveredExtension {
+    fn github_repository(&self) -> Result<GitHubRepository, RegistryError> {
+        self.repository
+            .strip_prefix(GITHUB_SOURCE_PREFIX)
+            .ok_or(RegistryError::InvalidResponse)?
+            .parse()
+    }
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct ExtensionDetails {
@@ -164,15 +181,15 @@ impl GitHubRegistry {
     pub fn new() -> Result<Self, RegistryError> {
         let client = Client::builder()
             .redirect(Policy::none())
-            .user_agent("attricat-extension-registry")
+            .user_agent(USER_AGENT)
             .build()
             .map_err(|_| RegistryError::Unavailable)?;
         // GitHub release download URLs redirect to a short-lived asset URL.
         // The initial URL is authenticated against the GitHub release response
         // and exact repository before this client follows that redirect.
         let asset_client = Client::builder()
-            .redirect(Policy::limited(5))
-            .user_agent("attricat-extension-registry")
+            .redirect(Policy::limited(MAX_ASSET_REDIRECTS))
+            .user_agent(USER_AGENT)
             .build()
             .map_err(|_| RegistryError::Unavailable)?;
         Ok(Self {
@@ -226,7 +243,7 @@ impl GitHubRegistry {
             .into_iter()
             .map(|entry| {
                 if entry.id.is_empty()
-                    || entry.id.len() > 128
+                    || entry.id.len() > MAX_REGISTRY_ID_BYTES
                     || !entry.id.bytes().all(|byte| {
                         byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
                     })
@@ -258,11 +275,7 @@ impl GitHubRegistry {
         &self,
         extension: DiscoveredExtension,
     ) -> Result<ExtensionDetails, RegistryError> {
-        let repository = extension
-            .repository
-            .strip_prefix("github:")
-            .ok_or(RegistryError::InvalidResponse)?
-            .parse::<GitHubRepository>()?;
+        let repository = extension.github_repository()?;
         let readme_url = self
             .api_origin
             .join(&format!(
@@ -302,11 +315,7 @@ impl GitHubRegistry {
         &self,
         extension: &DiscoveredExtension,
     ) -> Result<Vec<DiscoveredRelease>, RegistryError> {
-        let repository = extension
-            .repository
-            .strip_prefix("github:")
-            .ok_or(RegistryError::InvalidResponse)?
-            .parse::<GitHubRepository>()?;
+        let repository = extension.github_repository()?;
         self.releases(&repository).await
     }
     /// Downloads only an asset that was returned by this registry's trusted
@@ -320,7 +329,7 @@ impl GitHubRegistry {
             Url::parse(&release.asset.download_url).map_err(|_| RegistryError::InvalidResponse)?;
         let source = release
             .source
-            .trim_start_matches("github:")
+            .trim_start_matches(GITHUB_SOURCE_PREFIX)
             .parse::<GitHubRepository>()
             .map_err(|_| RegistryError::InvalidResponse)?;
         if url.scheme() != "https"

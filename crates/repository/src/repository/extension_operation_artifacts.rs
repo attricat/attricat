@@ -14,6 +14,9 @@ use super::{AttricatRepository, RepositoryError};
 pub const MAX_OPERATION_ARTIFACT_BYTES: i64 = 1024 * 1024 * 1024;
 pub const MAX_OPERATION_RUN_ARTIFACT_BYTES: i64 = 2 * 1024 * 1024 * 1024;
 pub const MAX_OPERATION_WORKSPACE_ARTIFACT_BYTES: i64 = 8 * 1024 * 1024 * 1024;
+pub(super) const MAX_ARTIFACT_MEDIA_TYPE_BYTES: usize = 255;
+/// Length of a lowercase hex-encoded SHA-256 checksum.
+pub(super) const SHA256_HEX_LEN: usize = 64;
 
 #[derive(Clone, Debug, FromRow)]
 pub struct ExtensionOperationArtifact {
@@ -85,7 +88,10 @@ impl AttricatRepository {
         release_id: Uuid,
         media_type: &str,
     ) -> Result<ExtensionOperationArtifact, RepositoryError> {
-        if media_type.is_empty() || media_type.len() > 255 || !media_type.is_ascii() {
+        if media_type.is_empty()
+            || media_type.len() > MAX_ARTIFACT_MEDIA_TYPE_BYTES
+            || !media_type.is_ascii()
+        {
             return Err(artifact_error("invalid artifact media type"));
         }
         let mut tx = self.pool.begin().await?;
@@ -210,7 +216,7 @@ impl AttricatRepository {
         checksum: &str,
         object_key: &str,
     ) -> Result<ExtensionOperationArtifact, RepositoryError> {
-        if checksum.len() != 64
+        if checksum.len() != SHA256_HEX_LEN
             || !checksum
                 .bytes()
                 .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())

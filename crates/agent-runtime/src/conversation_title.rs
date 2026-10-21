@@ -8,6 +8,8 @@ use uuid::Uuid;
 const TITLE_PROMPT: &str = "Give this catalogue conversation a concise, specific title describing the user's actual task or question. Use the language of the user. Respond with only the title, without quotes, markdown, a label, or a sentence. Do not include credentials or private identifiers.";
 const MAX_TITLE_CHARS: usize = 72;
 const MAX_CONTEXT_CHARS: usize = 2000;
+/// Attachment filenames of the first request offered as title context.
+const MAX_CONTEXT_ATTACHMENTS: usize = 8;
 
 fn normalize_title(raw: &str) -> Option<String> {
     let title = raw
@@ -61,7 +63,7 @@ pub async fn maybe_generate_title(
         .unwrap_or("");
     let input = json!({
         "user_request": request.content.as_str().unwrap_or("").chars().take(MAX_CONTEXT_CHARS).collect::<String>(),
-        "attachments": request.attachments.iter().map(|file| file.filename.as_str()).take(8).collect::<Vec<_>>(),
+        "attachments": request.attachments.iter().map(|file| file.filename.as_str()).take(MAX_CONTEXT_ATTACHMENTS).collect::<Vec<_>>(),
         "assistant_answer": answer_text.chars().take(MAX_CONTEXT_CHARS).collect::<String>(),
     });
     let result = provider

@@ -54,12 +54,12 @@ use crate::{
     solution_pack_extensions::OfficialExtensionReleases,
     solution_packs::MAX_SOLUTION_PACK_ARCHIVE_BYTES,
     storage::ObjectStore,
-    telemetry::{register_request_timing, unregister_request_timing},
+    telemetry::{PROMETHEUS_CONTENT_TYPE, register_request_timing, unregister_request_timing},
 };
 use axum::{
     Router,
     extract::State,
-    http::{HeaderName, HeaderValue},
+    http::{HeaderName, HeaderValue, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post, put},
@@ -130,6 +130,17 @@ pub use self::sessions::{SampleAccount, SampleLogins};
 pub use self::streams::StreamControl;
 pub use self::system::BuildInfo;
 
+/// Code of the context every workspace starts with.
+const DEFAULT_CONTEXT_CODE: &str = "default";
+const REQUEST_ID_HEADER: &str = "x-request-id";
+const SERVER_TIMING: HeaderName = HeaderName::from_static("server-timing");
+pub(crate) const MILLIS_PER_SECOND: f64 = 1_000.0;
+/// Request body headroom for the plan form fields sent beside the archive.
+const SOLUTION_PACK_PLAN_FIELDS_BYTES: usize = 128 * 1024;
+/// Concurrent archive decompression/validation jobs, each of which can expand
+/// to hundreds of MiB.
+const MAX_CONCURRENT_ARCHIVE_WORK: usize = 2;
+
 const TIMING_PHASES: [&str; 4] = ["candidate", "page", "related", "serialize"];
 /// Only Explorer requests publish development SQL and phase breakdowns.
 /// Other API responses retain the standard aggregate `app` timing.
@@ -172,7 +183,7 @@ impl RequestTiming {
         self.phases
             .lock()
             .expect("timing lock is not poisoned")
-            .push((phase, started.elapsed().as_secs_f64() * 1_000.0));
+            .push((phase, elapsed_ms(started)));
     }
 
     pub(crate) fn record_sql(&self, label: Option<&str>, duration_ms: f64) {
@@ -220,9 +231,13 @@ impl RequestTiming {
     }
 }
 
-// Each archive can expand to hundreds of MiB. Request admission alone cannot
-// bound this work: timed-out requests leave spawn_blocking threads running.
-static ARCHIVE_WORK: Semaphore = Semaphore::const_new(2);
+fn elapsed_ms(started: Instant) -> f64 {
+    started.elapsed().as_secs_f64() * MILLIS_PER_SECOND
+}
+
+// Request admission alone cannot bound archive work: timed-out requests leave
+// spawn_blocking threads running.
+static ARCHIVE_WORK: Semaphore = Semaphore::const_new(MAX_CONCURRENT_ARCHIVE_WORK);
 
 /// Runs archive decompression and validation off the async workers, retaining
 /// its memory/CPU admission permit until the blocking work actually finishes.
@@ -276,7 +291,7 @@ fn canonical_route(route: &str) -> &str {
 fn request_id(request: &axum::extract::Request) -> Uuid {
     request
         .headers()
-        .get("x-request-id")
+        .get(REQUEST_ID_HEADER)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse::<Uuid>().ok())
         .unwrap_or_else(Uuid::new_v4)
@@ -321,22 +336,21 @@ async fn server_timing(
     )
     .await;
     let status = response.status().as_u16();
-    let duration_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+    let duration_ms = elapsed_ms(started_at);
     span.record("status", status)
         .record("duration_ms", duration_ms);
     metrics::counter!("attricat_http_requests_total", "method" => method.clone(), "route" => route.clone(), "status" => status.to_string()).increment(1);
-    metrics::histogram!("attricat_http_request_duration_seconds", "method" => method, "route" => route).record(duration_ms / 1_000.0);
+    metrics::histogram!("attricat_http_request_duration_seconds", "method" => method, "route" => route).record(duration_ms / MILLIS_PER_SECOND);
     if status >= 500 {
         tracing::error!(parent: &span, status, duration_ms, "request failed");
     } else {
         tracing::info!(parent: &span, status, duration_ms, "request completed");
     }
-    let duration_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
-    let server_timing = HeaderName::from_static("server-timing");
+    let duration_ms = elapsed_ms(started_at);
     let phases = timing.server_timing();
     let value = match response
         .headers()
-        .get(&server_timing)
+        .get(SERVER_TIMING)
         .and_then(|value| value.to_str().ok())
     {
         Some(existing) if phases.is_empty() => format!("{existing}, app;dur={duration_ms:.2}"),
@@ -345,11 +359,11 @@ async fn server_timing(
         None => format!("{phases}, app;dur={duration_ms:.2}"),
     };
     response.headers_mut().insert(
-        HeaderName::from_static("x-request-id"),
+        HeaderName::from_static(REQUEST_ID_HEADER),
         HeaderValue::from_str(&request_id.to_string()).expect("UUID is a valid header value"),
     );
     response.headers_mut().insert(
-        server_timing,
+        SERVER_TIMING,
         HeaderValue::from_str(&value).expect("server timing values are valid header values"),
     );
     if let Some(id) = timing_span {
@@ -449,7 +463,7 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/solution-packs/plans",
             post(solution_packs::create_plan).layer(axum::extract::DefaultBodyLimit::max(
-                MAX_SOLUTION_PACK_ARCHIVE_BYTES + 128 * 1024,
+                MAX_SOLUTION_PACK_ARCHIVE_BYTES + SOLUTION_PACK_PLAN_FIELDS_BYTES,
             )),
         )
         .route(
@@ -1167,7 +1181,7 @@ fn panic_response(panic: Box<dyn std::any::Any + Send + 'static>) -> Response {
 
 async fn metrics(State(state): State<AppState>) -> Response {
     (
-        [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
+        [(header::CONTENT_TYPE, PROMETHEUS_CONTENT_TYPE)],
         state.metrics.render(),
     )
         .into_response()
@@ -1176,6 +1190,8 @@ async fn metrics(State(state): State<AppState>) -> Response {
 #[cfg(test)]
 mod timing_tests {
     use super::*;
+
+    const PERMIT_RELEASE_TIMEOUT: Duration = Duration::from_secs(2);
 
     #[test]
     fn api_aliases_use_the_canonical_route_for_middleware() {
@@ -1221,7 +1237,7 @@ mod timing_tests {
         assert!(task.await.unwrap_err().is_cancelled());
         assert!(PERMITS.try_acquire().is_err());
         release.send(()).unwrap();
-        let _permit = tokio::time::timeout(Duration::from_secs(2), PERMITS.acquire())
+        let _permit = tokio::time::timeout(PERMIT_RELEASE_TIMEOUT, PERMITS.acquire())
             .await
             .unwrap()
             .unwrap();
@@ -1231,13 +1247,13 @@ mod timing_tests {
     fn request_ids_accept_only_uuids_and_generate_missing_ids() {
         let id = Uuid::new_v4();
         let request = axum::http::Request::builder()
-            .header("x-request-id", id.to_string())
+            .header(REQUEST_ID_HEADER, id.to_string())
             .body(axum::body::Body::empty())
             .unwrap();
         assert_eq!(request_id(&request), id);
 
         let invalid = axum::http::Request::builder()
-            .header("x-request-id", "not-a-uuid")
+            .header(REQUEST_ID_HEADER, "not-a-uuid")
             .body(axum::body::Body::empty())
             .unwrap();
         assert_ne!(request_id(&invalid), Uuid::nil());

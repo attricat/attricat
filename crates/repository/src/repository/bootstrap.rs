@@ -7,7 +7,7 @@ use super::{
     generations::{Generation, advance_generation},
 };
 
-const OWNER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000101);
+use super::roles::OWNER_ROLE_ID;
 
 impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Applies deployment-provided metadata to the workspace selected for bootstrap.

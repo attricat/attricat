@@ -5,13 +5,16 @@ use sha2::{Digest as _, Sha256};
 use subtle::ConstantTimeEq;
 use thiserror::Error;
 
+/// Random bytes in a session secret, before encoding.
+const SESSION_SECRET_BYTES: usize = 32;
+
 /// A random 32-byte browser credential or CSRF value. It deliberately cannot
 /// be formatted, serialized, or logged; only delivery code may expose it.
 pub struct SessionSecret(SecretString);
 
 impl SessionSecret {
     pub fn generate() -> Self {
-        let mut bytes = [0_u8; 32];
+        let mut bytes = [0_u8; SESSION_SECRET_BYTES];
         OsRng.fill_bytes(&mut bytes);
         Self(SecretString::from(URL_SAFE_NO_PAD.encode(bytes)))
     }
@@ -21,7 +24,7 @@ impl SessionSecret {
         let decoded = URL_SAFE_NO_PAD
             .decode(&value)
             .map_err(|_| SessionSecretError::Invalid)?;
-        if decoded.len() != 32 || URL_SAFE_NO_PAD.encode(&decoded) != value {
+        if decoded.len() != SESSION_SECRET_BYTES || URL_SAFE_NO_PAD.encode(&decoded) != value {
             return Err(SessionSecretError::Invalid);
         }
         Ok(Self(SecretString::from(value)))

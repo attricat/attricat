@@ -11,6 +11,11 @@ use crate::{
 use async_trait::async_trait;
 use uuid::Uuid;
 
+const DEFAULT_PAGE_SIZE: usize = 100;
+const MAX_PAGE_SIZE: usize = 1000;
+const DEFAULT_CONCURRENCY: usize = 4;
+const MAX_CONCURRENCY: usize = 64;
+
 #[derive(Clone, Copy, Debug)]
 pub struct BlueprintMigrationBatchConfig {
     pub page_size: usize,
@@ -20,8 +25,8 @@ pub struct BlueprintMigrationBatchConfig {
 impl Default for BlueprintMigrationBatchConfig {
     fn default() -> Self {
         Self {
-            page_size: 100,
-            concurrency: 4,
+            page_size: DEFAULT_PAGE_SIZE,
+            concurrency: DEFAULT_CONCURRENCY,
         }
     }
 }
@@ -33,14 +38,14 @@ impl BlueprintMigrationBatchConfig {
             page_size: bounded_config_value(
                 "BLUEPRINT_MIGRATION_PAGE_SIZE",
                 get("BLUEPRINT_MIGRATION_PAGE_SIZE").as_deref(),
-                100,
-                1000,
+                DEFAULT_PAGE_SIZE,
+                MAX_PAGE_SIZE,
             )?,
             concurrency: bounded_config_value(
                 "BLUEPRINT_MIGRATION_CONCURRENCY",
                 get("BLUEPRINT_MIGRATION_CONCURRENCY").as_deref(),
-                4,
-                64,
+                DEFAULT_CONCURRENCY,
+                MAX_CONCURRENCY,
             )?,
         })
     }

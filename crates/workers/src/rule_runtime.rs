@@ -1,5 +1,6 @@
 //! Rule intake and schedule advancement are producers. Evaluation is owned by
 //! the shared task worker after the rule task cutover.
+use crate::coordinator::{DISCOVERY_ERROR_BACKOFF, IDLE_POLL, STANDBY_POLL};
 use crate::preparation_backoff::PreparationBackoff;
 use crate::repository::CoordinatorLeadership;
 use crate::{
@@ -14,15 +15,13 @@ use crate::{
 use async_trait::async_trait;
 use attricat_repository::round_trips::measure;
 use chrono::Utc;
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 use tokio::sync::watch;
 use uuid::Uuid;
 
-const PAGE_SIZE: i64 = 500;
+const PAGE_SIZE: i64 = attricat_rules::MAX_PAGE_SIZE as i64;
+/// The task error code of a failed rule run.
+const TASK_ERROR_CODE: &str = "rule_run";
 
 pub struct RuleIntakeHandler;
 #[async_trait]
@@ -91,7 +90,7 @@ impl TaskHandler for RuleTaskHandler {
                 .map_err(task_error)?
             {
                 scoped
-                    .dead_letter_task(&task, "rule_run", "rule run is already dead-lettered")
+                    .dead_letter_task(&task, TASK_ERROR_CODE, "rule run is already dead-lettered")
                     .await
                     .map_err(|error| task_error(error.into()))?;
                 return Ok(TaskOutcome::DeadLettered);
@@ -139,7 +138,7 @@ async fn fail_rule_run(
         // The generic task worker owns retries before the failure budget is
         // exhausted. The repository has returned the run to pending first.
         Err(TaskHandlerError {
-            code: "rule_run",
+            code: TASK_ERROR_CODE,
             message,
         })
     }
@@ -147,7 +146,7 @@ async fn fail_rule_run(
 
 fn task_error(error: RepositoryError) -> TaskHandlerError {
     TaskHandlerError {
-        code: "rule_run",
+        code: TASK_ERROR_CODE,
         message: error.to_string(),
     }
 }
@@ -179,6 +178,7 @@ async fn evaluate_page(
             truncated,
         });
     }
+    let page_size = PAGE_SIZE.min(remaining);
     let pool = repo.pool_for_runtime();
     let candidates: Vec<Uuid> = sqlx::query_scalar(
         "SELECT id FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL AND ($4::uuid IS NULL OR id>$4) AND ($5::uuid IS NULL OR id=$5) ORDER BY id LIMIT $6",
@@ -188,14 +188,13 @@ async fn evaluate_page(
     .bind(run.blueprint_version)
     .bind(run.candidate_cursor)
     .bind(run.scope_record_id)
-    .bind(PAGE_SIZE.min(remaining))
+    .bind(page_size)
     .fetch_all(&pool)
     .await?;
     let results = repo
         .evaluate_rule_candidates(run.context_id, &compiled, &candidates)
         .await?;
-    let page_size = PAGE_SIZE.min(remaining) as usize;
-    let exhausted = candidates.len() < page_size || run.scope_record_id.is_some();
+    let exhausted = candidates.len() < page_size as usize || run.scope_record_id.is_some();
     let capped = run.candidates_evaluated + candidates.len() as i64
         >= attricat_rules::MAX_CANDIDATES_PER_RUN as i64;
     let next_cursor = candidates.last().copied();
@@ -241,7 +240,7 @@ pub fn start_schedule_coordinator(
         let mut leadership = CoordinatorLeadership::new("rule_schedule");
         loop {
             if !leadership.is_leader(&repository).await {
-                tokio::select! { _ = tokio::time::sleep(Duration::from_secs(1)) => continue, _ = shutdown.changed() => return }
+                tokio::select! { _ = tokio::time::sleep(STANDBY_POLL) => continue, _ = shutdown.changed() => return }
             }
             let delay = measure("worker:rule_schedule", async {
                 let (workspaces, delay) = match repository.polled_workspace_ids().await {
@@ -249,13 +248,13 @@ pub fn start_schedule_coordinator(
                         let workspaces = workspaces.as_ref().clone();
                         metrics::gauge!("attricat_schedule_coordinator_healthy", "kind" => "rule")
                             .set(1.0);
-                        (workspaces, Duration::from_millis(250))
+                        (workspaces, IDLE_POLL)
                     }
                     Err(error) => {
                         metrics::gauge!("attricat_schedule_coordinator_healthy", "kind" => "rule")
                             .set(0.0);
                         tracing::warn!(%error, "rule scheduler cannot discover workspaces");
-                        (Vec::new(), Duration::from_secs(5))
+                        (Vec::new(), DISCOVERY_ERROR_BACKOFF)
                     }
                 };
                 for workspace in workspaces {

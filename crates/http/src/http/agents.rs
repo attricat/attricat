@@ -62,6 +62,20 @@ pub(super) struct RunResponse {
     status: String,
 }
 
+const MAX_CONVERSATION_SEARCH_BYTES: usize = 120;
+const MAX_CONVERSATION_SEARCH_CURSOR_BYTES: usize = 128;
+const CONVERSATION_SEARCH_PAGE_SIZE: usize = 30;
+const LAST_EVENT_ID_HEADER: &str = "last-event-id";
+
+fn validate_title(title: &str) -> Result<(), ApiError> {
+    if title.len() > MAX_CONVERSATION_TITLE_BYTES {
+        return Err(ApiError::invalid_input(format!(
+            "title must be at most {MAX_CONVERSATION_TITLE_BYTES} bytes"
+        )));
+    }
+    Ok(())
+}
+
 fn configured(state: &AppState) -> Result<&crate::agents::AgentProviderConfig, ApiError> {
     state
         .agent_provider
@@ -75,11 +89,7 @@ pub(super) async fn create_conversation(
     ScopedRepository(repository): ScopedRepository,
     ApiJson(input): ApiJson<CreateConversation>,
 ) -> Result<(StatusCode, Json<ConversationResponse>), ApiError> {
-    if input.title.len() > MAX_CONVERSATION_TITLE_BYTES {
-        return Err(ApiError::invalid_input(
-            "title must be at most 512 bytes".into(),
-        ));
-    }
+    validate_title(&input.title)?;
     if input.context_id.is_some() && input.record_id.is_none() {
         return Err(ApiError::invalid_input(
             "context_id requires record_id".into(),
@@ -219,7 +229,7 @@ pub(super) async fn search_conversations(
     ApiQuery(query): ApiQuery<ConversationSearchQuery>,
 ) -> Result<Json<ConversationSearchPage>, ApiError> {
     let search = query.q.trim();
-    if search.len() > 120 || search.contains('\0') {
+    if search.len() > MAX_CONVERSATION_SEARCH_BYTES || search.contains('\0') {
         return Err(ApiError::invalid_input(
             "invalid conversation search".into(),
         ));
@@ -227,7 +237,7 @@ pub(super) async fn search_conversations(
     if query
         .cursor
         .as_ref()
-        .is_some_and(|cursor| cursor.len() > 128)
+        .is_some_and(|cursor| cursor.len() > MAX_CONVERSATION_SEARCH_CURSOR_BYTES)
     {
         return Err(ApiError::invalid_input("invalid cursor".into()));
     }
@@ -246,12 +256,11 @@ pub(super) async fn search_conversations(
             Ok::<_, ApiError>((date, id))
         })
         .transpose()?;
-    const PAGE_SIZE: usize = 30;
     let mut rows = repository
-        .search_conversations(search, before, (PAGE_SIZE + 1) as i64)
+        .search_conversations(search, before, (CONVERSATION_SEARCH_PAGE_SIZE + 1) as i64)
         .await?;
-    let has_more = rows.len() > PAGE_SIZE;
-    rows.truncate(PAGE_SIZE);
+    let has_more = rows.len() > CONVERSATION_SEARCH_PAGE_SIZE;
+    rows.truncate(CONVERSATION_SEARCH_PAGE_SIZE);
     let next_cursor = if has_more {
         rows.last()
             .map(|row| format!("{}|{}", row.updated_at.to_rfc3339(), row.id))
@@ -293,11 +302,7 @@ pub(super) async fn update_conversation(
     ApiPath(conversation_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<UpdateConversation>,
 ) -> Result<Json<crate::repository::Conversation>, ApiError> {
-    if input.title.len() > MAX_CONVERSATION_TITLE_BYTES {
-        return Err(ApiError::invalid_input(
-            "title must be at most 512 bytes".into(),
-        ));
-    }
+    validate_title(&input.title)?;
     readable_conversation(&repository, user, workspace, conversation_id).await?;
     Ok(Json(
         repository
@@ -354,14 +359,14 @@ pub(super) async fn send_message(
     if (input.content.trim().is_empty() && input.attachment_ids.is_empty())
         || input.content.len() > MAX_CONVERSATION_MESSAGE_BYTES
     {
-        return Err(ApiError::invalid_input(
-            "content must be between 1 and 32768 bytes unless attachments are included".into(),
-        ));
+        return Err(ApiError::invalid_input(format!(
+            "content must be between 1 and {MAX_CONVERSATION_MESSAGE_BYTES} bytes unless attachments are included"
+        )));
     }
     if input.attachment_ids.len() > MAX_CONVERSATION_ATTACHMENTS {
-        return Err(ApiError::invalid_input(
-            "a message may include at most 16 attachments".into(),
-        ));
+        return Err(ApiError::invalid_input(format!(
+            "a message may include at most {MAX_CONVERSATION_ATTACHMENTS} attachments"
+        )));
     }
     if input
         .attachment_ids
@@ -566,7 +571,7 @@ pub(super) async fn stream_events(
     )
     .await?;
     let after = match headers
-        .get("last-event-id")
+        .get(LAST_EVENT_ID_HEADER)
         .and_then(|value| value.to_str().ok())
         .filter(|value| !value.is_empty())
     {

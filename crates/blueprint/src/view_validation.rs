@@ -8,6 +8,9 @@ use crate::{
     component_manifest::validate_component, parser::validate_code,
 };
 
+/// Longest `extension_id:contribution_id` key in an extension layout.
+const MAX_CONTRIBUTION_KEY_BYTES: usize = 256;
+
 pub(crate) fn validate_view(
     view: &str,
     definition: &ViewDefinition,
@@ -123,7 +126,7 @@ pub(crate) fn validate_view(
                         let Some((extension_id, contribution_id)) = key.split_once(':') else {
                             return true;
                         };
-                        key.len() > 256
+                        key.len() > MAX_CONTRIBUTION_KEY_BYTES
                             || extension_id.is_empty()
                             || contribution_id.is_empty()
                             || contribution_id.contains(':')
@@ -305,7 +308,7 @@ fn validate_table_columns(
             }
         }
         let parts: Vec<_> = column.field.split('.').collect();
-        if parts.is_empty() || parts.len() > 4 {
+        if parts.is_empty() || parts.len() > MAX_RELATIONSHIP_HOPS + 1 {
             return Err(BlueprintError::InvalidTableColumnPath {
                 field: column.field.clone(),
             });

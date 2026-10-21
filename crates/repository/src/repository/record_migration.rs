@@ -12,6 +12,9 @@ use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
+const TRANSACTION_DURATION_METRIC: &str = "attricat_record_migration_transaction_duration_seconds";
+const VALUES_METRIC: &str = "attricat_record_migration_values_total";
+
 type AttributeContextKey = (String, Option<Uuid>);
 
 /// The relationship targets a migration's audit changes removed, grouped by
@@ -459,7 +462,7 @@ impl AttricatRepository {
                 .execute(&mut *transaction)
                 .await?;
             self.commit_mutation(transaction).await?;
-            metrics::histogram!("attricat_record_migration_transaction_duration_seconds")
+            metrics::histogram!(TRANSACTION_DURATION_METRIC)
                 .record(transaction_started.elapsed().as_secs_f64());
             return Err(RepositoryError::MigrationTargetChanged);
         }
@@ -718,7 +721,7 @@ impl AttricatRepository {
             .execute(&mut *transaction)
             .await?;
             self.commit_mutation(transaction).await?;
-            metrics::histogram!("attricat_record_migration_transaction_duration_seconds")
+            metrics::histogram!(TRANSACTION_DURATION_METRIC)
                 .record(transaction_started.elapsed().as_secs_f64());
             return Err(RepositoryError::MigrationNeedsResolution(unresolved));
         }
@@ -847,13 +850,10 @@ impl AttricatRepository {
             },
         )
         .await?;
-        metrics::counter!("attricat_record_migration_values_total", "action" => "preserved")
-            .increment(preserved_count);
-        metrics::counter!("attricat_record_migration_values_total", "action" => "archived")
-            .increment(archived_count);
-        metrics::counter!("attricat_record_migration_values_total", "action" => "replaced")
-            .increment(replaced_count);
-        metrics::histogram!("attricat_record_migration_transaction_duration_seconds")
+        metrics::counter!(VALUES_METRIC, "action" => "preserved").increment(preserved_count);
+        metrics::counter!(VALUES_METRIC, "action" => "archived").increment(archived_count);
+        metrics::counter!(VALUES_METRIC, "action" => "replaced").increment(replaced_count);
+        metrics::histogram!(TRANSACTION_DURATION_METRIC)
             .record(transaction_started.elapsed().as_secs_f64());
         Ok(target_record)
     }

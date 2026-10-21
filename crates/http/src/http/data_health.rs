@@ -6,7 +6,7 @@ use crate::{
 use axum::{
     Json,
     extract::State,
-    http::{HeaderName, HeaderValue, StatusCode},
+    http::{HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,8 @@ use std::{
 use uuid::Uuid;
 
 const MAX_DATA_HEALTH_CACHE_ENTRIES: usize = 256;
+/// Per-dependency deadline of one readiness probe.
+const READINESS_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub(super) async fn background_processing_status(
     State(state): State<AppState>,
@@ -44,16 +46,11 @@ pub(super) async fn liveness() -> Json<Value> {
 /// are operational details, not public API data.
 pub(super) async fn readiness(State(state): State<AppState>) -> Response {
     let Ok(_permit) = state.readiness_permits.try_acquire() else {
-        return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({ "status": "not_ready" })),
-        )
-            .into_response();
+        return not_ready();
     };
-    let deadline = Duration::from_secs(2);
     let (database, storage) = tokio::join!(
-        tokio::time::timeout(deadline, state.repository.readiness()),
-        tokio::time::timeout(deadline, state.object_store.readiness()),
+        tokio::time::timeout(READINESS_TIMEOUT, state.repository.readiness()),
+        tokio::time::timeout(READINESS_TIMEOUT, state.object_store.readiness()),
     );
     let database_ready = matches!(database, Ok(Ok(())));
     let storage_ready = matches!(storage, Ok(Ok(())));
@@ -64,12 +61,16 @@ pub(super) async fn readiness(State(state): State<AppState>) -> Response {
     if database_ready && storage_ready {
         (StatusCode::OK, Json(json!({ "status": "ready" }))).into_response()
     } else {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({ "status": "not_ready" })),
-        )
-            .into_response()
+        not_ready()
     }
+}
+
+fn not_ready() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({ "status": "not_ready" })),
+    )
+        .into_response()
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -191,7 +192,7 @@ where
     metrics::counter!("attricat_data_health_cache_total", "status" => cache_status).increment(1);
     let mut response = Json(value).into_response();
     response.headers_mut().append(
-        HeaderName::from_static("server-timing"),
+        super::SERVER_TIMING,
         HeaderValue::from_static(match cache_status {
             "HIT" => "cache;desc=HIT",
             "MISS" => "cache;desc=MISS",

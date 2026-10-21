@@ -73,6 +73,9 @@ impl SecurityVersion {
     }
 }
 
+/// Random bytes in an action-token secret, before encoding.
+const ACTION_TOKEN_SECRET_BYTES: usize = 32;
+
 /// A randomly generated, opaque 32-byte action-token secret.
 ///
 /// The value is encoded only for delivery to the action recipient. It does not
@@ -81,7 +84,7 @@ pub struct ActionTokenSecret(SecretString);
 
 impl ActionTokenSecret {
     pub fn generate() -> Self {
-        let mut bytes = [0_u8; 32];
+        let mut bytes = [0_u8; ACTION_TOKEN_SECRET_BYTES];
         OsRng.fill_bytes(&mut bytes);
         Self(SecretString::from(URL_SAFE_NO_PAD.encode(bytes)))
     }
@@ -92,7 +95,7 @@ impl ActionTokenSecret {
         let decoded = URL_SAFE_NO_PAD
             .decode(&value)
             .map_err(|_| ActionTokenSecretError::InvalidToken)?;
-        if decoded.len() != 32 || URL_SAFE_NO_PAD.encode(&decoded) != value {
+        if decoded.len() != ACTION_TOKEN_SECRET_BYTES || URL_SAFE_NO_PAD.encode(&decoded) != value {
             return Err(ActionTokenSecretError::InvalidToken);
         }
         Ok(Self(SecretString::from(value)))

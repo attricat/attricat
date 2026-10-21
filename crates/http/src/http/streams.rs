@@ -8,6 +8,11 @@ use std::{
 use tokio::sync::watch;
 use uuid::Uuid;
 
+use crate::constants::{
+    DEFAULT_HTTP_EVENT_STREAM_LIFETIME_SECONDS, DEFAULT_HTTP_MAX_EVENT_STREAMS,
+    DEFAULT_HTTP_MAX_EVENT_STREAMS_PER_PRINCIPAL,
+};
+
 #[derive(Clone)]
 pub struct StreamControl {
     inner: Arc<Inner>,
@@ -23,7 +28,11 @@ struct Inner {
 
 impl Default for StreamControl {
     fn default() -> Self {
-        Self::new(128, 4, Duration::from_secs(15 * 60))
+        Self::new(
+            DEFAULT_HTTP_MAX_EVENT_STREAMS,
+            DEFAULT_HTTP_MAX_EVENT_STREAMS_PER_PRINCIPAL,
+            Duration::from_secs(DEFAULT_HTTP_EVENT_STREAM_LIFETIME_SECONDS),
+        )
     }
 }
 

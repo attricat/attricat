@@ -11,6 +11,8 @@ use super::{AttricatRepository, RepositoryError, StartExtensionOperation};
 
 const MAX_SNAPSHOT_BYTES: usize = 64 * 1024;
 const MAX_DUE_PER_POLL: i64 = 16;
+/// Schedules run between once a minute and once every 30 days.
+const SCHEDULE_INTERVAL_SECONDS: std::ops::RangeInclusive<i32> = 60..=30 * 24 * 60 * 60;
 
 #[derive(Clone, Debug)]
 pub struct CreateExtensionOperationSchedule {
@@ -39,6 +41,16 @@ pub struct ExtensionOperationSchedule {
 
 fn invalid(message: &str) -> RepositoryError {
     RepositoryError::InvalidExtension(message.into())
+}
+
+fn validate_interval(interval_seconds: i32) -> Result<(), RepositoryError> {
+    if SCHEDULE_INTERVAL_SECONDS.contains(&interval_seconds) {
+        Ok(())
+    } else {
+        Err(invalid(
+            "schedule interval must be between one minute and 30 days",
+        ))
+    }
 }
 
 fn safe_snapshot(
@@ -101,11 +113,7 @@ impl AttricatRepository {
         &self,
         input: CreateExtensionOperationSchedule,
     ) -> Result<ExtensionOperationSchedule, RepositoryError> {
-        if !(60..=2_592_000).contains(&input.interval_seconds) {
-            return Err(invalid(
-                "schedule interval must be between one minute and 30 days",
-            ));
-        }
+        validate_interval(input.interval_seconds)?;
         safe_snapshot(
             &input.input,
             &input.source_reference,
@@ -193,11 +201,7 @@ impl AttricatRepository {
         enabled: bool,
         interval_seconds: i32,
     ) -> Result<Option<ExtensionOperationSchedule>, RepositoryError> {
-        if !(60..=2_592_000).contains(&interval_seconds) {
-            return Err(invalid(
-                "schedule interval must be between one minute and 30 days",
-            ));
-        }
+        validate_interval(interval_seconds)?;
         sqlx::query_as(&format!("UPDATE extension_operation_schedules SET enabled=$3,interval_seconds=$4,next_at=CASE WHEN $3 AND NOT enabled THEN clock_timestamp()+($4*interval '1 second') ELSE next_at END,paused_reason=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 RETURNING {PROJECTION}"))
             .bind(id).bind(self.extension_workspace()).bind(enabled).bind(interval_seconds)
             .fetch_optional(&self.pool).await.map_err(Into::into)

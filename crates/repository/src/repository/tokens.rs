@@ -3,6 +3,10 @@ use uuid::Uuid;
 
 use super::{AttricatRepository, RepositoryError};
 
+/// Byte length of the digests stored in place of secret tokens.
+pub(super) const TOKEN_DIGEST_BYTES: usize = 32;
+const MAX_TOKEN_LABEL_BYTES: usize = 120;
+
 #[derive(Debug, sqlx::FromRow)]
 pub struct PersonalApiToken {
     pub id: Uuid,
@@ -30,8 +34,8 @@ impl AttricatRepository {
     ) -> Result<(), RepositoryError> {
         if label.trim() != label
             || label.is_empty()
-            || label.len() > 120
-            || digest.len() != 32
+            || label.len() > MAX_TOKEN_LABEL_BYTES
+            || digest.len() != TOKEN_DIGEST_BYTES
             || permissions.is_empty()
         {
             return Err(RepositoryError::NotFound("valid token input"));

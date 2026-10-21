@@ -32,6 +32,8 @@ use uuid::Uuid;
 
 const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
 const MAX_SEARCH_FILTERS: usize = 20;
+/// Relationship hops a filter, sort or relationship path may traverse.
+const MAX_RELATIONSHIP_HOPS: usize = 3;
 
 fn map_search_error(error: RepositoryError) -> ApiError {
     match error {
@@ -242,7 +244,12 @@ pub(super) async fn search_record_previews(
         .map(str::trim)
         .filter(|v| !v.is_empty());
     let context = repository
-        .search_context(input.context_code.as_deref().unwrap_or("default"))
+        .search_context(
+            input
+                .context_code
+                .as_deref()
+                .unwrap_or(super::DEFAULT_CONTEXT_CODE),
+        )
         .await?
         .ok_or_else(|| ApiError::invalid_input("context_code is not a context".to_owned()))?;
     let mut filters = Vec::with_capacity(input.filters.len());
@@ -531,7 +538,10 @@ async fn resolve_search_filter(
     caller: Uuid,
 ) -> Result<RecordSearchFilter, ApiError> {
     let parts: Vec<_> = filter.field.split('.').collect();
-    if parts.is_empty() || parts.len() > 4 || parts.iter().any(|part| part.is_empty()) {
+    if parts.is_empty()
+        || parts.len() > MAX_RELATIONSHIP_HOPS + 1
+        || parts.iter().any(|part| part.is_empty())
+    {
         return Err(ApiError::invalid_input(
             "filters.field may contain at most three relationship hops and a scalar or file leaf"
                 .to_owned(),
@@ -797,7 +807,10 @@ async fn resolve_relationship_filter(
         ));
     }
     let path: Vec<_> = filter.field.split('.').collect();
-    if path.is_empty() || path.len() > 3 || path.iter().any(|segment| segment.is_empty()) {
+    if path.is_empty()
+        || path.len() > MAX_RELATIONSHIP_HOPS
+        || path.iter().any(|segment| segment.is_empty())
+    {
         return Err(ApiError::invalid_input(
             "relationship_filters.field must contain one to three relationship hops".to_owned(),
         ));
@@ -998,7 +1011,7 @@ async fn resolve_table_sort(
         ));
     }
     let parts: Vec<_> = sort.field.split('.').collect();
-    if parts.is_empty() || parts.len() > 4 {
+    if parts.is_empty() || parts.len() > MAX_RELATIONSHIP_HOPS + 1 {
         return Err(ApiError::invalid_input(
             "sort.field may contain at most three relationship hops and a scalar leaf".to_owned(),
         ));

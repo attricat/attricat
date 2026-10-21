@@ -59,10 +59,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         let mut tx = self.pool.begin().await?;
         sqlx::query("INSERT INTO permissions (code, description) VALUES ('extensions.read', 'Discover extension releases from trusted registries'), ('extensions.manage', 'Manage trusted extension registries') ON CONFLICT (code) DO NOTHING")
             .execute(&mut *tx).await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
+        for role_id in super::roles::OWNER_AND_ADMIN_ROLE_IDS {
             sqlx::query("INSERT INTO role_permissions (role_id, permission_code) SELECT $1, code FROM permissions WHERE code IN ('extensions.read', 'extensions.manage') ON CONFLICT DO NOTHING")
                 .bind(role_id).execute(&mut *tx).await?;
         }

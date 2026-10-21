@@ -48,12 +48,14 @@ use crate::{
         AttricatRepository, ClaimedExtensionOperationRun, ClaimedTask, CoordinatorLeadership,
         DeliveryState, ExtensionAttricatBatch, ExtensionAttricatIntent,
         ExtensionAttricatPageRequest, ExtensionConfigurationScope, ExtensionOperationArtifact,
-        ExtensionRuntimeInstallation, MaterializeScope, RepositoryError, SystemRepository,
+        ExtensionRuntimeInstallation, MAX_EXTENSION_BATCH_INTENTS,
+        MAX_EXTENSION_LOOKUP_VALUE_BYTES, MaterializeScope, RepositoryError, SystemRepository,
     },
     storage::{ObjectStore, ObjectStoreError, StoredObject},
     task_queue::TaskKind,
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
+use attricat_workers::coordinator;
 
 #[cfg(test)]
 mod abi_evolution_tests;
@@ -67,9 +69,36 @@ use operation_batch::run_operation_batch;
 
 const MAX_HOST_MESSAGE_BYTES: usize = 16 * 1024;
 const MAX_HOST_JSON_BYTES: usize = 64 * 1024;
-/// The recorded ABI of runs bound to the released 1.4 connector world.
 const MAX_CACHED_COMPONENTS: usize = 64;
 const MAX_WRITE_VALUES: usize = 100;
+/// Values one connector upsert row may write.
+const MAX_CONNECTOR_UPSERT_VALUES: usize = 128;
+/// Rows one connector catalog page may return; keeps results within the WIT
+/// JSON bound even for wide blueprints.
+const MAX_CONNECTOR_PAGE_LIMIT: u32 = 16;
+const DEFAULT_FUEL: u64 = 10_000_000;
+const DEFAULT_MAX_MEMORY_BYTES: usize = 32 * 1024 * 1024;
+const DEFAULT_INVOCATION_TIMEOUT: Duration = Duration::from_secs(10);
+/// The event consumer that feeds enabled extension event handlers.
+const WASM_EVENT_CONSUMER: &str = "attricat.extensions.wasm";
+/// How long a paused operation run waits before checking whether its pinned
+/// release is authorized again.
+const PAUSED_OPERATION_RECHECK_DELAY: chrono::TimeDelta = chrono::TimeDelta::seconds(30);
+/// Headers a component may never set on an outbound request.
+const RESERVED_REQUEST_HEADERS: [&str; 4] =
+    ["host", "content-length", "connection", "transfer-encoding"];
+/// Headers the host sets itself on bulk transfers, in addition to
+/// [`RESERVED_REQUEST_HEADERS`].
+const RESERVED_TRANSFER_HEADERS: [&str; 3] = ["range", "if-match", "idempotency-key"];
+const MAX_REQUEST_HEADER_VALUE_BYTES: usize = 8192;
+const MAX_IDEMPOTENCY_KEY_BYTES: usize = 512;
+const MAX_SECRET_HEADER_PREFIX_BYTES: usize = 512;
+const MAX_TRANSFER_SECRET_HEADERS: usize = 4;
+const MAX_TRANSFER_KEY_BYTES: usize = 128;
+/// The largest byte range one transfer fetch may request.
+const MAX_TRANSFER_RANGE_BYTES: u32 = 16 * 1024 * 1024;
+const MAX_ETAG_BYTES: usize = 256;
+const MAX_MEDIA_TYPE_BYTES: usize = 255;
 const EPOCH_TICK_INTERVAL: Duration = Duration::from_millis(10);
 const NETWORK_RATE_WINDOW: Duration = Duration::from_secs(60);
 const NETWORK_RATE_LIMIT: usize = 60;
@@ -105,9 +134,9 @@ pub struct ExtensionRuntimeConfig {
 impl Default for ExtensionRuntimeConfig {
     fn default() -> Self {
         Self {
-            fuel: 10_000_000,
-            max_memory_bytes: 32 * 1024 * 1024,
-            invocation_timeout: Duration::from_secs(10),
+            fuel: DEFAULT_FUEL,
+            max_memory_bytes: DEFAULT_MAX_MEMORY_BYTES,
+            invocation_timeout: DEFAULT_INVOCATION_TIMEOUT,
         }
     }
 }
@@ -557,16 +586,7 @@ impl HostState {
         // untrusted component code is running. Refresh the entire snapshot at
         // every host call; merely checking that one still exists would retain
         // revoked grants in `self.installation`.
-        let installation = self
-            .repository
-            .runtime_extension_installation(
-                &self.installation.extension_id,
-                self.installation.installed_release_id,
-            )
-            .await
-            .map_err(|_| "extension authorization could not be checked")?
-            .ok_or_else(|| "extension invocation is no longer authorized".to_owned())?;
-        self.installation = installation;
+        self.refresh_installation().await?;
         if let Err(error) = self.require(required) {
             metrics::counter!("attricat_extension_host_calls_total", "outcome" => "denied", "operation" => operation).increment(1);
             return Err(error.to_string());
@@ -688,7 +708,7 @@ impl HostState {
     ) -> Result<wit::api::WriteResponse, String> {
         self.require_active("attricat.write").await?;
         if request.values.is_empty() || request.values.len() > MAX_WRITE_VALUES {
-            return Err("writes require 1-100 scalar values".into());
+            return Err(format!("writes require 1-{MAX_WRITE_VALUES} scalar values"));
         }
         let record_id = parse_uuid(&request.record_id, "record ID")?;
         let values = request
@@ -765,6 +785,21 @@ impl HostState {
 }
 
 impl HostState {
+    /// Replaces the installation snapshot with the current authorized one.
+    async fn refresh_installation(&mut self) -> Result<(), String> {
+        let installation = self
+            .repository
+            .runtime_extension_installation(
+                &self.installation.extension_id,
+                self.installation.installed_release_id,
+            )
+            .await
+            .map_err(|_| "extension authorization could not be checked")?
+            .ok_or_else(|| "extension invocation is no longer authorized".to_owned())?;
+        self.installation = installation;
+        Ok(())
+    }
+
     /// [`Self::require_active`] for several capabilities with one refresh.
     async fn require_all_active<'a>(
         &mut self,
@@ -774,16 +809,7 @@ impl HostState {
         if capabilities.is_empty() {
             return Ok(());
         }
-        let installation = self
-            .repository
-            .runtime_extension_installation(
-                &self.installation.extension_id,
-                self.installation.installed_release_id,
-            )
-            .await
-            .map_err(|_| "extension authorization could not be checked")?
-            .ok_or_else(|| "extension invocation is no longer authorized".to_owned())?;
-        self.installation = installation;
+        self.refresh_installation().await?;
         for capability in capabilities {
             self.require(capability)
                 .map_err(|error| error.to_string())?;
@@ -792,16 +818,7 @@ impl HostState {
     }
 
     async fn require_active(&mut self, capability: &str) -> Result<(), String> {
-        let installation = self
-            .repository
-            .runtime_extension_installation(
-                &self.installation.extension_id,
-                self.installation.installed_release_id,
-            )
-            .await
-            .map_err(|_| "extension authorization could not be checked")?
-            .ok_or_else(|| "extension invocation is no longer authorized".to_owned())?;
-        self.installation = installation;
+        self.refresh_installation().await?;
         self.require(capability).map_err(|error| error.to_string())
     }
 
@@ -942,29 +959,14 @@ impl HostState {
         {
             return Err("network request rate limit exceeded".into());
         }
-        let addresses: Vec<std::net::SocketAddr> = tokio::time::timeout(
-            Duration::from_millis(rule.timeout_ms),
-            tokio::net::lookup_host((host, port)),
-        )
-        .await
-        .map_err(|_| "destination DNS lookup timed out")?
-        .map_err(|_| "destination DNS lookup failed")?
-        .collect();
-        if addresses.is_empty()
-            || addresses.iter().any(|address| {
-                !attricat_extension_manifest::extensions::is_public_destination(address.ip())
-            })
-        {
-            return Err("destination resolves to an unsafe address".into());
-        }
+        let timeout = Duration::from_millis(rule.timeout_ms);
+        let addresses = resolve_public_destination(host, port, timeout).await?;
         let mut headers = reqwest::header::HeaderMap::new();
         for (name, value) in input.headers.unwrap_or_default() {
             let header_name = reqwest::header::HeaderName::from_bytes(name.as_bytes())
                 .map_err(|_| "invalid request header")?;
-            if matches!(
-                header_name.as_str(),
-                "host" | "content-length" | "connection" | "transfer-encoding"
-            ) || value.len() > 8192
+            if RESERVED_REQUEST_HEADERS.contains(&header_name.as_str())
+                || value.len() > MAX_REQUEST_HEADER_VALUE_BYTES
             {
                 return Err("unsafe request header".into());
             }
@@ -975,7 +977,10 @@ impl HostState {
             );
         }
         if let Some(key) = &input.idempotency_key {
-            if key.is_empty() || key.len() > 512 || headers.contains_key("idempotency-key") {
+            if key.is_empty()
+                || key.len() > MAX_IDEMPOTENCY_KEY_BYTES
+                || headers.contains_key("idempotency-key")
+            {
                 return Err("invalid idempotency key".into());
             }
             headers.insert(
@@ -988,10 +993,8 @@ impl HostState {
             valid_secret_name(&item.secret)?;
             let name = reqwest::header::HeaderName::from_bytes(item.header.as_bytes())
                 .map_err(|_| "invalid secret header")?;
-            if matches!(
-                name.as_str(),
-                "host" | "content-length" | "connection" | "transfer-encoding"
-            ) || item.prefix.len() > 512
+            if RESERVED_REQUEST_HEADERS.contains(&name.as_str())
+                || item.prefix.len() > MAX_SECRET_HEADER_PREFIX_BYTES
             {
                 return Err("unsafe secret header".into());
             }
@@ -1007,17 +1010,7 @@ impl HostState {
                     .map_err(|_| "secret cannot be used as a header")?,
             );
         }
-        let client = Client::builder()
-            // Environment proxy settings would bypass the checked/pinned target
-            // address and turn this broker into an SSRF proxy.
-            .no_proxy()
-            .redirect(Policy::none())
-            .https_only(true)
-            .resolve_to_addrs(host, &addresses)
-            .connect_timeout(Duration::from_millis(rule.timeout_ms))
-            .timeout(Duration::from_millis(rule.timeout_ms))
-            .build()
-            .map_err(|_| "network client unavailable")?;
+        let client = pinned_client(host, &addresses, timeout)?;
         let started = Instant::now();
         let response = client
             .request(method, url)
@@ -1334,9 +1327,6 @@ struct NetworkRequest {
     idempotency_key: Option<String>,
 }
 
-/// Shared-task executor for enabled extension event handlers. A component can
-/// finish before its task acknowledgement, so extensions remain at-least-once
-/// and must stay idempotent.
 /// Shared-task executor for release-pinned checkpointed operations. The
 /// checkpoint is committed under the task lease only after WASM returns; a
 /// crash before that transaction repeats the batch, so operation components
@@ -1406,7 +1396,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 .await
                 .map_err(operation_task_error)?;
             return Ok(TaskOutcome::Reschedule {
-                at: chrono::Utc::now() + chrono::Duration::seconds(30),
+                at: chrono::Utc::now() + PAUSED_OPERATION_RECHECK_DELAY,
             });
         };
         // Read under the run's row lock when the batch began.
@@ -1496,6 +1486,9 @@ impl TaskHandler for ExtensionOperationTaskHandler {
     }
 }
 
+/// Shared-task executor for enabled extension event handlers. A component can
+/// finish before its task acknowledgement, so extensions remain at-least-once
+/// and must stay idempotent.
 pub struct WasmExtensionTaskHandler {
     repository: SystemRepository,
     runtime: ExtensionRuntime,
@@ -1618,7 +1611,7 @@ impl TaskHandler for WasmExtensionTaskHandler {
             return Ok(TaskOutcome::Complete);
         };
         let context =
-            repository.for_event_delivery_task(&delivery.event, "attricat.extensions.wasm", &task);
+            repository.for_event_delivery_task(&delivery.event, WASM_EVENT_CONSUMER, &task);
         self.invoke_event(delivery.event, context)
             .await
             .map_err(|error| TaskHandlerError {
@@ -1636,9 +1629,6 @@ impl TaskHandler for WasmExtensionTaskHandler {
     }
 }
 
-/// Intake is only a producer/coordinator. It registers at the high-water mark
-/// and atomically creates delivery/task pairs for subsequently supported event
-/// versions; execution is exclusively owned by `WasmExtensionTaskHandler`.
 /// How often the coordinator runs its operation storage, schedule and
 /// connector sweeps per workspace.
 const COORDINATOR_SWEEP_INTERVAL: Duration = Duration::from_secs(5);
@@ -1656,6 +1646,9 @@ struct CoordinatedWorkspace {
     last_sweep: Option<Instant>,
 }
 
+/// Intake is only a producer/coordinator. It registers at the high-water mark
+/// and atomically creates delivery/task pairs for subsequently supported event
+/// versions; execution is exclusively owned by `WasmExtensionTaskHandler`.
 pub fn start_event_delivery_coordinator(
     repository: SystemRepository,
     object_store: Arc<dyn ObjectStore>,
@@ -1668,7 +1661,7 @@ pub fn start_event_delivery_coordinator(
         loop {
             if !leadership.is_leader(&repository).await {
                 tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(1)) => continue,
+                    _ = tokio::time::sleep(coordinator::STANDBY_POLL) => continue,
                     _ = shutdown.changed() => return,
                 }
             }
@@ -1689,7 +1682,7 @@ pub fn start_event_delivery_coordinator(
             })
             .await;
             tokio::select! {
-                _ = tokio::time::sleep(Duration::from_millis(250)) => {},
+                _ = tokio::time::sleep(coordinator::IDLE_POLL) => {},
                 _ = shutdown.changed() => return,
             }
         }
@@ -1724,7 +1717,7 @@ async fn coordinate_workspace(
     }
     if !state.registered {
         scoped
-            .ensure_event_consumer("attricat.extensions.wasm", &[])
+            .ensure_event_consumer(WASM_EVENT_CONSUMER, &[])
             .await?;
         state.registered = true;
     }
@@ -1735,7 +1728,7 @@ async fn coordinate_workspace(
         MaterializeScope::NewEvents
     };
     state.history_pending = scoped
-        .materialize_event_delivery_tasks_with("attricat.extensions.wasm", &event_types, scope)
+        .materialize_event_delivery_tasks_with(WASM_EVENT_CONSUMER, &event_types, scope)
         .await?;
     state.event_types = Some(event_types);
     Ok(())
@@ -1944,7 +1937,49 @@ fn transfer_url(raw: &str) -> Result<Url, String> {
 }
 
 fn transfer_key_valid(key: &str) -> bool {
-    !key.is_empty() && key.len() <= 128 && key.is_ascii()
+    !key.is_empty() && key.len() <= MAX_TRANSFER_KEY_BYTES && key.is_ascii()
+}
+
+/// Resolves an outbound destination within `timeout` and accepts it only when
+/// every resolved address is public.
+async fn resolve_public_destination(
+    host: &str,
+    port: u16,
+    timeout: Duration,
+) -> Result<Vec<std::net::SocketAddr>, String> {
+    let addresses: Vec<std::net::SocketAddr> =
+        tokio::time::timeout(timeout, tokio::net::lookup_host((host, port)))
+            .await
+            .map_err(|_| "destination DNS lookup timed out")?
+            .map_err(|_| "destination DNS lookup failed")?
+            .collect();
+    if addresses.is_empty()
+        || addresses.iter().any(|address| {
+            !attricat_extension_manifest::extensions::is_public_destination(address.ip())
+        })
+    {
+        return Err("destination resolves to an unsafe address".into());
+    }
+    Ok(addresses)
+}
+
+/// An HTTPS-only client pinned to the checked `addresses`, without redirects.
+fn pinned_client(
+    host: &str,
+    addresses: &[std::net::SocketAddr],
+    timeout: Duration,
+) -> Result<Client, String> {
+    Client::builder()
+        // Environment proxy settings would bypass the checked/pinned target
+        // address and turn this broker into an SSRF proxy.
+        .no_proxy()
+        .redirect(Policy::none())
+        .https_only(true)
+        .resolve_to_addrs(host, addresses)
+        .connect_timeout(timeout)
+        .timeout(timeout)
+        .build()
+        .map_err(|_| "network client unavailable".into())
 }
 
 impl OperationState {
@@ -1988,39 +2023,19 @@ impl OperationState {
         let port = url
             .port_or_known_default()
             .ok_or("HTTPS URL needs a port")?;
-        let resolved: Vec<_> = tokio::time::timeout(
-            Duration::from_millis(rule.timeout_ms),
-            tokio::net::lookup_host((address, port)),
-        )
-        .await
-        .map_err(|_| "destination DNS lookup timed out")?
-        .map_err(|_| "destination DNS lookup failed")?
-        .collect();
-        if resolved.is_empty()
-            || resolved.iter().any(|addr: &std::net::SocketAddr| {
-                !attricat_extension_manifest::extensions::is_public_destination(addr.ip())
-            })
-        {
-            return Err("destination resolves to an unsafe address".into());
-        }
+        let timeout = Duration::from_millis(rule.timeout_ms);
+        let resolved = resolve_public_destination(address, port, timeout).await?;
         let mut headers = reqwest::header::HeaderMap::new();
-        if secrets.len() > 4 {
+        if secrets.len() > MAX_TRANSFER_SECRET_HEADERS {
             return Err("too many secret headers".into());
         }
         for secret in secrets {
             valid_secret_name(&secret.secret)?;
             let name = reqwest::header::HeaderName::from_bytes(secret.header.as_bytes())
                 .map_err(|_| "invalid secret header")?;
-            if matches!(
-                name.as_str(),
-                "host"
-                    | "content-length"
-                    | "connection"
-                    | "transfer-encoding"
-                    | "range"
-                    | "if-match"
-                    | "idempotency-key"
-            ) || secret.prefix.len() > 512
+            if RESERVED_REQUEST_HEADERS.contains(&name.as_str())
+                || RESERVED_TRANSFER_HEADERS.contains(&name.as_str())
+                || secret.prefix.len() > MAX_SECRET_HEADER_PREFIX_BYTES
                 || headers.contains_key(&name)
             {
                 return Err("unsafe secret header".into());
@@ -2037,15 +2052,7 @@ impl OperationState {
                     .map_err(|_| "invalid secret header value")?,
             );
         }
-        let client = Client::builder()
-            .no_proxy()
-            .redirect(Policy::none())
-            .https_only(true)
-            .resolve_to_addrs(address, &resolved)
-            .connect_timeout(Duration::from_millis(rule.timeout_ms))
-            .timeout(Duration::from_millis(rule.timeout_ms))
-            .build()
-            .map_err(|_| "network client unavailable")?;
+        let client = pinned_client(address, &resolved, timeout)?;
         Ok((client, url, headers, rule.max_transfer_bytes))
     }
 }
@@ -2055,7 +2062,7 @@ impl OperationState {
         let input: TransferFetch = parse_host_request(&request, "transfer request")?;
         if !transfer_key_valid(&input.transfer_key)
             || input.max_bytes == 0
-            || input.max_bytes > 16 * 1024 * 1024
+            || input.max_bytes > MAX_TRANSFER_RANGE_BYTES
             || input
                 .offset
                 .checked_add(u64::from(input.max_bytes))
@@ -2099,7 +2106,7 @@ impl OperationState {
                 .map_err(|_| "invalid range")?,
         );
         if let Some(etag) = &input.etag {
-            if etag.len() > 256 {
+            if etag.len() > MAX_ETAG_BYTES {
                 return Err("ETag is too long".into());
             }
             headers.insert(
@@ -2145,7 +2152,7 @@ impl OperationState {
             .headers()
             .get(reqwest::header::ETAG)
             .and_then(|v| v.to_str().ok())
-            .filter(|v| v.len() <= 256)
+            .filter(|v| v.len() <= MAX_ETAG_BYTES)
             .map(str::to_owned);
         if input
             .etag
@@ -2164,7 +2171,7 @@ impl OperationState {
             .headers()
             .get(reqwest::header::CONTENT_TYPE)
             .and_then(|v| v.to_str().ok())
-            .filter(|v| !v.is_empty() && v.len() <= 255 && v.is_ascii())
+            .filter(|v| !v.is_empty() && v.len() <= MAX_MEDIA_TYPE_BYTES && v.is_ascii())
             .unwrap_or("application/octet-stream")
             .to_owned();
         let artifact = self
@@ -2369,9 +2376,10 @@ impl OperationState {
     ) -> Result<String, String> {
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_active("attricat.read").await?;
-        // Keep results within the WIT JSON bound even for wide blueprints.
-        if limit == 0 || limit > 16 {
-            return Err("connector page limit must be 1-16".into());
+        if limit == 0 || limit > MAX_CONNECTOR_PAGE_LIMIT {
+            return Err(format!(
+                "connector page limit must be 1-{MAX_CONNECTOR_PAGE_LIMIT}"
+            ));
         }
         let blueprint = parse_uuid(&blueprint_id, "blueprint ID")?;
         let version = i64::try_from(blueprint_version).map_err(|_| "invalid blueprint version")?;
@@ -2446,8 +2454,10 @@ impl OperationState {
         if input.run_id != self.run_id {
             return Err("batch run ID does not match".into());
         }
-        if input.intents.is_empty() || input.intents.len() > 100 {
-            return Err("batch must contain 1-100 intents".into());
+        if input.intents.is_empty() || input.intents.len() > MAX_EXTENSION_BATCH_INTENTS {
+            return Err(format!(
+                "batch must contain 1-{MAX_EXTENSION_BATCH_INTENTS} intents"
+            ));
         }
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_active("attricat.write").await?;
@@ -2478,7 +2488,10 @@ impl OperationState {
             if row.values.get(&row.business_key) != Some(&Value::String(row.key.clone())) {
                 return Err("business key value does not match the lookup value".into());
             }
-            if row.key.is_empty() || row.key.len() > 512 || row.values.len() > 128 {
+            if row.key.is_empty()
+                || row.key.len() > MAX_EXTENSION_LOOKUP_VALUE_BYTES
+                || row.values.len() > MAX_CONNECTOR_UPSERT_VALUES
+            {
                 return Err("invalid bounded upsert row".into());
             }
             let mut values = Vec::with_capacity(row.values.len());

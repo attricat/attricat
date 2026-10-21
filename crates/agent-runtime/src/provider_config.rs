@@ -18,6 +18,7 @@ const DEFAULT_RUN_TIMEOUT_SECONDS: u64 = 300;
 const MAX_TIMEOUT_SECONDS: u64 = 3_600;
 const DEFAULT_MAX_TOOL_ROUNDS: u16 = 25;
 const MAX_TOOL_ROUNDS: u16 = 100;
+const MAX_REASONING_EFFORT_BYTES: usize = 64;
 
 #[derive(Clone)]
 pub struct AgentProviderConfig {
@@ -63,7 +64,9 @@ impl AgentProviderConfig {
         }
         let reasoning_effort = value("LLM_REASONING_EFFORT").filter(|effort| !effort.is_empty());
         if reasoning_effort.as_ref().is_some_and(|effort| {
-            effort.trim() != effort || effort.len() > 64 || effort.chars().any(char::is_whitespace)
+            effort.trim() != effort
+                || effort.len() > MAX_REASONING_EFFORT_BYTES
+                || effort.chars().any(char::is_whitespace)
         }) {
             return Err(AgentConfigError::InvalidReasoningEffort);
         }
@@ -122,13 +125,22 @@ fn duration_value(
 pub enum AgentConfigError {
     #[error("LLM_BASE_URL must be an absolute HTTP(S) URL")]
     InvalidBaseUrl,
-    #[error("LLM_MODEL must be non-empty and at most 512 characters")]
+    #[error(
+        "LLM_MODEL must be non-empty and at most {max} characters",
+        max = MAX_AGENT_MODEL_BYTES
+    )]
     InvalidModel,
-    #[error("LLM_REASONING_EFFORT must be a single token of at most 64 characters")]
+    #[error(
+        "LLM_REASONING_EFFORT must be a single token of at most {max} characters",
+        max = MAX_REASONING_EFFORT_BYTES
+    )]
     InvalidReasoningEffort,
-    #[error("{0} must be an integer between 1 and 3600 seconds")]
+    #[error("{0} must be an integer between 1 and {max} seconds", max = MAX_TIMEOUT_SECONDS)]
     InvalidDuration(&'static str),
-    #[error("LLM_MAX_TOOL_ROUNDS must be an integer between 1 and 100")]
+    #[error(
+        "LLM_MAX_TOOL_ROUNDS must be an integer between 1 and {max}",
+        max = MAX_TOOL_ROUNDS
+    )]
     InvalidToolRounds,
 }
 
@@ -136,7 +148,9 @@ pub enum AgentConfigError {
 mod tests {
     use secrecy::SecretString;
 
-    use super::{AgentConfigError, AgentProviderConfig, DEFAULT_LLM_MODEL};
+    use super::{
+        AgentConfigError, AgentProviderConfig, DEFAULT_LLM_MODEL, DEFAULT_MAX_TOOL_ROUNDS,
+    };
 
     fn key(value: &str) -> Option<SecretString> {
         Some(SecretString::from(value))
@@ -164,7 +178,7 @@ mod tests {
         assert_eq!(configured.base_url.as_str(), "https://api.openai.com/v1/");
         assert_eq!(configured.model, DEFAULT_LLM_MODEL);
         assert_eq!(configured.reasoning_effort, None);
-        assert_eq!(configured.max_tool_rounds, 25);
+        assert_eq!(configured.max_tool_rounds, DEFAULT_MAX_TOOL_ROUNDS);
         let configured = AgentProviderConfig::from_values(
             |name| (name == "LLM_REASONING_EFFORT").then(|| "none".to_owned()),
             key("secret"),

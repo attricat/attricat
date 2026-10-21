@@ -37,6 +37,9 @@ use crate::{
     storage::ObjectStoreError,
 };
 
+/// Extension-chosen media must never run as active content on the API origin.
+pub(super) const SANDBOXED_CONTENT_POLICY: &str = "sandbox; default-src 'none'";
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct CommandRequest {
@@ -1124,7 +1127,7 @@ pub(super) async fn download_operation_artifact(
     );
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static("sandbox; default-src 'none'"),
+        HeaderValue::from_static(SANDBOXED_CONTENT_POLICY),
     );
     Ok(response)
 }

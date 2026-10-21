@@ -189,7 +189,7 @@ impl AttricatRepository {
         if host_sample_marker {
             let ordinary_tags = system_tags
                 .iter()
-                .filter(|tag| tag.as_str() != "attricat.sample")
+                .filter(|tag| tag.as_str() != SAMPLE_SYSTEM_TAG)
                 .cloned()
                 .collect::<Vec<_>>();
             if ordinary_tags.len() + 1 != system_tags.len() {
@@ -414,7 +414,7 @@ impl AttricatRepository {
         let system_tags = source
             .system_tags
             .into_iter()
-            .filter(|tag| tag != "attricat.sample")
+            .filter(|tag| tag != SAMPLE_SYSTEM_TAG)
             .collect();
         let (system_tags, system_metadata) = self
             .without_claimed_annotations(system_tags, source.system_metadata)

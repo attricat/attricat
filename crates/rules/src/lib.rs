@@ -12,6 +12,9 @@ use thiserror::Error;
 
 pub const MAX_CANDIDATES_PER_RUN: u32 = 10_000;
 pub const MAX_PAGE_SIZE: u32 = 500;
+const MAX_TRIGGERS: usize = 8;
+/// Fields of a schedule cron expression, including seconds.
+const CRON_FIELDS: usize = 6;
 
 #[derive(Debug, Error)]
 pub enum RuleError {
@@ -159,7 +162,7 @@ struct Raw {
     name: String,
     severity: Severity,
     /// One to eight events that evaluate the rule.
-    #[schemars(length(min = 1, max = 8))]
+    #[schemars(length(min = 1, max = MAX_TRIGGERS))]
     triggers: Vec<RawTrigger>,
     predicate: Predicate,
     /// Reject violating saves or status transitions. Requires `error` or
@@ -196,8 +199,10 @@ pub fn parse(source: &str) -> Result<RuleDefinition, RuleError> {
     }
     code(&raw.code, "rule code")?;
     non_empty(&raw.name, "rule name")?;
-    if raw.triggers.is_empty() || raw.triggers.len() > 8 {
-        return Err(RuleError::Invalid("rules require 1-8 triggers".into()));
+    if raw.triggers.is_empty() || raw.triggers.len() > MAX_TRIGGERS {
+        return Err(RuleError::Invalid(format!(
+            "rules require 1-{MAX_TRIGGERS} triggers"
+        )));
     }
     let mut schedule_seen = HashSet::new();
     let triggers = raw
@@ -347,14 +352,12 @@ pub fn raw_hash(source: &str) -> String {
     format!("{:x}", Sha256::digest(source.as_bytes()))
 }
 pub fn parse_six_field_cron(value: &str) -> Result<Schedule, RuleError> {
-    if value.split_whitespace().count() != 6 {
-        return Err(RuleError::Invalid(
-            "schedule cron must be a valid six-field UTC cron expression".into(),
-        ));
+    let invalid =
+        || RuleError::Invalid("schedule cron must be a valid six-field UTC cron expression".into());
+    if value.split_whitespace().count() != CRON_FIELDS {
+        return Err(invalid());
     }
-    Schedule::from_str(value).map_err(|_| {
-        RuleError::Invalid("schedule cron must be a valid six-field UTC cron expression".into())
-    })
+    Schedule::from_str(value).map_err(|_| invalid())
 }
 fn code(value: &str, name: &str) -> Result<(), RuleError> {
     if is_valid_code(value) {

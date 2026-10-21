@@ -913,10 +913,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             .execute(&mut *tx).await?;
         sqlx::query("INSERT INTO permissions (code, description) VALUES ('agents.manage', 'Configure how the agent proposes and applies changes') ON CONFLICT (code) DO NOTHING")
             .execute(&mut *tx).await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
+        for role_id in super::roles::OWNER_AND_ADMIN_ROLE_IDS {
             for permission in ["agents.run", "agents.manage"] {
                 sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, $2) ON CONFLICT DO NOTHING")
                     .bind(role_id).bind(permission).execute(&mut *tx).await?;

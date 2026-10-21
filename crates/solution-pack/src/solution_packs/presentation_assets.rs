@@ -14,9 +14,15 @@ use super::{
     invalid, is_valid_stable_code, parse_sha256, safe_archive_path, sha256_hex,
 };
 
+/// Decoder allocation bound: decoded output is bounded to 64 MiB, plus
+/// bounded headroom for decoder scratch space.
+const MAX_DECODE_ALLOC_BYTES: u64 = 96 * 1024 * 1024;
+const MAX_SVG_ELEMENTS: usize = 4096;
+const MAX_SVG_DEPTH: usize = 64;
+
 fn valid_presentation_asset_path(path: &str) -> bool {
-    path.len() <= 512
-        && safe_archive_path(path)
+    // `safe_archive_path` also bounds the path length.
+    safe_archive_path(path)
         && path.strip_prefix("assets/").is_some_and(|suffix| {
             !suffix.is_empty()
                 && suffix.split('/').all(|component| {
@@ -215,8 +221,7 @@ pub fn validate_presentation_asset_bytes(
     let mut decode_limits = Limits::default();
     decode_limits.max_image_width = Some(MAX_SOLUTION_PACK_ASSET_DIMENSION);
     decode_limits.max_image_height = Some(MAX_SOLUTION_PACK_ASSET_DIMENSION);
-    // The output is bounded to 64 MiB; retain bounded headroom for decoder scratch space.
-    decode_limits.max_alloc = Some(96 * 1024 * 1024);
+    decode_limits.max_alloc = Some(MAX_DECODE_ALLOC_BYTES);
     reader.limits(decode_limits);
     let image = reader.decode().map_err(|_| {
         SolutionPackError::Invalid(format!(
@@ -236,12 +241,18 @@ pub fn validate_presentation_asset_bytes(
 }
 
 fn png_has_animation(bytes: &[u8]) -> bool {
-    let mut offset = 8usize;
-    while offset.checked_add(12).is_some_and(|end| end <= bytes.len()) {
+    const PNG_SIGNATURE_BYTES: usize = 8;
+    /// A chunk's length, type and CRC fields around its data.
+    const PNG_CHUNK_OVERHEAD_BYTES: usize = 12;
+    let mut offset = PNG_SIGNATURE_BYTES;
+    while offset
+        .checked_add(PNG_CHUNK_OVERHEAD_BYTES)
+        .is_some_and(|end| end <= bytes.len())
+    {
         let length =
             u32::from_be_bytes(bytes[offset..offset + 4].try_into().expect("four bytes")) as usize;
         let Some(end) = offset
-            .checked_add(12)
+            .checked_add(PNG_CHUNK_OVERHEAD_BYTES)
             .and_then(|value| value.checked_add(length))
         else {
             return true;
@@ -439,7 +450,7 @@ pub(super) fn sanitize_svg(source: &[u8], key: &str) -> Result<Vec<u8>, Solution
                     ));
                 }
                 elements += 1;
-                if elements > 4096 || depth > 64 {
+                if elements > MAX_SVG_ELEMENTS || depth > MAX_SVG_DEPTH {
                     return invalid(format!("presentation asset '{key}' SVG is too complex"));
                 }
                 let mut attrs = Vec::new();

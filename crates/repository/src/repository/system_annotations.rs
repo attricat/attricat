@@ -1,7 +1,7 @@
 //! Validation and patching of record system tags and system metadata,
 //! shared by record writes, workflow actions and extension annotations.
 
-use super::RepositoryError;
+use super::{RepositoryError, SAMPLE_SYSTEM_TAG};
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, HashSet};
 
@@ -17,7 +17,7 @@ pub(super) fn validate_system_tag_update(
     current: &[String],
     requested: &[String],
 ) -> Result<(), RepositoryError> {
-    let marker = "attricat.sample";
+    let marker = SAMPLE_SYSTEM_TAG;
     if requested.iter().any(|tag| tag == marker) && !current.iter().any(|tag| tag == marker) {
         return Err(RepositoryError::InvalidSystemTags);
     }
@@ -101,11 +101,13 @@ pub(super) fn apply_tag_metadata_patch(
 
 /// Longest stored system tag, including an extension namespace prefix.
 pub(super) const MAX_SYSTEM_TAG_BYTES: usize = 128;
+pub(super) const MAX_SYSTEM_TAGS: usize = 100;
+pub(super) const MAX_SYSTEM_METADATA_BYTES: usize = 64 * 1024;
 
 pub(super) fn validate_system_tags(tags: &[String]) -> Result<(), RepositoryError> {
-    if tags.len() > 100
+    if tags.len() > MAX_SYSTEM_TAGS
         || tags.iter().any(|tag| {
-            tag.trim().is_empty() || tag.len() > MAX_SYSTEM_TAG_BYTES || tag == "attricat.sample"
+            tag.trim().is_empty() || tag.len() > MAX_SYSTEM_TAG_BYTES || tag == SAMPLE_SYSTEM_TAG
         })
         || tags.iter().collect::<HashSet<_>>().len() != tags.len()
     {
@@ -116,7 +118,8 @@ pub(super) fn validate_system_tags(tags: &[String]) -> Result<(), RepositoryErro
 
 pub(super) fn validate_system_metadata(metadata: &Value) -> Result<(), RepositoryError> {
     if !metadata.is_object()
-        || serde_json::to_vec(metadata).map_or(true, |value| value.len() > 64 * 1024)
+        || serde_json::to_vec(metadata)
+            .map_or(true, |value| value.len() > MAX_SYSTEM_METADATA_BYTES)
     {
         return Err(RepositoryError::InvalidSystemMetadata);
     }

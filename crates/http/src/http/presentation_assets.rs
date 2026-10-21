@@ -15,6 +15,7 @@ use super::{
     conditional,
     error::ApiError,
     extractors::{ApiPath, ApiQuery},
+    pagination::MAX_OFFSET,
 };
 use crate::{
     repository::{MAX_PRESENTATION_ASSET_PAGE_SIZE, PresentationAsset},
@@ -30,8 +31,10 @@ pub(super) struct ListQuery {
     offset: i64,
 }
 
+const DEFAULT_PAGE_SIZE: i64 = 25;
+
 fn default_limit() -> i64 {
-    25
+    DEFAULT_PAGE_SIZE
 }
 
 fn private_cache_headers() -> HeaderMap {
@@ -48,11 +51,11 @@ pub(super) async fn list(
     ApiQuery(query): ApiQuery<ListQuery>,
 ) -> Result<(HeaderMap, Json<Vec<PresentationAsset>>), ApiError> {
     if !(1..=MAX_PRESENTATION_ASSET_PAGE_SIZE).contains(&query.limit)
-        || !(0..=10_000).contains(&query.offset)
+        || !(0..=MAX_OFFSET).contains(&query.offset)
     {
-        return Err(ApiError::invalid_input(
-            "limit must be 1-100 and offset must be 0-10000".into(),
-        ));
+        return Err(ApiError::invalid_input(format!(
+            "limit must be 1-{MAX_PRESENTATION_ASSET_PAGE_SIZE} and offset must be 0-{MAX_OFFSET}"
+        )));
     }
     Ok((
         private_cache_headers(),
@@ -130,11 +133,11 @@ pub(super) async fn content(
         HeaderValue::from_static(conditional::IMMUTABLE),
     );
     headers.insert(
-        "x-content-type-options",
+        header::X_CONTENT_TYPE_OPTIONS,
         HeaderValue::from_static("nosniff"),
     );
     headers.insert(
-        "content-security-policy",
+        header::CONTENT_SECURITY_POLICY,
         HeaderValue::from_static("default-src 'none'"),
     );
     Ok(response)

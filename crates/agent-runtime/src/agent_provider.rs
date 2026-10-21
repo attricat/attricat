@@ -279,16 +279,16 @@ impl OpenAiCompatibleClient {
         Err(ProviderError::Malformed)
     }
 }
+/// Where the first server-sent event frame in `buffer` ends, and the length
+/// of the blank-line delimiter that ends it.
 fn sse_frame_end(buffer: &[u8]) -> Option<(usize, usize)> {
-    let lf = buffer
-        .windows(2)
-        .position(|bytes| bytes == b"\n\n")
-        .map(|index| (index, 2));
-    let crlf = buffer
-        .windows(4)
-        .position(|bytes| bytes == b"\r\n\r\n")
-        .map(|index| (index, 4));
-    match (lf, crlf) {
+    let find = |delimiter: &[u8]| {
+        buffer
+            .windows(delimiter.len())
+            .position(|bytes| bytes == delimiter)
+            .map(|index| (index, delimiter.len()))
+    };
+    match (find(b"\n\n"), find(b"\r\n\r\n")) {
         (Some(lf), Some(crlf)) => Some(if lf.0 < crlf.0 { lf } else { crlf }),
         (Some(frame), None) | (None, Some(frame)) => Some(frame),
         (None, None) => None,

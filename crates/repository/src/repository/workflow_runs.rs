@@ -7,6 +7,22 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use uuid::Uuid;
 
+/// Event metadata keys that carry workflow causality across emitted events.
+pub(super) const CAUSAL_DEPTH_METADATA_KEY: &str = "workflow_causal_depth";
+pub(super) const ROOT_TRIGGER_EVENT_METADATA_KEY: &str = "workflow_root_trigger_event_id";
+/// Events deeper than this in a workflow-caused chain do not fan out again.
+pub(super) const MAX_WORKFLOW_CAUSAL_DEPTH: i64 = 8;
+/// Upper bound on overdue schedule occurrences processed in one tick.
+const MAX_SCHEDULE_CATCH_UP_OCCURRENCES: usize = 512;
+/// A schedule occurrence that is later than this is recorded as missed.
+pub(super) const MISSED_SCHEDULE_GRACE: chrono::Duration = chrono::Duration::minutes(5);
+const MAX_MANUAL_IDEMPOTENCY_KEY_BYTES: usize = 128;
+
+/// Manual run idempotency keys are 1-128 ASCII bytes.
+pub(super) fn valid_manual_idempotency_key(key: &str) -> bool {
+    !key.is_empty() && key.len() <= MAX_MANUAL_IDEMPOTENCY_KEY_BYTES && key.is_ascii()
+}
+
 #[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
 pub struct WorkflowRun {
     pub id: Uuid,
@@ -131,9 +147,9 @@ impl AttricatRepository {
             || event.source_name.starts_with("workflow:")
             || event
                 .metadata
-                .get("workflow_causal_depth")
+                .get(CAUSAL_DEPTH_METADATA_KEY)
                 .and_then(Value::as_u64)
-                .is_some_and(|depth| depth > 8)
+                .is_some_and(|depth| depth > MAX_WORKFLOW_CAUSAL_DEPTH as u64)
         {
             return Ok(0);
         }
@@ -159,15 +175,15 @@ impl AttricatRepository {
             }
             let root_trigger_event_id = event
                 .metadata
-                .get("workflow_root_trigger_event_id")
+                .get(ROOT_TRIGGER_EVENT_METADATA_KEY)
                 .and_then(Value::as_str)
                 .and_then(|id| id.parse::<Uuid>().ok())
                 .unwrap_or(event.id);
             let causal_depth = event
                 .metadata
-                .get("workflow_causal_depth")
+                .get(CAUSAL_DEPTH_METADATA_KEY)
                 .and_then(Value::as_i64)
-                .filter(|depth| (0..=8).contains(depth))
+                .filter(|depth| (0..=MAX_WORKFLOW_CAUSAL_DEPTH).contains(depth))
                 .unwrap_or(0) as i32;
             let id = Uuid::new_v4();
             let run_id: Option<Uuid> = sqlx::query_scalar("INSERT INTO workflow_runs (id, workspace_id, workflow_id, workflow_version, trigger_event_id, trigger_sequence, trigger_event, compiled_plan, root_trigger_event_id, causal_depth) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (workspace_id,workflow_id,workflow_version,trigger_event_id) DO NOTHING RETURNING id")
@@ -301,8 +317,7 @@ impl AttricatRepository {
         record_id: Uuid,
         idempotency_key: &str,
     ) -> Result<Uuid, RepositoryError> {
-        if idempotency_key.is_empty() || idempotency_key.len() > 128 || !idempotency_key.is_ascii()
-        {
+        if !valid_manual_idempotency_key(idempotency_key) {
             return Err(RepositoryError::InvalidWorkflowDefinition(
                 "manual idempotency_key must be 1-128 ASCII bytes".into(),
             ));
@@ -375,7 +390,6 @@ impl AttricatRepository {
     /// task envelope is committed together, while active task/run state keeps
     /// the existing no-overlap semantics.
     pub async fn schedule_workflow_runs(&self) -> Result<u64, RepositoryError> {
-        use chrono::Duration as ChronoDuration;
         let ws = self.workspace_id.0;
         let now = Utc::now();
         let mut tx = self.pool.begin().await?;
@@ -422,7 +436,7 @@ impl AttricatRepository {
                 }
                 let mut occurrence_due = due;
                 let mut skipped = 0_i64;
-                for _ in 0..512 {
+                for _ in 0..MAX_SCHEDULE_CATCH_UP_OCCURRENCES {
                     if occurrence_due > now {
                         break;
                     }
@@ -431,7 +445,7 @@ impl AttricatRepository {
                             "schedule has no future occurrence".into(),
                         )
                     })?;
-                    let missed = occurrence_due < now - ChronoDuration::minutes(5);
+                    let missed = occurrence_due < now - MISSED_SCHEDULE_GRACE;
                     let active = match pending {
                         Some(pending) => pending,
                         None => {

@@ -20,6 +20,21 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// Large artifacts and file uploads are bounded independently from JSON API calls.
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+/// Media type of extension and solution-pack archives.
+const ZSTD_MEDIA_TYPE: &str = "application/zstd";
+const DEFAULT_SERVER_URL: &str = "http://127.0.0.1:3000/api";
+const SESSION_COOKIE: &str = "attricat_session";
+const CSRF_COOKIE: &str = "attricat_csrf";
+const CSRF_HEADER: &str = "x-attricat-csrf";
+const DEFAULT_LIST_LIMIT: u16 = 25;
+const MAX_LIST_LIMIT: u16 = 100;
+const MAX_LIST_OFFSET: u16 = 10_000;
+const MAX_BULK_EDIT_RECORDS: u32 = 5000;
+const MIN_SCHEDULE_INTERVAL_SECONDS: i32 = 60;
+/// Thirty days.
+const MAX_SCHEDULE_INTERVAL_SECONDS: i32 = 30 * 24 * 60 * 60;
+/// Longest solution-pack logical key or existing stable code a mapping accepts.
+const MAX_PACK_MAPPING_KEY_BYTES: usize = 128;
 const GENERATOR_TOKEN_LABEL: &str = "catalog-generator";
 const GENERATOR_TOKEN_PERMISSIONS: &[&str] = &[
     "blueprints.read",
@@ -723,7 +738,7 @@ enum AgentSettingsCommand {
         #[arg(long, value_enum)]
         bulk_edits: Option<BulkEditPolicyArgument>,
         /// The most records one bulk edit may change (1-5000).
-        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=5000))]
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=i64::from(MAX_BULK_EDIT_RECORDS)))]
         bulk_edit_max_records: Option<u32>,
     },
 }
@@ -1314,14 +1329,14 @@ enum ExtensionScheduleCommand {
         input: String,
         #[arg(long)]
         input_file_id: Option<Uuid>,
-        #[arg(long, value_parser = clap::value_parser!(i32).range(60..=2592000))]
+        #[arg(long, value_parser = clap::value_parser!(i32).range(i64::from(MIN_SCHEDULE_INTERVAL_SECONDS)..=i64::from(MAX_SCHEDULE_INTERVAL_SECONDS)))]
         interval_seconds: i32,
     },
     Update {
         schedule_id: Uuid,
         #[arg(long, action = clap::ArgAction::Set)]
         enabled: bool,
-        #[arg(long, value_parser = clap::value_parser!(i32).range(60..=2592000))]
+        #[arg(long, value_parser = clap::value_parser!(i32).range(i64::from(MIN_SCHEDULE_INTERVAL_SECONDS)..=i64::from(MAX_SCHEDULE_INTERVAL_SECONDS)))]
         interval_seconds: i32,
     },
 }
@@ -1363,7 +1378,7 @@ enum SolutionPackPlanCommand {
 enum SolutionPackApplicationsCommand {
     /// List bounded application history for the active workspace.
     List {
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = u32::from(DEFAULT_LIST_LIMIT))]
         limit: u32,
         #[arg(long, default_value_t = 0)]
         offset: u32,
@@ -1381,7 +1396,7 @@ enum SolutionPackChecksCommand {
     /// List bounded immutable check-run history.
     List {
         application_id: Uuid,
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = u32::from(DEFAULT_LIST_LIMIT))]
         limit: u32,
         #[arg(long, default_value_t = 0)]
         offset: u32,
@@ -1453,9 +1468,9 @@ enum SolutionPackCommand {
 #[derive(Subcommand)]
 enum PresentationAssetCommand {
     List {
-        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u16).range(1..=100))]
+        #[arg(long, default_value_t = DEFAULT_LIST_LIMIT, value_parser = clap::value_parser!(u16).range(1..=i64::from(MAX_LIST_LIMIT)))]
         limit: u16,
-        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u16).range(0..=10000))]
+        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u16).range(0..=i64::from(MAX_LIST_OFFSET)))]
         offset: u16,
     },
     Show {
@@ -1695,7 +1710,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
             Ok(value) => Url::parse(&value).map_err(|error| {
                 CliError::Input(format!("ATTRICAT_API_URL is not a valid URL: {error}"))
             })?,
-            Err(_) => Url::parse("http://127.0.0.1:3000/api").expect("valid default URL"),
+            Err(_) => Url::parse(DEFAULT_SERVER_URL).expect("valid default URL"),
         },
     };
     let session_file = cli.session_file;
@@ -1730,7 +1745,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         headers.insert(
             reqwest::header::COOKIE,
             reqwest::header::HeaderValue::from_str(&format!(
-                "attricat_session={}; attricat_csrf={}",
+                "{SESSION_COOKIE}={}; {CSRF_COOKIE}={}",
                 session.session, session.csrf
             ))
             .map_err(|_| {
@@ -1738,7 +1753,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
             })?,
         );
         headers.insert(
-            reqwest::header::HeaderName::from_static("x-attricat-csrf"),
+            reqwest::header::HeaderName::from_static(CSRF_HEADER),
             reqwest::header::HeaderValue::from_str(&session.csrf).map_err(|_| {
                 CliError::Input("session file contains invalid CSRF characters".to_owned())
             })?,
@@ -2544,8 +2559,8 @@ async fn save_session_response(
         .filter_map(|header| header.split_once(';').map(|(cookie, _)| cookie))
         .filter_map(|cookie| cookie.split_once('='))
         .fold((None, None), |(session, csrf), (name, value)| match name {
-            "attricat_session" => (Some(value.to_owned()), csrf),
-            "attricat_csrf" => (session, Some(value.to_owned())),
+            SESSION_COOKIE => (Some(value.to_owned()), csrf),
+            CSRF_COOKIE => (session, Some(value.to_owned())),
             _ => (session, csrf),
         });
     let output = raw_response(response).await?;
@@ -3161,7 +3176,7 @@ async fn extension_command(
     ExtensionCommand::Runtime => request(client,server,Method::GET,"/extensions/runtime",None).await,
     ExtensionCommand::WorkspaceMode { enabled } => request(client,server,Method::PUT,"/workspace/extensions-mode",Some(json!({"enabled":enabled}))).await,
     ExtensionCommand::Install { owner, repository, release_id } => request(client,server,Method::POST,"/extensions",Some(json!({"owner":owner,"repository":repository,"release_id":release_id}))).await,
-    ExtensionCommand::Sideload { file } => raw_upload(client,server,"/extensions/sideload",&file,"application/zstd").await,
+    ExtensionCommand::Sideload { file } => raw_upload(client,server,"/extensions/sideload",&file,ZSTD_MEDIA_TYPE).await,
     ExtensionCommand::Upgrade { extension_id, owner, repository, release_id } => request(client,server,Method::POST,&format!("/extensions/{}/upgrade",segment(&extension_id)),Some(json!({"owner":owner,"repository":repository,"release_id":release_id}))).await,
     ExtensionCommand::Configure { extension_id, configuration } => request(client,server,Method::PUT,&format!("/extensions/{}/configure",segment(&extension_id)),Some(json!({"configuration":json_input(&configuration,"--configuration")?}))).await,
     ExtensionCommand::Grant { extension_id, grant_kind, grant_id } => request(client,server,Method::POST,&format!("/extensions/{}/grants",segment(&extension_id)),Some(json!({"grant_kind":grant_kind,"grant_id":grant_id}))).await,
@@ -3354,7 +3369,7 @@ async fn solution_pack_command(
                 server,
                 "/solution-packs/inspect",
                 &file,
-                "application/zstd",
+                ZSTD_MEDIA_TYPE,
             )
             .await
         }
@@ -3402,7 +3417,7 @@ async fn solution_pack_command(
                 path.push_str("&include_sample_data=true");
             }
             if blueprint_maps.is_empty() && asset_maps.is_empty() && context_maps.is_empty() {
-                raw_upload(client, server, &path, &file, "application/zstd").await
+                raw_upload(client, server, &path, &file, ZSTD_MEDIA_TYPE).await
             } else {
                 solution_pack_plan_upload(
                     client,
@@ -3735,7 +3750,7 @@ async fn solution_pack_plan_upload(
         "EXISTING_CODE",
         |code| {
             let valid = !code.is_empty()
-                && code.len() <= 128
+                && code.len() <= MAX_PACK_MAPPING_KEY_BYTES
                 && code
                     .bytes()
                     .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'));
@@ -3753,7 +3768,7 @@ async fn solution_pack_plan_upload(
     let archive_part =
         reqwest::multipart::Part::stream_with_length(reqwest::Body::wrap_stream(stream), length)
             .file_name("solution-pack.tar.zst")
-            .mime_str("application/zstd")
+            .mime_str(ZSTD_MEDIA_TYPE)
             .map_err(|error| CliError::Input(error.to_string()))?;
     let mut form = reqwest::multipart::Form::new().part("archive", archive_part);
     for (field, mappings) in [
@@ -3781,7 +3796,7 @@ async fn solution_pack_plan_upload(
 // generates from hyphenated logical keys. Existing mappings are not prefixes.
 fn blueprint_mapping_value(code: &str) -> Option<Value> {
     let valid = !code.is_empty()
-        && code.len() <= 128
+        && code.len() <= MAX_PACK_MAPPING_KEY_BYTES
         && code.as_bytes()[0].is_ascii_lowercase()
         && code.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
@@ -3809,7 +3824,7 @@ fn parse_pack_mappings(
                 CliError::Input(format!("{flag} must be LOGICAL_KEY={value_name}"))
             })?;
             let invalid = || CliError::Input(format!("invalid {flag} value '{requested}'"));
-            if !key.starts_with(key_prefix) || key.len() > 128 {
+            if !key.starts_with(key_prefix) || key.len() > MAX_PACK_MAPPING_KEY_BYTES {
                 return Err(invalid());
             }
             let mut part = parse_value(value).ok_or_else(invalid)?;

@@ -1,5 +1,6 @@
 //! Workflow intake and schedule advancement are producers. Execution is owned
 //! exclusively by the shared task worker after the workflow task cutover.
+use crate::coordinator::{DISCOVERY_ERROR_BACKOFF, IDLE_POLL, STANDBY_POLL};
 use crate::preparation_backoff::PreparationBackoff;
 use crate::repository::CoordinatorLeadership;
 use crate::{
@@ -21,6 +22,8 @@ use tokio::sync::watch;
 use uuid::Uuid;
 
 const MAX_CAUSAL_DEPTH: usize = 8;
+/// The task error code of a failed workflow run.
+const TASK_ERROR_CODE: &str = "workflow_run";
 
 pub struct WorkflowIntakeHandler;
 #[async_trait]
@@ -83,7 +86,7 @@ impl TaskHandler for WorkflowTaskHandler {
             scoped
                 .dead_letter_task(
                     &task,
-                    "workflow_run",
+                    TASK_ERROR_CODE,
                     "workflow run is already dead-lettered",
                 )
                 .await
@@ -121,7 +124,7 @@ async fn fail_workflow_run(
         // The generic task worker owns retries before the failure budget is
         // exhausted; the workflow run remains pending and replayable.
         Err(TaskHandlerError {
-            code: "workflow_run",
+            code: TASK_ERROR_CODE,
             message,
         })
     }
@@ -129,7 +132,7 @@ async fn fail_workflow_run(
 
 fn task_error(error: crate::repository::RepositoryError) -> TaskHandlerError {
     TaskHandlerError {
-        code: "workflow_run",
+        code: TASK_ERROR_CODE,
         message: error.to_string(),
     }
 }
@@ -151,7 +154,7 @@ pub fn start_schedule_coordinator(
         let mut leadership = CoordinatorLeadership::new("workflow_schedule");
         loop {
             if !leadership.is_leader(&repository).await {
-                tokio::select! { _ = tokio::time::sleep(Duration::from_secs(1)) => continue, _ = shutdown.changed() => return }
+                tokio::select! { _ = tokio::time::sleep(STANDBY_POLL) => continue, _ = shutdown.changed() => return }
             }
             let delay = measure("worker:workflow_schedule", async {
                 let (workspaces, delay) = match repository.polled_workspace_ids().await {
@@ -159,13 +162,13 @@ pub fn start_schedule_coordinator(
                         let workspaces = workspaces.as_ref().clone();
                         metrics::gauge!("attricat_schedule_coordinator_healthy", "kind" => "workflow")
                             .set(1.0);
-                        (workspaces, Duration::from_millis(250))
+                        (workspaces, IDLE_POLL)
                     }
                     Err(error) => {
                         metrics::gauge!("attricat_schedule_coordinator_healthy", "kind" => "workflow")
                             .set(0.0);
                         tracing::warn!(%error, "workflow scheduler cannot discover workspaces");
-                        (Vec::new(), Duration::from_secs(5))
+                        (Vec::new(), DISCOVERY_ERROR_BACKOFF)
                     }
                 };
                 for workspace in workspaces {

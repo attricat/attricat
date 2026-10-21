@@ -53,6 +53,9 @@ impl OperationState {
     }
 }
 
+/// The longest selection page cursor a component may pass back.
+const MAX_SELECTION_CURSOR_BYTES: usize = 32;
+
 impl wit::selection::Host for OperationState {
     async fn describe(&mut self) -> Result<String, String> {
         let scope = load_scope(&self.repository, self.run_id)
@@ -67,7 +70,7 @@ impl wit::selection::Host for OperationState {
     }
 
     async fn page(&mut self, cursor: String, limit: u32) -> Result<String, String> {
-        if cursor.len() > 32 {
+        if cursor.len() > MAX_SELECTION_CURSOR_BYTES {
             return Err("selection cursor is invalid".into());
         }
         let scope = load_scope(&self.repository, self.run_id)

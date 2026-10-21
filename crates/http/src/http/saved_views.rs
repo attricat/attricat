@@ -28,6 +28,8 @@ pub(super) struct ListQuery {
 }
 
 const MAX_LIST_SEARCH_LENGTH: usize = 120;
+const MAX_NAME_BYTES: usize = 120;
+const MAX_DESCRIPTION_BYTES: usize = 500;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -50,10 +52,15 @@ fn validate_named(input: &ViewInput) -> Result<(&str, Option<&str>), ApiError> {
         .name
         .as_deref()
         .map(str::trim)
-        .filter(|s| !s.is_empty() && s.len() <= 120)
-        .ok_or_else(|| ApiError::invalid_input("name must be 1–120 characters".to_owned()))?;
+        .filter(|s| !s.is_empty() && s.len() <= MAX_NAME_BYTES)
+        .ok_or_else(|| {
+            ApiError::invalid_input(format!("name must be 1–{MAX_NAME_BYTES} characters"))
+        })?;
     if !matches!(input.visibility.as_str(), "private" | "workspace")
-        || input.description.as_ref().is_some_and(|s| s.len() > 500)
+        || input
+            .description
+            .as_ref()
+            .is_some_and(|s| s.len() > MAX_DESCRIPTION_BYTES)
     {
         return Err(ApiError::invalid_input(
             "invalid visibility or description".to_owned(),

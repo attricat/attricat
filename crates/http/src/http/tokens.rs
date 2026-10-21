@@ -1,7 +1,5 @@
 use axum::{Json, extract::State, http::StatusCode};
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -11,8 +9,11 @@ use super::{
     auth::{ActiveWorkspace, AuthenticatedPrincipal},
     error::ApiError,
     extractors::{ApiJson, ApiPath},
+    members::opaque_secret,
 };
 use crate::repository::PersonalApiToken;
+
+const PERSONAL_TOKEN_PREFIX: &str = "cat_pat_";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -62,9 +63,7 @@ pub(super) async fn create(
     ActiveWorkspace(workspace_id): ActiveWorkspace,
     ApiJson(input): ApiJson<CreateTokenRequest>,
 ) -> Result<(StatusCode, Json<CreatedToken>), ApiError> {
-    let mut bytes = [0u8; 32];
-    rand::rngs::OsRng.fill_bytes(&mut bytes);
-    let secret = format!("cat_pat_{}", URL_SAFE_NO_PAD.encode(bytes));
+    let secret = opaque_secret(PERSONAL_TOKEN_PREFIX);
     let digest = Sha256::digest(secret.as_bytes());
     let token_id = Uuid::new_v4();
     repository
