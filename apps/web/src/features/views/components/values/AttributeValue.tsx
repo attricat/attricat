@@ -190,6 +190,8 @@ export const AttributeValue = ({
         color={value ? 'success' : 'default'}
         label={formatAttributeValue(attribute, value)}
         size="small"
+        // Fits its label instead of stretching across a column layout.
+        sx={{ alignSelf: 'flex-start' }}
       />
     );
   }
