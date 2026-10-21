@@ -53,20 +53,42 @@ describe('loadRecordPublications', () => {
     );
   });
 
-  it('fails a left-out record as its own lookup does', async () => {
-    fetchMock
-      .mockResolvedValueOnce(json({ items: [] }))
-      .mockResolvedValueOnce(
-        json(
-          { error: { code: 'not_found', message: 'record not found' } },
-          404,
-        ),
-      );
+  it('fails a left-out record without a request of its own', async () => {
+    fetchMock.mockResolvedValueOnce(json({ items: [] }));
     await expect(loadRecordPublications(hidden)).rejects.toMatchObject({
       status: 404,
+      code: 'not_found',
     });
-    expect(fetchMock.mock.lastCall?.[0]).toBe(
-      `/api/v1/records/${hidden}/publications`,
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends the lookups of a large batch together', async () => {
+    const ids = Array.from(
+      { length: 150 },
+      (_, index) =>
+        `123e4567-e89b-42d3-a456-${String(index).padStart(12, '0')}`,
     );
+    const pending: ((value: unknown) => void)[] = [];
+    fetchMock.mockImplementation(
+      (_path: string, init: RequestInit) =>
+        new Promise((resolve) =>
+          pending.push(() =>
+            resolve(
+              json({
+                items: (
+                  JSON.parse(String(init.body)) as { record_ids: string[] }
+                ).record_ids.map((record_id) => ({
+                  record_id,
+                  publications: [],
+                })),
+              }),
+            ),
+          ),
+        ),
+    );
+    const loaded = Promise.all(ids.map(loadRecordPublications));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    pending.forEach((resolve) => resolve(undefined));
+    expect(await loaded).toHaveLength(150);
   });
 });

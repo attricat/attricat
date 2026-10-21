@@ -59,6 +59,7 @@
     "unexpectedDescription": "Nie udało się wyświetlić tej strony. Spróbuj ponownie albo wróć do strony głównej katalogu.",
     "notFoundTitle": "Nie znaleziono strony",
     "notFoundDescription": "Żądana strona nie istnieje lub nie jest już dostępna.",
+    "recordUnavailable": "Ten rekord nie istnieje lub nie masz uprawnień do jego odczytu.",
     "queryTitle": "Nie udało się wczytać tych informacji",
     "queryDescription": "Sprawdź połączenie i spróbuj ponownie.",
     "retry": "Spróbuj ponownie",
