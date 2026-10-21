@@ -185,6 +185,8 @@ Blokady są egzekwowane na serwerze dla każdej drogi zapisu: strony rekordu, AP
 
 Status, który deklaruje blokadę, wymaga jawnej listy `transitions`, więc wyjście z niego jest zawsze nazwanym, ograniczonym przejściem. Aby poprawić wydany rekord, najpierw wykonaj przejście korygujące, a dopiero potem edytuj. Korekta może zmienić wyłącznie status. Odblokowanie jest zapisywane w dzienniku audytu jako `record.unlock`.
 
+Właściciele i administratorzy mogą zawsze odblokować rekord, nawet gdy schemat nie deklaruje żadnego wyjścia albo nie mają żadnej z ról przejścia. Strona rekordu wyjaśnia każdą blokadę, a **Odblokuj…** pozwala im zmienić status na dowolną z jego opcji. Tak jak korekta, zmienia to wyłącznie status. Role, uprawnienia, rozdzielenie obowiązków i warunki przejść są pomijane, ale nowy status nadal stosuje własną blokadę lub zatwierdzenie. Zmiana jest zapisywana w historii statusów jako nadpisanie i w dzienniku audytu jako `record.unlock` z `override: true`. Innym rolom można to umożliwić [uprawnieniem `records.unlock`](/pl/reference/permissions/).
+
 Blokady działają w obrębie kontekstu: rekord wydany na jednym rynku nadal można edytować na innym, gdzie jest szkicem, o ile zmiana nie trafi do zablokowanego rynku przez dziedziczenie.
 
 #### Wiąż zatwierdzenia z przejrzaną treścią
@@ -320,7 +322,7 @@ Aby wychwycić takie przypadki, dodaj [regułę](/pl/builders/rules/) z tym samy
 | `publication_checks_failed` | 422 | Kontrole wymagane przez kanał nie przechodzą. Zobacz [Publikowanie](/pl/guides/publishing/#wymagaj-kontroli-przed-publikacją). |
 | `status_transition_forbidden` | 403 | Przejście wymaga uprawnienia lub roli, których nie masz. Zobacz [Kto może wykonać przejście](#kto-może-wykonać-przejście). |
 | `status_separation_of_duties` | 403 | To przejście musi wykonać ktoś inny. |
-| `record_locked` | 409 | Status rekordu blokuje zmienioną treść albo rekordu nie można usunąć. Najpierw wykonaj przejście korygujące. Zobacz [Blokuj sfinalizowane rekordy](#blokuj-sfinalizowane-rekordy). |
+| `record_locked` | 409 | Status rekordu blokuje zmienioną treść albo rekordu nie można usunąć. Najpierw wykonaj przejście korygujące albo poproś właściciela lub administratora o odblokowanie. Zobacz [Blokuj sfinalizowane rekordy](#blokuj-sfinalizowane-rekordy). |
 
 Przy zapisie kontrole, warunki i egzekwowane reguły działają w tej kolejności, po JSON Schema, a zgłaszana jest tylko pierwsza grupa, która nie przeszła. Cztery błędy `422` wymieniają do 50 naruszeń w `error.details.violations`, każde z kodem `code`, komunikatem `message`, kontekstami `contexts`, w których wystąpiło, i atrybutami `attributes`, których dotyczy. Wszystkie pola opisuje [dokumentacja API](/pl/reference/api/#szczegóły-błędu).
 
