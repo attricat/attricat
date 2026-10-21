@@ -39,6 +39,7 @@ const sessionSchema = z.object({
       rules_read: z.boolean().default(false),
       rules_manage: z.boolean().default(false),
       records_publish: z.boolean().default(false),
+      records_unlock: z.boolean().default(false),
       records_delete: z.boolean().default(false),
       blueprints_write: z.boolean().default(false),
       records_write: z.boolean().default(false),

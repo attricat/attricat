@@ -243,6 +243,54 @@ export const statusCovers = (
     ? attributeCode !== statusCode
     : coverage.includes(attributeCode);
 
+/** A status attribute whose saved option locks values in a context. */
+export type StatusLock = {
+  attribute: Attribute;
+  config: StatusConfiguration;
+  option: StatusOption & { lock: StatusCoverage };
+  /** Codes of the other attributes the lock covers. */
+  lockedCodes: string[];
+};
+
+/**
+ * The status attributes whose saved option in this context has `lock`, with
+ * the attributes each one locks.
+ */
+export const savedStatusLocks = (
+  attributes: readonly Attribute[],
+  values: readonly FormAttributeValue[],
+  contextId: string | null,
+  parentContextIds: readonly string[],
+): StatusLock[] =>
+  attributes.flatMap((statusAttribute) => {
+    const config = statusConfiguration(statusAttribute);
+    if (!config) return [];
+    const { current } = savedStatusState(
+      statusAttribute,
+      values,
+      contextId,
+      parentContextIds,
+    );
+    const option = config.options.find((item) => item.code === current);
+    if (!option?.lock) return [];
+    const lock = option.lock;
+    const lockedCodes = attributes
+      .filter((attribute) =>
+        statusCovers(lock, attribute.code, statusAttribute.code),
+      )
+      .map((attribute) => attribute.code);
+    return lockedCodes.length > 0
+      ? [
+          {
+            attribute: statusAttribute,
+            config,
+            option: { ...option, lock },
+            lockedCodes,
+          },
+        ]
+      : [];
+  });
+
 /**
  * Attribute codes made read-only by the saved status of each status attribute
  * in this context, mapped to that status label. The server enforces the same
@@ -255,20 +303,12 @@ export const statusLocks = (
   parentContextIds: readonly string[],
 ): Record<string, string> => {
   const locks: Record<string, string> = {};
-  for (const statusAttribute of attributes) {
-    const config = statusConfiguration(statusAttribute);
-    if (!config) continue;
-    const { current } = savedStatusState(
-      statusAttribute,
-      values,
-      contextId,
-      parentContextIds,
-    );
-    const option = config.options.find((item) => item.code === current);
-    if (!option?.lock) continue;
-    for (const attribute of attributes)
-      if (statusCovers(option.lock, attribute.code, statusAttribute.code))
-        locks[attribute.code] ??= statusOptionLabel(option);
-  }
+  for (const { option, lockedCodes } of savedStatusLocks(
+    attributes,
+    values,
+    contextId,
+    parentContextIds,
+  ))
+    for (const code of lockedCodes) locks[code] ??= statusOptionLabel(option);
   return locks;
 };

@@ -6,8 +6,10 @@ use super::{
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
+use crate::model::Record;
 use crate::repository::{
     FileRetentionHold, RECORD_CONTROL_PAGE_SIZE, RecordApproval, StatusTransitionAccess,
+    UnlockRecordStatus,
 };
 use axum::{Json, extract::State, http::StatusCode};
 use chrono::{DateTime, Utc};
@@ -77,6 +79,24 @@ pub(super) async fn status_transitions(
         .status_transition_access(record_id, query.context_id, principal.actor())
         .await?;
     Ok(Json(Items { items }))
+}
+
+/// Leaves a locking status outside the declared transitions; owners and
+/// administrators hold `records.unlock`.
+pub(super) async fn unlock_status(
+    State(state): State<AppState>,
+    ScopedRepository(repository): ScopedRepository,
+    principal: AuthenticatedPrincipal,
+    ApiPath(record_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<UnlockRecordStatus>,
+) -> Result<Json<Record>, ApiError> {
+    let record = repository
+        .clone()
+        .with_authorization_actor(principal.actor())
+        .unlock_record_status(record_id, input)
+        .await?;
+    super::data_health::invalidate_data_health(&state, &repository);
+    Ok(Json(record))
 }
 
 pub(super) async fn approvals(

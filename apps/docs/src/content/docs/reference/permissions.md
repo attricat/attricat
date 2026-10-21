@@ -37,10 +37,11 @@ A missing or expired sign-in returns `401`. A signed-in person without the permi
 | `extensions.manage` | Installing, configuring, granting, enabling, and removing extensions; registries, layout, secrets, operations, and connector jobs. | ✓ | ✓ | | |
 | `solution_packs.manage` | Inspecting, planning, and applying solution packs; presentation assets. | ✓ | ✓ | | |
 | `files.hold` | Placing and releasing explicit retention holds on files. | ✓ | ✓ | | |
+| `records.unlock` | Unlocking a record whose status locks it, to any status, outside the blueprint's transitions. | ✓ | ✓ | | |
 
 ## Status transitions
 
-A blueprint status can require a permission or role for a transition, or a different person than made an earlier one, on top of `records.write` and for every writer; locked records refuse changes whatever the writer's permissions. See [Control a record's lifecycle](/builders/validation/#control-a-records-lifecycle).
+A blueprint status can require a permission or role for a transition, or a different person than made an earlier one, on top of `records.write` and for every writer; locked records refuse changes whatever the writer's permissions, until their status changes. Holders of `records.unlock` can change a locking status to any option. See [Control a record's lifecycle](/builders/validation/#control-a-records-lifecycle).
 
 ## Attribute visibility
 

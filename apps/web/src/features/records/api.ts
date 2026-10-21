@@ -346,6 +346,26 @@ export const publishRecord = (id: string, contextId: string) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ context_id: uuidSchema.parse(contextId) }),
   });
+/** Moves a locking status to `to` outside the declared transitions. */
+export const unlockRecordStatus = (
+  id: string,
+  input: {
+    attributeCode: string;
+    contextId: string | null;
+    to: string;
+    expectedUpdatedAt: string;
+  },
+) =>
+  request(`${recordPath(id)}/status-unlock`, recordSchema, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      attribute_code: input.attributeCode,
+      ...(input.contextId && { context_id: uuidSchema.parse(input.contextId) }),
+      to: input.to,
+      expected_updated_at: input.expectedUpdatedAt,
+    }),
+  });
 export const publishRecordAllChannels = (id: string) =>
   request(
     `${recordPath(id)}/publications/publish-all`,

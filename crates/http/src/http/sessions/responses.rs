@@ -50,6 +50,7 @@ pub(super) struct SessionCapabilities {
     rules_read: bool,
     rules_manage: bool,
     records_publish: bool,
+    records_unlock: bool,
     records_delete: bool,
     blueprints_write: bool,
     records_write: bool,
@@ -77,6 +78,7 @@ impl SessionResponse {
         c.rules_read &= permits("rules.read");
         c.rules_manage &= permits("rules.manage");
         c.records_publish &= permits("records.publish");
+        c.records_unlock &= permits("records.unlock");
         c.records_delete &= permits("records.delete");
         c.blueprints_write &= permits("blueprints.write");
         c.records_write &= permits("records.write");
@@ -183,7 +185,7 @@ async fn session_response_payload_with_identifier(
 }
 
 /// Workspace-wide permissions reported as session capability flags.
-const CAPABILITY_PERMISSIONS: [&str; 21] = [
+const CAPABILITY_PERMISSIONS: [&str; 22] = [
     "audit.read",
     "data_health.read",
     "members.manage",
@@ -199,6 +201,7 @@ const CAPABILITY_PERMISSIONS: [&str; 21] = [
     "rules.read",
     "rules.manage",
     "records.publish",
+    "records.unlock",
     "records.delete",
     "blueprints.write",
     "records.write",
@@ -235,6 +238,7 @@ async fn session_capabilities(
         rules_read: has("rules.read"),
         rules_manage: has("rules.manage"),
         records_publish: has("records.publish"),
+        records_unlock: has("records.unlock"),
         records_delete: has("records.delete"),
         blueprints_write: has("blueprints.write"),
         records_write: has("records.write"),

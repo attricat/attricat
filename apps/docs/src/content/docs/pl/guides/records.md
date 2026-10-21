@@ -79,7 +79,7 @@ Pola plików przyjmujące tylko obrazy wyświetlają galerię. Wybierz obraz, ab
 Niektóre schematy używają statusów do kontrolowania cyklu życia rekordu. Wtedy:
 
 - Lista wyboru statusu wyłącza przejścia, których nie możesz wykonać, i wyjaśnia dlaczego: przejście wymaga uprawnienia lub roli, której nie masz, albo musi je wykonać ktoś inny (np. osoba, która przesłała dokument do przeglądu, nie może go zatwierdzić).
-- W statusie ostatecznym, takim jak *Wydany*, część pól lub wszystkie są tylko do odczytu, nie można dodawać ani usuwać plików, a rekordu nie można usunąć. Aby poprawić rekord, zmień jego status przejściem korygującym przewidzianym w schemacie, a potem edytuj. Korekta jest zapisywana w dzienniku audytu.
+- W statusie ostatecznym, takim jak *Wydany*, część pól lub wszystkie są tylko do odczytu, nie można dodawać ani usuwać plików, a rekordu nie można usunąć. Komunikat nad polami wskazuje status, który je blokuje, i statusy, na które możesz go zmienić. Aby poprawić rekord, zmień jego status przejściem korygującym przewidzianym w schemacie, a potem edytuj. Właściciele i administratorzy mogą też wybrać w komunikacie **Odblokuj…** i zmienić status na dowolną opcję, nawet bez przejścia korygującego. Korekty i odblokowania są zapisywane w dzienniku audytu.
 - Gdy rekord zostaje zatwierdzony, zatwierdzenie jest powiązane z dokładnie tą treścią, którą przejrzano. Edycja tej treści unieważnia zatwierdzenie, a rekord w tym samym zapisie wraca do wcześniejszego statusu.
 - Pliki sfinalizowanych rekordów mogą być objęte blokadą retencji do określonej daty.
 

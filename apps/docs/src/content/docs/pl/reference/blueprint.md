@@ -138,7 +138,7 @@ Każda opcja:
 | `code` | kod, do 128 znaków | Wymagany. Musi odpowiadać dokładnie jednej wartości z `enum`. |
 | `label` | ciąg znaków, od 1 do 200 znaków | Wymagany. Może zawierać [odwołania do leksykonu](/pl/builders/translations/#etykiety-statusów-i-list-wyboru). |
 | `tone` | `default`, `success`, `warning`, `error` lub `info` | Kolor znacznika statusu. |
-| `lock` | `"all"` lub od 1 do 500 kodów atrybutów | Sprawia, że wymienione atrybuty są tylko do odczytu, dopóki rekord ma ten status. `"all"` obejmuje wszystkie atrybuty, relacje i pliki oprócz samego statusu. Atrybut wielokrotnego użytku zapisuje się jako `namespace:code`. Rekordu ze statusem z blokadą nie można usunąć. Wymaga `transitions`. |
+| `lock` | `"all"` lub od 1 do 500 kodów atrybutów | Sprawia, że wymienione atrybuty są tylko do odczytu, dopóki rekord ma ten status. `"all"` obejmuje wszystkie atrybuty, relacje i pliki oprócz samego statusu. Atrybut wielokrotnego użytku zapisuje się jako `namespace:code`. Rekordu ze statusem z blokadą nie można usunąć. Właściciele i administratorzy zawsze mogą go odblokować, zmieniając status. Wymaga `transitions`. |
 | `approval` | tabela z `covers` i `void_to` | Rejestruje zatwierdzenie, gdy rekord przechodzi do tego statusu. `covers` to `"all"` lub od 1 do 500 kodów atrybutów; `void_to` to inna opcja, do której rekord przechodzi, gdy objęta treść się zmieni. |
 | `retention_days` | liczba całkowita od 1 do 36 600 | Zakłada blokadę retencji na pliki zablokowanych atrybutów, gdy rekord przechodzi do tego statusu. Wymaga `lock`. |
 

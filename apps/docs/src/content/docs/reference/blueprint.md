@@ -138,7 +138,7 @@ Each option:
 | `code` | code, up to 128 characters | Required. Must match exactly one `enum` value. |
 | `label` | string, 1 to 200 characters | Required. Can contain [lexicon references](/builders/translations/#status-and-choice-labels). |
 | `tone` | `default`, `success`, `warning`, `error`, or `info` | Color of the status chip. |
-| `lock` | `"all"`, or 1 to 500 attribute codes | Makes the listed attributes read-only while the record has this status. `"all"` covers every attribute, relationship, and file except the status itself. A reusable attribute is written `namespace:code`. A record with a locking status cannot be deleted. Requires `transitions`. |
+| `lock` | `"all"`, or 1 to 500 attribute codes | Makes the listed attributes read-only while the record has this status. `"all"` covers every attribute, relationship, and file except the status itself. A reusable attribute is written `namespace:code`. A record with a locking status cannot be deleted. Owners and admins can always unlock it to another status. Requires `transitions`. |
 | `approval` | table with `covers` and `void_to` | Records an approval when the record enters this status. `covers` is `"all"` or 1 to 500 attribute codes; `void_to` is another option the record moves to when covered content changes. |
 | `retention_days` | integer, 1 to 36,600 | Places a retention hold on the locked attributes' files when the record enters this status. Requires `lock`. |
 

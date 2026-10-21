@@ -284,6 +284,82 @@ async fn locked_records_reject_writes_until_an_audited_correction(pool: PgPool) 
 }
 
 #[sqlx::test]
+async fn owners_unlock_any_locking_status_outside_the_declared_transitions(pool: PgPool) {
+    let (_, server, _, record) = setup(&pool).await;
+    let owner = authenticated_client();
+    let reviewer = client_for(member_with_role(&pool, reviewer_role(&pool).await).await);
+    let unlock = |client: &Client, to: &str| {
+        let client = client.clone();
+        let url = format!("{}/status-unlock", record.url);
+        let to = to.to_owned();
+        let record = &record;
+        async move {
+            let current = record.read(&client).await;
+            client
+                .post(url)
+                .json(&json!({
+                    "attribute_code": "status",
+                    "to": to,
+                    "expected_updated_at": current["record"]["updated_at"],
+                }))
+                .send()
+                .await
+                .unwrap()
+        }
+    };
+    expect_error(
+        unlock(&owner, "review").await,
+        StatusCode::CONFLICT,
+        "status_not_locked",
+    )
+    .await;
+    for (client, status) in [
+        (&owner, "review"),
+        (&reviewer, "approved"),
+        (&owner, "released"),
+    ] {
+        expect_status(record.set_status(client, status).await, StatusCode::OK).await;
+    }
+    expect_error(
+        unlock(&reviewer, "review").await,
+        StatusCode::FORBIDDEN,
+        "forbidden",
+    )
+    .await;
+    expect_error(
+        unlock(&owner, "retired").await,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "attribute_value_schema_mismatch",
+    )
+    .await;
+    // `released` declares no edge to `review`, and the unlock skips the
+    // reviewer role the approval edges require.
+    expect_status(unlock(&owner, "review").await, StatusCode::OK).await;
+    assert_eq!(record.status(&owner).await, "review");
+    expect_status(
+        record
+            .put(&owner, json!([scalar("title", "Changed")]))
+            .await,
+        StatusCode::OK,
+    )
+    .await;
+    let (kind, edge, unlocked): (String, Option<String>, bool) = sqlx::query_as(
+        "SELECT kind, edge_code, unlocked FROM record_status_transitions WHERE from_status = 'released'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((kind.as_str(), edge, unlocked), ("override", None, true));
+    let audited: Value =
+        sqlx::query_scalar("SELECT metadata FROM audit_events WHERE action = 'record.unlock'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(audited["record_control"]["override"], true);
+    server.abort();
+}
+
+#[sqlx::test]
 async fn approvals_bind_to_content_and_void_on_change(pool: PgPool) {
     let (base, server, _, record) = setup(&pool).await;
     let owner = authenticated_client();

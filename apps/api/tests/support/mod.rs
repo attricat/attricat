@@ -387,6 +387,10 @@ async fn start_configured_server(
         .await
         .unwrap();
     AttricatRepository::system(pool.clone())
+        .ensure_record_unlock_permissions()
+        .await
+        .unwrap();
+    AttricatRepository::system(pool.clone())
         .ensure_solution_pack_permissions()
         .await
         .unwrap();

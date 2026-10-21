@@ -95,6 +95,7 @@ error_codes! {
     SolutionPackPlanNotReady = "solution_pack_plan_not_ready",
     SolutionPackPlanStale = "solution_pack_plan_stale",
     StaleRecord = "stale_record",
+    StatusNotLocked = "status_not_locked",
     StatusPreconditionRequired = "status_precondition_required",
     StatusSeparationOfDuties = "status_separation_of_duties",
     StatusTransitionForbidden = "status_transition_forbidden",
@@ -241,6 +242,15 @@ impl RepositoryError {
                 "attribute": attribute,
                 "context": context,
                 "edge": edge,
+            })),
+            Self::StatusNotLocked {
+                attribute,
+                context,
+                status,
+            } => plain(Conflict, Code::StatusNotLocked).with_details(json!({
+                "attribute": attribute,
+                "context": context,
+                "status": status,
             })),
             Self::RecordLocked {
                 attribute,

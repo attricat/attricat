@@ -426,6 +426,12 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path.starts_with("/files/{file_id}") {
         return Some(read(TargetKind::FileRead));
     }
+    if path == "/v1/records/{record_id}/status-unlock" {
+        return Some(Policy {
+            permission: "records.unlock",
+            target: TargetKind::RecordId,
+        });
+    }
     if path.starts_with("/v1/records/{record_id}/publications") && method != Method::GET {
         return Some(Policy {
             permission: "records.publish",
