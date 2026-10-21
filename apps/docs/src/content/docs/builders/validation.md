@@ -193,7 +193,7 @@ Locks apply per context: a record released in one market can still be edited in 
 
 When covered content later changes, the approval is voided in the same save, and if the record is still in the approved status it moves to `void_to`. For example, editing the title of an approved document can send it back to review. Changes to attributes that are not covered keep the approval.
 
-Approvals and voids appear in the audit log (`record.approval.record`, `record.approval.void`) and in the **Record control** panel on the record page.
+Approvals and voids appear in the audit log (`record.approval.record`, `record.approval.void`) and in the **Record control** tab on the record page.
 
 #### Retain released files
 

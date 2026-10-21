@@ -350,6 +350,43 @@ async fn approvals_bind_to_content_and_void_on_change(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(actions, ["record.approval.record", "record.approval.void"]);
+
+    // Older superseded copies fill more than one page.
+    sqlx::query(
+        "INSERT INTO record_approvals (id, workspace_id, record_id, attribute_code, context_id, status, covers_all, covered_attributes, content_digest, approved_at, ended_at, end_reason) SELECT gen_random_uuid(), workspace_id, record_id, attribute_code, context_id, status, covers_all, covered_attributes, content_digest, approved_at - make_interval(mins => n), approved_at, 'superseded' FROM record_approvals, generate_series(1, 20) AS n",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let page = |query: Vec<(&'static str, String)>| {
+        let request = owner.get(format!("{}/approvals", record.url)).query(&query);
+        async move { request.send().await.unwrap() }
+    };
+    let first: Value = page(vec![]).await.json().await.unwrap();
+    let items = first["items"].as_array().unwrap();
+    assert_eq!(items.len(), 20);
+    assert_eq!(first["has_more"], true);
+    assert_eq!(items[0]["id"], voided[0]["id"]);
+    let last = &items[19];
+    let second: Value = page(vec![
+        (
+            "before_time",
+            last["approved_at"].as_str().unwrap().to_owned(),
+        ),
+        ("before_id", last["id"].as_str().unwrap().to_owned()),
+    ])
+    .await
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(second["items"].as_array().unwrap().len(), 1);
+    assert_eq!(second["has_more"], false);
+    expect_error(
+        page(vec![("before_id", last["id"].as_str().unwrap().to_owned())]).await,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "invalid_input",
+    )
+    .await;
     server.abort();
 }
 
@@ -494,6 +531,29 @@ async fn released_files_are_held_and_explicit_holds_are_managed(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(listed["items"].as_array().unwrap().len(), 2);
+    // The record's holds continue, newest first, before the last one shown.
+    let record_holds = |query: Vec<(&'static str, String)>| {
+        let request = editor
+            .get(format!("{}/retention-holds", record.url))
+            .query(&query);
+        async move { request.send().await.unwrap().json::<Value>().await.unwrap() }
+    };
+    let first = record_holds(vec![]).await;
+    assert_eq!(first["has_more"], false);
+    let newest = &first["items"][0];
+    let older = record_holds(vec![
+        (
+            "before_time",
+            newest["created_at"].as_str().unwrap().to_owned(),
+        ),
+        ("before_id", newest["id"].as_str().unwrap().to_owned()),
+    ])
+    .await;
+    assert_eq!(
+        older["items"].as_array().unwrap().len(),
+        first["items"].as_array().unwrap().len() - 1
+    );
+    assert_eq!(older["items"][0]["id"], first["items"][1]["id"]);
     // FileRead routes defer resource authorization to the handler. Merely
     // having an active membership must not expose another record's holds.
     let (unrelated, membership) = add_workspace_user(&pool).await;

@@ -193,7 +193,7 @@ Blokady działają w obrębie kontekstu: rekord wydany na jednym rynku nadal mo�
 
 Gdy objęta treść się później zmieni, zatwierdzenie zostaje unieważnione w tym samym zapisie, a jeśli rekord wciąż ma status zatwierdzony, przechodzi do `void_to`. Na przykład edycja tytułu zatwierdzonego dokumentu może odesłać go z powrotem do przeglądu. Zmiany atrybutów, których zatwierdzenie nie obejmuje, nie naruszają zatwierdzenia.
 
-Zatwierdzenia i unieważnienia pojawiają się w dzienniku audytu (`record.approval.record`, `record.approval.void`) oraz w panelu **Kontrola rekordu** na stronie rekordu.
+Zatwierdzenia i unieważnienia pojawiają się w dzienniku audytu (`record.approval.record`, `record.approval.void`) oraz na karcie **Kontrola rekordu** na stronie rekordu.
 
 #### Zachowuj wydane pliki
 

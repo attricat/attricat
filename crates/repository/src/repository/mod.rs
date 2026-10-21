@@ -228,7 +228,7 @@ pub use solution_packs::{
     SolutionPackApplicationSummary, SolutionPackCheckRun, SolutionPackCheckRunSummary,
     SolutionPackPlan,
 };
-pub use status::{RecordApproval, StatusTransitionAccess};
+pub use status::{RECORD_CONTROL_PAGE_SIZE, RecordApproval, StatusTransitionAccess};
 pub use tasks::{
     BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary, bounded_task_error_message,
 };

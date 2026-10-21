@@ -270,7 +270,8 @@ still equals the approved option, the same transaction writes the option's
 inherit the void status) and records an `approval_void` transition. This
 automatic change bypasses edge and permission checks by design. Audit actions
 are `record.approval.record` and `record.approval.void`.
-`GET /v1/records/{record_id}/approvals` lists approvals newest first.
+`GET /v1/records/{record_id}/approvals` lists approvals newest first, 20 per
+page; continue with `before_time` and `before_id` from the last item.
 
 ### Retention
 

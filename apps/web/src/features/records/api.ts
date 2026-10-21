@@ -31,12 +31,14 @@ import {
   recordPublicationStatusSchema,
   recordPublicationReadinessSchema,
   recordApprovalSchema,
+  recordControlPageSchema,
   itemsResponseSchema,
   retentionHoldSchema,
   statusTransitionAccessSchema,
   uuidSchema,
 } from './schemas';
 
+import type { RecordControlCursor } from './schemas';
 export { viewBlockTypes } from './schemas';
 export type {
   Attribute,
@@ -47,6 +49,7 @@ export type {
   AttricatRecord,
   RecordApproval,
   RecordAuditChange,
+  RecordControlCursor,
   RecordFormResponse,
   RecordMigrationPreview,
   RecordPublicationReadiness,
@@ -395,16 +398,27 @@ export const getStatusTransitions = (
     signal === undefined ? undefined : { signal },
   );
 
-export const getRecordApprovals = (id: string, signal?: AbortSignal) =>
+const recordControlQuery = (cursor?: RecordControlCursor) =>
+  cursor ? `?${new URLSearchParams(cursor)}` : '';
+
+export const getRecordApprovals = (
+  id: string,
+  cursor?: RecordControlCursor,
+  signal?: AbortSignal,
+) =>
   request(
-    `${recordPath(id)}/approvals`,
-    itemsResponseSchema(recordApprovalSchema),
+    `${recordPath(id)}/approvals${recordControlQuery(cursor)}`,
+    recordControlPageSchema(recordApprovalSchema),
     signal === undefined ? undefined : { signal },
   );
 
-export const getRecordRetentionHolds = (id: string, signal?: AbortSignal) =>
+export const getRecordRetentionHolds = (
+  id: string,
+  cursor?: RecordControlCursor,
+  signal?: AbortSignal,
+) =>
   request(
-    `${recordPath(id)}/retention-holds`,
-    itemsResponseSchema(retentionHoldSchema),
+    `${recordPath(id)}/retention-holds${recordControlQuery(cursor)}`,
+    recordControlPageSchema(retentionHoldSchema),
     signal === undefined ? undefined : { signal },
   );

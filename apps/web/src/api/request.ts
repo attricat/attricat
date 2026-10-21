@@ -70,6 +70,33 @@ export const request = async <T>(
   return result.data;
 };
 
+/** Offset of the next page of a list returned as a bare array. */
+const nextOffsetHeader = 'x-next-offset';
+
+/**
+ * One page of a list returned as a bare JSON array, with the offset of the
+ * next page when there are more items.
+ */
+export const requestOffsetPage = async <T>(
+  path: string,
+  schema: z.ZodType<T[]>,
+  init?: RequestInit,
+): Promise<{ items: T[]; nextOffset?: number }> => {
+  const response = await responseFor(path, init);
+  const result = schema.safeParse(await response.json());
+  if (!result.success)
+    throw new Error(
+      i18n.t('errors.invalidApiResponse', {
+        details: z.prettifyError(result.error),
+      }),
+    );
+  const next = Number(response.headers.get(nextOffsetHeader) ?? Number.NaN);
+  return {
+    items: result.data,
+    nextOffset: Number.isInteger(next) ? next : undefined,
+  };
+};
+
 const responseFor = async (path: string, init?: RequestInit) => {
   const response = await (init === undefined
     ? apiFetch(path)

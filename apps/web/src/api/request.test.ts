@@ -4,6 +4,7 @@ import {
   ApiRequestError,
   request,
   requestNoContent,
+  requestOffsetPage,
   requestText,
 } from './request';
 import '../i18n';
@@ -48,6 +49,28 @@ describe('API request helper', () => {
     await expect(
       request('/api/example', z.object({ id: z.string() })),
     ).rejects.toMatchObject({ code: 'record_check_failed', details });
+  });
+
+  it('reads the next offset of a bare-array page from its header', async () => {
+    const page = (nextOffset: string | null) => ({
+      ok: true,
+      status: 200,
+      headers: new Headers(
+        nextOffset === null ? {} : { 'x-next-offset': nextOffset },
+      ),
+      json: () => Promise.resolve([{ id: 'a' }]),
+    });
+    const schema = z.array(z.object({ id: z.string() }));
+    fetchMock.mockResolvedValueOnce(page('20'));
+    await expect(requestOffsetPage('/api/example', schema)).resolves.toEqual({
+      items: [{ id: 'a' }],
+      nextOffset: 20,
+    });
+    fetchMock.mockResolvedValueOnce(page(null));
+    await expect(requestOffsetPage('/api/example', schema)).resolves.toEqual({
+      items: [{ id: 'a' }],
+      nextOffset: undefined,
+    });
   });
 
   it('validates successful JSON responses with the provided schema', async () => {

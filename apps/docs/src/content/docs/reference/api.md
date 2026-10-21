@@ -137,8 +137,8 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `POST` | `/v1/records/{id}/blueprint-migration` | Migrate. |
 | `POST` | `/v1/records/{id}/reusable-attributes`, `/v1/records/{id}/reusable-attribute-groups/{group_id}` | Attach a reusable attribute or group. |
 | `GET` | `/v1/records/{id}/status-transitions?context_id=…` | Declared transitions from the saved status in one context (default context if omitted): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, unmet}]}`. `denial_code` is `status_transition_forbidden`, `status_separation_of_duties` or `transition_conditions_unmet`; `unmet` lists unmet conditions and enforcing rules as violations. |
-| `GET` | `/v1/records/{id}/approvals` | Approvals recorded by status transitions, newest first, with who approved, when, a digest of the covered content, and why an approval was voided. |
-| `GET` | `/v1/records/{id}/retention-holds` | Retention holds on the record's files. |
+| `GET` | `/v1/records/{id}/approvals` | Approvals recorded by status transitions, newest first and 20 per page, with who approved, when, a digest of the covered content, and why an approval was voided. Returns `{"items","has_more"}`; continue with `before_time` (the last item's `approved_at`) and `before_id`. |
+| `GET` | `/v1/records/{id}/retention-holds` | Retention holds on the record's files, newest first and 20 per page. Returns `{"items","has_more"}`; continue with `before_time` (the last item's `created_at`) and `before_id`. |
 
 ### Batch changes
 
@@ -304,7 +304,8 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/rules/{id}` | Read a rule. |
 | `POST` | `/rules/{id}/versions/{version}/publish`, `/enable`; `/rules/{id}/disable` | Lifecycle. `/enable` accepts an optional `{"accept_existing_violations": true}` for an enforcing rule whose dry run found violations. |
 | `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. A dry run may add `"version": 2` to target a published revision that is not enabled; it defaults to the enabled revision, or the latest published one. |
-| `GET` | `/rule-runs`, `/rule-findings` | Runs and findings. A run's `truncated` is `true` when it stopped at its record limit before checking every record. |
+| `GET` | `/rule-runs`, `/rule-findings` | Runs and findings. A run's `truncated` is `true` when it stopped at its record limit before checking every record. Add `limit` and `offset` for pages; the `x-next-offset` header gives the next page's offset. `unresolved=true` leaves out resolved findings. |
+| `GET` | `/rule-findings/count` | `{count}` of open and acknowledged findings; pass `record_id` to count one record's. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Replay a dead letter; acknowledge a finding. |
 | `POST` | `/rule-findings/recheck` | Re-check one record against every enabled rule of its revision. Body `{record_id, idempotency_key}`; returns `202 {run_ids}`. Pass `record_id` to `GET /rule-runs` or `/rule-findings` to follow one record. |
 | `POST` | `/workflows/validate` | Validate workflow TOML. |

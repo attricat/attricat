@@ -83,11 +83,11 @@ Niektóre schematy używają statusów do kontrolowania cyklu życia rekordu. Wt
 - Gdy rekord zostaje zatwierdzony, zatwierdzenie jest powiązane z dokładnie tą treścią, którą przejrzano. Edycja tej treści unieważnia zatwierdzenie, a rekord w tym samym zapisie wraca do wcześniejszego statusu.
 - Pliki sfinalizowanych rekordów mogą być objęte blokadą retencji do określonej daty.
 
-Panel **Kontrola rekordu** na stronie rekordu wyświetla zatwierdzenia wraz z informacją, kto i kiedy zatwierdził oraz czy zatwierdzenie jest nadal ważne, a także blokady retencji plików rekordu.
+Karta **Kontrola rekordu** pod wartościami rekordu wyświetla, od najnowszych, zatwierdzenia wraz z informacją, kto i kiedy zatwierdził oraz czy zatwierdzenie jest nadal ważne, a także blokady retencji plików rekordu.
 
 ## Komentarze
 
-Strona rekordu ma panel **Komentarze**. Każdy, kto może odczytać rekord, może dodać komentarz w Markdownie; **Podgląd Markdown** pokazuje, jak będzie wyglądał. Możesz edytować tylko własne komentarze. Jeśli komentarz zmieni się, zanim zapiszesz edycję, zostanie ona odrzucona; odśwież komentarze i przywróć szkic, aby uzgodnić tekst.
+Strona rekordu ma pod wartościami kartę **Komentarze** z najnowszymi komentarzami na początku; starsze wczytuje **Wczytaj więcej komentarzy**. Każdy, kto może odczytać rekord, może dodać komentarz w Markdownie; **Podgląd Markdown** pokazuje, jak będzie wyglądał. Możesz edytować tylko własne komentarze. Jeśli komentarz zmieni się, zanim zapiszesz edycję, zostanie ona odrzucona; odśwież komentarze i przywróć szkic, aby uzgodnić tekst.
 
 ## Dodatkowe atrybuty
 
@@ -105,7 +105,7 @@ Poprzednie wartości atrybutów są domyślnie przechowywane przez 90 dni. Z his
 
 ## Ustalenia dotyczące jakości danych
 
-Jeśli [reguły jakości danych](/pl/builders/rules/) oznaczą rekord, jego strona pokazuje liczbę otwartych ustaleń.
+Jeśli [reguły jakości danych](/pl/builders/rules/) oznaczą rekord, jego strona pokazuje liczbę otwartych ustaleń. Kliknięcie jej otwiera kartę **Jakość danych**, która wymienia je pod wartościami rekordu.
 
 ## Aktualizacja do nowszej wersji
 

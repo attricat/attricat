@@ -82,6 +82,9 @@ pub struct StatusTransitionAccess {
 }
 
 /// One recorded approval decision.
+/// Approvals or retention holds a record page lists at a time.
+pub const RECORD_CONTROL_PAGE_SIZE: i64 = 20;
+
 #[derive(Debug, serde::Serialize, sqlx::FromRow)]
 pub struct RecordApproval {
     pub id: Uuid,
@@ -1193,16 +1196,23 @@ impl AttricatRepository {
         Ok(access)
     }
 
-    /// Approval decisions recorded on a record, newest first.
+    /// Up to `limit` approval decisions recorded on a record, newest first,
+    /// continuing before the `(approved_at, id)` of the last one seen.
     pub async fn record_approvals(
         &self,
         record_id: Uuid,
+        before: Option<(DateTime<Utc>, Uuid)>,
+        limit: i64,
     ) -> Result<Vec<RecordApproval>, RepositoryError> {
+        let (time, id) = before.map_or((None, None), |(time, id)| (Some(time), Some(id)));
         Ok(sqlx::query_as::<_, RecordApproval>(
-            "SELECT a.id, a.attribute_code, a.context_id, c.code AS context_code, a.status, a.covers_all, a.covered_attributes, a.content_digest, a.approved_by_user_id, COALESCE(u.display_name, u.email) AS approved_by, a.approved_at, a.ended_at, a.end_reason, a.ended_by_user_id, a.void_status FROM record_approvals a JOIN attribute_contexts c ON c.id = a.context_id LEFT JOIN users u ON u.id = a.approved_by_user_id WHERE a.workspace_id = $1 AND a.record_id = $2 ORDER BY a.approved_at DESC, a.id DESC LIMIT 200",
+            "SELECT a.id, a.attribute_code, a.context_id, c.code AS context_code, a.status, a.covers_all, a.covered_attributes, a.content_digest, a.approved_by_user_id, COALESCE(u.display_name, u.email) AS approved_by, a.approved_at, a.ended_at, a.end_reason, a.ended_by_user_id, a.void_status FROM record_approvals a JOIN attribute_contexts c ON c.id = a.context_id LEFT JOIN users u ON u.id = a.approved_by_user_id WHERE a.workspace_id = $1 AND a.record_id = $2 AND ($3::timestamptz IS NULL OR (a.approved_at, a.id) < ($3, $4::uuid)) ORDER BY a.approved_at DESC, a.id DESC LIMIT $5",
         )
         .bind(self.workspace_id.0)
         .bind(record_id)
+        .bind(time)
+        .bind(id)
+        .bind(limit)
         .fetch_all(&self.pool)
         .await?)
     }

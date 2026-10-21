@@ -234,7 +234,7 @@ Rekordu, który już narusza egzekwowaną regułę, nie można zapisać, dopóki
 
 **Potwierdź** ustalenie, aby zapisać, że ktoś je widział. Pozostaje ono, dopóki rekord nie spełni reguły.
 
-Strona rekordu wyświetla jego otwarte i potwierdzone ustalenia w sekcji **Jakość danych**; prowadzi do niej oznaczenie jakości danych w nagłówku rekordu. Po edycji lista odświeża się, gdy sprawdzanie rekordu się zakończy. **Sprawdź ponownie** od razu sprawdza rekord względem każdej włączonej reguły jego rewizji, na przykład po zmianie reguły.
+Strona rekordu wyświetla jego otwarte i potwierdzone ustalenia na karcie **Jakość danych**, po 20 naraz, a pozostałe wczytuje **Wczytaj więcej ustaleń**; oznaczenie jakości danych w nagłówku rekordu otwiera tę kartę. Po edycji lista odświeża się, gdy sprawdzanie rekordu się zakończy. **Sprawdź ponownie** od razu sprawdza rekord względem każdej włączonej reguły jego rewizji, na przykład po zmianie reguły.
 
 ```sh
 acli rule findings --record-id <uuid>

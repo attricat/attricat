@@ -791,10 +791,18 @@ export const retentionHoldSchema = z.object({
   status: z.string().nullable(),
   reason: z.string().nullable(),
   held_until: z.string(),
+  created_at: z.string(),
   released_at: z.string().nullable(),
   active: z.boolean(),
 });
 export type RetentionHold = z.infer<typeof retentionHoldSchema>;
+
+/** One newest-first page of a record's approvals or retention holds. */
+export const recordControlPageSchema = <T extends z.ZodType>(item: T) =>
+  z.object({ items: z.array(item), has_more: z.boolean() });
+
+/** Continues a record control list before its last item. */
+export type RecordControlCursor = { before_time: string; before_id: string };
 
 /** Unwraps an `{ items: [...] }` collection response. */
 export const itemsResponseSchema = <T extends z.ZodType>(item: T) =>

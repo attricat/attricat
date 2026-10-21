@@ -458,6 +458,38 @@ async fn record_changes_and_rechecks_run_every_enabled_rule_for_the_record(pool:
     assert_eq!(findings.as_array().unwrap().len(), 1);
     assert_eq!(findings[0]["state"], "open");
 
+    let get_json = |path: String| {
+        let client = client.clone();
+        async move {
+            client
+                .get(path)
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap()
+        }
+    };
+    let count_path = format!("{base_url}/rule-findings/count?record_id={record_id}");
+    let unresolved_path =
+        format!("{base_url}/rule-findings?record_id={record_id}&unresolved=true&limit=1");
+    assert_eq!(get_json(count_path.clone()).await["count"], 1);
+    assert_eq!(get_json(unresolved_path.clone()).await, findings);
+    // A resolved finding stays in the full list but leaves the unresolved
+    // list and count.
+    sqlx::query("UPDATE rule_findings SET state='resolved',resolved_at=now() WHERE record_id=$1")
+        .bind(record_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(get_json(count_path).await["count"], 0);
+    assert_eq!(get_json(unresolved_path).await, json!([]));
+    let all = get_json(format!("{base_url}/rule-findings?record_id={record_id}")).await;
+    assert_eq!(all[0]["state"], "resolved");
+
     let missing = client
         .post(format!("{base_url}/rule-findings/recheck"))
         .json(&json!({"record_id": Uuid::new_v4(), "idempotency_key": "missing"}))

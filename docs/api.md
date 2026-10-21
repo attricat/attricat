@@ -94,7 +94,8 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/rules/validate` | Structurally validate a strict rule TOML definition (`rules.manage`). |
 | `POST` | `/rules/{rule_id}/run-now` | Enqueue an idempotent bounded manual or dry run (`rules.manage`). Optional `version` selects a published revision; only dry runs may target a revision that is not enabled. |
 | `POST` | `/rules/{rule_id}/versions/{version}/enable` | Enable a published revision (`rules.manage`). Optional body `{ "accept_existing_violations": true }`; enforcing revisions first need a completed full dry run. See [Rules](rules.md#dry-run-before-enabling). |
-| `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). Both accept `record_id` to list one record's runs or findings. A run's `truncated` is `true` when it stopped at its candidate cap with candidates left. |
+| `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). Both accept `record_id` to list one record's runs or findings, and `limit`/`offset` pages with an `x-next-offset` header. `/rule-findings` also accepts `unresolved=true`. A run's `truncated` is `true` when it stopped at its candidate cap with candidates left. |
+| `GET` | `/rule-findings/count` | `{count}` of open and acknowledged findings, optionally of one `record_id` (`rules.read`). |
 | `POST` | `/rule-findings/recheck` | Re-check one record against every enabled rule of its blueprint revision with idempotent record-scoped runs; body `{record_id, idempotency_key}`, returns `202 {run_ids}` (`rules.manage`). |
 | `POST` | `/extensions/{extension_id}/{contribution_id}/command` | Validate a bounded, manifest-declared client-mediated extension command against the enabled exact release and grants (`records.write`). |
 | `POST` | `/extensions/{extension_id}/{contribution_id}/operations` | Start an interactive extension operation from a selection-aware contribution for the signed-in user. The body is `{release_id, operation_id, input, idempotency_key, selection: {blueprint_id, blueprint_version, context_id, record_ids}}`; every record must be saved, belong to the one revision, and be readable by the caller, otherwise the whole request is rejected. A retried identical request returns the same `run_id`; reusing the key with different input or selection returns `409 idempotency_key_reused`. |
@@ -186,8 +187,8 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/v1/records/{id}/publications/unpublish` | Unpublish from `{ "context_id": "…" }`. |
 | `POST` | `/v1/records/{id}/publications/publish-all` | Publish atomically to every enabled channel. |
 | `GET` | `/v1/records/{id}/status-transitions` | Declared status edges from the saved status in `?context_id=`, whether the caller may take each, and `unmet` transition conditions and enforcing rules (`denial_code` `transition_conditions_unmet`). See [status control](status-control.md#controlled-records). |
-| `GET` | `/v1/records/{id}/approvals` | Approval decisions with content digests and void reasons. |
-| `GET` | `/v1/records/{id}/retention-holds` | Retention holds on the record's files. |
+| `GET` | `/v1/records/{id}/approvals` | Approval decisions with content digests and void reasons, newest first, 20 per page. Returns `{"items","has_more"}`; continue with `before_time` (`approved_at`) and `before_id` of the last item. |
+| `GET` | `/v1/records/{id}/retention-holds` | Retention holds on the record's files, newest first, 20 per page. Returns `{"items","has_more"}`; continue with `before_time` (`created_at`) and `before_id` of the last item. |
 | `GET`, `POST` | `/files/{id}/retention-holds` | List holds, or place an explicit hold (`files.hold`). |
 | `POST` | `/files/{id}/retention-holds/{hold_id}/release` | Release an explicit hold early (`files.hold`). |
 | `GET` | `/v1/records/{id}/publications/readiness` | Evaluate each enabled channel's required checks without publishing: `[{ "context_id", "context_code", "ready", "violations" }]`. |

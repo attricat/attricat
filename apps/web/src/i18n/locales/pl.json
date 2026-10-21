@@ -378,7 +378,11 @@
       "explicitHold": "Zachowane: {{reason}}",
       "holdActive": "Zablokowane",
       "holdEnded": "Zakończone",
-      "heldUntil": "Zachowane do"
+      "heldUntil": "Zachowane do",
+      "empty": "Brak zatwierdzeń i blokad retencji.",
+      "loading": "Wczytywanie kontroli rekordu",
+      "loadMoreApprovals": "Wczytaj więcej zatwierdzeń",
+      "loadMoreHolds": "Wczytaj więcej blokad retencji"
     },
     "managedInDefault": "Zarządzane w kontekście domyślnym.",
     "inheritedFromContext": "Dziedziczone z kontekstu {{context}}.",
@@ -666,7 +670,8 @@
     "fieldsChanged_one": "{{count}} pole zmienione",
     "fieldsChanged_few": "{{count}} pola zmienione",
     "fieldsChanged_many": "{{count}} pól zmienionych",
-    "fieldsChanged_other": "{{count}} pola zmienionego"
+    "fieldsChanged_other": "{{count}} pola zmienionego",
+    "recordTabs": "Sekcje rekordu"
   },
   "exports": {
     "title": "Eksporty",
@@ -1847,7 +1852,10 @@
       "contexts": "Konteksty: {{contexts}}",
       "firstFound": "Pierwsze wykrycie <timestamp/>",
       "noFindings": "Brak otwartych ustaleń.",
-      "noFindingsCheckedAt": "Brak otwartych ustaleń. Ostatnio sprawdzono <timestamp/>."
+      "noFindingsCheckedAt": "Brak otwartych ustaleń. Ostatnio sprawdzono <timestamp/>.",
+      "loading": "Wczytywanie ustaleń",
+      "loadMore": "Wczytaj więcej ustaleń",
+      "noRules": "Żadna włączona reguła nie sprawdza rekordów tego schematu."
     }
   },
   "reusableAttributes": {

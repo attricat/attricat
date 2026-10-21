@@ -37,6 +37,5 @@ export const RULE_STATUS_PUBLISHED = 'published';
 export const RULE_HAS_EXISTING_VIOLATIONS = 'rule_has_existing_violations';
 /** Characters of a record ID shown where no display label is loaded. */
 export const SHORT_RECORD_ID_LENGTH = 8;
-/** The record's findings panel, which the data quality chip moves to. */
-export const recordFindingsPanelId = (recordId: string) =>
-  `record-findings-${recordId}`;
+/** Unresolved findings the record page lists at a time. */
+export const RECORD_FINDINGS_PAGE_SIZE = 20;

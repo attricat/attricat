@@ -20,6 +20,15 @@ export const RECORD_PREVIEW_QUERY = {
   relationshipLimit: 1,
 } as const;
 
+/** Sections shown in tabs below a record's values. */
+export const recordPreviewTabs = {
+  dataQuality: 'data-quality',
+  comments: 'comments',
+  recordControl: 'record-control',
+} as const;
+export type RecordPreviewTabKey =
+  (typeof recordPreviewTabs)[keyof typeof recordPreviewTabs];
+
 export const RECORD_EXTENSION_DRAWER_ID = 'record-extension-contributions';
 export const RECORD_DRAWER_WIDTH = 480;
 

@@ -20,7 +20,9 @@ for (const mode of ['light', 'dark'] as const) {
     if (mode === 'dark')
       await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/records/${record.id}`);
-    const panel = page.getByRole('region', { name: 'Comments', exact: true });
+    const commentsTab = page.getByRole('tab', { name: 'Comments' });
+    const panel = page.getByRole('tabpanel', { name: 'Comments' });
+    await commentsTab.click();
     const input = panel.getByRole('textbox', { name: /^Comment/ });
     await expect(input).toBeEnabled();
     await input.fill(
@@ -33,6 +35,7 @@ for (const mode of ['light', 'dark'] as const) {
     await expect(panel.locator('li strong')).toHaveText('Hello');
     await expect(panel.locator('script')).toHaveCount(0);
     await page.reload();
+    await commentsTab.click();
     await expect(panel.locator('li strong')).toHaveText('Hello');
     await panel.getByRole('button', { name: 'Edit', exact: true }).click();
     await panel

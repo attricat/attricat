@@ -83,11 +83,11 @@ Some blueprints use statuses to control a record's lifecycle. Then:
 - When a record is approved, the approval is tied to the exact content that was reviewed. Editing that content voids the approval, and the record returns to an earlier status in the same save.
 - Files of finalized records can be kept under a retention hold until a set date.
 
-The **Record control** panel on the record page lists approvals, with who approved, when, and whether they are still valid, and the retention holds on the record's files.
+The **Record control** tab below the record's values lists approvals, newest first, with who approved, when, and whether they are still valid, and the retention holds on the record's files.
 
 ## Comments
 
-The record page has a **Comments** panel. Anyone who can read the record can add a comment, written in Markdown; **Preview Markdown** shows how it will look. You can edit only your own comments. If someone else's change reaches a comment before your edit is saved, the edit is rejected; reload the comments and restore your draft to reconcile it.
+The record page has a **Comments** tab below the record's values, with the newest comments first and **Load more comments** for older ones. Anyone who can read the record can add a comment, written in Markdown; **Preview Markdown** shows how it will look. You can edit only your own comments. If someone else's change reaches a comment before your edit is saved, the edit is rejected; reload the comments and restore your draft to reconcile it.
 
 ## Additional attributes
 
@@ -105,7 +105,7 @@ Previous attribute values are kept for 90 days by default. From the value histor
 
 ## Data quality findings
 
-If [data quality rules](/builders/rules/) flag the record, its page shows the number of open findings.
+If [data quality rules](/builders/rules/) flag the record, its page shows the number of open findings. Select it to open the **Data quality** tab, which lists them below the record's values.
 
 ## Upgrade to a newer revision
 

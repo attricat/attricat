@@ -174,7 +174,7 @@ and fail with `422 publication_checks_failed`. See [API](api.md#errors).
 - `POST /rules/{rule_id}/versions/{version}/enable`, with an optional body `{ "accept_existing_violations": true }` for enforcing revisions
 - `POST /rules/{rule_id}/disable`
 - `POST /rules/{rule_id}/run-now` with `{ "record_id": "optional UUID", "dry_run": false, "idempotency_key": "...", "version": 2 }`; `version` is optional. A normal run uses the enabled revision (`version`, if given, must match it). A dry run uses `version`, else the enabled revision, else the latest published revision.
-- `GET /rule-runs?record_id=...`, `POST /rule-runs/{run_id}/replay`, `GET /rule-findings?record_id=...`
+- `GET /rule-runs?record_id=...`, `POST /rule-runs/{run_id}/replay`, `GET /rule-findings?record_id=...` (add `unresolved=true` to skip resolved findings), `GET /rule-findings/count?record_id=...`
 - `POST /rule-findings/recheck` with `{ "record_id": "UUID", "idempotency_key": "..." }` re-checks one record against every enabled rule of its blueprint revision and returns `202 { "run_ids": [...] }`, one record-scoped manual run per rule. Repeating the key returns the same runs.
 - `POST /rule-findings/{finding_id}/acknowledge`
 
