@@ -12,6 +12,7 @@ Views are optional. Without them, the web app shows attributes in declaration or
 | View | Where it appears |
 | --- | --- |
 | `dropdown_option` | The label of a record in pickers, filter pills, and search. Required for record blueprints. |
+| `page_title` | The record page's browser tab title. Falls back to the `dropdown_option` label. |
 | `detail` | The record page, its preview, and the create form. Fields are shown and edited in this layout. |
 | `table` | The Explorer's result columns. |
 | `explorer` | Explorer defaults, such as the field the **Browse by** panel lists. |

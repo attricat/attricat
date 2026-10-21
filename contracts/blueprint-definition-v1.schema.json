@@ -1093,7 +1093,7 @@
       "type": "object"
     },
     "ViewDefinition": {
-      "description": "A named view. `dropdown_option` labels relationship choices, `table`\nconfigures Explorer columns, `explorer` sets Explorer defaults, and layout\nroots arrange `detail` and `edit`.",
+      "description": "A named view. `dropdown_option` labels relationship choices, `page_title`\nnames the record page, `table` configures Explorer columns, `explorer`\nsets Explorer defaults, and layout roots arrange `detail` and `edit`.",
       "oneOf": [
         {
           "additionalProperties": false,
@@ -1114,6 +1114,34 @@
             },
             "type": {
               "const": "dropdown_option",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "fields"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Title of the record page and its browser tab.",
+          "properties": {
+            "fields": {
+              "description": "Attributes joined into the title.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "x-attricat-reference": "attribute"
+            },
+            "separator": {
+              "default": " · ",
+              "description": "Text between title fields. Defaults to ` · `.",
+              "type": "string"
+            },
+            "type": {
+              "const": "page_title",
               "type": "string"
             }
           },
@@ -1965,10 +1993,11 @@
         "$ref": "#/$defs/ViewDefinition"
       },
       "default": {},
-      "description": "Named views: `dropdown_option`, `table`, `detail`, and `extension_layout`.\nThe `detail` layout also drives editing; a legacy `edit` view is ignored.",
+      "description": "Named views: `dropdown_option`, `page_title`, `table`, `detail`, and `extension_layout`.\nThe `detail` layout also drives editing; a legacy `edit` view is ignored.",
       "type": "object",
       "x-attricat-key-suggestions": [
         "dropdown_option",
+        "page_title",
         "detail",
         "table",
         "explorer",

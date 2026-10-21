@@ -12,6 +12,7 @@ Widoki są opcjonalne. Bez nich aplikacja internetowa pokazuje atrybuty w kolejn
 | Widok | Gdzie się pojawia |
 | --- | --- |
 | `dropdown_option` | Etykieta rekordu w selektorach, etykietach filtrów i wyszukiwaniu. Wymagany w schematach rekordów. |
+| `page_title` | Tytuł karty przeglądarki na stronie rekordu. Gdy go brak, używana jest etykieta `dropdown_option`. |
 | `detail` | Strona rekordu, jej podgląd i formularz tworzenia. W tym układzie pola są zarówno wyświetlane, jak i edytowane. |
 | `table` | Kolumny wyników w **Przeglądarce rekordów**. |
 | `explorer` | Ustawienia domyślne **Przeglądarki rekordów**, np. atrybut wyświetlany w panelu **Przeglądaj według**. |

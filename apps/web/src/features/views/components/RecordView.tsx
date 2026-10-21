@@ -220,6 +220,7 @@ export const RecordView = ({
     !view ||
     view.type === viewBlockTypes.table ||
     view.type === viewBlockTypes.dropdownOption ||
+    view.type === viewBlockTypes.pageTitle ||
     view.type === viewBlockTypes.extensionLayout ||
     view.type === viewBlockTypes.explorer
   )

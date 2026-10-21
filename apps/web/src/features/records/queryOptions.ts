@@ -2,6 +2,7 @@ import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import {
   getRecordApprovals,
   getRecordForm,
+  getRecordLabels,
   getRecordPublicationReadiness,
   getRecordPublications,
   getRecordRetentionHolds,
@@ -18,6 +19,16 @@ const publicationStaleTimeMs = 60_000;
 // side panel's data started with the record, is not fetched again when the
 // component showing it mounts; edits invalidate it.
 export const readAheadStaleTimeMs = 10_000;
+
+/**
+ * A record's display labels by context, built from its blueprint's
+ * `dropdown_option` view.
+ */
+export const recordLabelOptions = (recordId: string) =>
+  queryOptions({
+    queryKey: recordQueryKeys.labels([recordId]),
+    queryFn: ({ signal }) => getRecordLabels([recordId], signal),
+  });
 
 /** A record's values as seen from a context. */
 export const resolvedRecordPreviewOptions = (

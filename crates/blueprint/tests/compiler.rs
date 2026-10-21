@@ -1279,6 +1279,73 @@ cardinality = "many"
 }
 
 #[test]
+fn page_title_view_joins_scalar_fields_on_record_blueprints() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title", "sku"]
+
+[views.page_title]
+type = "page_title"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "sku"
+value_type = "string"
+
+[[attributes]]
+code = "category"
+value_type = "relationship"
+target_blueprint = "category"
+"#;
+    let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    assert_eq!(
+        compiled.views.get("page_title"),
+        Some(&ViewDefinition::PageTitle {
+            fields: vec!["title".to_owned()],
+            separator: " · ".to_owned(),
+        })
+    );
+
+    let empty = source.replace("fields = [\"title\"]", "fields = []");
+    assert!(matches!(
+        compile(parse(&empty).unwrap(), &[], &empty),
+        Err(BlueprintError::EmptyPageTitleFields)
+    ));
+    let duplicate = source.replace("fields = [\"title\"]", "fields = [\"title\", \"title\"]");
+    assert!(matches!(
+        compile(parse(&duplicate).unwrap(), &[], &duplicate),
+        Err(BlueprintError::DuplicatePageTitleField(field)) if field == "title"
+    ));
+    let relationship = source.replace("fields = [\"title\"]", "fields = [\"category\"]");
+    assert!(matches!(
+        compile(parse(&relationship).unwrap(), &[], &relationship),
+        Err(BlueprintError::NonScalarViewField { field, .. }) if field == "category"
+    ));
+    let renamed = source.replace("[views.page_title]", "[views.heading]");
+    assert!(matches!(
+        compile(parse(&renamed).unwrap(), &[], &renamed),
+        Err(BlueprintError::InvalidPageTitleView)
+    ));
+    let mixin = source
+        .replace("kind = \"record\"", "kind = \"mixin\"")
+        .replace("[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\", \"sku\"]\n\n", "");
+    assert!(matches!(
+        compile(parse(&mixin).unwrap(), &[], &mixin),
+        Err(BlueprintError::InvalidPageTitleView)
+    ));
+}
+
+#[test]
 fn table_columns_preserve_legacy_fields_and_reject_invalid_paths() {
     let source = r#"
 format_version = 1

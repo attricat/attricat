@@ -31,6 +31,21 @@ pub(crate) fn validate_view(
                 validate_view_field(view, field, attributes, false)?;
             }
         }
+        ViewDefinition::PageTitle { fields, .. } => {
+            if view != "page_title" || *blueprint_kind != BlueprintKind::Record {
+                return Err(BlueprintError::InvalidPageTitleView);
+            }
+            if fields.is_empty() {
+                return Err(BlueprintError::EmptyPageTitleFields);
+            }
+            let mut unique_fields = HashSet::new();
+            for field in fields {
+                if field.trim().is_empty() || !unique_fields.insert(field) {
+                    return Err(BlueprintError::DuplicatePageTitleField(field.clone()));
+                }
+                validate_view_field(view, field, attributes, false)?;
+            }
+        }
         ViewDefinition::Table {
             fields,
             columns,
