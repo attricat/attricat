@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { currentSession } from '../auth/api';
@@ -18,6 +19,19 @@ import {
 import { RECORD_RULE_RUN_POLL_MS } from './constants';
 import { RecordFindingsPanel } from './RecordFindingsPanel';
 
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    children,
+    params,
+  }: {
+    children: ReactNode;
+    params: { ruleId: string; version: string };
+  }) => (
+    <a href={`/manage/rules/${params.ruleId}/revisions/${params.version}`}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
 vi.mock('./api', () => ({
   acknowledgeFinding: vi.fn(),
@@ -117,7 +131,11 @@ describe('RecordFindingsPanel', () => {
     renderPanel();
     const item = await screen.findByRole('listitem');
     expect(within(item).getByText('title is required')).toBeTruthy();
-    expect(within(item).getByText(/Title required v1/)).toBeTruthy();
+    expect(
+      within(item)
+        .getByRole('link', { name: 'Title required v1' })
+        .getAttribute('href'),
+    ).toBe(`/manage/rules/${ruleId}/revisions/1`);
     expect(within(item).getByText(/Contexts: default, pl/)).toBeTruthy();
     await user.click(within(item).getByRole('button', { name: 'Acknowledge' }));
     expect(vi.mocked(acknowledgeFinding).mock.calls[0]?.[0]).toBe(finding.id);
