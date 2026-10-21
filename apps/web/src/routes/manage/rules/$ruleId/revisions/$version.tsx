@@ -13,7 +13,8 @@ function RuleRevisionRoute() {
   return (
     <RuleRevisionPage
       ruleId={ruleId}
-      version={z.coerce.number().int().positive().parse(version)}
+      // A malformed version shows the page's not-found state.
+      version={z.coerce.number().int().positive().safeParse(version).data}
     />
   );
 }

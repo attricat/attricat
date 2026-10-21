@@ -24,7 +24,8 @@ export const RuleRevisionPage = ({
   version,
 }: {
   ruleId: string;
-  version: number;
+  /** Undefined when the URL names no valid version. */
+  version: number | undefined;
 }) => {
   const { t } = useTranslation();
   const session = useQuery({
@@ -95,7 +96,10 @@ export const RuleRevisionPage = ({
       {back}
       <PageHeader
         icon={RuleIcon}
-        title={t('rules.ruleRevision', { name: rule.name, version })}
+        title={t('rules.ruleRevision', {
+          name: rule.name,
+          version: rule.version,
+        })}
         description={rule.code}
       />
       <Stack
