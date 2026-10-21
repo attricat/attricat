@@ -61,8 +61,9 @@ export const recordQueryKeys = {
     [...recordQueryKeys.publication(recordId), 'readiness'] as const,
   migrationPreview: (recordId: string) =>
     ['record-migration-preview', recordId] as const,
+  allResolvedPreviews: () => ['record-resolved-preview'] as const,
   resolvedPreviews: (recordId: string) =>
-    ['record-resolved-preview', recordId] as const,
+    [...recordQueryKeys.allResolvedPreviews(), recordId] as const,
   resolvedPreview: (recordId: string, contextId: string | undefined) =>
     [...recordQueryKeys.resolvedPreviews(recordId), contextId] as const,
   hierarchies: (recordId: string) => ['record-hierarchy', recordId] as const,

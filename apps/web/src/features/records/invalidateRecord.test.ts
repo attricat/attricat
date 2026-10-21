@@ -25,6 +25,10 @@ const search = recordQueryKeys.search({
 const seeded = () => {
   const client = new QueryClient();
   for (const key of [...projections, search]) client.setQueryData(key, []);
+  client.setQueryData(recordQueryKeys.resolvedPreview('record', 'context'), {
+    values: {},
+    reusable_values: {},
+  });
   client.setQueryData(recordQueryKeys.form('unrelated'), {});
   return client;
 };
@@ -79,5 +83,19 @@ describe('record mutation cache policy', () => {
     await refreshStaleRecordSearches(client);
     expect(fetchSearch).toHaveBeenCalledTimes(2);
     unsubscribe();
+  });
+  it('refreshes the resolved previews of records that label the edited one', async () => {
+    const client = new QueryClient();
+    const relatedTo = (id: string) => ({
+      values: { brand: { value: { items: [{ id, display: 'Old name' }] } } },
+      reusable_values: {},
+    });
+    const referencing = recordQueryKeys.resolvedPreview('product', 'context');
+    const unrelated = recordQueryKeys.resolvedPreview('other', 'context');
+    client.setQueryData(referencing, relatedTo('record'));
+    client.setQueryData(unrelated, relatedTo('someone-else'));
+    await invalidateRecord(client, 'record');
+    expect(client.getQueryState(referencing)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(unrelated)?.isInvalidated).toBe(false);
   });
 });
