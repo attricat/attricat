@@ -66,11 +66,13 @@ describe('API request helper', () => {
       items: [{ id: 'a' }],
       nextOffset: 20,
     });
-    fetchMock.mockResolvedValueOnce(page(null));
-    await expect(requestOffsetPage('/api/example', schema)).resolves.toEqual({
-      items: [{ id: 'a' }],
-      nextOffset: undefined,
-    });
+    for (const nextOffset of [null, '', '1.5', '-20']) {
+      fetchMock.mockResolvedValueOnce(page(nextOffset));
+      await expect(requestOffsetPage('/api/example', schema)).resolves.toEqual({
+        items: [{ id: 'a' }],
+        nextOffset: undefined,
+      });
+    }
   });
 
   it('validates successful JSON responses with the provided schema', async () => {
