@@ -21,7 +21,7 @@ A missing or expired sign-in returns `401`. A signed-in person without the permi
 | `blueprints.read` | Blueprints and reusable attributes. | ✓ | ✓ | ✓ | ✓ |
 | `blueprints.write` | Creating blueprint drafts and revisions; reusable attributes. | ✓ | ✓ | ✓ | |
 | `blueprints.publish` | Publishing blueprint revisions. | ✓ | ✓ | | |
-| `records.read` | Records, search, saved searches, files, and history; the user and team directory for assignments (`GET /directory`, `acli directory`), which lists member names and email addresses. | ✓ | ✓ | ✓ | ✓ |
+| `records.read` | Records, search, saved searches, files, and history; the user and team directory for assignments (`GET /directory`, `acli directory`), which lists member names and email addresses, and each member's profile with their teams (`GET /directory/users/{user_id}`). | ✓ | ✓ | ✓ | ✓ |
 | `records.write` | Creating and editing records, uploading files, migrating records, attaching reusable attributes, running extension commands from the UI. | ✓ | ✓ | ✓ | |
 | `records.delete` | Deleting records. | ✓ | ✓ | ✓ | |
 | `records.publish` | Publishing and unpublishing records to channels. | ✓ | ✓ | | |

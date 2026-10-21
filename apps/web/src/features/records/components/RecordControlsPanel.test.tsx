@@ -27,6 +27,7 @@ const approval = (id: string, approvedAt: string): RecordApproval => ({
   covers_all: true,
   covered_attributes: [],
   content_digest: 'a'.repeat(64),
+  approved_by_user_id: null,
   approved_by: 'Ada',
   approved_at: approvedAt,
   ended_at: null,

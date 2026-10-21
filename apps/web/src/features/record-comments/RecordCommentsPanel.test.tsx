@@ -8,6 +8,10 @@ import { listComments } from './api';
 
 const userId = '00000000-0000-4000-8000-000000000201';
 
+vi.mock(
+  '@tanstack/react-router',
+  async () => (await import('../../test/routerLinkMock')).routerLinkMock,
+);
 vi.mock('./api', () => ({
   listComments: vi.fn(),
   createComment: vi.fn(),

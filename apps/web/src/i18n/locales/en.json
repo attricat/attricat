@@ -365,7 +365,7 @@
       "approvalActive": "Valid",
       "approvalVoided": "Voided by a content change",
       "approvalSuperseded": "Superseded",
-      "approvedBy": "Approved by {{user}}",
+      "approvedBy": "Approved by <user>{{user}}</user>",
       "voidedOn": "Voided",
       "returnedTo": "returned to {{status}}",
       "digest": "Content digest {{digest}}",
@@ -1436,7 +1436,7 @@
     "extensionFallback": "Extension",
     "loadingInstallation": "Loading installation.",
     "installationVersion": "v{{version}} from {{source}}",
-    "lifecycleActor": "· actor {{actor}}",
+    "lifecycleActor": "· actor <actor>{{actor}}</actor>",
     "grant": "Grant",
     "readme": "README",
     "manifestHash": "Manifest SHA-256: {{hash}}",
@@ -1964,6 +1964,16 @@
     "deletedTeam": "Deleted team",
     "users": "Users",
     "teams": "Teams"
+  },
+  "users": {
+    "email": "Email",
+    "membership": "Membership",
+    "activeMember": "Active member",
+    "memberSince": "Member since",
+    "noTeams": "Not a member of any team",
+    "editOwnProfile": "Edit your profile",
+    "notFoundTitle": "User not found",
+    "notFound": "This user is not a member of the workspace."
   },
   "json": {
     "copy": "Copy JSON",

@@ -7,7 +7,7 @@ use super::{
     error::ApiError,
     extractors::{ApiJson, ApiPath},
 };
-use crate::repository::{Team, WorkspaceDirectory};
+use crate::repository::{DirectoryUserProfile, Team, WorkspaceDirectory};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -29,6 +29,13 @@ pub(super) async fn directory(
     ScopedRepository(repository): ScopedRepository,
 ) -> Result<Json<WorkspaceDirectory>, ApiError> {
     Ok(Json(repository.workspace_directory().await?))
+}
+
+pub(super) async fn directory_user(
+    ScopedRepository(repository): ScopedRepository,
+    ApiPath(user_id): ApiPath<Uuid>,
+) -> Result<Json<DirectoryUserProfile>, ApiError> {
+    Ok(Json(repository.directory_user_profile(user_id).await?))
 }
 
 pub(super) async fn list(

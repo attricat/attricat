@@ -9,6 +9,10 @@ import type { AuditEvent } from './api';
 import { listAuditEvents } from './api';
 import { AuditLogPage } from './AuditLogPage';
 
+vi.mock(
+  '@tanstack/react-router',
+  async () => (await import('../../test/routerLinkMock')).routerLinkMock,
+);
 vi.mock('./api', () => ({
   listAuditEvents: vi.fn(),
 }));

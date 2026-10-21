@@ -135,6 +135,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `DELETE` | `/workspace/members/{member_id}/grants/{grant_id}` | Revoke a role grant. |
 | `POST` | `/workspace/members/{member_id}/transfer-ownership` | Transfer ownership to an active member (owner only). |
 | `GET` | `/directory` | Users and teams that [assignment attributes](blueprints.md#user-or-team-assignments) can reference (`records.read`). |
+| `GET` | `/directory/users/{user_id}` | One workspace member's profile with their teams (`records.read`). |
 | `GET`, `POST` | `/workspace/teams` | List or create [teams](#teams) (`members.manage`). |
 | `PATCH`, `DELETE` | `/workspace/teams/{team_id}` | Rename a team or replace its members; delete it (`members.manage`). |
 | `GET`, `POST` | `/workspace/invitations` | List or create expiring email invitations. |
@@ -515,6 +516,13 @@ existing assignments still resolve its name through `GET /directory`
 "teams":[{"id","code","name","deleted"}]}`. It includes inactive members and
 deleted teams so existing assignments render; only active members and
 non-deleted teams can be newly assigned.
+
+`GET /directory/users/{user_id}` returns the profile the web app links every
+user name to: `{"id","display_name","email","avatar_file_id","active",
+"member_since","teams":[{"id","code","name"}]}`. Former members are included so
+their past changes, approvals and comments keep a destination; `teams` lists
+non-deleted teams and `avatar_file_id` is `null` unless the membership is
+active. Users who were never members of the workspace return `404`.
 
 ## Notifications
 

@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { BrandIcon } from '../../components/BrandIcon';
 import { UserAvatar } from '../../components/UserAvatar';
+import { UserProfileLink } from '../../components/UserProfileLink';
 import { Timestamp } from '../../time/Timestamp';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
@@ -73,7 +74,13 @@ const CommentItem = ({
           />
         )}
         <Typography variant="subtitle2">
-          {comment.author_display_name || comment.author_email}
+          {comment.author_kind === systemAuthorKind ? (
+            comment.author_display_name || comment.author_email
+          ) : (
+            <UserProfileLink userId={comment.author_user_id}>
+              {comment.author_display_name || comment.author_email}
+            </UserProfileLink>
+          )}
         </Typography>
         {comment.author_kind === systemAuthorKind && (
           <Chip

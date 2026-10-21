@@ -234,7 +234,9 @@ pub use status::{
 pub use tasks::{
     BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary, bounded_task_error_message,
 };
-pub use teams::{DirectoryTeam, DirectoryUser, Team, WorkspaceDirectory};
+pub use teams::{
+    DirectoryTeam, DirectoryUser, DirectoryUserProfile, DirectoryUserTeam, Team, WorkspaceDirectory,
+};
 pub use tokens::{AuthenticatedToken, PersonalApiToken};
 pub use upload_intents::AbandonedUpload;
 pub use workflow_runs::WorkflowRun;

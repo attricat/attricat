@@ -349,6 +349,7 @@ See [Translate labels](/builders/translations/).
 | `GET`, `PUT` | `/workspace/navigation`; `GET /workspace/navigation/sidebar` | Sidebar shortcuts. |
 | `GET`, `PUT` | `/workspace/agent-settings` | How agent bulk edits are approved (`agents.manage`): `{"bulk_edits": "per_proposal" \| "per_record", "bulk_edit_max_records": 1–5000}`. |
 | `GET` | `/directory` | Users and teams that user or team attributes can reference (`records.read`). |
+| `GET` | `/directory/users/{user_id}` | One workspace member's profile with their teams (`records.read`). |
 | `GET`, `POST`, `PATCH`, `DELETE` | `/workspace/teams[/{id}]` | Teams (`members.manage`). `PATCH` takes `name` and/or `member_user_ids`, which replaces every member. |
 | `GET` | `/audit-events` | Audit log. |
 

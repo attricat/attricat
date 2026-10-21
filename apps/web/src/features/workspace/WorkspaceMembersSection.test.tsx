@@ -6,6 +6,10 @@ import '../../i18n';
 import { grantMemberRole, listAssignableRoles, listMembers } from './api';
 import { WorkspaceMembersSection } from './WorkspaceMembersSection';
 
+vi.mock(
+  '@tanstack/react-router',
+  async () => (await import('../../test/routerLinkMock')).routerLinkMock,
+);
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
   grantMemberRole: vi.fn(),

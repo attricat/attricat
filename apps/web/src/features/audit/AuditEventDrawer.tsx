@@ -119,6 +119,7 @@ export const AuditEventDrawer = ({
                             event.approved_by_email ??
                             event.approved_by_user_id
                           }
+                          userId={event.approved_by_user_id}
                         />
                       ) : (
                         <span />

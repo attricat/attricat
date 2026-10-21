@@ -115,6 +115,24 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
     assert_eq!(former_entry["active"], false);
     assert_eq!(directory["teams"].as_array().unwrap().len(), 2);
 
+    // Every name links to a profile, including former members'.
+    let profile = get_json(&client, format!("{base}/directory/users/{member}")).await;
+    assert_eq!(profile["email"], "member@example.test");
+    assert_eq!(profile["active"], true);
+    assert_eq!(
+        profile["teams"],
+        json!([{"id": empty["id"], "code": "ops", "name": "Ops"}])
+    );
+    let former_profile = get_json(&client, format!("{base}/directory/users/{former}")).await;
+    assert_eq!(former_profile["active"], false);
+    assert_eq!(former_profile["avatar_file_id"], Value::Null);
+    let stranger = client
+        .get(format!("{base}/directory/users/{}", Uuid::new_v4()))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(stranger.status(), StatusCode::NOT_FOUND);
+
     create_blueprint(&client, &base, DEFINITION).await;
     let create = |values: Vec<Value>| post_record(&client, &base, "task", Value::from(values));
     for (code, value) in [

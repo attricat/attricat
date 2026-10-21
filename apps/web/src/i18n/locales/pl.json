@@ -381,7 +381,7 @@
       "approvalActive": "Ważne",
       "approvalVoided": "Unieważnione przez zmianę treści",
       "approvalSuperseded": "Zastąpione",
-      "approvedBy": "Zatwierdził(a): {{user}}",
+      "approvedBy": "Zatwierdził(a): <user>{{user}}</user>",
       "voidedOn": "Unieważniono",
       "returnedTo": "powrót do statusu {{status}}",
       "digest": "Skrót treści {{digest}}",
@@ -1504,7 +1504,7 @@
     "extensionFallback": "Rozszerzenie",
     "loadingInstallation": "Wczytywanie instalacji.",
     "installationVersion": "v{{version}} z {{source}}",
-    "lifecycleActor": "· wykonawca {{actor}}",
+    "lifecycleActor": "· wykonawca <actor>{{actor}}</actor>",
     "grant": "Przyznaj",
     "readme": "README",
     "manifestHash": "Manifest SHA-256: {{hash}}",
@@ -2048,6 +2048,16 @@
     "deletedTeam": "Usunięty zespół",
     "users": "Użytkownicy",
     "teams": "Zespoły"
+  },
+  "users": {
+    "email": "E-mail",
+    "membership": "Członkostwo",
+    "activeMember": "Aktywny członek",
+    "memberSince": "Członek od",
+    "noTeams": "Nie należy do żadnego zespołu",
+    "editOwnProfile": "Edytuj swój profil",
+    "notFoundTitle": "Nie znaleziono użytkownika",
+    "notFound": "Ten użytkownik nie jest członkiem obszaru roboczego."
   },
   "json": {
     "copy": "Kopiuj JSON",

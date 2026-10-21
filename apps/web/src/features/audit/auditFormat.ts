@@ -18,5 +18,6 @@ export const auditActorPerson = (event: AuditEvent) =>
         name:
           event.actor_display_name ?? event.actor_email ?? event.actor_user_id,
         avatarFileId: event.actor_avatar_file_id,
+        userId: event.actor_user_id,
       }
     : null;

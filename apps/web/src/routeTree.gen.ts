@@ -33,6 +33,7 @@ import { Route as PasswordResetConfirmRouteImport } from './routes/password-rese
 import { Route as ProfileIndexRouteImport } from './routes/profile/index'
 import { Route as RecordsRecordIdRouteImport } from './routes/records/$recordId'
 import { Route as RecordsNewRouteImport } from './routes/records/new'
+import { Route as UsersUserIdRouteImport } from './routes/users/$userId'
 import { Route as ExtensionsExtensionIdContributionIdRouteImport } from './routes/extensions/$extensionId/$contributionId'
 import { Route as ManageBlueprintsIndexRouteImport } from './routes/manage/blueprints/index'
 import { Route as ManageBlueprintsBlueprintIdRouteImport } from './routes/manage/blueprints/$blueprintId'
@@ -194,6 +195,11 @@ const RecordsRecordIdRoute = RecordsRecordIdRouteImport.update({
 const RecordsNewRoute = RecordsNewRouteImport.update({
   id: '/records/new',
   path: '/records/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UsersUserIdRoute = UsersUserIdRouteImport.update({
+  id: '/users/$userId',
+  path: '/users/$userId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExtensionsExtensionIdContributionIdRoute =
@@ -443,6 +449,7 @@ export interface FileRoutesByFullPath {
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/records/$recordId': typeof RecordsRecordIdRouteWithChildren
   '/records/new': typeof RecordsNewRoute
+  '/users/$userId': typeof UsersUserIdRoute
   '/agents/': typeof AgentsIndexRoute
   '/extensions/': typeof ExtensionsIndexRoute
   '/login/': typeof LoginIndexRoute
@@ -507,6 +514,7 @@ export interface FileRoutesByTo {
   '/manage/system-health': typeof ManageSystemHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/records/new': typeof RecordsNewRoute
+  '/users/$userId': typeof UsersUserIdRoute
   '/agents': typeof AgentsIndexRoute
   '/extensions': typeof ExtensionsIndexRoute
   '/login': typeof LoginIndexRoute
@@ -573,6 +581,7 @@ export interface FileRoutesById {
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/records/$recordId': typeof RecordsRecordIdRouteWithChildren
   '/records/new': typeof RecordsNewRoute
+  '/users/$userId': typeof UsersUserIdRoute
   '/agents/': typeof AgentsIndexRoute
   '/extensions/': typeof ExtensionsIndexRoute
   '/login/': typeof LoginIndexRoute
@@ -642,6 +651,7 @@ export interface FileRouteTypes {
     | '/password-reset/confirm'
     | '/records/$recordId'
     | '/records/new'
+    | '/users/$userId'
     | '/agents/'
     | '/extensions/'
     | '/login/'
@@ -706,6 +716,7 @@ export interface FileRouteTypes {
     | '/manage/system-health'
     | '/password-reset/confirm'
     | '/records/new'
+    | '/users/$userId'
     | '/agents'
     | '/extensions'
     | '/login'
@@ -771,6 +782,7 @@ export interface FileRouteTypes {
     | '/password-reset/confirm'
     | '/records/$recordId'
     | '/records/new'
+    | '/users/$userId'
     | '/agents/'
     | '/extensions/'
     | '/login/'
@@ -838,6 +850,7 @@ export interface RootRouteChildren {
   PasswordResetConfirmRoute: typeof PasswordResetConfirmRoute
   RecordsRecordIdRoute: typeof RecordsRecordIdRouteWithChildren
   RecordsNewRoute: typeof RecordsNewRoute
+  UsersUserIdRoute: typeof UsersUserIdRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
   ExtensionsIndexRoute: typeof ExtensionsIndexRoute
   ManageIndexRoute: typeof ManageIndexRoute
@@ -1042,6 +1055,13 @@ declare module '@tanstack/react-router' {
       path: '/records/new'
       fullPath: '/records/new'
       preLoaderRoute: typeof RecordsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/users/$userId': {
+      id: '/users/$userId'
+      path: '/users/$userId'
+      fullPath: '/users/$userId'
+      preLoaderRoute: typeof UsersUserIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/extensions/$extensionId/$contributionId': {
@@ -1434,6 +1454,7 @@ const rootRouteChildren: RootRouteChildren = {
   PasswordResetConfirmRoute: PasswordResetConfirmRoute,
   RecordsRecordIdRoute: RecordsRecordIdRouteWithChildren,
   RecordsNewRoute: RecordsNewRoute,
+  UsersUserIdRoute: UsersUserIdRoute,
   AgentsIndexRoute: AgentsIndexRoute,
   ExtensionsIndexRoute: ExtensionsIndexRoute,
   ManageIndexRoute: ManageIndexRoute,

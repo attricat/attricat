@@ -1,5 +1,6 @@
 import { Box, Divider, Paper, Typography } from '@mui/material';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
+import { UserProfileLink } from '../../components/UserProfileLink';
 import {
   lifecycleOperationLabel,
   lifecycleStateLabel,
@@ -18,21 +19,6 @@ const ExtensionLifecycleRecord = ({ record }: { record: LifecycleRecord }) => {
   const { t } = useTranslation();
   const stateLabel = (state: string | null) =>
     state === null ? t('extensions.noState') : lifecycleStateLabel(state, t);
-  const details = [
-    record.actor_user_id
-      ? t('extensions.lifecycleActor', {
-          actor:
-            record.actor_display_name ||
-            record.actor_email ||
-            record.actor_user_id,
-        })
-      : undefined,
-    hasDiagnostics(record.diagnostics)
-      ? t('extensions.lifecycleDiagnostics', {
-          diagnostics: JSON.stringify(record.diagnostics),
-        })
-      : undefined,
-  ].filter(Boolean);
   return (
     <Box sx={{ py: 1 }}>
       <Typography>
@@ -44,7 +30,28 @@ const ExtensionLifecycleRecord = ({ record }: { record: LifecycleRecord }) => {
       </Typography>
       <Typography color="text.secondary" variant="body2">
         <Timestamp style="dateTimeSeconds" value={record.created_at} />
-        {details.map((detail) => ` ${detail}`).join('')}
+        {record.actor_user_id && (
+          <>
+            {' '}
+            <Trans
+              components={{
+                actor: <UserProfileLink userId={record.actor_user_id} />,
+              }}
+              i18nKey="extensions.lifecycleActor"
+              t={t}
+              values={{
+                actor:
+                  record.actor_display_name ||
+                  record.actor_email ||
+                  record.actor_user_id,
+              }}
+            />
+          </>
+        )}
+        {hasDiagnostics(record.diagnostics) &&
+          ` ${t('extensions.lifecycleDiagnostics', {
+            diagnostics: JSON.stringify(record.diagnostics),
+          })}`}
       </Typography>
       <Divider />
     </Box>

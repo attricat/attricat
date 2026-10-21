@@ -9,10 +9,11 @@ import {
 } from '@mui/material';
 import { useId, type ReactNode } from 'react';
 import { monoFontFamily } from '../../../app/theme';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { EmptyState } from '../../../components/EmptyState';
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
 import { RecordControlIcon } from '../../../components/systemIcons';
+import { UserProfileLink } from '../../../components/UserProfileLink';
 import { Timestamp } from '../../../time/Timestamp';
 import type { Attribute, RecordApproval, RetentionHold } from '../api';
 import { attributeLabel } from '../recordDisplay';
@@ -94,9 +95,18 @@ const ApprovalItem = ({
       }}
     >
       <Typography variant="body2" color="text.secondary">
-        {t('records.recordControls.approvedBy', {
-          user: approval.approved_by ?? t('audit.system'),
-        })}{' '}
+        <Trans
+          components={{
+            user: approval.approved_by_user_id ? (
+              <UserProfileLink userId={approval.approved_by_user_id} />
+            ) : (
+              <span />
+            ),
+          }}
+          i18nKey="records.recordControls.approvedBy"
+          t={t}
+          values={{ user: approval.approved_by ?? t('audit.system') }}
+        />{' '}
         <Timestamp value={approval.approved_at} />
       </Typography>
       {approval.end_reason === 'content_changed' && approval.ended_at && (

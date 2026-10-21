@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import { useRef, useState } from 'react';
 import { UserAvatar } from '../../components/UserAvatar';
+import { UserProfileLink } from '../../components/UserProfileLink';
 import { userAvatarSizes } from '../../components/userAvatars';
 import { invalidateAuthorization } from '../auth/invalidateAuthorization';
 import { principalQueryKeys } from '../principals/queryKeys';
@@ -145,7 +146,11 @@ export const WorkspaceMembersSection = ({
                 />
               </ListItemAvatar>
               <ListItemText
-                primary={member.display_name ?? member.email}
+                primary={
+                  <UserProfileLink userId={member.user_id}>
+                    {member.display_name ?? member.email}
+                  </UserProfileLink>
+                }
                 secondary={t(
                   member.grants.length
                     ? 'workspace.memberSummaryWithRoles'

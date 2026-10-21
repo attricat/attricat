@@ -51,6 +51,38 @@ pub struct DirectoryTeam {
     pub deleted: bool,
 }
 
+/// A team named on a member's profile.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct DirectoryUserTeam {
+    pub id: Uuid,
+    pub code: String,
+    pub name: String,
+}
+
+/// A workspace member as shown on their profile to every catalog reader.
+#[derive(Debug, Serialize)]
+pub struct DirectoryUserProfile {
+    pub id: Uuid,
+    pub display_name: Option<String>,
+    pub email: String,
+    /// Only active members keep a visible avatar, as elsewhere.
+    pub avatar_file_id: Option<Uuid>,
+    pub active: bool,
+    pub member_since: DateTime<Utc>,
+    /// The member's existing teams.
+    pub teams: Vec<DirectoryUserTeam>,
+}
+
+#[derive(sqlx::FromRow)]
+struct DirectoryUserProfileRow {
+    id: Uuid,
+    display_name: Option<String>,
+    email: String,
+    avatar_file_id: Option<Uuid>,
+    active: bool,
+    member_since: DateTime<Utc>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct WorkspaceDirectory {
     pub users: Vec<DirectoryUser>,
@@ -291,6 +323,47 @@ impl AttricatRepository {
         .fetch_all(&self.pool)
         .await?;
         Ok(WorkspaceDirectory { users, teams })
+    }
+
+    /// One workspace member's profile, including former members so their
+    /// past activity keeps a destination. Users outside the workspace are
+    /// not found.
+    pub async fn directory_user_profile(
+        &self,
+        user_id: Uuid,
+    ) -> Result<DirectoryUserProfile, RepositoryError> {
+        let row = sqlx::query_as::<_, DirectoryUserProfileRow>(
+            "SELECT u.id, u.display_name, u.email, avatar.id AS avatar_file_id,
+                    (m.state = 'active' AND u.state = 'active') AS active, m.created_at AS member_since
+             FROM workspace_memberships m JOIN users u ON u.id = m.user_id
+             LEFT JOIN files avatar ON m.state = 'active' AND avatar.workspace_id = m.workspace_id AND avatar.id = m.avatar_file_id AND avatar.purpose = 'avatar' AND avatar.status = 'ready' AND avatar.deleted_at IS NULL
+             WHERE m.workspace_id = $1 AND m.user_id = $2",
+        )
+        .bind(self.workspace_id.0)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(RepositoryError::NotFound("user"))?;
+        let teams = sqlx::query_as::<_, DirectoryUserTeam>(
+            "SELECT t.id, t.code, t.name FROM teams t
+             JOIN team_members tm ON tm.team_id = t.id
+             JOIN workspace_memberships m ON m.id = tm.membership_id
+             WHERE t.workspace_id = $1 AND t.deleted_at IS NULL AND m.user_id = $2
+             ORDER BY lower(t.name), t.code",
+        )
+        .bind(self.workspace_id.0)
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(DirectoryUserProfile {
+            id: row.id,
+            display_name: row.display_name,
+            email: row.email,
+            avatar_file_id: row.avatar_file_id,
+            active: row.active,
+            member_since: row.member_since,
+            teams,
+        })
     }
 
     /// The non-deleted teams `user_id` belongs to through an active membership

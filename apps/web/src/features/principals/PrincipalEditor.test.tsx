@@ -15,6 +15,10 @@ import { ScalarAttributeEditor } from '../records/components/ScalarAttributeEdit
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import { getDirectory } from './api';
 
+vi.mock(
+  '@tanstack/react-router',
+  async () => (await import('../../test/routerLinkMock')).routerLinkMock,
+);
 vi.mock('./api', () => ({ getDirectory: vi.fn() }));
 
 const ada = '6a1f9a54-2d0c-4f3a-9a7e-1c2b3d4e5f60';
