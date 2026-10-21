@@ -90,10 +90,11 @@ export const requestOffsetPage = async <T>(
         details: z.prettifyError(result.error),
       }),
     );
-  const next = Number(response.headers.get(nextOffsetHeader) ?? Number.NaN);
+  // `Number('')` is 0, which would load the first page again.
+  const next = response.headers.get(nextOffsetHeader)?.trim();
   return {
     items: result.data,
-    nextOffset: Number.isInteger(next) ? next : undefined,
+    nextOffset: next && /^\d+$/.test(next) ? Number(next) : undefined,
   };
 };
 
