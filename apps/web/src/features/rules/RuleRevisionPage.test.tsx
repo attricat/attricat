@@ -58,7 +58,7 @@ const rule: Rule = {
   enabled_version: 1,
 };
 
-const renderPage = (version: number) =>
+const renderPage = (version: number | undefined) =>
   render(
     <QueryClientProvider
       client={
@@ -95,10 +95,13 @@ describe('RuleRevisionPage', () => {
     ).toBe(`/manage/blueprints/${blueprintId}`);
   });
 
-  it('says when the revision does not exist', async () => {
-    renderPage(7);
-    expect(
-      await screen.findByText('This rule revision was not found.'),
-    ).toBeTruthy();
-  });
+  it.each([7, undefined])(
+    'says when the revision does not exist (version %s)',
+    async (version) => {
+      renderPage(version);
+      expect(
+        await screen.findByText('This rule revision was not found.'),
+      ).toBeTruthy();
+    },
+  );
 });
