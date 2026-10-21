@@ -1,8 +1,6 @@
-import {
-  getRecordPublications,
-  getRecordsPublications,
-  type RecordPublicationStatus,
-} from './api';
+import { ApiRequestError } from '../../api/request';
+import i18n from '../../i18n';
+import { getRecordsPublications, type RecordPublicationStatus } from './api';
 
 /** Most records one publication lookup may name. */
 const maxRecordsPerLookup = 100;
@@ -15,37 +13,45 @@ type Waiter = {
 let waiting = new Map<string, Waiter[]>();
 let scheduled = false;
 
+const lookUp = async (chunk: string[], batch: Map<string, Waiter[]>) => {
+  try {
+    const { items } = await getRecordsPublications(chunk);
+    const found = new Map(
+      items.map((item) => [item.record_id, item.publications]),
+    );
+    for (const recordId of chunk) {
+      const publications = found.get(recordId);
+      // The lookup leaves out records the caller cannot read or that no longer
+      // exist; they fail as their own lookup would, without one request each.
+      batch
+        .get(recordId)
+        ?.forEach((waiter) =>
+          publications === undefined
+            ? waiter.reject(
+                new ApiRequestError(
+                  404,
+                  i18n.t('errors.recordUnavailable'),
+                  'not_found',
+                ),
+              )
+            : waiter.resolve(publications),
+        );
+    }
+  } catch (error) {
+    for (const recordId of chunk)
+      batch.get(recordId)?.forEach((waiter) => waiter.reject(error));
+  }
+};
+
 const flush = async () => {
   const batch = waiting;
   waiting = new Map();
   scheduled = false;
   const recordIds = [...batch.keys()];
-  for (let start = 0; start < recordIds.length; start += maxRecordsPerLookup) {
-    const chunk = recordIds.slice(start, start + maxRecordsPerLookup);
-    try {
-      const { items } = await getRecordsPublications(chunk);
-      const found = new Map(
-        items.map((item) => [item.record_id, item.publications]),
-      );
-      for (const recordId of chunk) {
-        const publications = found.get(recordId);
-        // A left-out record fails as its own lookup would.
-        const result =
-          publications === undefined
-            ? getRecordPublications(recordId)
-            : Promise.resolve(publications);
-        result.then(
-          (value) =>
-            batch.get(recordId)?.forEach((waiter) => waiter.resolve(value)),
-          (error: unknown) =>
-            batch.get(recordId)?.forEach((waiter) => waiter.reject(error)),
-        );
-      }
-    } catch (error) {
-      for (const recordId of chunk)
-        batch.get(recordId)?.forEach((waiter) => waiter.reject(error));
-    }
-  }
+  const chunks: string[][] = [];
+  for (let start = 0; start < recordIds.length; start += maxRecordsPerLookup)
+    chunks.push(recordIds.slice(start, start + maxRecordsPerLookup));
+  await Promise.all(chunks.map((chunk) => lookUp(chunk, batch)));
 };
 
 /**

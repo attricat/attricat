@@ -57,6 +57,7 @@
     "unexpectedDescription": "We couldn't display this page. Try again or return to the catalog home page.",
     "notFoundTitle": "Page not found",
     "notFoundDescription": "The page you requested doesn't exist or is no longer available.",
+    "recordUnavailable": "This record doesn't exist or you can't read it.",
     "queryTitle": "Unable to load this information",
     "queryDescription": "Check your connection and try again.",
     "retry": "Try again",
