@@ -145,20 +145,20 @@ describe('RecordFindingsPanel', () => {
     expect(vi.mocked(acknowledgeFinding).mock.calls[0]?.[0]).toBe(finding.id);
   });
 
-  it('puts the most severe findings first and names fields by their labels', async () => {
+  it('keeps the server’s severity order and names fields by their labels', async () => {
     vi.mocked(listUnresolvedRecordFindings).mockResolvedValue({
       items: [
+        {
+          ...finding,
+          message: "'title' is required",
+          evidence: { contexts: ['default', 'pl'], attribute_code: 'title' },
+        },
         {
           ...finding,
           id: '00000000-0000-4000-8000-000000000006',
           severity: 'info',
           message: "'summary' is required",
           evidence: { contexts: ['pl'], attribute_code: 'summary' },
-        },
-        {
-          ...finding,
-          message: "'title' is required",
-          evidence: { contexts: ['default', 'pl'], attribute_code: 'title' },
         },
       ],
     });

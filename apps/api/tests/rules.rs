@@ -489,6 +489,23 @@ async fn record_changes_and_rechecks_run_every_enabled_rule_for_the_record(pool:
     assert_eq!(get_json(unresolved_path).await, json!([]));
     let all = get_json(format!("{base_url}/rule-findings?record_id={record_id}")).await;
     assert_eq!(all[0]["state"], "resolved");
+    // More severe findings come first even when they are older, so offset
+    // pages do not reshuffle when a re-check touches a finding.
+    sqlx::query("INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,record_id,context_id,evaluation_key,severity,message,evidence,created_at,updated_at) SELECT $2,workspace_id,rule_id,rule_version,record_id,context_id,'older-critical','critical',message,evidence,created_at - interval '1 hour',created_at - interval '1 hour' FROM rule_findings WHERE record_id=$1")
+        .bind(record_id)
+        .bind(Uuid::new_v4())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let all = get_json(format!("{base_url}/rule-findings?record_id={record_id}")).await;
+    assert_eq!(
+        all.as_array()
+            .unwrap()
+            .iter()
+            .map(|finding| finding["severity"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["critical", "error"]
+    );
 
     let missing = client
         .post(format!("{base_url}/rule-findings/recheck"))

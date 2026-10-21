@@ -732,8 +732,9 @@ impl AttricatRepository {
         Ok((rows.into_domain(), has_more))
     }
 
-    /// Findings, most recently changed first, optionally of one record and
-    /// leaving out resolved ones.
+    /// Findings, most severe first and then newest first, optionally of one
+    /// record and leaving out resolved ones. The order does not depend on
+    /// re-checks, so offset pages stay stable while rules run again.
     pub async fn rule_findings_page(
         &self,
         record_id: Option<Uuid>,
@@ -742,7 +743,7 @@ impl AttricatRepository {
         offset: i64,
     ) -> Result<(Vec<RuleFinding>, bool), RepositoryError> {
         let ws = self.workspace_id.0;
-        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,record_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR record_id=$2) AND (NOT $3 OR state <> 'resolved') ORDER BY updated_at DESC,id DESC LIMIT $4 OFFSET $5")
+        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,record_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR record_id=$2) AND (NOT $3 OR state <> 'resolved') ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'error' THEN 1 WHEN 'warning' THEN 2 WHEN 'info' THEN 3 ELSE 4 END,created_at DESC,id DESC LIMIT $4 OFFSET $5")
             .bind(ws).bind(record_id).bind(unresolved).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
