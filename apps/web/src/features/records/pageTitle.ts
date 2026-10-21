@@ -24,7 +24,9 @@ export const pageTitleLabel = (
       const attribute = attributes.find((item) => item.code === field);
       const value = values[field]?.value;
       if (!attribute || value === null || value === undefined) return [];
-      return [formatAttributeValue(attribute, value)];
+      const text = formatAttributeValue(attribute, value);
+      // An empty field adds no segment, so a record with none falls back.
+      return text.trim() ? [text] : [];
     })
     .join(definition.data.separator ?? ' · ');
   return label || null;
