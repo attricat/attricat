@@ -81,7 +81,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | --- | --- |
 | `source` | `record_check`, `transition_condition`, `rule` lub, tylko przy publikacji, `record_schema`. |
 | `code` | Kod kontroli, warunku lub reguły. |
-| `message` | Własny komunikat lub wygenerowany. |
+| `message` | Własny komunikat sprawdzenia lub warunku, nazwa reguły albo komunikat wygenerowany. |
 | `contexts` | Kody kontekstów, w których wystąpił problem. |
 | `attributes` | Atrybuty tego rekordu, których dotyczy naruszenie, np. obie strony porównania lub relacja kontroli `linked`. Służą do wyróżnienia pól. |
 | `severity` | Dla reguł: waga reguły. |

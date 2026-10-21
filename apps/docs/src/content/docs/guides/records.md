@@ -105,7 +105,7 @@ Previous attribute values are kept for 90 days by default. From the value histor
 
 ## Data quality findings
 
-If [data quality rules](/builders/rules/) flag the record, its page shows the number of open findings. Select it to open the **Data quality** tab, which lists them below the record's values.
+If [data quality rules](/builders/rules/) flag the record, its page shows the number of open findings. Select it to open the **Data quality** tab, which lists them below the record's values. The most severe findings come first. Each one shows the rule's name, what is wrong with which field, the contexts it fails in, and when it was first found.
 
 ## Upgrade to a newer revision
 

@@ -224,8 +224,8 @@ These errors and `publication_checks_failed` include `error.details`:
 
 - `source`: `record_check`, `transition_condition`, `rule` or `record_schema`
   (publication gates only, with `code = "record_schema"`).
-- `code`: the check, condition or rule code. `message`: the custom message or a
-  generated one.
+- `code`: the check, condition or rule code. `message`: the check's or
+  condition's custom message, the rule's name, or a generated one.
 - `contexts`: codes of the contexts in which it failed. One violation is
   reported per declaration.
 - `attributes`: attributes of the saved record involved, for highlighting form

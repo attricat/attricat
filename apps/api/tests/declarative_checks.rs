@@ -841,6 +841,8 @@ async fn enforcing_rules_dry_run_before_enabling_and_reject_writes(pool: PgPool)
     let violation = &body["error"]["details"]["violations"][0];
     assert_eq!(violation["source"], "rule");
     assert_eq!(violation["code"], "price-non-negative");
+    // A rule violation is worded with the rule's name.
+    assert_eq!(violation["message"], "price-non-negative");
     assert_eq!(violation["severity"], "error");
     assert_eq!(violation["attributes"], json!(["price"]));
 

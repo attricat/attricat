@@ -81,7 +81,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | --- | --- |
 | `source` | `record_check`, `transition_condition`, `rule`, or, for publication only, `record_schema`. |
 | `code` | The check, condition, or rule code. |
-| `message` | The custom message, or a generated one. |
+| `message` | The check's or condition's custom message, the rule's name, or a generated one. |
 | `contexts` | Codes of the contexts where it failed. |
 | `attributes` | Attributes of this record involved, such as both sides of a comparison or the relationship of a `linked` check. Use them to highlight fields. |
 | `severity` | For rules: the rule's severity. |

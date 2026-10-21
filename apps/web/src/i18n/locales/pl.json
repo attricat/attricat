@@ -1862,6 +1862,7 @@
       "checking": "Sprawdzanie reguł…",
       "recheck": "Sprawdź ponownie",
       "contexts": "Konteksty: {{contexts}}",
+      "allContexts": "Wszystkie konteksty",
       "firstFound": "Pierwsze wykrycie <timestamp/>",
       "noFindings": "Brak otwartych ustaleń.",
       "noFindingsCheckedAt": "Brak otwartych ustaleń. Ostatnio sprawdzono <timestamp/>.",

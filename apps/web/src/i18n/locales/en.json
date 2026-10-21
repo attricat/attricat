@@ -1786,6 +1786,7 @@
       "checking": "Checking rules…",
       "recheck": "Re-run checks",
       "contexts": "Contexts: {{contexts}}",
+      "allContexts": "All contexts",
       "firstFound": "First found <timestamp/>",
       "noFindings": "No open findings.",
       "noFindingsCheckedAt": "No open findings. Last checked <timestamp/>.",

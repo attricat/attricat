@@ -51,6 +51,7 @@ export const findingSchema = z.object({
 /** The evidence fields the record page shows; rules may add others. */
 export const findingEvidenceSchema = z.object({
   contexts: z.array(z.string()).optional(),
+  attribute_code: z.string().optional(),
 });
 export type Rule = z.infer<typeof ruleSchema>;
 export type RuleRun = z.infer<typeof ruleRunSchema>;

@@ -364,11 +364,21 @@ export const StatusEditor = ({
             key={option.code}
             value={option.code}
             disabled={Boolean(denied)}
+            // Dim only the option, so the reason it is blocked stays legible.
+            sx={
+              denied?.kind === 'access'
+                ? { '&.Mui-disabled': { opacity: 1 } }
+                : undefined
+            }
           >
             {denied?.kind === 'access' ? (
               <ListItemText
                 primary={statusOptionLabel(option)}
                 secondary={denialText(denied)}
+                slotProps={{
+                  primary: { sx: { color: 'text.disabled' } },
+                  secondary: { sx: { color: 'text.secondary' } },
+                }}
               />
             ) : (
               statusOptionLabel(option)

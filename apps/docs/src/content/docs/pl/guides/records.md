@@ -105,7 +105,7 @@ Poprzednie wartości atrybutów są domyślnie przechowywane przez 90 dni. Z his
 
 ## Ustalenia dotyczące jakości danych
 
-Jeśli [reguły jakości danych](/pl/builders/rules/) oznaczą rekord, jego strona pokazuje liczbę otwartych ustaleń. Kliknięcie jej otwiera kartę **Jakość danych**, która wymienia je pod wartościami rekordu.
+Jeśli [reguły jakości danych](/pl/builders/rules/) oznaczą rekord, jego strona pokazuje liczbę otwartych ustaleń. Kliknięcie jej otwiera kartę **Jakość danych**, która wymienia je pod wartościami rekordu. Najpoważniejsze ustalenia są na górze. Każde pokazuje nazwę reguły, co jest nie tak i w którym polu, konteksty, w których występuje, oraz kiedy wykryto je po raz pierwszy.
 
 ## Aktualizacja do nowszej wersji
 

@@ -96,7 +96,9 @@ const run = (status: string, completedAt: string | null): RuleRun => ({
   created_at: '2026-10-20T10:00:00Z',
 });
 
-const renderPanel = () =>
+const renderPanel = (
+  props: Partial<Parameters<typeof RecordFindingsPanel>[0]> = {},
+) =>
   render(
     <QueryClientProvider
       client={
@@ -107,6 +109,7 @@ const renderPanel = () =>
         blueprintId={blueprintId}
         blueprintVersion={1}
         recordId={recordId}
+        {...props}
       />
     </QueryClientProvider>,
   );
@@ -133,12 +136,44 @@ describe('RecordFindingsPanel', () => {
     expect(within(item).getByText('title is required')).toBeTruthy();
     expect(
       within(item)
-        .getByRole('link', { name: 'Title required v1' })
+        .getByRole('link', { name: 'Title required' })
         .getAttribute('href'),
     ).toBe(`/manage/rules/${ruleId}/revisions/1`);
     expect(within(item).getByText(/Contexts: default, pl/)).toBeTruthy();
     await user.click(within(item).getByRole('button', { name: 'Acknowledge' }));
     expect(vi.mocked(acknowledgeFinding).mock.calls[0]?.[0]).toBe(finding.id);
+  });
+
+  it('puts the most severe findings first and names fields by their labels', async () => {
+    vi.mocked(listUnresolvedRecordFindings).mockResolvedValue({
+      items: [
+        {
+          ...finding,
+          id: '00000000-0000-4000-8000-000000000006',
+          severity: 'info',
+          message: "'summary' is required",
+          evidence: { contexts: ['pl'], attribute_code: 'summary' },
+        },
+        {
+          ...finding,
+          message: "'title' is required",
+          evidence: { contexts: ['default', 'pl'], attribute_code: 'title' },
+        },
+      ],
+    });
+    renderPanel({
+      attributes: [
+        { code: 'title', name: 'Listing title' },
+        { code: 'summary' },
+      ],
+      contextCodes: ['default', 'pl'],
+    });
+    await screen.findByText('Listing title is required');
+    const [first, second] = screen.getAllByRole('listitem');
+    expect(within(first!).getByText('Error')).toBeTruthy();
+    expect(within(first!).getByText(/All contexts/)).toBeTruthy();
+    expect(within(second!).getByText('summary is required')).toBeTruthy();
+    expect(within(second!).getByText(/Contexts: pl/)).toBeTruthy();
   });
 
   it('re-runs the record’s checks and refreshes findings when they finish', async () => {

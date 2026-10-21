@@ -12,6 +12,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { Link } from '@tanstack/react-router';
 import { PlayIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
@@ -21,6 +22,7 @@ import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { RuleIcon } from '../../components/systemIcons';
 import { Timestamp } from '../../time/Timestamp';
 import { useCan } from '../auth/useCan';
+import { attributeLabel } from '../records/recordDisplay';
 import {
   acknowledgeFinding,
   recheckRecord,
@@ -41,7 +43,11 @@ import {
 } from './queryOptions';
 import { isWatchingRecordRuleChecks } from './recordRuleChecks';
 import { RuleRevisionCell } from './RuleCells';
-import { ruleRevisionsByKey, type RuleRevisions } from './ruleRevisions';
+import {
+  ruleRevisionKey,
+  ruleRevisionsByKey,
+  type RuleRevisions,
+} from './ruleRevisions';
 import { findingEvidenceSchema } from './schemas';
 
 const isActive = (run: RuleRun) =>
@@ -57,15 +63,47 @@ const latestCompletion = (runs: readonly RuleRun[] | undefined) =>
     null,
   ) ?? null;
 
+const SEVERITY_ORDER = ['critical', 'error', 'warning', 'info'];
+
+const severityRank = (severity: string) => {
+  const rank = SEVERITY_ORDER.indexOf(severity);
+  return rank === -1 ? SEVERITY_ORDER.length : rank;
+};
+
+const severityColor = (severity: string) =>
+  ERROR_FINDING_SEVERITIES.includes(severity)
+    ? 'error'
+    : severity === 'info'
+      ? 'info'
+      : 'warning';
+
+/** Names the attribute a finding is about by its label instead of its code. */
+const findingMessage = (
+  message: string,
+  attributeCode: string | undefined,
+  attributes: readonly FindingAttribute[],
+) => {
+  const attribute = attributes.find((item) => item.code === attributeCode);
+  return attribute
+    ? message.replaceAll(`'${attribute.code}'`, attributeLabel(attribute))
+    : message;
+};
+
+type FindingAttribute = { code: string; name?: unknown };
+
 const FindingItem = ({
   acknowledging,
+  attributes,
   canManage,
+  contextCodes,
   finding,
   onAcknowledge,
   revisions,
 }: {
   acknowledging: boolean;
+  attributes: readonly FindingAttribute[];
   canManage: boolean;
+  contextCodes: readonly string[] | undefined;
   finding: Finding;
   onAcknowledge: () => void;
   revisions: RuleRevisions;
@@ -73,66 +111,102 @@ const FindingItem = ({
   const { t } = useTranslation();
   const evidence = findingEvidenceSchema.safeParse(finding.evidence);
   const contexts = evidence.success ? (evidence.data.contexts ?? []) : [];
+  const everyContext =
+    contextCodes !== undefined &&
+    contextCodes.length > 1 &&
+    contextCodes.every((code) => contexts.includes(code));
+  const rule = revisions.get(
+    ruleRevisionKey(finding.rule_id, finding.rule_version),
+  );
+  const message = findingMessage(
+    finding.message,
+    evidence.success ? evidence.data.attribute_code : undefined,
+    attributes,
+  );
   return (
     <Box
       component="li"
-      sx={{ py: 1.5, borderBottom: 1, borderColor: 'divider' }}
+      sx={{
+        alignItems: 'flex-start',
+        display: 'flex',
+        gap: 1.5,
+        py: 1.5,
+        '&:not(:last-of-type)': { borderBottom: 1, borderColor: 'divider' },
+      }}
     >
-      <Stack
-        direction="row"
-        spacing={1}
-        sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}
-      >
+      <Chip
+        color={severityColor(finding.severity)}
+        label={t(`rules.severities.${finding.severity}`, {
+          defaultValue: finding.severity,
+        })}
+        size="small"
+        sx={{ minWidth: 72 }}
+      />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          component="p"
+          variant="body2"
+          sx={{
+            fontWeight: 600,
+            // The rule name reads as the heading and links on hover.
+            '& a': { color: 'inherit', textDecoration: 'none' },
+            '& a:hover, & a:focus-visible': { textDecoration: 'underline' },
+          }}
+        >
+          {rule ? (
+            <Link
+              params={{
+                ruleId: finding.rule_id,
+                version: String(finding.rule_version),
+              }}
+              to="/manage/rules/$ruleId/revisions/$version"
+            >
+              {rule.name}
+            </Link>
+          ) : (
+            <RuleRevisionCell
+              revisions={revisions}
+              ruleId={finding.rule_id}
+              version={finding.rule_version}
+            />
+          )}
+        </Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          {message}
+        </Typography>
+        <Typography
+          component="p"
+          variant="caption"
+          sx={{ color: 'text.secondary' }}
+        >
+          {everyContext
+            ? t('rules.recordFindings.allContexts')
+            : contexts.length > 0 &&
+              t('rules.recordFindings.contexts', {
+                contexts: contexts.join(', '),
+              })}
+          {contexts.length > 0 && ' · '}
+          <Trans
+            i18nKey="rules.recordFindings.firstFound"
+            components={{ timestamp: <Timestamp value={finding.created_at} /> }}
+          />
+        </Typography>
+      </Box>
+      {finding.state === FINDING_STATE_OPEN ? (
+        canManage && (
+          <Button disabled={acknowledging} size="small" onClick={onAcknowledge}>
+            {t('rules.acknowledge')}
+          </Button>
+        )
+      ) : (
         <Chip
-          color={
-            ERROR_FINDING_SEVERITIES.includes(finding.severity)
-              ? 'error'
-              : 'warning'
-          }
-          label={t(`rules.severities.${finding.severity}`, {
-            defaultValue: finding.severity,
+          label={t(`rules.findingStates.${finding.state}`, {
+            defaultValue: finding.state,
           })}
           size="small"
+          variant="outlined"
         />
-        <Typography component="p" variant="subtitle2" sx={{ flex: 1 }}>
-          {finding.message}
-        </Typography>
-        {finding.state === FINDING_STATE_OPEN ? (
-          canManage && (
-            <Button
-              disabled={acknowledging}
-              size="small"
-              onClick={onAcknowledge}
-            >
-              {t('rules.acknowledge')}
-            </Button>
-          )
-        ) : (
-          <Chip
-            label={t(`rules.findingStates.${finding.state}`, {
-              defaultValue: finding.state,
-            })}
-            size="small"
-            variant="outlined"
-          />
-        )}
-      </Stack>
-      <Typography variant="body2" color="text.secondary">
-        <RuleRevisionCell
-          revisions={revisions}
-          ruleId={finding.rule_id}
-          version={finding.rule_version}
-        />
-        {contexts.length > 0 &&
-          ` · ${t('rules.recordFindings.contexts', {
-            contexts: contexts.join(', '),
-          })}`}
-        {' · '}
-        <Trans
-          i18nKey="rules.recordFindings.firstFound"
-          components={{ timestamp: <Timestamp value={finding.created_at} /> }}
-        />
-      </Typography>
+      )}
     </Box>
   );
 };
@@ -147,10 +221,16 @@ export const RecordFindingsPanel = ({
   recordId,
   blueprintId,
   blueprintVersion,
+  attributes = [],
+  contextCodes,
 }: {
   recordId: string;
   blueprintId: string;
   blueprintVersion: number;
+  /** The blueprint's attributes, to name the fields findings are about. */
+  attributes?: readonly FindingAttribute[];
+  /** Every context's code, to summarize findings that fail in all of them. */
+  contextCodes?: readonly string[];
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
@@ -200,7 +280,12 @@ export const RecordFindingsPanel = ({
       rule.blueprint_version === blueprintVersion &&
       rule.enabled_version === rule.version,
   );
-  const unresolved = findings.data?.pages.flatMap((page) => page.items) ?? [];
+  // The most severe findings come first; the server's order breaks ties.
+  const unresolved = [
+    ...(findings.data?.pages.flatMap((page) => page.items) ?? []),
+  ].sort(
+    (left, right) => severityRank(left.severity) - severityRank(right.severity),
+  );
   const error = findings.error ?? rules.error ?? runs.error;
   const checking = Boolean(runs.data?.some(isActive)) || recheck.isPending;
   const revisions = ruleRevisionsByKey(rules.data ?? []);
@@ -263,7 +348,9 @@ export const RecordFindingsPanel = ({
             <FindingItem
               key={finding.id}
               acknowledging={acknowledge.isPending}
+              attributes={attributes}
               canManage={canManage}
+              contextCodes={contextCodes}
               finding={finding}
               onAcknowledge={() => acknowledge.mutate(finding.id)}
               revisions={revisions}

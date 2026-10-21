@@ -375,10 +375,14 @@ export const RecordPreview = ({
                           label: t('rules.recordFindings.title'),
                           content: (
                             <RecordFindingsPanel
+                              attributes={blueprint.data?.attributes}
                               blueprintId={resolvedRecord.blueprint_id}
                               blueprintVersion={
                                 resolvedRecord.blueprint_version
                               }
+                              contextCodes={contexts.data?.map(
+                                (context) => context.code,
+                              )}
                               recordId={recordId}
                             />
                           ),

@@ -723,7 +723,9 @@ impl<'a> Job<'a> {
         Self {
             source: CheckSource::Rule,
             code: &rule.code,
-            message: None,
+            // The rule's name says what it requires; the evaluator's
+            // explanation stays in the violation's evidence.
+            message: Some(&rule.compiled.name),
             predicate: &rule.compiled.predicate,
             severity: Some(rule.compiled.severity.clone()),
             transition,
