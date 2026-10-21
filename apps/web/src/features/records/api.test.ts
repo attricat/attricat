@@ -8,7 +8,6 @@ import {
   getRecordChanges,
   getRecordForm,
   getRecordHierarchy,
-  getIncomingRelationships,
   getRecordPublications,
   listRecordBlueprints,
   publishRecord,
@@ -594,40 +593,6 @@ describe('record API client', () => {
         page: { size: 25, cursor: null },
       }),
     });
-  });
-
-  it('loads incoming relationship pages with the configured selectors', async () => {
-    respond({
-      items: [
-        {
-          id: recordId,
-          blueprint_code: 'product',
-          blueprint_version: 1,
-          is_sample: false,
-          display: { default: 'Navy shirt' },
-        },
-      ],
-      next_cursor: 'next-page',
-    });
-
-    await getIncomingRelationships(
-      recordId,
-      [{ source_blueprint: 'product', field: 'categories' }],
-      10,
-      null,
-    );
-
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      `/api/v1/records/${recordId}/incoming-relationships`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          relationships: [{ source_blueprint: 'product', field: 'categories' }],
-          page: { size: 10, cursor: null },
-        }),
-      },
-    );
   });
 
   it('loads resolved previews with the record revision identity', async () => {

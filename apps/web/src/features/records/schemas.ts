@@ -484,17 +484,6 @@ const recordSearchResponseSchema = z.object({
 const recordSearchPageSchema = recordSearchResponseSchema.extend({
   blueprint: blueprintWithAttributesSchema.optional(),
 });
-const incomingRelationshipItemSchema = z.object({
-  id: uuidSchema,
-  blueprint_code: z.string(),
-  blueprint_version: z.number().int().positive(),
-  is_sample: z.boolean(),
-  display: z.record(z.string(), z.string()),
-});
-export const incomingRelationshipsPageSchema = z.object({
-  items: z.array(incomingRelationshipItemSchema),
-  next_cursor: z.string().nullable(),
-});
 export const recordHierarchySchema = z.object({
   items: z.array(z.object({ id: uuidSchema, display: z.string() })),
   paths: z.array(z.array(z.object({ id: uuidSchema, display: z.string() }))),

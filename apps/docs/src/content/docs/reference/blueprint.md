@@ -388,7 +388,7 @@ Only a record blueprint can define it, and only under the name `explorer`. Witho
 | `accordion` | `sections` = array of `{ label, children }` | Collapsible sections. |
 | `field` | `field` | One scalar or file attribute. |
 | `relationship_list` | `field` | One relationship attribute and its targets. |
-| `incoming_relationship_list` | `label`, `relationships`, `page_size` | A button that opens a paged list of records linking to this one. `relationships` is an array of `{ source_blueprint, field }`. `page_size` is capped by the server's `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE`. |
+| `incoming_relationship_list` | `label`, `relationships`, `page_size` | A link that opens the Explorer in a new tab, filtered to records linking to this one; one link per relationship. `relationships` is an array of `{ source_blueprint, field }`. `page_size` is capped by the server's `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE`; the web app does not use it. |
 | `heading` | `text` | Static heading. |
 | `text` | `text` | Static paragraph. |
 | `divider` | | Horizontal rule. |

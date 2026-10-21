@@ -1693,13 +1693,11 @@
     "loadingHierarchy": "Wczytywanie hierarchii...",
     "noHierarchy": "Brak dostępnej hierarchii.",
     "hierarchy": "Hierarchia",
-    "loadingLinkedRecords": "Ładowanie powiązanych rekordów...",
-    "noLinkedRecords": "Brak powiązanych rekordów.",
+    "incomingRelationshipLink": "{{label}} · {{blueprint}}",
     "inheritedFromContext": "Dziedziczone z kontekstu {{context}}",
     "unableToRenderAttribute": "Nie można wyświetlić {{attribute}}.",
     "unableToRenderComponent": "Nie można wyświetlić komponentu.",
-    "unableToRenderRecordHeading": "Nie można wyświetlić nagłówka rekordu.",
-    "close": "Zamknij"
+    "unableToRenderRecordHeading": "Nie można wyświetlić nagłówka rekordu."
   },
   "common": {
     "opensInNewTab": "Otwiera się w nowej karcie",

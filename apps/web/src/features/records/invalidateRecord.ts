@@ -33,7 +33,6 @@ const recordProjections = (id: string) => [
   recordQueryKeys.publication(id),
   recordQueryKeys.migrationPreview(id),
   recordQueryKeys.hierarchies(id),
-  recordQueryKeys.incomingRelationshipResults(id),
 ];
 
 /**

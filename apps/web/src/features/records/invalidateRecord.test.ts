@@ -18,7 +18,6 @@ const projections = [
   recordQueryKeys.statusTransitions('record', 'context'),
   recordQueryKeys.migrationPreview('record'),
   recordQueryKeys.hierarchy('record', 'context', 'parent'),
-  recordQueryKeys.incomingRelationships('record', [], 25),
 ];
 const search = recordQueryKeys.search({
   sort: { field: 'publication_status', direction: 'asc' },

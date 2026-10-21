@@ -127,3 +127,16 @@ export const recordSelectionSearch = (
   sort: search.sort,
   query: recordIdsQuery(recordIds),
 });
+
+/**
+ * The search listing the records whose `field` links to `recordId`, across
+ * every version of their blueprint.
+ */
+export const incomingRelationshipSearch = (
+  recordId: string,
+  relationship: { source_blueprint: string; field: string },
+): ExplorerSearch => ({
+  blueprint: relationship.source_blueprint,
+  allVersions: true,
+  relationshipFacets: [{ field: relationship.field, selectedIds: [recordId] }],
+});

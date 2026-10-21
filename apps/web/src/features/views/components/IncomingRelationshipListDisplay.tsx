@@ -1,29 +1,20 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
-import {
-  Box,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  List,
-  ListItem,
-  ListItemText,
-  Typography,
-} from '@mui/material';
-import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Stack } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { LoadMoreButton } from '../../../components/LoadMoreButton';
-import { getIncomingRelationships } from '../../records/api';
 import { NewTabIcon } from '../../../components/NewTabIcon';
+import { RouterButton } from '../../../components/RouterLink';
+import { listBlueprints } from '../../blueprints/api';
+import { blueprintQueryKeys } from '../../blueprints/queryKeys';
+import { incomingRelationshipSearch } from '../../explorer/search';
+import { lexiconText } from '../../lexicon/lexicon';
 import { relatedRecordLinkProps } from '../../records/linkedRecord';
-import { displayLabel } from '../../records/recordDisplay';
-import { recordQueryKeys } from '../../records/queryKeys';
 import type { ViewComponentDefinition } from './componentTypes';
 import { VIEW_COMPONENT_IDS, VIEW_COMPONENT_VERSION } from '../constants';
 
+/**
+ * Opens the records linking to this one in the Explorer. The Explorer searches
+ * one blueprint at a time, so each relationship gets its own link.
+ */
 export const IncomingRelationshipListDisplay = ({
   recordId,
   node,
@@ -37,103 +28,40 @@ export const IncomingRelationshipListDisplay = ({
   };
 }) => {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const results = useInfiniteQuery({
-    queryKey: recordQueryKeys.incomingRelationships(
-      recordId,
-      node.relationships,
-      node.page_size,
-    ),
-    queryFn: ({ pageParam }) =>
-      getIncomingRelationships(
-        recordId,
-        node.relationships,
-        node.page_size,
-        pageParam,
-      ),
-    initialPageParam: null as string | null,
-    getNextPageParam: (page) => page.next_cursor,
-    enabled: open,
+  const several = node.relationships.length > 1;
+  // Only several links need the source blueprint's name to tell them apart.
+  const blueprints = useQuery({
+    queryKey: blueprintQueryKeys.catalogue(),
+    queryFn: listBlueprints,
+    enabled: several,
   });
-  const items = results.data?.pages.flatMap((page) => page.items) ?? [];
+  const blueprintName = (code: string) => {
+    const blueprint = blueprints.data?.find(
+      (candidate) => candidate.code === code,
+    );
+    return blueprint ? lexiconText(blueprint.name) : code;
+  };
 
   return (
-    <>
-      <Button onClick={() => setOpen(true)} variant="outlined">
-        {node.label}
-      </Button>
-      <Dialog
-        fullWidth
-        maxWidth="sm"
-        onClose={() => setOpen(false)}
-        open={open}
-      >
-        <DialogTitle>{node.label}</DialogTitle>
-        <DialogContent dividers>
-          {results.isPending && (
-            <Typography>{t('views.loadingLinkedRecords')}</Typography>
-          )}
-          {results.isError && (
-            <Typography color="error">{results.error.message}</Typography>
-          )}
-          {!results.isPending && !results.isError && !items.length && (
-            <Typography color="text.secondary">
-              {t('views.noLinkedRecords')}
-            </Typography>
-          )}
-          {items.length > 0 && (
-            <List disablePadding>
-              {items.map((item) => (
-                <ListItem alignItems="flex-start" disableGutters key={item.id}>
-                  <ListItemText
-                    primary={
-                      <Link
-                        params={{ recordId: item.id }}
-                        to="/records/$recordId"
-                        {...relatedRecordLinkProps}
-                      >
-                        <Box
-                          component="span"
-                          sx={{
-                            alignItems: 'center',
-                            display: 'inline-flex',
-                            gap: 0.5,
-                          }}
-                        >
-                          <NewTabIcon />
-                          {displayLabel(item.display, item.id)}
-                        </Box>
-                      </Link>
-                    }
-                    secondary={
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: 0.5,
-                          mt: 0.5,
-                        }}
-                      >
-                        <Chip label={item.blueprint_code} size="small" />
-                      </Box>
-                    }
-                  />
-                </ListItem>
-              ))}
-            </List>
-          )}
-        </DialogContent>
-        <DialogActions>
-          {results.hasNextPage && (
-            <LoadMoreButton
-              isLoading={results.isFetchingNextPage}
-              onLoadMore={() => void results.fetchNextPage()}
-            />
-          )}
-          <Button onClick={() => setOpen(false)}>{t('views.close')}</Button>
-        </DialogActions>
-      </Dialog>
-    </>
+    <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+      {node.relationships.map((relationship) => (
+        <RouterButton
+          key={`${relationship.source_blueprint}.${relationship.field}`}
+          search={incomingRelationshipSearch(recordId, relationship)}
+          startIcon={<NewTabIcon />}
+          to="/"
+          variant="outlined"
+          {...relatedRecordLinkProps}
+        >
+          {several
+            ? t('views.incomingRelationshipLink', {
+                label: node.label,
+                blueprint: blueprintName(relationship.source_blueprint),
+              })
+            : node.label}
+        </RouterButton>
+      ))}
+    </Stack>
   );
 };
 

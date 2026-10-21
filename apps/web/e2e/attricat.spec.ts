@@ -368,13 +368,13 @@ target_blueprint = "${categoryCode}"`,
   await hierarchy.getByRole('link', { name: 'Shoes' }).click();
   await expect(page).toHaveURL(new RegExp(`/records/${child.id}$`));
 
-  await page.getByRole('button', { name: 'Products in category' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Products in category' });
+  // Incoming links open the Explorer, filtered to them, in a new tab.
+  const explorerTab = page.context().waitForEvent('page');
+  await page.getByRole('link', { name: /Products in category/ }).click();
+  const explorer = await explorerTab;
   await expect(
-    dialog.getByRole('link', { name: 'Running shoe' }),
+    explorer.getByRole('row').filter({ hasText: 'Running shoe' }),
   ).toBeVisible();
-  await dialog.getByRole('link', { name: 'Running shoe' }).click();
-  await expect(page).toHaveURL(new RegExp(`/records/${item.id}$`));
   await page.context().close();
 });
 

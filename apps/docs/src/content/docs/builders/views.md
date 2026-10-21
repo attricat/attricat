@@ -100,7 +100,7 @@ If the title field is empty, the record ID is shown. The heading is removed from
 
 ## Showing what links here
 
-`incoming_relationship_list` shows records that point at the current one, such as the products in a category. It is a button that opens a paged list, so nothing is loaded until someone asks.
+`incoming_relationship_list` shows records that point at the current one, such as the products in a category. It is a link that opens the Explorer in a new tab, filtered to those records. The Explorer searches one blueprint at a time, so a list with several `relationships` shows one link per entry, named after its source blueprint.
 
 ```toml
 { type = "incoming_relationship_list",

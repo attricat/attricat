@@ -22,7 +22,6 @@ import {
   relationshipTreeFacetChildrenResponseSchema,
   getBlueprintRequestSchema,
   getBlueprintRevisionRequestSchema,
-  incomingRelationshipsPageSchema,
   resolvedRecordPreviewSchema,
   smartFillRecordFormRequestSchema,
   smartFillRecordFormResponseSchema,
@@ -260,24 +259,6 @@ export const getRecordForm = (id: string, signal?: AbortSignal) =>
     recordPath(id),
     recordFormResponseSchema,
     signal === undefined ? undefined : { signal },
-  );
-export const getIncomingRelationships = (
-  id: string,
-  relationships: { source_blueprint: string; field: string }[],
-  pageSize: number,
-  cursor: string | null,
-) =>
-  request(
-    `${recordPath(id)}/incoming-relationships`,
-    incomingRelationshipsPageSchema,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        relationships,
-        page: { size: pageSize, cursor },
-      }),
-    },
   );
 export const createRecord = (
   input: z.input<typeof createRecordRequestSchema>,

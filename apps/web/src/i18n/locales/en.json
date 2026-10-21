@@ -1619,13 +1619,11 @@
     "loadingHierarchy": "Loading hierarchy...",
     "noHierarchy": "No hierarchy available.",
     "hierarchy": "Hierarchy",
-    "loadingLinkedRecords": "Loading linked records...",
-    "noLinkedRecords": "No linked records.",
+    "incomingRelationshipLink": "{{label}} · {{blueprint}}",
     "inheritedFromContext": "Inherited from {{context}} context",
     "unableToRenderAttribute": "Unable to render {{attribute}}.",
     "unableToRenderComponent": "Unable to render component.",
-    "unableToRenderRecordHeading": "Unable to render record heading.",
-    "close": "Close"
+    "unableToRenderRecordHeading": "Unable to render record heading."
   },
   "common": {
     "opensInNewTab": "Opens in a new tab",

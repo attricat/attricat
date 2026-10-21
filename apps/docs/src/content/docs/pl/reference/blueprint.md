@@ -388,7 +388,7 @@ Może go zdefiniować tylko schemat rekordów i tylko pod nazwą `explorer`. Bez
 | `accordion` | `sections` = tablica `{ label, children }` | Zwijane sekcje. |
 | `field` | `field` | Jeden atrybut skalarny lub plikowy. |
 | `relationship_list` | `field` | Jeden atrybut relacji i jego cele. |
-| `incoming_relationship_list` | `label`, `relationships`, `page_size` | Przycisk otwierający stronicowaną listę rekordów wskazujących na ten rekord. `relationships` to tablica `{ source_blueprint, field }`. `page_size` jest ograniczane przez `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` serwera. |
+| `incoming_relationship_list` | `label`, `relationships`, `page_size` | Link otwierający Przeglądarkę rekordów w nowej karcie, przefiltrowaną do rekordów wskazujących na ten rekord; osobny link dla każdej relacji. `relationships` to tablica `{ source_blueprint, field }`. `page_size` jest ograniczane przez `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` serwera; aplikacja webowa go nie używa. |
 | `heading` | `text` | Statyczny nagłówek. |
 | `text` | `text` | Statyczny akapit. |
 | `divider` | | Linia pozioma. |

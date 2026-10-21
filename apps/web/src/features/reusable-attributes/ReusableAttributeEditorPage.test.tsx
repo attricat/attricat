@@ -20,7 +20,12 @@ import { ReusableAttributeEditorPage } from './ReusableAttributeEditorPage';
 import { reusableAttributeTemplates } from './templates';
 
 const { navigate } = vi.hoisted(() => ({ navigate: vi.fn() }));
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }));
+vi.mock('@tanstack/react-router', () => ({
+  createLink:
+    () =>
+    ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
+  useNavigate: () => navigate,
+}));
 vi.mock('@monaco-editor/react', () => ({
   Editor: ({
     onChange,

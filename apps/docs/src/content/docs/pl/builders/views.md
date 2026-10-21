@@ -100,7 +100,7 @@ Jeśli pole tytułu jest puste, wyświetlany jest identyfikator rekordu. Nagłó
 
 ## Pokazywanie powiązań przychodzących
 
-`incoming_relationship_list` pokazuje rekordy wskazujące na bieżący, np. produkty w kategorii. To przycisk otwierający stronicowaną listę, więc nic nie jest wczytywane, dopóki ktoś o to nie poprosi.
+`incoming_relationship_list` pokazuje rekordy wskazujące na bieżący, np. produkty w kategorii. To link otwierający Przeglądarkę rekordów w nowej karcie, przefiltrowaną do tych rekordów. Przeglądarka przeszukuje jeden schemat naraz, więc lista z kilkoma `relationships` pokazuje osobny link dla każdego wpisu, nazwany schematem źródłowym.
 
 ```toml
 { type = "incoming_relationship_list",

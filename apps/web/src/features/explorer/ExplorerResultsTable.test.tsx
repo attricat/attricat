@@ -28,6 +28,9 @@ vi.mock('../auth/useCan', () => ({
 }));
 
 vi.mock('@tanstack/react-router', () => ({
+  createLink:
+    () =>
+    ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
   Link: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),

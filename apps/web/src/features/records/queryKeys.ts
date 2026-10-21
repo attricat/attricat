@@ -68,18 +68,6 @@ export const recordQueryKeys = {
   hierarchies: (recordId: string) => ['record-hierarchy', recordId] as const,
   hierarchy: (recordId: string, contextId: string, field: string) =>
     [...recordQueryKeys.hierarchies(recordId), contextId, field] as const,
-  incomingRelationshipResults: (recordId: string) =>
-    ['incoming-relationships', recordId] as const,
-  incomingRelationships: (
-    recordId: string,
-    relationships: { source_blueprint: string; field: string }[],
-    pageSize: number,
-  ) =>
-    [
-      ...recordQueryKeys.incomingRelationshipResults(recordId),
-      relationships,
-      pageSize,
-    ] as const,
   blueprintOverview: ({
     blueprint,
     contextCode,

@@ -61,7 +61,6 @@ export const refreshRecord = async (client: QueryClient, recordId: string) => {
     recordQueryKeys.publication(recordId),
     recordQueryKeys.resolvedPreviews(recordId),
     recordQueryKeys.hierarchies(recordId),
-    recordQueryKeys.incomingRelationshipResults(recordId),
     ruleQueryKeys.findings(recordId),
   ];
   await Promise.all(
