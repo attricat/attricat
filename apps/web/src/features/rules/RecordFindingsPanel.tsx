@@ -63,13 +63,6 @@ const latestCompletion = (runs: readonly RuleRun[] | undefined) =>
     null,
   ) ?? null;
 
-const SEVERITY_ORDER = ['critical', 'error', 'warning', 'info'];
-
-const severityRank = (severity: string) => {
-  const rank = SEVERITY_ORDER.indexOf(severity);
-  return rank === -1 ? SEVERITY_ORDER.length : rank;
-};
-
 const severityColor = (severity: string) =>
   ERROR_FINDING_SEVERITIES.includes(severity)
     ? 'error'
@@ -282,12 +275,9 @@ export const RecordFindingsPanel = ({
   });
 
   if (!canRead) return null;
-  // The most severe findings come first; the server's order breaks ties.
-  const unresolved = [
-    ...(findings.data?.pages.flatMap((page) => page.items) ?? []),
-  ].sort(
-    (left, right) => severityRank(left.severity) - severityRank(right.severity),
-  );
+  // The server orders findings most severe first, so loading another page
+  // only appends rows.
+  const unresolved = findings.data?.pages.flatMap((page) => page.items) ?? [];
   const error = findings.error ?? rules.error ?? runs.error;
   const checking = Boolean(runs.data?.some(isActive)) || recheck.isPending;
   const revisions = ruleRevisionsByKey(rules.data ?? []);
