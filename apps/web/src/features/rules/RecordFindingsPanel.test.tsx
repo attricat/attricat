@@ -18,6 +18,7 @@ import {
 } from './api';
 import { RECORD_RULE_RUN_POLL_MS } from './constants';
 import { RecordFindingsPanel } from './RecordFindingsPanel';
+import { watchRecordRuleChecks } from './recordRuleChecks';
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -239,4 +240,24 @@ describe('RecordFindingsPanel', () => {
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Re-run checks' })).toBeNull();
   });
+
+  it('waits for an edit’s rule runs only when an enabled rule applies', async () => {
+    const pollsAfterEdit = async () => {
+      vi.mocked(listRecordRuleRuns).mockClear();
+      watchRecordRuleChecks(recordId);
+      const { unmount } = renderPanel();
+      await waitFor(() => expect(listRecordRuleRuns).toHaveBeenCalled());
+      await new Promise((resolve) =>
+        setTimeout(resolve, 2.5 * RECORD_RULE_RUN_POLL_MS),
+      );
+      unmount();
+      return vi.mocked(listRecordRuleRuns).mock.calls.length;
+    };
+    expect(await pollsAfterEdit()).toBeGreaterThan(1);
+
+    vi.mocked(listRules).mockResolvedValue([
+      { ...rule, enabled_version: null },
+    ]);
+    expect(await pollsAfterEdit()).toBe(1);
+  }, 10_000);
 });

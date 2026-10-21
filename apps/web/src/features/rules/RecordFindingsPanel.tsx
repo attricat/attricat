@@ -241,12 +241,20 @@ export const RecordFindingsPanel = ({
     ...recordFindingsOptions(recordId),
     enabled: canRead,
   });
+  const hasApplicableRules = (rules.data ?? []).some(
+    (rule) =>
+      rule.blueprint_id === blueprintId &&
+      rule.blueprint_version === blueprintVersion &&
+      rule.enabled_version === rule.version,
+  );
   const runs = useQuery({
     ...recordRuleRunsOptions(recordId),
     enabled: canRead,
     // Keep checking while runs are pending or an edit's runs may still start.
+    // Without an enabled rule an edit starts no runs.
     refetchInterval: (query) =>
-      query.state.data?.some(isActive) || isWatchingRecordRuleChecks(recordId)
+      query.state.data?.some(isActive) ||
+      (hasApplicableRules && isWatchingRecordRuleChecks(recordId))
         ? RECORD_RULE_RUN_POLL_MS
         : false,
   });
@@ -274,12 +282,6 @@ export const RecordFindingsPanel = ({
   });
 
   if (!canRead) return null;
-  const hasApplicableRules = (rules.data ?? []).some(
-    (rule) =>
-      rule.blueprint_id === blueprintId &&
-      rule.blueprint_version === blueprintVersion &&
-      rule.enabled_version === rule.version,
-  );
   // The most severe findings come first; the server's order breaks ties.
   const unresolved = [
     ...(findings.data?.pages.flatMap((page) => page.items) ?? []),
