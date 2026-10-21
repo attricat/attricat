@@ -732,18 +732,30 @@ impl AttricatRepository {
         Ok((rows.into_domain(), has_more))
     }
 
+    /// Findings, most recently changed first, optionally of one record and
+    /// leaving out resolved ones.
     pub async fn rule_findings_page(
         &self,
         record_id: Option<Uuid>,
+        unresolved: bool,
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<RuleFinding>, bool), RepositoryError> {
         let ws = self.workspace_id.0;
-        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,record_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR record_id=$2) ORDER BY updated_at DESC,id DESC LIMIT $3 OFFSET $4")
-            .bind(ws).bind(record_id).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
+        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,record_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR record_id=$2) AND (NOT $3 OR state <> 'resolved') ORDER BY updated_at DESC,id DESC LIMIT $4 OFFSET $5")
+            .bind(ws).bind(record_id).bind(unresolved).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
         Ok((rows.into_domain(), has_more))
+    }
+
+    /// Open and acknowledged findings, optionally of one record.
+    pub async fn unresolved_rule_finding_count(
+        &self,
+        record_id: Option<Uuid>,
+    ) -> Result<i64, RepositoryError> {
+        Ok(sqlx::query_scalar("SELECT count(*) FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR record_id=$2) AND state <> 'resolved'")
+            .bind(self.workspace_id.0).bind(record_id).fetch_one(&self.pool).await?)
     }
 
     pub async fn acknowledge_rule_finding(&self, id: Uuid) -> Result<RuleFinding, RepositoryError> {

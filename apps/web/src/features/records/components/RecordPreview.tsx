@@ -25,7 +25,10 @@ import { attributeValueTypes } from '../valueTypes';
 import {
   RECORD_HEADER_CONTEXT_VERSION,
   FALLBACK_BLUEPRINT_VERSION,
+  recordPreviewTabs,
+  type RecordPreviewTabKey,
 } from '../constants';
+import { commentsSectionId } from '../../record-comments/constants';
 import { RelatedRecordPreviewContext } from '../linkedRecord';
 import { recordQueryKeys } from '../queryKeys';
 import { useRecordReadAhead } from '../useRecordReadAhead';
@@ -46,6 +49,7 @@ import { RecordExtensionDrawer } from './RecordExtensionDrawer';
 import { RecordHeading } from './RecordHeading';
 import type { RecordInlineFieldsHandle } from './RecordInlineFields';
 import { RecordPreviewContent } from './RecordPreviewContent';
+import { RecordPreviewTabs } from './RecordPreviewTabs';
 import { RecordPreviewToolbar } from './RecordPreviewToolbar';
 import { RecordControlsPanel } from './RecordControlsPanel';
 import { RelationshipPickerActionBar } from './RelationshipPickerActionBar';
@@ -105,6 +109,21 @@ export const RecordPreview = ({
   const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   const inlineFieldsRef = useRef<RecordInlineFieldsHandle>(null);
+  // A link to the comments opens their tab.
+  const [tab, setTab] = useState<RecordPreviewTabKey>(() =>
+    showComments && window.location.hash === `#${commentsSectionId}`
+      ? recordPreviewTabs.comments
+      : recordPreviewTabs.dataQuality,
+  );
+  const tabPanelRef = useRef<HTMLDivElement>(null);
+  // Counts requests to bring the selected tab into view once it renders.
+  const [tabReveal, setTabReveal] = useState(0);
+  useEffect(() => {
+    if (tabReveal === 0) return;
+    const panel = tabPanelRef.current;
+    panel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    panel?.focus({ preventScroll: true });
+  }, [tabReveal]);
   const { contextId, contexts, defaultContextId, setSelectedContext } =
     useRecordContextSelection(initialContextId);
   const selectedContextId = contextId ?? undefined;
@@ -112,6 +131,7 @@ export const RecordPreview = ({
   const canDeleteRecords = useCanOn('records_delete', 'record', recordId);
   const canCreateRecords = useCan('records_write');
   const canAskAgent = useCan('agents_run');
+  const canReadRules = useCan('rules_read');
   const publications = useRecordPublications(recordId, contextId, canPublish);
   const { blueprint, recordForm, resolved, statusTransitions } =
     useRecordPreviewData(recordId, contextId);
@@ -171,7 +191,13 @@ export const RecordPreview = ({
             schemaOutdated={schemaOutdated}
             isSample={resolvedRecord?.is_sample}
           >
-            <DataQualityFindingsChip recordId={recordId} />
+            <DataQualityFindingsChip
+              recordId={recordId}
+              onOpen={() => {
+                setTab(recordPreviewTabs.dataQuality);
+                setTabReveal((count) => count + 1);
+              }}
+            />
           </RecordBlueprintHeaderActions>
         ),
         children: (
@@ -324,26 +350,62 @@ export const RecordPreview = ({
               </>
             )}
             {resolvedRecord && (
-              <RecordFindingsPanel
-                blueprintId={resolvedRecord.blueprint_id}
-                blueprintVersion={resolvedRecord.blueprint_version}
-                recordId={recordId}
+              <RecordPreviewTabs
+                onChange={setTab}
+                panelRef={tabPanelRef}
+                tabs={[
+                  ...(canReadRules
+                    ? [
+                        {
+                          key: recordPreviewTabs.dataQuality,
+                          label: t('rules.recordFindings.title'),
+                          content: (
+                            <RecordFindingsPanel
+                              blueprintId={resolvedRecord.blueprint_id}
+                              blueprintVersion={
+                                resolvedRecord.blueprint_version
+                              }
+                              recordId={recordId}
+                            />
+                          ),
+                        },
+                      ]
+                    : []),
+                  ...(showComments
+                    ? [
+                        {
+                          key: recordPreviewTabs.comments,
+                          label: t('comments.title'),
+                          content: (
+                            <Suspense
+                              fallback={
+                                <CircularProgress
+                                  aria-label={t('comments.loading')}
+                                />
+                              }
+                            >
+                              <RecordCommentsPanel
+                                key={recordId}
+                                recordId={recordId}
+                              />
+                            </Suspense>
+                          ),
+                        },
+                      ]
+                    : []),
+                  {
+                    key: recordPreviewTabs.recordControl,
+                    label: t('records.recordControls.title'),
+                    content: (
+                      <RecordControlsPanel
+                        attributes={blueprint.data?.attributes ?? []}
+                        recordId={recordId}
+                      />
+                    ),
+                  },
+                ]}
+                value={tab}
               />
-            )}
-            {resolved.data && (
-              <RecordControlsPanel
-                attributes={blueprint.data?.attributes ?? []}
-                recordId={recordId}
-              />
-            )}
-            {showComments && resolved.data && (
-              <Suspense
-                fallback={
-                  <CircularProgress aria-label={t('comments.loading')} />
-                }
-              >
-                <RecordCommentsPanel key={recordId} recordId={recordId} />
-              </Suspense>
             )}
           </>
         ),

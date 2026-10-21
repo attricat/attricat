@@ -1,18 +1,24 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import {
   Box,
   Button,
   Chip,
   CircularProgress,
-  Paper,
   Stack,
   Typography,
 } from '@mui/material';
 import { PlayIcon } from 'lucide-react';
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
+import { EmptyState } from '../../components/EmptyState';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
+import { RuleIcon } from '../../components/systemIcons';
 import { Timestamp } from '../../time/Timestamp';
 import { useCan } from '../auth/useCan';
 import {
@@ -25,9 +31,7 @@ import {
   ACTIVE_RULE_RUN_STATUSES,
   ERROR_FINDING_SEVERITIES,
   FINDING_STATE_OPEN,
-  FINDING_STATE_RESOLVED,
   RECORD_RULE_RUN_POLL_MS,
-  recordFindingsPanelId,
 } from './constants';
 import { ruleQueryKeys } from './queryKeys';
 import {
@@ -134,10 +138,10 @@ const FindingItem = ({
 };
 
 /**
- * A record's unresolved data quality findings, with a re-check of every
- * enabled rule of its blueprint revision. Edits re-check the record on the
- * server; the panel follows those runs and refreshes the findings when they
- * finish. Renders nothing when no rule applies and nothing is reported.
+ * A record's unresolved data quality findings, page by page, with a re-check
+ * of every enabled rule of its blueprint revision. Edits re-check the record
+ * on the server; the panel follows those runs and refreshes the findings when
+ * they finish.
  */
 export const RecordFindingsPanel = ({
   recordId,
@@ -149,12 +153,11 @@ export const RecordFindingsPanel = ({
   blueprintVersion: number;
 }) => {
   const { t } = useTranslation();
-  const headingId = useId();
   const client = useQueryClient();
   const canRead = useCan('rules_read');
   const canManage = useCan('rules_manage');
   const rules = useQuery({ ...ruleDefinitionsOptions(), enabled: canRead });
-  const findings = useQuery({
+  const findings = useInfiniteQuery({
     ...recordFindingsOptions(recordId),
     enabled: canRead,
   });
@@ -191,57 +194,50 @@ export const RecordFindingsPanel = ({
   });
 
   if (!canRead) return null;
-  const applicableRules = (rules.data ?? []).filter(
+  const hasApplicableRules = (rules.data ?? []).some(
     (rule) =>
       rule.blueprint_id === blueprintId &&
       rule.blueprint_version === blueprintVersion &&
       rule.enabled_version === rule.version,
   );
-  const unresolved = (findings.data ?? []).filter(
-    (finding) => finding.state !== FINDING_STATE_RESOLVED,
-  );
+  const unresolved = findings.data?.pages.flatMap((page) => page.items) ?? [];
   const error = findings.error ?? rules.error ?? runs.error;
-  if (!error && applicableRules.length === 0 && unresolved.length === 0)
-    return null;
   const checking = Boolean(runs.data?.some(isActive)) || recheck.isPending;
   const revisions = ruleRevisionsByKey(rules.data ?? []);
 
   return (
-    <Paper
-      component="section"
-      aria-labelledby={headingId}
-      aria-busy={checking}
-      id={recordFindingsPanelId(recordId)}
-      sx={{ mt: 3, p: { xs: 2, md: 3 } }}
-      tabIndex={-1}
-    >
-      <Stack
-        direction="row"
-        spacing={2}
-        sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 1 }}
-      >
-        <Typography id={headingId} component="h2" variant="h6" sx={{ flex: 1 }}>
-          {t('rules.recordFindings.title')}
-        </Typography>
-        {checking && (
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <CircularProgress aria-hidden enableTrackSlot size={16} />
-            <Typography variant="body2" color="text.secondary" role="status">
-              {t('rules.recordFindings.checking')}
-            </Typography>
-          </Stack>
-        )}
-        {canManage && applicableRules.length > 0 && (
-          <Button
-            disabled={checking}
-            size="small"
-            startIcon={<PlayIcon aria-hidden />}
-            onClick={() => recheck.mutate()}
-          >
-            {t('rules.recordFindings.recheck')}
-          </Button>
-        )}
-      </Stack>
+    <Box aria-busy={checking}>
+      {(checking || (canManage && hasApplicableRules)) && (
+        <Stack
+          direction="row"
+          spacing={2}
+          sx={{
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            justifyContent: 'flex-end',
+            mb: 1,
+          }}
+        >
+          {checking && (
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <CircularProgress aria-hidden enableTrackSlot size={16} />
+              <Typography variant="body2" color="text.secondary" role="status">
+                {t('rules.recordFindings.checking')}
+              </Typography>
+            </Stack>
+          )}
+          {canManage && hasApplicableRules && (
+            <Button
+              disabled={checking}
+              size="small"
+              startIcon={<PlayIcon aria-hidden />}
+              onClick={() => recheck.mutate()}
+            >
+              {t('rules.recordFindings.recheck')}
+            </Button>
+          )}
+        </Stack>
+      )}
       <QueryErrorNotice
         error={error}
         isRetrying={findings.isFetching || rules.isFetching || runs.isFetching}
@@ -254,6 +250,12 @@ export const RecordFindingsPanel = ({
       {recheck.error && <ApiErrorAlert error={recheck.error} sx={{ mb: 1 }} />}
       {acknowledge.error && (
         <ApiErrorAlert error={acknowledge.error} sx={{ mb: 1 }} />
+      )}
+      {findings.isPending && (
+        <CircularProgress
+          aria-label={t('rules.recordFindings.loading')}
+          enableTrackSlot
+        />
       )}
       {unresolved.length > 0 ? (
         <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
@@ -270,18 +272,35 @@ export const RecordFindingsPanel = ({
         </Box>
       ) : (
         findings.isSuccess && (
-          <Typography variant="body2" color="text.secondary">
-            {finishedAt ? (
-              <Trans
-                i18nKey="rules.recordFindings.noFindingsCheckedAt"
-                components={{ timestamp: <Timestamp value={finishedAt} /> }}
-              />
-            ) : (
-              t('rules.recordFindings.noFindings')
-            )}
-          </Typography>
+          <EmptyState
+            icon={RuleIcon}
+            title={
+              finishedAt ? (
+                <Trans
+                  i18nKey="rules.recordFindings.noFindingsCheckedAt"
+                  components={{ timestamp: <Timestamp value={finishedAt} /> }}
+                />
+              ) : (
+                t('rules.recordFindings.noFindings')
+              )
+            }
+            description={
+              rules.isSuccess && !hasApplicableRules
+                ? t('rules.recordFindings.noRules')
+                : undefined
+            }
+          />
         )
       )}
-    </Paper>
+      {findings.hasNextPage && (
+        <Button
+          disabled={findings.isFetchingNextPage}
+          onClick={() => void findings.fetchNextPage()}
+          sx={{ mt: 1 }}
+        >
+          {t('rules.recordFindings.loadMore')}
+        </Button>
+      )}
+    </Box>
   );
 };

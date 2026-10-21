@@ -1,9 +1,18 @@
-import { useQuery } from '@tanstack/react-query';
-import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import {
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Stack,
+  Typography,
+} from '@mui/material';
 import { useId, type ReactNode } from 'react';
 import { monoFontFamily } from '../../../app/theme';
 import { useTranslation } from 'react-i18next';
+import { EmptyState } from '../../../components/EmptyState';
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
+import { RecordControlIcon } from '../../../components/systemIcons';
 import { Timestamp } from '../../../time/Timestamp';
 import type { Attribute, RecordApproval, RetentionHold } from '../api';
 import { attributeLabel } from '../recordDisplay';
@@ -155,8 +164,8 @@ const HoldItem = ({
 };
 
 /**
- * Approval history and file retention holds of a controlled record. Renders
- * nothing for records without either. `attributes` label the reported codes.
+ * Approval history and file retention holds of a controlled record, page by
+ * page. `attributes` label the reported codes.
  */
 export const RecordControlsPanel = ({
   recordId,
@@ -166,21 +175,17 @@ export const RecordControlsPanel = ({
   attributes: readonly Attribute[];
 }) => {
   const { t } = useTranslation();
-  const headingId = useId();
-  const approvals = useQuery(recordApprovalsOptions(recordId));
-  const holds = useQuery(recordRetentionHoldsOptions(recordId));
+  const approvalsHeadingId = useId();
+  const holdsHeadingId = useId();
+  const approvals = useInfiniteQuery(recordApprovalsOptions(recordId));
+  const holds = useInfiniteQuery(recordRetentionHoldsOptions(recordId));
   const labels = controlLabels(attributes);
   const error = approvals.error ?? holds.error;
-  if (!error && !approvals.data?.length && !holds.data?.length) return null;
+  const approvalItems =
+    approvals.data?.pages.flatMap((page) => page.items) ?? [];
+  const holdItems = holds.data?.pages.flatMap((page) => page.items) ?? [];
   return (
-    <Paper
-      component="section"
-      aria-labelledby={headingId}
-      sx={{ mt: 3, p: { xs: 2, md: 3 } }}
-    >
-      <Typography id={headingId} component="h2" variant="h6" sx={{ mb: 1 }}>
-        {t('records.recordControls.title')}
-      </Typography>
+    <>
       <QueryErrorNotice
         error={error}
         isRetrying={approvals.isFetching || holds.isFetching}
@@ -189,13 +194,32 @@ export const RecordControlsPanel = ({
           void holds.refetch();
         }}
       />
-      {Boolean(approvals.data?.length) && (
-        <>
-          <Typography component="h3" variant="subtitle1" sx={{ mt: 1 }}>
+      {(approvals.isPending || holds.isPending) && (
+        <CircularProgress
+          aria-label={t('records.recordControls.loading')}
+          enableTrackSlot
+        />
+      )}
+      {approvals.isSuccess &&
+        holds.isSuccess &&
+        approvalItems.length === 0 &&
+        holdItems.length === 0 && (
+          <EmptyState
+            icon={RecordControlIcon}
+            title={t('records.recordControls.empty')}
+          />
+        )}
+      {approvalItems.length > 0 && (
+        <Box component="section" aria-labelledby={approvalsHeadingId}>
+          <Typography
+            id={approvalsHeadingId}
+            component="h2"
+            variant="subtitle1"
+          >
             {t('records.recordControls.approvals')}
           </Typography>
           <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
-            {approvals.data?.map((approval) => (
+            {approvalItems.map((approval) => (
               <ApprovalItem
                 key={approval.id}
                 approval={approval}
@@ -203,20 +227,42 @@ export const RecordControlsPanel = ({
               />
             ))}
           </Box>
-        </>
+          {approvals.hasNextPage && (
+            <Button
+              disabled={approvals.isFetchingNextPage}
+              onClick={() => void approvals.fetchNextPage()}
+              sx={{ mt: 1 }}
+            >
+              {t('records.recordControls.loadMoreApprovals')}
+            </Button>
+          )}
+        </Box>
       )}
-      {Boolean(holds.data?.length) && (
-        <>
-          <Typography component="h3" variant="subtitle1" sx={{ mt: 2 }}>
+      {holdItems.length > 0 && (
+        <Box
+          component="section"
+          aria-labelledby={holdsHeadingId}
+          sx={{ mt: approvalItems.length > 0 ? 3 : 0 }}
+        >
+          <Typography id={holdsHeadingId} component="h2" variant="subtitle1">
             {t('records.recordControls.retentionHolds')}
           </Typography>
           <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
-            {holds.data?.map((hold) => (
+            {holdItems.map((hold) => (
               <HoldItem key={hold.id} hold={hold} labels={labels} />
             ))}
           </Box>
-        </>
+          {holds.hasNextPage && (
+            <Button
+              disabled={holds.isFetchingNextPage}
+              onClick={() => void holds.fetchNextPage()}
+              sx={{ mt: 1 }}
+            >
+              {t('records.recordControls.loadMoreHolds')}
+            </Button>
+          )}
+        </Box>
       )}
-    </Paper>
+    </>
   );
 };

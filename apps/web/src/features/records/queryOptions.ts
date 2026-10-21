@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query';
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import {
   getRecordApprovals,
   getRecordForm,
@@ -7,6 +7,7 @@ import {
   getRecordRetentionHolds,
   getResolvedRecordPreview,
   getStatusTransitions,
+  type RecordControlCursor,
 } from './api';
 import { recordQueryKeys } from './queryKeys';
 
@@ -62,17 +63,40 @@ export const recordPublicationReadinessOptions = (recordId: string) =>
     queryFn: ({ signal }) => getRecordPublicationReadiness(recordId, signal),
   });
 
+/** Continues a newest-first record control list after its last page. */
+const nextRecordControlCursor = <T>(
+  page: { items: T[]; has_more: boolean },
+  cursorOf: (item: T) => RecordControlCursor,
+) => {
+  const last = page.items.at(-1);
+  return page.has_more && last ? cursorOf(last) : undefined;
+};
+
 export const recordApprovalsOptions = (recordId: string) =>
-  queryOptions({
+  infiniteQueryOptions({
     queryKey: recordQueryKeys.approvals(recordId),
-    queryFn: ({ signal }) => getRecordApprovals(recordId, signal),
+    queryFn: ({ pageParam, signal }) =>
+      getRecordApprovals(recordId, pageParam, signal),
+    initialPageParam: undefined as RecordControlCursor | undefined,
+    getNextPageParam: (page) =>
+      nextRecordControlCursor(page, (approval) => ({
+        before_time: approval.approved_at,
+        before_id: approval.id,
+      })),
     staleTime: readAheadStaleTimeMs,
   });
 
 export const recordRetentionHoldsOptions = (recordId: string) =>
-  queryOptions({
+  infiniteQueryOptions({
     queryKey: recordQueryKeys.retentionHolds(recordId),
-    queryFn: ({ signal }) => getRecordRetentionHolds(recordId, signal),
+    queryFn: ({ pageParam, signal }) =>
+      getRecordRetentionHolds(recordId, pageParam, signal),
+    initialPageParam: undefined as RecordControlCursor | undefined,
+    getNextPageParam: (page) =>
+      nextRecordControlCursor(page, (hold) => ({
+        before_time: hold.created_at,
+        before_id: hold.id,
+      })),
     staleTime: readAheadStaleTimeMs,
   });
 

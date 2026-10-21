@@ -234,7 +234,7 @@ A record that already violates an enforcing rule cannot be saved until a save fi
 
 **Acknowledge** a finding to record that someone has seen it. It stays until the record passes.
 
-A record's own page lists its open and acknowledged findings under **Data quality**; the data quality chip in the record's header jumps there. After an edit, the list refreshes once the record's checks finish. **Re-run checks** checks the record against every enabled rule of its revision straight away, for example after a rule changed.
+A record's own page lists its open and acknowledged findings in its **Data quality** tab, 20 at a time with **Load more findings** for the rest; the data quality chip in the record's header opens the tab. After an edit, the list refreshes once the record's checks finish. **Re-run checks** checks the record against every enabled rule of its revision straight away, for example after a rule changed.
 
 ```sh
 acli rule findings --record-id <uuid>

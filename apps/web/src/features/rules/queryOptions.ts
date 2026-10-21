@@ -1,6 +1,11 @@
-import { queryOptions } from '@tanstack/react-query';
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import { readAheadStaleTimeMs } from '../records/queryOptions';
-import { listFindings, listRecordRuleRuns, listRules } from './api';
+import {
+  getUnresolvedRecordFindingCount,
+  listRecordRuleRuns,
+  listRules,
+  listUnresolvedRecordFindings,
+} from './api';
 import { ruleQueryKeys } from './queryKeys';
 
 export const ruleDefinitionsOptions = () =>
@@ -9,11 +14,26 @@ export const ruleDefinitionsOptions = () =>
     queryFn: listRules,
   });
 
-/** A record's findings. The findings panel refreshes them when checks finish. */
+/**
+ * A record's unresolved findings, page by page. The findings panel refreshes
+ * them when checks finish.
+ */
 export const recordFindingsOptions = (recordId: string) =>
-  queryOptions({
+  infiniteQueryOptions({
     queryKey: ruleQueryKeys.findings(recordId),
-    queryFn: () => listFindings(recordId),
+    queryFn: ({ pageParam }) =>
+      listUnresolvedRecordFindings(recordId, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (page) => page.nextOffset,
+    staleTime: readAheadStaleTimeMs,
+  });
+
+/** How many unresolved findings a record has; refreshed with its findings. */
+export const recordFindingCountOptions = (recordId: string) =>
+  queryOptions({
+    queryKey: ruleQueryKeys.findingCount(recordId),
+    queryFn: () => getUnresolvedRecordFindingCount(recordId),
+    select: (data) => data.count,
     staleTime: readAheadStaleTimeMs,
   });
 

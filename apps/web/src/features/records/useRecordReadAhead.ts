@@ -5,6 +5,7 @@ import { authQueryKeys } from '../auth/queryKeys';
 import { useCan } from '../auth/useCan';
 import { recordCommentsOptions } from '../record-comments/queryOptions';
 import {
+  recordFindingCountOptions,
   recordFindingsOptions,
   recordRuleRunsOptions,
 } from '../rules/queryOptions';
@@ -34,12 +35,13 @@ export const useRecordReadAhead = (
     queryFn: currentSession,
   });
   useEffect(() => {
-    void client.prefetchQuery(recordApprovalsOptions(recordId));
-    void client.prefetchQuery(recordRetentionHoldsOptions(recordId));
+    void client.prefetchInfiniteQuery(recordApprovalsOptions(recordId));
+    void client.prefetchInfiniteQuery(recordRetentionHoldsOptions(recordId));
   }, [client, recordId]);
   useEffect(() => {
     if (!canReadRules) return;
-    void client.prefetchQuery(recordFindingsOptions(recordId));
+    void client.prefetchInfiniteQuery(recordFindingsOptions(recordId));
+    void client.prefetchQuery(recordFindingCountOptions(recordId));
     void client.prefetchQuery(recordRuleRunsOptions(recordId));
   }, [canReadRules, client, recordId]);
   // A related preview needs its record's blueprint revision, usually the

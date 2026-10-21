@@ -137,8 +137,8 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `POST` | `/v1/records/{id}/blueprint-migration` | Migruje. |
 | `POST` | `/v1/records/{id}/reusable-attributes`, `/v1/records/{id}/reusable-attribute-groups/{group_id}` | Dołącza atrybut lub grupę atrybutów wielokrotnego użytku. |
 | `GET` | `/v1/records/{id}/status-transitions?context_id=…` | Zadeklarowane przejścia z zapisanego statusu w jednym kontekście (bez parametru: kontekst domyślny): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, unmet}]}`. `denial_code` to `status_transition_forbidden`, `status_separation_of_duties` lub `transition_conditions_unmet`; `unmet` wymienia niespełnione warunki i egzekwowane reguły jako naruszenia. |
-| `GET` | `/v1/records/{id}/approvals` | Zatwierdzenia zarejestrowane przez przejścia statusów, od najnowszych, z osobą zatwierdzającą, czasem, skrótem objętej treści i powodem unieważnienia. |
-| `GET` | `/v1/records/{id}/retention-holds` | Blokady retencji na plikach rekordu. |
+| `GET` | `/v1/records/{id}/approvals` | Zatwierdzenia zarejestrowane przez przejścia statusów, od najnowszych, po 20 na stronę, z osobą zatwierdzającą, czasem, skrótem objętej treści i powodem unieważnienia. Zwraca `{"items","has_more"}`; kontynuuj z `before_time` (`approved_at` ostatniego elementu) i `before_id`. |
+| `GET` | `/v1/records/{id}/retention-holds` | Blokady retencji na plikach rekordu, od najnowszych, po 20 na stronę. Zwraca `{"items","has_more"}`; kontynuuj z `before_time` (`created_at` ostatniego elementu) i `before_id`. |
 
 ### Zmiany wsadowe
 
@@ -304,7 +304,8 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 | `GET` | `/rules/{id}` | Odczytuje regułę. |
 | `POST` | `/rules/{id}/versions/{version}/publish`, `/enable`; `/rules/{id}/disable` | Cykl życia. `/enable` przyjmuje opcjonalne `{"accept_existing_violations": true}` dla egzekwowanej reguły, której przebieg próbny znalazł naruszenia. |
 | `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. Przebieg próbny może dodać `"version": 2`, aby objąć opublikowaną wersję, która nie jest włączona; domyślnie dotyczy wersji włączonej albo najnowszej opublikowanej. |
-| `GET` | `/rule-runs`, `/rule-findings` | Uruchomienia i ustalenia. Pole `truncated` uruchomienia ma wartość `true`, gdy zatrzymało się ono na limicie rekordów, zanim sprawdziło wszystkie. |
+| `GET` | `/rule-runs`, `/rule-findings` | Uruchomienia i ustalenia. Pole `truncated` uruchomienia ma wartość `true`, gdy zatrzymało się ono na limicie rekordów, zanim sprawdziło wszystkie. Strony wybierasz przez `limit` i `offset`; nagłówek `x-next-offset` podaje przesunięcie następnej strony. `unresolved=true` pomija rozwiązane ustalenia. |
+| `GET` | `/rule-findings/count` | `{count}` otwartych i potwierdzonych ustaleń; przekaż `record_id`, aby policzyć ustalenia jednego rekordu. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Ponawia martwą wiadomość; potwierdza ustalenie. |
 | `POST` | `/rule-findings/recheck` | Ponownie sprawdza jeden rekord względem każdej włączonej reguły jego rewizji. Treść `{record_id, idempotency_key}`; zwraca `202 {run_ids}`. Przekaż `record_id` do `GET /rule-runs` lub `/rule-findings`, aby śledzić jeden rekord. |
 | `POST` | `/workflows/validate` | Weryfikuje TOML przepływu pracy. |

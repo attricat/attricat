@@ -8,11 +8,10 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Paper,
   Stack,
   Typography,
 } from '@mui/material';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { BrandIcon } from '../../components/BrandIcon';
@@ -123,9 +122,9 @@ const CommentItem = ({
   );
 };
 
+/** A record's comments, newest first and page by page, with a composer. */
 export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
-  const headingId = useId();
   const client = useQueryClient();
   const [composerVersion, setComposerVersion] = useState(0);
   const [notice, setNotice] = useState('');
@@ -144,7 +143,7 @@ export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
     void client.invalidateQueries({ queryKey: key });
   };
   const items = comments.data?.pages.flatMap((page) => page.items) ?? [];
-  const sectionRef = useRef<HTMLElement>(null);
+  const sectionRef = useRef<HTMLDivElement>(null);
   // The section loads after the record, too late for the router's own
   // scroll to a link's #comments target.
   useEffect(() => {
@@ -152,16 +151,7 @@ export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
       sectionRef.current?.scrollIntoView();
   }, []);
   return (
-    <Paper
-      component="section"
-      aria-labelledby={headingId}
-      id={commentsSectionId}
-      ref={sectionRef}
-      sx={{ mt: 3, p: { xs: 2, md: 3 } }}
-    >
-      <Typography id={headingId} component="h2" variant="h6" sx={{ mb: 2 }}>
-        {t('comments.title')}
-      </Typography>
+    <Box id={commentsSectionId} ref={sectionRef}>
       <Typography role="status" variant="body2">
         {notice}
       </Typography>
@@ -211,6 +201,6 @@ export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
           {t('comments.loadMore')}
         </Button>
       )}
-    </Paper>
+    </Box>
   );
 };

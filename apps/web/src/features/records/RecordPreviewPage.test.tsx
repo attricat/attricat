@@ -36,8 +36,10 @@ vi.mock('./api', async (importOriginal) => ({
   deleteRecord: vi.fn(),
   getBlueprintRevision: vi.fn(),
   getCurrentBlueprint: vi.fn(),
+  getRecordApprovals: vi.fn(),
   getRecordForm: vi.fn(),
   getRecordPublications: vi.fn(),
+  getRecordRetentionHolds: vi.fn(),
   getResolvedRecordPreview: vi.fn(),
   publishRecord: vi.fn(),
   publishRecordAllChannels: vi.fn(),
@@ -57,6 +59,14 @@ vi.mock('../extensions/ExtensionOutlet', () => ({
     popoverOutletRender(props);
     return null;
   },
+}));
+
+vi.mock('../rules/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../rules/api')>()),
+  getUnresolvedRecordFindingCount: vi.fn(),
+  listRecordRuleRuns: vi.fn(),
+  listRules: vi.fn(),
+  listUnresolvedRecordFindings: vi.fn(),
 }));
 
 vi.mock('../record-comments/RecordCommentsPanel', () => ({
@@ -152,6 +162,9 @@ describe('RecordPreviewPage', () => {
     vi.mocked(api.getRecordPublications).mockResolvedValue([]);
     vi.mocked(api.getRecordForm).mockReset();
     vi.mocked(api.getRecordForm).mockRejectedValue(new Error('not loaded'));
+    const emptyPage = { items: [], has_more: false };
+    vi.mocked(api.getRecordApprovals).mockResolvedValue(emptyPage);
+    vi.mocked(api.getRecordRetentionHolds).mockResolvedValue(emptyPage);
   });
   it('offers confirmed deletion only when permitted and navigates away afterwards', async () => {
     const { getExtensionRuntime } = await import('../extensions/api');
@@ -407,6 +420,99 @@ describe('RecordPreviewPage', () => {
         open: true,
       }),
     );
+  });
+
+  it('shows data quality, comments and record control in tabs, one at a time', async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const { currentSession } = await import('../auth/api');
+    const api = await import('./api');
+    const rules = await import('../rules/api');
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { rules_read: true },
+    } as never);
+    vi.mocked(rules.listRules).mockResolvedValue([]);
+    vi.mocked(rules.listRecordRuleRuns).mockResolvedValue([]);
+    vi.mocked(rules.listUnresolvedRecordFindings).mockResolvedValue({
+      items: [],
+    });
+    vi.mocked(rules.getUnresolvedRecordFindingCount).mockResolvedValue({
+      count: 2,
+    });
+    vi.mocked(listContexts).mockResolvedValue([
+      {
+        id: '33333333-3333-4333-8333-333333333333',
+        code: 'default',
+        data: {},
+        parent_id: null,
+      },
+    ]);
+    vi.mocked(api.getResolvedRecordPreview).mockResolvedValue({
+      record: {
+        id: '00000000-0000-4000-8000-000000000001',
+        blueprint_id: '22222222-2222-4222-8222-222222222222',
+        blueprint_version: 1,
+      },
+      values: {},
+      reusable_values: {},
+    } as never);
+    vi.mocked(api.getBlueprintRevision).mockResolvedValue({
+      blueprint: {
+        id: '22222222-2222-4222-8222-222222222222',
+        name: 'Product',
+        code: 'product',
+        version: 1,
+        views: {},
+      },
+      attributes: [],
+    } as never);
+    vi.mocked(api.getCurrentBlueprint).mockResolvedValue({
+      blueprint: { version: 1 },
+    } as never);
+    renderPage();
+
+    const tabs = within(await screen.findByRole('tablist')).getAllByRole('tab');
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Data quality',
+      'Comments',
+      'Record control',
+    ]);
+    expect(
+      (await screen.findByRole('tabpanel', { name: 'Data quality' }))
+        .textContent,
+    ).toContain('No open findings.');
+    // Hidden panels stay mounted but out of the accessibility tree.
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1);
+
+    await user.click(screen.getByRole('tab', { name: 'Record control' }));
+    expect(
+      within(
+        screen.getByRole('tabpanel', { name: 'Record control' }),
+      ).getByText('No approvals or retention holds.'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('tabpanel', { name: 'Data quality' })).toBeNull();
+
+    await user.click(screen.getByRole('tab', { name: 'Comments' }));
+    expect(
+      within(screen.getByRole('tabpanel', { name: 'Comments' })).getByRole(
+        'region',
+        { name: 'Comments' },
+      ),
+    ).toBeTruthy();
+
+    // The header's findings chip opens their tab and moves to it.
+    await user.click(
+      await screen.findByRole('button', { name: '2 data quality findings' }),
+    );
+    const dataQuality = screen.getByRole('tabpanel', { name: 'Data quality' });
+    expect(
+      screen
+        .getByRole('tab', { name: 'Data quality' })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    await waitFor(() => expect(document.activeElement).toBe(dataQuality));
+    expect(scrollIntoView).toHaveBeenCalled();
   });
 
   it('shows a retryable error instead of a blank preview when contexts fail to load', async () => {

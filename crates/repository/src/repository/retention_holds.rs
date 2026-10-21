@@ -43,16 +43,24 @@ impl AttricatRepository {
         .await?)
     }
 
-    /// Holds on files the record references or placed by its statuses.
+    /// Up to `limit` holds on files the record references or placed by its
+    /// statuses, newest first, continuing before the `(created_at, id)` of the
+    /// last one seen.
     pub async fn record_retention_holds(
         &self,
         record_id: Uuid,
+        before: Option<(DateTime<Utc>, Uuid)>,
+        limit: i64,
     ) -> Result<Vec<FileRetentionHold>, RepositoryError> {
+        let (time, id) = before.map_or((None, None), |(time, id)| (Some(time), Some(id)));
         Ok(sqlx::query_as::<_, FileRetentionHold>(&format!(
-            "SELECT {HOLD_COLUMNS} FROM file_retention_holds h WHERE workspace_id = $1 AND (record_id = $2 OR file_id IN (SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id WHERE v.record_id = $2 AND v.workspace_id = $1)) ORDER BY created_at DESC, id DESC LIMIT 200"
+            "SELECT {HOLD_COLUMNS} FROM file_retention_holds h WHERE workspace_id = $1 AND (record_id = $2 OR file_id IN (SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id WHERE v.record_id = $2 AND v.workspace_id = $1)) AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4::uuid)) ORDER BY created_at DESC, id DESC LIMIT $5"
         ))
         .bind(self.workspace_id.0)
         .bind(record_id)
+        .bind(time)
+        .bind(id)
+        .bind(limit)
         .fetch_all(&self.pool)
         .await?)
     }

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { request } from '../../api/request';
-import { RECORD_RULE_RUNS_LIMIT } from './constants';
+import { request, requestOffsetPage } from '../../api/request';
+import { RECORD_FINDINGS_PAGE_SIZE, RECORD_RULE_RUNS_LIMIT } from './constants';
 import { findingSchema, ruleRunSchema, ruleSchema } from './schemas';
 export type { Finding, Rule, RuleRun } from './schemas';
 const id = (value: string) => encodeURIComponent(z.uuid().parse(value));
@@ -53,6 +53,23 @@ export const listFindings = (recordId?: string) =>
       ? `/api/rule-findings?record_id=${id(recordId)}`
       : '/api/rule-findings',
     z.array(findingSchema),
+  );
+/** One page of a record's open and acknowledged findings, newest change first. */
+export const listUnresolvedRecordFindings = (recordId: string, offset = 0) =>
+  requestOffsetPage(
+    `/api/rule-findings?${new URLSearchParams({
+      record_id: z.uuid().parse(recordId),
+      unresolved: 'true',
+      limit: String(RECORD_FINDINGS_PAGE_SIZE),
+      offset: String(offset),
+    })}`,
+    z.array(findingSchema),
+  );
+/** How many of a record's findings are open or acknowledged. */
+export const getUnresolvedRecordFindingCount = (recordId: string) =>
+  request(
+    `/api/rule-findings/count?record_id=${id(recordId)}`,
+    z.object({ count: z.number().int().nonnegative() }),
   );
 export const acknowledgeFinding = (findingId: string) =>
   request(`/api/rule-findings/${id(findingId)}/acknowledge`, findingSchema, {

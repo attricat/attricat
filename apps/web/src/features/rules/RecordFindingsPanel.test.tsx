@@ -7,9 +7,9 @@ import '../../i18n';
 import { currentSession } from '../auth/api';
 import {
   acknowledgeFinding,
-  listFindings,
   listRecordRuleRuns,
   listRules,
+  listUnresolvedRecordFindings,
   recheckRecord,
   type Finding,
   type Rule,
@@ -21,9 +21,9 @@ import { RecordFindingsPanel } from './RecordFindingsPanel';
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
 vi.mock('./api', () => ({
   acknowledgeFinding: vi.fn(),
-  listFindings: vi.fn(),
   listRecordRuleRuns: vi.fn(),
   listRules: vi.fn(),
+  listUnresolvedRecordFindings: vi.fn(),
   recheckRecord: vi.fn(),
 }));
 
@@ -102,7 +102,9 @@ describe('RecordFindingsPanel', () => {
     vi.resetAllMocks();
     vi.mocked(currentSession).mockResolvedValue(manager);
     vi.mocked(listRules).mockResolvedValue([rule]);
-    vi.mocked(listFindings).mockResolvedValue([finding]);
+    vi.mocked(listUnresolvedRecordFindings).mockResolvedValue({
+      items: [finding],
+    });
     vi.mocked(listRecordRuleRuns).mockResolvedValue([]);
   });
 
@@ -113,8 +115,7 @@ describe('RecordFindingsPanel', () => {
       state: 'acknowledged',
     });
     renderPanel();
-    const panel = await screen.findByRole('region', { name: 'Data quality' });
-    const item = await within(panel).findByRole('listitem');
+    const item = await screen.findByRole('listitem');
     expect(within(item).getByText('title is required')).toBeTruthy();
     expect(within(item).getByText(/Title required v1/)).toBeTruthy();
     expect(within(item).getByText(/Contexts: default, pl/)).toBeTruthy();
@@ -130,9 +131,7 @@ describe('RecordFindingsPanel', () => {
     vi.mocked(listRecordRuleRuns)
       .mockResolvedValueOnce([run('pending', null)])
       .mockResolvedValue([run('completed', '2026-10-20T10:01:00Z')]);
-    vi.mocked(listFindings).mockResolvedValue([
-      { ...finding, state: 'resolved' },
-    ]);
+    vi.mocked(listUnresolvedRecordFindings).mockResolvedValue({ items: [] });
     await user.click(screen.getByRole('button', { name: 'Re-run checks' }));
     expect(recheckRecord).toHaveBeenCalledWith(recordId);
     // The finished run arrives with the next poll, a second later.
@@ -146,13 +145,45 @@ describe('RecordFindingsPanel', () => {
     expect(screen.queryByText('title is required')).toBeNull();
   });
 
-  it('renders nothing when no rule applies and nothing is reported', async () => {
+  it('loads further pages of findings on request', async () => {
+    const user = userEvent.setup();
+    const older = {
+      ...finding,
+      id: '00000000-0000-4000-8000-000000000006',
+      message: 'summary is too long',
+    };
+    vi.mocked(listUnresolvedRecordFindings).mockImplementation(
+      (_, offset = 0) =>
+        Promise.resolve(
+          offset === 0
+            ? { items: [finding], nextOffset: 20 }
+            : { items: [older] },
+        ),
+    );
+    renderPanel();
+    await screen.findByText('title is required');
+    await user.click(
+      screen.getByRole('button', { name: 'Load more findings' }),
+    );
+    expect(await screen.findByText('summary is too long')).toBeTruthy();
+    expect(listUnresolvedRecordFindings).toHaveBeenLastCalledWith(recordId, 20);
+    expect(screen.queryByRole('button', { name: 'Load more findings' })).toBe(
+      null,
+    );
+  });
+
+  it('says when no rule applies and nothing is reported', async () => {
     vi.mocked(listRules).mockResolvedValue([
       { ...rule, enabled_version: null },
     ]);
-    vi.mocked(listFindings).mockResolvedValue([]);
-    const { container } = renderPanel();
-    await waitFor(() => expect(listFindings).toHaveBeenCalled());
-    expect(container.textContent).toBe('');
+    vi.mocked(listUnresolvedRecordFindings).mockResolvedValue({ items: [] });
+    renderPanel();
+    expect(await screen.findByText('No open findings.')).toBeTruthy();
+    expect(
+      await screen.findByText(
+        'No enabled rule checks records of this blueprint.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Re-run checks' })).toBeNull();
   });
 });

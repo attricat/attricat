@@ -362,7 +362,11 @@
       "explicitHold": "Retained: {{reason}}",
       "holdActive": "Held",
       "holdEnded": "Ended",
-      "heldUntil": "Held until"
+      "heldUntil": "Held until",
+      "empty": "No approvals or retention holds.",
+      "loading": "Loading record control",
+      "loadMoreApprovals": "Load more approvals",
+      "loadMoreHolds": "Load more retention holds"
     },
     "managedInDefault": "Managed in Default.",
     "inheritedFromContext": "Inherited from {{context}} context.",
@@ -620,7 +624,8 @@
     "changeBlueprintDescription": "The values and files you entered for this blueprint are discarded.",
     "changeBlueprintConfirm": "Discard and change",
     "fieldsChanged_one": "{{count}} field changed",
-    "fieldsChanged_other": "{{count}} fields changed"
+    "fieldsChanged_other": "{{count}} fields changed",
+    "recordTabs": "Record sections"
   },
   "exports": {
     "title": "Exports",
@@ -1771,7 +1776,10 @@
       "contexts": "Contexts: {{contexts}}",
       "firstFound": "First found <timestamp/>",
       "noFindings": "No open findings.",
-      "noFindingsCheckedAt": "No open findings. Last checked <timestamp/>."
+      "noFindingsCheckedAt": "No open findings. Last checked <timestamp/>.",
+      "loading": "Loading findings",
+      "loadMore": "Load more findings",
+      "noRules": "No enabled rule checks records of this blueprint."
     }
   },
   "reusableAttributes": {

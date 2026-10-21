@@ -6,8 +6,11 @@ use super::{
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
-use crate::repository::{FileRetentionHold, RecordApproval, StatusTransitionAccess};
+use crate::repository::{
+    FileRetentionHold, RECORD_CONTROL_PAGE_SIZE, RecordApproval, StatusTransitionAccess,
+};
 use axum::{Json, extract::State, http::StatusCode};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -20,6 +23,41 @@ pub(super) struct TransitionQuery {
 #[derive(Serialize)]
 pub(super) struct Items<T> {
     items: Vec<T>,
+}
+
+/// Continues a newest-first list before the timestamp and ID of its last item.
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct PageQuery {
+    before_time: Option<DateTime<Utc>>,
+    before_id: Option<Uuid>,
+}
+
+impl PageQuery {
+    fn before(self) -> Result<Option<(DateTime<Utc>, Uuid)>, ApiError> {
+        match (self.before_time, self.before_id) {
+            (Some(time), Some(id)) => Ok(Some((time, id))),
+            (None, None) => Ok(None),
+            _ => Err(ApiError::invalid_input(
+                "both cursor fields are required".to_owned(),
+            )),
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub(super) struct Page<T> {
+    items: Vec<T>,
+    has_more: bool,
+}
+
+impl<T> Page<T> {
+    /// Splits a [`RECORD_CONTROL_PAGE_SIZE`] page from one extra item.
+    fn new(mut items: Vec<T>) -> Self {
+        let has_more = items.len() > RECORD_CONTROL_PAGE_SIZE as usize;
+        items.truncate(RECORD_CONTROL_PAGE_SIZE as usize);
+        Self { items, has_more }
+    }
 }
 
 #[derive(Deserialize)]
@@ -44,27 +82,35 @@ pub(super) async fn status_transitions(
 pub(super) async fn approvals(
     ScopedRepository(repository): ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
-) -> Result<Json<Items<RecordApproval>>, ApiError> {
+    ApiQuery(query): ApiQuery<PageQuery>,
+) -> Result<Json<Page<RecordApproval>>, ApiError> {
+    let before = query.before()?;
     repository
         .get_record(record_id)
         .await?
         .ok_or(ApiError::not_found("record"))?;
-    Ok(Json(Items {
-        items: repository.record_approvals(record_id).await?,
-    }))
+    Ok(Json(Page::new(
+        repository
+            .record_approvals(record_id, before, RECORD_CONTROL_PAGE_SIZE + 1)
+            .await?,
+    )))
 }
 
 pub(super) async fn record_holds(
     ScopedRepository(repository): ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
-) -> Result<Json<Items<FileRetentionHold>>, ApiError> {
+    ApiQuery(query): ApiQuery<PageQuery>,
+) -> Result<Json<Page<FileRetentionHold>>, ApiError> {
+    let before = query.before()?;
     repository
         .get_record(record_id)
         .await?
         .ok_or(ApiError::not_found("record"))?;
-    Ok(Json(Items {
-        items: repository.record_retention_holds(record_id).await?,
-    }))
+    Ok(Json(Page::new(
+        repository
+            .record_retention_holds(record_id, before, RECORD_CONTROL_PAGE_SIZE + 1)
+            .await?,
+    )))
 }
 
 pub(super) async fn file_holds(

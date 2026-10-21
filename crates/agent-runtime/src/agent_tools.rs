@@ -49,6 +49,8 @@ const AUTHORING_GUIDE_TOPICS: [(&str, &str); 6] = [
 ];
 /// Comments per page and characters per comment body the agent reads, so a
 /// page of maximum-length comments stays within the tool result bound.
+/// Newest approvals and retention holds `get_record_controls` reports.
+const MAX_RECORD_CONTROL_ITEMS: i64 = 200;
 const MAX_COMMENT_PAGE: usize = 30;
 const MAX_COMMENT_BODY_CHARS: usize = 1_000;
 const DEFAULT_COMMENT_PAGE: usize = 10;
@@ -1417,8 +1419,10 @@ pub async fn execute_read(
                 .await?;
             json!({
                 "transitions": transitions,
-                "approvals": repository.record_approvals(record_id).await?,
-                "retention_holds": repository.record_retention_holds(record_id).await?,
+                "approvals": repository.record_approvals(record_id, None, MAX_RECORD_CONTROL_ITEMS).await?,
+                "retention_holds": repository
+                    .record_retention_holds(record_id, None, MAX_RECORD_CONTROL_ITEMS)
+                    .await?,
             })
         }
         "get_record_publications" => serde_json::to_value(
@@ -1460,7 +1464,7 @@ pub async fn execute_read(
             struct Input { record_id: Option<Uuid>, limit: Option<i64>, offset: Option<i64> }
             let input: Input = decode(arguments)?;
             let (limit, offset) = diagnostic_page_arguments(input.limit, input.offset)?;
-            let (items, has_more) = repository.rule_findings_page(input.record_id, limit, offset).await?;
+            let (items, has_more) = repository.rule_findings_page(input.record_id, false, limit, offset).await?;
             json!({"items":items.into_iter().map(|finding| json!({
                 "id":finding.id,"rule_id":finding.rule_id,"record_id":finding.record_id,
                 "context_id":finding.context_id,"severity":finding.severity,
