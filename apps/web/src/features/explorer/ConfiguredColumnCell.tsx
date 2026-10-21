@@ -1,5 +1,6 @@
 import { createElement } from 'react';
 import { Typography } from '@mui/material';
+import { JsonInline } from '../../components/JsonValue';
 import type { Attribute, RecordItem } from '../records/api';
 import type { ExtensionContribution } from '../extensions/api';
 import { resolveValueRenderer } from '../views/components/registry';
@@ -17,25 +18,22 @@ import {
 import { ExtensionTableCell } from './ExtensionTableCell';
 import { explorerTableCellContextSchema } from './schemas';
 
-const formatProjectedValue = (value: unknown) =>
-  typeof value === 'object' ? JSON.stringify(value) : String(value);
-
 /**
  * Search projections contain the related target's scalar but not its
  * attribute definition. Keep that rendering deliberately defensive: an absent
  * relation or incompatible value is not an excuse to fetch a row (or to break
  * virtualized rendering).
  */
-const RelatedPathValue = ({ value }: { value: unknown }) =>
-  value === null || value === undefined ? (
-    <NotSetValue />
-  ) : (
-    <Typography variant="body2">
-      {Array.isArray(value)
-        ? value.map(formatProjectedValue).join(', ')
-        : formatProjectedValue(value)}
-    </Typography>
+const RelatedPathValue = ({ value }: { value: unknown }) => {
+  if (value === null || value === undefined) return <NotSetValue />;
+  const values = Array.isArray(value) ? value : [value];
+  // Objects are JSON values; render them as JSON rather than plain text.
+  if (values.some((item) => typeof item === 'object' && item !== null))
+    return <JsonInline noWrap value={value} />;
+  return (
+    <Typography variant="body2">{values.map(String).join(', ')}</Typography>
   );
+};
 
 type Props = {
   attribute: Attribute;

@@ -27,9 +27,14 @@ it('labels parent contexts and preserves metadata for both known and missing par
       <ContextsPage />
     </QueryClientProvider>,
   );
+  // The metadata renders as JSON code inside the secondary line.
+  const secondary = (text: string) => (_: string, element: Element | null) =>
+    element?.tagName === 'P' && element.textContent === text;
   expect(
-    await screen.findByText('Parent: default · {"region":"east"}'),
+    await screen.findByText(
+      secondary('Parent: default · { "region": "east" }'),
+    ),
   ).toBeTruthy();
-  expect(screen.getByText('Parent: unknown · {}')).toBeTruthy();
-  expect(screen.getByText('Root · {}')).toBeTruthy();
+  expect(screen.getByText(secondary('Parent: unknown · {}'))).toBeTruthy();
+  expect(screen.getByText(secondary('Root · {}'))).toBeTruthy();
 });

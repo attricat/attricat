@@ -1,4 +1,5 @@
 import { Box, Typography } from '@mui/material';
+import { JsonBlock } from '../../components/JsonValue';
 
 export const JsonMetadata = ({
   label,
@@ -8,20 +9,13 @@ export const JsonMetadata = ({
   value: unknown;
 }) => (
   <Box>
-    <Typography color="text.secondary" variant="caption">
+    <Typography
+      color="text.secondary"
+      sx={{ display: 'block', mb: 0.5 }}
+      variant="caption"
+    >
       {label}
     </Typography>
-    <Typography
-      component="pre"
-      sx={{
-        fontFamily: 'monospace',
-        fontSize: '0.75rem',
-        m: 0,
-        overflowX: 'auto',
-        whiteSpace: 'pre-wrap',
-      }}
-    >
-      {JSON.stringify(value, null, 2)}
-    </Typography>
+    <JsonBlock value={value} />
   </Box>
 );

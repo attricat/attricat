@@ -11,6 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import { PlusIcon } from 'lucide-react';
+import { JsonInline } from '../../components/JsonValue';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { listContexts } from './api';
@@ -62,16 +63,19 @@ export const ContextsPage = () => {
               <ListItem divider key={context.id}>
                 <ListItemText
                   primary={context.code}
-                  secondary={[
-                    context.parent_id
-                      ? t('contexts.parent', {
-                          parent:
-                            contextCodes.get(context.parent_id) ??
-                            t('contexts.unknown'),
-                        })
-                      : t('contexts.root'),
-                    JSON.stringify(context.data),
-                  ].join(' · ')}
+                  secondary={
+                    <>
+                      {context.parent_id
+                        ? t('contexts.parent', {
+                            parent:
+                              contextCodes.get(context.parent_id) ??
+                              t('contexts.unknown'),
+                          })
+                        : t('contexts.root')}
+                      {' · '}
+                      <JsonInline value={context.data} />
+                    </>
+                  }
                 />
               </ListItem>
             ))}

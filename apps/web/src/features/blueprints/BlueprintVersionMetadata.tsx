@@ -11,6 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { JsonInline } from '../../components/JsonValue';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes } from './api';
@@ -135,9 +136,11 @@ export const BlueprintVersionMetadata = ({
                           emptyValuePlaceholder)}
                       {attribute.hierarchy && ` (${attribute.hierarchy})`}
                     </TableCell>
-                    <TableCell>{JSON.stringify(attribute.tags)}</TableCell>
                     <TableCell>
-                      {JSON.stringify(attribute.value_schema)}
+                      <JsonInline value={attribute.tags} />
+                    </TableCell>
+                    <TableCell>
+                      <JsonInline value={attribute.value_schema} />
                     </TableCell>
                     <TableCell>
                       {attribute.context_fallback} /{' '}
