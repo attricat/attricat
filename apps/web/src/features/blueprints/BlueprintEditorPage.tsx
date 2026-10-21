@@ -23,6 +23,7 @@ import {
 } from './api';
 import { blueprintTemplates } from './blueprintEditorUtils';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
+import { recordQueryKeys } from '../records/queryKeys';
 import { blueprintQueryKeys } from './queryKeys';
 import { BlueprintIcon } from '../../components/systemIcons';
 
@@ -83,6 +84,14 @@ export const BlueprintEditorPage = ({
         }),
         queryClient.invalidateQueries({
           queryKey: blueprintQueryKeys.revisions(blueprint.id),
+        }),
+        // The Explorer, navigation and relationship pickers keep these lists
+        // until something in the app invalidates them.
+        queryClient.invalidateQueries({
+          queryKey: recordQueryKeys.blueprintsByCode(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: recordQueryKeys.blueprints(),
         }),
       ]);
       navigate({
