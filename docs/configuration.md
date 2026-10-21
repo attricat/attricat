@@ -49,7 +49,6 @@ or inaccessible configured bucket.
 | `CACHE_KEY_PREFIX` | `attricat` | API | First segment of every Redis key, followed by the database's random identity. A copy of a database (a clone or restored backup) keeps that identity: a copy that runs alongside its source needs a different prefix or Redis database. After an in-place restore, change it or flush Redis. Must not contain whitespace. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | API | Maximum page size for incoming-relationship browsing. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | API | Maximum relationship nodes considered while building Explorer facets. |
-| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | API | Number of days of attribute-value history retained; must be a positive signed 64-bit integer. Invalid values stop startup. A periodic worker deletes at most 1,000 rows per transaction, with a 10-second sweep budget every minute. Failures are logged and retried without blocking startup. |
 | `HTTP_REQUEST_TIMEOUT_SECONDS` | `30` | API | Positive wall-clock limit through response creation. Timed-out requests return `503` with code `request_timeout`; mutations must not be blindly replayed. |
 | `HTTP_MAX_CONCURRENT_REQUESTS` | `256` | API | Positive process-local in-flight handler cap. Excess requests return `503`. Health probes have independent admission; event-stream bodies have separate limits. |
 | `HTTP_MAX_EVENT_STREAMS` | `128` | API | Positive process-local cap held for each SSE response body's lifetime. |
@@ -173,6 +172,71 @@ by the supervised worker. On shutdown it stops claiming, lets registered handler
 heartbeat through the configured grace period, then allows unfinished leases to expire.
 File processing is excluded and continues to use its separate file-worker configuration
 and `file_processing_jobs` table.
+
+## Data retention
+
+The API's maintenance worker runs a bounded retention sweep every
+`RETENTION_SWEEP_INTERVAL_SECONDS`. Each table family has a
+`purge_<family>_batch` repository method in
+`crates/repository/src/repository/retention.rs`. A batch is one transaction
+that locks at most `RETENTION_BATCH_ROWS` expired rows with
+`FOR UPDATE SKIP LOCKED`, deletes them and their dependent rows, and runs under
+`SET LOCAL statement_timeout = '2s'` and `lock_timeout = '1s'`. The worker
+runs one batch per family in turn until every family is drained or
+`RETENTION_SWEEP_BUDGET_SECONDS` runs out, so one backlog cannot starve the
+others. A failed batch is logged, and that family retries on the next tick.
+Invalid values stop startup. Day counts must be positive integers.
+
+| Setting | Default | Deletes |
+| --- | --- | --- |
+| `RETENTION_SWEEP_INTERVAL_SECONDS` | `60` | How often the sweep starts, 1 to 86400. |
+| `RETENTION_SWEEP_BUDGET_SECONDS` | `10` | Longest one sweep runs, 1 to 3600, and at most the interval. |
+| `RETENTION_BATCH_ROWS` | `1000` | Most rows one batch deletes per table, 1 to 10000. Every batch statement still has a 2-second timeout, so prefer a longer budget to much larger batches. |
+| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Archived attribute values. Current values are never touched. |
+| `TASK_RETENTION_DAYS` | `7` | Succeeded and cancelled task envelopes, and dead letters a replay has superseded. Queued and leased envelopes, and each subject's latest dead letter, stay until their run is purged; event-delivery envelopes (every generation) go with their delivery. |
+| `RULE_RUN_RECORD_RETENTION_DAYS` | `7` | Completed and cancelled record-scoped rule runs. |
+| `RULE_RUN_RETENTION_DAYS` | `90` | Completed and cancelled full rule runs, and dead-lettered runs of either scope. Each rule version keeps its latest run and its latest completed full dry run (the enable gate). Findings keep their resolution; `resolved_by_run_id` becomes null. |
+| `WORKFLOW_RUN_RETENTION_DAYS` | `90` | Terminal workflow runs, their action progress and envelopes. |
+| `EXTENSION_OPERATION_RUN_RETENTION_DAYS` | `90` | Terminal extension operation runs whose outputs have already expired (`outputs_expired`), with their artifacts, HTTP transfers, staging and record links. Runs with an unfinished upload or output chunk wait. |
+| `AGENT_RUN_EVENT_RETENTION_DAYS` | `90` | Stream events (`agent_run_events`) of finished agent runs. Runs, tool calls and messages stay with their conversation. |
+| `FILE_PROCESSING_JOB_RETENTION_DAYS` | `30` | Completed and failed metadata jobs. Purge jobs stay: a completed one stops the file from being queued for purging again, and a failed one is evidence of a purge that cannot finish. |
+| `SOLUTION_PACK_CHECK_RUN_RETENTION_DAYS` | `90` | Manual check runs and their results. Each application keeps its post-apply run and its latest run. |
+| `DOMAIN_EVENT_RETENTION_DAYS` | `90` | Domain events that every consumer in the workspace has passed (`sequence <= min(watermark)`) and whose deliveries all completed, with those deliveries and their envelopes. Events with a pending, leased or dead-lettered delivery stay, so replay always works, and so does each workspace's newest event. Workflow runs keep their `trigger_event` copy; `trigger_event_id` becomes null. |
+| `BROWSER_SESSION_RETENTION_DAYS` | `7` | Sessions that expired or were revoked (including rotated ones) this long ago. |
+| `USER_ACTION_TOKEN_RETENTION_DAYS` | `7` | Verification, password-setup and password-reset tokens consumed, revoked or expired this long ago. |
+| `WORKSPACE_INVITATION_RETENTION_DAYS` | `30` | Unaccepted invitations that expired or were revoked this long ago, with their onboarding rows. Accepted invitations stay. |
+| (none) | | Login, password-reset and workspace-discovery rate-limit rows whose 15-minute window has ended. |
+| `AUDIT_EVENT_RETENTION_DAYS` | Unset | Audit events and their value changes. Unset keeps them forever. |
+| `READ_NOTIFICATION_RETENTION_DAYS` | Unset | Read notifications. Unread ones are never deleted. Unset keeps them forever. |
+
+Some data is never swept: agent conversations with their messages,
+attachments, runs and tool calls; record status transitions and approvals;
+file-reference history; extension annotation revisions; blueprint migration
+batches; and connector job definitions. These are user content, control
+evidence or definitions.
+
+Each workspace's event scan is bounded by its slowest consumer's watermark and
+its newest event, so a lagging consumer only holds back its own workspace. A
+consumer row that no longer runs (an extension runtime that was turned off, a
+renamed handler) freezes that bound: delete its `event_consumers` row and
+deliveries. The scan resumes where the previous batch stopped
+(`domain_event_retention.scan_after_sequence`) and examines at most
+`RETENTION_BATCH_ROWS` events per workspace, so events held by a dead letter
+cost one pass per cycle. They stay until the delivery is replayed; alert on
+dead letters. `domain_event_retention.purged_through_sequence` records the
+highest purged sequence: an extension change-feed cursor issued before a purge
+passed it is rejected as expired, and the extension must take a new snapshot.
+A change-feed read without a cursor starts at the oldest retained event, and a
+newly subscribed extension event type's historical-gap delivery sees only the
+retained window.
+A manual rule, workflow or extension run whose idempotency key was purged runs
+again if a client reuses that key.
+
+Each family reports `attricat_retention_rows_purged_total{family}`,
+`attricat_retention_cleanup_total{family,outcome}` (`success`, `failed` or
+`budget_exhausted`) and `attricat_retention_cleanup_duration_seconds{family}`.
+Batch latency against large tables is recorded in
+[`perf/retention.md`](../perf/retention.md).
 
 ## Agent provider
 

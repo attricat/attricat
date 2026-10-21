@@ -37,15 +37,15 @@ fields = ["title"]
     let repository = AttricatRepository::system(pool.clone());
     let retention = "90".parse().unwrap();
     let (a, b) = tokio::join!(
-        repository.purge_value_history_batch(retention),
-        repository.purge_value_history_batch(retention)
+        repository.purge_value_history_batch(retention, 1000),
+        repository.purge_value_history_batch(retention, 1000)
     );
     let (a, b) = (a.unwrap(), b.unwrap());
     assert!(a <= 1000 && b <= 1000);
     assert_eq!(a + b, 1505);
     assert_eq!(
         repository
-            .purge_value_history_batch(retention)
+            .purge_value_history_batch(retention, 1000)
             .await
             .unwrap(),
         0

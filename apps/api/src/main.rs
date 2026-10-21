@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         cache,
         agent_provider,
         extensions,
-        value_history_retention_days,
+        retention,
         event_dispatcher: dispatcher_config,
         task_worker: task_worker_config,
         blueprint_migration: blueprint_migration_config,
@@ -293,7 +293,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let maintenance_worker = maintenance::start(
         task_repository.clone(),
         object_store.clone(),
-        value_history_retention_days,
+        retention,
         shutdown_receiver.clone(),
     );
     let solution_pack_housekeeping =

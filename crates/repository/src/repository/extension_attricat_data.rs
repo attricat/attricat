@@ -178,6 +178,10 @@ struct ExtensionAttricatChangeCursor {
     blueprint_version: i64,
     high_water_sequence: i64,
     after_sequence: i64,
+    /// The workspace's purged-through sequence when paging began. A purge
+    /// past it may have deleted events this cursor has not read yet.
+    #[serde(default)]
+    retention_floor: i64,
 }
 
 impl AttricatRepository {
@@ -307,7 +311,13 @@ impl AttricatRepository {
             .as_deref()
             .map(decode_extension_change_cursor)
             .transpose()?;
-        let (high_water_sequence, after_sequence) = if let Some(cursor) = cursor {
+        let purged_through: i64 = sqlx::query_scalar(
+            "SELECT COALESCE((SELECT purged_through_sequence FROM domain_event_retention WHERE workspace_id=$1), 0)",
+        )
+        .bind(workspace_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let (high_water_sequence, after_sequence, retention_floor) = if let Some(cursor) = cursor {
             if cursor.workspace_id != workspace_id
                 || cursor.blueprint_id != blueprint_id
                 || cursor.blueprint_version != blueprint_version
@@ -316,7 +326,19 @@ impl AttricatRepository {
                     "catalog change cursor does not match this workspace or filter".into(),
                 ));
             }
-            (cursor.high_water_sequence, cursor.after_sequence)
+            // A purge since paging began may have deleted events after this
+            // cursor; resuming would silently skip them. Older events that
+            // retention kept are still returned in order.
+            if purged_through > cursor.retention_floor && cursor.after_sequence < purged_through {
+                return Err(RepositoryError::InvalidExtension(
+                    "catalog change cursor has expired: events after it were deleted by retention; take a new snapshot".into(),
+                ));
+            }
+            (
+                cursor.high_water_sequence,
+                cursor.after_sequence,
+                cursor.retention_floor,
+            )
         } else {
             let high_water_sequence: i64 = sqlx::query_scalar(
                 "SELECT COALESCE(MAX(sequence), 0) FROM domain_events WHERE workspace_id=$1",
@@ -324,7 +346,7 @@ impl AttricatRepository {
             .bind(workspace_id)
             .fetch_one(&self.pool)
             .await?;
-            (high_water_sequence, 0)
+            (high_water_sequence, 0, purged_through)
         };
         let events = sqlx::query_as::<_, crate::domain_events::DomainEvent>(
             "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload \
@@ -342,6 +364,7 @@ impl AttricatRepository {
                     blueprint_version,
                     high_water_sequence,
                     after_sequence: event.sequence,
+                    retention_floor,
                 })
             })
         } else {
