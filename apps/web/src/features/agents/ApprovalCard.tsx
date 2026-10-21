@@ -2,7 +2,6 @@ import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
-  Box,
   Button,
   Paper,
   Stack,
@@ -12,7 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { CheckIcon, XIcon } from 'lucide-react';
 import { bulkEditProposalSchema, bulkEditToolName } from './bulkEdits';
 import { BulkEditPreview } from './BulkEditPreview';
-import { jsonIndent } from './constants';
+import { JsonBlock } from '../../components/JsonValue';
 import type { AgentToolCall } from './schemas';
 
 export const ApprovalCard = ({
@@ -45,12 +44,7 @@ export const ApprovalCard = ({
       >
         <AccordionSummary>{t('agents.showProposedInput')}</AccordionSummary>
         <AccordionDetails>
-          <Box
-            component="pre"
-            sx={{ m: 0, overflow: 'auto', whiteSpace: 'pre-wrap' }}
-          >
-            {JSON.stringify(call.arguments, null, jsonIndent)}
-          </Box>
+          <JsonBlock value={call.arguments} />
         </AccordionDetails>
       </Accordion>
       <Stack direction="row" spacing={1} sx={{ mt: 2 }}>

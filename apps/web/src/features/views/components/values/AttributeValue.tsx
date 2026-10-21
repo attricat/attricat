@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import type { Attribute } from '../../../records/api';
 import { fileDownloadUrl } from '../../../files/api';
 import { ImageGallery } from '../../../files/ImageGallery';
+import { JsonBlock, JsonInline } from '../../../../components/JsonValue';
 import { NewTabIcon } from '../../../../components/NewTabIcon';
 import { AttributeValueText } from './AttributeValueText';
 import { formatAttributeValue } from './formatAttributeValue';
@@ -176,6 +177,18 @@ export const AttributeValue = ({
           </Stack>
         ))}
       </Stack>
+    );
+  }
+
+  if (
+    attribute.value_type === attributeValueTypes.json &&
+    value !== null &&
+    value !== undefined
+  ) {
+    return compact ? (
+      <JsonInline noWrap value={value} />
+    ) : (
+      <JsonBlock value={value} />
     );
   }
 

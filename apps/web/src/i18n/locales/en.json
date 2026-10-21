@@ -1939,5 +1939,17 @@
     "deletedTeam": "Deleted team",
     "users": "Users",
     "teams": "Teams"
+  },
+  "json": {
+    "copy": "Copy JSON",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "expandNamed": "Expand {{name}}",
+    "collapseNamed": "Collapse {{name}}",
+    "keys_one": "{{count}} key",
+    "keys_other": "{{count}} keys",
+    "items_one": "{{count}} item",
+    "items_other": "{{count}} items",
+    "showAll": "Show all {{count}}"
   }
 }

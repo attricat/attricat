@@ -46,7 +46,6 @@ export const newConversationMaxWidth = 760;
 export const avatarSize = 30;
 export const progressSize = 20;
 export const loadingProgressSize = 18;
-export const jsonIndent = 2;
 export const composerBorderRadius = 3;
 export const messageBubbleRadius = 3;
 export const userMessageMaxWidth = { xs: '100%', sm: '80%' } as const;

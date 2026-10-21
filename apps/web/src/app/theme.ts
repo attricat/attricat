@@ -25,6 +25,8 @@ declare module '@mui/material/styles' {
   interface TypeBackground {
     /** Icon rail and its flyout panels. */
     navigation: { panel: string; rail: string };
+    /** Regions nested inside a surface, such as a code block. */
+    inset: string;
   }
   interface TypeAction {
     /** Hover on navigation items, which sit on the navigation background. */
@@ -35,6 +37,13 @@ declare module '@mui/material/styles' {
 }
 
 export const monoFontFamily = typography.families.mono;
+
+/** The design system's code role: mono at caption size. */
+export const codeTypography = {
+  fontFamily: monoFontFamily,
+  fontSize: typography.roles.code.size,
+  lineHeight: typography.roles.code.lineHeight,
+} as const;
 
 // Icons rendered inside a component that sizes them with its own font size.
 const inheritSizeIcon = (icon: LucideIcon) =>
@@ -66,6 +75,7 @@ export const makeTheme = (mode: DesignMode) => {
       background: {
         default: c.background.default,
         paper: c.background.surface,
+        inset: c.background.inset,
         navigation: {
           panel: c.background.navigation,
           rail: c.background.navigationRail,

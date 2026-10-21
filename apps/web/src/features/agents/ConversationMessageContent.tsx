@@ -13,13 +13,11 @@ import { bulkEditResultSchema, bulkEditToolName } from './bulkEdits';
 import { BulkEditResult } from './BulkEditResult';
 import { useTranslation } from 'react-i18next';
 import '../../i18n';
-import { jsonIndent, messageRoles, uuidPattern } from './constants';
+import { JsonBlock } from '../../components/JsonValue';
+import { messageRoles, uuidPattern } from './constants';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const formatJson = (value: unknown) =>
-  JSON.stringify(value, null, jsonIndent) ?? String(value);
 
 const JsonDetails = ({
   children,
@@ -31,12 +29,7 @@ const JsonDetails = ({
   <Accordion disableGutters elevation={0} sx={{ bgcolor: 'action.hover' }}>
     <AccordionSummary>{label}</AccordionSummary>
     <AccordionDetails>
-      <Box
-        component="pre"
-        sx={{ m: 0, overflow: 'auto', whiteSpace: 'pre-wrap' }}
-      >
-        {formatJson(children)}
-      </Box>
+      <JsonBlock value={children} />
     </AccordionDetails>
   </Accordion>
 );
@@ -167,12 +160,14 @@ export const ConversationMessageContent = ({
     );
   }
 
+  if (typeof content !== 'string') return <JsonBlock value={content} />;
+
   return (
     <Typography
       component="pre"
       sx={{ fontFamily: 'inherit', m: 0, whiteSpace: 'pre-wrap' }}
     >
-      {typeof content === 'string' ? content : formatJson(content)}
+      {content}
     </Typography>
   );
 };

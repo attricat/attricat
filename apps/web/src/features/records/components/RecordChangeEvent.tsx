@@ -1,5 +1,6 @@
 import { Box, Paper, Typography } from '@mui/material';
 import { Trans, useTranslation } from 'react-i18next';
+import { JsonInline } from '../../../components/JsonValue';
 import { UserLabel } from '../../../components/UserLabel';
 import type { RecordAuditChange } from '../api';
 import { AGENT_EXECUTOR_TYPE } from '../constants';
@@ -62,13 +63,12 @@ export const RecordChangeEvent = ({ changes }: Props) => {
             {change.context_code ? ` (${change.context_code})` : ''}:{' '}
             {t(`records.changeKind.${change.change_kind}`)}
           </Typography>
-          <Typography
-            component="pre"
-            sx={{ fontFamily: 'monospace', m: 0, whiteSpace: 'pre-wrap' }}
-            variant="body2"
-          >
-            {JSON.stringify(change.before_value)} →{' '}
-            {JSON.stringify(change.after_value)}
+          <Typography component="div" variant="body2">
+            <JsonInline value={change.before_value} />
+            <Box component="span" sx={{ color: 'text.secondary', mx: 1 }}>
+              →
+            </Box>
+            <JsonInline value={change.after_value} />
           </Typography>
         </Box>
       ))}

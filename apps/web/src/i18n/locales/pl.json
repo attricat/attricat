@@ -2023,5 +2023,21 @@
     "deletedTeam": "Usunięty zespół",
     "users": "Użytkownicy",
     "teams": "Zespoły"
+  },
+  "json": {
+    "copy": "Kopiuj JSON",
+    "expand": "Rozwiń",
+    "collapse": "Zwiń",
+    "expandNamed": "Rozwiń {{name}}",
+    "collapseNamed": "Zwiń {{name}}",
+    "keys_one": "{{count}} klucz",
+    "keys_few": "{{count}} klucze",
+    "keys_many": "{{count}} kluczy",
+    "keys_other": "{{count}} klucza",
+    "items_one": "{{count}} element",
+    "items_few": "{{count}} elementy",
+    "items_many": "{{count}} elementów",
+    "items_other": "{{count}} elementu",
+    "showAll": "Pokaż wszystkie ({{count}})"
   }
 }

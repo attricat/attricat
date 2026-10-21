@@ -1,5 +1,6 @@
 import { Box, Drawer, Typography } from '@mui/material';
 import { Trans, useTranslation } from 'react-i18next';
+import { JsonBlock } from '../../components/JsonValue';
 import { RouterButton } from '../../components/RouterLink';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import type { AuditEvent } from './api';
@@ -15,16 +16,24 @@ import {
 
 const Detail = ({ label, value }: { label: string; value: unknown }) => (
   <Box>
-    <Typography color="text.secondary" variant="caption">
+    <Typography
+      color="text.secondary"
+      sx={{ display: 'block', mb: 0.5 }}
+      variant="caption"
+    >
       {label}
     </Typography>
-    <Typography
-      component="pre"
-      sx={{ m: 0, overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}
-      variant="body2"
-    >
-      {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
-    </Typography>
+    {typeof value === 'string' ? (
+      <Typography
+        component="pre"
+        sx={{ m: 0, overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}
+        variant="body2"
+      >
+        {value}
+      </Typography>
+    ) : (
+      <JsonBlock value={value} />
+    )}
   </Box>
 );
 
