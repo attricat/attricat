@@ -2,7 +2,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   FormControlLabel,
   Paper,
   Stack,
@@ -14,10 +13,12 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
+import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { FlaskConicalIcon, PlayIcon } from 'lucide-react';
 import type { Rule } from './api';
 import { RULE_STATUS_PUBLISHED } from './constants';
+import { RuleLifecycleChip } from './RuleCells';
 
 export const RulesSection = ({
   canManage,
@@ -57,24 +58,22 @@ export const RulesSection = ({
               {(rules ?? []).map((rule) => {
                 // Rows are revisions; only the enabled one is enabled.
                 const enabled = rule.enabled_version === rule.version;
-                const lifecycle = (
-                  <Chip
-                    color={enabled ? 'success' : 'default'}
-                    label={
-                      enabled
-                        ? t('rules.enabled')
-                        : rule.status === RULE_STATUS_PUBLISHED
-                          ? t('rules.disabled')
-                          : t('rules.draft')
-                    }
-                    size="small"
-                  />
-                );
+                const lifecycle = <RuleLifecycleChip rule={rule} />;
                 return (
                   <TableRow key={`${rule.id}-${rule.version}`}>
                     <TableCell>
                       <Stack spacing={0.25}>
-                        <Typography>{rule.name}</Typography>
+                        <Typography>
+                          <Link
+                            params={{
+                              ruleId: rule.id,
+                              version: String(rule.version),
+                            }}
+                            to="/manage/rules/$ruleId/revisions/$version"
+                          >
+                            {rule.name}
+                          </Link>
+                        </Typography>
                         <Typography color="text.secondary" variant="caption">
                           {rule.code}
                         </Typography>

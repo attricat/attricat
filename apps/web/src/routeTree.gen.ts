@@ -71,6 +71,7 @@ import { Route as RecordsRecordIdMigrateRouteImport } from './routes/records/$re
 import { Route as ManageBlueprintsBlueprintIdIndexRouteImport } from './routes/manage/blueprints/$blueprintId/index'
 import { Route as ManageExtensionsOwnerRepositoryRouteImport } from './routes/manage/extensions/$owner/$repository'
 import { Route as ManageWorkflowsWorkflowIdIndexRouteImport } from './routes/manage/workflows/$workflowId/index'
+import { Route as ManageRulesRuleIdRevisionsVersionRouteImport } from './routes/manage/rules/$ruleId/revisions/$version'
 import { Route as ManageBlueprintsBlueprintIdRevisionsVersionNewRouteImport } from './routes/manage/blueprints/$blueprintId/revisions/$version/new'
 import { Route as ManageWorkflowsWorkflowIdRevisionsVersionNewRouteImport } from './routes/manage/workflows/$workflowId/revisions/$version/new'
 
@@ -404,6 +405,12 @@ const ManageWorkflowsWorkflowIdIndexRoute =
     path: '/',
     getParentRoute: () => ManageWorkflowsWorkflowIdRoute,
   } as any)
+const ManageRulesRuleIdRevisionsVersionRoute =
+  ManageRulesRuleIdRevisionsVersionRouteImport.update({
+    id: '/manage/rules/$ruleId/revisions/$version',
+    path: '/manage/rules/$ruleId/revisions/$version',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ManageBlueprintsBlueprintIdRevisionsVersionNewRoute =
   ManageBlueprintsBlueprintIdRevisionsVersionNewRouteImport.update({
     id: '/revisions/$version/new',
@@ -480,6 +487,7 @@ export interface FileRoutesByFullPath {
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
   '/manage/workflows/$workflowId/': typeof ManageWorkflowsWorkflowIdIndexRoute
+  '/manage/rules/$ruleId/revisions/$version': typeof ManageRulesRuleIdRevisionsVersionRoute
   '/manage/blueprints/$blueprintId/revisions/$version/new': typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRoute
   '/manage/workflows/$workflowId/revisions/$version/new': typeof ManageWorkflowsWorkflowIdRevisionsVersionNewRoute
 }
@@ -541,6 +549,7 @@ export interface FileRoutesByTo {
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdIndexRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdIndexRoute
+  '/manage/rules/$ruleId/revisions/$version': typeof ManageRulesRuleIdRevisionsVersionRoute
   '/manage/blueprints/$blueprintId/revisions/$version/new': typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRoute
   '/manage/workflows/$workflowId/revisions/$version/new': typeof ManageWorkflowsWorkflowIdRevisionsVersionNewRoute
 }
@@ -608,6 +617,7 @@ export interface FileRoutesById {
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
   '/manage/workflows/$workflowId/': typeof ManageWorkflowsWorkflowIdIndexRoute
+  '/manage/rules/$ruleId/revisions/$version': typeof ManageRulesRuleIdRevisionsVersionRoute
   '/manage/blueprints/$blueprintId/revisions/$version/new': typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRoute
   '/manage/workflows/$workflowId/revisions/$version/new': typeof ManageWorkflowsWorkflowIdRevisionsVersionNewRoute
 }
@@ -676,6 +686,7 @@ export interface FileRouteTypes {
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId/'
     | '/manage/workflows/$workflowId/'
+    | '/manage/rules/$ruleId/revisions/$version'
     | '/manage/blueprints/$blueprintId/revisions/$version/new'
     | '/manage/workflows/$workflowId/revisions/$version/new'
   fileRoutesByTo: FileRoutesByTo
@@ -737,6 +748,7 @@ export interface FileRouteTypes {
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId'
     | '/manage/workflows/$workflowId'
+    | '/manage/rules/$ruleId/revisions/$version'
     | '/manage/blueprints/$blueprintId/revisions/$version/new'
     | '/manage/workflows/$workflowId/revisions/$version/new'
   id:
@@ -803,6 +815,7 @@ export interface FileRouteTypes {
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId/'
     | '/manage/workflows/$workflowId/'
+    | '/manage/rules/$ruleId/revisions/$version'
     | '/manage/blueprints/$blueprintId/revisions/$version/new'
     | '/manage/workflows/$workflowId/revisions/$version/new'
   fileRoutesById: FileRoutesById
@@ -858,6 +871,7 @@ export interface RootRouteChildren {
   ManageWorkflowsIndexRoute: typeof ManageWorkflowsIndexRoute
   ManageWorkspaceIndexRoute: typeof ManageWorkspaceIndexRoute
   ManageExtensionsOwnerRepositoryRoute: typeof ManageExtensionsOwnerRepositoryRoute
+  ManageRulesRuleIdRevisionsVersionRoute: typeof ManageRulesRuleIdRevisionsVersionRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1296,6 +1310,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageWorkflowsWorkflowIdIndexRouteImport
       parentRoute: typeof ManageWorkflowsWorkflowIdRoute
     }
+    '/manage/rules/$ruleId/revisions/$version': {
+      id: '/manage/rules/$ruleId/revisions/$version'
+      path: '/manage/rules/$ruleId/revisions/$version'
+      fullPath: '/manage/rules/$ruleId/revisions/$version'
+      preLoaderRoute: typeof ManageRulesRuleIdRevisionsVersionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/blueprints/$blueprintId/revisions/$version/new': {
       id: '/manage/blueprints/$blueprintId/revisions/$version/new'
       path: '/revisions/$version/new'
@@ -1449,6 +1470,8 @@ const rootRouteChildren: RootRouteChildren = {
   ManageWorkflowsIndexRoute: ManageWorkflowsIndexRoute,
   ManageWorkspaceIndexRoute: ManageWorkspaceIndexRoute,
   ManageExtensionsOwnerRepositoryRoute: ManageExtensionsOwnerRepositoryRoute,
+  ManageRulesRuleIdRevisionsVersionRoute:
+    ManageRulesRuleIdRevisionsVersionRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

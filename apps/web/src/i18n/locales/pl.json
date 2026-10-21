@@ -1868,6 +1868,13 @@
       "loading": "Wczytywanie ustaleń",
       "loadMore": "Wczytaj więcej ustaleń",
       "noRules": "Żadna włączona reguła nie sprawdza rekordów tego schematu."
+    },
+    "revisionPage": {
+      "backToRules": "Wróć do reguł",
+      "notFound": "Nie znaleziono tej rewizji reguły.",
+      "blueprint": "Sprawdza",
+      "blueprintRevision": "{{name}} v{{version}}",
+      "definition": "Definicja"
     }
   },
   "reusableAttributes": {

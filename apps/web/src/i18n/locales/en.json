@@ -1792,6 +1792,13 @@
       "loading": "Loading findings",
       "loadMore": "Load more findings",
       "noRules": "No enabled rule checks records of this blueprint."
+    },
+    "revisionPage": {
+      "backToRules": "Back to rules",
+      "notFound": "This rule revision was not found.",
+      "blueprint": "Checks",
+      "blueprintRevision": "{{name}} v{{version}}",
+      "definition": "Definition"
     }
   },
   "reusableAttributes": {
