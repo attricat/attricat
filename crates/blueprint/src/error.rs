@@ -50,6 +50,12 @@ pub enum BlueprintError {
     InvalidBrowseByField(String),
     #[error("views.dropdown_option contains duplicate field '{0}'")]
     DuplicateDropdownOptionField(String),
+    #[error("page_title views must be named views.page_title on a record blueprint")]
+    InvalidPageTitleView,
+    #[error("views.page_title must define at least one field")]
+    EmptyPageTitleFields,
+    #[error("views.page_title contains duplicate field '{0}'")]
+    DuplicatePageTitleField(String),
     #[error("attribute '{0}' has an invalid tag")]
     InvalidAttributeTag(String),
     #[error("attribute '{code}' has unsupported value type '{value_type}'")]

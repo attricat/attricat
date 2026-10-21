@@ -13,6 +13,7 @@ import {
 
 export const viewBlockTypes = {
   dropdownOption: 'dropdown_option',
+  pageTitle: 'page_title',
   stack: 'stack',
   grid: 'grid',
   section: 'section',
@@ -71,6 +72,11 @@ export type ViewNode =
 export type ViewDefinition =
   | {
       type: 'dropdown_option';
+      fields: string[];
+      separator?: string;
+    }
+  | {
+      type: 'page_title';
       fields: string[];
       separator?: string;
     }
@@ -193,6 +199,11 @@ const viewDefinitionSchema: z.ZodType<ViewDefinition> = z.lazy(() =>
   z.union([
     z.object({
       type: z.literal(viewBlockTypes.dropdownOption),
+      fields: z.array(z.string()),
+      separator: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal(viewBlockTypes.pageTitle),
       fields: z.array(z.string()),
       separator: z.string().optional(),
     }),

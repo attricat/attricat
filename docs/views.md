@@ -12,6 +12,9 @@ that do not define them.
 - `edit`: deprecated. The UI ignores it. The compiler still accepts it and
   still requires edit-capable components inside it, but no longer requires it
   to place required attributes.
+- `page_title`: the record page's browser tab title, joined from scalar
+  `fields` with an optional `separator`. Record blueprints only, under that
+  name. The page falls back to the `dropdown_option` label, then a short ID.
 - `table`: configured columns in the record explorer.
 - `explorer`: Explorer defaults. `browse_by` names the single-target
   relationship the browse rail lists first, a relationship path of up to three

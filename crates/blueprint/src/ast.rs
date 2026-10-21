@@ -96,6 +96,7 @@ pub const EXTENSION_LAYOUT_OUTLETS: &[&str] = &[
 /// View names with platform meaning, offered to editors as suggestions.
 pub const KNOWN_VIEW_NAMES: &[&str] = &[
     "dropdown_option",
+    "page_title",
     "detail",
     "table",
     "explorer",
@@ -176,9 +177,9 @@ pub struct IncomingRelationship {
     pub field: String,
 }
 
-/// A named view. `dropdown_option` labels relationship choices, `table`
-/// configures Explorer columns, `explorer` sets Explorer defaults, and layout
-/// roots arrange `detail` and `edit`.
+/// A named view. `dropdown_option` labels relationship choices, `page_title`
+/// names the record page, `table` configures Explorer columns, `explorer`
+/// sets Explorer defaults, and layout roots arrange `detail` and `edit`.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ViewDefinition {
@@ -188,6 +189,15 @@ pub enum ViewDefinition {
         #[schemars(extend("x-attricat-reference" = "attribute"))]
         fields: Vec<String>,
         /// Text between label fields. Defaults to ` · `.
+        #[serde(default = "default_display_separator")]
+        separator: String,
+    },
+    /// Title of the record page and its browser tab.
+    PageTitle {
+        /// Attributes joined into the title.
+        #[schemars(extend("x-attricat-reference" = "attribute"))]
+        fields: Vec<String>,
+        /// Text between title fields. Defaults to ` · `.
         #[serde(default = "default_display_separator")]
         separator: String,
     },

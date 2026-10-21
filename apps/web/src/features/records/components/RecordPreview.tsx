@@ -28,6 +28,7 @@ import {
 } from '../constants';
 import { RelatedRecordPreviewContext } from '../linkedRecord';
 import { recordQueryKeys } from '../queryKeys';
+import { pageTitleLabel } from '../pageTitle';
 import { useRecordReadAhead } from '../useRecordReadAhead';
 import {
   KnownRecordLabelsContext,
@@ -62,6 +63,11 @@ const RecordCommentsPanel = lazy(() =>
 export type RecordPreviewFrame = {
   /** The record's blueprint revision, once loaded. */
   blueprint?: { code: string; id: string; name: string; version: number };
+  /**
+   * The record's `page_title` view label, `null` when its blueprint has none
+   * or the fields are empty, or `undefined` until the record has loaded.
+   */
+  title?: string | null;
   /** Blueprint, sample, schema and data quality indicators. */
   headerActions: ReactNode;
   children: ReactNode;
@@ -164,6 +170,14 @@ export const RecordPreview = ({
     <>
       {renderFrame({
         blueprint: blueprint.data?.blueprint,
+        title:
+          resolved.data && blueprint.data
+            ? pageTitleLabel(
+                blueprint.data.blueprint.views,
+                blueprint.data.attributes,
+                resolved.data.values,
+              )
+            : undefined,
         headerActions: (
           <RecordBlueprintHeaderActions
             blueprint={blueprint.data?.blueprint}

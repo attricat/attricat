@@ -306,6 +306,7 @@ A selected attribute keeps all of the mixin's settings. To pick up changes in th
 | View | Purpose | Allowed `type` |
 | --- | --- | --- |
 | `dropdown_option` | Label for the record in relationship pickers, filter pills, and search results. Required on record blueprints. | `dropdown_option` |
+| `page_title` | Browser tab title of the record page. Optional on record blueprints. | `page_title` |
 | `detail` | Record page and create form. Fields the user may change are edited in place. | A layout block |
 | `edit` | Deprecated and ignored by the web app. Still accepted, and edit components in it are still validated. | A layout block |
 | `table` | Explorer columns. | `table` |
@@ -329,6 +330,21 @@ separator = " / "
 | `separator` | string | `" · "` | Text placed between fields. |
 
 Labels are resolved per context and follow each attribute's `context_fallback`.
+
+### `page_title`
+
+```toml
+[views.page_title]
+type = "page_title"
+fields = ["name"]
+```
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `fields` | array of attribute codes | Required | One or more unique scalar attributes joined into the title. Unset values are skipped. |
+| `separator` | string | `" · "` | Text placed between fields. |
+
+Only a record blueprint can define it, and only under the name `page_title`. The title uses the values shown in the selected context. Without this view, or when all its fields are empty, the record page uses the `dropdown_option` label, then a short record ID.
 
 ### `table`
 

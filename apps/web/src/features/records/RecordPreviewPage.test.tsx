@@ -37,6 +37,7 @@ vi.mock('./api', async (importOriginal) => ({
   getBlueprintRevision: vi.fn(),
   getCurrentBlueprint: vi.fn(),
   getRecordForm: vi.fn(),
+  getRecordLabels: vi.fn(),
   getRecordPublications: vi.fn(),
   getResolvedRecordPreview: vi.fn(),
   publishRecord: vi.fn(),
@@ -150,6 +151,8 @@ describe('RecordPreviewPage', () => {
     vi.mocked(currentSession).mockResolvedValue(null);
     const api = await import('./api');
     vi.mocked(api.getRecordPublications).mockResolvedValue([]);
+    vi.mocked(api.getRecordLabels).mockReset();
+    vi.mocked(api.getRecordLabels).mockResolvedValue({ items: [] });
     vi.mocked(api.getRecordForm).mockReset();
     vi.mocked(api.getRecordForm).mockRejectedValue(new Error('not loaded'));
   });
@@ -424,5 +427,66 @@ describe('RecordPreviewPage', () => {
     screen.getByRole('button', { name: 'Try again' }).click();
 
     await waitFor(() => expect(listContexts).toHaveBeenCalledTimes(2));
+  });
+
+  const loadRecord = async (views: Record<string, unknown>) => {
+    const api = await import('./api');
+    vi.mocked(listContexts).mockResolvedValue([
+      {
+        id: '33333333-3333-4333-8333-333333333333',
+        code: 'default',
+        data: {},
+        parent_id: null,
+      },
+    ]);
+    vi.mocked(api.getResolvedRecordPreview).mockResolvedValue({
+      record: {
+        id: '00000000-0000-4000-8000-000000000001',
+        blueprint_id: '22222222-2222-4222-8222-222222222222',
+        blueprint_version: 1,
+      },
+      values: { name: { value: 'Blue lamp' } },
+      reusable_values: {},
+    } as never);
+    vi.mocked(api.getBlueprintRevision).mockResolvedValue({
+      blueprint: {
+        id: '22222222-2222-4222-8222-222222222222',
+        name: 'Product',
+        code: 'product',
+        version: 1,
+        views,
+      },
+      attributes: [{ code: 'name', value_type: 'string' }],
+    } as never);
+    vi.mocked(api.getCurrentBlueprint).mockResolvedValue({
+      blueprint: { version: 1 },
+    } as never);
+    vi.mocked(api.getRecordLabels).mockResolvedValue({
+      items: [
+        {
+          id: '00000000-0000-4000-8000-000000000001',
+          blueprint_code: 'product',
+          display: { default: 'Blue lamp · LMP-1' },
+        },
+      ],
+    });
+  };
+
+  it('titles the browser tab with the page_title view', async () => {
+    await loadRecord({
+      page_title: { type: 'page_title', fields: ['name'] },
+    });
+    renderPage();
+
+    await waitFor(() => expect(document.title).toBe('Blue lamp · Attricat'));
+  });
+
+  it('titles the browser tab with the dropdown label without a page_title view', async () => {
+    await loadRecord({});
+    renderPage();
+
+    await waitFor(() =>
+      expect(document.title).toBe('Blue lamp · LMP-1 · Attricat'),
+    );
   });
 });

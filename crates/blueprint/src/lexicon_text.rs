@@ -90,6 +90,7 @@ pub fn lexicon_texts(definition: &BlueprintDefinition) -> Vec<LexiconText<'_>> {
             }
             ViewDefinition::Table { .. }
             | ViewDefinition::DropdownOption { .. }
+            | ViewDefinition::PageTitle { .. }
             | ViewDefinition::Explorer { .. }
             | ViewDefinition::ExtensionLayout { .. } => {}
         }

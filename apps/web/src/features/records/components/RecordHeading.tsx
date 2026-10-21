@@ -5,9 +5,8 @@ import { RecordIcon } from '../../../components/systemIcons';
 import { findRecordHeading } from '../../views/components/blocks/RecordHeadingDefinition';
 import type { HeadingRenderer } from '../../views/components/componentTypes';
 import { resolveHeadingRenderer } from '../../views/components/registry';
-import { getRecordLabels } from '../api';
 import { displayLabel } from '../recordDisplay';
-import { recordQueryKeys } from '../queryKeys';
+import { recordLabelOptions } from '../queryOptions';
 
 type Props = ComponentProps<HeadingRenderer>;
 
@@ -19,10 +18,7 @@ const FallbackRecordHeading = ({
   compact = false,
   recordId,
 }: Pick<Props, 'compact' | 'recordId'>) => {
-  const label = useQuery({
-    queryKey: recordQueryKeys.labels([recordId]),
-    queryFn: ({ signal }) => getRecordLabels([recordId], signal),
-  });
+  const label = useQuery(recordLabelOptions(recordId));
   // Waits for the label rather than flashing the ID first.
   if (label.isPending) return null;
   const display = label.data?.items.find((item) => item.id === recordId);

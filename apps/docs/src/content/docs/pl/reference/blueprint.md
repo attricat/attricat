@@ -306,6 +306,7 @@ Wybrany atrybut zachowuje wszystkie ustawienia z mixinu. Aby uwzględnić zmiany
 | Widok | Przeznaczenie | Dozwolony `type` |
 | --- | --- | --- |
 | `dropdown_option` | Etykieta rekordu w selektorach relacji, etykietach filtrów i wynikach wyszukiwania. Wymagany w schematach rekordów. | `dropdown_option` |
+| `page_title` | Tytuł karty przeglądarki na stronie rekordu. Opcjonalny w schematach rekordów. | `page_title` |
 | `detail` | Strona rekordu i formularz tworzenia. Pola, które użytkownik może zmienić, są edytowane w miejscu. | Blok układu |
 | `edit` | Przestarzały i ignorowany przez aplikację internetową. Nadal akceptowany, a komponenty edycji w nim nadal są walidowane. | Blok układu |
 | `table` | Kolumny przeglądarki rekordów. | `table` |
@@ -329,6 +330,21 @@ separator = " / "
 | `separator` | ciąg znaków | `" · "` | Tekst wstawiany między pola. |
 
 Etykiety są rozstrzygane dla każdego kontekstu i respektują `context_fallback` każdego atrybutu.
+
+### `page_title`
+
+```toml
+[views.page_title]
+type = "page_title"
+fields = ["name"]
+```
+
+| Klucz | Typ | Domyślnie | Opis |
+| --- | --- | --- | --- |
+| `fields` | tablica kodów atrybutów | Wymagany | Jeden lub więcej unikalnych atrybutów skalarnych łączonych w tytuł. Puste wartości są pomijane. |
+| `separator` | ciąg znaków | `" · "` | Tekst wstawiany między pola. |
+
+Może go zdefiniować tylko schemat rekordów i tylko pod nazwą `page_title`. Tytuł korzysta z wartości widocznych w wybranym kontekście. Bez tego widoku lub gdy wszystkie jego pola są puste, strona rekordu używa etykiety `dropdown_option`, a następnie skróconego identyfikatora rekordu.
 
 ### `table`
 

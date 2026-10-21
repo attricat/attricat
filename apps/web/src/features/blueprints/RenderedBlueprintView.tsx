@@ -104,7 +104,8 @@ export const RenderedBlueprintView = ({
   const { t } = useTranslation();
   if (
     view.type === viewBlockTypes.table ||
-    view.type === viewBlockTypes.dropdownOption
+    view.type === viewBlockTypes.dropdownOption ||
+    view.type === viewBlockTypes.pageTitle
   )
     return (
       <TableViewPreview
