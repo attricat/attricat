@@ -1,7 +1,8 @@
 -- The maintenance worker's retention sweep. Each index bounds one family's
 -- expiry scan to rows that can already be deleted.
 
-CREATE INDEX tasks_terminal_retention_idx ON tasks(created_at, id) WHERE status IN ('succeeded', 'cancelled');
+-- Event-delivery envelopes go with their delivery, so they are left out.
+CREATE INDEX tasks_terminal_retention_idx ON tasks(created_at, id) WHERE status IN ('succeeded', 'cancelled') AND kind <> 'event_delivery.v1';
 
 CREATE INDEX rule_runs_terminal_retention_idx ON rule_runs(created_at, id) WHERE status IN ('completed', 'cancelled', 'dead_letter');
 -- "Is there a newer run of this rule version?" keeps the latest run.
@@ -28,10 +29,19 @@ CREATE INDEX extension_operation_runs_terminal_retention_idx ON extension_operat
 
 CREATE INDEX agent_run_events_created_idx ON agent_run_events(created_at, id);
 
--- Completed purge jobs stay: they stop a file from being queued for purging again.
-CREATE INDEX file_processing_jobs_terminal_retention_idx ON file_processing_jobs(created_at, id) WHERE status = 'failed' OR (status = 'completed' AND kind <> 'purge');
+-- Purge jobs stay: a completed one stops a file from being queued for purging
+-- again, and a failed one is evidence of a purge that cannot finish.
+CREATE INDEX file_processing_jobs_terminal_retention_idx ON file_processing_jobs(created_at, id) WHERE kind <> 'purge' AND status IN ('completed', 'failed');
 
 CREATE INDEX domain_events_occurred_at_idx ON domain_events(occurred_at, id);
+-- The highest purged sequence per workspace. Change-feed cursors older than it
+-- have lost events and must restart from a snapshot.
+CREATE TABLE domain_event_retention (
+    workspace_id UUID PRIMARY KEY REFERENCES workspaces(id),
+    purged_through_sequence BIGINT NOT NULL CHECK (purged_through_sequence > 0)
+);
+
+CREATE INDEX solution_pack_check_runs_retention_idx ON solution_pack_check_runs(completed_at, id) WHERE trigger <> 'post_apply';
 
 CREATE INDEX browser_sessions_expires_at_idx ON browser_sessions(expires_at);
 CREATE INDEX browser_sessions_revoked_at_idx ON browser_sessions(revoked_at) WHERE revoked_at IS NOT NULL;

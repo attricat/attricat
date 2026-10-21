@@ -191,15 +191,15 @@ Invalid values stop startup. Day counts must be positive integers.
 | --- | --- | --- |
 | `RETENTION_SWEEP_INTERVAL_SECONDS` | `60` | How often the sweep starts, 1 to 86400. |
 | `RETENTION_SWEEP_BUDGET_SECONDS` | `10` | Longest one sweep runs, 1 to 3600, and at most the interval. |
-| `RETENTION_BATCH_ROWS` | `1000` | Most rows one batch deletes per table, 1 to 10000. |
+| `RETENTION_BATCH_ROWS` | `1000` | Most rows one batch deletes per table, 1 to 10000. Every batch statement still has a 2-second timeout, so prefer a longer budget to much larger batches. |
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Archived attribute values. Current values are never touched. |
-| `TASK_RETENTION_DAYS` | `7` | Succeeded and cancelled task envelopes. Queued, leased and dead-lettered envelopes stay; an event-delivery envelope goes with its delivery. |
+| `TASK_RETENTION_DAYS` | `7` | Succeeded and cancelled task envelopes. Queued, leased and dead-lettered envelopes stay until their run is purged; event-delivery envelopes go with their delivery. |
 | `RULE_RUN_RECORD_RETENTION_DAYS` | `7` | Completed and cancelled record-scoped rule runs. |
 | `RULE_RUN_RETENTION_DAYS` | `90` | Completed and cancelled full rule runs, and dead-lettered runs of either scope. Each rule version keeps its latest run and its latest completed full dry run (the enable gate). Findings keep their resolution; `resolved_by_run_id` becomes null. |
 | `WORKFLOW_RUN_RETENTION_DAYS` | `90` | Terminal workflow runs, their action progress and envelopes. |
 | `EXTENSION_OPERATION_RUN_RETENTION_DAYS` | `90` | Terminal extension operation runs whose outputs have already expired (`outputs_expired`), with their artifacts, HTTP transfers, staging and record links. Runs with an unfinished upload or output chunk wait. |
 | `AGENT_RUN_EVENT_RETENTION_DAYS` | `90` | Stream events (`agent_run_events`) of finished agent runs. Runs, tool calls and messages stay with their conversation. |
-| `FILE_PROCESSING_JOB_RETENTION_DAYS` | `30` | Failed file jobs and completed metadata jobs. Completed purge jobs stay: they stop a file from being queued for purging again. |
+| `FILE_PROCESSING_JOB_RETENTION_DAYS` | `30` | Completed and failed metadata jobs. Purge jobs stay: a completed one stops the file from being queued for purging again, and a failed one is evidence of a purge that cannot finish. |
 | `SOLUTION_PACK_CHECK_RUN_RETENTION_DAYS` | `90` | Manual check runs and their results. Each application keeps its post-apply run and its latest run. |
 | `DOMAIN_EVENT_RETENTION_DAYS` | `90` | Domain events that every consumer in the workspace has passed (`sequence <= min(watermark)`) and whose deliveries all completed, with those deliveries and their envelopes. Events with a pending, leased or dead-lettered delivery stay, so replay always works, and so does each workspace's newest event. Workflow runs keep their `trigger_event` copy; `trigger_event_id` becomes null. |
 | `BROWSER_SESSION_RETENTION_DAYS` | `7` | Sessions that expired or were revoked (including rotated ones) this long ago. |
@@ -215,8 +215,14 @@ file-reference history; extension annotation revisions; blueprint migration
 batches; and connector job definitions. These are user content, control
 evidence or definitions.
 
-Once events expire, the extension change feed and a newly subscribed
-extension event type's historical-gap delivery see only the retained window.
+Each workspace's event scan is bounded by its slowest consumer's watermark and
+its newest event, so a lagging consumer only holds back its own workspace.
+Events behind a dead-lettered delivery stay until the delivery is replayed;
+alert on dead letters, not just on retention. The highest purged sequence is
+kept in `domain_event_retention`: an extension change-feed cursor older than
+it is rejected as expired, and the extension must take a new snapshot. A newly
+subscribed extension event type's historical-gap delivery sees only the
+retained window.
 A manual rule, workflow or extension run whose idempotency key was purged runs
 again if a client reuses that key.
 

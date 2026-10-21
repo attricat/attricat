@@ -365,11 +365,63 @@ async fn event_retention_never_removes_undelivered_or_unconsumed_events(pool: Pg
         .await
         .unwrap();
     assert_eq!(delivered_task_left, 0);
+    let purged_through: i64 = sqlx::query_scalar(
+        "SELECT purged_through_sequence FROM domain_event_retention WHERE workspace_id = $1",
+    )
+    .bind(workspace())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(purged_through >= delivered.1);
     let deliveries: i64 = sqlx::query_scalar("SELECT count(*) FROM event_deliveries")
         .fetch_one(&pool)
         .await
         .unwrap();
     assert_eq!(deliveries, 2);
+    server.abort();
+}
+
+#[sqlx::test]
+async fn change_feed_rejects_a_cursor_older_than_purged_events(pool: PgPool) {
+    let (_, server) = start_server(pool.clone()).await;
+    let blueprint = Uuid::new_v4();
+    for _ in 0..3 {
+        sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES (gen_random_uuid(), $1, 'record.updated.v1', 'record', gen_random_uuid(), gen_random_uuid(), 'system', 'retention-test', jsonb_build_object('blueprint_id', $2::text, 'blueprint_version', 1))")
+            .bind(workspace())
+            .bind(blueprint)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let repository = AttricatRepository::new(pool.clone(), workspace());
+    let first = repository
+        .extension_attricat_changes(blueprint, 1, None, 1)
+        .await
+        .unwrap();
+    let cursor = first.next_cursor.unwrap();
+    let resumed = repository
+        .extension_attricat_changes(blueprint, 1, Some(cursor.clone()), 1)
+        .await
+        .unwrap();
+    assert_eq!(resumed.events.len(), 1);
+
+    // Retention deletes the event after the cursor.
+    sqlx::query("INSERT INTO domain_event_retention (workspace_id, purged_through_sequence) VALUES ($1, $2)")
+        .bind(workspace())
+        .bind(resumed.events[0].sequence)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let error = repository
+        .extension_attricat_changes(blueprint, 1, Some(cursor), 1)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("expired"), "{error}");
+    let resumed = repository
+        .extension_attricat_changes(blueprint, 1, resumed.next_cursor, 1)
+        .await
+        .unwrap();
+    assert_eq!(resumed.events.len(), 1);
     server.abort();
 }
 

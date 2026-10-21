@@ -316,6 +316,19 @@ impl AttricatRepository {
                     "catalog change cursor does not match this workspace or filter".into(),
                 ));
             }
+            // Retention may have deleted events after this cursor; resuming
+            // would silently skip them.
+            let purged_through: Option<i64> = sqlx::query_scalar(
+                "SELECT purged_through_sequence FROM domain_event_retention WHERE workspace_id=$1",
+            )
+            .bind(workspace_id)
+            .fetch_optional(&self.pool)
+            .await?;
+            if purged_through.is_some_and(|purged| cursor.after_sequence < purged) {
+                return Err(RepositoryError::InvalidExtension(
+                    "catalog change cursor has expired: events after it were deleted by retention; take a new snapshot".into(),
+                ));
+            }
             (cursor.high_water_sequence, cursor.after_sequence)
         } else {
             let high_water_sequence: i64 = sqlx::query_scalar(

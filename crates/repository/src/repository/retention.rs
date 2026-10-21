@@ -88,15 +88,16 @@ impl<S: RepositoryScope> AttricatRepository<S> {
 
     /// Succeeded and cancelled task envelopes older than `days`. Queued,
     /// leased and dead-lettered envelopes stay: workers and replay need them.
-    /// Event-delivery envelopes go with their delivery in
-    /// [`Self::purge_domain_events_batch`].
+    /// Event-delivery envelopes are linked to their delivery and go with it in
+    /// [`Self::purge_domain_events_batch`]; they are outside this scan so they
+    /// never sit in front of rows it can delete.
     pub async fn purge_tasks_batch(
         &self,
         days: RetentionDays,
         limit: i64,
     ) -> Result<u64, RepositoryError> {
         self.purge_with(
-            "WITH expired AS (SELECT t.id FROM tasks t WHERE t.status IN ('succeeded', 'cancelled') AND t.created_at < now() - ($2 * interval '1 day') AND COALESCE(t.completed_at, t.cancelled_at, t.updated_at) < now() - ($2 * interval '1 day') AND NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.task_id = t.id) ORDER BY t.created_at, t.id LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM tasks t USING expired e WHERE t.id = e.id",
+            "WITH expired AS (SELECT t.id FROM tasks t WHERE t.status IN ('succeeded', 'cancelled') AND t.kind <> 'event_delivery.v1' AND t.created_at < now() - ($2 * interval '1 day') AND COALESCE(t.completed_at, t.cancelled_at, t.updated_at) < now() - ($2 * interval '1 day') AND NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.task_id = t.id) ORDER BY t.created_at, t.id LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM tasks t USING expired e WHERE t.id = e.id",
             Some(days),
             limit,
         )
@@ -226,16 +227,16 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         .await
     }
 
-    /// Failed file jobs and completed metadata jobs older than `days`. A
-    /// completed purge job stays: it is what stops the file from being queued
-    /// for purging again.
+    /// Completed and failed metadata jobs older than `days`. Purge jobs stay: a
+    /// completed one stops the file from being queued for purging again, and a
+    /// failed one is the operator's evidence of a purge that cannot finish.
     pub async fn purge_file_processing_jobs_batch(
         &self,
         days: RetentionDays,
         limit: i64,
     ) -> Result<u64, RepositoryError> {
         self.purge_with(
-            "WITH expired AS (SELECT id FROM file_processing_jobs WHERE (status = 'failed' OR (status = 'completed' AND kind <> 'purge')) AND created_at < now() - ($2 * interval '1 day') AND updated_at < now() - ($2 * interval '1 day') ORDER BY created_at, id LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM file_processing_jobs j USING expired e WHERE j.id = e.id",
+            "WITH expired AS (SELECT id FROM file_processing_jobs WHERE kind <> 'purge' AND status IN ('completed', 'failed') AND created_at < now() - ($2 * interval '1 day') AND updated_at < now() - ($2 * interval '1 day') ORDER BY created_at, id LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM file_processing_jobs j USING expired e WHERE j.id = e.id",
             Some(days),
             limit,
         )
@@ -248,24 +249,38 @@ impl<S: RepositoryScope> AttricatRepository<S> {
     /// stays, and so does each workspace's newest event, which activation
     /// boundaries and new consumers read. Workflow runs keep their copy of the
     /// trigger event (`trigger_event_id` becomes null).
+    ///
+    /// Each workspace scans its own sequence range up to a ceiling: the
+    /// slowest consumer's watermark, the event before its newest, and the
+    /// first event inside the retention window. A lagging consumer or an idle
+    /// workspace therefore costs one index probe, not a scan past rows that
+    /// cannot be deleted. The highest purged sequence is recorded per
+    /// workspace so change-feed cursors older than it are rejected.
     pub async fn purge_domain_events_batch(
         &self,
         days: RetentionDays,
         limit: i64,
     ) -> Result<u64, RepositoryError> {
         let mut tx = self.begin_purge().await?;
-        let ids: Vec<Uuid> = sqlx::query_scalar(
-            "SELECT e.id FROM domain_events e \
-             WHERE e.occurred_at < now() - ($2 * interval '1 day') \
-             AND e.sequence <= COALESCE((SELECT min(c.watermark) FROM event_consumers c WHERE c.workspace_id = e.workspace_id), e.sequence) \
-             AND e.sequence < (SELECT max(m.sequence) FROM domain_events m WHERE m.workspace_id = e.workspace_id) \
-             AND NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.event_id = e.id AND d.status IN ('pending', 'leased', 'dead_letter')) \
-             ORDER BY e.occurred_at, e.id LIMIT $1 FOR UPDATE OF e SKIP LOCKED",
+        let expired: Vec<(Uuid, Uuid, i64)> = sqlx::query_as(
+            "WITH window_start AS (SELECT COALESCE((SELECT sequence FROM domain_events WHERE occurred_at >= now() - ($2 * interval '1 day') ORDER BY occurred_at, id LIMIT 1), 9223372036854775807) AS sequence) \
+             SELECT x.workspace_id, x.id, x.sequence FROM workspaces w \
+             CROSS JOIN LATERAL (SELECT LEAST( \
+                 COALESCE((SELECT min(c.watermark) FROM event_consumers c WHERE c.workspace_id = w.id), 9223372036854775807), \
+                 (SELECT max(m.sequence) FROM domain_events m WHERE m.workspace_id = w.id) - 1, \
+                 (SELECT sequence FROM window_start) - 1) AS sequence) ceiling \
+             CROSS JOIN LATERAL (SELECT e.workspace_id, e.id, e.sequence FROM domain_events e \
+                 WHERE e.workspace_id = w.id AND e.sequence <= ceiling.sequence \
+                 AND e.occurred_at < now() - ($2 * interval '1 day') \
+                 AND NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.event_id = e.id AND d.status IN ('pending', 'leased', 'dead_letter')) \
+                 ORDER BY e.sequence LIMIT $1 FOR UPDATE OF e SKIP LOCKED) x \
+             LIMIT $1",
         )
         .bind(limit)
         .bind(days.get())
         .fetch_all(&mut *tx)
         .await?;
+        let ids: Vec<Uuid> = expired.iter().map(|(_, id, _)| *id).collect();
         let tasks: Vec<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
             "DELETE FROM event_deliveries WHERE event_id = ANY($1) AND status = 'completed' RETURNING task_id",
         )
@@ -286,6 +301,15 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             .execute(&mut *tx)
             .await?
             .rows_affected();
+        let (workspaces, sequences): (Vec<Uuid>, Vec<i64>) = expired
+            .into_iter()
+            .map(|(workspace, _, sequence)| (workspace, sequence))
+            .unzip();
+        sqlx::query("INSERT INTO domain_event_retention (workspace_id, purged_through_sequence) SELECT workspace_id, max(sequence) FROM unnest($1::uuid[], $2::bigint[]) AS e(workspace_id, sequence) GROUP BY workspace_id ON CONFLICT (workspace_id) DO UPDATE SET purged_through_sequence = GREATEST(domain_event_retention.purged_through_sequence, EXCLUDED.purged_through_sequence)")
+            .bind(&workspaces)
+            .bind(&sequences)
+            .execute(&mut *tx)
+            .await?;
         tx.commit().await?;
         Ok(deleted)
     }
@@ -318,7 +342,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         limit: i64,
     ) -> Result<u64, RepositoryError> {
         self.purge_with(
-            "WITH expired AS (SELECT id FROM browser_sessions WHERE expires_at < now() - ($2 * interval '1 day') UNION SELECT id FROM browser_sessions WHERE revoked_at < now() - ($2 * interval '1 day') LIMIT $1), locked AS (SELECT s.id FROM browser_sessions s JOIN expired e ON e.id = s.id FOR UPDATE OF s SKIP LOCKED) DELETE FROM browser_sessions s USING locked l WHERE s.id = l.id",
+            "WITH expired AS (SELECT id FROM browser_sessions WHERE expires_at < now() - ($2 * interval '1 day') OR revoked_at < now() - ($2 * interval '1 day') LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM browser_sessions s USING expired e WHERE s.id = e.id",
             Some(days),
             limit,
         )

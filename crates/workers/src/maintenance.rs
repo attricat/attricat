@@ -251,6 +251,7 @@ pub async fn sweep_retention(
     struct Progress {
         sweep: FamilySweep,
         elapsed: Duration,
+        batches: u32,
         done: bool,
     }
     let deadline = Instant::now() + config.sweep_budget;
@@ -264,6 +265,7 @@ pub async fn sweep_retention(
                 outcome: "budget_exhausted",
             },
             elapsed: Duration::ZERO,
+            batches: 0,
             done: false,
         })
         .collect();
@@ -279,6 +281,7 @@ pub async fn sweep_retention(
             let batch =
                 tokio::time::timeout(remaining, purge_batch(repository, config, family)).await;
             entry.elapsed += started.elapsed();
+            entry.batches += 1;
             match batch {
                 Ok(Ok(deleted)) => {
                     entry.sweep.purged += deleted;
@@ -305,8 +308,11 @@ pub async fn sweep_retention(
             let family = entry.sweep.family.label();
             metrics::counter!("attricat_retention_cleanup_total", "family" => family, "outcome" => entry.sweep.outcome)
                 .increment(1);
-            metrics::histogram!("attricat_retention_cleanup_duration_seconds", "family" => family)
-                .record(entry.elapsed.as_secs_f64());
+            // A family the budget never reached has no duration to report.
+            if entry.batches > 0 {
+                metrics::histogram!("attricat_retention_cleanup_duration_seconds", "family" => family)
+                    .record(entry.elapsed.as_secs_f64());
+            }
             entry.sweep
         })
         .collect()
