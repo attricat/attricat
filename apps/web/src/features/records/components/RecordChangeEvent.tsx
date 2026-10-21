@@ -17,7 +17,11 @@ export const RecordChangeEvent = ({ changes }: Props) => {
   const [event] = changes;
   const actorName = event.actor_display_name ?? event.actor_email;
   const actor = actorName ? (
-    <UserLabel avatarFileId={event.actor_avatar_file_id} name={actorName} />
+    <UserLabel
+      avatarFileId={event.actor_avatar_file_id}
+      name={actorName}
+      userId={event.actor_user_id}
+    />
   ) : event.executor_type === AGENT_EXECUTOR_TYPE ? (
     t('records.agent')
   ) : (
@@ -31,6 +35,7 @@ export const RecordChangeEvent = ({ changes }: Props) => {
             <UserLabel
               avatarFileId={event.approved_by_avatar_file_id}
               name={event.approved_by_display_name}
+              userId={event.approved_by_user_id}
             />
           ),
         }}

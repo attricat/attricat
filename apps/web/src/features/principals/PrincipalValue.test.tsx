@@ -6,6 +6,10 @@ import '../../i18n';
 import { getDirectory } from './api';
 import { PrincipalValue } from './PrincipalValue';
 
+vi.mock(
+  '@tanstack/react-router',
+  async () => (await import('../../test/routerLinkMock')).routerLinkMock,
+);
 vi.mock('./api', () => ({ getDirectory: vi.fn() }));
 
 const ada = '6a1f9a54-2d0c-4f3a-9a7e-1c2b3d4e5f60';
@@ -49,6 +53,18 @@ describe('PrincipalValue', () => {
     renderValue(`user:${ada}`);
     expect(await screen.findByText('Ada')).toBeTruthy();
     expect(screen.queryByText('No longer an active member')).toBeNull();
+  });
+
+  it('links a user to their profile but not a team', async () => {
+    vi.mocked(getDirectory).mockResolvedValue(directory);
+    renderValue(`user:${ada}`);
+    expect(
+      (await screen.findByRole('link', { name: 'Ada' })).getAttribute('href'),
+    ).toBe(`/users/${ada}`);
+    cleanup();
+    renderValue(`team:${team}`);
+    expect(await screen.findByText('Old team')).toBeTruthy();
+    expect(screen.queryByRole('link')).toBeNull();
   });
 
   it('explains an inactive user', async () => {

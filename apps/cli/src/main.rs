@@ -103,7 +103,11 @@ enum Command {
         command: RecordCommand,
     },
     /// List workspace users and teams that assignment attributes can reference.
-    Directory,
+    Directory {
+        /// Show one member's profile, with their teams, instead.
+        #[arg(long)]
+        user: Option<Uuid>,
+    },
     /// Read and manage your own notification inbox in the workspace.
     Notification {
         #[command(subcommand)]
@@ -1768,7 +1772,12 @@ async fn run(cli: Cli) -> Result<String, CliError> {
 
     match cli.command {
         Command::Health => request(&client, &server, Method::GET, "/health", None).await,
-        Command::Directory => request(&client, &server, Method::GET, "/directory", None).await,
+        Command::Directory { user: None } => {
+            request(&client, &server, Method::GET, "/directory", None).await
+        }
+        Command::Directory { user: Some(id) } => {
+            request(&client, &server, Method::GET, &format!("/directory/users/{id}"), None).await
+        }
         Command::Notification { command } => {
             let (method, path, payload) = notification_request(command);
             request(&client, &server, method, &path, payload).await

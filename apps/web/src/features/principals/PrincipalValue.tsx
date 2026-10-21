@@ -1,6 +1,7 @@
 import { Chip, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
+import { RouterChip } from '../../components/RouterLink';
 import { NotSetValue } from '../views/components/values/NotSetValue';
 import { AssignedUserIcon, TeamIcon } from '../../components/systemIcons';
 import { principalKinds } from './constants';
@@ -47,13 +48,25 @@ export const PrincipalValue = ({ value }: { value: unknown }) => {
   }
   return (
     <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
-      <Chip
-        icon={<PrincipalKindIcon kind={principal.kind} />}
-        label={principal.label}
-        variant="outlined"
-        title={principal.kind === 'user' ? principal.user.email : undefined}
-        sx={{ maxWidth: '100%' }}
-      />
+      {principal.kind === 'user' ? (
+        <RouterChip
+          clickable
+          icon={<PrincipalKindIcon kind={principal.kind} />}
+          label={principal.label}
+          params={{ userId: principal.user.id }}
+          sx={{ maxWidth: '100%' }}
+          title={principal.user.email}
+          to="/users/$userId"
+          variant="outlined"
+        />
+      ) : (
+        <Chip
+          icon={<PrincipalKindIcon kind={principal.kind} />}
+          label={principal.label}
+          variant="outlined"
+          sx={{ maxWidth: '100%' }}
+        />
+      )}
       {!isAssignable(principal) && (
         <Typography color="text.secondary" variant="caption">
           {t(

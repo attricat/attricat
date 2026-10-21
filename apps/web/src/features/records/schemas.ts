@@ -786,6 +786,7 @@ export const recordApprovalSchema = z.object({
   covers_all: z.boolean(),
   covered_attributes: z.array(z.string()),
   content_digest: z.string(),
+  approved_by_user_id: uuidSchema.nullable(),
   approved_by: z.string().nullable(),
   approved_at: z.string(),
   ended_at: z.string().nullable(),

@@ -776,6 +776,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/workspace/roles/{role_id}/retire", post(roles::retire))
         .route("/directory", get(teams::directory))
+        .route("/directory/users/{user_id}", get(teams::directory_user))
         .route("/workspace/teams", get(teams::list).post(teams::create))
         .route(
             "/workspace/teams/{team_id}",
