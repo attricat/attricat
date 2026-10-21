@@ -21,9 +21,9 @@ container (not the development database), with 1,000-row batches. Seeded rows:
 
 | Batch | Time per 1,000 rows | Plan |
 | --- | ---: | --- |
-| `purge_tasks_batch` | 45 ms | `tasks_terminal_retention_idx` range scan, anti-join on `event_deliveries_task_id_unique_idx`. 12 ms is the `event_deliveries.task_id` FK check. |
+| `purge_tasks_batch` | 45 ms | `tasks_terminal_retention_idx` range scan. Measured with an `event_deliveries` anti-join that has since been removed (event-delivery envelopes are now outside the index); 12 ms of it was the `event_deliveries.task_id` FK check. |
 | `purge_rule_runs_batch` (select, envelope delete, run delete) | 32 ms | `rule_runs_terminal_retention_idx` range scan. Probes `rule_runs_version_created_idx` ("is there a newer run?"), `rule_runs_enable_gate_idx` and the tasks unique key once per row. |
-| `purge_domain_events_batch` (select, delivery, envelope and event deletes) | 90 ms | Per-workspace range scan of `domain_events_workspace_sequence_idx` from the stored scan cursor to the ceiling. Probes `event_deliveries_event_idx` and the tasks unique key once per examined event. |
+| `purge_domain_events_batch` (select, delivery, envelope and event deletes) | 90 ms (first draft); the current examine step is 5 ms, deletes unchanged | Per-workspace range scan of `domain_events_workspace_sequence_idx` from the stored scan cursor to the ceiling. Probes `event_deliveries_event_idx` and the tasks unique key once per examined event. |
 
 With the default 10-second budget, one sweep drains roughly 100k–300k rows per
 family when it is the only family with a backlog. Families share the budget
