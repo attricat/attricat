@@ -1,6 +1,8 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { ruleQueryKeys } from '../rules/queryKeys';
 import { watchRecordRuleChecks } from '../rules/recordRuleChecks';
+import type { ResolvedRecordPreview } from './api';
+import { relationshipTargetLabels } from './knownRecordLabels';
 import { recordQueryKeys } from './queryKeys';
 
 export const invalidateRecordSearches = (client: QueryClient) =>
@@ -53,6 +55,17 @@ export const invalidateRecord = (client: QueryClient, id: string) => {
     client.invalidateQueries({
       queryKey: recordQueryKeys.allLabels(),
       predicate: (query) => query.queryKey.includes(id),
+    }),
+    // Records that relate to this one label it from their own resolved
+    // preview, so those previews show its old label until refreshed.
+    client.invalidateQueries({
+      queryKey: recordQueryKeys.allResolvedPreviews(),
+      predicate: (query) => {
+        const preview = query.state.data as ResolvedRecordPreview | undefined;
+        return Boolean(
+          preview && relationshipTargetLabels(preview, true).has(id),
+        );
+      },
     }),
     client.invalidateQueries({
       queryKey: recordQueryKeys.searches(),
