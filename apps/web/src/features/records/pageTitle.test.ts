@@ -29,4 +29,19 @@ describe('pageTitleLabel', () => {
     ).toBeNull();
     expect(pageTitleLabel(views, attributes, {})).toBeNull();
   });
+
+  it('leaves out empty text fields', () => {
+    expect(
+      pageTitleLabel(views, attributes, {
+        name: { value: '' },
+        sku: { value: 'LAMP-1' },
+      }),
+    ).toBe('LAMP-1');
+    expect(
+      pageTitleLabel(views, attributes, {
+        name: { value: ' ' },
+        sku: { value: '' },
+      }),
+    ).toBeNull();
+  });
 });
