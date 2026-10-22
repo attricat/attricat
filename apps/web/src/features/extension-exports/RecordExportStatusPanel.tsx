@@ -150,6 +150,15 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
           {retry.error.message}
         </Alert>
       )}
+      {!!retry.data?.job_errors.length && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {t('extensionExports.retryJobErrors', {
+            messages: retry.data.job_errors
+              .map((error) => error.message)
+              .join('; '),
+          })}
+        </Alert>
+      )}
       <Table size="small">
         <TableHead>
           <TableRow>

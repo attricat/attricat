@@ -2005,6 +2005,7 @@
     "notExported": "Not exported yet",
     "preview": "Preview",
     "retry": "Retry",
+    "retryJobErrors": "Some export jobs could not resync the records: {{messages}}",
     "previewTitle": "Payload for {{destination}}",
     "previewLoading": "Building the payload",
     "previewIssues_one": "The destination would reject this record for {{count}} reason:",

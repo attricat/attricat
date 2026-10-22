@@ -121,6 +121,15 @@ export const ExtensionExportStatusSection = ({
       </Typography>
       {page.error && <Alert severity="error">{page.error.message}</Alert>}
       {retry.error && <Alert severity="error">{retry.error.message}</Alert>}
+      {!!retry.data?.job_errors.length && (
+        <Alert severity="warning">
+          {t('extensionExports.retryJobErrors', {
+            messages: retry.data.job_errors
+              .map((error) => error.message)
+              .join('; '),
+          })}
+        </Alert>
+      )}
       {rows.length === 0 ? (
         <EmptyState
           description={t('extensionExports.nothingExportedDescription')}

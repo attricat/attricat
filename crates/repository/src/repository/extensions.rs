@@ -1516,6 +1516,22 @@ impl AttricatRepository {
             .await?;
         self.revoke_extension_file_links(&mut transaction, &current.extension_id)
             .await?;
+        // Credentials, operator budgets and handler outcomes go with the
+        // installation, so a later install of the same ID starts without
+        // them. Export mappings stay: they only name destination IDs.
+        for table in [
+            "extension_connections",
+            "extension_host_permission_budgets",
+            "extension_handler_attempts",
+        ] {
+            sqlx::query(&format!(
+                "DELETE FROM {table} WHERE workspace_id = $1 AND extension_id = $2"
+            ))
+            .bind(self.workspace_id.0)
+            .bind(&current.extension_id)
+            .execute(&mut *transaction)
+            .await?;
+        }
         self.commit_extension_mutation(transaction, "remove", &current.extension_id)
             .await
     }

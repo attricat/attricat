@@ -36,6 +36,10 @@ use crate::{
 /// The most failed handler deliveries an export status page lists.
 const HANDLER_FAILURE_LIMIT: i64 = 20;
 const MAX_CONNECTION_TEXT_BYTES: usize = 2048;
+/// Column limits of `extension_connections`.
+const MAX_CONNECTION_NAME_CHARS: usize = 200;
+const MAX_CLIENT_ID_CHARS: usize = 512;
+const MAX_CONNECTION_URL_CHARS: usize = 2048;
 const MAX_SECRET_INPUT_BYTES: usize = 8 * 1024;
 const MAX_CONNECTION_PARAMETERS_BYTES: usize = 16 * 1024;
 
@@ -230,12 +234,32 @@ pub(super) async fn retry_export(
 // ---- connections ----------------------------------------------------------
 
 pub(super) async fn list_connections(
+    State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
+    principal: AuthenticatedPrincipal,
+    workspace: ActiveWorkspace,
     ApiPath(extension_id): ApiPath<String>,
 ) -> Result<Json<Vec<ExtensionConnection>>, ApiError> {
-    Ok(Json(
-        repository.list_extension_connections(&extension_id).await?,
-    ))
+    let mut connections = repository.list_extension_connections(&extension_id).await?;
+    // A pending device code lets whoever enters it bind the connection to
+    // their own account, so only operators who may authorize see it.
+    if !state
+        .repository
+        .principal_may(
+            principal.actor(),
+            workspace.0,
+            "extensions.manage",
+            None,
+            None,
+        )
+        .await?
+    {
+        for connection in &mut connections {
+            connection.device_user_code = None;
+            connection.device_verification_uri = None;
+        }
+    }
+    Ok(Json(connections))
 }
 
 #[derive(Deserialize)]
@@ -260,9 +284,15 @@ pub(super) struct CreateConnectionRequest {
 }
 
 fn bounded_text(value: &str, label: &str) -> Result<(), ApiError> {
-    if value.trim().is_empty() || value.len() > MAX_CONNECTION_TEXT_BYTES {
+    bounded_chars(value, label, MAX_CONNECTION_TEXT_BYTES)
+}
+
+/// Checks a connection field against its column's length limit, in
+/// characters as the database counts them.
+fn bounded_chars(value: &str, label: &str, max: usize) -> Result<(), ApiError> {
+    if value.trim().is_empty() || value.chars().count() > max {
         return Err(ApiError::invalid_input(format!(
-            "{label} must be 1-{MAX_CONNECTION_TEXT_BYTES} bytes"
+            "{label} must be 1-{max} characters"
         )));
     }
     Ok(())
@@ -279,6 +309,7 @@ fn bounded_secret(value: Option<&String>, label: &str) -> Result<(), ApiError> {
 
 /// Checks a token or device endpoint against the kind's host permission.
 fn check_endpoint(manifest: &Manifest, rule_id: &str, url: &str) -> Result<(), ApiError> {
+    bounded_chars(url, "endpoint URL", MAX_CONNECTION_URL_CHARS)?;
     let parsed = url::Url::parse(url)
         .map_err(|_| ApiError::invalid_input("endpoint URLs must be HTTPS URLs".into()))?;
     if !manifest
@@ -318,8 +349,12 @@ pub(super) async fn create_connection(
             "the connection kind does not support that grant type".into(),
         ));
     }
-    bounded_text(&input.display_name, "display_name")?;
-    bounded_text(&input.client_id, "client_id")?;
+    bounded_chars(
+        input.display_name.trim(),
+        "display_name",
+        MAX_CONNECTION_NAME_CHARS,
+    )?;
+    bounded_chars(&input.client_id, "client_id", MAX_CLIENT_ID_CHARS)?;
     if let Some(scope) = &input.scope {
         bounded_text(scope, "scope")?;
     }
@@ -417,7 +452,7 @@ pub(super) async fn update_connection(
     let installed = repository.installed_extension(&extension_id).await?;
     let manifest = installed_manifest(&installed.manifest)?;
     if let Some(name) = &input.display_name {
-        bounded_text(name, "display_name")?;
+        bounded_chars(name.trim(), "display_name", MAX_CONNECTION_NAME_CHARS)?;
     }
     if let Some(scope) = input.scope.as_ref().filter(|scope| !scope.is_empty()) {
         bounded_text(scope, "scope")?;
@@ -743,6 +778,10 @@ pub(super) async fn preview_export(
         return Err(ApiError::forbidden());
     }
     let installation = runtime_installation(&repository, &extension_id).await?;
+    // A preview is a client command, so it needs the same grant.
+    if !installation.capability_grants.contains("client.commands") {
+        return Err(ApiError::forbidden());
+    }
     let server = installation
         .manifest
         .server

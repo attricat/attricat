@@ -283,6 +283,26 @@ impl OperationState {
         })
     }
 
+    /// The recorded result of a fetch this run already made with the same
+    /// transfer key and request digest. It is checked before the target is
+    /// resolved, so a replay spends no token refresh or request budget.
+    async fn replayed_fetch(
+        repository: &AttricatRepository,
+        run_id: Uuid,
+        transfer_key: &str,
+        digest: &str,
+    ) -> Result<Option<String>, String> {
+        let previous = repository
+            .previous_extension_http_input(run_id, transfer_key, digest)
+            .await
+            .map_err(|error| error.to_string())?;
+        previous
+            .map(|(id, etag)| {
+                bounded_serialize(&json!({"artifact_id":id,"etag":etag,"replayed":true}))
+            })
+            .transpose()
+    }
+
     /// Fetches one byte range into a run-bound input artifact. `digest`
     /// identifies the request for replays of the same transfer key.
     #[allow(clippy::too_many_arguments)]
@@ -298,14 +318,6 @@ impl OperationState {
     ) -> Result<String, String> {
         if u64::from(max_bytes) > target.max_transfer_bytes {
             return Err("range exceeds granted bulk transfer limit".into());
-        }
-        if let Some((id, etag)) = self
-            .repository
-            .previous_extension_http_input(self.run_id, transfer_key, digest)
-            .await
-            .map_err(|error| error.to_string())?
-        {
-            return bounded_serialize(&json!({"artifact_id":id,"etag":etag,"replayed":true}));
         }
         let TransferTarget {
             client,
@@ -507,6 +519,13 @@ impl OperationState {
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_active("network.request").await?;
         let url = transfer_url(&input.url)?;
+        let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
+        if let Some(replayed) =
+            Self::replayed_fetch(&self.repository, self.run_id, &input.transfer_key, &digest)
+                .await?
+        {
+            return Ok(replayed);
+        }
         let target = Self::transfer_target(
             &host,
             &input.host_permission_id,
@@ -517,7 +536,6 @@ impl OperationState {
         )
         .await
         .map_err(TargetRefusal::into_error)?;
-        let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
         self.fetch_range(
             &host,
             target,
@@ -544,6 +562,13 @@ impl OperationState {
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_active("network.request").await?;
         let url = https_url(&input.url)?;
+        let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
+        if let Some(replayed) =
+            Self::replayed_fetch(&self.repository, self.run_id, &input.transfer_key, &digest)
+                .await?
+        {
+            return Ok(replayed);
+        }
         let mut target = match Self::transfer_target(
             &host,
             &input.host_permission_id,
@@ -558,7 +583,6 @@ impl OperationState {
             Err(refusal) => return refusal.into_outcome(),
         };
         caller_headers(&mut target.headers, input.headers)?;
-        let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
         self.fetch_range(
             &host,
             target,

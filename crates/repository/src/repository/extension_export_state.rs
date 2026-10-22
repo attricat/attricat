@@ -742,7 +742,7 @@ impl AttricatRepository {
         if !EXPORT_STATUSES.contains(&status) {
             return Err(invalid("unknown export status"));
         }
-        let ids: Vec<Uuid> = sqlx::query_scalar("SELECT m.record_id FROM extension_export_mappings m JOIN records r ON r.workspace_id=m.workspace_id AND r.id=m.record_id WHERE m.workspace_id=$1 AND m.extension_id=$2 AND m.connection IS NOT DISTINCT FROM $3 AND m.status=$4 AND r.blueprint_id=$5 ORDER BY m.record_id LIMIT $6")
+        let ids: Vec<Uuid> = sqlx::query_scalar("SELECT m.record_id FROM extension_export_mappings m JOIN records r ON r.workspace_id=m.workspace_id AND r.id=m.record_id WHERE m.workspace_id=$1 AND m.extension_id=$2 AND m.connection IS NOT DISTINCT FROM $3 AND m.status=$4 AND r.blueprint_id=$5 AND r.deleted_at IS NULL ORDER BY m.record_id LIMIT $6")
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(status).bind(blueprint_id).bind(limit.saturating_add(1))
             .fetch_all(&self.pool).await?;
         Ok((ids.len() as i64 <= limit).then_some(ids))

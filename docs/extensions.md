@@ -185,8 +185,9 @@ host-permission grant. Quarantine may occur from any installed state; direct
 re-enablement revalidates the installed release and its configuration before
 handlers resume. Upgrade snapshots a newly selected installed release, clears grants and
 configuration, and leaves a formerly enabled installation disabled. Removal
-deletes current state but retains installed-release and append-only lifecycle
-history.
+deletes current state, including the extension's connections and their
+credentials, host-permission budgets and handler outcomes, but retains
+installed-release and append-only lifecycle history and export mappings.
 
 Each lifecycle mutation uses an explicit Rust/SQLx transaction to write the
 current state, an append-only lifecycle record, and the existing generic audit

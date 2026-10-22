@@ -59,8 +59,11 @@ export const retryExports = (
   request(
     `${extensionPath(extensionId)}/export-status/retry`,
     retryResponseSchema,
+    // Retried records are also resynced at once by the export jobs of
+    // their connection, so a retry pushes even without a retry handler.
     json({
       connection: selection.connection,
+      run: true,
       ...(selection.recordIds ? { record_ids: selection.recordIds } : {}),
       ...(selection.status ? { status: selection.status } : {}),
     }),

@@ -124,14 +124,17 @@ pub const KNOWN_VIEW_NAMES: &[&str] = &[
 ];
 
 pub const CONNECTOR_JOB_DIRECTIONS: &[&str] = &["import", "export"];
-/// Record events that may trigger an export connector job.
+/// Record events that may trigger an export connector job: every event
+/// that changes a record's content revision.
 pub const CONNECTOR_TRIGGER_EVENTS: &[&str] = &[
     "record.created.v1",
     "record.updated.v1",
     "record.deleted.v1",
+    "record.migrated.v1",
     "record.published.v1",
     "record.unpublished.v1",
     "attribute_value.changed.v1",
+    "attribute_value.restored.v1",
     "relationship.changed.v1",
 ];
 /// Shortest connector job run interval, in seconds.

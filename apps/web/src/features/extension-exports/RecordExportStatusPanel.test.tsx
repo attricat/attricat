@@ -11,7 +11,7 @@ const recordId = '00000000-0000-4000-8000-000000000001';
 vi.mock('../auth/useCan', () => ({ useCan: () => true }));
 vi.mock('./api', () => ({
   recordExportStatus: vi.fn(),
-  retryExports: vi.fn(async () => ({ record_ids: [recordId] })),
+  retryExports: vi.fn(async () => ({ record_ids: [recordId], job_errors: [] })),
   previewExport: vi.fn(async () => ({
     payload: { title: 'Chair' },
     issues: ['GTIN is required'],

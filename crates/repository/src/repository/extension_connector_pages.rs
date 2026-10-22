@@ -206,10 +206,12 @@ impl AttricatRepository {
         Ok(published.into_iter().collect())
     }
 
-    /// Live records among `record_ids`, by ID.
+    /// Live records among `record_ids`, by ID, with their content revision
+    /// as of `snapshot_at` so it matches values read at that snapshot.
     async fn records_of(
         &self,
         record_ids: &[Uuid],
+        snapshot_at: DateTime<Utc>,
     ) -> Result<HashMap<Uuid, Record>, RepositoryError> {
         if record_ids.is_empty() {
             return Ok(HashMap::new());
@@ -217,10 +219,11 @@ impl AttricatRepository {
         let records: Vec<Record> = sqlx::query_as::<_, Db<Record>>(&format!(
             "SELECT r.id, r.blueprint_id, r.blueprint_version, r.projections, r.system_tags, r.system_metadata, ('attricat.sample'=ANY(r.system_tags)) AS is_sample, r.created_at, r.updated_at, r.deleted_at, {} AS content_revision \
              FROM records r WHERE r.id = ANY($1) AND r.workspace_id = $2 AND r.deleted_at IS NULL",
-            super::extension_attricat_data::content_revision_sql("r", None)
+            super::extension_attricat_data::content_revision_sql("r", Some("$3"))
         ))
         .bind(record_ids)
         .bind(self.workspace_id.0)
+        .bind(snapshot_at)
         .fetch_all(&self.pool)
         .await?
         .into_domain();
@@ -305,7 +308,7 @@ impl AttricatRepository {
             .collect();
         target_ids.sort_unstable();
         target_ids.dedup();
-        let targets = self.records_of(&target_ids).await?;
+        let targets = self.records_of(&target_ids, page.snapshot_at).await?;
         let unread: Vec<Uuid> = target_ids
             .iter()
             .copied()

@@ -2095,6 +2095,7 @@
     "notExported": "Jeszcze nie wyeksportowany",
     "preview": "Podgląd",
     "retry": "Ponów",
+    "retryJobErrors": "Niektóre zadania eksportu nie mogły ponownie zsynchronizować rekordów: {{messages}}",
     "previewTitle": "Dane dla {{destination}}",
     "previewLoading": "Przygotowywanie danych",
     "previewIssues_one": "Miejsce docelowe odrzuciłoby ten rekord z {{count}} powodu:",

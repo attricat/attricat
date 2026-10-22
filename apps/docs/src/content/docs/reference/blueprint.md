@@ -651,7 +651,7 @@ input = { profile = { version = 1, columns = [{ header = "ID", attribute = "exte
 | `connection` | string | Default destination | Exports only. The extension [connection](/builders/extensions/#connections) the job pushes to: 1 to 128 ASCII letters, digits, `.`, `_`, or `-`. |
 | `trigger` | table | | Exports only. Also run the job when records change: `{ events = [...], debounce_seconds = N }`. |
 
-`trigger.events` lists one or more of `record.created.v1`, `record.updated.v1`, `record.deleted.v1`, `record.published.v1`, `record.unpublished.v1`, `attribute_value.changed.v1`, and `relationship.changed.v1`. `trigger.debounce_seconds` is 1 to 3600: a run starts once the newest matching event of the blueprint's records is that old, or once the oldest pending change is ten times that old, and covers only the changed records.
+`trigger.events` lists one or more of `record.created.v1`, `record.updated.v1`, `record.deleted.v1`, `record.migrated.v1`, `record.published.v1`, `record.unpublished.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, and `relationship.changed.v1`. `trigger.debounce_seconds` is 1 to 3600: a run starts once the newest matching event of the blueprint's records is that old, or once the oldest pending change is ten times that old, and covers only the changed records.
 
 ```toml
 [[connector_jobs]]
