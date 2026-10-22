@@ -273,8 +273,9 @@ pub struct DeviceAuthorization {
     pub interval_seconds: i32,
 }
 
-/// How long a refresh claim lasts if its worker never settles it.
-const REFRESH_CLAIM: chrono::Duration = chrono::Duration::seconds(120);
+/// How long a refresh claim lasts if its worker never settles it: longer than
+/// a DNS lookup and a token request may take at their longest timeouts.
+const REFRESH_CLAIM: chrono::Duration = chrono::Duration::seconds(300);
 
 /// A connection claimed for a token refresh or device-code poll. While the
 /// claim is live no other worker refreshes the same connection, so a
@@ -307,7 +308,10 @@ impl ConnectionRefresh {
         }
     }
 
-    /// Stores freshly issued tokens and releases the claim.
+    /// Stores freshly issued tokens and releases the claim. The tokens are
+    /// stored even when the claim has lapsed: the provider may already have
+    /// rotated the refresh token, and losing the new one would break the
+    /// connection.
     pub async fn complete(mut self, tokens: IssuedTokens) -> Result<(), RepositoryError> {
         let id = self.credentials.id;
         let access = seal(id, "access_token", &tokens.access_token)?;
@@ -317,7 +321,7 @@ impl ConnectionRefresh {
             .map(|token| seal(id, "refresh_token", token))
             .transpose()?;
         let (workspace_id, claim) = (self.workspace_id, self.claim);
-        self.settle(sqlx::query("UPDATE extension_connections SET access_token_ciphertext=$3,access_token_expires_at=$4,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=NULL,refresh_claimed_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_claim=$6")
+        self.settle(sqlx::query("UPDATE extension_connections SET access_token_ciphertext=$3,access_token_expires_at=$4,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claim END,refresh_claimed_until=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2")
             .bind(workspace_id).bind(id).bind(access).bind(tokens.expires_at).bind(refresh).bind(claim))
             .await
     }
@@ -593,20 +597,24 @@ impl AttricatRepository {
             .bind(REFRESH_CLAIM.num_seconds() as f64)
             .fetch_optional(&mut *transaction).await?;
         if claimed.is_none() {
-            // Distinguish a missing connection from a busy one.
+            // End the transaction before distinguishing a missing connection
+            // from a busy one, so a waiter holds one pooled connection.
+            transaction.rollback().await?;
             self.extension_connection(extension_id, connection).await?;
             return Ok(None);
         }
         let row: CredentialRow = sqlx::query_as(&format!("SELECT {CREDENTIAL_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3"))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection)
             .fetch_one(&mut *transaction).await?;
+        // Credentials that cannot be decrypted roll the claim back.
+        let credentials = row.decrypt()?;
         transaction.commit().await?;
         Ok(Some(ConnectionRefresh {
             pool: self.pool.clone(),
             workspace_id: self.extension_workspace(),
             claim,
             settled: false,
-            credentials: row.decrypt()?,
+            credentials,
         }))
     }
 

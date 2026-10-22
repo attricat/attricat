@@ -131,7 +131,8 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
-    // A preview reads one record; the handler authorizes that record.
+    // The preview command reads with the extension's catalog access, so the
+    // handler requires a workspace-wide `records.read` grant.
     if path == "/extensions/{extension_id}/exports/{export_id}/preview" {
         return Some(Policy {
             permission: "records.read",

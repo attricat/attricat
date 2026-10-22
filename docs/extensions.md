@@ -622,7 +622,7 @@ whose `handle-event(event, delivery)` returns `result<_, failure>`, and
 | Case | Event handler | Operation batch |
 |---|---|---|
 | `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes | The run is dead-lettered with code `rejected`, without retries |
-| `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted` | The batch is retried with the same batch key after the delay, within the task's failure budget |
+| `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted` | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget; without it, it is a failure within that budget |
 | `fault(message)` | Quarantines the installation | Fails the run and quarantines the installation |
 
 Traps, fuel or memory exhaustion, timeouts and invalid batch results are
@@ -635,7 +635,12 @@ and message. When the rejecting run or handler delivery holds the record's
 lease, the rejection settles the revision it leased and ends that lease; while
 another one holds it, that push settles the record instead. A rejection of a
 revision older than the mapping's is ignored. A connector run's rejection
-without a `connection` belongs to the run's connection. Handler outcomes are stored per
+without a `connection` belongs to the run's connection. Any other rejection
+without one belongs to the record's only mapping of the extension, else to the
+extension's only connection, else to its default destination when it has no
+connections; when that is ambiguous no export status is set. A handler's
+rejection of a record other than the event's is settled at that record's
+revision when the event happened. Handler outcomes are stored per
 event and handler in `extension_handler_attempts`: handlers that already
 completed are not invoked again when another handler of the same event is
 retried. Rejected and exhausted outcomes stay visible for 30 days
@@ -691,7 +696,8 @@ exporter can withdraw the item. Components with `exports.mappings` use these
 same or a newer revision, unless an operator requested a retry or `force` is
 set. Otherwise it leases the record for `lease_ms` (default 2 minutes, at most
 15) so an event handler and a connector job never push the same record at the
-same time. `commit` records the result and releases the lease; without a lease
+same time. A retried delivery or batch takes its own earlier lease back. A
+leased `commit` without `record_revision` is for the leased revision. `commit` records the result and releases the lease; without a lease
 token it fails while another worker holds a live lease, and a result for an
 older revision than the mapping's is refused, so a late push never replaces a
 newer outcome. A refused commit still ends its own lease. A component that
@@ -778,8 +784,9 @@ The rule's `response_headers` list extra response headers to return beyond
 `x-amzn-ratelimit-limit` or request IDs); `set-cookie` and authentication
 headers can never be listed. The result is `{outcome: "response", status,
 headers, body_base64}`, `{outcome: "rate_limited", retry_after_ms}` when the
-rule's budget is spent, `{outcome: "uncertain"}` after a transport failure or
-timeout, or `{outcome: "connection_unavailable", message}` when a token could
+rule's budget is spent, `{outcome: "uncertain"}` after a transport failure,
+a timeout or a response larger than the rule's `max_response_bytes` (the
+request may have been applied), or `{outcome: "connection_unavailable", message}` when a token could
 not be refreshed for a temporary reason. Redirects are never followed; v2
 returns a 3xx response as it is, so a component may request its `Location`
 through a granted rule (Allegro answers finished offer commands with
@@ -815,8 +822,10 @@ as its file part, for Shopify's form-style staged uploads. A POST still needs
 input artifact of the run as well as an output. Like `network.request.v2`, the
 v2 transfers answer a spent request budget with
 `{outcome: "rate_limited", retry_after_ms}` and an unavailable token endpoint
-with `{outcome: "connection_unavailable"}` instead of an error, and a 401 from
-the destination discards the connection's cached token.
+with `{outcome: "connection_unavailable"}` instead of an error, and charge the
+budget only for a transfer that is sent. A 401 from the destination discards
+the connection's cached token and is not recorded against the delivery key,
+so the same key is sent again with a fresh token.
 
 `transfer.open-record-file({record_id, file_id, variant?})` copies a file a
 live record references (up to 16 MiB) into a run-bound input artifact for a

@@ -1601,6 +1601,20 @@ impl ExtensionOperationTaskHandler {
         operation_started: Instant,
     ) -> Result<TaskOutcome, TaskHandlerError> {
         let outcome = match error {
+            // A retry with an explicit delay is the batch asking to wait,
+            // like a deferral, so it does not spend the failure budget.
+            BatchError::Failure(InvocationFailure::Retry {
+                message,
+                after: Some(after),
+            }) => {
+                let at = chrono::Utc::now()
+                    + chrono::TimeDelta::from_std(after).unwrap_or(chrono::TimeDelta::zero());
+                repository
+                    .defer_extension_operation_task(task, &message, at)
+                    .await
+                    .map_err(operation_task_error)?;
+                "deferred"
+            }
             BatchError::Failure(InvocationFailure::Retry { message, after }) => {
                 let delay = after.unwrap_or_else(|| retry_backoff(task.failures.max(0) as u32 + 1));
                 let at = chrono::Utc::now()
@@ -1630,27 +1644,36 @@ impl ExtensionOperationTaskHandler {
                         .await
                         .map_err(operation_task_error)?;
                     // A connector run's rejection belongs to the run's
-                    // connection unless it names another.
+                    // connection unless it names another; any other run's to
+                    // the record's one destination, which is not guessed.
                     let connection = match rejection.connection {
-                        Some(connection) => Some(connection),
-                        None => repository
+                        Some(connection) => Some(Some(connection)),
+                        None => match repository
                             .connector_run_details(run.id)
                             .await
                             .map_err(operation_task_error)?
-                            .and_then(|details| details.connection),
+                        {
+                            Some(details) => Some(details.connection),
+                            None => repository
+                                .rejection_destination(&run.extension_id, record_id)
+                                .await
+                                .map_err(operation_task_error)?,
+                        },
                     };
-                    repository
-                        .record_export_rejection(
-                            &run.extension_id,
-                            connection.as_deref(),
-                            record_id,
-                            Some(revision),
-                            Some(&run_lease_holder(run.id)),
-                            &rejection.code,
-                            &rejection.message,
-                        )
-                        .await
-                        .map_err(operation_task_error)?;
+                    if let Some(connection) = connection {
+                        repository
+                            .record_export_rejection(
+                                &run.extension_id,
+                                connection.as_deref(),
+                                record_id,
+                                Some(revision),
+                                Some(&run_lease_holder(run.id)),
+                                &rejection.code,
+                                &rejection.message,
+                            )
+                            .await
+                            .map_err(operation_task_error)?;
+                    }
                 }
                 repository
                     .reject_extension_operation_task(
@@ -1955,13 +1978,35 @@ impl WasmExtensionTaskHandler {
                     .await?;
                 if let Some(record_id) = rejection.record_id
                     && exports_mappings(installation)
+                    // A rejection that names no connection goes to the record's
+                    // one destination; an ambiguous one is not guessed.
+                    && let Some(connection) = match rejection.connection {
+                        Some(connection) => Some(Some(connection)),
+                        None => {
+                            repository
+                                .rejection_destination(&installation.extension_id, record_id)
+                                .await?
+                        }
+                    }
                 {
+                    // The delivery's revision is the event record's; another
+                    // record's rejection concerns that record's revision when
+                    // the event happened.
+                    let revision = if record_id == event.aggregate_id {
+                        delivery.record_revision
+                    } else {
+                        Some(
+                            repository
+                                .record_content_revision_at(record_id, event.occurred_at)
+                                .await?,
+                        )
+                    };
                     repository
                         .record_export_rejection(
                             &installation.extension_id,
-                            rejection.connection.as_deref(),
+                            connection.as_deref(),
                             record_id,
-                            delivery.record_revision,
+                            revision,
                             Some(&handler_lease_holder(event.id, &handler.id)),
                             &rejection.code,
                             &rejection.message,

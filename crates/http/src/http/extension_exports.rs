@@ -214,7 +214,11 @@ pub(super) async fn retry_export(
             },
         )
         .await?;
+    // The retry is recorded above. Each job resyncs only its blueprint's
+    // records, and a job that cannot run is reported rather than failing a
+    // retry that already happened.
     let mut run_ids = Vec::new();
+    let mut job_errors = Vec::new();
     if input.run && !record_ids.is_empty() {
         let key = format!("retry-{}", Uuid::new_v4().simple());
         for job in repository
@@ -223,16 +227,32 @@ pub(super) async fn retry_export(
             .into_iter()
             .filter(|job| job.connection == input.connection)
         {
-            run_ids.extend(
-                repository
-                    .resync_blueprint_connector_job(job.id, &key, Some(record_ids.clone()))
-                    .await?,
-            );
+            let ids = repository
+                .records_of_blueprint(job.blueprint_id, &record_ids)
+                .await?;
+            if ids.is_empty() {
+                continue;
+            }
+            match repository
+                .resync_blueprint_connector_job(job.id, &key, Some(ids))
+                .await
+            {
+                Ok(runs) => run_ids.extend(runs),
+                Err(error) => {
+                    tracing::warn!(job = %job.id, %error, "export retry resync could not start");
+                    let message = match &error {
+                        RepositoryError::InvalidExtension(message) => message.clone(),
+                        RepositoryError::NotFound(what) => format!("{what} not found"),
+                        _ => "the job could not start a resync".to_owned(),
+                    };
+                    job_errors.push(json!({"job_id": job.id, "message": message}));
+                }
+            }
         }
     }
     Ok((
         StatusCode::ACCEPTED,
-        Json(json!({"record_ids": record_ids, "run_ids": run_ids})),
+        Json(json!({"record_ids": record_ids, "run_ids": run_ids, "job_errors": job_errors})),
     ))
 }
 
@@ -387,6 +407,10 @@ pub(super) struct UpdateConnectionRequest {
     display_name: Option<String>,
     #[serde(default)]
     token_url: Option<String>,
+    /// A device-code connection's authorization endpoint.
+    #[serde(default)]
+    device_authorization_url: Option<String>,
+    /// The requested scope; an empty string clears it.
     #[serde(default)]
     scope: Option<String>,
     #[serde(default)]
@@ -424,10 +448,18 @@ pub(super) async fn update_connection(
     if let Some(name) = &input.display_name {
         bounded_text(name, "display_name")?;
     }
-    if let Some(scope) = &input.scope {
+    if let Some(scope) = input.scope.as_ref().filter(|scope| !scope.is_empty()) {
         bounded_text(scope, "scope")?;
     }
     if let Some(url) = &input.token_url {
+        check_endpoint(&manifest, &current.host_permission_id, url)?;
+    }
+    if let Some(url) = &input.device_authorization_url {
+        if current.grant_type != "device_code" {
+            return Err(ApiError::invalid_input(
+                "device_authorization_url applies only to the device code grant".into(),
+            ));
+        }
         check_endpoint(&manifest, &current.host_permission_id, url)?;
     }
     bounded_secret(input.client_secret.as_ref(), "client_secret")?;
@@ -453,8 +485,10 @@ pub(super) async fn update_connection(
                 ExtensionConnectionPatch {
                     display_name: input.display_name.map(|name| name.trim().to_owned()),
                     token_url: input.token_url,
-                    device_authorization_url: None,
-                    scope: input.scope.map(Some),
+                    device_authorization_url: input.device_authorization_url.map(Some),
+                    scope: input
+                        .scope
+                        .map(|scope| (!scope.is_empty()).then_some(scope)),
                     parameters: input.parameters,
                     client_secret: input.client_secret,
                     refresh_token: input.refresh_token,

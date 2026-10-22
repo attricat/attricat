@@ -177,8 +177,6 @@ pub(crate) fn validate_workspace_extension_layout(layout: &Value) -> Result<(), 
     Ok(())
 }
 
-/// Core Attricat events retain existing subscription semantics. Extension-owned
-/// events additionally require a matching declared provider contract.
 /// A retry request reaches only the extension it names.
 fn export_retry_addressed_to(
     extension_id: &str,
@@ -188,6 +186,8 @@ fn export_retry_addressed_to(
         || event.payload.get("extension_id").and_then(Value::as_str) == Some(extension_id)
 }
 
+/// Core Attricat events retain existing subscription semantics. Extension-owned
+/// events additionally require a matching declared provider contract.
 fn event_contract_subscription_allowed(
     manifest: &Manifest,
     event: &crate::domain_events::DomainEvent,

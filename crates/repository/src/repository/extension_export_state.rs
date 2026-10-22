@@ -404,8 +404,11 @@ impl AttricatRepository {
         let now: DateTime<Utc> = sqlx::query_scalar("SELECT clock_timestamp()")
             .fetch_one(&mut *transaction)
             .await?;
+        // A live lease of another invocation keeps the record busy. The same
+        // invocation (a retried delivery or batch) takes its own lease back.
         if let (Some(_), Some(until)) = (mapping.lease_token, mapping.lease_until)
             && until > now
+            && (holder.is_none() || mapping.lease_holder.as_deref() != holder)
         {
             transaction.commit().await?;
             return Ok(ExportBegin::Busy { lease_until: until });
@@ -508,9 +511,16 @@ impl AttricatRepository {
                         "export mapping is leased by another worker".into(),
                     ));
                 }
+                // A leased push without a revision is for the revision it
+                // leased.
+                let revision = update.record_revision.or(if lease_token.is_some() {
+                    mapping.leased_revision
+                } else {
+                    None
+                });
                 (
                     lease_token.is_some(),
-                    update.record_revision.unwrap_or(mapping.record_revision),
+                    revision.unwrap_or(mapping.record_revision),
                 )
             }
             Lease::Rejection(holder) => {
@@ -674,6 +684,34 @@ impl AttricatRepository {
             ) => Ok(()),
             Err(error) => Err(error),
         }
+    }
+
+    /// The destination a rejection that names no connection belongs to: the
+    /// record's only mapping of the extension, else the extension's only
+    /// connection, else its default destination when it has no connections.
+    /// `None` when that is ambiguous, so no destination is guessed.
+    pub async fn rejection_destination(
+        &self,
+        extension_id: &str,
+        record_id: Uuid,
+    ) -> Result<Option<Option<String>>, RepositoryError> {
+        let mapped: Vec<Option<String>> = sqlx::query_scalar("SELECT connection FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND record_id=$3 LIMIT 2")
+            .bind(self.extension_workspace()).bind(extension_id).bind(record_id)
+            .fetch_all(&self.pool).await?;
+        if let [connection] = mapped.as_slice() {
+            return Ok(Some(connection.clone()));
+        }
+        if mapped.len() > 1 {
+            return Ok(None);
+        }
+        let connections: Vec<String> = sqlx::query_scalar("SELECT connection FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 LIMIT 2")
+            .bind(self.extension_workspace()).bind(extension_id)
+            .fetch_all(&self.pool).await?;
+        Ok(match connections.as_slice() {
+            [] => Some(None),
+            [connection] => Some(Some(connection.clone())),
+            _ => None,
+        })
     }
 
     // ---- management -------------------------------------------------------

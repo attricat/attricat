@@ -16,7 +16,6 @@ use crate::extension_runtime::connections::{self, TokenError};
 
 const MAX_SECRET_BODY_FIELDS: usize = 8;
 const MAX_SECRET_FIELD_BYTES: usize = 256;
-/// Response headers every request returns.
 /// How long an operator-lowered budget is cached before it is read again,
 /// so mediated requests do not each query the database.
 const LOWERED_BUDGET_TTL: Duration = Duration::from_secs(10);
@@ -29,6 +28,7 @@ type BudgetCache = HashMap<BudgetKey, (Instant, Option<(i32, i32)>)>;
 static LOWERED_BUDGETS: std::sync::LazyLock<std::sync::Mutex<BudgetCache>> =
     std::sync::LazyLock::new(Default::default);
 
+/// Response headers every request returns.
 const DEFAULT_RESPONSE_HEADERS: [&str; 3] = ["content-type", "etag", "retry-after"];
 
 #[derive(Deserialize)]
@@ -470,11 +470,22 @@ impl HostState {
             })
             .filter_map(|(name, value)| Some((name.to_string(), value.to_str().ok()?.to_owned())))
             .collect::<HashMap<_, _>>();
+        // The request was sent and may have been applied, so a response too
+        // large to return is `uncertain`, not an error a component retries.
+        let too_large = || {
+            counter!("attricat_extension_network_requests_total", "outcome" => "uncertain")
+                .increment(1);
+            bounded_serialize(&json!({
+                "outcome": "uncertain",
+                "status": status,
+                "reason": "response_too_large",
+            }))
+        };
         if response
             .content_length()
             .is_some_and(|length| length > rule.max_response_bytes)
         {
-            return Err("response exceeds host permission limit".into());
+            return too_large();
         }
         let mut bytes = Vec::new();
         let mut stream = response.bytes_stream();
@@ -483,7 +494,7 @@ impl HostState {
                 return bounded_serialize(&json!({"outcome": "uncertain", "status": status}));
             };
             if bytes.len().saturating_add(chunk.len()) > rule.max_response_bytes as usize {
-                return Err("response exceeds host permission limit".into());
+                return too_large();
             }
             bytes.extend_from_slice(&chunk);
         }

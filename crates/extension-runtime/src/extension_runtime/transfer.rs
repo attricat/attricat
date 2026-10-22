@@ -223,9 +223,6 @@ impl OperationState {
                 "POST bulk delivery requires an explicit idempotent destination declaration".into(),
             );
         }
-        if let Err(wait) = admit_request(&host.repository, &host.installation, rule).await {
-            return Err(TargetRefusal::RateLimited(wait));
-        }
         let address = url.host_str().ok_or("HTTPS URL needs a host")?.to_owned();
         let port = url
             .port_or_known_default()
@@ -288,6 +285,11 @@ impl OperationState {
                     .map_err(|_| "invalid token header value")?,
             );
             sent = Some((connection.to_owned(), token));
+        }
+        // The budget is spent only by a transfer that is about to be sent,
+        // not by one refused above.
+        if let Err(wait) = admit_request(&host.repository, &host.installation, rule).await {
+            return Err(TargetRefusal::RateLimited(wait));
         }
         let client = pinned_client(&address, &resolved, timeout)?;
         Ok(TransferTarget {
@@ -826,6 +828,15 @@ impl OperationState {
             connection.as_ref(),
         )
         .await;
+        // A 401 with a connection's token applied nothing; the same key is
+        // sent again once the token is refreshed.
+        if status == 401 && connection.is_some() {
+            self.repository
+                .forget_extension_http_delivery(id)
+                .await
+                .map_err(|_| "delivery state could not be persisted")?;
+            return bounded_serialize(&json!({"outcome":"failed","status":status}));
+        }
         self.repository
             .complete_extension_http_delivery(id, status)
             .await

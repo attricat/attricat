@@ -182,6 +182,18 @@ impl AttricatRepository {
         Ok(DeliveryState::Send(id))
     }
 
+    /// Forgets a sent delivery the destination refused as unauthorized
+    /// (401), so the same key is sent again with a fresh token instead of
+    /// replaying the refusal. Nothing was applied, so resending is safe.
+    pub async fn forget_extension_http_delivery(&self, id: Uuid) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
+        sqlx::query("DELETE FROM extension_operation_http_deliveries WHERE id=$1 AND workspace_id=$2 AND state='uncertain'")
+            .bind(id).bind(self.extension_workspace()).execute(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn complete_extension_http_delivery(
         &self,
         id: Uuid,

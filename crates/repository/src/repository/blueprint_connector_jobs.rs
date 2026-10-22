@@ -453,9 +453,42 @@ impl AttricatRepository {
         .fetch_all(&self.pool)
         .await?;
         let mut started = 0;
+        // The oldest and newest pending change decide whether a job is due;
+        // each is one index-ordered row, so a job inside its debounce does
+        // not read its whole change window on every tick.
+        let pending_change = |newest: bool| {
+            format!(
+                "SELECT e.occurred_at FROM domain_events e \
+                 WHERE e.workspace_id=$1 AND e.aggregate_kind='record' AND e.sequence>$2 AND e.event_type=ANY($3) \
+                   AND EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=e.workspace_id AND r.id=e.aggregate_id AND r.blueprint_id=$4) \
+                 ORDER BY e.sequence {} LIMIT 1",
+                if newest { "DESC" } else { "ASC" }
+            )
+        };
+        let (oldest_sql, newest_sql) = (pending_change(false), pending_change(true));
         for (id, blueprint_id, events, debounce, watermark) in jobs {
-            let changes: Vec<(i64, Uuid, DateTime<Utc>)> = sqlx::query_as(
-                "SELECT e.sequence,e.aggregate_id,e.occurred_at FROM domain_events e \
+            let mut bounds = Vec::with_capacity(2);
+            for sql in [&oldest_sql, &newest_sql] {
+                bounds.push(
+                    sqlx::query_scalar::<_, DateTime<Utc>>(sql)
+                        .bind(self.extension_workspace())
+                        .bind(watermark)
+                        .bind(&events)
+                        .bind(blueprint_id)
+                        .fetch_optional(&self.pool)
+                        .await?,
+                );
+            }
+            let [Some(oldest), Some(newest)] = bounds[..] else {
+                continue;
+            };
+            let debounce = Duration::seconds(i64::from(debounce));
+            let now = Utc::now();
+            if now - newest < debounce && now - oldest < debounce * TRIGGER_MAX_WAIT_FACTOR {
+                continue;
+            }
+            let changes: Vec<(i64, Uuid)> = sqlx::query_as(
+                "SELECT e.sequence,e.aggregate_id FROM domain_events e \
                  WHERE e.workspace_id=$1 AND e.aggregate_kind='record' AND e.sequence>$2 AND e.event_type=ANY($3) \
                    AND EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=e.workspace_id AND r.id=e.aggregate_id AND r.blueprint_id=$4) \
                  ORDER BY e.sequence LIMIT $5",
@@ -467,16 +500,9 @@ impl AttricatRepository {
             .bind(MAX_CONNECTOR_RECORD_FILTER as i64 + 1)
             .fetch_all(&self.pool)
             .await?;
-            let (Some(&(_, _, oldest)), Some(&(high_water, _, newest))) =
-                (changes.first(), changes.last())
-            else {
+            let Some(&(high_water, _)) = changes.last() else {
                 continue;
             };
-            let debounce = Duration::seconds(i64::from(debounce));
-            let now = Utc::now();
-            if now - newest < debounce && now - oldest < debounce * TRIGGER_MAX_WAIT_FACTOR {
-                continue;
-            }
             let mut record_ids: Vec<Uuid> = changes.iter().map(|change| change.1).collect();
             record_ids.sort_unstable();
             record_ids.dedup();
@@ -519,6 +545,17 @@ impl AttricatRepository {
     ) -> Result<Option<ConnectorRunDetails>, RepositoryError> {
         Ok(sqlx::query_as("SELECT j.id AS job_id,j.code AS job_code,j.direction,r.connector_blueprint_id AS blueprint_id,r.connector_blueprint_version AS blueprint_version,r.connector_context_id AS context_id,r.connector_channel_id AS channel_id,r.connector_connection AS connection,COALESCE(r.connector_mode,'incremental') AS mode,cardinality(r.connector_record_ids)::bigint AS record_count,r.connector_record_ids AS record_ids FROM extension_operation_runs r JOIN blueprint_connector_jobs j ON j.id=r.connector_job_id AND j.workspace_id=r.workspace_id WHERE r.id=$1 AND r.workspace_id=$2")
             .bind(run_id).bind(self.extension_workspace()).fetch_optional(&self.pool).await?)
+    }
+
+    /// The live records among `record_ids` of `blueprint_id`.
+    pub async fn records_of_blueprint(
+        &self,
+        blueprint_id: Uuid,
+        record_ids: &[Uuid],
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        Ok(sqlx::query_scalar("SELECT id FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND id=ANY($3) AND deleted_at IS NULL ORDER BY id")
+            .bind(self.extension_workspace()).bind(blueprint_id).bind(record_ids)
+            .fetch_all(&self.pool).await?)
     }
 
     /// Whether a connector run's catalog covers `record_id`: a live record of

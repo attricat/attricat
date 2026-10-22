@@ -139,6 +139,15 @@ pub async fn access_token(
             return Ok((token, kind));
         }
     };
+    // Another worker may have failed the grant meanwhile; its refresh token
+    // is not sent again.
+    if refresh.credentials.status != "active" {
+        let status = refresh.credentials.status.clone();
+        let _ = refresh.release().await;
+        return Err(TokenError::Invalid(format!(
+            "connection '{connection}' is {status} and needs an operator"
+        )));
+    }
     // Another worker may have refreshed just before this claim.
     if let Some(token) = still_valid(
         refresh.credentials.access_token.as_ref(),

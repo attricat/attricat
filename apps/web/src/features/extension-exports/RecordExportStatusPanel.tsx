@@ -98,6 +98,9 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
   const canManage = useCan('extensions_manage');
+  // A preview runs with the extension's catalog access, so it needs
+  // workspace-wide read access.
+  const canPreview = useCan('records_read');
   const [preview, setPreview] = useState<{
     destination: ExportDestination;
     connection: string | null;
@@ -200,7 +203,7 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
                     spacing={1}
                     sx={{ justifyContent: 'flex-end' }}
                   >
-                    {destination?.preview && (
+                    {canPreview && destination?.preview && (
                       <Button
                         size="small"
                         startIcon={<EyeIcon />}

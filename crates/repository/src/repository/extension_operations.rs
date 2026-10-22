@@ -592,6 +592,37 @@ impl AttricatRepository {
         Ok(terminal)
     }
 
+    /// Re-runs the same batch at `at` without spending the failure budget,
+    /// for a batch that asked to wait (a typed retry with an explicit delay,
+    /// such as a destination's 429). The run and its task are released in
+    /// one transaction.
+    pub async fn defer_extension_operation_task(
+        &self,
+        task: &ClaimedTask,
+        message: &str,
+        at: chrono::DateTime<Utc>,
+    ) -> Result<(), RepositoryError> {
+        let message = bounded_message(message);
+        let mut transaction = self.pool.begin().await?;
+        self.for_extension_operation_task(task)
+            .ensure_task_fence(&mut transaction)
+            .await?;
+        let task_changed = sqlx::query("UPDATE tasks SET status='queued',available_at=$4,lease_owner=NULL,lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3")
+            .bind(task.id).bind(&task.lease_owner).bind(task.lease_token).bind(at)
+            .execute(&mut *transaction).await?.rows_affected();
+        let run_changed = sqlx::query("UPDATE extension_operation_runs SET status='pending',last_error_code='retry',last_error_message=$4,resume_at=$5,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3")
+            .bind(task.subject_id).bind(self.extension_workspace()).bind(task.lease_token)
+            .bind(&message).bind(at)
+            .execute(&mut *transaction).await?.rows_affected();
+        if task_changed != 1 || run_changed != 1 {
+            return Err(RepositoryError::InvalidExtension(
+                "operation run lost its lease".into(),
+            ));
+        }
+        transaction.commit().await?;
+        Ok(())
+    }
+
     /// Dead-letters a run whose batch reported a permanent (rejected)
     /// failure. Nothing is retried; an operator may replay the run.
     pub async fn reject_extension_operation_task(

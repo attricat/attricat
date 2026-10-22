@@ -514,6 +514,12 @@ async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool
     };
     // Another invocation's rejection leaves the record to the lease holder.
     let lease = begin("run:a").await.expect("a first push proceeds");
+    // Another invocation is held off; the same one takes its lease back.
+    assert!(begin("handler:b").await.is_none(), "another holder is busy");
+    let lease = begin("run:a")
+        .await
+        .inspect(|retaken| assert_ne!(*retaken, lease))
+        .expect("a retried holder takes its lease back");
     reject("handler:b").await;
     assert_eq!(mapping_status(&pool, record).await.unwrap().0, "pending");
     // The holder's own rejection settles the revision it leased and ends
