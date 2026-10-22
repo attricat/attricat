@@ -285,7 +285,7 @@ pub struct ExtensionGrant {
 
 /// An export destination of an enabled extension, as the export status
 /// surfaces name it.
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ExportDestinationDescriptor {
     pub extension_id: String,
     pub extension_name: String,
@@ -1637,11 +1637,44 @@ impl AttricatRepository {
     pub async fn enabled_export_destinations(
         &self,
     ) -> Result<Vec<ExportDestinationDescriptor>, RepositoryError> {
+        // Cached per extensions generation like the client contributions;
+        // the deployment policy is applied to the cached list on every read.
+        let destinations = match self.generations() {
+            Some(generations) => self
+                .cache
+                .fetch(
+                    CacheKey::new(
+                        "export_destinations",
+                        &[
+                            &self.extension_workspace(),
+                            &generations.extensions_generation,
+                        ],
+                    ),
+                    &[],
+                    Policy::Generation,
+                    || self.unfiltered_export_destinations(),
+                )
+                .await?
+                .as_ref()
+                .clone(),
+            None => self.unfiltered_export_destinations().await?,
+        };
+        Ok(destinations
+            .into_iter()
+            .filter(|(release, destination)| {
+                extension_policy::allows(&destination.extension_id, *release)
+            })
+            .map(|(_, destination)| destination)
+            .collect())
+    }
+
+    /// Every enabled, authorized installation's export destinations with its
+    /// installed release, before the deployment policy is applied.
+    async fn unfiltered_export_destinations(
+        &self,
+    ) -> Result<Vec<(Uuid, ExportDestinationDescriptor)>, RepositoryError> {
         let mut destinations = Vec::new();
         for row in self.runtime_installation_rows(None).await? {
-            if !extension_policy::allows(&row.extension_id, row.installed_release_id) {
-                continue;
-            }
             let Some(installation) = self.runtime_installation(row).await? else {
                 continue;
             };
@@ -1651,17 +1684,20 @@ impl AttricatRepository {
                 .iter()
                 .flat_map(|server| server.exports.iter())
             {
-                destinations.push(ExportDestinationDescriptor {
-                    extension_id: installation.extension_id.clone(),
-                    extension_name: installation.manifest.name.clone(),
-                    export_id: export.id.clone(),
-                    title: export.title.clone(),
-                    connection_kind: export.connection.clone(),
-                    preview: export.preview_command.is_some()
-                        && installation.capability_grants.contains("client.commands"),
-                    resync_operation: export.resync_operation.clone(),
-                    reconcile_operation: export.reconcile_operation.clone(),
-                });
+                destinations.push((
+                    installation.installed_release_id,
+                    ExportDestinationDescriptor {
+                        extension_id: installation.extension_id.clone(),
+                        extension_name: installation.manifest.name.clone(),
+                        export_id: export.id.clone(),
+                        title: export.title.clone(),
+                        connection_kind: export.connection.clone(),
+                        preview: export.preview_command.is_some()
+                            && installation.capability_grants.contains("client.commands"),
+                        resync_operation: export.resync_operation.clone(),
+                        reconcile_operation: export.reconcile_operation.clone(),
+                    },
+                ));
             }
         }
         Ok(destinations)

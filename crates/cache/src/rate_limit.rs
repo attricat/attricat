@@ -28,10 +28,12 @@ pub trait RateLimiter: Send + Sync {
     ) -> Result<(), Duration>;
 }
 
-/// One token bucket: its tokens when it was last updated.
+/// One token bucket: its tokens when it was last updated, and when it will
+/// be full again under its own rule.
 struct Bucket {
     tokens: f64,
     updated: Instant,
+    full_at: Instant,
 }
 
 /// Seconds per token of a bucket refilling `refill` tokens every `period`.
@@ -94,24 +96,26 @@ impl LocalRateLimiter {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         if buckets.len() > EVICT_ABOVE {
-            // A bucket idle long enough to be full again holds no state.
-            buckets.retain(|_, bucket| {
-                now.duration_since(bucket.updated).as_secs_f64() < capacity * per_token
-            });
+            // A bucket full again under its own rule holds no state; one of
+            // another rule is judged by that rule, not this caller's.
+            buckets.retain(|_, bucket| now < bucket.full_at);
         }
         let bucket = buckets.entry(key.to_owned()).or_insert(Bucket {
             tokens: capacity,
             updated: now,
+            full_at: now,
         });
         let refilled = now.duration_since(bucket.updated).as_secs_f64() / per_token;
         bucket.tokens = (bucket.tokens + refilled).min(capacity);
         bucket.updated = now;
-        if bucket.tokens >= 1.0 {
+        let result = if bucket.tokens >= 1.0 {
             bucket.tokens -= 1.0;
             Ok(())
         } else {
             Err(Duration::from_secs_f64((1.0 - bucket.tokens) * per_token))
-        }
+        };
+        bucket.full_at = now + Duration::from_secs_f64((capacity - bucket.tokens) * per_token);
+        result
     }
 
     pub fn bucket_count(&self) -> usize {
@@ -281,6 +285,24 @@ mod tests {
         assert!(limiter.take_now("b", 2, 1, period).is_ok());
         std::thread::sleep(period);
         assert!(limiter.take_now("a", 2, 1, period).is_ok());
+    }
+
+    #[test]
+    fn eviction_keeps_a_slow_rules_drained_bucket() {
+        let limiter = LocalRateLimiter::default();
+        let slow = Duration::from_secs(3600);
+        assert!(limiter.take_now("slow", 1, 1, slow).is_ok());
+        // A fast rule's caller evicts idle buckets by their own rule.
+        let fast = Duration::from_millis(1);
+        for index in 0..=EVICT_ABOVE {
+            let _ = limiter.take_now(&format!("fast-{index}"), 1, 1, fast);
+        }
+        std::thread::sleep(Duration::from_millis(5));
+        let _ = limiter.take_now("fast-trigger", 1, 1, fast);
+        assert!(
+            limiter.take_now("slow", 1, 1, slow).is_err(),
+            "the slow bucket stays drained"
+        );
     }
 
     #[test]

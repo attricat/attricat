@@ -84,6 +84,7 @@ CREATE TABLE extension_export_mappings (
     attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
     lease_token UUID,
     lease_until TIMESTAMPTZ,
+    leased_at TIMESTAMPTZ,
     retry_requested_at TIMESTAMPTZ,
     synced_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -130,12 +131,14 @@ CREATE TABLE extension_host_permission_budgets (
 ALTER TABLE extension_operation_runs ADD COLUMN resume_at TIMESTAMPTZ;
 -- The destination connection a connector job targets, and its optional
 -- change trigger: record events after `trigger_watermark` start a run once
--- the newest of them is `trigger_debounce_seconds` old.
+-- the newest of them is `trigger_debounce_seconds` old. A trigger whose run
+-- could not be queued waits until `trigger_blocked_until` before it retries.
 ALTER TABLE blueprint_connector_jobs
     ADD COLUMN connection TEXT CHECK (connection ~ '^[A-Za-z0-9._-]{1,128}$'),
     ADD COLUMN trigger_events TEXT[],
     ADD COLUMN trigger_debounce_seconds INTEGER CHECK (trigger_debounce_seconds BETWEEN 1 AND 3600),
     ADD COLUMN trigger_watermark BIGINT,
+    ADD COLUMN trigger_blocked_until TIMESTAMPTZ,
     ADD CONSTRAINT blueprint_connector_jobs_trigger_check
         CHECK ((trigger_events IS NULL) = (trigger_debounce_seconds IS NULL));
 -- A connector run's connection, mode and optional record filter (a resync

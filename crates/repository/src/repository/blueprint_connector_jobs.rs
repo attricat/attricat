@@ -31,6 +31,9 @@ pub struct BlueprintConnectorJob {
 const FIELDS: &str = "id,blueprint_id,blueprint_version,code,direction,extension_id,operation_id,input,context_id,input_file_id,interval_seconds,next_at,enabled,connection,trigger_events,trigger_debounce_seconds";
 /// How many change-triggered jobs one producer tick starts at most.
 const TRIGGERED_JOBS_PER_TICK: i64 = 64;
+/// How long a change trigger whose run could not be queued waits before it
+/// tries again, so failing jobs cannot take every slot of a tick.
+const TRIGGER_FAILURE_BACKOFF_SECONDS: i64 = 300;
 /// A triggered job runs once its oldest pending change has waited this many
 /// debounces, even while newer changes keep arriving.
 const TRIGGER_MAX_WAIT_FACTOR: i32 = 10;
@@ -182,6 +185,10 @@ impl AttricatRepository {
             }
             prepared.push((job, input, context_id, input_file_id));
         }
+        // Only a trigger that is watching now keeps its watermark; one that
+        // was disabled or removed starts again at the end of the event log.
+        let watching: Vec<String> = sqlx::query_scalar("SELECT code FROM blueprint_connector_jobs WHERE workspace_id=$1 AND blueprint_id=$2 AND enabled AND code IS NOT NULL AND trigger_watermark IS NOT NULL")
+            .bind(ws).bind(blueprint_id).fetch_all(&mut **tx).await?;
         sqlx::query("UPDATE blueprint_connector_jobs SET enabled=false,updated_at=clock_timestamp() WHERE workspace_id=$1 AND blueprint_id=$2")
             .bind(ws).bind(blueprint_id).execute(&mut **tx).await?;
         // A change trigger starts watching at the current end of the event
@@ -198,11 +205,12 @@ impl AttricatRepository {
                 .as_ref()
                 .map(|trigger| (trigger.events.clone(), trigger.debounce_seconds))
                 .unzip();
-            sqlx::query("INSERT INTO blueprint_connector_jobs(id,workspace_id,blueprint_id,blueprint_version,code,direction,extension_id,operation_id,input,context_id,input_file_id,interval_seconds,next_at,enabled,connection,trigger_events,trigger_debounce_seconds,trigger_watermark) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,CASE WHEN $12::integer IS NULL THEN NULL ELSE clock_timestamp()+($12*interval '1 second') END,$13,$14,$15,$16,CASE WHEN $15::text[] IS NULL THEN NULL ELSE $17::bigint END) ON CONFLICT(workspace_id,blueprint_id,code) WHERE code IS NOT NULL DO UPDATE SET blueprint_version=$4,direction=$6,extension_id=$7,operation_id=$8,input=$9,context_id=$10,input_file_id=$11,interval_seconds=$12,next_at=CASE WHEN $12::integer IS NULL THEN NULL ELSE clock_timestamp()+($12*interval '1 second') END,enabled=$13,connection=$14,trigger_events=$15,trigger_debounce_seconds=$16,trigger_watermark=CASE WHEN $15::text[] IS NULL THEN NULL ELSE COALESCE(blueprint_connector_jobs.trigger_watermark,$17::bigint) END,updated_at=clock_timestamp()")
+            sqlx::query("INSERT INTO blueprint_connector_jobs(id,workspace_id,blueprint_id,blueprint_version,code,direction,extension_id,operation_id,input,context_id,input_file_id,interval_seconds,next_at,enabled,connection,trigger_events,trigger_debounce_seconds,trigger_watermark) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,CASE WHEN $12::integer IS NULL THEN NULL ELSE clock_timestamp()+($12*interval '1 second') END,$13,$14,$15,$16,CASE WHEN $15::text[] IS NULL THEN NULL ELSE $17::bigint END) ON CONFLICT(workspace_id,blueprint_id,code) WHERE code IS NOT NULL DO UPDATE SET blueprint_version=$4,direction=$6,extension_id=$7,operation_id=$8,input=$9,context_id=$10,input_file_id=$11,interval_seconds=$12,next_at=CASE WHEN $12::integer IS NULL THEN NULL ELSE clock_timestamp()+($12*interval '1 second') END,enabled=$13,connection=$14,trigger_events=$15,trigger_debounce_seconds=$16,trigger_watermark=CASE WHEN $15::text[] IS NULL THEN NULL WHEN $18 THEN COALESCE(blueprint_connector_jobs.trigger_watermark,$17::bigint) ELSE $17::bigint END,trigger_blocked_until=NULL,updated_at=clock_timestamp()")
                 .bind(Uuid::new_v4()).bind(ws).bind(blueprint_id).bind(version).bind(&job.code)
                 .bind(&job.direction).bind(&job.extension_id).bind(&job.operation_id).bind(input)
                 .bind(context_id).bind(file).bind(job.interval_seconds).bind(job.enabled)
                 .bind(&job.connection).bind(trigger_events).bind(trigger_debounce).bind(high_water)
+                .bind(watching.contains(&job.code))
                 .execute(&mut **tx).await?;
         }
         Ok(())
@@ -434,6 +442,7 @@ impl AttricatRepository {
         let jobs: Vec<(Uuid, Uuid, Vec<String>, i32, i64)> = sqlx::query_as(
             "SELECT j.id,j.blueprint_id,j.trigger_events,j.trigger_debounce_seconds,j.trigger_watermark FROM blueprint_connector_jobs j \
              WHERE j.workspace_id=$1 AND j.enabled AND j.code IS NOT NULL AND j.trigger_events IS NOT NULL AND j.trigger_watermark IS NOT NULL \
+               AND (j.trigger_blocked_until IS NULL OR j.trigger_blocked_until<=clock_timestamp()) \
                AND EXISTS (SELECT 1 FROM domain_events e JOIN records r ON r.workspace_id=e.workspace_id AND r.id=e.aggregate_id \
                            WHERE e.workspace_id=j.workspace_id AND e.aggregate_kind='record' AND e.sequence>j.trigger_watermark \
                              AND e.event_type=ANY(j.trigger_events) AND r.blueprint_id=j.blueprint_id) \
@@ -487,12 +496,16 @@ impl AttricatRepository {
                 Err(error) => {
                     // Keep the watermark, like an interval occurrence keeps
                     // `next_at`, so the changes are exported once the job can
-                    // run again instead of being skipped.
+                    // run again instead of being skipped. Back off so the job
+                    // leaves this tick's slots to others meanwhile.
                     tracing::warn!(job=%id, %error, "triggered connector run could not be queued");
+                    sqlx::query("UPDATE blueprint_connector_jobs SET trigger_blocked_until=clock_timestamp()+make_interval(secs => $3) WHERE id=$1 AND workspace_id=$2")
+                        .bind(id).bind(self.extension_workspace()).bind(TRIGGER_FAILURE_BACKOFF_SECONDS as f64)
+                        .execute(&self.pool).await?;
                     continue;
                 }
             }
-            sqlx::query("UPDATE blueprint_connector_jobs SET trigger_watermark=$3,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND trigger_watermark=$4")
+            sqlx::query("UPDATE blueprint_connector_jobs SET trigger_watermark=$3,trigger_blocked_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND trigger_watermark=$4")
                 .bind(id).bind(self.extension_workspace()).bind(high_water).bind(watermark)
                 .execute(&self.pool).await?;
         }

@@ -724,7 +724,7 @@ impl HostState {
         };
         let record = self
             .repository
-            .get_record(record_id)
+            .get_record_with_revision(record_id)
             .await
             .map_err(|error| error.to_string())?
             .ok_or_else(|| "record not found".to_owned())?;
@@ -1383,6 +1383,13 @@ struct NetworkRequest {
     idempotency_key: Option<String>,
 }
 
+/// Whether an extension keeps export mappings, so a rejection it reports for
+/// a record is that record's export status. Other extensions' rejections stay
+/// handler outcomes only.
+fn exports_mappings(installation: &ExtensionRuntimeInstallation) -> bool {
+    installation.capability_grants.contains("exports.mappings")
+}
+
 /// Shared-task executor for release-pinned checkpointed operations. The
 /// checkpoint is committed under the task lease only after WASM returns; a
 /// crash before that transaction repeats the batch, so operation components
@@ -1591,7 +1598,14 @@ impl ExtensionOperationTaskHandler {
                 if terminal { "failed" } else { "retrying" }
             }
             BatchError::Failure(InvocationFailure::Rejected(rejection)) => {
-                if let Some(record_id) = rejection.record_id {
+                let exports = repository
+                    .runtime_extension_installation(&run.extension_id, run.installed_release_id)
+                    .await
+                    .map_err(operation_task_error)?
+                    .is_some_and(|installation| exports_mappings(&installation));
+                if let Some(record_id) = rejection.record_id
+                    && exports
+                {
                     // A run's rejection names no revision. The revision at the
                     // run's start is the oldest it can have read, so a newer
                     // result committed meanwhile is not overwritten.
@@ -1599,10 +1613,20 @@ impl ExtensionOperationTaskHandler {
                         .record_content_revision_at(record_id, run.created_at)
                         .await
                         .map_err(operation_task_error)?;
+                    // A connector run's rejection belongs to the run's
+                    // connection unless it names another.
+                    let connection = match rejection.connection {
+                        Some(connection) => Some(connection),
+                        None => repository
+                            .connector_run_details(run.id)
+                            .await
+                            .map_err(operation_task_error)?
+                            .and_then(|details| details.connection),
+                    };
                     repository
                         .record_export_rejection(
                             &run.extension_id,
-                            rejection.connection.as_deref(),
+                            connection.as_deref(),
                             record_id,
                             Some(revision),
                             &rejection.code,
@@ -1902,7 +1926,9 @@ impl WasmExtensionTaskHandler {
                         ..record("rejected", attempt, None)
                     })
                     .await?;
-                if let Some(record_id) = rejection.record_id {
+                if let Some(record_id) = rejection.record_id
+                    && exports_mappings(installation)
+                {
                     repository
                         .record_export_rejection(
                             &installation.extension_id,

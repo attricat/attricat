@@ -91,26 +91,28 @@ pub(super) async fn record_export_status(
     ApiPath(record_id): ApiPath<Uuid>,
 ) -> Result<Json<RecordExportStatus>, ApiError> {
     let statuses = repository.export_mappings_for_record(record_id).await?;
+    // One connection listing per extension that has a connection status.
+    let mut extensions: Vec<&str> = statuses
+        .iter()
+        .filter(|mapping| mapping.connection.is_some())
+        .map(|mapping| mapping.extension_id.as_str())
+        .collect();
+    extensions.sort_unstable();
+    extensions.dedup();
     let mut connections: Vec<ConnectionLabel> = Vec::new();
-    for mapping in &statuses {
-        let Some(connection) = &mapping.connection else {
-            continue;
-        };
-        if connections.iter().any(|label| {
-            label.extension_id == mapping.extension_id && &label.connection == connection
-        }) {
-            continue;
-        }
-        if let Ok(found) = repository
-            .extension_connection(&mapping.extension_id, connection)
-            .await
-        {
-            connections.push(ConnectionLabel {
-                extension_id: found.extension_id,
-                connection: found.connection,
-                kind: found.kind,
-                display_name: found.display_name,
-            });
+    for extension_id in extensions {
+        for found in repository.list_extension_connections(extension_id).await? {
+            if statuses.iter().any(|mapping| {
+                mapping.extension_id == found.extension_id
+                    && mapping.connection.as_deref() == Some(found.connection.as_str())
+            }) {
+                connections.push(ConnectionLabel {
+                    extension_id: found.extension_id,
+                    connection: found.connection,
+                    kind: found.kind,
+                    display_name: found.display_name,
+                });
+            }
         }
     }
     Ok(Json(RecordExportStatus {

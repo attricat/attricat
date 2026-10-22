@@ -409,7 +409,20 @@ impl AttricatRepository {
             .as_deref()
             .map(|token| seal(id, "refresh_token", token))
             .transpose()?;
-        let rotated = client_secret.is_some() || refresh_token.is_some();
+        // New credentials, a new token endpoint or a new scope make the
+        // cached access token stale, and give a failed connection another
+        // try when it still has something to obtain a token with.
+        let changed = client_secret.is_some()
+            || refresh_token.is_some()
+            || patch
+                .token_url
+                .as_ref()
+                .is_some_and(|url| *url != current.token_url)
+            || patch.device_authorization_url.is_some()
+            || patch
+                .scope
+                .as_ref()
+                .is_some_and(|scope| *scope != current.scope);
         let mut transaction = self.pool.begin().await?;
         let updated = sqlx::query_as(&format!(
             "UPDATE extension_connections SET display_name=COALESCE($3,display_name),token_url=COALESCE($4,token_url),\
@@ -418,7 +431,8 @@ impl AttricatRepository {
              client_secret_ciphertext=COALESCE($10,client_secret_ciphertext),refresh_token_ciphertext=COALESCE($11,refresh_token_ciphertext),\
              access_token_ciphertext=CASE WHEN $12 THEN NULL ELSE access_token_ciphertext END,\
              access_token_expires_at=CASE WHEN $12 THEN NULL ELSE access_token_expires_at END,\
-             status=CASE WHEN $11::bytea IS NOT NULL OR (grant_type='client_credentials' AND $10::bytea IS NOT NULL) THEN 'active' ELSE status END,\
+             status=CASE WHEN $11::bytea IS NOT NULL OR (grant_type='client_credentials' AND $10::bytea IS NOT NULL) THEN 'active' \
+               WHEN $12 AND status='failed' AND (refresh_token_ciphertext IS NOT NULL OR (grant_type='client_credentials' AND client_secret_ciphertext IS NOT NULL)) THEN 'active' ELSE status END,\
              last_error=CASE WHEN $12 THEN NULL ELSE last_error END,updated_at=clock_timestamp() \
              WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}"
         ))
@@ -433,7 +447,7 @@ impl AttricatRepository {
         .bind(&patch.parameters)
         .bind(client_secret)
         .bind(refresh_token)
-        .bind(rotated)
+        .bind(changed)
         .fetch_one(&mut *transaction)
         .await?;
         self.write_audit_event(&mut transaction).await?;

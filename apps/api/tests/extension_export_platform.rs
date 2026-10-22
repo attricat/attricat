@@ -11,8 +11,8 @@ use api::{
     extension_runtime::{ExtensionRuntime, ExtensionRuntimeConfig, WasmExtensionTaskHandler},
     model::{CreateAttributeContext, CreateBlueprint, NewAttributeValue},
     repository::{
-        AttricatRepository, ExportBegin, ExportMappingUpdate, ExtensionAttricatPageRequest,
-        MaterializeScope,
+        AttricatRepository, ExportBegin, ExportMappingUpdate, ExportRetrySelection,
+        ExtensionAttricatPageRequest, MaterializeScope,
     },
     storage::FakeObjectStore,
     task_queue::TaskKind,
@@ -208,7 +208,7 @@ async fn mapping_status(pool: &sqlx::PgPool, record_id: Uuid) -> Option<(String,
 async fn content_revision(pool: &sqlx::PgPool, record_id: Uuid) -> i64 {
     workspace_repository(pool)
         .await
-        .get_record(record_id)
+        .get_record_with_revision(record_id)
         .await
         .unwrap()
         .unwrap()
@@ -471,6 +471,87 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
         .unwrap()
         .unwrap();
     assert_eq!(found.record_id, record);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool) {
+    let repository = workspace_repository(&pool).await;
+    let store = Arc::new(FakeObjectStore::available());
+    install_extension(&repository, store, EXTENSION, &archive(), PERMISSIONS).await;
+    let blueprint = published_blueprint(&repository, VARIANT_BLUEPRINT).await;
+    let record = titled_record(&repository, blueprint, "Lamp").await;
+    let revision = content_revision(&pool, record).await;
+    let begin = || {
+        let repository = repository.clone();
+        async move {
+            match repository
+                .export_mapping_begin(EXTENSION, None, record, revision, None, false)
+                .await
+                .unwrap()
+            {
+                ExportBegin::Proceed { lease_token, .. } => Some(lease_token),
+                _ => None,
+            }
+        }
+    };
+    // The worker holding the lease rejects the record: the rejection is
+    // its status and ends the lease.
+    begin().await.expect("a first push proceeds");
+    repository
+        .record_export_rejection(
+            EXTENSION,
+            None,
+            record,
+            Some(revision),
+            "missing_gtin",
+            "GTIN is required",
+        )
+        .await
+        .unwrap();
+    assert_eq!(mapping_status(&pool, record).await.unwrap().0, "rejected");
+
+    // A retry requested while a push is under way outlives that push.
+    repository
+        .request_export_retry(
+            EXTENSION,
+            ExportRetrySelection {
+                connection: None,
+                record_ids: Some(vec![record]),
+                status: None,
+            },
+        )
+        .await
+        .unwrap();
+    let lease = begin().await.expect("a retried record proceeds");
+    repository
+        .request_export_retry(
+            EXTENSION,
+            ExportRetrySelection {
+                connection: None,
+                record_ids: Some(vec![record]),
+                status: None,
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .export_mapping_commit(
+            EXTENSION,
+            None,
+            record,
+            Some(lease),
+            ExportMappingUpdate {
+                status: "synced".into(),
+                record_revision: Some(revision),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert!(
+        begin().await.is_some(),
+        "the retry requested mid-push is still pending"
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -1135,6 +1216,22 @@ trigger = {events = ["attribute_value.changed.v1"], debounce_seconds = 1}
         .unwrap();
     assert_eq!(watermark().await, before);
     repository.enable_extension(EXTENSION).await.unwrap();
+    // The failed attempt backs the job off, leaving the tick to other jobs.
+    let runs = count(&pool, "SELECT count(*) FROM extension_operation_runs").await;
+    repository
+        .produce_due_blueprint_connector_jobs()
+        .await
+        .unwrap();
+    assert_eq!(
+        count(&pool, "SELECT count(*) FROM extension_operation_runs").await,
+        runs
+    );
+    sqlx::query(
+        "UPDATE blueprint_connector_jobs SET trigger_blocked_until=now()-interval '1 second'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     repository
         .produce_due_blueprint_connector_jobs()
         .await

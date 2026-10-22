@@ -629,9 +629,11 @@ Traps, fuel or memory exhaustion, timeouts and invalid batch results are
 faults. An error returned by a 1.1 lifecycle export (`prepare`, `start`,
 `checkpoint`, `finish` or `cancel`) fails the run without quarantine. A
 rejection that
-names a record also sets that record's [export status](#per-record-export-status)
-to `rejected` with the code and message, unless the mapping already holds a
-newer record revision than the rejected delivery. Handler outcomes are stored per
+names a record from an extension with `exports.mappings` also sets that
+record's [export status](#per-record-export-status) to `rejected` with the code
+and message and ends the extension's lease on it, unless the mapping already
+holds a newer record revision than the rejected delivery. A connector run's
+rejection without a `connection` belongs to the run's connection. Handler outcomes are stored per
 event and handler in `extension_handler_attempts`: handlers that already
 completed are not invoked again when another handler of the same event is
 retried. Rejected and exhausted outcomes stay visible for 30 days
@@ -868,7 +870,9 @@ selects `client_secret_post` (`body`) or HTTP Basic (`basic`). A token is
 refreshed 60 seconds before it expires, under the connection's row lock, and
 re-checked after taking the lock, so a rotating refresh token (Allegro) is
 never used twice. A rejected grant marks the connection `failed` for an
-operator; temporary failures keep it usable. `POST .../test` obtains a token.
+operator; temporary failures keep it usable. Changing the token URL, scope or
+credentials discards the cached access token, and gives a `failed` connection
+another try. `POST .../test` obtains a token.
 Deleting a connection deletes its credentials but keeps its mappings, so a
 connection re-created under the same name keeps the destination's external IDs.
 
@@ -891,8 +895,10 @@ input = {}
 A trigger starts a run once the newest matching event of the blueprint's
 records is `debounce_seconds` old, or once the oldest pending change is ten
 debounces old, so steady edits cannot starve it. Jobs with pending changes are
-checked longest-waiting first, and a run that cannot be queued keeps the
-watermark. The run is confined to the changed records
+checked longest-waiting first. A run that cannot be queued keeps the watermark
+and the job waits five minutes before it tries again, so failing jobs cannot
+hold up others. A trigger that was disabled or removed and is published again
+starts at the end of the event log. The run is confined to the changed records
 (up to 10,000; more changes run the whole job) and the trigger's watermark
 moves past them, so a burst of edits causes one run. Runs record their mode:
 `incremental`, `triggered` or `resync`.
