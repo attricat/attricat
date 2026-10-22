@@ -376,6 +376,17 @@ impl HostState {
                 .map_err(|_| "secret cannot be used as a header")?,
             );
         }
+        // The budget is admitted before the connection's token is read, so
+        // a throttled request never causes a token refresh. A request refused
+        // by its own validation above spends none.
+        if let Err(wait) = admit_request(&self.repository, &self.installation, rule).await {
+            counter!("attricat_extension_network_requests_total", "outcome" => "throttled")
+                .increment(1);
+            return bounded_serialize(&json!({
+                "outcome": "rate_limited",
+                "retry_after_ms": wait.as_millis().max(1) as u64,
+            }));
+        }
         let mut sent_token = None;
         if let Some(connection) = &input.connection {
             let token =
@@ -392,14 +403,6 @@ impl HostState {
                     Err(error) => return Err(error.to_string()),
                 };
             sent_token = Some(token);
-        }
-        if let Err(wait) = admit_request(&self.repository, &self.installation, rule).await {
-            counter!("attricat_extension_network_requests_total", "outcome" => "throttled")
-                .increment(1);
-            return bounded_serialize(&json!({
-                "outcome": "rate_limited",
-                "retry_after_ms": wait.as_millis().max(1) as u64,
-            }));
         }
         let host = url
             .host_str()

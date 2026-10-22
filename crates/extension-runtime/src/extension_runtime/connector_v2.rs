@@ -113,19 +113,24 @@ impl OperationState {
         {
             return Err("scoped jobs must use host-filtered connector catalog calls".into());
         }
-        for intent in &batch.intents {
-            let record_id = intent
-                .target_record_id()
-                .ok_or_else(|| "annotation intents need a record".to_owned())?;
-            let in_scope = self
-                .repository
-                .get_record(record_id)
-                .await
-                .map_err(|error| error.to_string())?
-                .is_some_and(|record| record.blueprint_id == blueprint_id);
-            if !in_scope {
-                return Err("annotation targets a record outside the job's blueprint".into());
-            }
+        let mut record_ids = batch
+            .intents
+            .iter()
+            .map(|intent| {
+                intent
+                    .target_record_id()
+                    .ok_or_else(|| "annotation intents need a record".to_owned())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        record_ids.sort_unstable();
+        record_ids.dedup();
+        let in_scope = self
+            .repository
+            .records_of_blueprint(blueprint_id, &record_ids)
+            .await
+            .map_err(|error| error.to_string())?;
+        if in_scope.len() != record_ids.len() {
+            return Err("annotation targets a record outside the job's blueprint".into());
         }
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_all_active(batch_capabilities(&batch)).await?;

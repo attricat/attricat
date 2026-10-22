@@ -57,12 +57,10 @@ const exportRows = (
       (destination) => destination.extension_id === mapping.extension_id,
     );
     // A connection's mapping belongs only to an export of its kind; the
-    // default destination's to an export without one, else any export.
+    // default destination's only to an export without one.
     const destination =
       mapping.connection === null
-        ? (candidates.find(
-            (destination) => destination.connection_kind === null,
-          ) ?? candidates[0])
+        ? candidates.find((destination) => destination.connection_kind === null)
         : candidates.find(
             (destination) =>
               connection !== undefined &&

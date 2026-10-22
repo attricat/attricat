@@ -623,7 +623,7 @@ whose `handle-event(event, delivery)` returns `result<_, failure>`, and
 | Case | Event handler | Operation batch |
 |---|---|---|
 | `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes | The run is dead-lettered with code `rejected`, without retries |
-| `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted` | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget; without it, it is a failure within that budget |
+| `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted` | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget, up to 100 times in a row before a completed batch; past that, and without `after-ms`, it is a failure within that budget |
 | `fault(message)` | Quarantines the installation | Fails the run and quarantines the installation |
 
 Traps, fuel or memory exhaustion, timeouts and invalid batch results are
@@ -689,6 +689,11 @@ exporter can withdraw the item. Components with `exports.mappings` use these
 | `mappings.commit.v1` | `{connection?, record_id, lease_token?, status, record_revision?, external_id?, external_ids?, content_hash?, error?}` | `{mapping}` |
 | `mappings.release.v1` | `{connection?, record_id, lease_token}` | `{released}` |
 | `mappings.delete.v1` | `{connection?, record_id}` | `{deleted}` |
+
+Inside an operation run, `begin`, `commit`, `release` and `delete` accept only
+records in the run's scope: records of a connector run's blueprint (including
+deleted, unpublished and older-version records it withdraws), or an
+interactive run's selected records.
 
 `begin` is the guard against reordered and duplicated work. It answers
 `stale` when the mapping is settled (`synced`, `withdrawn` or `rejected`) at the

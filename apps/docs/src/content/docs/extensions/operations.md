@@ -32,7 +32,7 @@ A component built for the `outcome-extension` [world](/extensions/server/#host-a
 `failure` is one of:
 
 - `rejected { code, message, record-id?, connection? }`: the run becomes a dead letter with code `rejected`, without retries.
-- `retry { message, after-ms? }`: the batch runs again with the same batch key after the delay, within the run's failure budget.
+- `retry { message, after-ms? }`: the batch runs again with the same batch key after the delay. With `after-ms` it waits without spending the run's failure budget, up to 100 times in a row before a batch completes; past that, and without `after-ms`, each retry counts against the budget.
 - `fault(message)`: the run fails and the installation is quarantined.
 
 Traps, fuel or memory exhaustion, timeouts, and invalid batch results are faults too. An error returned by `prepare`, `start`, `checkpoint`, `finish`, or `cancel` fails the run without quarantining the installation.

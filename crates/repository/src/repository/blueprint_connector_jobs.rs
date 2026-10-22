@@ -584,6 +584,28 @@ impl AttricatRepository {
         .await?)
     }
 
+    /// Whether a connector run may write the export mapping of `record_id`:
+    /// a record of the run's blueprint. Unlike
+    /// [`Self::connector_run_covers_record`] this includes deleted,
+    /// unpublished and older-version records and ones outside the run's
+    /// selection, whose withdrawals the run's withdrawn feed reports.
+    pub async fn connector_run_may_map_record(
+        &self,
+        run_id: Uuid,
+        record_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM extension_operation_runs r \
+               JOIN records e ON e.workspace_id=r.workspace_id AND e.id=$3 AND e.blueprint_id=r.connector_blueprint_id \
+             WHERE r.id=$1 AND r.workspace_id=$2)",
+        )
+        .bind(run_id)
+        .bind(self.extension_workspace())
+        .bind(record_id)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
     pub async fn connector_run_scope(
         &self,
         run_id: Uuid,

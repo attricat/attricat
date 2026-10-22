@@ -255,10 +255,12 @@ impl AttricatRepository {
     }
 
     /// Drops rejected and exhausted outcomes past their retention. Other
-    /// outcomes belong to a delivery still in progress: they go when it
-    /// settles, so a late retry never runs a completed handler again.
+    /// outcomes belong to a delivery still in progress and go when it
+    /// settles, so a late retry never runs a completed handler again; those
+    /// of a delivery that ended without settling (dead-lettered) are dropped
+    /// after the same retention once no delivery of the event is open.
     pub async fn sweep_extension_handler_attempts(&self) -> Result<u64, RepositoryError> {
-        Ok(sqlx::query("DELETE FROM extension_handler_attempts WHERE workspace_id=$1 AND status IN ('rejected','exhausted') AND updated_at < clock_timestamp() - make_interval(secs => $2)")
+        Ok(sqlx::query("DELETE FROM extension_handler_attempts a WHERE a.workspace_id=$1 AND a.updated_at < clock_timestamp() - make_interval(secs => $2) AND (a.status IN ('rejected','exhausted') OR NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.event_id=a.event_id AND d.status IN ('pending','leased')))")
             .bind(self.extension_workspace())
             .bind(HANDLER_OUTCOME_RETENTION.num_seconds() as f64)
             .execute(&self.pool).await?.rows_affected())
@@ -275,16 +277,19 @@ impl AttricatRepository {
             .fetch_all(&self.pool).await?)
     }
 
-    /// Whether a later event of `event_types` exists for the same record,
-    /// which supersedes a debounced delivery.
+    /// Whether a later event of `event_types` that `extension_id` receives
+    /// exists for the same record, which supersedes a debounced delivery. A
+    /// retry request addressed to another extension does not count.
     pub async fn newer_record_event_exists(
         &self,
+        extension_id: &str,
         record_id: Uuid,
         after_sequence: i64,
         event_types: &[String],
     ) -> Result<bool, RepositoryError> {
-        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM domain_events WHERE workspace_id=$1 AND aggregate_kind='record' AND aggregate_id=$2 AND sequence>$3 AND event_type=ANY($4))")
+        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM domain_events WHERE workspace_id=$1 AND aggregate_kind='record' AND aggregate_id=$2 AND sequence>$3 AND event_type=ANY($4) AND (event_type<>$6 OR payload->>'extension_id'=$5))")
             .bind(self.extension_workspace()).bind(record_id).bind(after_sequence).bind(event_types)
+            .bind(extension_id).bind(crate::domain_events::EXPORT_RETRY_REQUESTED_V1)
             .fetch_one(&self.pool).await?)
     }
 

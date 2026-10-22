@@ -32,7 +32,7 @@ Komponent zbudowany dla [świata](/pl/extensions/server/#wersja-api-hosta) `outc
 `failure` przyjmuje jedną z postaci:
 
 - `rejected { code, message, record-id?, connection? }`: przebieg staje się martwą wiadomością z kodem `rejected`, bez ponowień.
-- `retry { message, after-ms? }`: partia jest wykonywana ponownie z tym samym kluczem partii po podanym czasie, w ramach budżetu niepowodzeń przebiegu.
+- `retry { message, after-ms? }`: partia jest wykonywana ponownie z tym samym kluczem partii po podanym czasie. Z `after-ms` czeka bez zużywania budżetu niepowodzeń przebiegu, najwyżej 100 razy z rzędu, zanim jakaś partia się zakończy; potem, a także bez `after-ms`, każde ponowienie liczy się do tego budżetu.
 - `fault(message)`: przebieg kończy się błędem, a instalacja zostaje poddana kwarantannie.
 
 Pułapki (trap), wyczerpanie paliwa lub pamięci, przekroczenie limitu czasu i nieprawidłowy wynik partii również są traktowane jak `fault`. Błąd zwrócony przez `prepare`, `start`, `checkpoint`, `finish` lub `cancel` kończy przebieg błędem bez kwarantanny instalacji.

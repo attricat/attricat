@@ -287,7 +287,19 @@ pub struct ConnectionRefresh {
     workspace_id: Uuid,
     claim: Uuid,
     settled: bool,
+    /// The stored grant the refresh started from, so tokens it obtained
+    /// are not stored over credentials an operator changed meanwhile.
+    basis: RefreshBasis,
     pub credentials: ConnectionCredentials,
+}
+
+/// The credential columns a refresh's tokens were obtained with.
+#[derive(Default)]
+struct RefreshBasis {
+    client_secret: Option<Vec<u8>>,
+    refresh_token: Option<Vec<u8>>,
+    token_url: String,
+    scope: Option<String>,
 }
 
 impl ConnectionRefresh {
@@ -311,7 +323,8 @@ impl ConnectionRefresh {
     /// Stores freshly issued tokens and releases the claim. The tokens are
     /// stored even when the claim has lapsed: the provider may already have
     /// rotated the refresh token, and losing the new one would break the
-    /// connection.
+    /// connection. They are discarded when an operator changed the grant
+    /// they were obtained with, so the new credentials win.
     pub async fn complete(mut self, tokens: IssuedTokens) -> Result<(), RepositoryError> {
         let id = self.credentials.id;
         let access = seal(id, "access_token", &tokens.access_token)?;
@@ -321,9 +334,16 @@ impl ConnectionRefresh {
             .map(|token| seal(id, "refresh_token", token))
             .transpose()?;
         let (workspace_id, claim) = (self.workspace_id, self.claim);
-        self.settle(sqlx::query("UPDATE extension_connections SET access_token_ciphertext=$3,access_token_expires_at=$4,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claim END,refresh_claimed_until=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2")
-            .bind(workspace_id).bind(id).bind(access).bind(tokens.expires_at).bind(refresh).bind(claim))
+        let basis = std::mem::take(&mut self.basis);
+        self.settle(sqlx::query("UPDATE extension_connections SET access_token_ciphertext=$3,access_token_expires_at=$4,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claim END,refresh_claimed_until=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 AND refresh_token_ciphertext IS NOT DISTINCT FROM $8 AND token_url=$9 AND scope IS NOT DISTINCT FROM $10")
+            .bind(workspace_id).bind(id).bind(access).bind(tokens.expires_at).bind(refresh).bind(claim)
+            .bind(basis.client_secret).bind(basis.refresh_token).bind(basis.token_url).bind(basis.scope))
             .await
+            .map_err(|_| {
+                RepositoryError::InvalidExtension(
+                    "the connection changed during the token refresh".into(),
+                )
+            })
     }
 
     /// Records a device-code poll the provider answered with "pending" and
@@ -482,7 +502,10 @@ impl AttricatRepository {
                 .token_url
                 .as_ref()
                 .is_some_and(|url| *url != current.token_url)
-            || patch.device_authorization_url.is_some()
+            || patch
+                .device_authorization_url
+                .as_ref()
+                .is_some_and(|url| *url != current.device_authorization_url)
             || patch
                 .scope
                 .as_ref()
@@ -497,7 +520,9 @@ impl AttricatRepository {
              access_token_expires_at=CASE WHEN $12 THEN NULL ELSE access_token_expires_at END,\
              status=CASE WHEN $11::bytea IS NOT NULL OR (grant_type='client_credentials' AND $10::bytea IS NOT NULL) THEN 'active' \
                WHEN $12 AND status='failed' AND (refresh_token_ciphertext IS NOT NULL OR (grant_type='client_credentials' AND client_secret_ciphertext IS NOT NULL)) THEN 'active' ELSE status END,\
-             last_error=CASE WHEN $12 THEN NULL ELSE last_error END,updated_at=clock_timestamp() \
+             last_error=CASE WHEN $12 THEN NULL ELSE last_error END,\
+             refresh_claim=CASE WHEN $12 THEN NULL ELSE refresh_claim END,\
+             refresh_claimed_until=CASE WHEN $12 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() \
              WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}"
         ))
         .bind(self.extension_workspace())
@@ -606,6 +631,12 @@ impl AttricatRepository {
         let row: CredentialRow = sqlx::query_as(&format!("SELECT {CREDENTIAL_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3"))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection)
             .fetch_one(&mut *transaction).await?;
+        let basis = RefreshBasis {
+            client_secret: row.client_secret_ciphertext.clone(),
+            refresh_token: row.refresh_token_ciphertext.clone(),
+            token_url: row.token_url.clone(),
+            scope: row.scope.clone(),
+        };
         // Credentials that cannot be decrypted roll the claim back.
         let credentials = row.decrypt()?;
         transaction.commit().await?;
@@ -614,6 +645,7 @@ impl AttricatRepository {
             workspace_id: self.extension_workspace(),
             claim,
             settled: false,
+            basis,
             credentials,
         }))
     }

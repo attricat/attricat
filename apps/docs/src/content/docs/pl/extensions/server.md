@@ -195,6 +195,8 @@ Poniższe operacje `api.call` działają tak samo w procedurach obsługi zdarze�
 | `mappings.release.v1` | `{connection?, record_id, lease_token}` | `{released}` |
 | `mappings.delete.v1` | `{connection?, record_id}` | `{deleted}` |
 
+W przebiegu operacji `begin`, `commit`, `release` i `delete` przyjmują tylko rekordy objęte przebiegiem: rekordy schematu przebiegu konektora (także usunięte lub nieopublikowane, które wycofuje) albo rekordy wybrane w przebiegu interaktywnym.
+
 Wywołaj `begin` przed wysłaniem rekordu. Chroni ono przed pracą wykonaną w złej kolejności lub dwukrotnie:
 
 - Odpowiada `stale`, gdy mapowanie ma już status `synced`, `withdrawn` lub `rejected` dla tej samej lub nowszej rewizji, chyba że operator poprosił o ponowienie albo przekazujesz `force`.

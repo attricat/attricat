@@ -1863,9 +1863,6 @@ impl WasmExtensionTaskHandler {
         dispatch: &mut EventDispatch,
     ) -> Result<HandlerStep, RepositoryError> {
         let now = chrono::Utc::now();
-        if previous.is_some() {
-            dispatch.has_state = true;
-        }
         let record = |status: &'static str,
                       attempts: i32,
                       next_attempt_at: Option<chrono::DateTime<chrono::Utc>>| {
@@ -1913,13 +1910,13 @@ impl WasmExtensionTaskHandler {
                 repository
                     .record_extension_handler_attempt(record("debouncing", 0, Some(due)))
                     .await?;
-                dispatch.has_state = true;
                 dispatch.resume_no_later_than(due);
                 return Ok(HandlerStep::Settled);
             }
             if now < event.occurred_at + delay(max_wait)
                 && repository
                     .newer_record_event_exists(
+                        &installation.extension_id,
                         event.aggregate_id,
                         event.sequence,
                         &handler.event_types,
@@ -1929,7 +1926,6 @@ impl WasmExtensionTaskHandler {
                 repository
                     .record_extension_handler_attempt(record("superseded", attempts, None))
                     .await?;
-                dispatch.has_state = true;
                 counter!("attricat_extension_invocations_total", "outcome" => "superseded")
                     .increment(1);
                 return Ok(HandlerStep::Settled);
@@ -1960,7 +1956,6 @@ impl WasmExtensionTaskHandler {
             Ok(Err(failure)) => failure,
             Err(error) => InvocationFailure::Fault(error.to_string()),
         };
-        dispatch.has_state = true;
         match failure {
             InvocationFailure::Rejected(rejection) => {
                 counter!("attricat_extension_invocations_total", "outcome" => "rejected")
@@ -2064,8 +2059,6 @@ impl WasmExtensionTaskHandler {
 struct EventDispatch {
     /// The earliest time a retrying or debouncing handler is due.
     resume_at: Option<chrono::DateTime<chrono::Utc>>,
-    /// Whether any handler outcome of this event is stored.
-    has_state: bool,
 }
 
 impl EventDispatch {
@@ -2131,15 +2124,16 @@ impl TaskHandler for WasmExtensionTaskHandler {
                 code: "receipt",
                 message: error.to_string(),
             })?;
-        if dispatch.has_state {
-            repository
-                .clear_extension_handler_attempts(delivery.event.id)
-                .await
-                .map_err(|error| TaskHandlerError {
-                    code: "receipt",
-                    message: error.to_string(),
-                })?;
-        }
+        // Cleared on every settled delivery, not only when this run stored an
+        // outcome: an earlier run may have stored one for a handler whose
+        // extension has since been disabled.
+        repository
+            .clear_extension_handler_attempts(delivery.event.id)
+            .await
+            .map_err(|error| TaskHandlerError {
+                code: "receipt",
+                message: error.to_string(),
+            })?;
         Ok(TaskOutcome::Complete)
     }
 }

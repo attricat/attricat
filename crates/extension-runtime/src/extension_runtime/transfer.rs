@@ -256,6 +256,12 @@ impl OperationState {
                     .map_err(|_| "invalid secret header value")?,
             );
         }
+        // The budget is spent only by a transfer that passed the checks
+        // above, and before the connection's token is read, so a throttled
+        // transfer never causes a token refresh.
+        if let Err(wait) = admit_request(&host.repository, &host.installation, rule).await {
+            return Err(TargetRefusal::RateLimited(wait));
+        }
         let mut sent = None;
         if let Some(connection) = connection {
             let token = connections::insert_access_token(host, connection, &rule.id, &mut headers)
@@ -267,11 +273,6 @@ impl OperationState {
                     error => TargetRefusal::Error(error.to_string()),
                 })?;
             sent = Some((connection.to_owned(), token));
-        }
-        // The budget is spent only by a transfer that is about to be sent,
-        // not by one refused above.
-        if let Err(wait) = admit_request(&host.repository, &host.installation, rule).await {
-            return Err(TargetRefusal::RateLimited(wait));
         }
         let client = pinned_client(&address, &resolved, timeout)?;
         Ok(TransferTarget {
@@ -974,6 +975,37 @@ pub(super) async fn ensure_run_covers_record(
         .is_some()
         && !repository
             .connector_run_covers_record(run_id, record_id)
+            .await
+            .map_err(|error| error.to_string())?
+    {
+        return Err("the record is outside the run's scope".into());
+    }
+    if let Some(scope) = repository
+        .interactive_run_scope(run_id)
+        .await
+        .map_err(|error| error.to_string())?
+        && !scope.record_ids.contains(&record_id)
+    {
+        return Err("the record is outside the run selection".into());
+    }
+    Ok(())
+}
+
+/// Refuses an export mapping write for a record outside a run's scope: a
+/// connector run writes only records of its blueprint (including ones it
+/// withdraws), an interactive run only its selection.
+pub(super) async fn ensure_run_may_map_record(
+    repository: &AttricatRepository,
+    run_id: Uuid,
+    record_id: Uuid,
+) -> Result<(), String> {
+    if repository
+        .connector_run_scope(run_id)
+        .await
+        .map_err(|error| error.to_string())?
+        .is_some()
+        && !repository
+            .connector_run_may_map_record(run_id, record_id)
             .await
             .map_err(|error| error.to_string())?
     {
