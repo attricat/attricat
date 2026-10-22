@@ -526,6 +526,29 @@ impl AttricatRepository {
             .execute(&self.pool).await?.rows_affected() == 1)
     }
 
+    /// The content revision `record_id` had at `at`: the oldest revision a
+    /// run that started at `at` can have read, for a rejection that names no
+    /// revision of its own.
+    pub async fn record_content_revision_at(
+        &self,
+        record_id: Uuid,
+        at: DateTime<Utc>,
+    ) -> Result<i64, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT LEAST(r.content_revision, COALESCE((SELECT max(d.sequence) FROM domain_events d \
+               WHERE d.workspace_id=r.workspace_id AND d.aggregate_kind='record' AND d.aggregate_id=r.id \
+                 AND d.event_type=ANY($3) AND d.occurred_at <= $4), 0)) \
+             FROM records r WHERE r.workspace_id=$1 AND r.id=$2",
+        )
+        .bind(self.extension_workspace())
+        .bind(record_id)
+        .bind(crate::domain_events::RECORD_CONTENT_EVENT_TYPES_V1)
+        .bind(at)
+        .fetch_optional(&self.pool)
+        .await?
+        .unwrap_or(0))
+    }
+
     /// Records a handler's rejection of a record as that record's status.
     /// `record_revision` is the revision the rejected delivery carried; a
     /// rejection of a revision older than the mapping's is outdated and kept
@@ -617,7 +640,8 @@ impl AttricatRepository {
 
     /// Marks the selected mappings for retry and emits
     /// `export.retry_requested.v1` per record, in one audited transaction.
-    /// Returns the selected record IDs.
+    /// Returns the selected record IDs. A status that matches more than
+    /// [`MAX_EXPORT_RETRY_RECORDS`] records is refused rather than cut.
     pub async fn request_export_retry(
         &self,
         extension_id: &str,
@@ -644,8 +668,14 @@ impl AttricatRepository {
         let mut transaction = self.pool.begin().await?;
         let ids: Vec<Uuid> = sqlx::query_scalar("WITH selected AS (SELECT id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND ($4::uuid[] IS NULL OR record_id=ANY($4)) AND ($5::text IS NULL OR status=$5) ORDER BY record_id LIMIT $6 FOR UPDATE) UPDATE extension_export_mappings m SET status='pending',retry_requested_at=clock_timestamp(),attempts=0,updated_at=clock_timestamp() FROM selected s WHERE m.id=s.id RETURNING m.record_id")
             .bind(self.extension_workspace()).bind(extension_id).bind(&selection.connection)
-            .bind(&selection.record_ids).bind(&selection.status).bind(MAX_EXPORT_RETRY_RECORDS)
+            .bind(&selection.record_ids).bind(&selection.status).bind(MAX_EXPORT_RETRY_RECORDS + 1)
             .fetch_all(&mut *transaction).await?;
+        if ids.len() as i64 > MAX_EXPORT_RETRY_RECORDS {
+            // Dropping the transaction rolls the update back.
+            return Err(invalid(format!(
+                "more than {MAX_EXPORT_RETRY_RECORDS} records match; retry them by record ID in batches"
+            )));
+        }
         let events = ids
             .iter()
             .map(|record_id| {

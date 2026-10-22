@@ -206,18 +206,6 @@ impl AttricatRepository {
         Ok(published.into_iter().collect())
     }
 
-    /// Whether `record_id` is currently published in `channel_id`.
-    async fn published_in(
-        &self,
-        record_id: Uuid,
-        channel_id: Uuid,
-    ) -> Result<bool, RepositoryError> {
-        Ok(self
-            .published_of(&[record_id], channel_id)
-            .await?
-            .contains(&record_id))
-    }
-
     /// Live records among `record_ids`, by ID.
     async fn records_of(
         &self,
@@ -448,19 +436,31 @@ impl AttricatRepository {
         .bind(i64::from(limit))
         .fetch_all(&self.pool)
         .await?;
+        // A record published again since is no longer withdrawn.
+        let republished = match channel_id {
+            Some(channel) => {
+                let unpublished: Vec<Uuid> = events
+                    .iter()
+                    .filter(|(_, event_type, _, _)| event_type != "record.deleted.v1")
+                    .map(|(_, _, record_id, _)| *record_id)
+                    .collect();
+                if unpublished.is_empty() {
+                    HashSet::new()
+                } else {
+                    self.published_of(&unpublished, channel).await?
+                }
+            }
+            None => HashSet::new(),
+        };
         let mut items = Vec::with_capacity(events.len());
         let mut last = after_sequence;
         for (sequence, event_type, record_id, occurred_at) in &events {
             last = *sequence;
             let reason = if event_type == "record.deleted.v1" {
                 "deleted"
+            } else if republished.contains(record_id) {
+                continue;
             } else {
-                // A record published again since is no longer withdrawn.
-                if let Some(channel) = channel_id
-                    && self.published_in(*record_id, channel).await?
-                {
-                    continue;
-                }
                 "unpublished"
             };
             items.push(json!({

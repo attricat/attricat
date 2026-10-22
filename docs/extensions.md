@@ -713,7 +713,8 @@ app shows it:
 
 `POST /extensions/{extension_id}/export-status/retry` with
 `{connection?, record_ids?, status?, run?}` sets the selected mappings (up to
-1,000, by IDs or by status) to `pending`, records the retry request, emits
+1,000, by IDs or by status; a status matching more is refused, not cut) to
+`pending`, records the retry request, emits
 `export.retry_requested.v1` for each record to that extension only, and is
 audited. With `run: true` it also starts a [resync](#connector-jobs-for-exports)
 of just those records on each of the extension's export jobs that target the
@@ -819,8 +820,9 @@ fetch media themselves, as Amazon and Allegro do, hours after a listing is
 submitted. It needs `attricat.files.public_links` and `attricat.read`, and the
 deployment's `EXTENSION_PUBLIC_FILE_BASE_URL`. Only the token's SHA-256 is
 stored. `GET /api/public/extension-files/{token}` serves the file without a
-session while the link is unexpired and the extension is enabled with the
-capability.
+session while the link is unexpired, the extension is enabled with the
+capability, and the record the link was issued for still references the file.
+Deleting the record or replacing the file stops the link at once.
 
 ### Credential connections
 
@@ -865,7 +867,8 @@ refreshed 60 seconds before it expires, under the connection's row lock, and
 re-checked after taking the lock, so a rotating refresh token (Allegro) is
 never used twice. A rejected grant marks the connection `failed` for an
 operator; temporary failures keep it usable. `POST .../test` obtains a token.
-Deleting a connection deletes its credentials and mappings.
+Deleting a connection deletes its credentials but keeps its mappings, so a
+connection re-created under the same name keeps the destination's external IDs.
 
 ### Connector jobs for exports
 

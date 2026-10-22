@@ -376,6 +376,7 @@ impl HostState {
                 .map_err(|_| "secret cannot be used as a header")?,
             );
         }
+        let mut sent_token = None;
         if let Some(connection) = &input.connection {
             self.require("connections.use")
                 .map_err(|error| error.to_string())?;
@@ -407,6 +408,7 @@ impl HostState {
                 reqwest::header::HeaderValue::from_str(&(prefix + &token))
                     .map_err(|_| "token cannot be used as a header")?,
             );
+            sent_token = Some(token);
         }
         if let Err(wait) = admit_request(&self.repository, &self.installation, rule).await {
             counter!("attricat_extension_network_requests_total", "outcome" => "throttled")
@@ -444,12 +446,16 @@ impl HostState {
         // (Allegro answers finished commands with 303 See Other).
         let status = response.status().as_u16();
         if status == 401
-            && let Some(connection) = &input.connection
+            && let (Some(connection), Some(token)) = (&input.connection, &sent_token)
         {
             // The destination rejected the token; refresh it on the next call.
             let _ = self
                 .repository
-                .invalidate_extension_connection_token(&self.installation.extension_id, connection)
+                .invalidate_extension_connection_token(
+                    &self.installation.extension_id,
+                    connection,
+                    token,
+                )
                 .await;
         }
         let response_headers = response

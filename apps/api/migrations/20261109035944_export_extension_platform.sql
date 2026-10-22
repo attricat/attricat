@@ -61,6 +61,7 @@ CREATE TABLE extension_connections (
     device_verification_uri TEXT CHECK (char_length(device_verification_uri) <= 2048),
     device_expires_at TIMESTAMPTZ,
     device_interval_seconds INTEGER CHECK (device_interval_seconds BETWEEN 1 AND 3600),
+    device_polled_at TIMESTAMPTZ,
     status TEXT NOT NULL
         CHECK (status IN ('pending_authorization', 'active', 'failed', 'revoked')),
     last_error TEXT CHECK (char_length(last_error) <= 1024),
@@ -71,9 +72,10 @@ CREATE TABLE extension_connections (
 );
 
 -- Record -> destination mapping of an export extension, per connection (NULL
--- is the extension's default destination). Rows go with their record or
--- connection; withdrawing a record on the destination is the extension's
--- job, so soft deletion keeps the row.
+-- is the extension's default destination). Rows go with their record only;
+-- withdrawing a record on the destination is the extension's job, so soft
+-- deletion keeps the row. Rows outlive their connection so a connection
+-- re-created under the same name keeps the destination's external IDs.
 CREATE TABLE extension_export_mappings (
     id UUID PRIMARY KEY,
     workspace_id UUID NOT NULL REFERENCES workspaces(id),
@@ -94,9 +96,7 @@ CREATE TABLE extension_export_mappings (
     synced_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE NULLS NOT DISTINCT (workspace_id, extension_id, connection, record_id),
-    FOREIGN KEY (workspace_id, extension_id, connection)
-        REFERENCES extension_connections (workspace_id, extension_id, connection) ON DELETE CASCADE
+    UNIQUE NULLS NOT DISTINCT (workspace_id, extension_id, connection, record_id)
 );
 CREATE INDEX extension_export_mappings_external_idx
     ON extension_export_mappings (workspace_id, extension_id, connection, external_id)
@@ -107,12 +107,14 @@ CREATE INDEX extension_export_mappings_record_idx
     ON extension_export_mappings (workspace_id, record_id);
 
 -- Short-lived public links an export extension issued for a record file so a
--- marketplace can fetch it. Only the token's SHA-256 is stored.
+-- marketplace can fetch it. Only the token's SHA-256 is stored. A link serves
+-- its file only while the record it was issued for still references it.
 CREATE TABLE extension_file_links (
     id UUID PRIMARY KEY,
     workspace_id UUID NOT NULL REFERENCES workspaces(id),
     extension_id TEXT NOT NULL CHECK (char_length(extension_id) BETWEEN 1 AND 128),
     file_id UUID NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    record_id UUID NOT NULL REFERENCES records(id) ON DELETE CASCADE,
     token_sha256 TEXT NOT NULL UNIQUE CHECK (char_length(token_sha256) = 64),
     expires_at TIMESTAMPTZ NOT NULL,
     revoked_at TIMESTAMPTZ,

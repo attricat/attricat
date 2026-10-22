@@ -27,6 +27,7 @@ type ClaimedOperationRunRow = (
     Value,
     i32,
     String,
+    DateTime<Utc>,
 );
 
 #[derive(Clone, Debug)]
@@ -62,6 +63,8 @@ pub struct ClaimedExtensionOperationRun {
     /// checkpoint's contents because `{}` is a valid extension checkpoint.
     pub lifecycle_started: bool,
     pub cancelling: bool,
+    /// Every catalog read of the run is at or after this time.
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Clone, Debug, sqlx::FromRow)]
@@ -313,7 +316,7 @@ impl AttricatRepository {
             .ensure_task_fence(&mut transaction)
             .await?;
         let row: Option<ClaimedOperationRunRow> = sqlx::query_as(
-            "SELECT status,cancellation_requested,lifecycle_started,extension_id,installed_release_id,operation_id,configuration_snapshot,input,checkpoint,batch_number,abi_version FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
+            "SELECT status,cancellation_requested,lifecycle_started,extension_id,installed_release_id,operation_id,configuration_snapshot,input,checkpoint,batch_number,abi_version,created_at FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
         )
         .bind(task.subject_id)
         .bind(self.extension_workspace())
@@ -331,6 +334,7 @@ impl AttricatRepository {
             checkpoint,
             batch_number,
             abi_version,
+            created_at,
         )) = row
         else {
             return Err(RepositoryError::InvalidExtension(
@@ -390,6 +394,7 @@ impl AttricatRepository {
             max_checkpoint_bytes: handler.1,
             lifecycle_started,
             cancelling,
+            created_at,
         }))
     }
 

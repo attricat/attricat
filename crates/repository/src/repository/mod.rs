@@ -190,8 +190,9 @@ pub use extension_attricat_data::{
     MAX_EXTENSION_LOOKUP_VALUE_BYTES,
 };
 pub use extension_connections::{
-    ConnectionCredentials, ConnectionRefresh, DeviceAuthorization, ExtensionConnection,
-    ExtensionConnectionPatch, IssuedTokens, NewExtensionConnection, use_extension_credential_key,
+    ConnectionAccessToken, ConnectionCredentials, ConnectionRefresh, DeviceAuthorization,
+    ExtensionConnection, ExtensionConnectionPatch, IssuedTokens, NewExtensionConnection,
+    use_extension_credential_key,
 };
 pub use extension_connector_pages::{
     ConnectorPageV2Request, MAX_EXPANDED_RELATIONSHIPS, MAX_WITHDRAWN_PAGE,

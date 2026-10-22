@@ -454,7 +454,9 @@ impl AttricatRepository {
             let mut record_ids: Vec<Uuid> = changes.iter().map(|change| change.1).collect();
             record_ids.sort_unstable();
             record_ids.dedup();
-            let filter = (changes.len() <= MAX_CONNECTOR_RECORD_FILTER).then_some(record_ids);
+            // The run covers events up to `high_water` only, so the records
+            // of this window are all that changed even when it is full.
+            let filter = (record_ids.len() <= MAX_CONNECTOR_RECORD_FILTER).then_some(record_ids);
             match self
                 .run_blueprint_connector_job_as(
                     id,

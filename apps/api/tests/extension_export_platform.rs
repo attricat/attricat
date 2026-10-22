@@ -10,7 +10,10 @@ use std::{sync::Arc, time::Duration};
 use api::{
     extension_runtime::{ExtensionRuntime, ExtensionRuntimeConfig, WasmExtensionTaskHandler},
     model::{CreateAttributeContext, CreateBlueprint, NewAttributeValue},
-    repository::{AttricatRepository, ExportBegin, ExportMappingUpdate, MaterializeScope},
+    repository::{
+        AttricatRepository, ExportBegin, ExportMappingUpdate, ExtensionAttricatPageRequest,
+        MaterializeScope,
+    },
     storage::FakeObjectStore,
     task_queue::TaskKind,
     task_worker::{TaskHandler, TaskOutcome},
@@ -435,6 +438,62 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
         .unwrap()
         .unwrap();
     assert_eq!(found.record_id, record);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn catalog_pages_pair_snapshot_values_with_snapshot_revisions(pool: sqlx::PgPool) {
+    let repository = workspace_repository(&pool).await;
+    let store = Arc::new(FakeObjectStore::available());
+    install_extension(&repository, store, EXTENSION, &archive(), PERMISSIONS).await;
+    let blueprint = published_blueprint(&repository, VARIANT_BLUEPRINT).await;
+    titled_record(&repository, blueprint, "Lamp").await;
+    let chair = titled_record(&repository, blueprint, "Chair").await;
+    let created = content_revision(&pool, chair).await;
+    let request = |cursor| ExtensionAttricatPageRequest {
+        blueprint_id: blueprint.0,
+        blueprint_version: blueprint.1,
+        context_id: None,
+        publication_context_id: None,
+        cursor,
+        limit: 1,
+    };
+    let first = repository
+        .extension_attricat_page(request(None))
+        .await
+        .unwrap();
+    // The chair is edited while the exporter is between pages.
+    set_title(&repository, chair, "Armchair").await;
+    let edited = content_revision(&pool, chair).await;
+    assert!(edited > created);
+    let second = repository
+        .extension_attricat_page(request(first.next_cursor))
+        .await
+        .unwrap();
+    assert_eq!(second.records[0].id, chair);
+    // The page's values are the snapshot's, so its revision is too: the
+    // edit's revision stays unexported until the edit itself is.
+    assert_eq!(second.records[0].content_revision, Some(created));
+    let values = repository
+        .extension_attricat_values_at(chair, second.snapshot_at)
+        .await
+        .unwrap();
+    assert!(values.iter().any(|value| value.value == json!("Chair")));
+    // A run that started before the edit reports rejections at the revision
+    // it can have read.
+    assert_eq!(
+        repository
+            .record_content_revision_at(chair, first.snapshot_at)
+            .await
+            .unwrap(),
+        created
+    );
+    assert_eq!(
+        repository
+            .record_content_revision_at(chair, chrono::Utc::now())
+            .await
+            .unwrap(),
+        edited
+    );
 }
 
 /// Creates an enabled publication channel below the default context.

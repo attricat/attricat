@@ -416,8 +416,17 @@ async fn brokered_requests_carry_host_managed_credentials_only(pool: sqlx::PgPoo
     );
     assert_eq!(first.unwrap().0, "tok-r2");
     assert_eq!(second.unwrap().0, "tok-r2");
+    // A 401 for a token that was already replaced keeps the current one.
     repository
-        .invalidate_extension_connection_token(EXTENSION, "rotating")
+        .invalidate_extension_connection_token(EXTENSION, "rotating", "tok-stale")
+        .await
+        .unwrap();
+    let (token, _) = connections::access_token(&repository, &installation, "rotating")
+        .await
+        .unwrap();
+    assert_eq!(token, "tok-r2");
+    repository
+        .invalidate_extension_connection_token(EXTENSION, "rotating", "tok-r2")
         .await
         .unwrap();
     let (token, _) = connections::access_token(&repository, &installation, "rotating")
@@ -591,6 +600,26 @@ async fn operators_manage_connections_without_seeing_credentials(pool: sqlx::PgP
     )
     .await;
     assert_eq!(pending["status"], "pending_authorization");
+    // A poll sooner than the provider's interval does not reach the provider,
+    // which would have approved it.
+    let early = expect_status(
+        client
+            .post(format!(
+                "{connections}/allegro-pl/device-authorization/poll"
+            ))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(early["status"], "pending_authorization");
+    sqlx::query(
+        "UPDATE extension_connections SET device_polled_at=device_polled_at - interval '1 minute'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     let approved = expect_status(
         client
             .post(format!(
@@ -863,6 +892,25 @@ max_bytes = 1024
             .status(),
         StatusCode::NOT_FOUND
     );
+    // Deleting the record the link was issued for stops it too.
+    repository.enable_extension(EXTENSION).await.unwrap();
+    let public_status = || async {
+        anonymous
+            .get(format!("{base_url}/public/extension-files/{token}"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+    };
+    assert_eq!(public_status().await, StatusCode::OK);
+    client
+        .delete(format!("{base_url}/records/{record_id}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(public_status().await, StatusCode::NOT_FOUND);
     server.abort();
 }
 

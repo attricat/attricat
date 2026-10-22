@@ -1494,7 +1494,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                     .handle_batch_failure(
                         &repository,
                         &task,
-                        &installation,
+                        &run,
                         deferrable,
                         error,
                         operation_started,
@@ -1574,7 +1574,7 @@ impl ExtensionOperationTaskHandler {
         &self,
         repository: &AttricatRepository,
         task: &ClaimedTask,
-        installation: &ExtensionRuntimeInstallation,
+        run: &ClaimedExtensionOperationRun,
         deferrable: bool,
         error: BatchError,
         operation_started: Instant,
@@ -1592,12 +1592,19 @@ impl ExtensionOperationTaskHandler {
             }
             BatchError::Failure(InvocationFailure::Rejected(rejection)) => {
                 if let Some(record_id) = rejection.record_id {
+                    // A run's rejection names no revision. The revision at the
+                    // run's start is the oldest it can have read, so a newer
+                    // result committed meanwhile is not overwritten.
+                    let revision = repository
+                        .record_content_revision_at(record_id, run.created_at)
+                        .await
+                        .map_err(operation_task_error)?;
                     repository
                         .record_export_rejection(
-                            &installation.extension_id,
+                            &run.extension_id,
                             rejection.connection.as_deref(),
                             record_id,
-                            None,
+                            Some(revision),
                             &rejection.code,
                             &rejection.message,
                         )
@@ -1618,10 +1625,7 @@ impl ExtensionOperationTaskHandler {
                 // was disabled, quarantined or lost a grant) pauses like one
                 // that finds it unauthorized before the batch.
                 if repository
-                    .runtime_extension_installation(
-                        &installation.extension_id,
-                        installation.installed_release_id,
-                    )
+                    .runtime_extension_installation(&run.extension_id, run.installed_release_id)
                     .await
                     .map_err(operation_task_error)?
                     .is_none()
@@ -1636,12 +1640,12 @@ impl ExtensionOperationTaskHandler {
                 }
                 if deferrable && error.is_fault() {
                     tracing::warn!(
-                        extension = %installation.extension_id,
-                        installed_release_id = %installation.installed_release_id,
+                        extension = %run.extension_id,
+                        installed_release_id = %run.installed_release_id,
                         error = %error,
                         "extension operation faulted; quarantining extension"
                     );
-                    quarantine_after_fault(repository, &installation.extension_id)
+                    quarantine_after_fault(repository, &run.extension_id)
                         .await
                         .map_err(operation_task_error)?;
                 }

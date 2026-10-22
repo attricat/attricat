@@ -259,8 +259,15 @@ impl AttricatRepository {
                 return Err(RepositoryError::NotFound("context"));
             }
         }
+        // Values are read as of `snapshot_at`, so the revision must be too: a
+        // live revision paired with older values would let an exporter mark
+        // an edit synced that it never pushed. Content events are stamped
+        // after their values, so the revision never runs ahead of the values.
         let rows = sqlx::query_as::<_, Db<Record>>(
-            "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,('attricat.sample'=ANY(e.system_tags)) AS is_sample,e.created_at,e.updated_at,e.deleted_at,e.content_revision \
+            "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,('attricat.sample'=ANY(e.system_tags)) AS is_sample,e.created_at,e.updated_at,e.deleted_at, \
+               LEAST(e.content_revision, COALESCE((SELECT max(d.sequence) FROM domain_events d \
+                 WHERE d.workspace_id=e.workspace_id AND d.aggregate_kind='record' AND d.aggregate_id=e.id \
+                   AND d.event_type=ANY($10) AND d.occurred_at <= $4), 0)) AS content_revision \
              FROM records e \
              WHERE e.workspace_id=$1 AND (e.deleted_at IS NULL OR e.deleted_at > $4) AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
                AND e.created_at <= $4 \
@@ -271,7 +278,8 @@ impl AttricatRepository {
         )
         .bind(workspace_id).bind(request.blueprint_id).bind(request.blueprint_version)
         .bind(snapshot_at).bind(created_at).bind(record_id).bind(request.publication_context_id)
-        .bind(i64::from(request.limit) + 1).bind(record_ids).fetch_all(&self.pool).await?;
+        .bind(i64::from(request.limit) + 1).bind(record_ids)
+        .bind(crate::domain_events::RECORD_CONTENT_EVENT_TYPES_V1).fetch_all(&self.pool).await?;
         let mut records = rows.into_domain();
         let next_cursor = if records.len() > request.limit as usize {
             records.pop();

@@ -353,14 +353,7 @@ pub(super) async fn create_connection(
         ));
     }
     let parameters = input.parameters.unwrap_or_else(|| json!({}));
-    if !parameters.is_object()
-        || serde_json::to_vec(&parameters)
-            .map_or(true, |bytes| bytes.len() > MAX_CONNECTION_PARAMETERS_BYTES)
-    {
-        return Err(ApiError::invalid_input(
-            "parameters must be an object of at most 16 KiB".into(),
-        ));
-    }
+    bounded_parameters(&parameters)?;
     if let Some(schema) = &kind.parameters_schema {
         validate_schema(schema, &parameters)
             .map_err(|error| ApiError::invalid_input(error.to_string()))?;
@@ -402,6 +395,20 @@ pub(super) struct UpdateConnectionRequest {
     refresh_token: Option<String>,
 }
 
+/// Connection parameters are an object of at most 16 KiB, so they always fit
+/// the host calls that return them.
+fn bounded_parameters(parameters: &Value) -> Result<(), ApiError> {
+    if !parameters.is_object()
+        || serde_json::to_vec(parameters)
+            .map_or(true, |bytes| bytes.len() > MAX_CONNECTION_PARAMETERS_BYTES)
+    {
+        return Err(ApiError::invalid_input(
+            "parameters must be an object of at most 16 KiB".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub(super) async fn update_connection(
     ScopedRepository(repository): ScopedRepository,
     ApiPath((extension_id, connection)): ApiPath<(String, String)>,
@@ -424,11 +431,7 @@ pub(super) async fn update_connection(
     bounded_secret(input.client_secret.as_ref(), "client_secret")?;
     bounded_secret(input.refresh_token.as_ref(), "refresh_token")?;
     if let Some(parameters) = &input.parameters {
-        if !parameters.is_object() {
-            return Err(ApiError::invalid_input(
-                "parameters must be an object".into(),
-            ));
-        }
+        bounded_parameters(parameters)?;
         if let Some(schema) = manifest.server.as_ref().and_then(|server| {
             server
                 .connections
@@ -446,7 +449,7 @@ pub(super) async fn update_connection(
                 &extension_id,
                 &connection,
                 ExtensionConnectionPatch {
-                    display_name: input.display_name,
+                    display_name: input.display_name.map(|name| name.trim().to_owned()),
                     token_url: input.token_url,
                     device_authorization_url: None,
                     scope: input.scope.map(Some),
@@ -783,8 +786,9 @@ pub(super) async fn preview_export(
 // ---- public file links ----------------------------------------------------
 
 /// Serves a file through an extension-issued public link. The link stays
-/// valid only while it is unexpired and unrevoked and the extension is
-/// enabled with `attricat.files.public_links`.
+/// valid only while it is unexpired and unrevoked, the extension is enabled
+/// with `attricat.files.public_links`, and the live record it was issued for
+/// still references the file.
 pub(super) async fn public_file(
     State(state): State<AppState>,
     ApiPath(token): ApiPath<String>,
@@ -794,7 +798,7 @@ pub(super) async fn public_file(
         return Err(ApiError::not_found("file"));
     }
     let digest = format!("{:x}", Sha256::digest(token.as_bytes()));
-    let Some((workspace_id, file_id, extension_id)) = state
+    let Some((workspace_id, file_id, extension_id, record_id)) = state
         .repository
         .resolve_extension_file_link(&digest)
         .await?
@@ -815,7 +819,13 @@ pub(super) async fn public_file(
                 .capability_grants
                 .contains("attricat.files.public_links")
         });
-    if !allowed {
+    if !allowed
+        || !repository
+            .file_read_targets(file_id)
+            .await?
+            .iter()
+            .any(|target| target.record_id == record_id)
+    {
         return Err(ApiError::not_found("file"));
     }
     let file = repository.file_object(file_id, None).await?;

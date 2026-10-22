@@ -175,6 +175,7 @@ pub struct ConnectionCredentials {
     pub device_code: Option<String>,
     pub device_expires_at: Option<DateTime<Utc>>,
     pub device_interval_seconds: Option<i32>,
+    pub device_polled_at: Option<DateTime<Utc>>,
 }
 
 impl std::fmt::Debug for ConnectionCredentials {
@@ -208,9 +209,10 @@ struct CredentialRow {
     device_code_ciphertext: Option<Vec<u8>>,
     device_expires_at: Option<DateTime<Utc>>,
     device_interval_seconds: Option<i32>,
+    device_polled_at: Option<DateTime<Utc>>,
 }
 
-const CREDENTIAL_FIELDS: &str = "id,connection,kind,grant_type,host_permission_id,token_url,device_authorization_url,client_id,scope,status,client_secret_ciphertext,refresh_token_ciphertext,access_token_ciphertext,access_token_expires_at,device_code_ciphertext,device_expires_at,device_interval_seconds";
+const CREDENTIAL_FIELDS: &str = "id,connection,kind,grant_type,host_permission_id,token_url,device_authorization_url,client_id,scope,status,client_secret_ciphertext,refresh_token_ciphertext,access_token_ciphertext,access_token_expires_at,device_code_ciphertext,device_expires_at,device_interval_seconds,device_polled_at";
 
 impl CredentialRow {
     fn decrypt(self) -> Result<ConnectionCredentials, RepositoryError> {
@@ -233,8 +235,17 @@ impl CredentialRow {
             device_code: open_optional(id, "device_code", self.device_code_ciphertext)?,
             device_expires_at: self.device_expires_at,
             device_interval_seconds: self.device_interval_seconds,
+            device_polled_at: self.device_polled_at,
         })
     }
+}
+
+/// A connection's cached access token, read without its other secrets.
+pub struct ConnectionAccessToken {
+    pub kind: String,
+    pub status: String,
+    pub access_token: Option<String>,
+    pub access_token_expires_at: Option<DateTime<Utc>>,
 }
 
 /// Tokens a token endpoint issued.
@@ -277,6 +288,17 @@ impl ConnectionRefresh {
             .transpose()?;
         sqlx::query("UPDATE extension_connections SET access_token_ciphertext=$3,access_token_expires_at=$4,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2")
             .bind(self.workspace_id).bind(id).bind(access).bind(tokens.expires_at).bind(refresh)
+            .execute(&mut *self.transaction).await?;
+        self.transaction.commit().await?;
+        Ok(())
+    }
+
+    /// Records a device-code poll the provider answered with "pending" and
+    /// releases the lock. `slow_down` adds 5 seconds to the poll interval,
+    /// as RFC 8628 requires.
+    pub async fn pending(mut self, slow_down: bool) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE extension_connections SET device_polled_at=clock_timestamp(),device_interval_seconds=CASE WHEN $3 THEN LEAST(COALESCE(device_interval_seconds,5)+5,3600) ELSE device_interval_seconds END WHERE workspace_id=$1 AND id=$2")
+            .bind(self.workspace_id).bind(self.credentials.id).bind(slow_down)
             .execute(&mut *self.transaction).await?;
         self.transaction.commit().await?;
         Ok(())
@@ -419,7 +441,9 @@ impl AttricatRepository {
         Ok(updated)
     }
 
-    /// Deletes a connection, its credentials and its export mappings.
+    /// Deletes a connection and its credentials. Its export mappings stay, so
+    /// re-creating the connection under the same name keeps the destination's
+    /// external IDs.
     pub async fn delete_extension_connection(
         &self,
         extension_id: &str,
@@ -450,6 +474,32 @@ impl AttricatRepository {
         row.decrypt()
     }
 
+    /// The cached access token of a connection with its kind and status. Only
+    /// the access token is decrypted, so a mediated request that reuses a
+    /// valid token does not open the connection's other secrets.
+    pub async fn extension_connection_access_token(
+        &self,
+        extension_id: &str,
+        connection: &str,
+    ) -> Result<ConnectionAccessToken, RepositoryError> {
+        let (id, kind, status, ciphertext, expires_at): (
+            Uuid,
+            String,
+            String,
+            Option<Vec<u8>>,
+            Option<DateTime<Utc>>,
+        ) = sqlx::query_as("SELECT id,kind,status,access_token_ciphertext,access_token_expires_at FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3")
+            .bind(self.extension_workspace()).bind(extension_id).bind(connection)
+            .fetch_optional(&self.pool).await?
+            .ok_or(RepositoryError::NotFound("extension connection"))?;
+        Ok(ConnectionAccessToken {
+            kind,
+            status,
+            access_token: open_optional(id, "access_token", ciphertext)?,
+            access_token_expires_at: expires_at,
+        })
+    }
+
     /// Locks a connection for a token refresh or device-code poll.
     pub async fn lock_extension_connection(
         &self,
@@ -469,15 +519,27 @@ impl AttricatRepository {
     }
 
     /// Discards a cached access token the destination rejected, so the next
-    /// request refreshes it.
+    /// request refreshes it. Only `rejected`, the token that was sent, is
+    /// discarded: a token another worker refreshed meanwhile is kept.
     pub async fn invalidate_extension_connection_token(
         &self,
         extension_id: &str,
         connection: &str,
+        rejected: &str,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("UPDATE extension_connections SET access_token_ciphertext=NULL,access_token_expires_at=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3")
+        let mut transaction = self.pool.begin().await?;
+        let row: Option<(Uuid, Option<Vec<u8>>)> = sqlx::query_as("SELECT id,access_token_ciphertext FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3 FOR UPDATE")
             .bind(self.extension_workspace()).bind(extension_id).bind(connection)
-            .execute(&self.pool).await?;
+            .fetch_optional(&mut *transaction).await?;
+        let Some((id, ciphertext)) = row else {
+            return Ok(());
+        };
+        if open_optional(id, "access_token", ciphertext)?.as_deref() == Some(rejected) {
+            sqlx::query("UPDATE extension_connections SET access_token_ciphertext=NULL,access_token_expires_at=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2")
+                .bind(self.extension_workspace()).bind(id)
+                .execute(&mut *transaction).await?;
+        }
+        transaction.commit().await?;
         Ok(())
     }
 
@@ -491,7 +553,7 @@ impl AttricatRepository {
         let current = self.extension_connection(extension_id, connection).await?;
         let device_code = seal(current.id, "device_code", &authorization.device_code)?;
         let mut transaction = self.pool.begin().await?;
-        let updated = sqlx::query_as(&format!("UPDATE extension_connections SET device_code_ciphertext=$3,device_user_code=$4,device_verification_uri=$5,device_expires_at=$6,device_interval_seconds=$7,status='pending_authorization',last_error=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}"))
+        let updated = sqlx::query_as(&format!("UPDATE extension_connections SET device_code_ciphertext=$3,device_user_code=$4,device_verification_uri=$5,device_expires_at=$6,device_interval_seconds=$7,device_polled_at=NULL,status='pending_authorization',last_error=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}"))
             .bind(self.extension_workspace()).bind(current.id).bind(device_code)
             .bind(&authorization.user_code).bind(&authorization.verification_uri)
             .bind(authorization.expires_at).bind(authorization.interval_seconds.clamp(1, 3600))
@@ -556,12 +618,13 @@ impl AttricatRepository {
         &self,
         extension_id: &str,
         file_id: Uuid,
+        record_id: Uuid,
         token_sha256: &str,
         expires_at: DateTime<Utc>,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("INSERT INTO extension_file_links(id,workspace_id,extension_id,file_id,token_sha256,expires_at) VALUES($1,$2,$3,$4,$5,$6)")
+        sqlx::query("INSERT INTO extension_file_links(id,workspace_id,extension_id,file_id,record_id,token_sha256,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)")
             .bind(Uuid::new_v4()).bind(self.extension_workspace()).bind(extension_id)
-            .bind(file_id).bind(token_sha256).bind(expires_at)
+            .bind(file_id).bind(record_id).bind(token_sha256).bind(expires_at)
             .execute(&self.pool).await?;
         Ok(())
     }
@@ -586,13 +649,14 @@ impl AttricatRepository {
 
 impl AttricatRepository<super::SystemScope> {
     /// Resolves a public file link token (by its SHA-256) across workspaces.
-    /// Returns the workspace and file of a live link of an extension whose
-    /// installation still grants public links.
+    /// Returns the workspace, file, issuing extension and record of a live
+    /// link; the caller checks the grant and that the record still references
+    /// the file.
     pub async fn resolve_extension_file_link(
         &self,
         token_sha256: &str,
-    ) -> Result<Option<(Uuid, Uuid, String)>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT l.workspace_id,l.file_id,l.extension_id FROM extension_file_links l JOIN files f ON f.id=l.file_id AND f.workspace_id=l.workspace_id WHERE l.token_sha256=$1 AND l.revoked_at IS NULL AND l.expires_at>clock_timestamp() AND f.deleted_at IS NULL")
+    ) -> Result<Option<(Uuid, Uuid, String, Uuid)>, RepositoryError> {
+        Ok(sqlx::query_as("SELECT l.workspace_id,l.file_id,l.extension_id,l.record_id FROM extension_file_links l JOIN files f ON f.id=l.file_id AND f.workspace_id=l.workspace_id WHERE l.token_sha256=$1 AND l.revoked_at IS NULL AND l.expires_at>clock_timestamp() AND f.deleted_at IS NULL")
             .bind(token_sha256)
             .fetch_optional(&self.pool).await?)
     }

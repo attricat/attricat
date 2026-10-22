@@ -60,9 +60,13 @@ pub fn connection_kind<'a>(
         .ok_or_else(|| TokenError::Invalid("the connection kind is no longer declared".into()))
 }
 
-fn still_valid(credentials: &ConnectionCredentials, now: DateTime<Utc>) -> Option<String> {
-    let token = credentials.access_token.clone()?;
-    match credentials.access_token_expires_at {
+fn still_valid(
+    token: Option<&String>,
+    expires_at: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+) -> Option<String> {
+    let token = token?.clone();
+    match expires_at {
         Some(expires_at) if expires_at - TOKEN_EXPIRY_SKEW <= now => None,
         _ => Some(token),
     }
@@ -75,18 +79,22 @@ pub async fn access_token(
     installation: &ExtensionRuntimeInstallation,
     connection: &str,
 ) -> Result<(String, ConnectionKind), TokenError> {
-    let credentials = repository
-        .extension_connection_credentials(&installation.extension_id, connection)
+    let cached = repository
+        .extension_connection_access_token(&installation.extension_id, connection)
         .await
         .map_err(|error| TokenError::Invalid(error.to_string()))?;
-    let kind = connection_kind(installation, &credentials.kind)?.clone();
-    if credentials.status != "active" {
+    let kind = connection_kind(installation, &cached.kind)?.clone();
+    if cached.status != "active" {
         return Err(TokenError::Invalid(format!(
             "connection '{connection}' is {} and needs an operator",
-            credentials.status
+            cached.status
         )));
     }
-    if let Some(token) = still_valid(&credentials, Utc::now()) {
+    if let Some(token) = still_valid(
+        cached.access_token.as_ref(),
+        cached.access_token_expires_at,
+        Utc::now(),
+    ) {
         return Ok((token, kind));
     }
     let refresh = repository
@@ -94,7 +102,11 @@ pub async fn access_token(
         .await
         .map_err(|error| TokenError::Temporary(error.to_string()))?;
     // Another worker may have refreshed while this one waited for the lock.
-    if let Some(token) = still_valid(&refresh.credentials, Utc::now()) {
+    if let Some(token) = still_valid(
+        refresh.credentials.access_token.as_ref(),
+        refresh.credentials.access_token_expires_at,
+        Utc::now(),
+    ) {
         return Ok((token, kind));
     }
     let credentials = refresh.credentials.clone();
@@ -239,6 +251,19 @@ pub async fn poll_device_authorization(
             "the device authorization expired; start it again".into(),
         ));
     }
+    // A poll sooner than the provider's interval is answered as still
+    // pending without asking the provider, which would answer `slow_down`.
+    if let (Some(polled_at), Some(interval)) = (
+        credentials.device_polled_at,
+        credentials.device_interval_seconds,
+    ) && Utc::now() < polled_at + chrono::TimeDelta::seconds(i64::from(interval))
+    {
+        drop(refresh);
+        return repository
+            .extension_connection(&installation.extension_id, connection)
+            .await
+            .map_err(|error| TokenError::Invalid(error.to_string()));
+    }
     let kind = connection_kind(installation, &credentials.kind)?.clone();
     let form = vec![
         ("grant_type", DEVICE_CODE_GRANT.to_owned()),
@@ -257,7 +282,10 @@ pub async fn poll_device_authorization(
             .complete(tokens)
             .await
             .map_err(|error| TokenError::Temporary(error.to_string()))?,
-        Err(TokenError::Pending { .. }) => drop(refresh),
+        Err(TokenError::Pending { slow_down }) => refresh
+            .pending(slow_down)
+            .await
+            .map_err(|error| TokenError::Temporary(error.to_string()))?,
         Err(error) => {
             let _ = refresh
                 .fail(&error.to_string(), matches!(error, TokenError::Rejected(_)))
@@ -463,28 +491,11 @@ mod tests {
 
     #[test]
     fn cached_tokens_are_refreshed_before_they_expire() {
-        let credentials = |expires_at| ConnectionCredentials {
-            id: Uuid::nil(),
-            connection: "shop".into(),
-            kind: "shopify".into(),
-            grant_type: "client_credentials".into(),
-            host_permission_id: "token".into(),
-            token_url: "https://example.com/token".into(),
-            device_authorization_url: None,
-            client_id: "client".into(),
-            scope: None,
-            status: "active".into(),
-            client_secret: None,
-            refresh_token: None,
-            access_token: Some("token".into()),
-            access_token_expires_at: expires_at,
-            device_code: None,
-            device_expires_at: None,
-            device_interval_seconds: None,
-        };
+        let token = Some("token".to_owned());
         let now = Utc::now();
-        assert!(still_valid(&credentials(None), now).is_some());
-        assert!(still_valid(&credentials(Some(now + TimeDelta::minutes(10))), now).is_some());
-        assert!(still_valid(&credentials(Some(now + TimeDelta::seconds(30))), now).is_none());
+        assert!(still_valid(token.as_ref(), None, now).is_some());
+        assert!(still_valid(token.as_ref(), Some(now + TimeDelta::minutes(10)), now).is_some());
+        assert!(still_valid(token.as_ref(), Some(now + TimeDelta::seconds(30)), now).is_none());
+        assert!(still_valid(None, None, now).is_none());
     }
 }
