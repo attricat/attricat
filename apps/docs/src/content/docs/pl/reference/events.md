@@ -7,8 +7,6 @@ Każda zmiana w katalogu zapisuje zdarzenie w tej samej transakcji bazy danych c
 
 Zdarzenia napędzają [przepływy pracy](/pl/builders/workflows/), [reguły](/pl/builders/rules/) i [procedury obsługi zdarzeń w rozszerzeniach](/pl/extensions/server/#obsługuj-zdarzenia-katalogu). Nie są udostępniane jako publiczny strumień.
 
-`record.updated.v1`.
-
 ## Typy zdarzeń
 
 | Typ | Rejestrowane, gdy |

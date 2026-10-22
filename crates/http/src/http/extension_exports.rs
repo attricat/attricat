@@ -679,9 +679,15 @@ pub(super) async fn resync_connector_job(
                     &job.extension_id,
                     job.connection.as_deref(),
                     &status,
+                    job.blueprint_id,
                     MAX_CONNECTOR_RECORD_FILTER as i64,
                 )
-                .await?;
+                .await?
+                .ok_or_else(|| {
+                    ApiError::invalid_input(format!(
+                        "more than {MAX_CONNECTOR_RECORD_FILTER} records have this status; resync the whole job instead"
+                    ))
+                })?;
             if ids.is_empty() {
                 return Ok((StatusCode::OK, Json(json!({"run_ids": []}))));
             }

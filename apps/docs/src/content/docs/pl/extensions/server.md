@@ -94,7 +94,7 @@ Wyszukiwanie działa dokładnie tak samo jak dopasowanie w upsercie. Jeśli sam 
 
 ## Magazyn
 
-Z `storage.extension` wywołania `storage.get.v1`, `storage.set.v1`, `storage.delete.v1` i `storage.list.v1` dają rozszerzeniu własny magazyn klucz-wartość, ograniczony do obszaru roboczego i wydania. `set` i `delete` przyjmują `expected_revision` na potrzeby optymistycznej współbieżności.
+Z `storage.extension` wywołania `storage.get.v1`, `storage.set.v1`, `storage.delete.v1` i `storage.list.v1` dają rozszerzeniu własny magazyn klucz-wartość, ograniczony do obszaru roboczego i wydania. `set` i `delete` przyjmują `expected_revision` na potrzeby optymistycznej współbieżności. Instalacja może przechowywać do 65 536 kluczy i 256 MiB, a pojedyncza wartość może mieć najwyżej 64 KiB.
 
 ## Konfiguracja
 

@@ -29,10 +29,23 @@ pub(super) struct BatchResult {
 /// Why a batch did not produce a result.
 #[derive(Debug)]
 pub(super) enum BatchError {
-    /// The host, a lifecycle call, a trap or a 1.0 `process-batch` error.
+    /// The host, a trap, invalid batch output or a 1.0 `process-batch` error.
     Runtime(ExtensionRuntimeError),
+    /// An error a lifecycle export (`prepare`, `start`, `checkpoint`,
+    /// `finish` or `cancel`) returned. It fails the run but is not a fault.
+    Lifecycle(String),
     /// A typed 1.1 `process-batch` failure.
     Failure(InvocationFailure),
+}
+
+impl BatchError {
+    /// Whether the component misbehaved, which quarantines a 1.1 component.
+    pub(super) fn is_fault(&self) -> bool {
+        match self {
+            Self::Runtime(_) | Self::Failure(InvocationFailure::Fault(_)) => true,
+            Self::Lifecycle(_) | Self::Failure(_) => false,
+        }
+    }
 }
 
 impl From<ExtensionRuntimeError> for BatchError {
@@ -45,6 +58,7 @@ impl std::fmt::Display for BatchError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Runtime(error) => error.fmt(formatter),
+            Self::Lifecycle(message) => formatter.write_str(message),
             Self::Failure(failure) => formatter.write_str(failure.message()),
         }
     }
@@ -168,10 +182,10 @@ fn to_json(value: &Value) -> Result<String, ExtensionRuntimeError> {
     serde_json::to_string(value).map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))
 }
 
-fn flatten<T>(result: wasmtime::Result<Result<T, String>>) -> Result<T, ExtensionRuntimeError> {
+fn flatten<T>(result: wasmtime::Result<Result<T, String>>) -> Result<T, BatchError> {
     result
-        .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?
-        .map_err(ExtensionRuntimeError::Runtime)
+        .map_err(|error| BatchError::Runtime(ExtensionRuntimeError::Runtime(error.to_string())))?
+        .map_err(BatchError::Lifecycle)
 }
 
 /// Runs one batch of `run` against an instantiated operations export: cancel,

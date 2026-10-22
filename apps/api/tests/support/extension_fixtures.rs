@@ -41,7 +41,9 @@ pub fn tar_zst(files: &[(&str, &[u8])]) -> Vec<u8> {
 pub fn build_test_component(package: &str, output: &str) -> Vec<u8> {
     // Parallel tests would race on the same build output and component file.
     static BUILDS: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let _build = BUILDS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _build = BUILDS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|path| path.parent())

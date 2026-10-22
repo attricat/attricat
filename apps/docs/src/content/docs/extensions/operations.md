@@ -35,6 +35,8 @@ A component built for the `outcome-extension` [world](/extensions/server/#host-a
 - `retry { message, after-ms? }`: the batch runs again with the same batch key after the delay, within the run's failure budget.
 - `fault(message)`: the run fails and the installation is quarantined.
 
+Traps, fuel or memory exhaustion, timeouts, and invalid batch results are faults too. An error returned by `prepare`, `start`, `checkpoint`, `finish`, or `cancel` fails the run without quarantining the installation.
+
 A run whose release is disabled, quarantined, or loses a grant during a batch pauses instead of failing.
 
 ## How runs are durable
@@ -215,7 +217,7 @@ trigger = { events = ["record.updated.v1", "attribute_value.changed.v1"], deboun
 input = {}
 ```
 
-A run starts once the newest matching event of the blueprint's records is `debounce_seconds` old, so a burst of edits causes one run. The run only covers the changed records, up to 10,000; with more changes it runs the whole job. See [Connector jobs](/reference/blueprint/#connector-jobs) for the allowed events.
+A run starts once the newest matching event of the blueprint's records is `debounce_seconds` old, so a burst of edits causes one run. Steady edits cannot hold it back forever: a run also starts once the oldest pending change is ten times `debounce_seconds` old. If the run cannot start, for example while the extension is disabled, the changes stay pending and are exported once it can. The run only covers the changed records, up to 10,000; with more changes it runs the whole job. See [Connector jobs](/reference/blueprint/#connector-jobs) for the allowed events.
 
 Each run records its mode: `incremental`, `triggered`, or `resync`.
 

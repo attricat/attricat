@@ -412,12 +412,22 @@ async fn token_endpoint_call(
     if status.is_redirection() {
         return Err(TokenError::Temporary("token endpoint redirected".into()));
     }
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|_| TokenError::Temporary("token response failed".into()))?;
-    if bytes.len() > MAX_TOKEN_RESPONSE_BYTES {
-        return Err(TokenError::Temporary("token response is too large".into()));
+    // Read at most the limit, so an oversized response is never buffered.
+    let too_large = || TokenError::Temporary("token response is too large".into());
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_TOKEN_RESPONSE_BYTES as u64)
+    {
+        return Err(too_large());
+    }
+    let mut bytes = Vec::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|_| TokenError::Temporary("token response failed".into()))?;
+        if bytes.len().saturating_add(chunk.len()) > MAX_TOKEN_RESPONSE_BYTES {
+            return Err(too_large());
+        }
+        bytes.extend_from_slice(&chunk);
     }
     let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     if status.is_success() && body.is_object() {

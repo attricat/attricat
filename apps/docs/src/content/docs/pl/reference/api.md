@@ -108,7 +108,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `GET` | `/blueprints/{id}/migration-batches` | Partie migracji w tle. |
 | `GET` | `/blueprints/{id}/connector-jobs` | Zadania konektorów. |
 | `POST` | `/blueprint-connector-jobs/{id}/run` | Uruchamia zadanie konektora z `{"idempotency_key": "…"}`. |
-| `POST` | `/blueprint-connector-jobs/{id}/resync` | Ponownie eksportuje każdy opublikowany rekord zadania eksportu: `{"idempotency_key": "…"}` oraz `record_ids` (tylko te rekordy) albo `status` (tylko rekordy z tym stanem eksportu w połączeniu zadania). Zwraca `{"run_ids": [...]}`. |
+| `POST` | `/blueprint-connector-jobs/{id}/resync` | Ponownie eksportuje każdy opublikowany rekord zadania eksportu: `{"idempotency_key": "…"}` oraz `record_ids` (tylko te rekordy) albo `status` (tylko rekordy z tym stanem eksportu w połączeniu zadania; ponad 10 000 takich rekordów daje błąd `422`, więc wtedy wykonaj ponowny eksport całego zadania). Zwraca `{"run_ids": [...]}`. |
 | `GET`, `POST` | `/reusable-attributes`; `POST /reusable-attributes/{id}/versions`; `POST /reusable-attribute-revisions/{id}/publish`; `GET`, `POST /reusable-attribute-groups` | Atrybuty wielokrotnego użytku. |
 | `POST` | `/reusable-attributes/validate`, `/reusable-attributes/{id}/versions/validate` | Uruchamia wszystkie kontrole, które wykonałoby utworzenie atrybutu wielokrotnego użytku lub jego kolejnej wersji, niczego nie zapisując. |
 
@@ -210,7 +210,7 @@ POST /api/v1/records/search
 - `query` używa [składni wyszukiwania](/pl/guides/search-syntax/).
 - `source_relationship_field` może być ścieżką relacji o maksymalnie trzech krokach, na przykład `model.brand`. Każdy krok musi mieć jeden schemat docelowy i `cardinality = "one"` i jest rozstrzygany w kontekście fasety z własnym dziedziczeniem kontekstu. Punkt końcowy elementów podrzędnych przyjmuje te same ścieżki.
 - Element `relationship_tree_facets` bez `source_relationship_field` filtruje przeszukiwany schemat według jego własnego `hierarchy_field`: rekord pasuje, gdy jest wybranym węzłem lub jednym z jego potomków. Punkt końcowy elementów podrzędnych przyjmuje to samo pominięcie, aby wyświetlić własne drzewo schematu, licząc każdy węzeł wraz ze wszystkim, co znajduje się pod nim.
-- `export_status` zostawia rekordy z danym stanem eksportu w połączeniu jednego rozszerzenia albo w jego domyślnym miejscu docelowym, gdy pominięto `connection`. `status` to `pending`, `synced`, `rejected`, `retrying`, `uncertain` lub `withdrawn`. Pasuje najwyżej 50 000 rekordów.
+- `export_status` zostawia rekordy z danym stanem eksportu w połączeniu jednego rozszerzenia albo w jego domyślnym miejscu docelowym, gdy pominięto `connection`. `status` to `pending`, `synced`, `rejected`, `retrying`, `uncertain` lub `withdrawn`. Pasują tylko rekordy wyszukiwanego schematu; jeśli ten stan ma więcej niż 50 000 jego rekordów, wyszukiwanie kończy się błędem `422` zamiast zwrócić niepełną listę.
 - Operatory filtrów to `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt` i `lte`. `field` może być ścieżką relacji o maksymalnie trzech krokach.
 - `context_code` (domyślnie `default`) to kontekst, w którym rozstrzygane są filtry, sortowanie i `table_values`, z dziedziczeniem z kontekstów nadrzędnych zależnie od atrybutu. `query` dopasowuje wartości we wszystkich kontekstach.
 - `sort.field` musi być kolumną skalarną w widoku tabeli schematu, `blueprint_version` lub `publication_status` (z `sort.context_code` wskazującym kanał).

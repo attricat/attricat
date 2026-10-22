@@ -1568,7 +1568,8 @@ impl ExtensionOperationTaskHandler {
     /// Applies a failed batch: a typed retry re-runs the same batch after a
     /// backoff, a rejection dead-letters the run at once, and anything else
     /// fails it through the envelope's failure budget. Only a 1.1 component's
-    /// fault (or trap) also quarantines its installation.
+    /// fault (a trap, invalid output or a typed `fault`) also quarantines its
+    /// installation; an error a lifecycle export returns only fails the run.
     async fn handle_batch_failure(
         &self,
         repository: &AttricatRepository,
@@ -1596,6 +1597,7 @@ impl ExtensionOperationTaskHandler {
                             &installation.extension_id,
                             rejection.connection.as_deref(),
                             record_id,
+                            None,
                             &rejection.code,
                             &rejection.message,
                         )
@@ -1632,7 +1634,7 @@ impl ExtensionOperationTaskHandler {
                         at: chrono::Utc::now() + PAUSED_OPERATION_RECHECK_DELAY,
                     });
                 }
-                if deferrable {
+                if deferrable && error.is_fault() {
                     tracing::warn!(
                         extension = %installation.extension_id,
                         installed_release_id = %installation.installed_release_id,
@@ -1902,6 +1904,7 @@ impl WasmExtensionTaskHandler {
                             &installation.extension_id,
                             rejection.connection.as_deref(),
                             record_id,
+                            delivery.record_revision,
                             &rejection.code,
                             &rejection.message,
                         )

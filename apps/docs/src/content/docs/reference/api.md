@@ -108,7 +108,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `GET` | `/blueprints/{id}/migration-batches` | Background migration batches. |
 | `GET` | `/blueprints/{id}/connector-jobs` | Connector jobs. |
 | `POST` | `/blueprint-connector-jobs/{id}/run` | Run a connector job, with `{"idempotency_key": "…"}`. |
-| `POST` | `/blueprint-connector-jobs/{id}/resync` | Export again every published record of an export job: `{"idempotency_key": "…"}`, plus either `record_ids` (only those records) or `status` (only records with that export status on the job's connection). Returns `{"run_ids": [...]}`. |
+| `POST` | `/blueprint-connector-jobs/{id}/resync` | Export again every published record of an export job: `{"idempotency_key": "…"}`, plus either `record_ids` (only those records) or `status` (only records with that export status on the job's connection; more than 10,000 such records is a `422`, so resync the whole job instead). Returns `{"run_ids": [...]}`. |
 | `GET`, `POST` | `/reusable-attributes`; `POST /reusable-attributes/{id}/versions`; `POST /reusable-attribute-revisions/{id}/publish`; `GET`, `POST /reusable-attribute-groups` | Reusable attributes. |
 | `POST` | `/reusable-attributes/validate`, `/reusable-attributes/{id}/versions/validate` | Run every check that creating the reusable attribute, or its next revision, would run, without storing it. |
 
@@ -210,7 +210,7 @@ POST /api/v1/records/search
 - `query` uses the [search syntax](/guides/search-syntax/).
 - `source_relationship_field` can be a relationship path of up to three hops, such as `model.brand`. Each hop needs a single target blueprint and `cardinality = "one"`, and resolves in the facet's context with its own context fallback. The children endpoint accepts the same paths.
 - A `relationship_tree_facets` item without `source_relationship_field` filters the searched blueprint by its own `hierarchy_field`: a record matches when it is a selected node or one of its descendants. The children endpoint accepts the same omission to list the blueprint's own tree, counting each node and everything below it.
-- `export_status` keeps records with that export status at one extension's connection, or its default destination when `connection` is omitted. `status` is `pending`, `synced`, `rejected`, `retrying`, `uncertain`, or `withdrawn`. At most 50,000 records match.
+- `export_status` keeps records with that export status at one extension's connection, or its default destination when `connection` is omitted. `status` is `pending`, `synced`, `rejected`, `retrying`, `uncertain`, or `withdrawn`. Matches are limited to the searched blueprint; if more than 50,000 of its records have the status, the search fails with `422` instead of returning a partial list.
 - Filter operators are `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt`, and `lte`. `field` can be a relationship path of up to three hops.
 - `context_code` (default `default`) is the context in which filters, sorting, and `table_values` are resolved, inheriting from parent contexts per attribute. `query` matches values in every context.
 - `sort.field` must be a scalar column in the blueprint's table view, `blueprint_version`, or `publication_status` (with `sort.context_code` naming a channel).

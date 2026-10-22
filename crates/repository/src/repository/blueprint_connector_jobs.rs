@@ -29,6 +29,11 @@ pub struct BlueprintConnectorJob {
 }
 
 const FIELDS: &str = "id,blueprint_id,blueprint_version,code,direction,extension_id,operation_id,input,context_id,input_file_id,interval_seconds,next_at,enabled,connection,trigger_events,trigger_debounce_seconds";
+/// How many change-triggered jobs one producer tick starts at most.
+const TRIGGERED_JOBS_PER_TICK: i64 = 64;
+/// A triggered job runs once its oldest pending change has waited this many
+/// debounces, even while newer changes keep arriving.
+const TRIGGER_MAX_WAIT_FACTOR: i32 = 10;
 /// The most records a resync or a triggered run may select by ID.
 pub const MAX_CONNECTOR_RECORD_FILTER: usize = 10_000;
 
@@ -402,11 +407,25 @@ impl AttricatRepository {
 
     /// Starts a run of every change-triggered export job whose blueprint's
     /// records changed after its watermark, once the newest change is older
-    /// than the job's debounce. The run selects the changed records (or every
-    /// record when too many changed), and the watermark moves past them.
+    /// than the job's debounce or the oldest has waited
+    /// [`TRIGGER_MAX_WAIT_FACTOR`] debounces. The run selects the changed
+    /// records (or every record when too many changed), and the watermark
+    /// moves past them.
     async fn produce_triggered_blueprint_connector_jobs(&self) -> Result<usize, RepositoryError> {
-        let jobs: Vec<(Uuid, Uuid, Vec<String>, i32, i64)> = sqlx::query_as("SELECT id,blueprint_id,trigger_events,trigger_debounce_seconds,trigger_watermark FROM blueprint_connector_jobs WHERE workspace_id=$1 AND enabled AND code IS NOT NULL AND trigger_events IS NOT NULL AND trigger_watermark IS NOT NULL ORDER BY id LIMIT 64")
-            .bind(self.extension_workspace()).fetch_all(&self.pool).await?;
+        // Only jobs with pending changes are considered, the longest-waiting
+        // first, so idle jobs cannot crowd out ones that have work.
+        let jobs: Vec<(Uuid, Uuid, Vec<String>, i32, i64)> = sqlx::query_as(
+            "SELECT j.id,j.blueprint_id,j.trigger_events,j.trigger_debounce_seconds,j.trigger_watermark FROM blueprint_connector_jobs j \
+             WHERE j.workspace_id=$1 AND j.enabled AND j.code IS NOT NULL AND j.trigger_events IS NOT NULL AND j.trigger_watermark IS NOT NULL \
+               AND EXISTS (SELECT 1 FROM domain_events e JOIN records r ON r.workspace_id=e.workspace_id AND r.id=e.aggregate_id \
+                           WHERE e.workspace_id=j.workspace_id AND e.aggregate_kind='record' AND e.sequence>j.trigger_watermark \
+                             AND e.event_type=ANY(j.trigger_events) AND r.blueprint_id=j.blueprint_id) \
+             ORDER BY j.trigger_watermark,j.id LIMIT $2",
+        )
+        .bind(self.extension_workspace())
+        .bind(TRIGGERED_JOBS_PER_TICK)
+        .fetch_all(&self.pool)
+        .await?;
         let mut started = 0;
         for (id, blueprint_id, events, debounce, watermark) in jobs {
             let changes: Vec<(i64, Uuid, DateTime<Utc>)> = sqlx::query_as(
@@ -422,10 +441,14 @@ impl AttricatRepository {
             .bind(MAX_CONNECTOR_RECORD_FILTER as i64 + 1)
             .fetch_all(&self.pool)
             .await?;
-            let Some(&(high_water, _, newest)) = changes.last() else {
+            let (Some(&(_, _, oldest)), Some(&(high_water, _, newest))) =
+                (changes.first(), changes.last())
+            else {
                 continue;
             };
-            if Utc::now() - newest < Duration::seconds(i64::from(debounce)) {
+            let debounce = Duration::seconds(i64::from(debounce));
+            let now = Utc::now();
+            if now - newest < debounce && now - oldest < debounce * TRIGGER_MAX_WAIT_FACTOR {
                 continue;
             }
             let mut record_ids: Vec<Uuid> = changes.iter().map(|change| change.1).collect();
@@ -443,7 +466,11 @@ impl AttricatRepository {
             {
                 Ok(_) => started += 1,
                 Err(error) => {
+                    // Keep the watermark, like an interval occurrence keeps
+                    // `next_at`, so the changes are exported once the job can
+                    // run again instead of being skipped.
                     tracing::warn!(job=%id, %error, "triggered connector run could not be queued");
+                    continue;
                 }
             }
             sqlx::query("UPDATE blueprint_connector_jobs SET trigger_watermark=$3,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND trigger_watermark=$4")

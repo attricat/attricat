@@ -526,26 +526,48 @@ impl AttricatRepository {
             .execute(&self.pool).await?.rows_affected() == 1)
     }
 
-    /// Records a handler's rejection of a record as that record's status. A
-    /// rejection for an unknown connection or a deleted record is ignored.
+    /// Records a handler's rejection of a record as that record's status.
+    /// `record_revision` is the revision the rejected delivery carried; a
+    /// rejection of a revision older than the mapping's is outdated and kept
+    /// out of the status. A rejection that cannot be recorded (an unknown or
+    /// invalid connection, a deleted record, or a record another worker holds)
+    /// is ignored, so it never fails the delivery or run that reported it.
     pub async fn record_export_rejection(
         &self,
         extension_id: &str,
         connection: Option<&str>,
         record_id: Uuid,
+        record_revision: Option<i64>,
         code: &str,
         message: &str,
     ) -> Result<(), RepositoryError> {
-        let update = ExportMappingUpdate {
-            status: "rejected".into(),
-            error: Some(json!({"code": code, "message": message})),
-            ..Default::default()
-        };
-        match self
-            .export_mapping_commit(extension_id, connection, record_id, None, update)
-            .await
-        {
-            Ok(_) | Err(RepositoryError::NotFound(_)) => Ok(()),
+        let result = async {
+            if let Some(revision) = record_revision
+                && self
+                    .export_mapping_get(extension_id, connection, MappingKey::Record(record_id))
+                    .await?
+                    .is_some_and(|mapping| mapping.record_revision > revision)
+            {
+                return Ok(());
+            }
+            let update = ExportMappingUpdate {
+                status: "rejected".into(),
+                record_revision: record_revision.filter(|revision| *revision >= 0),
+                error: Some(json!({"code": code, "message": message})),
+                ..Default::default()
+            };
+            self.export_mapping_commit(extension_id, connection, record_id, None, update)
+                .await
+                .map(|_| ())
+        }
+        .await;
+        match result {
+            Ok(())
+            | Err(
+                RepositoryError::NotFound(_)
+                | RepositoryError::ExportMappingConflict(_)
+                | RepositoryError::InvalidExtension(_),
+            ) => Ok(()),
             Err(error) => Err(error),
         }
     }
@@ -572,22 +594,25 @@ impl AttricatRepository {
             .fetch_all(&self.pool).await?)
     }
 
-    /// Records with a given export status, for the Explorer filter. At most
-    /// `limit` IDs are returned.
+    /// Records of `blueprint_id` with a given export status, for the
+    /// Explorer filter and status resyncs. Returns `None` when more than
+    /// `limit` records match, so a caller never acts on a silently cut list.
     pub async fn export_status_record_ids(
         &self,
         extension_id: &str,
         connection: Option<&str>,
         status: &str,
+        blueprint_id: Uuid,
         limit: i64,
-    ) -> Result<Vec<Uuid>, RepositoryError> {
+    ) -> Result<Option<Vec<Uuid>>, RepositoryError> {
         check_connection(connection)?;
         if !EXPORT_STATUSES.contains(&status) {
             return Err(invalid("unknown export status"));
         }
-        Ok(sqlx::query_scalar("SELECT record_id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND status=$4 ORDER BY record_id LIMIT $5")
-            .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(status).bind(limit)
-            .fetch_all(&self.pool).await?)
+        let ids: Vec<Uuid> = sqlx::query_scalar("SELECT m.record_id FROM extension_export_mappings m JOIN records r ON r.workspace_id=m.workspace_id AND r.id=m.record_id WHERE m.workspace_id=$1 AND m.extension_id=$2 AND m.connection IS NOT DISTINCT FROM $3 AND m.status=$4 AND r.blueprint_id=$5 ORDER BY m.record_id LIMIT $6")
+            .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(status).bind(blueprint_id).bind(limit.saturating_add(1))
+            .fetch_all(&self.pool).await?;
+        Ok((ids.len() as i64 <= limit).then_some(ids))
     }
 
     /// Marks the selected mappings for retry and emits

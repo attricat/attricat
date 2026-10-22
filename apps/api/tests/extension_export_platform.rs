@@ -411,6 +411,19 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
         )
         .await;
     assert!(late.is_err());
+    // Nor can a late rejection of an older revision.
+    repository
+        .record_export_rejection(
+            EXTENSION,
+            None,
+            record,
+            Some(created),
+            "missing_gtin",
+            "GTIN is required",
+        )
+        .await
+        .unwrap();
+    assert_eq!(mapping_status(&pool, record).await.unwrap().0, "synced");
     // Lookups by external ID serve reconciliation.
     let found = repository
         .export_mapping_get(
@@ -660,9 +673,10 @@ input = {{fail = "{fail}"}}
             products.0,
             CreateBlueprint {
                 definition: product_blueprint(&format!(
-                    "{}{}{}",
+                    "{}{}{}{}",
                     job_for("retry"),
                     job_for("reject"),
+                    job_for("prepare"),
                     job_for("fault")
                 )),
             },
@@ -703,6 +717,20 @@ input = {{fail = "{fail}"}}
     );
     assert_eq!(installation_state(&pool).await, "enabled");
 
+    // An error returned by a lifecycle call fails the run without
+    // quarantining the extension.
+    let unprepared = repository
+        .run_blueprint_connector_job(job("fail_prepare"), "prepare")
+        .await
+        .unwrap();
+    drain_operations(&repository, &pool, store.clone()).await;
+    let (status, _, _) = run_status(&pool, unprepared[0]).await;
+    assert!(
+        matches!(status.as_str(), "failed" | "dead_letter"),
+        "{status}"
+    );
+    assert_eq!(installation_state(&pool).await, "enabled");
+
     let faulted = repository
         .run_blueprint_connector_job(job("fail_fault"), "fault")
         .await
@@ -728,7 +756,14 @@ async fn export_status_preview_and_retry_are_served_over_http(pool: sqlx::PgPool
     let record = titled_record(&repository, blueprint, "Chair").await;
     titled_record(&repository, blueprint, "Table").await;
     repository
-        .record_export_rejection(EXTENSION, None, record, "missing_gtin", "GTIN is required")
+        .record_export_rejection(
+            EXTENSION,
+            None,
+            record,
+            None,
+            "missing_gtin",
+            "GTIN is required",
+        )
         .await
         .unwrap();
     let (base_url, server) = start_server_with_object_store(pool.clone(), store).await;
@@ -986,5 +1021,60 @@ trigger = {events = ["attribute_value.changed.v1"], debounce_seconds = 1}
     assert_eq!(
         count(&pool, "SELECT count(*) FROM extension_operation_runs").await,
         1
+    );
+
+    // A change whose run cannot be queued keeps the watermark and is
+    // exported once the job can run again.
+    let watermark = || async {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT trigger_watermark FROM blueprint_connector_jobs WHERE code='near_real_time'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    };
+    let before = watermark().await;
+    repository.disable_extension(EXTENSION).await.unwrap();
+    set_title(&repository, ids[1], "Silk scarf").await;
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    repository
+        .produce_due_blueprint_connector_jobs()
+        .await
+        .unwrap();
+    assert_eq!(watermark().await, before);
+    repository.enable_extension(EXTENSION).await.unwrap();
+    repository
+        .produce_due_blueprint_connector_jobs()
+        .await
+        .unwrap();
+    let filter: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT connector_record_ids FROM extension_operation_runs ORDER BY created_at DESC LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(filter, vec![ids[1]]);
+    assert!(watermark().await > before);
+
+    // Steady edits cannot hold a run back forever: once the oldest pending
+    // change has waited ten debounces, the job runs although the newest is
+    // still inside its debounce.
+    set_title(&repository, ids[0], "Felt hat").await;
+    sqlx::query(
+        "UPDATE domain_events SET occurred_at=now()-interval '20 seconds' WHERE sequence>$1",
+    )
+    .bind(watermark().await)
+    .execute(&pool)
+    .await
+    .unwrap();
+    set_title(&repository, ids[1], "Linen scarf").await;
+    let runs = count(&pool, "SELECT count(*) FROM extension_operation_runs").await;
+    repository
+        .produce_due_blueprint_connector_jobs()
+        .await
+        .unwrap();
+    assert_eq!(
+        count(&pool, "SELECT count(*) FROM extension_operation_runs").await,
+        runs + 1
     );
 }

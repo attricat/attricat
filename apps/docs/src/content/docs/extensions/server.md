@@ -94,7 +94,7 @@ A lookup resolves exactly like an upsert. If the attribute alone is a declared u
 
 ## Storage
 
-With `storage.extension`, `storage.get.v1`, `storage.set.v1`, `storage.delete.v1`, and `storage.list.v1` give the extension its own key-value store, scoped to the workspace and release. `set` and `delete` accept an `expected_revision` for optimistic concurrency.
+With `storage.extension`, `storage.get.v1`, `storage.set.v1`, `storage.delete.v1`, and `storage.list.v1` give the extension its own key-value store, scoped to the workspace and release. `set` and `delete` accept an `expected_revision` for optimistic concurrency. An installation can store up to 65,536 keys and 256 MiB, with values of at most 64 KiB.
 
 ## Configuration
 

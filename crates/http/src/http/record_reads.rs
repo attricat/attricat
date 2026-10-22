@@ -32,8 +32,9 @@ use uuid::Uuid;
 
 const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
 const MAX_SEARCH_FILTERS: usize = 20;
-/// The most records an export status filter matches; the Explorer pages
-/// through them like any other candidate set.
+/// The most records of a blueprint an export status filter may match; the
+/// Explorer pages through them like any other candidate set. A larger match
+/// is refused rather than cut.
 const MAX_EXPORT_STATUS_MATCHES: i64 = 50_000;
 /// Relationship hops a filter, sort or relationship path may traverse.
 const MAX_RELATIONSHIP_HOPS: usize = 3;
@@ -299,13 +300,19 @@ pub(super) async fn search_record_previews(
                 &export.extension_id,
                 export.connection.as_deref(),
                 &export.status,
+                current.blueprint.id,
                 MAX_EXPORT_STATUS_MATCHES,
             )
             .instrument(tracing::info_span!(
                 "sql.operation",
                 label = "export-status-filter"
             ))
-            .await?;
+            .await?
+            .ok_or_else(|| {
+                ApiError::invalid_input(format!(
+                    "more than {MAX_EXPORT_STATUS_MATCHES} records have this export status; retry or resync them first"
+                ))
+            })?;
         matching = Some(intersect_record_ids(matching, filtered));
     }
     if !relationship_filters.is_empty() {

@@ -8,7 +8,7 @@
 //! The withdrawn feed lists records unpublished from, or deleted in, the run's
 //! channel since a cursor, so an exporter can close them out on the destination.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
@@ -17,10 +17,11 @@ use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
 use super::{
-    AttricatRepository, ExtensionAttricatPageRequest, FormAttributeValue, RepositoryError,
+    AttricatRepository, ExtensionAttricatPageRequest, RepositoryError,
     record_values::resolve_on_path,
 };
 use crate::model::{Attribute, AttributeValue, Record};
+use crate::persistence_rows::{Db, IntoDomain};
 
 /// The most relationship attributes one page may expand.
 pub const MAX_EXPANDED_RELATIONSHIPS: usize = 4;
@@ -51,12 +52,28 @@ struct ResolvedValues {
     files: Map<String, Value>,
 }
 
+/// A file reference: record, attribute code, context, and the file's ID,
+/// name, media type, size and SHA-256.
+type FileReferenceRow = (
+    Uuid,
+    String,
+    Option<Uuid>,
+    Uuid,
+    String,
+    String,
+    i64,
+    String,
+);
+
+/// One record's current file references by attribute code and context.
+type FileReferences = HashMap<(String, Option<Uuid>), Vec<Value>>;
+
 /// Resolves `values` (and current file values) of one record in the context
 /// `path`, honoring each attribute's fallback setting.
 fn resolve_values(
     attributes: &[Attribute],
     values: &[AttributeValue],
-    files: &[FormAttributeValue],
+    files: &FileReferences,
     path: &[Uuid],
 ) -> ResolvedValues {
     let mut resolved = ResolvedValues::default();
@@ -84,32 +101,10 @@ fn resolve_values(
             }
             "file" => {
                 if let Some((_, references)) = resolve_on_path(path, inherit, |context| {
-                    files.iter().find_map(|value| match value {
-                        FormAttributeValue::File {
-                            attribute_code,
-                            context_id,
-                            files,
-                        } if attribute_code == &attribute.code
-                            && *context_id == Some(context)
-                            && !files.is_empty() =>
-                        {
-                            Some(
-                                files
-                                    .iter()
-                                    .map(|file| {
-                                        json!({
-                                            "file_id": file.id,
-                                            "filename": file.filename,
-                                            "mime_type": file.mime_type,
-                                            "byte_size": file.byte_size,
-                                            "sha256": file.sha256,
-                                        })
-                                    })
-                                    .collect::<Vec<_>>(),
-                            )
-                        }
-                        _ => None,
-                    })
+                    files
+                        .get(&(attribute.code.clone(), Some(context)))
+                        .filter(|references| !references.is_empty())
+                        .cloned()
                 }) {
                     resolved
                         .files
@@ -144,18 +139,71 @@ struct WithdrawnCursor {
 }
 
 impl AttricatRepository {
-    async fn resolved_record(
+    /// Values (as of `snapshot_at`) and current file references of
+    /// `records`, read in one query each.
+    async fn values_and_files_of(
         &self,
-        record: &Record,
-        path: &[Uuid],
-        attributes: &[Attribute],
+        record_ids: &[Uuid],
         snapshot_at: DateTime<Utc>,
-    ) -> Result<ResolvedValues, RepositoryError> {
-        let values = self
-            .extension_attricat_values_at(record.id, snapshot_at)
-            .await?;
-        let files = self.file_form_values(record.id).await?;
-        Ok(resolve_values(attributes, &values, &files, path))
+    ) -> Result<
+        (
+            HashMap<Uuid, Vec<AttributeValue>>,
+            HashMap<Uuid, FileReferences>,
+        ),
+        RepositoryError,
+    > {
+        let mut values: HashMap<Uuid, Vec<AttributeValue>> = HashMap::new();
+        let mut files: HashMap<Uuid, FileReferences> = HashMap::new();
+        if record_ids.is_empty() {
+            return Ok((values, files));
+        }
+        for value in self
+            .extension_attricat_values_of_at(record_ids, snapshot_at)
+            .await?
+        {
+            values.entry(value.record_id).or_default().push(value);
+        }
+        let rows: Vec<FileReferenceRow> = sqlx::query_as(
+            "SELECT av.record_id,a.code,av.context_id,f.id,f.display_filename,f.mime_type,f.byte_size,f.sha256 \
+             FROM attribute_values av \
+             JOIN records rec ON rec.id=av.record_id AND rec.workspace_id=av.workspace_id \
+             JOIN attributes a ON a.id=av.attribute_id AND a.blueprint_id=rec.blueprint_id AND a.blueprint_version=rec.blueprint_version AND a.value_type='file' \
+             JOIN attribute_file_references r ON r.attribute_value_id=av.id \
+             JOIN files f ON f.id=r.file_id AND f.workspace_id=av.workspace_id AND f.deleted_at IS NULL \
+             WHERE av.workspace_id=$1 AND av.record_id=ANY($2) \
+             ORDER BY av.record_id,a.position,av.context_id,r.position",
+        )
+        .bind(self.workspace_id.0)
+        .bind(record_ids)
+        .fetch_all(&self.pool)
+        .await?;
+        for (record_id, code, context_id, file_id, filename, mime_type, byte_size, sha256) in rows {
+            files
+                .entry(record_id)
+                .or_default()
+                .entry((code, context_id))
+                .or_default()
+                .push(json!({
+                    "file_id": file_id,
+                    "filename": filename,
+                    "mime_type": mime_type,
+                    "byte_size": byte_size,
+                    "sha256": sha256,
+                }));
+        }
+        Ok((values, files))
+    }
+
+    /// Which of `record_ids` are currently published in `channel_id`.
+    async fn published_of(
+        &self,
+        record_ids: &[Uuid],
+        channel_id: Uuid,
+    ) -> Result<HashSet<Uuid>, RepositoryError> {
+        let published: Vec<Uuid> = sqlx::query_scalar("SELECT record_id FROM record_channel_publications WHERE workspace_id=$1 AND record_id=ANY($2) AND context_id=$3 AND published_at IS NOT NULL")
+            .bind(self.workspace_id.0).bind(record_ids).bind(channel_id)
+            .fetch_all(&self.pool).await?;
+        Ok(published.into_iter().collect())
     }
 
     /// Whether `record_id` is currently published in `channel_id`.
@@ -164,9 +212,33 @@ impl AttricatRepository {
         record_id: Uuid,
         channel_id: Uuid,
     ) -> Result<bool, RepositoryError> {
-        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM record_channel_publications WHERE workspace_id=$1 AND record_id=$2 AND context_id=$3 AND published_at IS NOT NULL)")
-            .bind(self.workspace_id.0).bind(record_id).bind(channel_id)
-            .fetch_one(&self.pool).await?)
+        Ok(self
+            .published_of(&[record_id], channel_id)
+            .await?
+            .contains(&record_id))
+    }
+
+    /// Live records among `record_ids`, by ID.
+    async fn records_of(
+        &self,
+        record_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Record>, RepositoryError> {
+        if record_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let records: Vec<Record> = sqlx::query_as::<_, Db<Record>>(
+            "SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at, content_revision \
+             FROM records WHERE id = ANY($1) AND workspace_id = $2 AND deleted_at IS NULL",
+        )
+        .bind(record_ids)
+        .bind(self.workspace_id.0)
+        .fetch_all(&self.pool)
+        .await?
+        .into_domain();
+        Ok(records
+            .into_iter()
+            .map(|record| (record.id, record))
+            .collect())
     }
 
     /// A page of v2 connector rows. Values are as of the page's snapshot;
@@ -208,49 +280,104 @@ impl AttricatRepository {
         }
         let scope = self.preview_scope(request.context_id).await?;
         let path = scope.tree.path(request.context_id, true)?;
+        // Every page row and expanded target is read in a fixed number of
+        // queries, not per row.
+        let page_ids: Vec<Uuid> = page.records.iter().map(|record| record.id).collect();
+        let (mut values, mut files) = self
+            .values_and_files_of(&page_ids, page.snapshot_at)
+            .await?;
+        let no_files = FileReferences::new();
+        let resolved_rows: Vec<ResolvedValues> = page
+            .records
+            .iter()
+            .map(|record| {
+                resolve_values(
+                    &attributes,
+                    values.get(&record.id).map_or(&[][..], Vec::as_slice),
+                    files.get(&record.id).unwrap_or(&no_files),
+                    &path,
+                )
+            })
+            .collect();
+        let mut target_ids: Vec<Uuid> = resolved_rows
+            .iter()
+            .flat_map(|resolved| {
+                request.expand.iter().flat_map(|code| {
+                    resolved
+                        .relationships
+                        .get(code)
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .take(MAX_EXPANDED_TARGETS)
+                        .filter_map(|target| target.as_str()?.parse().ok())
+                })
+            })
+            .collect();
+        target_ids.sort_unstable();
+        target_ids.dedup();
+        let targets = self.records_of(&target_ids).await?;
+        let unread: Vec<Uuid> = target_ids
+            .iter()
+            .copied()
+            .filter(|id| targets.contains_key(id) && !page_ids.contains(id))
+            .collect();
+        let (target_values, target_files) =
+            self.values_and_files_of(&unread, page.snapshot_at).await?;
+        values.extend(target_values);
+        files.extend(target_files);
+        let published = match request.channel_id {
+            Some(channel) if !targets.is_empty() => {
+                let ids: Vec<Uuid> = targets.keys().copied().collect();
+                Some(self.published_of(&ids, channel).await?)
+            }
+            Some(_) => Some(HashSet::new()),
+            None => None,
+        };
         let mut target_attributes: HashMap<(Uuid, i64), Vec<Attribute>> = HashMap::new();
+        for target in targets.values() {
+            let key = (target.blueprint_id, target.blueprint_version);
+            if let std::collections::hash_map::Entry::Vacant(entry) = target_attributes.entry(key) {
+                entry.insert(self.list_attributes(key.0, key.1).await?);
+            }
+        }
+        let mut expanded: HashMap<Uuid, Value> = HashMap::new();
         let mut rows = Vec::with_capacity(page.records.len());
-        for record in &page.records {
-            let resolved = self
-                .resolved_record(record, &path, &attributes, page.snapshot_at)
-                .await?;
+        for (record, resolved) in page.records.iter().zip(resolved_rows) {
             let mut related = Map::new();
             for code in &request.expand {
-                let Some(targets) = resolved.relationships.get(code).and_then(Value::as_array)
+                let Some(target_refs) = resolved.relationships.get(code).and_then(Value::as_array)
                 else {
                     continue;
                 };
                 let mut items = Vec::new();
-                for target in targets.iter().take(MAX_EXPANDED_TARGETS) {
-                    let Some(target_id) = target.as_str().and_then(|id| id.parse().ok()) else {
+                for target in target_refs.iter().take(MAX_EXPANDED_TARGETS) {
+                    let Some(target) = target
+                        .as_str()
+                        .and_then(|id| id.parse::<Uuid>().ok())
+                        .and_then(|id| targets.get(&id))
+                    else {
                         continue;
                     };
-                    let Some(target) = self.get_record(target_id).await? else {
-                        continue;
-                    };
-                    let key = (target.blueprint_id, target.blueprint_version);
-                    if let std::collections::hash_map::Entry::Vacant(entry) =
-                        target_attributes.entry(key)
-                    {
-                        entry.insert(self.list_attributes(key.0, key.1).await?);
-                    }
-                    let target_resolved = self
-                        .resolved_record(&target, &path, &target_attributes[&key], page.snapshot_at)
-                        .await?;
-                    let published = match request.channel_id {
-                        Some(channel) => Some(self.published_in(target.id, channel).await?),
-                        None => None,
-                    };
-                    items.push(json!({
-                        "record_id": target.id,
-                        "blueprint_id": target.blueprint_id,
-                        "blueprint_version": target.blueprint_version,
-                        "content_revision": target.content_revision,
-                        "published": published,
-                        "values": target_resolved.values,
-                        "relationships": target_resolved.relationships,
-                        "files": target_resolved.files,
-                    }));
+                    let item = expanded.entry(target.id).or_insert_with(|| {
+                        let target_resolved = resolve_values(
+                            &target_attributes[&(target.blueprint_id, target.blueprint_version)],
+                            values.get(&target.id).map_or(&[][..], Vec::as_slice),
+                            files.get(&target.id).unwrap_or(&no_files),
+                            &path,
+                        );
+                        json!({
+                            "record_id": target.id,
+                            "blueprint_id": target.blueprint_id,
+                            "blueprint_version": target.blueprint_version,
+                            "content_revision": target.content_revision,
+                            "published": published.as_ref().map(|published| published.contains(&target.id)),
+                            "values": target_resolved.values,
+                            "relationships": target_resolved.relationships,
+                            "files": target_resolved.files,
+                        })
+                    });
+                    items.push(item.clone());
                 }
                 related.insert(code.clone(), Value::Array(items));
             }
@@ -412,7 +539,12 @@ mod tests {
             value(&title, parent, json!("Inherited")),
             value(&local, parent, json!("not inherited")),
         ];
-        let resolved = resolve_values(&[title, local], &values, &[], &[child, parent]);
+        let resolved = resolve_values(
+            &[title, local],
+            &values,
+            &FileReferences::new(),
+            &[child, parent],
+        );
         assert_eq!(resolved.values.get("title"), Some(&json!("Inherited")));
         assert!(resolved.values.get("sku").is_none());
     }

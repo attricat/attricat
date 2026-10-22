@@ -7,7 +7,7 @@
 //! Record titles steer the event handler: `reject…` is a record-level
 //! rejection, `retry…` fails temporarily twice, `fault…` is a component
 //! fault. The operation input's `fail` field steers its first batch the
-//! same way.
+//! same way, and `prepare` makes the `prepare` lifecycle call fail.
 
 wit_bindgen::generate!({
     path: "../extension-runtime/wit-host",
@@ -259,7 +259,11 @@ impl command_handler::Guest for Component {
 }
 
 impl deferrable_operations::Guest for Component {
-    fn prepare(_request: OperationRequest) -> Result<String, String> {
+    fn prepare(request: OperationRequest) -> Result<String, String> {
+        // A lifecycle error is the component's verdict, not a fault.
+        if parse(&request.input)?["fail"] == "prepare" {
+            return Err("destination settings are incomplete".into());
+        }
         Ok("prepared".into())
     }
 

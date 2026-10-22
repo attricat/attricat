@@ -136,7 +136,7 @@ A pattern is `http` or `https`, an exact host or a leading `*.` wildcard, an opt
 
 A budget is a token bucket: `requests` tokens are added every `per_seconds` (1 to 86,400), and up to `burst` (default `requests`) can be spent at once. `requests` and `burst` are 1 to 100,000. Every request the rule matches, including file transfers, takes a token. Declare the destination's published limit, so your extension slows down instead of being throttled.
 
-Rules without a `rate_limit` share 60 requests per minute per release. Budgets are counted per workspace, extension, and rule, in each API process, or across replicas with `CACHE_BACKEND=redis`. An administrator can [lower a budget](/builders/extensions/#request-budgets) but never raise it.
+Rules without a `rate_limit` share 60 requests per minute per release. Budgets are counted per workspace, extension, and rule, in each API process, or across replicas with `CACHE_BACKEND=redis`. An administrator can [lower a budget](/builders/extensions/#request-budgets) but never raise it; a change applies within 10 seconds.
 
 ## Configuration
 

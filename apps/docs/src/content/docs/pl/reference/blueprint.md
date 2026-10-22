@@ -651,7 +651,7 @@ input = { profile = { version = 1, columns = [{ header = "ID", attribute = "exte
 | `connection` | ciąg znaków | Domyślne miejsce docelowe | Tylko eksporty. [Połączenie](/pl/builders/extensions/#połączenia) rozszerzenia, do którego zadanie wysyła dane: od 1 do 128 liter ASCII, cyfr, `.`, `_` lub `-`. |
 | `trigger` | tabela | | Tylko eksporty. Uruchamia zadanie także wtedy, gdy rekordy się zmieniają: `{ events = [...], debounce_seconds = N }`. |
 
-`trigger.events` zawiera co najmniej jedno z: `record.created.v1`, `record.updated.v1`, `record.deleted.v1`, `record.published.v1`, `record.unpublished.v1`, `attribute_value.changed.v1` i `relationship.changed.v1`. `trigger.debounce_seconds` ma wartość od 1 do 3600: przebieg rusza, gdy od najnowszego pasującego zdarzenia rekordów schematu minie tyle sekund, i obejmuje tylko zmienione rekordy.
+`trigger.events` zawiera co najmniej jedno z: `record.created.v1`, `record.updated.v1`, `record.deleted.v1`, `record.published.v1`, `record.unpublished.v1`, `attribute_value.changed.v1` i `relationship.changed.v1`. `trigger.debounce_seconds` ma wartość od 1 do 3600: przebieg rusza, gdy od najnowszego pasującego zdarzenia rekordów schematu minie tyle sekund albo gdy najstarsza oczekująca zmiana ma dziesięciokrotność tego czasu, i obejmuje tylko zmienione rekordy.
 
 ```toml
 [[connector_jobs]]

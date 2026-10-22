@@ -35,6 +35,8 @@ Komponent zbudowany dla [świata](/pl/extensions/server/#wersja-api-hosta) `outc
 - `retry { message, after-ms? }`: partia jest wykonywana ponownie z tym samym kluczem partii po podanym czasie, w ramach budżetu niepowodzeń przebiegu.
 - `fault(message)`: przebieg kończy się błędem, a instalacja zostaje poddana kwarantannie.
 
+Pułapki (trap), wyczerpanie paliwa lub pamięci, przekroczenie limitu czasu i nieprawidłowy wynik partii również są traktowane jak `fault`. Błąd zwrócony przez `prepare`, `start`, `checkpoint`, `finish` lub `cancel` kończy przebieg błędem bez kwarantanny instalacji.
+
 Przebieg, którego wydanie zostanie wyłączone, poddane kwarantannie lub utraci uprawnienie w trakcie partii, jest wstrzymywany, a nie kończy się błędem.
 
 ## Jak przebiegi zachowują trwałość
@@ -215,7 +217,7 @@ trigger = { events = ["record.updated.v1", "attribute_value.changed.v1"], deboun
 input = {}
 ```
 
-Przebieg rusza, gdy od najnowszego pasującego zdarzenia rekordów Schematu minie `debounce_seconds` sekund, więc seria edycji daje jeden przebieg. Przebieg obejmuje tylko zmienione rekordy, do 10 000; przy większej liczbie zmian wykonuje całe zadanie. Dozwolone zdarzenia wymienia sekcja [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów).
+Przebieg rusza, gdy od najnowszego pasującego zdarzenia rekordów Schematu minie `debounce_seconds` sekund, więc seria edycji daje jeden przebieg. Ciągłe edycje nie mogą go wstrzymywać w nieskończoność: przebieg rusza także wtedy, gdy najstarsza oczekująca zmiana ma dziesięciokrotność `debounce_seconds`. Jeśli przebieg nie może wystartować, np. gdy rozszerzenie jest wyłączone, zmiany czekają i zostaną wyeksportowane, gdy będzie to możliwe. Przebieg obejmuje tylko zmienione rekordy, do 10 000; przy większej liczbie zmian wykonuje całe zadanie. Dozwolone zdarzenia wymienia sekcja [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów).
 
 Każdy przebieg zapisuje swój tryb: `incremental`, `triggered` lub `resync`.
 

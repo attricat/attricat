@@ -136,7 +136,7 @@ Wzorzec składa się z `http` lub `https`, dokładnej nazwy hosta albo wiodąceg
 
 Limit działa jak wiadro tokenów (token bucket): co `per_seconds` sekund (od 1 do 86 400) dochodzi `requests` tokenów, a naraz można wykorzystać do `burst` (domyślnie `requests`). `requests` i `burst` mieszczą się w przedziale od 1 do 100 000. Każde żądanie pasujące do reguły, także przy przesyłaniu plików, zużywa jeden token. Zadeklaruj limit, który publikuje miejsce docelowe, aby rozszerzenie zwalniało, zamiast być dławione.
 
-Reguły bez `rate_limit` dzielą 60 żądań na minutę na wydanie. Limity są liczone dla obszaru roboczego, rozszerzenia i reguły, osobno w każdym procesie API albo wspólnie dla replik przy `CACHE_BACKEND=redis`. Administrator może [obniżyć limit](/pl/builders/extensions/#limity-żądań), ale nigdy go nie podniesie.
+Reguły bez `rate_limit` dzielą 60 żądań na minutę na wydanie. Limity są liczone dla obszaru roboczego, rozszerzenia i reguły, osobno w każdym procesie API albo wspólnie dla replik przy `CACHE_BACKEND=redis`. Administrator może [obniżyć limit](/pl/builders/extensions/#limity-żądań), ale nigdy go nie podniesie; zmiana obowiązuje w ciągu 10 sekund.
 
 ## Konfiguracja
 

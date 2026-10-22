@@ -625,9 +625,13 @@ whose `handle-event(event, delivery)` returns `result<_, failure>`, and
 | `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted` | The batch is retried with the same batch key after the delay, within the task's failure budget |
 | `fault(message)` | Quarantines the installation | Fails the run and quarantines the installation |
 
-Traps, fuel or memory exhaustion and timeouts are faults. A rejection that
+Traps, fuel or memory exhaustion, timeouts and invalid batch results are
+faults. An error returned by a 1.1 lifecycle export (`prepare`, `start`,
+`checkpoint`, `finish` or `cancel`) fails the run without quarantine. A
+rejection that
 names a record also sets that record's [export status](#per-record-export-status)
-to `rejected` with the code and message. Handler outcomes are stored per
+to `rejected` with the code and message, unless the mapping already holds a
+newer record revision than the rejected delivery. Handler outcomes are stored per
 event and handler in `extension_handler_attempts`: handlers that already
 completed are not invoked again when another handler of the same event is
 retried. Rejected and exhausted outcomes stay visible for 30 days
@@ -786,7 +790,8 @@ lower a budget, never raise it, with `PUT
 `{requests, per_seconds}` (and reset it with `DELETE`); `GET
 /extensions/{extension_id}/host-permission-budgets` lists declared and lowered
 budgets. Buckets are per workspace, extension and rule, and shared across
-replicas with `CACHE_BACKEND=redis`. Rules without a budget keep the shared
+replicas with `CACHE_BACKEND=redis`. Each process caches a lowered budget for
+10 seconds. Rules without a budget keep the shared
 60 requests per minute per release.
 
 ### Transfers, record files and public links
@@ -879,7 +884,10 @@ input = {}
 ```
 
 A trigger starts a run once the newest matching event of the blueprint's
-records is `debounce_seconds` old. The run is confined to the changed records
+records is `debounce_seconds` old, or once the oldest pending change is ten
+debounces old, so steady edits cannot starve it. Jobs with pending changes are
+checked longest-waiting first, and a run that cannot be queued keeps the
+watermark. The run is confined to the changed records
 (up to 10,000; more changes run the whole job) and the trigger's watermark
 moves past them, so a burst of edits causes one run. Runs record their mode:
 `incremental`, `triggered` or `resync`.

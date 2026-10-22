@@ -619,6 +619,16 @@ impl AttricatRepository {
         record_id: Uuid,
         snapshot_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        self.extension_attricat_values_of_at(&[record_id], snapshot_at)
+            .await
+    }
+
+    /// [`Self::extension_attricat_values_at`] for several records in one read.
+    pub async fn extension_attricat_values_of_at(
+        &self,
+        record_ids: &[Uuid],
+        snapshot_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
         if snapshot_at
             < chrono::Utc::now() - super::extension_attricat_data::EXTENSION_CURSOR_SNAPSHOT_TTL
         {
@@ -630,16 +640,16 @@ impl AttricatRepository {
             r#"SELECT v.id,v.record_id,v.attribute_id,v.relationship_target_record_id,v.context_id,v.active,v.created_at,a.value_type,
                 v.value_text,v.value_number,v.value_integer,v.value_boolean,v.value_date,v.value_datetime,v.value_time,v.value_time_zone,v.value_json
               FROM attribute_values v JOIN attributes a ON a.id=v.attribute_id AND a.workspace_id=v.workspace_id
-              WHERE v.record_id=$1 AND v.workspace_id=$2 AND v.created_at <= $3
+              WHERE v.record_id=ANY($1) AND v.workspace_id=$2 AND v.created_at <= $3
                 AND (v.relationship_target_record_id IS NULL OR v.active)
               UNION ALL
               SELECT h.id,h.record_id,h.attribute_id,h.relationship_target_record_id,h.context_id,h.active,h.created_at,a.value_type,
                 h.value_text,h.value_number,h.value_integer,h.value_boolean,h.value_date,h.value_datetime,h.value_time,h.value_time_zone,h.value_json
               FROM attribute_value_history h JOIN attributes a ON a.id=h.attribute_id AND a.workspace_id=h.workspace_id
-              WHERE h.record_id=$1 AND h.workspace_id=$2 AND h.created_at <= $3 AND h.archived_at > $3
+              WHERE h.record_id=ANY($1) AND h.workspace_id=$2 AND h.created_at <= $3 AND h.archived_at > $3
                 AND (h.relationship_target_record_id IS NULL OR h.active)"#,
         )
-        .bind(record_id)
+        .bind(record_ids)
         .bind(self.workspace_id.0)
         .bind(snapshot_at)
         .fetch_all(&self.pool)

@@ -17,6 +17,18 @@ use crate::extension_runtime::connections::{self, TokenError};
 const MAX_SECRET_BODY_FIELDS: usize = 8;
 const MAX_SECRET_FIELD_BYTES: usize = 256;
 /// Response headers every request returns.
+/// How long an operator-lowered budget is cached before it is read again,
+/// so mediated requests do not each query the database.
+const LOWERED_BUDGET_TTL: Duration = Duration::from_secs(10);
+const MAX_CACHED_BUDGETS: usize = 4_096;
+
+/// Workspace, extension and host permission.
+type BudgetKey = (Uuid, String, String);
+/// When each lowered budget was read, and the budget (`None` when not lowered).
+type BudgetCache = HashMap<BudgetKey, (Instant, Option<(i32, i32)>)>;
+static LOWERED_BUDGETS: std::sync::LazyLock<std::sync::Mutex<BudgetCache>> =
+    std::sync::LazyLock::new(Default::default);
+
 const DEFAULT_RESPONSE_HEADERS: [&str; 3] = ["content-type", "etag", "retry-after"];
 
 #[derive(Deserialize)]
@@ -108,11 +120,7 @@ pub(super) async fn admit_request(
             ))
         };
     };
-    let lowered = repository
-        .extension_host_permission_budget(&installation.extension_id, &rule.id)
-        .await
-        .ok()
-        .flatten();
+    let lowered = lowered_budget(repository, installation, rule).await;
     let budget = effective_budget(declared, lowered);
     limiter
         .take(
@@ -127,6 +135,44 @@ pub(super) async fn admit_request(
             Duration::from_secs(u64::from(budget.per_seconds)),
         )
         .await
+}
+
+/// The operator-lowered budget of `rule`, cached for [`LOWERED_BUDGET_TTL`].
+async fn lowered_budget(
+    repository: &AttricatRepository,
+    installation: &ExtensionRuntimeInstallation,
+    rule: &HostPermission,
+) -> Option<(i32, i32)> {
+    let key = (
+        repository.scoped_workspace_id(),
+        installation.extension_id.clone(),
+        rule.id.clone(),
+    );
+    let cached = LOWERED_BUDGETS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(&key)
+        .filter(|(read_at, _)| read_at.elapsed() < LOWERED_BUDGET_TTL)
+        .map(|(_, budget)| *budget);
+    if let Some(budget) = cached {
+        return budget;
+    }
+    // A failed read applies the declared budget without caching it.
+    let budget = repository
+        .extension_host_permission_budget(&installation.extension_id, &rule.id)
+        .await
+        .ok()?;
+    let mut budgets = LOWERED_BUDGETS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if budgets.len() >= MAX_CACHED_BUDGETS {
+        budgets.retain(|_, (read_at, _)| read_at.elapsed() < LOWERED_BUDGET_TTL);
+        if budgets.len() >= MAX_CACHED_BUDGETS {
+            budgets.clear();
+        }
+    }
+    budgets.insert(key, (Instant::now(), budget));
+    budget
 }
 
 /// The granted rule `permission_id` when it matches `url` and `method`; a
