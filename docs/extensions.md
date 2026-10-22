@@ -659,8 +659,8 @@ Every record has a `content_revision`: the sequence of the latest domain
 event that changed its values, relationships, publication or lifecycle
 (`record.created`, `updated`, `deleted`, `migrated`, `published`,
 `unpublished`, `attribute_value.changed`, `restored`, `relationship.changed`).
-The repository sets it in the same transaction that writes the event, so it
-is monotonic per record. Annotation changes do not advance it, so an exporter's
+It is read from the event outbox, so it is monotonic per record and writing
+an event never locks the record row. Annotation changes do not advance it, so an exporter's
 own bookkeeping never makes its output look stale. Typed `api.read` records,
 connector page v2 rows and `event-handler` deliveries carry it.
 
@@ -688,8 +688,9 @@ same or a newer revision, unless an operator requested a retry or `force` is
 set. Otherwise it leases the record for `lease_ms` (default 2 minutes, at most
 15) so an event handler and a connector job never push the same record at the
 same time. `commit` records the result and releases the lease; without a lease
-token it fails while another worker holds a live lease, and a `synced` result
-never replaces a newer synced revision. A component that fails a batch should
+token it fails while another worker holds a live lease, and a result for an
+older revision than the mapping's is refused, so a late push never replaces a
+newer outcome. A component that fails a batch should
 release the leases it holds. Statuses are `pending`, `synced`, `rejected`,
 `retrying`, `uncertain` and `withdrawn`.
 
@@ -822,7 +823,8 @@ deployment's `EXTENSION_PUBLIC_FILE_BASE_URL`. Only the token's SHA-256 is
 stored. `GET /api/public/extension-files/{token}` serves the file without a
 session while the link is unexpired, the extension is enabled with the
 capability, and the record the link was issued for still references the file.
-Deleting the record or replacing the file stops the link at once.
+Deleting the record or replacing the file stops the link at once; disabling,
+quarantining or removing the extension revokes its links for good.
 
 ### Credential connections
 

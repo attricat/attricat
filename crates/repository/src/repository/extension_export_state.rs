@@ -218,9 +218,11 @@ impl AttricatRepository {
         Ok(())
     }
 
-    /// Drops rejected and exhausted outcomes past their retention.
+    /// Drops rejected and exhausted outcomes past their retention. Other
+    /// outcomes belong to a delivery still in progress: they go when it
+    /// settles, so a late retry never runs a completed handler again.
     pub async fn sweep_extension_handler_attempts(&self) -> Result<u64, RepositoryError> {
-        Ok(sqlx::query("DELETE FROM extension_handler_attempts WHERE workspace_id=$1 AND updated_at < clock_timestamp() - make_interval(secs => $2)")
+        Ok(sqlx::query("DELETE FROM extension_handler_attempts WHERE workspace_id=$1 AND status IN ('rejected','exhausted') AND updated_at < clock_timestamp() - make_interval(secs => $2)")
             .bind(self.extension_workspace())
             .bind(HANDLER_OUTCOME_RETENTION.num_seconds() as f64)
             .execute(&self.pool).await?.rows_affected())
@@ -399,8 +401,9 @@ impl AttricatRepository {
     }
 
     /// Records the result of a push and releases its lease. Without a lease
-    /// token the write fails while another worker holds the record. A synced
-    /// result never replaces a newer synced revision.
+    /// token the write fails while another worker holds the record. A result
+    /// for an older revision than the mapping's is late and refused, so it
+    /// can neither replace a newer outcome nor lower the revision.
     pub async fn export_mapping_commit(
         &self,
         extension_id: &str,
@@ -454,12 +457,9 @@ impl AttricatRepository {
             ));
         }
         let revision = update.record_revision.unwrap_or(mapping.record_revision);
-        if update.status == "synced"
-            && mapping.status == "synced"
-            && mapping.record_revision > revision
-        {
+        if mapping.record_revision > revision {
             return Err(RepositoryError::ExportMappingConflict(
-                "a newer record revision is already synced".into(),
+                "the mapping already records a newer record revision".into(),
             ));
         }
         let failed = matches!(
@@ -534,15 +534,12 @@ impl AttricatRepository {
         record_id: Uuid,
         at: DateTime<Utc>,
     ) -> Result<i64, RepositoryError> {
-        Ok(sqlx::query_scalar(
-            "SELECT LEAST(r.content_revision, COALESCE((SELECT max(d.sequence) FROM domain_events d \
-               WHERE d.workspace_id=r.workspace_id AND d.aggregate_kind='record' AND d.aggregate_id=r.id \
-                 AND d.event_type=ANY($3) AND d.occurred_at <= $4), 0)) \
-             FROM records r WHERE r.workspace_id=$1 AND r.id=$2",
-        )
+        Ok(sqlx::query_scalar(&format!(
+            "SELECT {} FROM records r WHERE r.workspace_id=$1 AND r.id=$2",
+            super::extension_attricat_data::content_revision_sql("r", Some("$3"))
+        ))
         .bind(self.extension_workspace())
         .bind(record_id)
-        .bind(crate::domain_events::RECORD_CONTENT_EVENT_TYPES_V1)
         .bind(at)
         .fetch_optional(&self.pool)
         .await?

@@ -10,7 +10,7 @@ use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    domain_events::{DomainEvent, NewDomainEvent, RECORD_CONTENT_EVENT_TYPES_V1},
+    domain_events::{DomainEvent, NewDomainEvent},
     task_queue::{TaskInsert, TaskKind},
 };
 
@@ -198,22 +198,13 @@ impl EventPublisher for AttricatRepository {
         // not committed yet.
         let workspace_id = self.workspace_id.0;
         lock_outbox_boundary(transaction, workspace_id).await?;
-        // A record content event also advances its record's content revision.
         Ok(sqlx::query_as::<_, DomainEvent>(
-            r#"WITH inserted AS (
-                INSERT INTO domain_events (
+            r#"INSERT INTO domain_events (
                     id, workspace_id, event_type, aggregate_kind, aggregate_id,
                     correlation_id, causation_id, source_kind, source_name, metadata, payload
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 RETURNING id, sequence, workspace_id, occurred_at, event_type, aggregate_kind,
-                    aggregate_id, correlation_id, causation_id, source_kind, source_name, metadata, payload
-            ), revised AS (
-                UPDATE records r SET content_revision = GREATEST(r.content_revision, i.sequence)
-                FROM inserted i
-                WHERE r.workspace_id = i.workspace_id AND r.id = i.aggregate_id
-                    AND i.aggregate_kind = 'record' AND i.event_type = ANY($12)
-            )
-            SELECT * FROM inserted"#,
+                    aggregate_id, correlation_id, causation_id, source_kind, source_name, metadata, payload"#,
         )
         .bind(Uuid::new_v4())
         .bind(workspace_id)
@@ -226,7 +217,6 @@ impl EventPublisher for AttricatRepository {
         .bind(event.source.name)
         .bind(event.metadata)
         .bind(event.payload)
-        .bind(RECORD_CONTENT_EVENT_TYPES_V1)
         .fetch_one(&mut **transaction)
         .await?)
     }
@@ -274,8 +264,7 @@ impl AttricatRepository {
         let workspace_id = self.workspace_id.0;
         lock_outbox_boundary(transaction, workspace_id).await?;
         sqlx::query(
-            r#"WITH inserted AS (
-                INSERT INTO domain_events (
+            r#"INSERT INTO domain_events (
                     id, workspace_id, event_type, aggregate_kind, aggregate_id,
                     correlation_id, causation_id, source_kind, source_name, metadata, payload
                 )
@@ -285,15 +274,7 @@ impl AttricatRepository {
                     $8::text[], $9::text[], $10::jsonb[], $11::jsonb[])
                     WITH ORDINALITY AS e(id, event_type, aggregate_kind, aggregate_id, correlation_id,
                         causation_id, source_kind, source_name, metadata, payload, position)
-                ORDER BY e.position
-                RETURNING sequence, aggregate_kind, aggregate_id, event_type
-            ), latest AS (
-                SELECT aggregate_id, max(sequence) AS sequence FROM inserted
-                WHERE aggregate_kind = 'record' AND event_type = ANY($12)
-                GROUP BY aggregate_id
-            )
-            UPDATE records r SET content_revision = GREATEST(r.content_revision, l.sequence)
-            FROM latest l WHERE r.workspace_id = $1 AND r.id = l.aggregate_id"#,
+                ORDER BY e.position"#,
         )
         .bind(workspace_id)
         .bind(ids)
@@ -306,7 +287,6 @@ impl AttricatRepository {
         .bind(source_names)
         .bind(metadata)
         .bind(payloads)
-        .bind(RECORD_CONTENT_EVENT_TYPES_V1)
         .execute(&mut **transaction)
         .await?;
         Ok(())
@@ -345,6 +325,23 @@ impl AttricatRepository {
         .await?;
         transaction.commit().await?;
         Ok(consumer)
+    }
+
+    /// The highest event sequence below which every event has committed.
+    /// Read under the outbox boundary, so no event with an allocated but
+    /// uncommitted sequence can later appear below it.
+    pub(crate) async fn committed_event_high_water(&self) -> Result<i64, RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        let mut transaction = self.pool.begin().await?;
+        lock_outbox_boundary(&mut transaction, workspace_id).await?;
+        let high_water = sqlx::query_scalar::<_, i64>(
+            "SELECT COALESCE(max(sequence), 0) FROM domain_events WHERE workspace_id = $1",
+        )
+        .bind(workspace_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(high_water)
     }
 
     pub async fn create_event_consumer(

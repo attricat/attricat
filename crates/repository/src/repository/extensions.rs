@@ -1416,6 +1416,8 @@ impl AttricatRepository {
         let row = self
             .update_extension_state(&mut transaction, &current, ExtensionState::Quarantined)
             .await?;
+        self.revoke_extension_file_links(&mut transaction, &current.extension_id)
+            .await?;
         self.write_extension_lifecycle(
             &mut transaction,
             &row,
@@ -1512,6 +1514,8 @@ impl AttricatRepository {
             .bind(current.id)
             .execute(&mut *transaction)
             .await?;
+        self.revoke_extension_file_links(&mut transaction, &current.extension_id)
+            .await?;
         self.commit_extension_mutation(transaction, "remove", &current.extension_id)
             .await
     }
@@ -1555,6 +1559,10 @@ impl AttricatRepository {
         let row = self
             .update_extension_state(&mut transaction, &current, state.clone())
             .await?;
+        if state == ExtensionState::Disabled {
+            self.revoke_extension_file_links(&mut transaction, &current.extension_id)
+                .await?;
+        }
         self.write_extension_lifecycle(
             &mut transaction,
             &row,

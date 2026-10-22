@@ -412,6 +412,23 @@ impl AttricatRepository {
     /// records (or every record when too many changed), and the watermark
     /// moves past them.
     async fn produce_triggered_blueprint_connector_jobs(&self) -> Result<usize, RepositoryError> {
+        // A job with no matching change up to the committed end of the log
+        // moves its watermark there, so the next sweep scans only newer
+        // events instead of all history since the job's last run.
+        let high_water = self.committed_event_high_water().await?;
+        sqlx::query(
+            "UPDATE blueprint_connector_jobs j SET trigger_watermark=$2 \
+             WHERE j.workspace_id=$1 AND j.enabled AND j.code IS NOT NULL AND j.trigger_events IS NOT NULL \
+               AND j.trigger_watermark IS NOT NULL AND j.trigger_watermark<$2 \
+               AND NOT EXISTS (SELECT 1 FROM domain_events e JOIN records r ON r.workspace_id=e.workspace_id AND r.id=e.aggregate_id \
+                               WHERE e.workspace_id=j.workspace_id AND e.aggregate_kind='record' \
+                                 AND e.sequence>j.trigger_watermark AND e.sequence<=$2 \
+                                 AND e.event_type=ANY(j.trigger_events) AND r.blueprint_id=j.blueprint_id)",
+        )
+        .bind(self.extension_workspace())
+        .bind(high_water)
+        .execute(&self.pool)
+        .await?;
         // Only jobs with pending changes are considered, the longest-waiting
         // first, so idle jobs cannot crowd out ones that have work.
         let jobs: Vec<(Uuid, Uuid, Vec<String>, i32, i64)> = sqlx::query_as(
@@ -489,6 +506,30 @@ impl AttricatRepository {
     ) -> Result<Option<ConnectorRunDetails>, RepositoryError> {
         Ok(sqlx::query_as("SELECT j.id AS job_id,j.code AS job_code,j.direction,r.connector_blueprint_id AS blueprint_id,r.connector_blueprint_version AS blueprint_version,r.connector_context_id AS context_id,r.connector_channel_id AS channel_id,r.connector_connection AS connection,COALESCE(r.connector_mode,'incremental') AS mode,cardinality(r.connector_record_ids)::bigint AS record_count,r.connector_record_ids AS record_ids FROM extension_operation_runs r JOIN blueprint_connector_jobs j ON j.id=r.connector_job_id AND j.workspace_id=r.workspace_id WHERE r.id=$1 AND r.workspace_id=$2")
             .bind(run_id).bind(self.extension_workspace()).fetch_optional(&self.pool).await?)
+    }
+
+    /// Whether a connector run's catalog covers `record_id`: a live record of
+    /// the run's blueprint version, among its selected records when it has a
+    /// selection, and published in its channel when it exports to one.
+    pub async fn connector_run_covers_record(
+        &self,
+        run_id: Uuid,
+        record_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM extension_operation_runs r \
+               JOIN records e ON e.workspace_id=r.workspace_id AND e.id=$3 AND e.deleted_at IS NULL \
+                 AND e.blueprint_id=r.connector_blueprint_id AND e.blueprint_version=r.connector_blueprint_version \
+             WHERE r.id=$1 AND r.workspace_id=$2 \
+               AND (r.connector_record_ids IS NULL OR $3=ANY(r.connector_record_ids)) \
+               AND (r.connector_channel_id IS NULL OR EXISTS (SELECT 1 FROM record_channel_publications p \
+                 WHERE p.workspace_id=r.workspace_id AND p.record_id=e.id AND p.context_id=r.connector_channel_id AND p.published_at IS NOT NULL)))",
+        )
+        .bind(run_id)
+        .bind(self.extension_workspace())
+        .bind(record_id)
+        .fetch_one(&self.pool)
+        .await?)
     }
 
     pub async fn connector_run_scope(

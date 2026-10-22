@@ -704,11 +704,12 @@ impl AttricatRepository {
     }
 
     pub async fn get_record(&self, record_id: Uuid) -> Result<Option<Record>, RepositoryError> {
-        Ok(sqlx::query_as::<_, Db<Record>>(
-            r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at, content_revision
-               FROM records
-               WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL"#,
-        )
+        Ok(sqlx::query_as::<_, Db<Record>>(&format!(
+            r#"SELECT r.id, r.blueprint_id, r.blueprint_version, r.projections, r.system_tags, r.system_metadata, ('attricat.sample'=ANY(r.system_tags)) AS is_sample, r.created_at, r.updated_at, r.deleted_at, {} AS content_revision
+               FROM records r
+               WHERE r.id = $1 AND r.workspace_id = $2 AND r.deleted_at IS NULL"#,
+            super::extension_attricat_data::content_revision_sql("r", None)
+        ))
         .bind(record_id)
         .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)

@@ -1,13 +1,5 @@
 -- Host platform for marketplace export extensions (#424).
 
--- The sequence of the latest domain event that changed a record's values,
--- relationships, publication or lifecycle. The repository sets it when it
--- writes that event, so it is monotonic per record and comparable across
--- events, connector rows and the export mapping store. Annotation changes do
--- not advance it.
-ALTER TABLE records
-    ADD COLUMN content_revision BIGINT NOT NULL DEFAULT 0 CHECK (content_revision >= 0);
-
 -- Per-handler outcome of one event delivery. Completed handlers are skipped
 -- when the delivery is retried for another handler; retrying handlers wait
 -- for `next_attempt_at`; rejected and exhausted outcomes are kept for

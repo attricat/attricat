@@ -636,14 +636,17 @@ impl AttricatRepository {
             .execute(&self.pool).await?.rows_affected())
     }
 
-    /// Revokes every link an extension issued, for example after disabling it.
-    pub async fn revoke_extension_file_links(
+    /// Revokes every live link an extension issued. Disabling, quarantining
+    /// and removing an extension call it in their transaction, so enabling
+    /// the extension again never revives a link.
+    pub(crate) async fn revoke_extension_file_links(
         &self,
+        transaction: &mut Transaction<'_, Postgres>,
         extension_id: &str,
     ) -> Result<u64, RepositoryError> {
         Ok(sqlx::query("UPDATE extension_file_links SET revoked_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND revoked_at IS NULL AND expires_at>clock_timestamp()")
             .bind(self.extension_workspace()).bind(extension_id)
-            .execute(&self.pool).await?.rows_affected())
+            .execute(&mut **transaction).await?.rows_affected())
     }
 }
 

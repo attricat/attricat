@@ -206,10 +206,13 @@ async fn mapping_status(pool: &sqlx::PgPool, record_id: Uuid) -> Option<(String,
 }
 
 async fn content_revision(pool: &sqlx::PgPool, record_id: Uuid) -> i64 {
-    sqlx::query_scalar("SELECT content_revision FROM records WHERE id=$1")
-        .bind(record_id)
-        .fetch_one(pool)
+    workspace_repository(pool)
         .await
+        .get_record(record_id)
+        .await
+        .unwrap()
+        .unwrap()
+        .content_revision
         .unwrap()
 }
 
@@ -427,6 +430,36 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
         .await
         .unwrap();
     assert_eq!(mapping_status(&pool, record).await.unwrap().0, "synced");
+    // A late push cannot replace a newer withdrawal either.
+    repository
+        .export_mapping_commit(
+            EXTENSION,
+            None,
+            record,
+            None,
+            ExportMappingUpdate {
+                status: "withdrawn".into(),
+                record_revision: Some(updated),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let late = repository
+        .export_mapping_commit(
+            EXTENSION,
+            None,
+            record,
+            None,
+            ExportMappingUpdate {
+                status: "synced".into(),
+                record_revision: Some(created),
+                ..Default::default()
+            },
+        )
+        .await;
+    assert!(late.is_err());
+    assert_eq!(mapping_status(&pool, record).await.unwrap().0, "withdrawn");
     // Lookups by external ID serve reconciliation.
     let found = repository
         .export_mapping_get(

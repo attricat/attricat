@@ -444,7 +444,7 @@ async fn brokered_requests_carry_host_managed_credentials_only(pool: sqlx::PgPoo
             operation_id: "transfer".into(),
             input: json!({"transfer": {
                 "output": {"text": "sku\ttitle\nSKU-1\tShirt\n", "media_type": "text/tab-separated-values"},
-                "deliver": {"host_permission_id": "bucket", "url": "https://bucket.mock.test/feeds/1?X-Amz-Signature=abc&X-Amz-Expires=300",
+                "deliver": {"host_permission_id": "bucket", "url": "https://bucket.mock.test/feeds/1?X-Amz-Signature=signed-query&X-Amz-Expires=300",
                             "method": "PUT", "delivery_key": "feed-1",
                             "headers": {"content-type": "text/tab-separated-values; charset=UTF-8"}},
                 "multipart": {"host_permission_id": "bucket", "url": "https://bucket.mock.test/staged",
@@ -487,7 +487,10 @@ async fn brokered_requests_carry_host_managed_credentials_only(pool: sqlx::PgPoo
         .find(|request| request["path"] == "/feeds/1")
         .unwrap();
     assert_eq!(put["method"], "PUT");
-    assert_eq!(put["query"], "X-Amz-Signature=abc&X-Amz-Expires=300");
+    assert_eq!(
+        put["query"],
+        "X-Amz-Signature=signed-query&X-Amz-Expires=300"
+    );
     assert_eq!(
         put["content_type"],
         "text/tab-separated-values; charset=UTF-8"
@@ -514,7 +517,11 @@ async fn brokered_requests_carry_host_managed_credentials_only(pool: sqlx::PgPoo
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert!(digests.iter().all(|digest| !digest.contains("abc")));
+    assert!(
+        digests
+            .iter()
+            .all(|digest| !digest.contains("signed-query"))
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -892,17 +899,45 @@ max_bytes = 1024
             .status(),
         StatusCode::NOT_FOUND
     );
-    // Deleting the record the link was issued for stops it too.
+    // Disabling revoked the link, so enabling again does not revive it.
     repository.enable_extension(EXTENSION).await.unwrap();
-    let public_status = || async {
-        anonymous
-            .get(format!("{base_url}/public/extension-files/{token}"))
-            .send()
-            .await
-            .unwrap()
-            .status()
+    let public_status = |token: String| {
+        let anonymous = anonymous.clone();
+        let base_url = base_url.clone();
+        async move {
+            anonymous
+                .get(format!("{base_url}/public/extension-files/{token}"))
+                .send()
+                .await
+                .unwrap()
+                .status()
+        }
     };
-    assert_eq!(public_status().await, StatusCode::OK);
+    assert_eq!(public_status(token.to_owned()).await, StatusCode::NOT_FOUND);
+    // Deleting the record a link was issued for stops it too.
+    let link: Value = serde_json::from_str(
+        &runtime
+            .invoke_command(
+                &installation,
+                repository.clone(),
+                "call",
+                &json!({"operation": "files.link.v1", "request": {
+                    "file_id": file_id, "record_id": record_id, "expires_in_seconds": 7200
+                }})
+                .to_string(),
+                65536,
+            )
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let token = link["ok"]["url"]
+        .as_str()
+        .unwrap()
+        .strip_prefix("https://attricat.example/api/public/extension-files/")
+        .unwrap()
+        .to_owned();
+    assert_eq!(public_status(token.clone()).await, StatusCode::OK);
     client
         .delete(format!("{base_url}/records/{record_id}"))
         .send()
@@ -910,7 +945,7 @@ max_bytes = 1024
         .unwrap()
         .error_for_status()
         .unwrap();
-    assert_eq!(public_status().await, StatusCode::NOT_FOUND);
+    assert_eq!(public_status(token).await, StatusCode::NOT_FOUND);
     server.abort();
 }
 

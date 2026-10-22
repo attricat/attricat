@@ -98,6 +98,16 @@ struct TransferTarget {
     max_transfer_bytes: u64,
 }
 
+/// The outcome of a recorded delivery; `None` for one still to be sent.
+fn delivery_outcome(state: &DeliveryState) -> Option<Value> {
+    match state {
+        DeliveryState::Succeeded(status) => Some(json!({"outcome":"succeeded","status":status})),
+        DeliveryState::Failed(status) => Some(json!({"outcome":"failed","status":status})),
+        DeliveryState::Uncertain => Some(json!({"outcome":"uncertain"})),
+        DeliveryState::Send(_) => None,
+    }
+}
+
 /// Inserts caller headers, rejecting those the host owns.
 fn caller_headers(
     headers: &mut reqwest::header::HeaderMap,
@@ -570,6 +580,17 @@ impl OperationState {
         }
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_active("network.request").await?;
+        // A replay of a recorded delivery returns its outcome before it
+        // spends a request budget, resolves DNS or refreshes a token.
+        if let Some(state) = self
+            .repository
+            .previous_extension_http_delivery(self.run_id, &input.delivery_key, &input.digest)
+            .await
+            .map_err(|error| error.to_string())?
+            && let Some(outcome) = delivery_outcome(&state)
+        {
+            return bounded_serialize(&outcome);
+        }
         let TransferTarget {
             client,
             url,
@@ -627,6 +648,27 @@ impl OperationState {
         {
             return Err("output exceeds granted delivery limit or is not finalized".into());
         }
+        // Every header is checked before the durable uncertain marker is
+        // written: a value that cannot be sent is an input error, not a
+        // delivery that may have happened.
+        let media_type = content_type.unwrap_or_else(|| artifact.media_type.clone());
+        let content_type_valid = if input.multipart.is_some() {
+            reqwest::multipart::Part::text("")
+                .mime_str(&media_type)
+                .is_ok()
+        } else {
+            reqwest::header::HeaderValue::from_str(&media_type).is_ok()
+        };
+        if !content_type_valid {
+            return Err("invalid content type".into());
+        }
+        if let Some(key) = &input.idempotency_key {
+            headers.insert(
+                "idempotency-key",
+                reqwest::header::HeaderValue::from_str(key)
+                    .map_err(|_| "invalid idempotency key")?,
+            );
+        }
         let attempt = self
             .repository
             .begin_extension_http_delivery(
@@ -638,24 +680,15 @@ impl OperationState {
             .await
             .map_err(|error| error.to_string())?;
         let id = match attempt {
-            DeliveryState::Succeeded(status) => {
-                return bounded_serialize(&json!({"outcome":"succeeded","status":status}));
-            }
-            DeliveryState::Failed(status) => {
-                return bounded_serialize(&json!({"outcome":"failed","status":status}));
-            }
-            DeliveryState::Uncertain => return bounded_serialize(&json!({"outcome":"uncertain"})),
             DeliveryState::Send(id) => id,
+            state => {
+                return bounded_serialize(
+                    &delivery_outcome(&state).expect("a recorded delivery has an outcome"),
+                );
+            }
         };
         // Once the durable uncertain marker exists we must not resend on any
         // failure path, including a process crash before the HTTP request.
-        if let Some(key) = &input.idempotency_key {
-            headers.insert(
-                "idempotency-key",
-                reqwest::header::HeaderValue::from_str(key)
-                    .map_err(|_| "invalid idempotency key")?,
-            );
-        }
         let object_key = artifact.object_key.ok_or("output object unavailable")?;
         let stream = self
             .object_store
@@ -664,7 +697,6 @@ impl OperationState {
             .map_err(|_| "output storage unavailable")?;
         let method =
             Method::from_bytes(input.method.as_bytes()).map_err(|_| "invalid delivery method")?;
-        let media_type = content_type.unwrap_or(artifact.media_type);
         let request = client.request(method, url).headers(headers);
         let request = match input.multipart {
             Some(multipart) => {
@@ -719,20 +751,27 @@ impl OperationState {
             .file_read_targets(input.file_id)
             .await
             .map_err(|error| error.to_string())?;
-        let Some(target) = targets
+        if !targets
             .iter()
-            .find(|target| target.record_id == input.record_id)
-        else {
+            .any(|target| target.record_id == input.record_id)
+        {
             return Err("the record does not reference that file".into());
-        };
-        if let Some((blueprint_id, ..)) = self
+        }
+        // A connector run opens only files of records its catalog serves:
+        // its selection and, for a channel export, published records.
+        if self
             .repository
             .connector_run_scope(self.run_id)
             .await
             .map_err(|error| error.to_string())?
-            && blueprint_id != target.blueprint_id
+            .is_some()
+            && !self
+                .repository
+                .connector_run_covers_record(self.run_id, input.record_id)
+                .await
+                .map_err(|error| error.to_string())?
         {
-            return Err("the record is outside the job's blueprint".into());
+            return Err("the record is outside the run's scope".into());
         }
         if let Some(scope) = self
             .repository
