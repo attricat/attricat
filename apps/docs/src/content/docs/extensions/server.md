@@ -58,7 +58,7 @@ A burst of edits to one record can produce many events. Add `debounce_ms` to the
 { "id": "push", "event_types": ["record.updated.v1"], "handler": "handle-event", "debounce_ms": 30000 }
 ```
 
-A debounced event waits until its record has been quiet for `debounce_ms` (up to one hour). Events that a newer event of the same record supersedes are skipped. `max_wait_ms` (default ten times `debounce_ms`, at most 24 hours) caps how long an event can wait while new ones keep arriving.
+A debounced event waits until its record has been quiet for `debounce_ms` (up to one hour). Events that a newer event of the same record supersedes are skipped. An `export.retry_requested.v1` event concerns one connection, so it supersedes only an earlier retry request for the same connection. `max_wait_ms` (default ten times `debounce_ms`, at most 24 hours) caps how long an event can wait while new ones keep arriving.
 
 ### Typed outcomes
 
@@ -210,7 +210,7 @@ Keep large destination reference data, such as category trees or product-type de
 
 ## Public file links
 
-Some destinations fetch images themselves, sometimes hours after a listing is submitted. With `attricat.files.public_links` and `attricat.read`, `files.link.v1` issues a public, unguessable link to a file a record references:
+Some destinations fetch images themselves, sometimes hours after a listing is submitted. With `attricat.files.public_links`, `attricat.files.read` and `attricat.read`, `files.link.v1` issues a public, unguessable link to a file a record references:
 
 ```json
 { "file_id": "…", "record_id": "…", "expires_in_seconds": 86400 }

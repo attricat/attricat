@@ -58,7 +58,7 @@ Seria edycji jednego rekordu może wygenerować wiele zdarzeń. Dodaj do procedu
 { "id": "push", "event_types": ["record.updated.v1"], "handler": "handle-event", "debounce_ms": 30000 }
 ```
 
-Zdarzenie czeka, aż jego rekord przez `debounce_ms` (do godziny) nie będzie się zmieniał. Zdarzenia zastąpione nowszym zdarzeniem tego samego rekordu są pomijane. `max_wait_ms` (domyślnie dziesięciokrotność `debounce_ms`, najwyżej 24 godziny) ogranicza, jak długo zdarzenie może czekać, gdy wciąż nadchodzą nowe.
+Zdarzenie czeka, aż jego rekord przez `debounce_ms` (do godziny) nie będzie się zmieniał. Zdarzenia zastąpione nowszym zdarzeniem tego samego rekordu są pomijane. Zdarzenie `export.retry_requested.v1` dotyczy jednego połączenia, więc zastępuje tylko wcześniejsze żądanie ponowienia dla tego samego połączenia. `max_wait_ms` (domyślnie dziesięciokrotność `debounce_ms`, najwyżej 24 godziny) ogranicza, jak długo zdarzenie może czekać, gdy wciąż nadchodzą nowe.
 
 ### Typowane wyniki
 
@@ -210,7 +210,7 @@ Duże dane referencyjne miejsca docelowego, takie jak drzewa kategorii czy defin
 
 ## Publiczne linki do plików
 
-Niektóre miejsca docelowe same pobierają obrazy, czasem kilka godzin po zgłoszeniu oferty. Z `attricat.files.public_links` i `attricat.read` wywołanie `files.link.v1` wydaje publiczny, trudny do odgadnięcia link do pliku, do którego odwołuje się rekord:
+Niektóre miejsca docelowe same pobierają obrazy, czasem kilka godzin po zgłoszeniu oferty. Z `attricat.files.public_links`, `attricat.files.read` i `attricat.read` wywołanie `files.link.v1` wydaje publiczny, trudny do odgadnięcia link do pliku, do którego odwołuje się rekord:
 
 ```json
 { "file_id": "…", "record_id": "…", "expires_in_seconds": 86400 }

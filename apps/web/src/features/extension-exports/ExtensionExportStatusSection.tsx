@@ -16,12 +16,18 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { RotateCcwIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
+import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { ExportIcon } from '../../components/systemIcons';
 import { Timestamp } from '../../time/Timestamp';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
@@ -89,9 +95,15 @@ export const ExtensionExportStatusSection = ({
       : (overview.data?.counts.find((count) => count.connection)?.connection ??
         null);
   const filter = { connection, status };
-  const page = useQuery({
-    queryKey: extensionExportQueryKeys.extension(extensionId, filter),
-    queryFn: () => extensionExportStatus(extensionId, filter),
+  const page = useInfiniteQuery({
+    queryKey: [
+      ...extensionExportQueryKeys.extension(extensionId, filter),
+      'pages',
+    ],
+    queryFn: ({ pageParam }) =>
+      extensionExportStatus(extensionId, { ...filter, after: pageParam }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next,
     enabled: exports.length > 0 && overview.isSuccess,
   });
   const retry = useMutation({
@@ -109,7 +121,8 @@ export const ExtensionExportStatusSection = ({
   });
   if (!exports.length) return null;
   const rows = countsByConnection(overview.data?.counts ?? []);
-  const mappings = page.data?.mappings ?? [];
+  const mappings = page.data?.pages.flatMap((item) => item.mappings) ?? [];
+  const handlerFailures = page.data?.pages[0]?.handler_failures ?? [];
   const retryable = retryableExportStatuses.includes(status);
   return (
     <Paper sx={{ p: 2 }}>
@@ -301,7 +314,15 @@ export const ExtensionExportStatusSection = ({
           </TableBody>
         </Table>
       )}
-      {(page.data?.handler_failures.length ?? 0) > 0 && (
+      {page.hasNextPage && (
+        <Box sx={{ mt: 2 }}>
+          <LoadMoreButton
+            isLoading={page.isFetchingNextPage}
+            onLoadMore={() => void page.fetchNextPage()}
+          />
+        </Box>
+      )}
+      {handlerFailures.length > 0 && (
         <Box sx={{ mt: 3 }}>
           <Typography variant="subtitle1">
             {t('extensionExports.handlerFailures')}
@@ -316,7 +337,7 @@ export const ExtensionExportStatusSection = ({
               </TableRow>
             </TableHead>
             <TableBody>
-              {page.data?.handler_failures.map((failure) => (
+              {handlerFailures.map((failure) => (
                 <TableRow key={`${failure.event_id}:${failure.handler_id}`}>
                   <TableCell>
                     {failure.event_type} · {failure.handler_id}

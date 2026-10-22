@@ -101,9 +101,11 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
   const canManage = useCan('extensions_manage');
-  // A preview runs with the extension's catalog access, so it needs
-  // workspace-wide read access.
-  const canPreview = useCan('records_read');
+  // A preview runs an extension command with the extension's catalog
+  // access, so it needs workspace-wide read access and command access.
+  const canRead = useCan('records_read');
+  const canWrite = useCan('records_write');
+  const canPreview = canRead && canWrite;
   const [preview, setPreview] = useState<{
     destination: ExportDestination;
     connection: string | null;

@@ -57,13 +57,7 @@ fn invalid(message: impl Into<String>) -> RepositoryError {
 }
 
 /// A connection key: the extension-local name of a destination account.
-pub fn valid_connection_key(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 128
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-}
+pub use attricat_validation::is_valid_connection_key as valid_connection_key;
 
 fn check_connection(connection: Option<&str>) -> Result<(), RepositoryError> {
     match connection {
@@ -172,7 +166,6 @@ pub struct ExportMappingUpdate {
     pub error: Option<Value>,
 }
 
-/// Counts of one connection's statuses.
 /// The kind and display name of a connection an export status names.
 #[derive(Clone, Debug, FromRow, Serialize)]
 pub struct ExportConnectionLabel {
@@ -182,6 +175,7 @@ pub struct ExportConnectionLabel {
     pub display_name: String,
 }
 
+/// Counts of one connection's statuses.
 #[derive(Clone, Debug, FromRow, Serialize)]
 pub struct ExportStatusCount {
     pub extension_id: String,
@@ -277,19 +271,22 @@ impl AttricatRepository {
             .fetch_all(&self.pool).await?)
     }
 
-    /// Whether a later event of `event_types` that `extension_id` receives
-    /// exists for the same record, which supersedes a debounced delivery. A
-    /// retry request addressed to another extension does not count.
+    /// Whether a later event of `event_types` for `event`'s record exists
+    /// that supersedes `event`'s debounced delivery to `extension_id`. A retry
+    /// request concerns one connection only, so it supersedes only an earlier
+    /// retry request of the same extension and connection.
     pub async fn newer_record_event_exists(
         &self,
         extension_id: &str,
-        record_id: Uuid,
-        after_sequence: i64,
+        event: &attricat_events::DomainEvent,
         event_types: &[String],
     ) -> Result<bool, RepositoryError> {
-        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM domain_events WHERE workspace_id=$1 AND aggregate_kind='record' AND aggregate_id=$2 AND sequence>$3 AND event_type=ANY($4) AND (event_type<>$6 OR payload->>'extension_id'=$5))")
-            .bind(self.extension_workspace()).bind(record_id).bind(after_sequence).bind(event_types)
+        let retry = event.event_type == crate::domain_events::EXPORT_RETRY_REQUESTED_V1;
+        let retry_connection = event.payload.get("connection").and_then(Value::as_str);
+        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM domain_events WHERE workspace_id=$1 AND aggregate_kind='record' AND aggregate_id=$2 AND sequence>$3 AND event_type=ANY($4) AND (event_type<>$6 OR ($7 AND payload->>'extension_id'=$5 AND payload->>'connection' IS NOT DISTINCT FROM $8)))")
+            .bind(self.extension_workspace()).bind(event.aggregate_id).bind(event.sequence).bind(event_types)
             .bind(extension_id).bind(crate::domain_events::EXPORT_RETRY_REQUESTED_V1)
+            .bind(retry).bind(retry_connection)
             .fetch_one(&self.pool).await?)
     }
 

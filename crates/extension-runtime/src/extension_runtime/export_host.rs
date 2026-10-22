@@ -289,7 +289,10 @@ impl HostState {
     /// Issues a short-lived public link to a file a live record references,
     /// so a marketplace can fetch it. A run links only records in its scope.
     pub(super) async fn file_link_call(&self, request: &str) -> Result<String, String> {
+        // A link exposes the file's bytes, so it needs the same grant as
+        // reading them directly.
         self.require("attricat.read")
+            .and_then(|()| self.require("attricat.files.read"))
             .map_err(|error| error.to_string())?;
         let input: FileLink = parse_host_request(request, "file link request")?;
         let base = PUBLIC_FILE_LINK_BASE

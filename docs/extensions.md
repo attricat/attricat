@@ -752,6 +752,10 @@ host-selected blueprint, context and channel. Each row has `record_id`,
   resolved values, relationships, files, revision and whether each is
   published in the channel, for variants and parent/child listings.
 
+With `expand`, a row's `content_revision` is the newest revision of the record
+and the records it embeds, so editing a variant makes its parent's row newer
+than the revision last committed for it.
+
 `attricat.withdrawn(cursor, limit)` (1–100) lists records of the job's
 blueprint that were unpublished from the run's channel (and are still
 unpublished) or deleted, in event order, as `{record_id, reason,
@@ -840,12 +844,13 @@ interactive runs to their selection.
 `files.link.v1` (`{file_id, record_id, expires_in_seconds}`, 60 s to 7 days)
 issues a public, unguessable link to a record's file for destinations that
 fetch media themselves, as Amazon and Allegro do, hours after a listing is
-submitted. It needs `attricat.files.public_links` and `attricat.read`, and the
+submitted. It needs `attricat.files.public_links`, `attricat.files.read` and
+`attricat.read`, and the
 deployment's `EXTENSION_PUBLIC_FILE_BASE_URL`. Inside an operation run it
 links only records in the run's scope, as `open-record-file` does. Only the
 token's SHA-256 is stored. `GET /api/public/extension-files/{token}` serves the file without a
-session while the link is unexpired, the extension is enabled with the
-capability, and the record the link was issued for still references the file.
+session while the link is unexpired, the extension is enabled with both
+file capabilities, and the record the link was issued for still references the file.
 Deleting the record or replacing the file stops the link at once; disabling,
 quarantining or removing the extension revokes its links for good.
 
@@ -923,7 +928,9 @@ and the job waits five minutes before it tries again, so failing jobs cannot
 hold up others. A trigger that was disabled or removed and is published again
 starts at the end of the event log. The run is confined to the changed records
 (up to 10,000; more changes run the whole job) and the trigger's watermark
-moves past them, so a burst of edits causes one run. Runs record their mode:
+moves past them, so a burst of edits causes one run. A matching event of a
+record that a live record of the blueprint links to through a relationship
+counts as a change of the linking record, because `page-v2` can embed it. Runs record their mode:
 `incremental`, `triggered` or `resync`.
 
 `POST /blueprint-connector-jobs/{id}/resync` `{idempotency_key, record_ids? |
@@ -936,7 +943,8 @@ Event handlers can be debounced too: `debounce_ms` (and optional
 `max_wait_ms`, default ten times the debounce) on an event handler delays a
 record's events until the record has been quiet that long and skips events a
 newer event of the same record supersedes, unless the event has waited its
-longest.
+longest. A retry request concerns one connection, so it supersedes only an
+earlier retry request of the same extension and connection.
 
 ### Preview, reconciliation and drift
 
@@ -947,8 +955,8 @@ connection?, preview_command?, resync_operation?, reconcile_operation?}`.
 returns its response, conventionally `{payload, issues}`: the destination
 payload and what the destination would reject (for example missing
 product-type attributes), without pushing. The command reads with the
-extension's own access, so the preview needs `records.read` across the whole
-workspace, and `connection` must be a connection of the export's kind.
+extension's own access, so the preview needs `records.write` like any other
+command plus `records.read` across the whole workspace, and `connection` must be a connection of the export's kind.
 
 Amazon and Allegro have no idempotency keys. After an `uncertain` result,
 commit the mapping as `uncertain`; before pushing that record again, look it up

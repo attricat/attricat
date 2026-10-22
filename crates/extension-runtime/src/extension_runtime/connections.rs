@@ -200,9 +200,15 @@ pub async fn access_token(
             form.push(("refresh_token", refresh_token.to_owned()));
         }
         _ => {
-            return Err(TokenError::Invalid(format!(
-                "connection '{connection}' has no refresh token; authorize it again"
-            )));
+            // The provider issued no refresh token, so only a new
+            // authorization helps; mark the connection failed so operators
+            // see it.
+            let message =
+                format!("connection '{connection}' has no refresh token; authorize it again");
+            let _ = refresh.fail(&message, true).await;
+            counter!("attricat_extension_connection_refreshes_total", "outcome" => "rejected")
+                .increment(1);
+            return Err(TokenError::Invalid(message));
         }
     }
     if let Some(scope) = &credentials.scope

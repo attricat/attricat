@@ -337,6 +337,10 @@ impl AttricatRepository {
         let mut rows = Vec::with_capacity(page.records.len());
         for (record, resolved) in page.records.iter().zip(resolved_rows) {
             let mut related = Map::new();
+            // The row embeds its expanded records, so its revision is the
+            // newest of theirs and its own: a change to one of them makes the
+            // row newer than what was pushed.
+            let mut content_revision = record.content_revision;
             for code in &request.expand {
                 let Some(target_refs) = resolved.relationships.get(code).and_then(Value::as_array)
                 else {
@@ -369,6 +373,7 @@ impl AttricatRepository {
                             "files": target_resolved.files,
                         })
                     });
+                    content_revision = content_revision.max(target.content_revision);
                     items.push(item.clone());
                 }
                 related.insert(code.clone(), Value::Array(items));
@@ -376,7 +381,7 @@ impl AttricatRepository {
             rows.push(json!({
                 "record_id": record.id,
                 "blueprint_version": record.blueprint_version,
-                "content_revision": record.content_revision,
+                "content_revision": content_revision,
                 "updated_at": record.updated_at,
                 "values": resolved.values,
                 "relationships": resolved.relationships,

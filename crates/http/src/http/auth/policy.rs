@@ -131,11 +131,13 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
-    // The preview command reads with the extension's catalog access, so the
-    // handler requires a workspace-wide `records.read` grant.
+    // The preview runs an extension command, which needs `records.write` like
+    // the command route. The handler also requires a workspace-wide
+    // `records.read` grant because the command reads with the extension's
+    // catalog access.
     if path == "/extensions/{extension_id}/exports/{export_id}/preview" {
         return Some(Policy {
-            permission: "records.read",
+            permission: "records.write",
             target: TargetKind::None,
         });
     }

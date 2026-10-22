@@ -304,26 +304,17 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         if let Some(context) = &job.context {
             validate_code(context, "connector job context")?;
         }
-        let valid_connection = |connection: &str| {
-            (1..=128).contains(&connection.len())
-                && connection
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-        };
-        if job
-            .connection
-            .as_deref()
-            .is_some_and(|connection| job.direction != "export" || !valid_connection(connection))
-            || job.trigger.as_ref().is_some_and(|trigger| {
-                job.direction != "export"
-                    || trigger.events.is_empty()
-                    || !(1..=3600).contains(&trigger.debounce_seconds)
-                    || trigger
-                        .events
-                        .iter()
-                        .any(|event| !CONNECTOR_TRIGGER_EVENTS.contains(&event.as_str()))
-            })
-        {
+        if job.connection.as_deref().is_some_and(|connection| {
+            job.direction != "export" || !attricat_validation::is_valid_connection_key(connection)
+        }) || job.trigger.as_ref().is_some_and(|trigger| {
+            job.direction != "export"
+                || trigger.events.is_empty()
+                || !(1..=3600).contains(&trigger.debounce_seconds)
+                || trigger
+                    .events
+                    .iter()
+                    .any(|event| !CONNECTOR_TRIGGER_EVENTS.contains(&event.as_str()))
+        }) {
             return Err(BlueprintError::InvalidConnectorJob(format!(
                 "invalid connection or trigger of connector job '{}'",
                 job.code

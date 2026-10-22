@@ -846,7 +846,7 @@ pub(super) async fn preview_export(
 
 /// Serves a file through an extension-issued public link. The link stays
 /// valid only while it is unexpired and unrevoked, the extension is enabled
-/// with `attricat.files.public_links`, and the live record it was issued for
+/// with `attricat.files.public_links` and `attricat.files.read`, and the live record it was issued for
 /// still references the file.
 pub(super) async fn public_file(
     State(state): State<AppState>,
@@ -877,6 +877,9 @@ pub(super) async fn public_file(
             installation
                 .capability_grants
                 .contains("attricat.files.public_links")
+                && installation
+                    .capability_grants
+                    .contains("attricat.files.read")
         });
     if !allowed
         || !repository

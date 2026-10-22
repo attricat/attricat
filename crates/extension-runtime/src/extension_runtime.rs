@@ -1710,17 +1710,25 @@ impl ExtensionOperationTaskHandler {
                         .await
                         .map_err(operation_task_error)?;
                 }
-                repository
+                let terminal = repository
                     .fail_extension_operation_task(task, &error.to_string())
                     .await
                     .map_err(operation_task_error)?;
-                "failed"
+                if terminal { "failed" } else { "retrying" }
             }
         };
         counter!("attricat_extension_operations_total", "outcome" => outcome).increment(1);
         histogram!("attricat_extension_operation_duration_seconds", "outcome" => outcome)
             .record(operation_started.elapsed().as_secs_f64());
-        Ok(TaskOutcome::DeadLettered)
+        // Only a failed or rejected run is dead-lettered; one that waits
+        // resumes, so the task metric must not count it as a dead letter.
+        Ok(match outcome {
+            "deferred" => TaskOutcome::Settled {
+                outcome: "rescheduled",
+            },
+            "retrying" => TaskOutcome::Settled { outcome: "retry" },
+            _ => TaskOutcome::DeadLettered,
+        })
     }
 }
 
@@ -1917,8 +1925,7 @@ impl WasmExtensionTaskHandler {
                 && repository
                     .newer_record_event_exists(
                         &installation.extension_id,
-                        event.aggregate_id,
-                        event.sequence,
+                        event,
                         &handler.event_types,
                     )
                     .await?
@@ -2000,7 +2007,7 @@ impl WasmExtensionTaskHandler {
                 }
                 Ok(HandlerStep::Settled)
             }
-            InvocationFailure::Retry { message, after } if attempt >= MAX_HANDLER_ATTEMPTS => {
+            InvocationFailure::Retry { message, .. } if attempt >= MAX_HANDLER_ATTEMPTS => {
                 counter!("attricat_extension_invocations_total", "outcome" => "exhausted")
                     .increment(1);
                 repository
@@ -2010,7 +2017,6 @@ impl WasmExtensionTaskHandler {
                         ..record("exhausted", attempt, None)
                     })
                     .await?;
-                let _ = after;
                 Ok(HandlerStep::Settled)
             }
             InvocationFailure::Retry { message, after } => {

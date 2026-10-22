@@ -144,7 +144,7 @@ Host API 1.1 adds connector calls for exporters:
   - `values`: scalar values resolved through the context's fallback chain, so values inherited from parent contexts are included;
   - `relationships`: relationship targets by attribute code;
   - `files`: file references (`file_id`, `filename`, `mime_type`, `byte_size`, `sha256`) by attribute code, for `open-record-file` and [`files.link.v1`](/extensions/server/#public-file-links);
-  - `related`: for up to four relationship codes named in `expand`, the targets' values, relationships, files, revision, and whether each is published in the channel. Use it for variants and parent/child listings.
+  - `related`: for up to four relationship codes named in `expand`, the targets' values, relationships, files, revision, and whether each is published in the channel. Use it for variants and parent/child listings. With `expand`, the row's `content_revision` is the newest revision of the record and the records it embeds, so editing a variant makes its parent's row newer than the revision last committed for it.
 - `attricat.withdrawn(cursor, limit)` lists 1 to 100 records of the job's blueprint that were unpublished from the run's channel (and are still unpublished) or deleted, in event order, as `{record_id, reason, record_revision, occurred_at}`, with `next_cursor` and `more`. An empty cursor starts at the oldest change. Save the cursor, for example in extension storage per job and channel, so the next run continues where this one stopped.
 - `api.call("connector.scope.v1", "{}")` returns the run's job, blueprint, revision, context, channel, connection, and mode, or `null` outside a connector run.
 
@@ -217,7 +217,7 @@ trigger = { events = ["record.updated.v1", "attribute_value.changed.v1"], deboun
 input = {}
 ```
 
-A run starts once the newest matching event of the blueprint's records is `debounce_seconds` old, so a burst of edits causes one run. Steady edits cannot hold it back forever: a run also starts once the oldest pending change is ten times `debounce_seconds` old. If the run cannot start, for example while the extension is disabled, the changes stay pending and are exported once it can. The run only covers the changed records, up to 10,000; with more changes it runs the whole job. See [Connector jobs](/reference/blueprint/#connector-jobs) for the allowed events.
+A run starts once the newest matching event of the blueprint's records is `debounce_seconds` old, so a burst of edits causes one run. Steady edits cannot hold it back forever: a run also starts once the oldest pending change is ten times `debounce_seconds` old. If the run cannot start, for example while the extension is disabled, the changes stay pending and are exported once it can. A matching event of a record that one of the blueprint's records links to through a relationship counts as a change of the linking record, because `page-v2` can embed it. The run only covers the changed records, up to 10,000; with more changes it runs the whole job. See [Connector jobs](/reference/blueprint/#connector-jobs) for the allowed events.
 
 Each run records its mode: `incremental`, `triggered`, or `resync`.
 

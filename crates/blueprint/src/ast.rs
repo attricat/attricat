@@ -87,7 +87,7 @@ pub struct ConnectorJobDefinition {
     pub enabled: bool,
     /// The extension connection (destination account) an export pushes to.
     /// Without it the extension's default destination is used.
-    #[schemars(regex(pattern = r"^[A-Za-z0-9._-]{1,128}$"))]
+    #[schemars(regex(pattern = attricat_validation::CONNECTION_KEY_PATTERN))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub connection: Option<String>,
     /// Also run an export when records of this blueprint change, once they

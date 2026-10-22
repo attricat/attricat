@@ -1186,6 +1186,91 @@ async fn debounced_handlers_push_a_burst_of_edits_once(pool: sqlx::PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn related_record_changes_trigger_and_advance_the_linking_row(pool: sqlx::PgPool) {
+    let repository = workspace_repository(&pool).await;
+    let store = Arc::new(FakeObjectStore::available());
+    install_extension(
+        &repository,
+        store.clone(),
+        EXTENSION,
+        &archive(),
+        PERMISSIONS,
+    )
+    .await;
+    let channel = child_channel(&repository, &pool, "marketplace").await;
+    let variants = published_blueprint(&repository, VARIANT_BLUEPRINT).await;
+    let products = published_blueprint(
+        &repository,
+        &product_blueprint(
+            r#"
+[[connector_jobs]]
+code = "near_real_time"
+direction = "export"
+extension_id = "acme.exporter"
+operation_id = "export"
+input = {expand = ["variants"]}
+trigger = {events = ["attribute_value.changed.v1"], debounce_seconds = 1}
+"#,
+        ),
+    )
+    .await;
+    let variant = titled_record(&repository, variants, "Blue / M").await;
+    publish(&pool, variant, channel).await;
+    let product = repository
+        .create_record_with_values(
+            products.0,
+            products.1,
+            vec![
+                NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some("title".into()),
+                    context_id: None,
+                    value: json!("Shirt"),
+                },
+                NewAttributeValue::Relationship {
+                    attribute_id: None,
+                    attribute_code: Some("variants".into()),
+                    context_id: None,
+                    target_record_id: variant,
+                },
+            ],
+            vec![],
+            json!({}),
+        )
+        .await
+        .unwrap()
+        .id;
+    publish(&pool, product, channel).await;
+    // Editing only the variant triggers a run of the product that links it.
+    set_title(&repository, variant, "Navy / M").await;
+    sqlx::query("UPDATE record_channel_publications SET published_at=now(),published_by_user_id=(SELECT id FROM users LIMIT 1) WHERE record_id=$1")
+        .bind(variant)
+        .execute(&pool)
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    repository
+        .produce_due_blueprint_connector_jobs()
+        .await
+        .unwrap();
+    let (run, filter): (Uuid, Vec<Uuid>) =
+        sqlx::query_as("SELECT id,connector_record_ids FROM extension_operation_runs")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(filter, vec![product]);
+    drain_operations(&repository, &pool, store).await;
+    let (status, checkpoint, _) = run_status(&pool, run).await;
+    assert_eq!(status, "completed", "{checkpoint}");
+    let row = &checkpoint["rows"][0]["row"];
+    assert_eq!(row["related"]["variants"][0]["values"]["title"], "Navy / M");
+    // The row embeds the variant, so its revision is the variant's newer one.
+    let variant_revision = content_revision(&pool, variant).await;
+    assert!(variant_revision > content_revision(&pool, product).await);
+    assert_eq!(row["content_revision"], json!(variant_revision));
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn change_triggered_jobs_export_only_the_changed_records(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     let store = Arc::new(FakeObjectStore::available());

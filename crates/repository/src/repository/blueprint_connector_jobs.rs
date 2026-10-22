@@ -418,56 +418,79 @@ impl AttricatRepository {
     /// Starts a run of every change-triggered export job whose blueprint's
     /// records changed after its watermark, once the newest change is older
     /// than the job's debounce or the oldest has waited
-    /// [`TRIGGER_MAX_WAIT_FACTOR`] debounces. The run selects the changed
-    /// records (or every record when too many changed), and the watermark
-    /// moves past them.
+    /// [`TRIGGER_MAX_WAIT_FACTOR`] debounces. A change of a record that a
+    /// record of the blueprint links to through a relationship counts as a
+    /// change of the linking record, because `page-v2` can embed it. The run
+    /// selects the changed records (or every record when too many changed),
+    /// and the watermark moves past them.
     async fn produce_triggered_blueprint_connector_jobs(&self) -> Result<usize, RepositoryError> {
+        // The high-water read takes the workspace's outbox lock, so skip it
+        // in workspaces without a change-triggered job.
+        let any_triggered: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM blueprint_connector_jobs WHERE workspace_id=$1 AND enabled AND code IS NOT NULL AND trigger_events IS NOT NULL AND trigger_watermark IS NOT NULL)",
+        )
+        .bind(self.extension_workspace())
+        .fetch_one(&self.pool)
+        .await?;
+        if !any_triggered {
+            return Ok(0);
+        }
         // A job with no matching change up to the committed end of the log
         // moves its watermark there, so the next sweep scans only newer
         // events instead of all history since the job's last run.
         let high_water = self.committed_event_high_water().await?;
-        sqlx::query(
+        sqlx::query(&format!(
             "UPDATE blueprint_connector_jobs j SET trigger_watermark=$2 \
              WHERE j.workspace_id=$1 AND j.enabled AND j.code IS NOT NULL AND j.trigger_events IS NOT NULL \
                AND j.trigger_watermark IS NOT NULL AND j.trigger_watermark<$2 \
-               AND NOT EXISTS (SELECT 1 FROM domain_events e JOIN records r ON r.workspace_id=e.workspace_id AND r.id=e.aggregate_id \
-                               WHERE e.workspace_id=j.workspace_id AND e.aggregate_kind='record' \
-                                 AND e.sequence>j.trigger_watermark AND e.sequence<=$2 \
-                                 AND e.event_type=ANY(j.trigger_events) AND r.blueprint_id=j.blueprint_id)",
-        )
+               AND NOT EXISTS ({})",
+            trigger_changes_sql(
+                "j.workspace_id",
+                "j.trigger_watermark",
+                Some("$2"),
+                "j.trigger_events",
+                "j.blueprint_id"
+            )
+        ))
         .bind(self.extension_workspace())
         .bind(high_water)
         .execute(&self.pool)
         .await?;
         // Only jobs with pending changes are considered, the longest-waiting
         // first, so idle jobs cannot crowd out ones that have work.
-        let jobs: Vec<(Uuid, Uuid, Vec<String>, i32, i64)> = sqlx::query_as(
+        let jobs: Vec<(Uuid, Uuid, Vec<String>, i32, i64)> = sqlx::query_as(&format!(
             "SELECT j.id,j.blueprint_id,j.trigger_events,j.trigger_debounce_seconds,j.trigger_watermark FROM blueprint_connector_jobs j \
              WHERE j.workspace_id=$1 AND j.enabled AND j.code IS NOT NULL AND j.trigger_events IS NOT NULL AND j.trigger_watermark IS NOT NULL \
                AND (j.trigger_blocked_until IS NULL OR j.trigger_blocked_until<=clock_timestamp()) \
-               AND EXISTS (SELECT 1 FROM domain_events e JOIN records r ON r.workspace_id=e.workspace_id AND r.id=e.aggregate_id \
-                           WHERE e.workspace_id=j.workspace_id AND e.aggregate_kind='record' AND e.sequence>j.trigger_watermark \
-                             AND e.event_type=ANY(j.trigger_events) AND r.blueprint_id=j.blueprint_id) \
+               AND EXISTS ({}) \
              ORDER BY j.trigger_watermark,j.id LIMIT $2",
-        )
+            trigger_changes_sql(
+                "j.workspace_id",
+                "j.trigger_watermark",
+                None,
+                "j.trigger_events",
+                "j.blueprint_id"
+            )
+        ))
         .bind(self.extension_workspace())
         .bind(TRIGGERED_JOBS_PER_TICK)
         .fetch_all(&self.pool)
         .await?;
         let mut started = 0;
+        let changes_sql = trigger_changes_sql("$1", "$2", None, "$3", "$4");
         // The oldest and newest pending change decide whether a job is due;
-        // each is one index-ordered row, so a job inside its debounce does
-        // not read its whole change window on every tick.
+        // each is one ordered row, so a job inside its debounce does not read
+        // its whole change window on every tick.
         let pending_change = |newest: bool| {
             format!(
-                "SELECT e.occurred_at FROM domain_events e \
-                 WHERE e.workspace_id=$1 AND e.aggregate_kind='record' AND e.sequence>$2 AND e.event_type=ANY($3) \
-                   AND EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=e.workspace_id AND r.id=e.aggregate_id AND r.blueprint_id=$4) \
-                 ORDER BY e.sequence {} LIMIT 1",
+                "SELECT c.occurred_at FROM ({changes_sql}) c ORDER BY c.sequence {} LIMIT 1",
                 if newest { "DESC" } else { "ASC" }
             )
         };
         let (oldest_sql, newest_sql) = (pending_change(false), pending_change(true));
+        let window_sql = format!(
+            "SELECT c.sequence,c.record_id FROM ({changes_sql}) c ORDER BY c.sequence LIMIT $5"
+        );
         for (id, blueprint_id, events, debounce, watermark) in jobs {
             let mut bounds = Vec::with_capacity(2);
             for sql in [&oldest_sql, &newest_sql] {
@@ -489,27 +512,30 @@ impl AttricatRepository {
             if now - newest < debounce && now - oldest < debounce * TRIGGER_MAX_WAIT_FACTOR {
                 continue;
             }
-            let changes: Vec<(i64, Uuid)> = sqlx::query_as(
-                "SELECT e.sequence,e.aggregate_id FROM domain_events e \
-                 WHERE e.workspace_id=$1 AND e.aggregate_kind='record' AND e.sequence>$2 AND e.event_type=ANY($3) \
-                   AND EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=e.workspace_id AND r.id=e.aggregate_id AND r.blueprint_id=$4) \
-                 ORDER BY e.sequence LIMIT $5",
-            )
-            .bind(self.extension_workspace())
-            .bind(watermark)
-            .bind(&events)
-            .bind(blueprint_id)
-            .bind(MAX_CONNECTOR_RECORD_FILTER as i64 + 1)
-            .fetch_all(&self.pool)
-            .await?;
-            let Some(&(high_water, _)) = changes.last() else {
+            let mut changes: Vec<(i64, Uuid)> = sqlx::query_as(&window_sql)
+                .bind(self.extension_workspace())
+                .bind(watermark)
+                .bind(&events)
+                .bind(blueprint_id)
+                .bind(MAX_CONNECTOR_RECORD_FILTER as i64 + 1)
+                .fetch_all(&self.pool)
+                .await?;
+            let Some(&(mut high_water, _)) = changes.last() else {
                 continue;
             };
+            // One event can change many linking records, so a full window may
+            // end inside an event. Leave that event to the next run, unless
+            // it alone fills the window, in which case export every record.
+            let full = changes.len() > MAX_CONNECTOR_RECORD_FILTER;
+            if full && changes[0].0 != high_water {
+                changes.retain(|change| change.0 != high_water);
+                high_water = changes.last().map_or(high_water, |change| change.0);
+            }
             let mut record_ids: Vec<Uuid> = changes.iter().map(|change| change.1).collect();
             record_ids.sort_unstable();
             record_ids.dedup();
             // The run covers events up to `high_water` only, so the records
-            // of this window are all that changed even when it is full.
+            // of this window are all that changed.
             let filter = (record_ids.len() <= MAX_CONNECTOR_RECORD_FILTER).then_some(record_ids);
             match self
                 .run_blueprint_connector_job_as(
@@ -539,7 +565,37 @@ impl AttricatRepository {
         }
         Ok(started)
     }
+}
 
+/// The changes after `after` (and up to `upto`) that trigger a job of
+/// `blueprint`, as `(sequence, occurred_at, record_id)`: events of its own
+/// records, and events of records its live records link to, attributed to the
+/// linking record.
+fn trigger_changes_sql(
+    workspace: &str,
+    after: &str,
+    upto: Option<&str>,
+    events: &str,
+    blueprint: &str,
+) -> String {
+    let upto = upto.map_or_else(String::new, |upto| format!(" AND e.sequence<={upto}"));
+    let window = format!(
+        "e.workspace_id={workspace} AND e.aggregate_kind='record' AND e.sequence>{after}{upto} \
+         AND e.event_type=ANY({events})"
+    );
+    format!(
+        "SELECT e.sequence,e.occurred_at,r.id AS record_id FROM domain_events e \
+           JOIN records r ON r.workspace_id=e.workspace_id AND r.id=e.aggregate_id \
+         WHERE {window} AND r.blueprint_id={blueprint} \
+         UNION ALL \
+         SELECT e.sequence,e.occurred_at,p.id FROM domain_events e \
+           JOIN attribute_values av ON av.workspace_id=e.workspace_id AND av.relationship_target_record_id=e.aggregate_id AND av.active \
+           JOIN records p ON p.workspace_id=av.workspace_id AND p.id=av.record_id AND p.deleted_at IS NULL \
+         WHERE {window} AND p.blueprint_id={blueprint}"
+    )
+}
+
+impl AttricatRepository {
     /// The connector scope of a run as its component sees it.
     pub async fn connector_run_details(
         &self,

@@ -144,7 +144,7 @@ API hosta 1.1 dodaje wywołania konektora dla eksporterów:
   - `values`: wartości skalarne rozwiązane przez łańcuch kontekstów zastępczych, więc obejmują też wartości odziedziczone z kontekstów nadrzędnych;
   - `relationships`: cele relacji według kodu atrybutu;
   - `files`: odwołania do plików (`file_id`, `filename`, `mime_type`, `byte_size`, `sha256`) według kodu atrybutu, do użycia z `open-record-file` i [`files.link.v1`](/pl/extensions/server/#publiczne-linki-do-plików);
-  - `related`: dla maksymalnie czterech kodów relacji wymienionych w `expand` wartości, relacje, pliki i rewizję rekordów docelowych oraz informację, czy każdy z nich jest opublikowany w kanale. Przydaje się przy wariantach i ofertach typu rodzic/dziecko.
+  - `related`: dla maksymalnie czterech kodów relacji wymienionych w `expand` wartości, relacje, pliki i rewizję rekordów docelowych oraz informację, czy każdy z nich jest opublikowany w kanale. Przydaje się przy wariantach i ofertach typu rodzic/dziecko. Z `expand` pole `content_revision` wiersza to najnowsza rewizja rekordu i osadzonych w nim rekordów, więc edycja wariantu sprawia, że wiersz rodzica jest nowszy niż ostatnio zatwierdzona dla niego rewizja.
 - `attricat.withdrawn(cursor, limit)` zwraca od 1 do 100 rekordów Schematu zadania, które wycofano z publikacji w kanale przebiegu (i nadal są niepublikowane) albo usunięto, w kolejności zdarzeń, jako `{record_id, reason, record_revision, occurred_at}`, wraz z `next_cursor` i `more`. Pusty kursor zaczyna od najstarszej zmiany. Zapisz kursor, np. w magazynie rozszerzenia dla każdego zadania i kanału, aby następny przebieg kontynuował od miejsca, w którym skończył ten.
 - `api.call("connector.scope.v1", "{}")` zwraca zadanie, Schemat, wersję, kontekst, kanał, połączenie i tryb przebiegu albo `null` poza przebiegiem konektora.
 
@@ -217,7 +217,7 @@ trigger = { events = ["record.updated.v1", "attribute_value.changed.v1"], deboun
 input = {}
 ```
 
-Przebieg rusza, gdy od najnowszego pasującego zdarzenia rekordów Schematu minie `debounce_seconds` sekund, więc seria edycji daje jeden przebieg. Ciągłe edycje nie mogą go wstrzymywać w nieskończoność: przebieg rusza także wtedy, gdy najstarsza oczekująca zmiana ma dziesięciokrotność `debounce_seconds`. Jeśli przebieg nie może wystartować, np. gdy rozszerzenie jest wyłączone, zmiany czekają i zostaną wyeksportowane, gdy będzie to możliwe. Przebieg obejmuje tylko zmienione rekordy, do 10 000; przy większej liczbie zmian wykonuje całe zadanie. Dozwolone zdarzenia wymienia sekcja [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów).
+Przebieg rusza, gdy od najnowszego pasującego zdarzenia rekordów Schematu minie `debounce_seconds` sekund, więc seria edycji daje jeden przebieg. Ciągłe edycje nie mogą go wstrzymywać w nieskończoność: przebieg rusza także wtedy, gdy najstarsza oczekująca zmiana ma dziesięciokrotność `debounce_seconds`. Jeśli przebieg nie może wystartować, np. gdy rozszerzenie jest wyłączone, zmiany czekają i zostaną wyeksportowane, gdy będzie to możliwe. Pasujące zdarzenie rekordu, do którego rekord Schematu odwołuje się przez relację, liczy się jako zmiana rekordu odwołującego się, bo `page-v2` może go osadzić. Przebieg obejmuje tylko zmienione rekordy, do 10 000; przy większej liczbie zmian wykonuje całe zadanie. Dozwolone zdarzenia wymienia sekcja [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów).
 
 Każdy przebieg zapisuje swój tryb: `incremental`, `triggered` lub `resync`.
 
