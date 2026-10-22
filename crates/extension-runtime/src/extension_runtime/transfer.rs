@@ -96,6 +96,56 @@ struct TransferTarget {
     url: Url,
     headers: reqwest::header::HeaderMap,
     max_transfer_bytes: u64,
+    /// The connection and the access token sent with the transfer, so a 401
+    /// discards exactly that token.
+    connection: Option<(String, String)>,
+}
+
+/// Why a transfer did not reach its destination.
+enum TargetRefusal {
+    /// The rule's request budget is spent for now.
+    RateLimited(Duration),
+    /// The connection's token endpoint is temporarily unavailable.
+    ConnectionUnavailable(String),
+    Error(String),
+}
+
+impl From<String> for TargetRefusal {
+    fn from(message: String) -> Self {
+        Self::Error(message)
+    }
+}
+
+impl From<&str> for TargetRefusal {
+    fn from(message: &str) -> Self {
+        Self::Error(message.to_owned())
+    }
+}
+
+impl TargetRefusal {
+    /// The released 1.0 transfers report every refusal as an error.
+    fn into_error(self) -> String {
+        match self {
+            Self::RateLimited(_) => "network request rate limit exceeded".into(),
+            Self::ConnectionUnavailable(message) | Self::Error(message) => message,
+        }
+    }
+
+    /// The 1.1 transfers report a spent budget and an unavailable connection
+    /// as retryable outcomes, like `network.request.v2`.
+    fn into_outcome(self) -> Result<String, String> {
+        match self {
+            Self::RateLimited(wait) => bounded_serialize(&json!({
+                "outcome": "rate_limited",
+                "retry_after_ms": wait.as_millis().max(1) as u64,
+            })),
+            Self::ConnectionUnavailable(message) => bounded_serialize(&json!({
+                "outcome": "connection_unavailable",
+                "message": message,
+            })),
+            Self::Error(message) => Err(message),
+        }
+    }
 }
 
 /// The outcome of a recorded delivery; `None` for one still to be sent.
@@ -137,6 +187,23 @@ fn caller_headers(
 }
 
 impl OperationState {
+    /// Discards the access token a destination answered with 401, so the
+    /// next transfer refreshes it; a token refreshed meanwhile is kept.
+    async fn discard_rejected_token(
+        repository: &AttricatRepository,
+        extension_id: &str,
+        status: u16,
+        connection: Option<&(String, String)>,
+    ) {
+        if status == 401
+            && let Some((connection, token)) = connection
+        {
+            let _ = repository
+                .invalidate_extension_connection_token(extension_id, connection, token)
+                .await;
+        }
+    }
+
     /// Resolves the granted rule, budget, secrets and pinned client of one
     /// transfer. A URL query needs a rule with `allow_query`.
     async fn transfer_target(
@@ -146,7 +213,7 @@ impl OperationState {
         url: Url,
         secrets: &[SecretHeader],
         connection: Option<&str>,
-    ) -> Result<TransferTarget, String> {
+    ) -> Result<TransferTarget, TargetRefusal> {
         let rule = granted_rule(&host.installation, permission, &url, method)
             .ok()
             .filter(|rule| rule.max_transfer_bytes > 0)
@@ -156,11 +223,8 @@ impl OperationState {
                 "POST bulk delivery requires an explicit idempotent destination declaration".into(),
             );
         }
-        if admit_request(&host.repository, &host.installation, rule)
-            .await
-            .is_err()
-        {
-            return Err("network request rate limit exceeded".into());
+        if let Err(wait) = admit_request(&host.repository, &host.installation, rule).await {
+            return Err(TargetRefusal::RateLimited(wait));
         }
         let address = url.host_str().ok_or("HTTPS URL needs a host")?.to_owned();
         let port = url
@@ -195,13 +259,19 @@ impl OperationState {
                     .map_err(|_| "invalid secret header value")?,
             );
         }
+        let mut sent = None;
         if let Some(connection) = connection {
             host.require("connections.use")
                 .map_err(|error| error.to_string())?;
             let (token, kind) =
                 connections::access_token(&host.repository, &host.installation, connection)
                     .await
-                    .map_err(|error| error.to_string())?;
+                    .map_err(|error| match error {
+                        connections::TokenError::Temporary(message) => {
+                            TargetRefusal::ConnectionUnavailable(message)
+                        }
+                        error => TargetRefusal::Error(error.to_string()),
+                    })?;
             if !kind.api_host_permissions.contains(&rule.id) {
                 return Err(
                     "this connection's token may not be sent to that host permission".into(),
@@ -217,6 +287,7 @@ impl OperationState {
                 reqwest::header::HeaderValue::from_str(&(prefix + &token))
                     .map_err(|_| "invalid token header value")?,
             );
+            sent = Some((connection.to_owned(), token));
         }
         let client = pinned_client(&address, &resolved, timeout)?;
         Ok(TransferTarget {
@@ -224,6 +295,7 @@ impl OperationState {
             url,
             headers,
             max_transfer_bytes: rule.max_transfer_bytes,
+            connection: sent,
         })
     }
 
@@ -255,6 +327,7 @@ impl OperationState {
             client,
             url,
             mut headers,
+            connection,
             ..
         } = target;
         let end = offset + u64::from(max_bytes) - 1;
@@ -286,6 +359,13 @@ impl OperationState {
             return Err("redirect responses are denied".into());
         }
         let status = response.status().as_u16();
+        Self::discard_rejected_token(
+            &self.repository,
+            &self.installation.extension_id,
+            status,
+            connection.as_ref(),
+        )
+        .await;
         if response
             .headers()
             .get(reqwest::header::CONTENT_ENCODING)
@@ -451,7 +531,8 @@ impl OperationState {
             &input.secret_headers,
             None,
         )
-        .await?;
+        .await
+        .map_err(TargetRefusal::into_error)?;
         let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
         self.fetch_range(
             &host,
@@ -479,7 +560,7 @@ impl OperationState {
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_active("network.request").await?;
         let url = https_url(&input.url)?;
-        let mut target = Self::transfer_target(
+        let mut target = match Self::transfer_target(
             &host,
             &input.host_permission_id,
             "GET",
@@ -487,7 +568,11 @@ impl OperationState {
             &input.secret_headers,
             input.connection.as_deref(),
         )
-        .await?;
+        .await
+        {
+            Ok(target) => target,
+            Err(refusal) => return refusal.into_outcome(),
+        };
         caller_headers(&mut target.headers, input.headers)?;
         let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
         self.fetch_range(
@@ -596,7 +681,8 @@ impl OperationState {
             url,
             mut headers,
             max_transfer_bytes,
-        } = Self::transfer_target(
+            connection,
+        } = match Self::transfer_target(
             &host,
             &input.host_permission_id,
             &input.method,
@@ -604,7 +690,13 @@ impl OperationState {
             &input.secret_headers,
             input.connection.as_deref(),
         )
-        .await?;
+        .await
+        {
+            Ok(target) => target,
+            // Only the 1.1 delivery has retryable outcomes.
+            Err(refusal) if input.any_artifact => return refusal.into_outcome(),
+            Err(refusal) => return Err(refusal.into_error()),
+        };
         let content_type = input
             .headers
             .iter()
@@ -727,6 +819,13 @@ impl OperationState {
             return bounded_serialize(&json!({"outcome":"uncertain"}));
         }
         let status = response.status().as_u16();
+        Self::discard_rejected_token(
+            &self.repository,
+            &self.installation.extension_id,
+            status,
+            connection.as_ref(),
+        )
+        .await;
         self.repository
             .complete_extension_http_delivery(id, status)
             .await

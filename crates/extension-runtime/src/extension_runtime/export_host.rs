@@ -166,6 +166,7 @@ impl HostState {
                         input.record_revision,
                         lease,
                         input.force,
+                        self.lease_holder.as_deref(),
                     )
                     .await
                     .map_err(error)?;

@@ -631,9 +631,11 @@ faults. An error returned by a 1.1 lifecycle export (`prepare`, `start`,
 rejection that
 names a record from an extension with `exports.mappings` also sets that
 record's [export status](#per-record-export-status) to `rejected` with the code
-and message and ends the extension's lease on it, unless the mapping already
-holds a newer record revision than the rejected delivery. A connector run's
-rejection without a `connection` belongs to the run's connection. Handler outcomes are stored per
+and message. When the rejecting run or handler delivery holds the record's
+lease, the rejection settles the revision it leased and ends that lease; while
+another one holds it, that push settles the record instead. A rejection of a
+revision older than the mapping's is ignored. A connector run's rejection
+without a `connection` belongs to the run's connection. Handler outcomes are stored per
 event and handler in `extension_handler_attempts`: handlers that already
 completed are not invoked again when another handler of the same event is
 retried. Rejected and exhausted outcomes stay visible for 30 days
@@ -692,7 +694,8 @@ set. Otherwise it leases the record for `lease_ms` (default 2 minutes, at most
 same time. `commit` records the result and releases the lease; without a lease
 token it fails while another worker holds a live lease, and a result for an
 older revision than the mapping's is refused, so a late push never replaces a
-newer outcome. A component that fails a batch should
+newer outcome. A refused commit still ends its own lease. A component that
+fails a batch should
 release the leases it holds. Statuses are `pending`, `synced`, `rejected`,
 `retrying`, `uncertain` and `withdrawn`.
 
@@ -809,7 +812,11 @@ a presigned URL is idempotent by itself. `multipart: {fields: [{name, value}],
 file_field, filename?}` posts a `multipart/form-data` form with the artifact
 as its file part, for Shopify's form-style staged uploads. A POST still needs
 `idempotent_delivery: true` on its rule. A v2 delivery may upload a completed
-input artifact of the run as well as an output.
+input artifact of the run as well as an output. Like `network.request.v2`, the
+v2 transfers answer a spent request budget with
+`{outcome: "rate_limited", retry_after_ms}` and an unavailable token endpoint
+with `{outcome: "connection_unavailable"}` instead of an error, and a 401 from
+the destination discards the connection's cached token.
 
 `transfer.open-record-file({record_id, file_id, variant?})` copies a file a
 live record references (up to 16 MiB) into a run-bound input artifact for a
@@ -867,9 +874,11 @@ operator's authorization-code exchange (`POST .../authorization-code`
 `{code, redirect_uri, code_verifier?}`, for apps whose redirect URI is not an
 Attricat route; callback ingress is tracked in #279). `client_authentication`
 selects `client_secret_post` (`body`) or HTTP Basic (`basic`). A token is
-refreshed 60 seconds before it expires, under the connection's row lock, and
-re-checked after taking the lock, so a rotating refresh token (Allegro) is
-never used twice. A rejected grant marks the connection `failed` for an
+refreshed 60 seconds before it expires (half its lifetime before, for a token
+issued for less than two minutes). One worker claims the refresh and re-checks
+the token after claiming it; the others wait for its token without holding a
+database connection, so a rotating refresh token (Allegro) is never used
+twice. A rejected grant marks the connection `failed` for an
 operator; temporary failures keep it usable. Changing the token URL, scope or
 credentials discards the cached access token, and gives a `failed` connection
 another try. `POST .../test` obtains a token.
@@ -923,8 +932,9 @@ connection?, preview_command?, resync_operation?, reconcile_operation?}`.
 `{record_id, connection?}` invokes the preview command with that payload and
 returns its response, conventionally `{payload, issues}`: the destination
 payload and what the destination would reject (for example missing
-product-type attributes), without pushing. It needs read access to the
-record.
+product-type attributes), without pushing. The command reads with the
+extension's own access, so the preview needs `records.read` across the whole
+workspace, and `connection` must be a connection of the export's kind.
 
 Amazon and Allegro have no idempotency keys. After an `uncertain` result,
 commit the mapping as `uncertain`; before pushing that record again, look it up

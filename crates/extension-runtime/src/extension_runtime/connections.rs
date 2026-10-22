@@ -17,8 +17,13 @@ use crate::repository::{
     ConnectionCredentials, DeviceAuthorization, ExtensionConnection, IssuedTokens,
 };
 
-/// A cached access token is refreshed this long before it expires.
+/// A cached access token is refreshed this long before it expires, or half
+/// its lifetime before for a shorter-lived token.
 const TOKEN_EXPIRY_SKEW: TimeDelta = TimeDelta::seconds(60);
+/// How often a caller waiting for another worker's refresh rechecks it.
+const REFRESH_WAIT_STEP: std::time::Duration = std::time::Duration::from_millis(200);
+/// How long a caller waits for another worker's refresh.
+const REFRESH_WAIT_LIMIT: std::time::Duration = std::time::Duration::from_secs(30);
 const DEVICE_CODE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
 /// The largest token endpoint response read.
 const MAX_TOKEN_RESPONSE_BYTES: usize = 64 * 1024;
@@ -63,13 +68,19 @@ pub fn connection_kind<'a>(
 fn still_valid(
     token: Option<&String>,
     expires_at: Option<DateTime<Utc>>,
+    issued_at: Option<DateTime<Utc>>,
     now: DateTime<Utc>,
 ) -> Option<String> {
     let token = token?.clone();
-    match expires_at {
-        Some(expires_at) if expires_at - TOKEN_EXPIRY_SKEW <= now => None,
-        _ => Some(token),
-    }
+    let Some(expires_at) = expires_at else {
+        return Some(token);
+    };
+    // A token issued for a minute or less would otherwise always count as
+    // expiring and be refreshed on every request.
+    let skew = issued_at.map_or(TOKEN_EXPIRY_SKEW, |issued_at| {
+        TOKEN_EXPIRY_SKEW.min((expires_at - issued_at) / 2)
+    });
+    (expires_at - skew > now).then_some(token)
 }
 
 /// A valid access token of `connection`, refreshed when it is missing or
@@ -93,20 +104,49 @@ pub async fn access_token(
     if let Some(token) = still_valid(
         cached.access_token.as_ref(),
         cached.access_token_expires_at,
+        cached.last_refreshed_at,
         Utc::now(),
     ) {
         return Ok((token, kind));
     }
-    let refresh = repository
-        .lock_extension_connection(&installation.extension_id, connection)
-        .await
-        .map_err(|error| TokenError::Temporary(error.to_string()))?;
-    // Another worker may have refreshed while this one waited for the lock.
+    // One worker refreshes; the others wait for its token without holding a
+    // database connection.
+    let started = std::time::Instant::now();
+    let refresh = loop {
+        if let Some(refresh) = repository
+            .claim_extension_connection_refresh(&installation.extension_id, connection)
+            .await
+            .map_err(|error| TokenError::Temporary(error.to_string()))?
+        {
+            break refresh;
+        }
+        if started.elapsed() >= REFRESH_WAIT_LIMIT {
+            return Err(TokenError::Temporary(
+                "another worker is still refreshing the token".into(),
+            ));
+        }
+        tokio::time::sleep(REFRESH_WAIT_STEP).await;
+        let cached = repository
+            .extension_connection_access_token(&installation.extension_id, connection)
+            .await
+            .map_err(|error| TokenError::Temporary(error.to_string()))?;
+        if let Some(token) = still_valid(
+            cached.access_token.as_ref(),
+            cached.access_token_expires_at,
+            cached.last_refreshed_at,
+            Utc::now(),
+        ) {
+            return Ok((token, kind));
+        }
+    };
+    // Another worker may have refreshed just before this claim.
     if let Some(token) = still_valid(
         refresh.credentials.access_token.as_ref(),
         refresh.credentials.access_token_expires_at,
+        refresh.credentials.last_refreshed_at,
         Utc::now(),
     ) {
+        let _ = refresh.release().await;
         return Ok((token, kind));
     }
     let credentials = refresh.credentials.clone();
@@ -228,13 +268,20 @@ pub async fn poll_device_authorization(
     installation: &ExtensionRuntimeInstallation,
     connection: &str,
 ) -> Result<ExtensionConnection, TokenError> {
-    let refresh = repository
-        .lock_extension_connection(&installation.extension_id, connection)
+    // A poll while another is under way is answered as still pending.
+    let Some(refresh) = repository
+        .claim_extension_connection_refresh(&installation.extension_id, connection)
         .await
-        .map_err(|error| TokenError::Invalid(error.to_string()))?;
+        .map_err(|error| TokenError::Invalid(error.to_string()))?
+    else {
+        return repository
+            .extension_connection(&installation.extension_id, connection)
+            .await
+            .map_err(|error| TokenError::Invalid(error.to_string()));
+    };
     let credentials = refresh.credentials.clone();
     let Some(device_code) = credentials.device_code.clone() else {
-        drop(refresh);
+        let _ = refresh.release().await;
         return repository
             .extension_connection(&installation.extension_id, connection)
             .await
@@ -258,7 +305,7 @@ pub async fn poll_device_authorization(
         credentials.device_interval_seconds,
     ) && Utc::now() < polled_at + chrono::TimeDelta::seconds(i64::from(interval))
     {
-        drop(refresh);
+        let _ = refresh.release().await;
         return repository
             .extension_connection(&installation.extension_id, connection)
             .await
@@ -310,9 +357,12 @@ pub async fn exchange_authorization_code(
     code_verifier: Option<&str>,
 ) -> Result<ExtensionConnection, TokenError> {
     let refresh = repository
-        .lock_extension_connection(&installation.extension_id, connection)
+        .claim_extension_connection_refresh(&installation.extension_id, connection)
         .await
-        .map_err(|error| TokenError::Invalid(error.to_string()))?;
+        .map_err(|error| TokenError::Invalid(error.to_string()))?
+        .ok_or_else(|| {
+            TokenError::Temporary("the connection is being refreshed; try again".into())
+        })?;
     let credentials = refresh.credentials.clone();
     if credentials.grant_type != "authorization_code" {
         return Err(TokenError::Invalid(
@@ -493,9 +543,18 @@ mod tests {
     fn cached_tokens_are_refreshed_before_they_expire() {
         let token = Some("token".to_owned());
         let now = Utc::now();
-        assert!(still_valid(token.as_ref(), None, now).is_some());
-        assert!(still_valid(token.as_ref(), Some(now + TimeDelta::minutes(10)), now).is_some());
-        assert!(still_valid(token.as_ref(), Some(now + TimeDelta::seconds(30)), now).is_none());
-        assert!(still_valid(None, None, now).is_none());
+        assert!(still_valid(token.as_ref(), None, None, now).is_some());
+        let in_ten_minutes = Some(now + TimeDelta::minutes(10));
+        assert!(still_valid(token.as_ref(), in_ten_minutes, None, now).is_some());
+        let in_thirty_seconds = Some(now + TimeDelta::seconds(30));
+        assert!(still_valid(token.as_ref(), in_thirty_seconds, None, now).is_none());
+        assert!(still_valid(None, None, None, now).is_none());
+        // A token issued for 60 seconds is reused for its first 30.
+        let issued = Some(now - TimeDelta::seconds(10));
+        let short = Some(now + TimeDelta::seconds(50));
+        assert!(still_valid(token.as_ref(), short, issued, now).is_some());
+        let late = Some(now - TimeDelta::seconds(40));
+        let ending = Some(now + TimeDelta::seconds(20));
+        assert!(still_valid(token.as_ref(), ending, late, now).is_none());
     }
 }

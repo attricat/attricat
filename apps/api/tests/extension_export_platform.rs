@@ -373,7 +373,7 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
         let repository = repository.clone();
         async move {
             repository
-                .export_mapping_begin(EXTENSION, None, record, revision, None, false)
+                .export_mapping_begin(EXTENSION, None, record, revision, None, false, None)
                 .await
                 .unwrap()
         }
@@ -424,6 +424,7 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
             None,
             record,
             Some(created),
+            None,
             "missing_gtin",
             "GTIN is required",
         )
@@ -481,11 +482,11 @@ async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool
     let blueprint = published_blueprint(&repository, VARIANT_BLUEPRINT).await;
     let record = titled_record(&repository, blueprint, "Lamp").await;
     let revision = content_revision(&pool, record).await;
-    let begin = || {
+    let begin = |holder: &'static str| {
         let repository = repository.clone();
         async move {
             match repository
-                .export_mapping_begin(EXTENSION, None, record, revision, None, false)
+                .export_mapping_begin(EXTENSION, None, record, revision, None, false, Some(holder))
                 .await
                 .unwrap()
             {
@@ -494,21 +495,55 @@ async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool
             }
         }
     };
-    // The worker holding the lease rejects the record: the rejection is
-    // its status and ends the lease.
-    begin().await.expect("a first push proceeds");
-    repository
-        .record_export_rejection(
-            EXTENSION,
-            None,
-            record,
-            Some(revision),
-            "missing_gtin",
-            "GTIN is required",
-        )
-        .await
-        .unwrap();
+    let reject = |holder: &'static str| {
+        let repository = repository.clone();
+        async move {
+            repository
+                .record_export_rejection(
+                    EXTENSION,
+                    None,
+                    record,
+                    None,
+                    Some(holder),
+                    "missing_gtin",
+                    "GTIN is required",
+                )
+                .await
+                .unwrap()
+        }
+    };
+    // Another invocation's rejection leaves the record to the lease holder.
+    let lease = begin("run:a").await.expect("a first push proceeds");
+    reject("handler:b").await;
+    assert_eq!(mapping_status(&pool, record).await.unwrap().0, "pending");
+    // The holder's own rejection settles the revision it leased and ends
+    // the lease, although it names no revision.
+    reject("run:a").await;
     assert_eq!(mapping_status(&pool, record).await.unwrap().0, "rejected");
+    let (rejected_at, leased): (i64, Option<Uuid>) = sqlx::query_as(
+        "SELECT record_revision,lease_token FROM extension_export_mappings WHERE record_id=$1",
+    )
+    .bind(record)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((rejected_at, leased), (revision, None));
+    assert!(
+        repository
+            .export_mapping_commit(
+                EXTENSION,
+                None,
+                record,
+                Some(lease),
+                ExportMappingUpdate {
+                    status: "synced".into(),
+                    ..Default::default()
+                }
+            )
+            .await
+            .is_err(),
+        "the ended lease cannot commit"
+    );
 
     // A retry requested while a push is under way outlives that push.
     repository
@@ -522,7 +557,7 @@ async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool
         )
         .await
         .unwrap();
-    let lease = begin().await.expect("a retried record proceeds");
+    let lease = begin("run:a").await.expect("a retried record proceeds");
     repository
         .request_export_retry(
             EXTENSION,
@@ -549,7 +584,7 @@ async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool
         .await
         .unwrap();
     assert!(
-        begin().await.is_some(),
+        begin("run:a").await.is_some(),
         "the retry requested mid-push is still pending"
     );
 }
@@ -933,6 +968,7 @@ async fn export_status_preview_and_retry_are_served_over_http(pool: sqlx::PgPool
             EXTENSION,
             None,
             record,
+            None,
             None,
             "missing_gtin",
             "GTIN is required",

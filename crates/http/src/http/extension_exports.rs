@@ -717,7 +717,9 @@ pub(super) struct PreviewRequest {
 }
 
 /// Returns the destination payload an export would push for one record,
-/// with any validation issues, without pushing it.
+/// with any validation issues, without pushing it. The preview command runs
+/// with the extension's catalog access, so it needs a caller who can read the
+/// whole workspace, and only a connection of the export's kind.
 pub(super) async fn preview_export(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
@@ -726,15 +728,11 @@ pub(super) async fn preview_export(
     ApiPath((extension_id, export_id)): ApiPath<(String, String)>,
     ApiJson(input): ApiJson<PreviewRequest>,
 ) -> Result<Json<Value>, ApiError> {
+    // Without a target only a workspace-wide grant matches, so the command
+    // cannot read anything the caller could not.
     if !state
         .repository
-        .principal_may(
-            principal.actor(),
-            workspace.0,
-            "records.read",
-            Some(input.record_id),
-            None,
-        )
+        .principal_may(principal.actor(), workspace.0, "records.read", None, None)
         .await?
     {
         return Err(ApiError::forbidden());
@@ -759,6 +757,21 @@ pub(super) async fn preview_export(
         .iter()
         .find(|command| &command.id == command_id)
         .ok_or_else(|| ApiError::not_found("export preview"))?;
+    if let Some(connection) = &input.connection {
+        let found = repository
+            .extension_connection(&extension_id, connection)
+            .await
+            .map_err(|_| ApiError::not_found("extension connection"))?;
+        if export
+            .connection
+            .as_ref()
+            .is_none_or(|kind| *kind != found.kind)
+        {
+            return Err(ApiError::invalid_input(
+                "the connection is not a destination of this export".into(),
+            ));
+        }
+    }
     let payload = json!({
         "export_id": export_id,
         "record_id": input.record_id,

@@ -555,6 +555,19 @@ struct HostState {
     installation: ExtensionRuntimeInstallation,
     repository: AttricatRepository,
     limits: StoreLimits,
+    /// The invocation that holds the export leases it takes, so its own
+    /// rejection of a record settles the revision it leased.
+    lease_holder: Option<String>,
+}
+
+/// The export lease holder of an operation run.
+fn run_lease_holder(run_id: Uuid) -> String {
+    format!("run:{run_id}")
+}
+
+/// The export lease holder of one handler's delivery of an event.
+fn handler_lease_holder(event_id: Uuid, handler_id: &str) -> String {
+    format!("handler:{event_id}:{handler_id}")
 }
 
 impl HostState {
@@ -569,6 +582,7 @@ impl HostState {
             limits: StoreLimitsBuilder::new()
                 .memory_size(max_memory_bytes)
                 .build(),
+            lease_holder: None,
         }
     }
 
@@ -1606,9 +1620,11 @@ impl ExtensionOperationTaskHandler {
                 if let Some(record_id) = rejection.record_id
                     && exports
                 {
-                    // A run's rejection names no revision. The revision at the
-                    // run's start is the oldest it can have read, so a newer
-                    // result committed meanwhile is not overwritten.
+                    // A run's rejection names no revision. When the run holds
+                    // the record's lease, the revision it leased is settled;
+                    // otherwise the revision at the run's start is the oldest
+                    // it can have read, so a newer result committed meanwhile
+                    // is not overwritten.
                     let revision = repository
                         .record_content_revision_at(record_id, run.created_at)
                         .await
@@ -1629,6 +1645,7 @@ impl ExtensionOperationTaskHandler {
                             connection.as_deref(),
                             record_id,
                             Some(revision),
+                            Some(&run_lease_holder(run.id)),
                             &rejection.code,
                             &rejection.message,
                         )
@@ -1714,6 +1731,11 @@ impl WasmExtensionTaskHandler {
         let mut dispatch = EventDispatch::default();
         let mut completed: Vec<(String, String, Uuid)> = Vec::new();
         let installations = repository.enabled_extension_handlers(event).await?;
+        let mut attempts = if installations.is_empty() {
+            Default::default()
+        } else {
+            repository.extension_handler_attempts(event.id).await?
+        };
         for candidate in installations {
             let handler_ids: Vec<String> = candidate
                 .manifest
@@ -1754,7 +1776,14 @@ impl WasmExtensionTaskHandler {
                     continue;
                 };
                 match self
-                    .deliver_to_handler(&repository, &installation, handler, event, &mut dispatch)
+                    .deliver_to_handler(
+                        &repository,
+                        &installation,
+                        handler,
+                        event,
+                        attempts.remove(&(installation.extension_id.clone(), handler.id.clone())),
+                        &mut dispatch,
+                    )
                     .await?
                 {
                     HandlerStep::Completed => completed.push((
@@ -1810,12 +1839,10 @@ impl WasmExtensionTaskHandler {
         installation: &ExtensionRuntimeInstallation,
         handler: &ManifestEventHandler,
         event: &DomainEvent,
+        previous: Option<crate::repository::HandlerAttempt>,
         dispatch: &mut EventDispatch,
     ) -> Result<HandlerStep, RepositoryError> {
         let now = chrono::Utc::now();
-        let previous = repository
-            .extension_handler_attempt(event.id, &installation.extension_id, &handler.id)
-            .await?;
         if previous.is_some() {
             dispatch.has_state = true;
         }
@@ -1935,6 +1962,7 @@ impl WasmExtensionTaskHandler {
                             rejection.connection.as_deref(),
                             record_id,
                             delivery.record_revision,
+                            Some(&handler_lease_holder(event.id, &handler.id)),
                             &rejection.code,
                             &rejection.message,
                         )

@@ -18,11 +18,13 @@ use uuid::Uuid;
 use super::{AttricatRepository, RepositoryError};
 
 /// Whose lease a mapping commit honours.
-enum Lease {
+enum Lease<'a> {
     /// A push's own result: refused while another worker holds the lease.
     Token(Option<Uuid>),
-    /// The extension's rejection of the record, which ends any lease it holds.
-    Rejection,
+    /// An invocation's rejection of the record. It settles the revision the
+    /// invocation leased and ends that lease; another holder's live lease
+    /// leaves the record to that holder's push.
+    Rejection(Option<&'a str>),
 }
 
 /// The per-record export statuses, in the order the UI lists them.
@@ -127,9 +129,15 @@ pub struct ExportMapping {
     pub lease_token: Option<Uuid>,
     #[serde(skip)]
     pub lease_until: Option<DateTime<Utc>>,
+    /// The invocation holding the lease (a run, or one handler's delivery).
+    #[serde(skip)]
+    pub lease_holder: Option<String>,
+    /// The record revision the lease holder is pushing.
+    #[serde(skip)]
+    pub leased_revision: Option<i64>,
 }
 
-const MAPPING_FIELDS: &str = "extension_id,connection,record_id,external_id,external_ids,content_hash,record_revision,status,error,attempts,retry_requested_at,synced_at,updated_at,lease_token,lease_until";
+const MAPPING_FIELDS: &str = "extension_id,connection,record_id,external_id,external_ids,content_hash,record_revision,status,error,attempts,retry_requested_at,synced_at,updated_at,lease_token,lease_until,lease_holder,leased_revision";
 
 /// How a mapping is selected.
 #[derive(Clone, Copy, Debug)]
@@ -191,15 +199,26 @@ fn bounded_json(value: &Value, max: usize, label: &str) -> Result<(), Repository
 impl AttricatRepository {
     // ---- handler outcomes -------------------------------------------------
 
-    pub async fn extension_handler_attempt(
+    /// Every stored handler outcome of an event, by extension and handler,
+    /// read once per delivery rather than once per handler.
+    pub async fn extension_handler_attempts(
         &self,
         event_id: Uuid,
-        extension_id: &str,
-        handler_id: &str,
-    ) -> Result<Option<HandlerAttempt>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT status,attempts,next_attempt_at FROM extension_handler_attempts WHERE workspace_id=$1 AND event_id=$2 AND extension_id=$3 AND handler_id=$4")
-            .bind(self.extension_workspace()).bind(event_id).bind(extension_id).bind(handler_id)
-            .fetch_optional(&self.pool).await?)
+    ) -> Result<std::collections::HashMap<(String, String), HandlerAttempt>, RepositoryError> {
+        #[derive(FromRow)]
+        struct StoredAttempt {
+            extension_id: String,
+            handler_id: String,
+            #[sqlx(flatten)]
+            attempt: HandlerAttempt,
+        }
+        let rows: Vec<StoredAttempt> = sqlx::query_as("SELECT extension_id,handler_id,status,attempts,next_attempt_at FROM extension_handler_attempts WHERE workspace_id=$1 AND event_id=$2")
+            .bind(self.extension_workspace()).bind(event_id)
+            .fetch_all(&self.pool).await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| ((row.extension_id, row.handler_id), row.attempt))
+            .collect())
     }
 
     pub async fn record_extension_handler_attempt(
@@ -356,7 +375,10 @@ impl AttricatRepository {
     /// Decides whether `record_revision` of a record should be pushed and, if
     /// so, leases the record for this destination. A revision that is not
     /// newer than one already pushed (synced, withdrawn or rejected) is stale
-    /// unless `force` is set or an operator requested a retry.
+    /// unless `force` is set or an operator requested a retry. `holder`
+    /// names the invocation taking the lease, so its own rejection of the
+    /// record settles at the revision it was pushing.
+    #[allow(clippy::too_many_arguments)]
     pub async fn export_mapping_begin(
         &self,
         extension_id: &str,
@@ -365,6 +387,7 @@ impl AttricatRepository {
         record_revision: i64,
         lease: Option<Duration>,
         force: bool,
+        holder: Option<&str>,
     ) -> Result<ExportBegin, RepositoryError> {
         check_connection(connection)?;
         if record_revision < 0 {
@@ -397,9 +420,9 @@ impl AttricatRepository {
             return Ok(ExportBegin::Stale { mapping });
         }
         let token = Uuid::new_v4();
-        let mapping: ExportMapping = sqlx::query_as(&format!("UPDATE extension_export_mappings SET lease_token=$5,lease_until=$6,leased_at=clock_timestamp(),updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND record_id=$4 RETURNING {MAPPING_FIELDS}"))
+        let mapping: ExportMapping = sqlx::query_as(&format!("UPDATE extension_export_mappings SET lease_token=$5,lease_until=$6,leased_at=clock_timestamp(),lease_holder=$7,leased_revision=$8,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND record_id=$4 RETURNING {MAPPING_FIELDS}"))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id)
-            .bind(token).bind(now + lease)
+            .bind(token).bind(now + lease).bind(holder).bind(record_revision)
             .fetch_one(&mut *transaction).await?;
         transaction.commit().await?;
         Ok(ExportBegin::Proceed {
@@ -435,7 +458,7 @@ impl AttricatRepository {
         extension_id: &str,
         connection: Option<&str>,
         record_id: Uuid,
-        lease: Lease,
+        lease: Lease<'_>,
         update: ExportMappingUpdate,
     ) -> Result<ExportMapping, RepositoryError> {
         check_connection(connection)?;
@@ -474,18 +497,48 @@ impl AttricatRepository {
         let now: DateTime<Utc> = sqlx::query_scalar("SELECT clock_timestamp()")
             .fetch_one(&mut *transaction)
             .await?;
-        if let Lease::Token(lease_token) = lease {
-            let leased_by_other = mapping.lease_token.is_some()
-                && mapping.lease_until.is_some_and(|until| until > now)
-                && mapping.lease_token != lease_token;
-            if leased_by_other || (lease_token.is_some() && mapping.lease_token != lease_token) {
-                return Err(RepositoryError::ExportMappingConflict(
-                    "export mapping is leased by another worker".into(),
-                ));
+        let leased =
+            mapping.lease_token.is_some() && mapping.lease_until.is_some_and(|until| until > now);
+        let (holds_lease, revision) = match lease {
+            Lease::Token(lease_token) => {
+                let leased_by_other = leased && mapping.lease_token != lease_token;
+                if leased_by_other || (lease_token.is_some() && mapping.lease_token != lease_token)
+                {
+                    return Err(RepositoryError::ExportMappingConflict(
+                        "export mapping is leased by another worker".into(),
+                    ));
+                }
+                (
+                    lease_token.is_some(),
+                    update.record_revision.unwrap_or(mapping.record_revision),
+                )
             }
-        }
-        let revision = update.record_revision.unwrap_or(mapping.record_revision);
+            Lease::Rejection(holder) => {
+                let own = leased && holder.is_some() && mapping.lease_holder.as_deref() == holder;
+                // Another worker's push under way settles the record itself.
+                if leased && !own {
+                    return Err(RepositoryError::ExportMappingConflict(
+                        "export mapping is leased by another worker".into(),
+                    ));
+                }
+                // The holder rejects the revision it was pushing.
+                let revision = if own {
+                    mapping.leased_revision.or(update.record_revision)
+                } else {
+                    update.record_revision
+                };
+                (own, revision.unwrap_or(mapping.record_revision))
+            }
+        };
         if mapping.record_revision > revision {
+            // A refused result still ends the lease of the worker that sent
+            // it, so the record is not held until the lease expires.
+            if holds_lease {
+                sqlx::query("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND record_id=$4")
+                    .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id)
+                    .execute(&mut *transaction).await?;
+                transaction.commit().await?;
+            }
             return Err(RepositoryError::ExportMappingConflict(
                 "the mapping already records a newer record revision".into(),
             ));
@@ -503,7 +556,7 @@ impl AttricatRepository {
              error=$12,attempts=CASE WHEN $13 THEN attempts+1 ELSE 0 END,\
              synced_at=CASE WHEN $5='synced' THEN clock_timestamp() ELSE synced_at END,\
              retry_requested_at=CASE WHEN $14 AND (leased_at IS NULL OR retry_requested_at <= leased_at) THEN NULL ELSE retry_requested_at END,\
-             lease_token=NULL,lease_until=NULL,leased_at=NULL,updated_at=clock_timestamp() \
+             lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() \
              WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND record_id=$4 \
              RETURNING {MAPPING_FIELDS}"
         ))
@@ -537,7 +590,7 @@ impl AttricatRepository {
         lease_token: Uuid,
     ) -> Result<bool, RepositoryError> {
         check_connection(connection)?;
-        Ok(sqlx::query("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND record_id=$4 AND lease_token=$5")
+        Ok(sqlx::query("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND record_id=$4 AND lease_token=$5")
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id).bind(lease_token)
             .execute(&self.pool).await?.rows_affected() == 1)
     }
@@ -574,32 +627,27 @@ impl AttricatRepository {
         .unwrap_or(0))
     }
 
-    /// Records a handler's rejection of a record as that record's status.
-    /// `record_revision` is the revision the rejected delivery carried; a
+    /// Records an invocation's rejection of a record as that record's status.
+    /// `holder` is the rejecting invocation: when it holds the record's lease
+    /// the rejection settles the revision it leased and ends the lease, and
+    /// while another invocation holds it the rejection is left to that push.
+    /// Otherwise `record_revision` is the revision the rejection concerns. A
     /// rejection of a revision older than the mapping's is outdated and kept
-    /// out of the status. The extension that holds the record's lease is the
-    /// one rejecting it, so the rejection ends that lease. A rejection that
-    /// cannot be recorded (an unknown or invalid connection or a deleted
-    /// record) is ignored, so it never fails the delivery or run that
-    /// reported it.
+    /// out of the status. A rejection that cannot be recorded (an unknown or
+    /// invalid connection or a deleted record) is ignored, so it never fails
+    /// the delivery or run that reported it.
+    #[allow(clippy::too_many_arguments)]
     pub async fn record_export_rejection(
         &self,
         extension_id: &str,
         connection: Option<&str>,
         record_id: Uuid,
         record_revision: Option<i64>,
+        holder: Option<&str>,
         code: &str,
         message: &str,
     ) -> Result<(), RepositoryError> {
         let result = async {
-            if let Some(revision) = record_revision
-                && self
-                    .export_mapping_get(extension_id, connection, MappingKey::Record(record_id))
-                    .await?
-                    .is_some_and(|mapping| mapping.record_revision > revision)
-            {
-                return Ok(());
-            }
             let update = ExportMappingUpdate {
                 status: "rejected".into(),
                 record_revision: record_revision.filter(|revision| *revision >= 0),
@@ -610,7 +658,7 @@ impl AttricatRepository {
                 extension_id,
                 connection,
                 record_id,
-                Lease::Rejection,
+                Lease::Rejection(holder),
                 update,
             )
             .await

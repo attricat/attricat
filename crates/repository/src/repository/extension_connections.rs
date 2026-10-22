@@ -176,6 +176,7 @@ pub struct ConnectionCredentials {
     pub device_expires_at: Option<DateTime<Utc>>,
     pub device_interval_seconds: Option<i32>,
     pub device_polled_at: Option<DateTime<Utc>>,
+    pub last_refreshed_at: Option<DateTime<Utc>>,
 }
 
 impl std::fmt::Debug for ConnectionCredentials {
@@ -210,9 +211,10 @@ struct CredentialRow {
     device_expires_at: Option<DateTime<Utc>>,
     device_interval_seconds: Option<i32>,
     device_polled_at: Option<DateTime<Utc>>,
+    last_refreshed_at: Option<DateTime<Utc>>,
 }
 
-const CREDENTIAL_FIELDS: &str = "id,connection,kind,grant_type,host_permission_id,token_url,device_authorization_url,client_id,scope,status,client_secret_ciphertext,refresh_token_ciphertext,access_token_ciphertext,access_token_expires_at,device_code_ciphertext,device_expires_at,device_interval_seconds,device_polled_at";
+const CREDENTIAL_FIELDS: &str = "id,connection,kind,grant_type,host_permission_id,token_url,device_authorization_url,client_id,scope,status,client_secret_ciphertext,refresh_token_ciphertext,access_token_ciphertext,access_token_expires_at,device_code_ciphertext,device_expires_at,device_interval_seconds,device_polled_at,last_refreshed_at";
 
 impl CredentialRow {
     fn decrypt(self) -> Result<ConnectionCredentials, RepositoryError> {
@@ -236,6 +238,7 @@ impl CredentialRow {
             device_expires_at: self.device_expires_at,
             device_interval_seconds: self.device_interval_seconds,
             device_polled_at: self.device_polled_at,
+            last_refreshed_at: self.last_refreshed_at,
         })
     }
 }
@@ -246,6 +249,9 @@ pub struct ConnectionAccessToken {
     pub status: String,
     pub access_token: Option<String>,
     pub access_token_expires_at: Option<DateTime<Utc>>,
+    /// When the token was issued, so a short-lived token is not refreshed on
+    /// every request.
+    pub last_refreshed_at: Option<DateTime<Utc>>,
 }
 
 /// Tokens a token endpoint issued.
@@ -267,17 +273,41 @@ pub struct DeviceAuthorization {
     pub interval_seconds: i32,
 }
 
-/// A connection locked for a token refresh. While it is held no other worker
-/// can refresh the same connection, so a rotating refresh token is never
-/// used twice. Dropping it without completing rolls the lock back.
+/// How long a refresh claim lasts if its worker never settles it.
+const REFRESH_CLAIM: chrono::Duration = chrono::Duration::seconds(120);
+
+/// A connection claimed for a token refresh or device-code poll. While the
+/// claim is live no other worker refreshes the same connection, so a
+/// rotating refresh token is never used twice, yet no row lock or pooled
+/// connection is held across the token request. Dropping it unsettled
+/// releases the claim in the background.
 pub struct ConnectionRefresh {
-    transaction: Transaction<'static, Postgres>,
+    pool: sqlx::PgPool,
     workspace_id: Uuid,
+    claim: Uuid,
+    settled: bool,
     pub credentials: ConnectionCredentials,
 }
 
 impl ConnectionRefresh {
-    /// Stores freshly issued tokens and releases the lock.
+    /// Runs one claim-settling update; it applies only while the claim is
+    /// still this worker's.
+    async fn settle(
+        &mut self,
+        query: sqlx::query::Query<'_, Postgres, sqlx::postgres::PgArguments>,
+    ) -> Result<(), RepositoryError> {
+        let settled = query.execute(&self.pool).await?.rows_affected() == 1;
+        self.settled = true;
+        if settled {
+            Ok(())
+        } else {
+            Err(RepositoryError::InvalidExtension(
+                "the connection refresh claim expired".into(),
+            ))
+        }
+    }
+
+    /// Stores freshly issued tokens and releases the claim.
     pub async fn complete(mut self, tokens: IssuedTokens) -> Result<(), RepositoryError> {
         let id = self.credentials.id;
         let access = seal(id, "access_token", &tokens.access_token)?;
@@ -286,34 +316,64 @@ impl ConnectionRefresh {
             .as_deref()
             .map(|token| seal(id, "refresh_token", token))
             .transpose()?;
-        sqlx::query("UPDATE extension_connections SET access_token_ciphertext=$3,access_token_expires_at=$4,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2")
-            .bind(self.workspace_id).bind(id).bind(access).bind(tokens.expires_at).bind(refresh)
-            .execute(&mut *self.transaction).await?;
-        self.transaction.commit().await?;
-        Ok(())
+        let (workspace_id, claim) = (self.workspace_id, self.claim);
+        self.settle(sqlx::query("UPDATE extension_connections SET access_token_ciphertext=$3,access_token_expires_at=$4,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=NULL,refresh_claimed_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_claim=$6")
+            .bind(workspace_id).bind(id).bind(access).bind(tokens.expires_at).bind(refresh).bind(claim))
+            .await
     }
 
     /// Records a device-code poll the provider answered with "pending" and
-    /// releases the lock. `slow_down` adds 5 seconds to the poll interval,
+    /// releases the claim. `slow_down` adds 5 seconds to the poll interval,
     /// as RFC 8628 requires.
     pub async fn pending(mut self, slow_down: bool) -> Result<(), RepositoryError> {
-        sqlx::query("UPDATE extension_connections SET device_polled_at=clock_timestamp(),device_interval_seconds=CASE WHEN $3 THEN LEAST(COALESCE(device_interval_seconds,5)+5,3600) ELSE device_interval_seconds END WHERE workspace_id=$1 AND id=$2")
-            .bind(self.workspace_id).bind(self.credentials.id).bind(slow_down)
-            .execute(&mut *self.transaction).await?;
-        self.transaction.commit().await?;
-        Ok(())
+        let (workspace_id, id, claim) = (self.workspace_id, self.credentials.id, self.claim);
+        self.settle(sqlx::query("UPDATE extension_connections SET device_polled_at=clock_timestamp(),device_interval_seconds=CASE WHEN $3 THEN LEAST(COALESCE(device_interval_seconds,5)+5,3600) ELSE device_interval_seconds END,refresh_claim=NULL,refresh_claimed_until=NULL WHERE workspace_id=$1 AND id=$2 AND refresh_claim=$4")
+            .bind(workspace_id).bind(id).bind(slow_down).bind(claim))
+            .await
     }
 
-    /// Records a failed refresh and releases the lock. A rejected grant
+    /// Records a failed refresh and releases the claim. A rejected grant
     /// (`revoked`) needs an operator to reconnect; other failures keep the
     /// connection usable for a later attempt.
     pub async fn fail(mut self, message: &str, revoked: bool) -> Result<(), RepositoryError> {
         let message: String = message.chars().take(1024).collect();
-        sqlx::query("UPDATE extension_connections SET status=CASE WHEN $4 THEN 'failed' ELSE status END,last_error=$3,access_token_ciphertext=CASE WHEN $4 THEN NULL ELSE access_token_ciphertext END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2")
-            .bind(self.workspace_id).bind(self.credentials.id).bind(message).bind(revoked)
-            .execute(&mut *self.transaction).await?;
-        self.transaction.commit().await?;
+        let (workspace_id, id, claim) = (self.workspace_id, self.credentials.id, self.claim);
+        self.settle(sqlx::query("UPDATE extension_connections SET status=CASE WHEN $4 THEN 'failed' ELSE status END,last_error=$3,access_token_ciphertext=CASE WHEN $4 THEN NULL ELSE access_token_ciphertext END,refresh_claim=NULL,refresh_claimed_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_claim=$5")
+            .bind(workspace_id).bind(id).bind(message).bind(revoked).bind(claim))
+            .await
+    }
+
+    /// Releases the claim without changing the connection.
+    pub async fn release(mut self) -> Result<(), RepositoryError> {
+        let (workspace_id, id, claim) = (self.workspace_id, self.credentials.id, self.claim);
+        let _ = self.settle(release_claim(workspace_id, id, claim)).await;
         Ok(())
+    }
+}
+
+fn release_claim(
+    workspace_id: Uuid,
+    id: Uuid,
+    claim: Uuid,
+) -> sqlx::query::Query<'static, Postgres, sqlx::postgres::PgArguments> {
+    sqlx::query("UPDATE extension_connections SET refresh_claim=NULL,refresh_claimed_until=NULL WHERE workspace_id=$1 AND id=$2 AND refresh_claim=$3")
+        .bind(workspace_id)
+        .bind(id)
+        .bind(claim)
+}
+
+impl Drop for ConnectionRefresh {
+    fn drop(&mut self) {
+        if self.settled {
+            return;
+        }
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            let pool = self.pool.clone();
+            let query = release_claim(self.workspace_id, self.credentials.id, self.claim);
+            runtime.spawn(async move {
+                let _ = query.execute(&pool).await;
+            });
+        }
     }
 }
 
@@ -475,7 +535,8 @@ impl AttricatRepository {
     }
 
     /// Decrypted credentials, without a lock. Use them to inject a still
-    /// valid access token; refresh through [`Self::lock_extension_connection`].
+    /// valid access token; refresh through
+    /// [`Self::claim_extension_connection_refresh`].
     pub async fn extension_connection_credentials(
         &self,
         extension_id: &str,
@@ -496,40 +557,57 @@ impl AttricatRepository {
         extension_id: &str,
         connection: &str,
     ) -> Result<ConnectionAccessToken, RepositoryError> {
-        let (id, kind, status, ciphertext, expires_at): (
-            Uuid,
-            String,
-            String,
-            Option<Vec<u8>>,
-            Option<DateTime<Utc>>,
-        ) = sqlx::query_as("SELECT id,kind,status,access_token_ciphertext,access_token_expires_at FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3")
+        #[derive(FromRow)]
+        struct AccessTokenRow {
+            id: Uuid,
+            kind: String,
+            status: String,
+            access_token_ciphertext: Option<Vec<u8>>,
+            access_token_expires_at: Option<DateTime<Utc>>,
+            last_refreshed_at: Option<DateTime<Utc>>,
+        }
+        let row: AccessTokenRow = sqlx::query_as("SELECT id,kind,status,access_token_ciphertext,access_token_expires_at,last_refreshed_at FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3")
             .bind(self.extension_workspace()).bind(extension_id).bind(connection)
             .fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("extension connection"))?;
         Ok(ConnectionAccessToken {
-            kind,
-            status,
-            access_token: open_optional(id, "access_token", ciphertext)?,
-            access_token_expires_at: expires_at,
+            kind: row.kind,
+            status: row.status,
+            access_token: open_optional(row.id, "access_token", row.access_token_ciphertext)?,
+            access_token_expires_at: row.access_token_expires_at,
+            last_refreshed_at: row.last_refreshed_at,
         })
     }
 
-    /// Locks a connection for a token refresh or device-code poll.
-    pub async fn lock_extension_connection(
+    /// Claims a connection for a token refresh or device-code poll. Returns
+    /// `None` while another worker's claim is live.
+    pub async fn claim_extension_connection_refresh(
         &self,
         extension_id: &str,
         connection: &str,
-    ) -> Result<ConnectionRefresh, RepositoryError> {
+    ) -> Result<Option<ConnectionRefresh>, RepositoryError> {
+        let claim = Uuid::new_v4();
         let mut transaction = self.pool.begin().await?;
-        let row: CredentialRow = sqlx::query_as(&format!("SELECT {CREDENTIAL_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3 FOR UPDATE"))
+        let claimed: Option<Uuid> = sqlx::query_scalar("UPDATE extension_connections SET refresh_claim=$4,refresh_claimed_until=clock_timestamp()+make_interval(secs => $5) WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3 AND (refresh_claim IS NULL OR refresh_claimed_until<=clock_timestamp()) RETURNING id")
+            .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(claim)
+            .bind(REFRESH_CLAIM.num_seconds() as f64)
+            .fetch_optional(&mut *transaction).await?;
+        if claimed.is_none() {
+            // Distinguish a missing connection from a busy one.
+            self.extension_connection(extension_id, connection).await?;
+            return Ok(None);
+        }
+        let row: CredentialRow = sqlx::query_as(&format!("SELECT {CREDENTIAL_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3"))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection)
-            .fetch_optional(&mut *transaction).await?
-            .ok_or(RepositoryError::NotFound("extension connection"))?;
-        Ok(ConnectionRefresh {
-            transaction,
+            .fetch_one(&mut *transaction).await?;
+        transaction.commit().await?;
+        Ok(Some(ConnectionRefresh {
+            pool: self.pool.clone(),
             workspace_id: self.extension_workspace(),
+            claim,
+            settled: false,
             credentials: row.decrypt()?,
-        })
+        }))
     }
 
     /// Discards a cached access token the destination rejected, so the next

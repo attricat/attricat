@@ -109,7 +109,7 @@ async fn a_full_catalog_keeps_every_mapping_in_host_storage(pool: sqlx::PgPool) 
     .unwrap();
     for id in &ids {
         let ExportBegin::Proceed { lease_token, .. } = repository
-            .export_mapping_begin(EXTENSION, None, *id, 2, None, false)
+            .export_mapping_begin(EXTENSION, None, *id, 2, None, false, None)
             .await
             .unwrap()
         else {

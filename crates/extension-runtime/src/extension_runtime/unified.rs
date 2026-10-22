@@ -355,12 +355,14 @@ fn to_wit_v16_event(event: &DomainEvent) -> v16::api::Event {
 
 impl ExtensionRuntime {
     /// Instantiates a unified component with every import linked. `operation`
-    /// is present only for an operation-run batch.
+    /// is present only for an operation-run batch; `lease_holder` names the
+    /// invocation for the export leases it takes.
     async fn instantiate_unified(
         &self,
         installation: &ExtensionRuntimeInstallation,
         repository: AttricatRepository,
         operation: Option<OperationState>,
+        lease_holder: Option<String>,
     ) -> Result<
         (
             Store<UnifiedState>,
@@ -370,14 +372,13 @@ impl ExtensionRuntime {
         ExtensionRuntimeError,
     > {
         let component = self.component(installation).await?;
-        let state = UnifiedState {
-            host: HostState::new(
-                installation.clone(),
-                repository,
-                self.config.max_memory_bytes,
-            ),
-            operation,
-        };
+        let mut host = HostState::new(
+            installation.clone(),
+            repository,
+            self.config.max_memory_bytes,
+        );
+        host.lease_holder = lease_holder;
+        let state = UnifiedState { host, operation };
         let mut store = Store::new(&self.engine, state);
         store.limiter(|state| &mut state.host.limits);
         store.set_fuel(self.config.fuel).map_err(runtime_error)?;
@@ -459,7 +460,12 @@ impl ExtensionRuntime {
         delivery: &EventDeliveryAttempt,
     ) -> Result<Result<(), InvocationFailure>, ExtensionRuntimeError> {
         let (mut store, pre, instance) = self
-            .instantiate_unified(installation, repository, None)
+            .instantiate_unified(
+                installation,
+                repository,
+                None,
+                Some(super::handler_lease_holder(event.id, &handler.id)),
+            )
             .await?;
         let export = Self::load_export(
             &mut store,
@@ -503,7 +509,7 @@ impl ExtensionRuntime {
         max_response_bytes: u64,
     ) -> Result<String, ExtensionRuntimeError> {
         let (mut store, pre, instance) = self
-            .instantiate_unified(installation, repository, None)
+            .instantiate_unified(installation, repository, None, None)
             .await?;
         let export = Self::load_export(
             &mut store,
@@ -566,7 +572,12 @@ impl ExtensionRuntime {
             .operation_state(installation, repository.clone(), run.id)
             .with_batch_key(&run.batch_key);
         let (mut store, pre, instance) = match self
-            .instantiate_unified(installation, repository, Some(operation))
+            .instantiate_unified(
+                installation,
+                repository,
+                Some(operation),
+                Some(super::run_lease_holder(run.id)),
+            )
             .await
         {
             Ok(instance) => instance,

@@ -58,6 +58,10 @@ CREATE TABLE extension_connections (
         CHECK (status IN ('pending_authorization', 'active', 'failed', 'revoked')),
     last_error TEXT CHECK (char_length(last_error) <= 1024),
     last_refreshed_at TIMESTAMPTZ,
+    -- The one worker refreshing the token, so a rotating refresh token is
+    -- used once without holding a row lock across the token request.
+    refresh_claim UUID,
+    refresh_claimed_until TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (workspace_id, extension_id, connection)
@@ -85,6 +89,8 @@ CREATE TABLE extension_export_mappings (
     lease_token UUID,
     lease_until TIMESTAMPTZ,
     leased_at TIMESTAMPTZ,
+    lease_holder TEXT CHECK (char_length(lease_holder) <= 256),
+    leased_revision BIGINT CHECK (leased_revision >= 0),
     retry_requested_at TIMESTAMPTZ,
     synced_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
