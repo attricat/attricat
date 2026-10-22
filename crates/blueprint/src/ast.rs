@@ -85,6 +85,26 @@ pub struct ConnectorJobDefinition {
     /// Whether the job is scheduled. Defaults to `true`.
     #[serde(default = "default_connector_enabled")]
     pub enabled: bool,
+    /// The extension connection (destination account) an export pushes to.
+    /// Without it the extension's default destination is used.
+    #[schemars(regex(pattern = r"^[A-Za-z0-9._-]{1,128}$"))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection: Option<String>,
+    /// Also run an export when records of this blueprint change, once they
+    /// have been quiet for `debounce_seconds`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<ConnectorJobTrigger>,
+}
+
+/// A change trigger of an export connector job.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectorJobTrigger {
+    /// Record event types that start a run, such as `record.updated.v1`.
+    pub events: Vec<String>,
+    /// Quiet period before a triggered run, from 1 to 3600 seconds.
+    #[schemars(range(min = 1, max = 3600))]
+    pub debounce_seconds: i32,
 }
 
 /// Record-owned outlets whose placement a blueprint `extension_layout` may override.
@@ -104,6 +124,16 @@ pub const KNOWN_VIEW_NAMES: &[&str] = &[
 ];
 
 pub const CONNECTOR_JOB_DIRECTIONS: &[&str] = &["import", "export"];
+/// Record events that may trigger an export connector job.
+pub const CONNECTOR_TRIGGER_EVENTS: &[&str] = &[
+    "record.created.v1",
+    "record.updated.v1",
+    "record.deleted.v1",
+    "record.published.v1",
+    "record.unpublished.v1",
+    "attribute_value.changed.v1",
+    "relationship.changed.v1",
+];
 /// Shortest connector job run interval, in seconds.
 pub const MIN_CONNECTOR_INTERVAL_SECONDS: i32 = 60;
 /// Longest connector job run interval, in seconds (30 days).

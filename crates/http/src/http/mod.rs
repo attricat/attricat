@@ -9,6 +9,7 @@ mod contexts;
 mod data_health;
 mod error;
 mod event_deliveries;
+mod extension_exports;
 mod extension_registries;
 mod extension_runs;
 mod extensions;
@@ -595,6 +596,67 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/extensions/{extension_id}/{contribution_id}/operations",
             post(extension_runs::start),
+        )
+        .route(
+            "/extensions/{extension_id}/export-status",
+            get(extension_exports::extension_export_status),
+        )
+        .route(
+            "/extensions/{extension_id}/export-status/retry",
+            post(extension_exports::retry_export),
+        )
+        .route(
+            "/export-status",
+            get(extension_exports::workspace_export_status),
+        )
+        .route(
+            "/v1/records/{record_id}/export-status",
+            get(extension_exports::record_export_status),
+        )
+        .route(
+            "/extensions/{extension_id}/connections",
+            get(extension_exports::list_connections).post(extension_exports::create_connection),
+        )
+        .route(
+            "/extensions/{extension_id}/connections/{connection}",
+            axum::routing::patch(extension_exports::update_connection)
+                .delete(extension_exports::delete_connection),
+        )
+        .route(
+            "/extensions/{extension_id}/connections/{connection}/device-authorization",
+            post(extension_exports::start_device_authorization),
+        )
+        .route(
+            "/extensions/{extension_id}/connections/{connection}/device-authorization/poll",
+            post(extension_exports::poll_device_authorization),
+        )
+        .route(
+            "/extensions/{extension_id}/connections/{connection}/authorization-code",
+            post(extension_exports::exchange_authorization_code),
+        )
+        .route(
+            "/extensions/{extension_id}/connections/{connection}/test",
+            post(extension_exports::test_connection),
+        )
+        .route(
+            "/extensions/{extension_id}/host-permission-budgets",
+            get(extension_exports::list_budgets),
+        )
+        .route(
+            "/extensions/{extension_id}/host-permission-budgets/{host_permission_id}",
+            put(extension_exports::set_budget).delete(extension_exports::clear_budget),
+        )
+        .route(
+            "/blueprint-connector-jobs/{id}/resync",
+            post(extension_exports::resync_connector_job),
+        )
+        .route(
+            "/extensions/{extension_id}/exports/{export_id}/preview",
+            post(extension_exports::preview_export),
+        )
+        .route(
+            "/public/extension-files/{token}",
+            get(extension_exports::public_file),
         )
         .route(
             "/extensions/{extension_id}/annotation-namespace",

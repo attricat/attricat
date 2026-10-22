@@ -22,6 +22,9 @@ pub const BLUEPRINT_PUBLISHED_V1: &str = "blueprint.published.v1";
 pub const CONTEXT_CREATED_V1: &str = "context.created.v1";
 pub const CONTEXT_UPDATED_V1: &str = "context.updated.v1";
 pub const CONTEXT_DELETED_V1: &str = "context.deleted.v1";
+/// An operator asked an export extension to push a record again. Only the
+/// extension named in the payload receives it.
+pub const EXPORT_RETRY_REQUESTED_V1: &str = "export.retry_requested.v1";
 
 pub const ALL_EVENT_TYPES_V1: &[&str] = &[
     RECORD_CREATED_V1,
@@ -40,6 +43,22 @@ pub const ALL_EVENT_TYPES_V1: &[&str] = &[
     CONTEXT_CREATED_V1,
     CONTEXT_UPDATED_V1,
     CONTEXT_DELETED_V1,
+    EXPORT_RETRY_REQUESTED_V1,
+];
+/// Events that change what a record exports: values, relationships,
+/// publication and lifecycle. Each advances the record's content revision to
+/// its sequence. Annotation changes deliberately do not, so an exporter's own
+/// bookkeeping never makes its output look stale.
+pub const RECORD_CONTENT_EVENT_TYPES_V1: &[&str] = &[
+    RECORD_CREATED_V1,
+    RECORD_UPDATED_V1,
+    RECORD_DELETED_V1,
+    RECORD_MIGRATED_V1,
+    RECORD_PUBLISHED_V1,
+    RECORD_UNPUBLISHED_V1,
+    ATTRIBUTE_VALUE_CHANGED_V1,
+    ATTRIBUTE_VALUE_RESTORED_V1,
+    RELATIONSHIP_CHANGED_V1,
 ];
 const CORE_EVENT_PREFIXES: &[&str] = &[
     "record.",
@@ -47,6 +66,7 @@ const CORE_EVENT_PREFIXES: &[&str] = &[
     "relationship.",
     "blueprint.",
     "context.",
+    "export.",
 ];
 const MAX_JSON_BYTES: usize = 64 * 1024;
 /// The longest aggregate kind, source name, or event type segment.
@@ -105,6 +125,16 @@ pub struct DomainEvent {
     pub source_name: String,
     pub metadata: Value,
     pub payload: Value,
+}
+
+impl DomainEvent {
+    /// The record content revision this event created, for record events that
+    /// change what a record exports.
+    pub fn record_content_revision(&self) -> Option<i64> {
+        (self.aggregate_kind == "record"
+            && RECORD_CONTENT_EVENT_TYPES_V1.contains(&self.event_type.as_str()))
+        .then_some(self.sequence)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

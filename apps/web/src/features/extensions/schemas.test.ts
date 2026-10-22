@@ -8,6 +8,7 @@ import {
 import { auditEventPanelOutlet } from '../audit/constants';
 import { dataHealthExtensionOutlet } from '../data-health/constants';
 import { explorerExtensionOutlets } from '../explorer/constants';
+import { exportMappingExtensionOutlet } from '../extension-exports/constants';
 
 const validLayout = {
   version: 1 as const,
@@ -69,6 +70,7 @@ describe('extension outlet coverage', () => {
       ...Object.values(explorerExtensionOutlets),
       auditEventPanelOutlet,
       dataHealthExtensionOutlet,
+      exportMappingExtensionOutlet,
     ]);
     expect(
       [...extensionOutletSchema.options].filter(

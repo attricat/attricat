@@ -102,6 +102,12 @@ export type SearchRecordsOptions = {
   signal?: AbortSignal;
   sort?: { field: string; direction: 'asc' | 'desc'; context_code?: string };
   version?: number;
+  /** Only records with this export status at one destination. */
+  exportStatus?: {
+    extension_id: string;
+    connection?: string;
+    status: string;
+  };
 };
 
 const searchRecordsInit = (
@@ -118,6 +124,7 @@ const searchRecordsInit = (
     signal,
     sort,
     version,
+    exportStatus,
   }: SearchRecordsOptions,
   include: { include_blueprint?: boolean; include_previews?: boolean } = {},
 ): RequestInit => {
@@ -134,6 +141,7 @@ const searchRecordsInit = (
     ...(relationshipTreeFacets.length
       ? { relationship_tree_facets: relationshipTreeFacets }
       : {}),
+    ...(exportStatus ? { export_status: exportStatus } : {}),
     sort,
     ...(contextCode === undefined ? {} : { context_code: contextCode }),
     ...(includeTotal ? { include_total: true } : {}),

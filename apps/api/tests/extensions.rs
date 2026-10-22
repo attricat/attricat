@@ -1925,7 +1925,7 @@ async fn workspace_safe_mode_blocks_runtime_descriptors_and_storage_without_muta
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_storage_enforces_cas_bounds_quota_and_workspace_namespace(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool)
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -2011,8 +2011,16 @@ async fn extension_storage_enforces_cas_bounds_quota_and_workspace_namespace(poo
             .is_err()
     );
 
+    // The quota fits destination reference data (taxonomies, product types):
+    // 65,536 keys and 256 MiB. Fill all but three maximal entries directly;
+    // the earlier small entries take part of the third.
+    sqlx::query("INSERT INTO extension_storage_entries (workspace_id, extension_id, key, value, revision, byte_size) SELECT $1, 'acme.storage', 'filler-' || n, 'null'::jsonb, 1, 65536 FROM generate_series(1, 4093) AS n")
+        .bind(workspace)
+        .execute(&pool)
+        .await
+        .unwrap();
     let quota_value = json!("x".repeat(65_534));
-    for index in 0..79 {
+    for index in 0..2 {
         repository
             .extension_storage_set(
                 "acme.storage",

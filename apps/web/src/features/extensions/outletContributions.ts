@@ -64,6 +64,7 @@ export const outletPolicies = {
   blueprint_publish_check: panelPolicy,
   record_attribute_panel: panelPolicy,
   file_panel: panelPolicy,
+  export_mapping: panelPolicy,
 } as const satisfies Record<OutletName, { kind: string }>;
 
 const embeddedOutlets = new Set<OutletName>([
@@ -87,6 +88,7 @@ const panelOutlets = new Set<OutletName>([
   'blueprint_publish_check',
   'record_attribute_panel',
   'file_panel',
+  'export_mapping',
 ]);
 
 export const supportsOutlet = (

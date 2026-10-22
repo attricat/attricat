@@ -32,6 +32,9 @@ use uuid::Uuid;
 
 const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
 const MAX_SEARCH_FILTERS: usize = 20;
+/// The most records an export status filter matches; the Explorer pages
+/// through them like any other candidate set.
+const MAX_EXPORT_STATUS_MATCHES: i64 = 50_000;
 /// Relationship hops a filter, sort or relationship path may traverse.
 const MAX_RELATIONSHIP_HOPS: usize = 3;
 
@@ -286,6 +289,21 @@ pub(super) async fn search_record_previews(
             .instrument(tracing::info_span!(
                 "sql.operation",
                 label = "attribute-filter"
+            ))
+            .await?;
+        matching = Some(intersect_record_ids(matching, filtered));
+    }
+    if let Some(export) = &input.export_status {
+        let filtered = repository
+            .export_status_record_ids(
+                &export.extension_id,
+                export.connection.as_deref(),
+                &export.status,
+                MAX_EXPORT_STATUS_MATCHES,
+            )
+            .instrument(tracing::info_span!(
+                "sql.operation",
+                label = "export-status-filter"
             ))
             .await?;
         matching = Some(intersect_record_ids(matching, filtered));

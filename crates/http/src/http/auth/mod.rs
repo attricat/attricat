@@ -340,6 +340,13 @@ pub(super) async fn authorize(
 }
 
 fn is_public_route(path: &str) -> bool {
+    // Extension-issued public file links carry their own unguessable token.
+    if path
+        .strip_prefix("/public/extension-files/")
+        .is_some_and(|token| !token.is_empty() && !token.contains('/'))
+    {
+        return true;
+    }
     matches!(
         path,
         "/health"

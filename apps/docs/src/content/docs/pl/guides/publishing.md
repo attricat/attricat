@@ -78,3 +78,5 @@ Zaufana edycja nadal musi przejść [kontrole publikacji](#wymagaj-kontroli-prze
 ## Eksporty
 
 Zadania eksportu konektora zadeklarowane w schemacie uruchamiają się raz dla każdego włączonego kanału i obejmują tylko rekordy opublikowane w tym kanale w chwili odczytu każdej strony. Rekord, którego publikację cofnięto w trakcie eksportu, nie trafia do kolejnych stron. Danych już wysłanych do systemu zewnętrznego nie można wycofać. Zobacz [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów).
+
+Eksportery do marketplace'ów i sklepów internetowych mogą też wycofać rekord z miejsca docelowego po cofnięciu jego publikacji lub usunięciu. Stan eksportu każdego rekordu widać na jego [karcie Eksporty](/pl/guides/records/#eksporty).

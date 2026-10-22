@@ -15,6 +15,7 @@ export { CompassIcon as ExplorerIcon } from 'lucide-react';
 export { BookmarkIcon as ExplorerShortcutIcon } from 'lucide-react';
 export { PuzzleIcon as ExtensionIcon } from 'lucide-react';
 export { FileOutputIcon as ExportIcon } from 'lucide-react';
+export { PlugIcon as ExtensionConnectionIcon } from 'lucide-react';
 export { WrenchIcon as InspectorIcon } from 'lucide-react';
 export { SettingsIcon as ManagementIcon } from 'lucide-react';
 export { RocketIcon as OnboardingIcon } from 'lucide-react';

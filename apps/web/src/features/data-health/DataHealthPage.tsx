@@ -36,6 +36,7 @@ import type { DataHealthSearch } from './schemas';
 import { SectionError } from './SectionError';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { DataHealthIcon } from '../../components/systemIcons';
+import { ExportHealthCard } from '../extension-exports/ExportHealthCard';
 
 export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   const { t } = useTranslation();
@@ -114,6 +115,7 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
             staleAfterDays={staleAfterDays}
             summary={summary.data}
           />
+          <ExportHealthCard />
           <Box component="section" sx={{ mt: 2 }}>
             <ExtensionOutlet
               context={{ context_version: dataHealthExtensionContextVersion }}

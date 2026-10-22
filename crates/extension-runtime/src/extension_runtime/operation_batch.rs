@@ -1,19 +1,54 @@
 //! The operation-batch lifecycle.
 //!
 //! [`OperationsExport`] wraps the bindgen types of the `attricat:host/operations`
-//! export so that one function, [`run_operation_batch`], owns the lifecycle and
-//! its validation.
+//! (1.0) and `attricat:host/deferrable-operations` (1.1) exports so that one
+//! function, [`run_operation_batch`], owns the lifecycle and its validation.
 
-use std::future::Future;
+use std::{future::Future, time::Duration};
 
 use serde_json::{Value, json};
 use wasmtime::Store;
 
 use super::{
     ExtensionRuntimeError, MAX_HOST_JSON_BYTES,
+    outcomes::{InvocationFailure, component_delay},
     unified::host_unified::exports::attricat::host as v16,
 };
 use crate::repository::ClaimedExtensionOperationRun;
+
+/// A validated, committed-to-be batch result.
+#[derive(Debug)]
+pub(super) struct BatchResult {
+    pub checkpoint: Value,
+    pub progress: Value,
+    pub done: bool,
+    /// Present when the batch asked to be resumed later rather than at once.
+    pub resume_after: Option<Duration>,
+}
+
+/// Why a batch did not produce a result.
+#[derive(Debug)]
+pub(super) enum BatchError {
+    /// The host, a lifecycle call, a trap or a 1.0 `process-batch` error.
+    Runtime(ExtensionRuntimeError),
+    /// A typed 1.1 `process-batch` failure.
+    Failure(InvocationFailure),
+}
+
+impl From<ExtensionRuntimeError> for BatchError {
+    fn from(error: ExtensionRuntimeError) -> Self {
+        Self::Runtime(error)
+    }
+}
+
+impl std::fmt::Display for BatchError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Runtime(error) => error.fmt(formatter),
+            Self::Failure(failure) => formatter.write_str(failure.message()),
+        }
+    }
+}
 
 /// A lifecycle export that takes the request and only reports failure.
 #[derive(Clone, Copy, Debug)]
@@ -30,6 +65,7 @@ pub(super) struct BatchOutput {
     checkpoint: String,
     progress: String,
     done: bool,
+    resume_after_ms: Option<u64>,
 }
 
 /// The `attricat:host/operations` export.
@@ -52,20 +88,20 @@ pub(super) trait OperationsExport: Sync {
         &self,
         store: &mut Store<T>,
         request: &Self::Request,
-    ) -> impl Future<Output = wasmtime::Result<Result<BatchOutput, String>>> + Send;
+    ) -> impl Future<Output = wasmtime::Result<Result<BatchOutput, BatchError>>> + Send;
 }
 
 /// Implements [`OperationsExport`] for the `operations` export module of each
 /// listed world. The bodies only forward to the bindgen-generated methods.
 macro_rules! impl_operations_export {
-    ($($world:ident),+ $(,)?) => {$(
-        impl OperationsExport for $world::operations::Guest {
-            type Request = $world::operations::OperationRequest;
+    ($($world:ident :: $interface:ident => $map:expr),+ $(,)?) => {$(
+        impl OperationsExport for $world::$interface::Guest {
+            type Request = $world::$interface::OperationRequest;
 
             fn request(
                 run: &ClaimedExtensionOperationRun,
             ) -> Result<Self::Request, ExtensionRuntimeError> {
-                Ok($world::operations::OperationRequest {
+                Ok($world::$interface::OperationRequest {
                     run_id: run.id.to_string(),
                     operation_id: run.operation_handler.clone(),
                     configuration: to_json(&run.configuration)?,
@@ -99,21 +135,34 @@ macro_rules! impl_operations_export {
                 &self,
                 store: &mut Store<T>,
                 request: &Self::Request,
-            ) -> wasmtime::Result<Result<BatchOutput, String>> {
-                Ok(self
-                    .call_process_batch(store, request)
-                    .await?
-                    .map(|result| BatchOutput {
-                        checkpoint: result.checkpoint,
-                        progress: result.progress,
-                        done: result.done,
-                    }))
+            ) -> wasmtime::Result<Result<BatchOutput, BatchError>> {
+                Ok(($map)(self.call_process_batch(store, request).await?))
             }
         }
     )+};
 }
 
-impl_operations_export!(v16);
+impl_operations_export!(
+    v16::operations => |result: Result<v16::operations::BatchResult, String>| result
+        .map(|result| BatchOutput {
+            checkpoint: result.checkpoint,
+            progress: result.progress,
+            done: result.done,
+            resume_after_ms: None,
+        })
+        .map_err(|error| BatchError::Runtime(ExtensionRuntimeError::Runtime(error))),
+    v16::deferrable_operations => |result: Result<
+        v16::deferrable_operations::BatchOutcome,
+        super::unified::host_unified::attricat::host::outcomes::Failure,
+    >| result
+        .map(|result| BatchOutput {
+            checkpoint: result.checkpoint,
+            progress: result.progress,
+            done: result.done,
+            resume_after_ms: result.resume_after_ms,
+        })
+        .map_err(|failure| BatchError::Failure(failure.into())),
+);
 
 fn to_json(value: &Value) -> Result<String, ExtensionRuntimeError> {
     serde_json::to_string(value).map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))
@@ -127,13 +176,13 @@ fn flatten<T>(result: wasmtime::Result<Result<T, String>>) -> Result<T, Extensio
 
 /// Runs one batch of `run` against an instantiated operations export: cancel,
 /// or prepare/start on the first batch, then process, validate, checkpoint and
-/// finish when done. Returns the validated `(checkpoint, progress, done)`.
+/// finish when done.
 pub(super) async fn run_operation_batch<E: OperationsExport, T: Send + 'static>(
     store: &mut Store<T>,
     operations: &E,
     run: &ClaimedExtensionOperationRun,
     cancelling: bool,
-) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
+) -> Result<BatchResult, BatchError> {
     let mut request = E::request(run)?;
     if cancelling {
         flatten(
@@ -141,15 +190,28 @@ pub(super) async fn run_operation_batch<E: OperationsExport, T: Send + 'static>(
                 .call(store, LifecycleCall::Cancel, &request)
                 .await,
         )?;
-        return Ok((run.checkpoint.clone(), json!({"cancelled": true}), true));
+        return Ok(BatchResult {
+            checkpoint: run.checkpoint.clone(),
+            progress: json!({"cancelled": true}),
+            done: true,
+            resume_after: None,
+        });
     }
     if !run.lifecycle_started {
         for call in [LifecycleCall::Prepare, LifecycleCall::Start] {
             flatten(operations.call(store, call, &request).await)?;
         }
     }
-    let output = flatten(operations.process_batch(store, &request).await)?;
+    let output = operations
+        .process_batch(store, &request)
+        .await
+        .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))??;
     let (checkpoint, progress) = validate_batch_output(&output, run.max_checkpoint_bytes)?;
+    // A finished run has nothing left to resume.
+    let resume_after = output
+        .resume_after_ms
+        .filter(|_| !output.done)
+        .map(component_delay);
     E::set_checkpoint(&mut request, output.checkpoint);
     flatten(
         operations
@@ -163,7 +225,12 @@ pub(super) async fn run_operation_batch<E: OperationsExport, T: Send + 'static>(
                 .await,
         )?;
     }
-    Ok((checkpoint, progress, output.done))
+    Ok(BatchResult {
+        checkpoint,
+        progress,
+        done: output.done,
+        resume_after,
+    })
 }
 
 /// Validates the checkpoint and progress JSON a batch returned. Both must be

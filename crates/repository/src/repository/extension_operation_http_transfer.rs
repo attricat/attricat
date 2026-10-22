@@ -147,7 +147,8 @@ impl AttricatRepository {
     ) -> Result<DeliveryState, RepositoryError> {
         let mut tx = self.pool.begin().await?;
         self.ensure_task_fence(&mut tx).await?;
-        let valid: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_operation_runs r JOIN extension_operation_artifacts a ON a.operation_run_id=r.id WHERE r.id=$1 AND r.workspace_id=$2 AND r.status='leased' AND a.id=$3 AND a.direction='output' AND a.state='completed')")
+        // Outputs and completed inputs (an opened record file) can be delivered.
+        let valid: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_operation_runs r JOIN extension_operation_artifacts a ON a.operation_run_id=r.id WHERE r.id=$1 AND r.workspace_id=$2 AND r.status='leased' AND a.id=$3 AND a.state='completed')")
             .bind(run).bind(self.extension_workspace()).bind(artifact).fetch_one(&mut *tx).await?;
         if !valid {
             return Err(denied());

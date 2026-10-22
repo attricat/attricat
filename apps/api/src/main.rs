@@ -244,6 +244,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (query_cache, rate_limiter) =
         QueryCache::from_config(cache, &database_identity.to_string()).await?;
     extension_runtime::use_network_rate_limiter(rate_limiter);
+    if let Some(key) = extensions.credential_key {
+        api::repository::use_extension_credential_key(key);
+    }
+    if let Some(base) = extensions.public_file_base_url.clone() {
+        extension_runtime::use_public_file_link_base(base);
+    }
+    if let Some(egress) = &extensions.development_egress {
+        let extra_root_certificates_pem = match &egress.ca_file {
+            Some(path) => std::fs::read(path)
+                .map_err(|error| format!("cannot read EXTENSION_DEV_EGRESS_CA_FILE: {error}"))?,
+            None => Vec::new(),
+        };
+        tracing::warn!("development egress overrides are active; never use them in production");
+        extension_runtime::use_development_egress(extension_runtime::DevelopmentEgress {
+            resolve: egress.resolve.clone(),
+            extra_root_certificates_pem,
+        });
+    }
     let task_repository =
         AttricatRepository::system(task_pool.clone()).with_cache(query_cache.clone());
     // Agent provider calls are not safely resumable. On process restart mark

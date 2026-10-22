@@ -17,6 +17,8 @@ description: Watch catalog data health, background queues, metrics, traces, and 
 
 **Stale after** sets what counts as stale, from 1 to 3650 days (90 by default). Results are cached for five minutes by default (`DATA_HEALTH_CACHE_TTL_SECONDS`); **Refresh** clears the cache.
 
+When an extension exports records, the **Exports** card counts the records each destination rejected, could not confirm, or is retrying, next to the synced ones. To see and retry those records, open the extension's page under **Manage → Extensions**; see [Export status](/builders/extensions/#export-status).
+
 Extensions can add cards to this page.
 
 ## Background processing

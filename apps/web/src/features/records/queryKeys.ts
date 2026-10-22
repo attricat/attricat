@@ -18,6 +18,7 @@ type RecordSearchKeyOptions = {
   }[];
   sort?: { field: string; direction: 'asc' | 'desc' };
   version?: number;
+  exportStatus?: { extension: string; connection?: string; status: string };
 };
 
 export const recordQueryKeys = {
@@ -97,6 +98,7 @@ export const recordQueryKeys = {
     relationshipTreeFacets,
     sort,
     version,
+    exportStatus,
   }: RecordSearchKeyOptions) =>
     [
       ...recordQueryKeys.searches(),
@@ -110,6 +112,7 @@ export const recordQueryKeys = {
         relationshipTreeFacets,
         sort,
         version,
+        exportStatus,
       },
     ] as const,
 } as const;

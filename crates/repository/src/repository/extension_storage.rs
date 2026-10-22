@@ -8,8 +8,8 @@ use crate::extension_policy;
 
 pub const MAX_EXTENSION_STORAGE_KEY_BYTES: usize = 256;
 pub const MAX_EXTENSION_STORAGE_VALUE_BYTES: usize = 64 * 1024;
-pub const MAX_EXTENSION_STORAGE_KEYS: i64 = 1_024;
-pub const MAX_EXTENSION_STORAGE_BYTES: i64 = 5 * 1024 * 1024;
+pub const MAX_EXTENSION_STORAGE_KEYS: i64 = 65_536;
+pub const MAX_EXTENSION_STORAGE_BYTES: i64 = 256 * 1024 * 1024;
 pub const MAX_EXTENSION_STORAGE_LIST_LIMIT: u32 = 100;
 
 #[derive(Clone, Debug)]

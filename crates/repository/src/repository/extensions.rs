@@ -179,6 +179,15 @@ pub(crate) fn validate_workspace_extension_layout(layout: &Value) -> Result<(), 
 
 /// Core Attricat events retain existing subscription semantics. Extension-owned
 /// events additionally require a matching declared provider contract.
+/// A retry request reaches only the extension it names.
+fn export_retry_addressed_to(
+    extension_id: &str,
+    event: &crate::domain_events::DomainEvent,
+) -> bool {
+    event.event_type != crate::domain_events::EXPORT_RETRY_REQUESTED_V1
+        || event.payload.get("extension_id").and_then(Value::as_str) == Some(extension_id)
+}
+
 fn event_contract_subscription_allowed(
     manifest: &Manifest,
     event: &crate::domain_events::DomainEvent,
@@ -272,6 +281,21 @@ pub struct ExtensionGrant {
     pub grant_kind: String,
     pub grant_id: String,
     pub granted_at: DateTime<Utc>,
+}
+
+/// An export destination of an enabled extension, as the export status
+/// surfaces name it.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ExportDestinationDescriptor {
+    pub extension_id: String,
+    pub extension_name: String,
+    pub export_id: String,
+    pub title: String,
+    pub connection_kind: Option<String>,
+    /// Whether the destination previews a record's payload.
+    pub preview: bool,
+    pub resync_operation: Option<String>,
+    pub reconcile_operation: Option<String>,
 }
 
 /// Immutable snapshot plus invocation-time state used by the WASM runtime.
@@ -986,7 +1010,8 @@ impl AttricatRepository {
                                 .iter()
                                 .any(|registered| registered == event_type)
                         })
-                    }) && event_contract_subscription_allowed(&installation.manifest, event);
+                    }) && event_contract_subscription_allowed(&installation.manifest, event)
+                        && export_retry_addressed_to(&installation.extension_id, event);
                 if subscribed {
                     enabled.push(installation);
                 }
@@ -1597,6 +1622,45 @@ impl AttricatRepository {
         Ok(())
     }
     pub(crate) fn extension_workspace(&self) -> Uuid {
+        self.workspace_id.0
+    }
+
+    /// Every export destination of the enabled, authorized installations.
+    pub async fn enabled_export_destinations(
+        &self,
+    ) -> Result<Vec<ExportDestinationDescriptor>, RepositoryError> {
+        let mut destinations = Vec::new();
+        for row in self.runtime_installation_rows(None).await? {
+            if !extension_policy::allows(&row.extension_id, row.installed_release_id) {
+                continue;
+            }
+            let Some(installation) = self.runtime_installation(row).await? else {
+                continue;
+            };
+            for export in installation
+                .manifest
+                .server
+                .iter()
+                .flat_map(|server| server.exports.iter())
+            {
+                destinations.push(ExportDestinationDescriptor {
+                    extension_id: installation.extension_id.clone(),
+                    extension_name: installation.manifest.name.clone(),
+                    export_id: export.id.clone(),
+                    title: export.title.clone(),
+                    connection_kind: export.connection.clone(),
+                    preview: export.preview_command.is_some()
+                        && installation.capability_grants.contains("client.commands"),
+                    resync_operation: export.resync_operation.clone(),
+                    reconcile_operation: export.reconcile_operation.clone(),
+                });
+            }
+        }
+        Ok(destinations)
+    }
+
+    /// The workspace this repository is scoped to.
+    pub fn scoped_workspace_id(&self) -> Uuid {
         self.workspace_id.0
     }
 

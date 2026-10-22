@@ -188,6 +188,15 @@ impl AttricatRepository {
         &self,
         request: ExtensionAttricatPageRequest,
     ) -> Result<ExtensionAttricatPage, RepositoryError> {
+        self.extension_attricat_page_of(request, None).await
+    }
+
+    /// [`Self::extension_attricat_page`] restricted to `record_ids` when given.
+    pub(crate) async fn extension_attricat_page_of(
+        &self,
+        request: ExtensionAttricatPageRequest,
+        record_ids: Option<&[Uuid]>,
+    ) -> Result<ExtensionAttricatPage, RepositoryError> {
         if request.limit == 0 || request.limit > MAX_EXTENSION_ATTRICAT_PAGE_SIZE {
             return Err(RepositoryError::InvalidExtension(format!(
                 "catalog page limit must be 1-{MAX_EXTENSION_ATTRICAT_PAGE_SIZE}"
@@ -251,17 +260,18 @@ impl AttricatRepository {
             }
         }
         let rows = sqlx::query_as::<_, Db<Record>>(
-            "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,('attricat.sample'=ANY(e.system_tags)) AS is_sample,e.created_at,e.updated_at,e.deleted_at \
+            "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,('attricat.sample'=ANY(e.system_tags)) AS is_sample,e.created_at,e.updated_at,e.deleted_at,e.content_revision \
              FROM records e \
              WHERE e.workspace_id=$1 AND (e.deleted_at IS NULL OR e.deleted_at > $4) AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
                AND e.created_at <= $4 \
                AND ($5::timestamptz IS NULL OR (e.created_at,e.id) > ($5,$6)) \
                AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM record_channel_publications p WHERE p.workspace_id=e.workspace_id AND p.record_id=e.id AND p.context_id=$7 AND p.published_at IS NOT NULL)) \
+               AND ($9::uuid[] IS NULL OR e.id=ANY($9)) \
              ORDER BY e.created_at,e.id LIMIT $8",
         )
         .bind(workspace_id).bind(request.blueprint_id).bind(request.blueprint_version)
         .bind(snapshot_at).bind(created_at).bind(record_id).bind(request.publication_context_id)
-        .bind(i64::from(request.limit) + 1).fetch_all(&self.pool).await?;
+        .bind(i64::from(request.limit) + 1).bind(record_ids).fetch_all(&self.pool).await?;
         let mut records = rows.into_domain();
         let next_cursor = if records.len() > request.limit as usize {
             records.pop();
@@ -384,7 +394,7 @@ impl AttricatRepository {
             return Ok(None);
         };
         let record = sqlx::query_as::<_, Db<Record>>(
-            "SELECT id,blueprint_id,blueprint_version,projections,system_tags,system_metadata,('attricat.sample'=ANY(system_tags)) AS is_sample,created_at,updated_at,deleted_at FROM records WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL",
+            "SELECT id,blueprint_id,blueprint_version,projections,system_tags,system_metadata,('attricat.sample'=ANY(system_tags)) AS is_sample,created_at,updated_at,deleted_at,content_revision FROM records WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL",
         )
         .bind(record_id)
         .bind(self.workspace_id.0)

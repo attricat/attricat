@@ -23,9 +23,68 @@ pub struct BlueprintConnectorJob {
     pub interval_seconds: Option<i32>,
     pub next_at: Option<DateTime<Utc>>,
     pub enabled: bool,
+    pub connection: Option<String>,
+    pub trigger_events: Option<Vec<String>>,
+    pub trigger_debounce_seconds: Option<i32>,
 }
 
-const FIELDS: &str = "id,blueprint_id,blueprint_version,code,direction,extension_id,operation_id,input,context_id,input_file_id,interval_seconds,next_at,enabled";
+const FIELDS: &str = "id,blueprint_id,blueprint_version,code,direction,extension_id,operation_id,input,context_id,input_file_id,interval_seconds,next_at,enabled,connection,trigger_events,trigger_debounce_seconds";
+/// The most records a resync or a triggered run may select by ID.
+pub const MAX_CONNECTOR_RECORD_FILTER: usize = 10_000;
+
+/// How a connector run was started.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectorRunMode {
+    /// A manual or interval run.
+    Incremental,
+    /// A backfill: re-export everything, or the selected records, skipping
+    /// unchanged ones by their stored content hash.
+    Resync,
+    /// Started by record changes; selects the changed records.
+    Triggered,
+}
+
+impl ConnectorRunMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Incremental => "incremental",
+            Self::Resync => "resync",
+            Self::Triggered => "triggered",
+        }
+    }
+}
+
+/// What a connector run is confined to; the host enforces it on every call.
+#[derive(Clone, Debug)]
+pub(crate) struct ConnectorRunScope {
+    pub job_id: Uuid,
+    pub blueprint_id: Uuid,
+    pub context_id: Uuid,
+    pub blueprint_version: i64,
+    pub channel_id: Option<Uuid>,
+    pub connection: Option<String>,
+    pub mode: ConnectorRunMode,
+    pub record_ids: Option<Vec<Uuid>>,
+}
+
+/// A connector run's scope as its component sees it.
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+pub struct ConnectorRunDetails {
+    pub job_id: Uuid,
+    pub job_code: Option<String>,
+    pub direction: String,
+    pub blueprint_id: Uuid,
+    pub blueprint_version: i64,
+    pub context_id: Uuid,
+    pub channel_id: Option<Uuid>,
+    pub connection: Option<String>,
+    pub mode: String,
+    /// Present when the run is confined to selected records.
+    pub record_count: Option<i64>,
+    #[serde(skip)]
+    pub record_ids: Option<Vec<Uuid>>,
+}
 const MAX_CONNECTOR_JOB_INPUT_BYTES: usize = 64 * 1024;
 const MAX_RUN_KEY_BYTES: usize = 40;
 
@@ -76,6 +135,15 @@ impl AttricatRepository {
                 .ok_or_else(|| invalid("connector operation is not declared"))?;
             attricat_extension_manifest::validate_schema(&operation.request_schema, &input)
                 .map_err(|_| invalid("connector input does not match operation schema"))?;
+            if job.connection.is_some()
+                && installation
+                    .manifest
+                    .server
+                    .as_ref()
+                    .is_none_or(|server| server.connections.is_empty())
+            {
+                return Err(invalid("the connector extension declares no connections"));
+            }
             let context_id: Option<Uuid> = match job.context.as_deref() {
                 Some(code) => Some(
                     sqlx::query_scalar(
@@ -111,11 +179,25 @@ impl AttricatRepository {
         }
         sqlx::query("UPDATE blueprint_connector_jobs SET enabled=false,updated_at=clock_timestamp() WHERE workspace_id=$1 AND blueprint_id=$2")
             .bind(ws).bind(blueprint_id).execute(&mut **tx).await?;
+        // A change trigger starts watching at the current end of the event
+        // log, so publishing a job never replays history.
+        let high_water: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1",
+        )
+        .bind(ws)
+        .fetch_one(&mut **tx)
+        .await?;
         for (job, input, context_id, file) in prepared {
-            sqlx::query("INSERT INTO blueprint_connector_jobs(id,workspace_id,blueprint_id,blueprint_version,code,direction,extension_id,operation_id,input,context_id,input_file_id,interval_seconds,next_at,enabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,CASE WHEN $12::integer IS NULL THEN NULL ELSE clock_timestamp()+($12*interval '1 second') END,$13) ON CONFLICT(workspace_id,blueprint_id,code) WHERE code IS NOT NULL DO UPDATE SET blueprint_version=$4,direction=$6,extension_id=$7,operation_id=$8,input=$9,context_id=$10,input_file_id=$11,interval_seconds=$12,next_at=CASE WHEN $12::integer IS NULL THEN NULL ELSE clock_timestamp()+($12*interval '1 second') END,enabled=$13,updated_at=clock_timestamp()")
+            let (trigger_events, trigger_debounce) = job
+                .trigger
+                .as_ref()
+                .map(|trigger| (trigger.events.clone(), trigger.debounce_seconds))
+                .unzip();
+            sqlx::query("INSERT INTO blueprint_connector_jobs(id,workspace_id,blueprint_id,blueprint_version,code,direction,extension_id,operation_id,input,context_id,input_file_id,interval_seconds,next_at,enabled,connection,trigger_events,trigger_debounce_seconds,trigger_watermark) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,CASE WHEN $12::integer IS NULL THEN NULL ELSE clock_timestamp()+($12*interval '1 second') END,$13,$14,$15,$16,CASE WHEN $15::text[] IS NULL THEN NULL ELSE $17::bigint END) ON CONFLICT(workspace_id,blueprint_id,code) WHERE code IS NOT NULL DO UPDATE SET blueprint_version=$4,direction=$6,extension_id=$7,operation_id=$8,input=$9,context_id=$10,input_file_id=$11,interval_seconds=$12,next_at=CASE WHEN $12::integer IS NULL THEN NULL ELSE clock_timestamp()+($12*interval '1 second') END,enabled=$13,connection=$14,trigger_events=$15,trigger_debounce_seconds=$16,trigger_watermark=CASE WHEN $15::text[] IS NULL THEN NULL ELSE COALESCE(blueprint_connector_jobs.trigger_watermark,$17::bigint) END,updated_at=clock_timestamp()")
                 .bind(Uuid::new_v4()).bind(ws).bind(blueprint_id).bind(version).bind(&job.code)
                 .bind(&job.direction).bind(&job.extension_id).bind(&job.operation_id).bind(input)
                 .bind(context_id).bind(file).bind(job.interval_seconds).bind(job.enabled)
+                .bind(&job.connection).bind(trigger_events).bind(trigger_debounce).bind(high_water)
                 .execute(&mut **tx).await?;
         }
         Ok(())
@@ -127,6 +209,23 @@ impl AttricatRepository {
     ) -> Result<Vec<BlueprintConnectorJob>, RepositoryError> {
         sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND blueprint_id=$2 AND code IS NOT NULL ORDER BY id"))
             .bind(self.extension_workspace()).bind(blueprint_id).fetch_all(&self.pool).await.map_err(Into::into)
+    }
+
+    /// The enabled export jobs of an extension.
+    pub async fn extension_export_connector_jobs(
+        &self,
+        extension_id: &str,
+    ) -> Result<Vec<BlueprintConnectorJob>, RepositoryError> {
+        Ok(sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND extension_id=$2 AND direction='export' AND enabled AND code IS NOT NULL ORDER BY id"))
+            .bind(self.extension_workspace()).bind(extension_id).fetch_all(&self.pool).await?)
+    }
+
+    pub async fn blueprint_connector_job(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<BlueprintConnectorJob>, RepositoryError> {
+        Ok(sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND id=$2 AND code IS NOT NULL"))
+            .bind(self.extension_workspace()).bind(id).fetch_optional(&self.pool).await?)
     }
 
     pub async fn blueprint_connector_jobs_page(
@@ -151,12 +250,45 @@ impl AttricatRepository {
         id: Uuid,
         key: &str,
     ) -> Result<Vec<Uuid>, RepositoryError> {
+        self.run_blueprint_connector_job_as(id, key, ConnectorRunMode::Incremental, None)
+            .await
+    }
+
+    /// Starts a resync of an export job: every published record, or only
+    /// `record_ids`. Its runs tell the component to skip records whose
+    /// stored content hash is unchanged rather than records already synced.
+    pub async fn resync_blueprint_connector_job(
+        &self,
+        id: Uuid,
+        key: &str,
+        record_ids: Option<Vec<Uuid>>,
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        self.run_blueprint_connector_job_as(id, key, ConnectorRunMode::Resync, record_ids)
+            .await
+    }
+
+    async fn run_blueprint_connector_job_as(
+        &self,
+        id: Uuid,
+        key: &str,
+        mode: ConnectorRunMode,
+        record_ids: Option<Vec<Uuid>>,
+    ) -> Result<Vec<Uuid>, RepositoryError> {
         if key.is_empty() || key.len() > MAX_RUN_KEY_BYTES || !key.is_ascii() {
             return Err(invalid("invalid run key"));
+        }
+        if record_ids
+            .as_ref()
+            .is_some_and(|ids| ids.is_empty() || ids.len() > MAX_CONNECTOR_RECORD_FILTER)
+        {
+            return Err(invalid("a run selects 1-10000 records"));
         }
         let job: BlueprintConnectorJob = sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND id=$2 AND enabled AND code IS NOT NULL"))
             .bind(self.extension_workspace()).bind(id).fetch_optional(&self.pool).await?
             .ok_or_else(|| RepositoryError::NotFound("blueprint connector job"))?;
+        if mode != ConnectorRunMode::Incremental && job.direction != "export" {
+            return Err(invalid("only export jobs can resync or be triggered"));
+        }
         let release = self
             .installed_extension(&job.extension_id)
             .await?
@@ -176,6 +308,14 @@ impl AttricatRepository {
                     .find(|op| op.id == job.operation_id)
             })
             .ok_or_else(|| invalid("connector operation is unavailable"))?;
+        if let Some(connection) = &job.connection {
+            let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3)")
+                .bind(self.extension_workspace()).bind(&job.extension_id).bind(connection)
+                .fetch_one(&self.pool).await?;
+            if !exists {
+                return Err(invalid("the job's connection does not exist"));
+            }
+        }
         let version: i64 = sqlx::query_scalar("SELECT max(version) FROM blueprints WHERE workspace_id=$1 AND id=$2 AND kind='record' AND status='published' AND deleted_at IS NULL")
             .bind(self.extension_workspace()).bind(job.blueprint_id).fetch_optional(&self.pool).await?
             .flatten().ok_or_else(|| invalid("blueprint is no longer published"))?;
@@ -197,6 +337,11 @@ impl AttricatRepository {
             }
             attricat_extension_manifest::validate_schema(&operation.request_schema, &input)
                 .map_err(|_| invalid("scoped input does not match connector schema"))?;
+            let prefix = match mode {
+                ConnectorRunMode::Incremental => "job",
+                ConnectorRunMode::Resync => "resync",
+                ConnectorRunMode::Triggered => "trigger",
+            };
             let run = self
                 .start_extension_operation_scoped(
                     StartExtensionOperation {
@@ -208,17 +353,20 @@ impl AttricatRepository {
                             .input_file_id
                             .map_or_else(|| json!({}), |file| json!({"input_file_id":file})),
                         destination_reference: json!({}),
-                        idempotency_key: format!("job:{id}:{key}:{context}"),
+                        idempotency_key: format!("{prefix}:{id}:{key}:{context}"),
                         schedule_id: None,
                         configuration_snapshot: None,
                     },
-                    Some((
-                        id,
-                        job.blueprint_id,
-                        context,
-                        version,
-                        (job.direction == "export").then_some(context),
-                    )),
+                    Some(ConnectorRunScope {
+                        job_id: id,
+                        blueprint_id: job.blueprint_id,
+                        context_id: context,
+                        blueprint_version: version,
+                        channel_id: (job.direction == "export").then_some(context),
+                        connection: job.connection.clone(),
+                        mode,
+                        record_ids: record_ids.clone(),
+                    }),
                 )
                 .await?;
             ids.push(run);
@@ -248,7 +396,70 @@ impl AttricatRepository {
             sqlx::query("UPDATE blueprint_connector_jobs SET next_at=$3,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND next_at=$4")
                 .bind(id).bind(self.extension_workspace()).bind(next).bind(tick).execute(&self.pool).await?;
         }
-        Ok(due.len())
+        let triggered = self.produce_triggered_blueprint_connector_jobs().await?;
+        Ok(due.len() + triggered)
+    }
+
+    /// Starts a run of every change-triggered export job whose blueprint's
+    /// records changed after its watermark, once the newest change is older
+    /// than the job's debounce. The run selects the changed records (or every
+    /// record when too many changed), and the watermark moves past them.
+    async fn produce_triggered_blueprint_connector_jobs(&self) -> Result<usize, RepositoryError> {
+        let jobs: Vec<(Uuid, Uuid, Vec<String>, i32, i64)> = sqlx::query_as("SELECT id,blueprint_id,trigger_events,trigger_debounce_seconds,trigger_watermark FROM blueprint_connector_jobs WHERE workspace_id=$1 AND enabled AND code IS NOT NULL AND trigger_events IS NOT NULL AND trigger_watermark IS NOT NULL ORDER BY id LIMIT 64")
+            .bind(self.extension_workspace()).fetch_all(&self.pool).await?;
+        let mut started = 0;
+        for (id, blueprint_id, events, debounce, watermark) in jobs {
+            let changes: Vec<(i64, Uuid, DateTime<Utc>)> = sqlx::query_as(
+                "SELECT e.sequence,e.aggregate_id,e.occurred_at FROM domain_events e \
+                 WHERE e.workspace_id=$1 AND e.aggregate_kind='record' AND e.sequence>$2 AND e.event_type=ANY($3) \
+                   AND EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=e.workspace_id AND r.id=e.aggregate_id AND r.blueprint_id=$4) \
+                 ORDER BY e.sequence LIMIT $5",
+            )
+            .bind(self.extension_workspace())
+            .bind(watermark)
+            .bind(&events)
+            .bind(blueprint_id)
+            .bind(MAX_CONNECTOR_RECORD_FILTER as i64 + 1)
+            .fetch_all(&self.pool)
+            .await?;
+            let Some(&(high_water, _, newest)) = changes.last() else {
+                continue;
+            };
+            if Utc::now() - newest < Duration::seconds(i64::from(debounce)) {
+                continue;
+            }
+            let mut record_ids: Vec<Uuid> = changes.iter().map(|change| change.1).collect();
+            record_ids.sort_unstable();
+            record_ids.dedup();
+            let filter = (changes.len() <= MAX_CONNECTOR_RECORD_FILTER).then_some(record_ids);
+            match self
+                .run_blueprint_connector_job_as(
+                    id,
+                    &high_water.to_string(),
+                    ConnectorRunMode::Triggered,
+                    filter,
+                )
+                .await
+            {
+                Ok(_) => started += 1,
+                Err(error) => {
+                    tracing::warn!(job=%id, %error, "triggered connector run could not be queued");
+                }
+            }
+            sqlx::query("UPDATE blueprint_connector_jobs SET trigger_watermark=$3,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND trigger_watermark=$4")
+                .bind(id).bind(self.extension_workspace()).bind(high_water).bind(watermark)
+                .execute(&self.pool).await?;
+        }
+        Ok(started)
+    }
+
+    /// The connector scope of a run as its component sees it.
+    pub async fn connector_run_details(
+        &self,
+        run_id: Uuid,
+    ) -> Result<Option<ConnectorRunDetails>, RepositoryError> {
+        Ok(sqlx::query_as("SELECT j.id AS job_id,j.code AS job_code,j.direction,r.connector_blueprint_id AS blueprint_id,r.connector_blueprint_version AS blueprint_version,r.connector_context_id AS context_id,r.connector_channel_id AS channel_id,r.connector_connection AS connection,COALESCE(r.connector_mode,'incremental') AS mode,cardinality(r.connector_record_ids)::bigint AS record_count,r.connector_record_ids AS record_ids FROM extension_operation_runs r JOIN blueprint_connector_jobs j ON j.id=r.connector_job_id AND j.workspace_id=r.workspace_id WHERE r.id=$1 AND r.workspace_id=$2")
+            .bind(run_id).bind(self.extension_workspace()).fetch_optional(&self.pool).await?)
     }
 
     pub async fn connector_run_scope(

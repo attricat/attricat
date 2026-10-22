@@ -131,6 +131,19 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
+    // A preview reads one record; the handler authorizes that record.
+    if path == "/extensions/{extension_id}/exports/{export_id}/preview" {
+        return Some(Policy {
+            permission: "records.read",
+            target: TargetKind::None,
+        });
+    }
+    if path == "/export-status" {
+        return Some(Policy {
+            permission: "data_health.read",
+            target: TargetKind::None,
+        });
+    }
     if path == "/blueprints/{blueprint_id}/connector-jobs"
         || path.starts_with("/blueprint-connector-jobs/")
         || path == "/extension-operation-runs"

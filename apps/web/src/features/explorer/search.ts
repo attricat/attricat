@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { exportStatuses } from '../extension-exports/constants';
 import { recordSearchFilterSchema } from '../records/schemas';
 import { maximumAttributeFilters, sortDirections } from './constants';
 import { recordIdsQuery } from './queryLanguage';
@@ -25,6 +26,14 @@ export const browseBySchema = z.union([
   z.string().trim().min(1),
   z.literal(false),
 ]);
+
+/** Records with one export status at one export extension's destination. */
+export const exportStatusFilterSchema = z.object({
+  extension: z.string().trim().min(1),
+  connection: z.string().trim().min(1).optional(),
+  status: z.enum(exportStatuses),
+});
+export type ExportStatusFilter = z.infer<typeof exportStatusFilterSchema>;
 
 export const explorerSearchSchema = z.object({
   savedView: z.uuid().optional().catch(undefined),
@@ -53,6 +62,7 @@ export const explorerSearchSchema = z.object({
     .optional()
     .catch(undefined),
   browseBy: browseBySchema.optional().catch(undefined),
+  exportStatus: exportStatusFilterSchema.optional().catch(undefined),
 });
 
 export type AttributeFilter = z.infer<typeof attributeFilterSearchSchema>;

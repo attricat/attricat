@@ -59,6 +59,8 @@ You can also start a filter from the table: open a cell's menu and choose **Filt
 
 Every active filter shows as a pill under the search box. All filters, facets, and the search query must match together.
 
+**Export status** appears when an extension exports records. It narrows results to records with one status, such as **Rejected**, at one destination. It needs the `data_health.read` permission.
+
 ## Relationship facets
 
 On wide screens, the **Browse by** panel next to the results lists the targets of one relationship attribute, with a count beside each. Click a target to keep only records linked to it, click it again or choose **All** to clear it. The choice shows as a filter pill, like any other filter.

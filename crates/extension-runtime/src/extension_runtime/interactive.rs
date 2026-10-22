@@ -1,4 +1,4 @@
-//! Run-bound host interfaces of `attricat:host@1.0.0`, for operation runs.
+//! Run-bound host interfaces of `attricat:host@1.1.0`, for operation runs.
 //!
 //! Artifact, transfer and administrative catalog calls apply to every run.
 //! Interactive runs are additionally confined to their frozen selection:
@@ -144,6 +144,20 @@ impl wit::attricat::Host for OperationState {
         }
         self.attricat_upsert_batch(request).await
     }
+
+    async fn page_v2(&mut self, request: String) -> Result<String, String> {
+        if load_scope(&self.repository, self.run_id).await?.is_some() {
+            return Err(SELECTION_SCOPE_ERROR.into());
+        }
+        self.attricat_page_v2(request).await
+    }
+
+    async fn withdrawn(&mut self, cursor: String, limit: u32) -> Result<String, String> {
+        if load_scope(&self.repository, self.run_id).await?.is_some() {
+            return Err(SELECTION_SCOPE_ERROR.into());
+        }
+        self.attricat_withdrawn(cursor, limit).await
+    }
 }
 
 impl wit::transfer::Host for OperationState {
@@ -153,6 +167,18 @@ impl wit::transfer::Host for OperationState {
 
     async fn deliver_output(&mut self, request: String) -> Result<String, String> {
         self.transfer_deliver_output(request).await
+    }
+
+    async fn fetch_input_v2(&mut self, request: String) -> Result<String, String> {
+        self.transfer_fetch_input_v2(request).await
+    }
+
+    async fn deliver_output_v2(&mut self, request: String) -> Result<String, String> {
+        self.transfer_deliver_output_v2(request).await
+    }
+
+    async fn open_record_file(&mut self, request: String) -> Result<String, String> {
+        self.transfer_open_record_file(request).await
     }
 }
 

@@ -3,11 +3,13 @@
 mod database;
 mod extension_fixtures;
 mod members;
+mod mock_tls;
 mod requests;
 
 pub use database::*;
 pub use extension_fixtures::*;
 pub use members::*;
+pub use mock_tls::*;
 pub use requests::*;
 
 use std::{net::SocketAddr, sync::Arc};

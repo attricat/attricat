@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
 
@@ -141,6 +142,10 @@ for (const [variable, secret] of Object.entries(retiredSecretVariables)) {
 env = setEnvValue(env, "ATTRICAT_SECRETS_DIR", secretsDir);
 if (!existsSync(secretPath("bootstrap_owner_password"))) {
   writeSecret("bootstrap_owner_password", "test");
+}
+// Encrypts extension connection credentials; a local key per worktree.
+if (!existsSync(secretPath("extension_credential_key"))) {
+  writeSecret("extension_credential_key", randomBytes(32).toString("base64"));
 }
 
 // SQLx tooling and the Rust tests read DATABASE_URL; the API reads the secret.

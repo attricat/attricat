@@ -130,6 +130,7 @@ Kontrybucja `dialog` wymaga pola `title`. Twoje akcje w wersji 2 otwierają ją 
 | `navigation` | `embedded` | | Kompaktowa ramka na pasku bocznym. |
 | `audit_event_panel` | `panel` | `client.audit_event_panel` | `event_id` otwartego zdarzenia audytu. |
 | `data_health_card` | `panel` | `client.data_health_card` | Brak. Karta na stronie Stan danych. |
+| `export_mapping` | `panel` | `client.export_mapping` | `export_id`. Wyświetlany w sekcji stanu eksportu na stronie zarządzania Twoim rozszerzeniem, raz dla każdego miejsca docelowego eksportu zadeklarowanego w wydaniu. Służy do edycji dużych mapowań miejsca docelowego przechowywanych w magazynie rozszerzenia, np. atrybutów na atrybuty typu produktu, przez Twoje polecenia serwerowe. |
 
 Każdy pozostały obiekt kontekstu zawiera `context_version: 1`.
 

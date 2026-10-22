@@ -648,6 +648,21 @@ input = { profile = { version = 1, columns = [{ header = "ID", attribute = "exte
 | `input_file_id` | UUID | | Tylko importy. Gotowy plik obszaru roboczego do zaimportowania. |
 | `interval_seconds` | liczba całkowita | Tylko ręcznie | Uruchamia zadanie co N sekund, od 60 do 2592000. |
 | `enabled` | wartość logiczna | `true` | Ustaw `false`, aby wstrzymać zadanie. |
+| `connection` | ciąg znaków | Domyślne miejsce docelowe | Tylko eksporty. [Połączenie](/pl/builders/extensions/#połączenia) rozszerzenia, do którego zadanie wysyła dane: od 1 do 128 liter ASCII, cyfr, `.`, `_` lub `-`. |
+| `trigger` | tabela | | Tylko eksporty. Uruchamia zadanie także wtedy, gdy rekordy się zmieniają: `{ events = [...], debounce_seconds = N }`. |
+
+`trigger.events` zawiera co najmniej jedno z: `record.created.v1`, `record.updated.v1`, `record.deleted.v1`, `record.published.v1`, `record.unpublished.v1`, `attribute_value.changed.v1` i `relationship.changed.v1`. `trigger.debounce_seconds` ma wartość od 1 do 3600: przebieg rusza, gdy od najnowszego pasującego zdarzenia rekordów schematu minie tyle sekund, i obejmuje tylko zmienione rekordy.
+
+```toml
+[[connector_jobs]]
+code = "shopify"
+direction = "export"
+extension_id = "acme.shopify"
+operation_id = "export"
+connection = "shop-eu"
+trigger = { events = ["record.updated.v1", "record.published.v1"], debounce_seconds = 30 }
+input = {}
+```
 
 Zadania są sprawdzane względem włączonego rozszerzenia podczas publikacji wersji; nieprawidłowe zadanie blokuje publikację. Zadanie usunięte w późniejszej wersji zostaje wyłączone, a jego historia uruchomień jest zachowywana. Zadanie eksportu uruchamia się raz dla każdego włączonego kanału eksportu i eksportuje tylko rekordy opublikowane w tym kanale. Zobacz [Operacje i konektory](/pl/extensions/operations/).
 

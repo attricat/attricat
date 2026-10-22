@@ -27,14 +27,14 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 | `records.publish` | Publikowanie rekordów w kanałach i wycofywanie ich publikacji. | ✓ | ✓ | | |
 | `contexts.read` | Konteksty i kanały eksportu. | ✓ | ✓ | ✓ | ✓ |
 | `contexts.write` | Tworzenie, zmienianie i usuwanie kontekstów; włączanie kanałów eksportu. | ✓ | ✓ | ✓ | |
-| `data_health.read` | Stan danych, przetwarzanie w tle, metryki i listy martwych wiadomości zdarzeń. | ✓ | ✓ | ✓ | ✓ |
+| `data_health.read` | Stan danych, przetwarzanie w tle, metryki i listy martwych wiadomości zdarzeń; liczby stanów eksportu i filtr **Stan eksportu** w przeglądarce rekordów. | ✓ | ✓ | ✓ | ✓ |
 | `agents.run` | Rozmowy z agentami i zatwierdzenia. | ✓ | ✓ | | |
 | `rules.read` | Reguły, uruchomienia i ustalenia. | ✓ | ✓ | | |
 | `rules.manage` | Tworzenie, publikowanie, włączanie i uruchamianie reguł; potwierdzanie ustaleń. | ✓ | ✓ | | |
 | `workflows.read` | Przepływy pracy i historia uruchomień. | ✓ | ✓ | | |
 | `workflows.manage` | Tworzenie, publikowanie, włączanie, uruchamianie i ponawianie przepływów pracy. | ✓ | ✓ | | |
-| `extensions.read` | Przeglądanie rejestrów rozszerzeń i zainstalowanych rozszerzeń. | ✓ | ✓ | | |
-| `extensions.manage` | Instalowanie, konfigurowanie, przyznawanie uprawnień, włączanie i usuwanie rozszerzeń; rejestry, układ, sekrety, operacje i zadania konektorów. | ✓ | ✓ | | |
+| `extensions.read` | Przeglądanie rejestrów rozszerzeń i zainstalowanych rozszerzeń wraz z ich stanem eksportu, połączeniami (bez sekretów) i limitami żądań. | ✓ | ✓ | | |
+| `extensions.manage` | Instalowanie, konfigurowanie, przyznawanie uprawnień, włączanie i usuwanie rozszerzeń; rejestry, układ, sekrety, operacje i zadania konektorów; połączenia, limity żądań, ponawianie eksportu i ponowna synchronizacja. | ✓ | ✓ | | |
 | `solution_packs.manage` | Sprawdzanie, planowanie i stosowanie pakietów rozwiązań; zasoby prezentacyjne. | ✓ | ✓ | | |
 | `files.hold` | Zakładanie i zwalnianie jawnych blokad retencji plików. | ✓ | ✓ | | |
 | `records.unlock` | Odblokowywanie rekordu, którego status go blokuje, przez zmianę na dowolny status, poza przejściami schematu. | ✓ | ✓ | | |
