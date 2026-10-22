@@ -887,11 +887,12 @@ input = {{fail = "{fail}"}}
             products.0,
             CreateBlueprint {
                 definition: product_blueprint(&format!(
-                    "{}{}{}{}",
+                    "{}{}{}{}{}",
                     job_for("retry"),
                     job_for("reject"),
                     job_for("prepare"),
-                    job_for("fault")
+                    job_for("fault"),
+                    job_for("retry_always")
                 )),
             },
         )
@@ -918,6 +919,44 @@ input = {{fail = "{fail}"}}
         .unwrap();
     drain_operations(&repository, &pool, store.clone()).await;
     assert_eq!(run_status(&pool, retried[0]).await.0, "completed");
+
+    // A retry delay defers the batch without spending the failure budget,
+    // but only so many times in a row.
+    let throttled = repository
+        .run_blueprint_connector_job(job("fail_retry_always"), "retry_always")
+        .await
+        .unwrap();
+    drain_extension_operations(&repository, store.clone()).await;
+    let deferrals = || async {
+        sqlx::query_as::<_, (i32, Option<String>)>(
+            "SELECT deferrals,last_error_code FROM extension_operation_runs WHERE id=$1",
+        )
+        .bind(throttled[0])
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    };
+    let (deferred, code) = deferrals().await;
+    assert!(deferred >= 1, "{deferred}");
+    assert_eq!(code.as_deref(), Some("retry"));
+    sqlx::query("UPDATE extension_operation_runs SET deferrals=100 WHERE id=$1")
+        .bind(throttled[0])
+        .execute(&pool)
+        .await
+        .unwrap();
+    drain_extension_operations(&repository, store.clone()).await;
+    assert_eq!(deferrals().await, (100, Some("operation".to_owned())));
+    // Settle it so later drains do not wait on its backoff.
+    sqlx::query("UPDATE tasks SET status='dead_letter',failed_at=now() WHERE subject_id=$1")
+        .bind(throttled[0])
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE extension_operation_runs SET status='dead_letter' WHERE id=$1")
+        .bind(throttled[0])
+        .execute(&pool)
+        .await
+        .unwrap();
 
     let rejected = repository
         .run_blueprint_connector_job(job("fail_reject"), "reject")

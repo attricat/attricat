@@ -459,7 +459,7 @@ impl AttricatRepository {
             .ensure_task_fence(&mut transaction)
             .await?;
         let changed: Option<String> = sqlx::query_scalar(
-            "UPDATE extension_operation_runs SET checkpoint=$3,progress=$4,lifecycle_started=true,batch_number=batch_number+1,status=CASE WHEN cancellation_requested AND cancellation_delivered THEN 'cancelled' WHEN cancellation_requested THEN 'pending' WHEN $5 THEN 'completed' ELSE 'pending' END,completed_at=CASE WHEN $5 AND NOT cancellation_requested THEN clock_timestamp() ELSE completed_at END,cancelled_at=CASE WHEN cancellation_requested AND cancellation_delivered THEN clock_timestamp() ELSE cancelled_at END,resume_at=$7,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$6 RETURNING status",
+            "UPDATE extension_operation_runs SET checkpoint=$3,progress=$4,lifecycle_started=true,batch_number=batch_number+1,deferrals=0,status=CASE WHEN cancellation_requested AND cancellation_delivered THEN 'cancelled' WHEN cancellation_requested THEN 'pending' WHEN $5 THEN 'completed' ELSE 'pending' END,completed_at=CASE WHEN $5 AND NOT cancellation_requested THEN clock_timestamp() ELSE completed_at END,cancelled_at=CASE WHEN cancellation_requested AND cancellation_delivered THEN clock_timestamp() ELSE cancelled_at END,resume_at=$7,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$6 RETURNING status",
         )
         .bind(run.id)
         .bind(self.extension_workspace())
@@ -595,22 +595,36 @@ impl AttricatRepository {
     /// Re-runs the same batch at `at` without spending the failure budget,
     /// for a batch that asked to wait (a typed retry with an explicit delay,
     /// such as a destination's 429). The run and its task are released in
-    /// one transaction.
+    /// one transaction. A run may wait at most `limit` times in a row
+    /// without completing a batch; past that nothing changes and this
+    /// returns false, so the caller spends the failure budget instead.
     pub async fn defer_extension_operation_task(
         &self,
         task: &ClaimedTask,
         message: &str,
         at: chrono::DateTime<Utc>,
-    ) -> Result<(), RepositoryError> {
+        limit: i32,
+    ) -> Result<bool, RepositoryError> {
         let message = bounded_message(message);
         let mut transaction = self.pool.begin().await?;
         self.for_extension_operation_task(task)
             .ensure_task_fence(&mut transaction)
             .await?;
+        let deferrals: Option<i32> = sqlx::query_scalar("SELECT deferrals FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3 FOR UPDATE")
+            .bind(task.subject_id).bind(self.extension_workspace()).bind(task.lease_token)
+            .fetch_optional(&mut *transaction).await?;
+        let Some(deferrals) = deferrals else {
+            return Err(RepositoryError::InvalidExtension(
+                "operation run lost its lease".into(),
+            ));
+        };
+        if deferrals >= limit {
+            return Ok(false);
+        }
         let task_changed = sqlx::query("UPDATE tasks SET status='queued',available_at=$4,lease_owner=NULL,lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3")
             .bind(task.id).bind(&task.lease_owner).bind(task.lease_token).bind(at)
             .execute(&mut *transaction).await?.rows_affected();
-        let run_changed = sqlx::query("UPDATE extension_operation_runs SET status='pending',last_error_code='retry',last_error_message=$4,resume_at=$5,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3")
+        let run_changed = sqlx::query("UPDATE extension_operation_runs SET status='pending',deferrals=deferrals+1,last_error_code='retry',last_error_message=$4,resume_at=$5,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3")
             .bind(task.subject_id).bind(self.extension_workspace()).bind(task.lease_token)
             .bind(&message).bind(at)
             .execute(&mut *transaction).await?.rows_affected();
@@ -620,7 +634,7 @@ impl AttricatRepository {
             ));
         }
         transaction.commit().await?;
-        Ok(())
+        Ok(true)
     }
 
     /// Dead-letters a run whose batch reported a permanent (rejected)

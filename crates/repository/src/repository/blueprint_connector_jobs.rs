@@ -192,7 +192,9 @@ impl AttricatRepository {
         sqlx::query("UPDATE blueprint_connector_jobs SET enabled=false,updated_at=clock_timestamp() WHERE workspace_id=$1 AND blueprint_id=$2")
             .bind(ws).bind(blueprint_id).execute(&mut **tx).await?;
         // A change trigger starts watching at the current end of the event
-        // log, so publishing a job never replays history.
+        // log, so publishing a job never replays history. The outbox
+        // boundary keeps an uncommitted event from landing below it.
+        super::domain_events::lock_outbox_boundary(tx, ws).await?;
         let high_water: i64 = sqlx::query_scalar(
             "SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1",
         )

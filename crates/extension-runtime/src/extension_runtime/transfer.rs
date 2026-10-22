@@ -258,32 +258,14 @@ impl OperationState {
         }
         let mut sent = None;
         if let Some(connection) = connection {
-            host.require("connections.use")
-                .map_err(|error| error.to_string())?;
-            let (token, kind) =
-                connections::access_token(&host.repository, &host.installation, connection)
-                    .await
-                    .map_err(|error| match error {
-                        connections::TokenError::Temporary(message) => {
-                            TargetRefusal::ConnectionUnavailable(message)
-                        }
-                        error => TargetRefusal::Error(error.to_string()),
-                    })?;
-            if !kind.api_host_permissions.contains(&rule.id) {
-                return Err(
-                    "this connection's token may not be sent to that host permission".into(),
-                );
-            }
-            let (name, prefix) = kind.token_header.as_ref().map_or_else(
-                || ("authorization".to_owned(), "Bearer ".to_owned()),
-                |header| (header.name.to_ascii_lowercase(), header.prefix.clone()),
-            );
-            headers.insert(
-                reqwest::header::HeaderName::from_bytes(name.as_bytes())
-                    .map_err(|_| "invalid token header")?,
-                reqwest::header::HeaderValue::from_str(&(prefix + &token))
-                    .map_err(|_| "invalid token header value")?,
-            );
+            let token = connections::insert_access_token(host, connection, &rule.id, &mut headers)
+                .await
+                .map_err(|error| match error {
+                    connections::TokenError::Temporary(message) => {
+                        TargetRefusal::ConnectionUnavailable(message)
+                    }
+                    error => TargetRefusal::Error(error.to_string()),
+                })?;
             sent = Some((connection.to_owned(), token));
         }
         // The budget is spent only by a transfer that is about to be sent,
@@ -867,31 +849,7 @@ impl OperationState {
         {
             return Err("the record does not reference that file".into());
         }
-        // A connector run opens only files of records its catalog serves:
-        // its selection and, for a channel export, published records.
-        if self
-            .repository
-            .connector_run_scope(self.run_id)
-            .await
-            .map_err(|error| error.to_string())?
-            .is_some()
-            && !self
-                .repository
-                .connector_run_covers_record(self.run_id, input.record_id)
-                .await
-                .map_err(|error| error.to_string())?
-        {
-            return Err("the record is outside the run's scope".into());
-        }
-        if let Some(scope) = self
-            .repository
-            .interactive_run_scope(self.run_id)
-            .await
-            .map_err(|error| error.to_string())?
-            && !scope.record_ids.contains(&input.record_id)
-        {
-            return Err("the record is outside the run selection".into());
-        }
+        ensure_run_covers_record(&self.repository, self.run_id, input.record_id).await?;
         let file = self
             .repository
             .file_object(input.file_id, input.variant.as_deref())
@@ -973,6 +931,37 @@ fn validate_range(
     }
     if offset > 0 && etag.is_none() {
         return Err("resumed input requires an ETag".into());
+    }
+    Ok(())
+}
+
+/// Refuses a record outside a run's scope: a connector run serves only its
+/// selection and, for a channel export, published records; an interactive
+/// run only the records it was started on.
+pub(super) async fn ensure_run_covers_record(
+    repository: &AttricatRepository,
+    run_id: Uuid,
+    record_id: Uuid,
+) -> Result<(), String> {
+    if repository
+        .connector_run_scope(run_id)
+        .await
+        .map_err(|error| error.to_string())?
+        .is_some()
+        && !repository
+            .connector_run_covers_record(run_id, record_id)
+            .await
+            .map_err(|error| error.to_string())?
+    {
+        return Err("the record is outside the run's scope".into());
+    }
+    if let Some(scope) = repository
+        .interactive_run_scope(run_id)
+        .await
+        .map_err(|error| error.to_string())?
+        && !scope.record_ids.contains(&record_id)
+    {
+        return Err("the record is outside the run selection".into());
     }
     Ok(())
 }

@@ -93,6 +93,9 @@ const WASM_EVENT_CONSUMER: &str = "attricat.extensions.wasm";
 /// How long a paused operation run waits before checking whether its pinned
 /// release is authorized again.
 const PAUSED_OPERATION_RECHECK_DELAY: chrono::TimeDelta = chrono::TimeDelta::seconds(30);
+/// How many times in a row a run's batch may ask to wait with a typed retry
+/// delay before further waits spend the run's failure budget.
+const MAX_RETRY_DEFERRALS: i32 = 100;
 /// Headers a component may never set on an outbound request.
 const RESERVED_REQUEST_HEADERS: [&str; 4] =
     ["host", "content-length", "connection", "transfer-encoding"];
@@ -558,6 +561,9 @@ struct HostState {
     /// The invocation that holds the export leases it takes, so its own
     /// rejection of a record settles the revision it leased.
     lease_holder: Option<String>,
+    /// The operation run of a batch invocation, whose scope bounds the
+    /// records it may reach.
+    run_id: Option<Uuid>,
 }
 
 /// The export lease holder of an operation run.
@@ -583,6 +589,7 @@ impl HostState {
                 .memory_size(max_memory_bytes)
                 .build(),
             lease_holder: None,
+            run_id: None,
         }
     }
 
@@ -1602,28 +1609,26 @@ impl ExtensionOperationTaskHandler {
     ) -> Result<TaskOutcome, TaskHandlerError> {
         let outcome = match error {
             // A retry with an explicit delay is the batch asking to wait,
-            // like a deferral, so it does not spend the failure budget.
-            BatchError::Failure(InvocationFailure::Retry {
-                message,
-                after: Some(after),
-            }) => {
-                let at = chrono::Utc::now()
-                    + chrono::TimeDelta::from_std(after).unwrap_or(chrono::TimeDelta::zero());
-                repository
-                    .defer_extension_operation_task(task, &message, at)
-                    .await
-                    .map_err(operation_task_error)?;
-                "deferred"
-            }
+            // like a deferral, so it does not spend the failure budget until
+            // the run has waited `MAX_RETRY_DEFERRALS` times in a row.
             BatchError::Failure(InvocationFailure::Retry { message, after }) => {
                 let delay = after.unwrap_or_else(|| retry_backoff(task.failures.max(0) as u32 + 1));
                 let at = chrono::Utc::now()
                     + chrono::TimeDelta::from_std(delay).unwrap_or(chrono::TimeDelta::zero());
-                let terminal = repository
-                    .retry_extension_operation_task(task, &message, at)
-                    .await
-                    .map_err(operation_task_error)?;
-                if terminal { "failed" } else { "retrying" }
+                let deferred = after.is_some()
+                    && repository
+                        .defer_extension_operation_task(task, &message, at, MAX_RETRY_DEFERRALS)
+                        .await
+                        .map_err(operation_task_error)?;
+                if deferred {
+                    "deferred"
+                } else {
+                    let terminal = repository
+                        .retry_extension_operation_task(task, &message, at)
+                        .await
+                        .map_err(operation_task_error)?;
+                    if terminal { "failed" } else { "retrying" }
+                }
             }
             BatchError::Failure(InvocationFailure::Rejected(rejection)) => {
                 let exports = repository
@@ -1644,36 +1649,28 @@ impl ExtensionOperationTaskHandler {
                         .await
                         .map_err(operation_task_error)?;
                     // A connector run's rejection belongs to the run's
-                    // connection unless it names another; any other run's to
-                    // the record's one destination, which is not guessed.
+                    // connection unless it names another; any other run's
+                    // without one to the default destination.
                     let connection = match rejection.connection {
-                        Some(connection) => Some(Some(connection)),
-                        None => match repository
+                        Some(connection) => Some(connection),
+                        None => repository
                             .connector_run_details(run.id)
                             .await
                             .map_err(operation_task_error)?
-                        {
-                            Some(details) => Some(details.connection),
-                            None => repository
-                                .rejection_destination(&run.extension_id, record_id)
-                                .await
-                                .map_err(operation_task_error)?,
-                        },
+                            .and_then(|details| details.connection),
                     };
-                    if let Some(connection) = connection {
-                        repository
-                            .record_export_rejection(
-                                &run.extension_id,
-                                connection.as_deref(),
-                                record_id,
-                                Some(revision),
-                                Some(&run_lease_holder(run.id)),
-                                &rejection.code,
-                                &rejection.message,
-                            )
-                            .await
-                            .map_err(operation_task_error)?;
-                    }
+                    repository
+                        .record_export_rejection(
+                            &run.extension_id,
+                            connection.as_deref(),
+                            record_id,
+                            Some(revision),
+                            Some(&run_lease_holder(run.id)),
+                            &rejection.code,
+                            &rejection.message,
+                        )
+                        .await
+                        .map_err(operation_task_error)?;
                 }
                 repository
                     .reject_extension_operation_task(
@@ -1976,19 +1973,12 @@ impl WasmExtensionTaskHandler {
                         ..record("rejected", attempt, None)
                     })
                     .await?;
+                // A rejection that names no connection belongs to the
+                // default destination.
                 if let Some(record_id) = rejection.record_id
                     && exports_mappings(installation)
-                    // A rejection that names no connection goes to the record's
-                    // one destination; an ambiguous one is not guessed.
-                    && let Some(connection) = match rejection.connection {
-                        Some(connection) => Some(Some(connection)),
-                        None => {
-                            repository
-                                .rejection_destination(&installation.extension_id, record_id)
-                                .await?
-                        }
-                    }
                 {
+                    let connection = rejection.connection;
                     // The delivery's revision is the event record's; another
                     // record's rejection concerns that record's revision when
                     // the event happened.

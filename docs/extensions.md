@@ -635,10 +635,8 @@ and message. When the rejecting run or handler delivery holds the record's
 lease, the rejection settles the revision it leased and ends that lease; while
 another one holds it, that push settles the record instead. A rejection of a
 revision older than the mapping's is ignored. A connector run's rejection
-without a `connection` belongs to the run's connection. Any other rejection
-without one belongs to the record's only mapping of the extension, else to the
-extension's only connection, else to its default destination when it has no
-connections; when that is ambiguous no export status is set. A handler's
+without a `connection` belongs to the run's connection; any other rejection
+without one belongs to the extension's default destination. A handler's
 rejection of a record other than the event's is settled at that record's
 revision when the event happened. Handler outcomes are stored per
 event and handler in `extension_handler_attempts`: handlers that already
@@ -837,8 +835,9 @@ interactive runs to their selection.
 issues a public, unguessable link to a record's file for destinations that
 fetch media themselves, as Amazon and Allegro do, hours after a listing is
 submitted. It needs `attricat.files.public_links` and `attricat.read`, and the
-deployment's `EXTENSION_PUBLIC_FILE_BASE_URL`. Only the token's SHA-256 is
-stored. `GET /api/public/extension-files/{token}` serves the file without a
+deployment's `EXTENSION_PUBLIC_FILE_BASE_URL`. Inside an operation run it
+links only records in the run's scope, as `open-record-file` does. Only the
+token's SHA-256 is stored. `GET /api/public/extension-files/{token}` serves the file without a
 session while the link is unexpired, the extension is enabled with the
 capability, and the record the link was issued for still references the file.
 Deleting the record or replacing the file stops the link at once; disabling,

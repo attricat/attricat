@@ -173,6 +173,15 @@ pub struct ExportMappingUpdate {
 }
 
 /// Counts of one connection's statuses.
+/// The kind and display name of a connection an export status names.
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct ExportConnectionLabel {
+    pub extension_id: String,
+    pub connection: String,
+    pub kind: String,
+    pub display_name: String,
+}
+
 #[derive(Clone, Debug, FromRow, Serialize)]
 pub struct ExportStatusCount {
     pub extension_id: String,
@@ -686,34 +695,6 @@ impl AttricatRepository {
         }
     }
 
-    /// The destination a rejection that names no connection belongs to: the
-    /// record's only mapping of the extension, else the extension's only
-    /// connection, else its default destination when it has no connections.
-    /// `None` when that is ambiguous, so no destination is guessed.
-    pub async fn rejection_destination(
-        &self,
-        extension_id: &str,
-        record_id: Uuid,
-    ) -> Result<Option<Option<String>>, RepositoryError> {
-        let mapped: Vec<Option<String>> = sqlx::query_scalar("SELECT connection FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND record_id=$3 LIMIT 2")
-            .bind(self.extension_workspace()).bind(extension_id).bind(record_id)
-            .fetch_all(&self.pool).await?;
-        if let [connection] = mapped.as_slice() {
-            return Ok(Some(connection.clone()));
-        }
-        if mapped.len() > 1 {
-            return Ok(None);
-        }
-        let connections: Vec<String> = sqlx::query_scalar("SELECT connection FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 LIMIT 2")
-            .bind(self.extension_workspace()).bind(extension_id)
-            .fetch_all(&self.pool).await?;
-        Ok(match connections.as_slice() {
-            [] => Some(None),
-            [connection] => Some(Some(connection.clone())),
-            _ => None,
-        })
-    }
-
     // ---- management -------------------------------------------------------
 
     /// Every extension's mapping of one record.
@@ -722,6 +703,16 @@ impl AttricatRepository {
         record_id: Uuid,
     ) -> Result<Vec<ExportMapping>, RepositoryError> {
         Ok(sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND record_id=$2 ORDER BY extension_id,connection NULLS FIRST"))
+            .bind(self.extension_workspace()).bind(record_id)
+            .fetch_all(&self.pool).await?)
+    }
+
+    /// The connections the record's export statuses name.
+    pub async fn export_connection_labels_for_record(
+        &self,
+        record_id: Uuid,
+    ) -> Result<Vec<ExportConnectionLabel>, RepositoryError> {
+        Ok(sqlx::query_as("SELECT c.extension_id,c.connection,c.kind,c.display_name FROM extension_export_mappings m JOIN extension_connections c ON c.workspace_id=m.workspace_id AND c.extension_id=m.extension_id AND c.connection=m.connection WHERE m.workspace_id=$1 AND m.record_id=$2 ORDER BY c.extension_id,c.connection")
             .bind(self.extension_workspace()).bind(record_id)
             .fetch_all(&self.pool).await?)
     }

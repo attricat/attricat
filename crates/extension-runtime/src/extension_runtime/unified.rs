@@ -378,6 +378,7 @@ impl ExtensionRuntime {
             self.config.max_memory_bytes,
         );
         host.lease_holder = lease_holder;
+        host.run_id = operation.as_ref().map(|operation| operation.run_id);
         let state = UnifiedState { host, operation };
         let mut store = Store::new(&self.engine, state);
         store.limiter(|state| &mut state.host.limits);

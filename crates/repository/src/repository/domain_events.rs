@@ -156,7 +156,7 @@ impl From<EventDeliveryRow> for EventDelivery {
     }
 }
 
-async fn lock_outbox_boundary(
+pub(crate) async fn lock_outbox_boundary(
     transaction: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
 ) -> Result<(), RepositoryError> {

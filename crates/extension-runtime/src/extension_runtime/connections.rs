@@ -83,6 +83,36 @@ fn still_valid(
     (expires_at - skew > now).then_some(token)
 }
 
+/// Sets `connection`'s access token on a request admitted by host-permission
+/// rule `rule_id`, in the header its kind names, and returns the token sent.
+/// A kind's token goes only to the host permissions it lists.
+pub(super) async fn insert_access_token(
+    host: &HostState,
+    connection: &str,
+    rule_id: &str,
+    headers: &mut reqwest::header::HeaderMap,
+) -> Result<String, TokenError> {
+    host.require("connections.use")
+        .map_err(|error| TokenError::Invalid(error.to_string()))?;
+    let (token, kind) = access_token(&host.repository, &host.installation, connection).await?;
+    if !kind.api_host_permissions.iter().any(|id| id == rule_id) {
+        return Err(TokenError::Invalid(
+            "this connection's token may not be sent to that host permission".into(),
+        ));
+    }
+    let (name, prefix) = kind.token_header.as_ref().map_or_else(
+        || ("authorization".to_owned(), "Bearer ".to_owned()),
+        |header| (header.name.to_ascii_lowercase(), header.prefix.clone()),
+    );
+    headers.insert(
+        reqwest::header::HeaderName::from_bytes(name.as_bytes())
+            .map_err(|_| TokenError::Invalid("invalid token header".into()))?,
+        reqwest::header::HeaderValue::from_str(&(prefix + &token))
+            .map_err(|_| TokenError::Invalid("token cannot be used as a header".into()))?,
+    );
+    Ok(token)
+}
+
 /// A valid access token of `connection`, refreshed when it is missing or
 /// about to expire.
 pub async fn access_token(

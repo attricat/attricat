@@ -56,17 +56,22 @@ const exportRows = (
     const candidates = destinations.filter(
       (destination) => destination.extension_id === mapping.extension_id,
     );
+    // A connection's mapping belongs only to an export of its kind; the
+    // default destination's to an export without one, else any export.
+    const destination =
+      mapping.connection === null
+        ? (candidates.find(
+            (destination) => destination.connection_kind === null,
+          ) ?? candidates[0])
+        : candidates.find(
+            (destination) =>
+              connection !== undefined &&
+              destination.connection_kind === connection.kind,
+          );
     return {
-      key: `${mapping.extension_id}:${mapping.connection ?? ''}`,
+      key: `mapping:${mapping.extension_id}:${mapping.connection ?? ''}`,
       connection,
-      destination:
-        candidates.find(
-          (destination) => destination.connection_kind === connection?.kind,
-        ) ??
-        candidates.find(
-          (destination) => destination.connection_kind === null,
-        ) ??
-        candidates[0],
+      destination,
       extensionId: mapping.extension_id,
       mapping,
     };
@@ -81,7 +86,7 @@ const exportRows = (
         ),
     )
     .map((destination) => ({
-      key: `${destination.extension_id}:${destination.export_id}`,
+      key: `export:${destination.extension_id}:${destination.export_id}`,
       connection: undefined,
       destination,
       extensionId: destination.extension_id,

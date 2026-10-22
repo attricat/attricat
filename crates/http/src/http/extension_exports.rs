@@ -25,10 +25,11 @@ use crate::{
         MAX_RATE_LIMIT_REQUESTS, MAX_RATE_LIMIT_SECONDS, Manifest, RateLimit, validate_schema,
     },
     repository::{
-        AttricatRepository, EXPORT_STATUSES, ExportDestinationDescriptor, ExportMapping,
-        ExportRetrySelection, ExportStatusCount, ExtensionConnection, ExtensionConnectionPatch,
-        ExtensionRuntimeInstallation, HandlerFailure, MAX_CONNECTOR_RECORD_FILTER,
-        MAX_EXPORT_MAPPING_PAGE, NewExtensionConnection, RepositoryError, valid_connection_key,
+        AttricatRepository, EXPORT_STATUSES, ExportConnectionLabel, ExportDestinationDescriptor,
+        ExportMapping, ExportRetrySelection, ExportStatusCount, ExtensionConnection,
+        ExtensionConnectionPatch, ExtensionRuntimeInstallation, HandlerFailure,
+        MAX_CONNECTOR_RECORD_FILTER, MAX_EXPORT_MAPPING_PAGE, NewExtensionConnection,
+        RepositoryError, valid_connection_key,
     },
 };
 
@@ -73,15 +74,7 @@ pub(super) struct RecordExportStatus {
     destinations: Vec<ExportDestinationDescriptor>,
     /// The kind and display name of each connection a status names, so a
     /// status can be matched with its destination.
-    connections: Vec<ConnectionLabel>,
-}
-
-#[derive(Serialize)]
-pub(super) struct ConnectionLabel {
-    extension_id: String,
-    connection: String,
-    kind: String,
-    display_name: String,
+    connections: Vec<ExportConnectionLabel>,
 }
 
 /// Every extension's export status of one record, with the destinations of
@@ -91,34 +84,12 @@ pub(super) async fn record_export_status(
     ApiPath(record_id): ApiPath<Uuid>,
 ) -> Result<Json<RecordExportStatus>, ApiError> {
     let statuses = repository.export_mappings_for_record(record_id).await?;
-    // One connection listing per extension that has a connection status.
-    let mut extensions: Vec<&str> = statuses
-        .iter()
-        .filter(|mapping| mapping.connection.is_some())
-        .map(|mapping| mapping.extension_id.as_str())
-        .collect();
-    extensions.sort_unstable();
-    extensions.dedup();
-    let mut connections: Vec<ConnectionLabel> = Vec::new();
-    for extension_id in extensions {
-        for found in repository.list_extension_connections(extension_id).await? {
-            if statuses.iter().any(|mapping| {
-                mapping.extension_id == found.extension_id
-                    && mapping.connection.as_deref() == Some(found.connection.as_str())
-            }) {
-                connections.push(ConnectionLabel {
-                    extension_id: found.extension_id,
-                    connection: found.connection,
-                    kind: found.kind,
-                    display_name: found.display_name,
-                });
-            }
-        }
-    }
     Ok(Json(RecordExportStatus {
         statuses,
         destinations: repository.enabled_export_destinations().await?,
-        connections,
+        connections: repository
+            .export_connection_labels_for_record(record_id)
+            .await?,
     }))
 }
 

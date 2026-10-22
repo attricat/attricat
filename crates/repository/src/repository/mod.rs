@@ -198,9 +198,10 @@ pub use extension_connector_pages::{
     ConnectorPageV2Request, MAX_EXPANDED_RELATIONSHIPS, MAX_WITHDRAWN_PAGE,
 };
 pub use extension_export_state::{
-    EXPORT_STATUSES, ExportBegin, ExportMapping, ExportMappingUpdate, ExportRetrySelection,
-    ExportStatusCount, HandlerAttempt, HandlerAttemptOutcome, HandlerFailure, MAX_EXPORT_LEASE,
-    MAX_EXPORT_MAPPING_PAGE, MAX_EXPORT_RETRY_RECORDS, MappingKey, valid_connection_key,
+    EXPORT_STATUSES, ExportBegin, ExportConnectionLabel, ExportMapping, ExportMappingUpdate,
+    ExportRetrySelection, ExportStatusCount, HandlerAttempt, HandlerAttemptOutcome, HandlerFailure,
+    MAX_EXPORT_LEASE, MAX_EXPORT_MAPPING_PAGE, MAX_EXPORT_RETRY_RECORDS, MappingKey,
+    valid_connection_key,
 };
 pub use extension_interactive_operations::{
     INITIATOR_ACCESS_REVOKED, InteractiveRun, InteractiveRunArtifact, InteractiveRunFailure,

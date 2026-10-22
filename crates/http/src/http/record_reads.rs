@@ -12,8 +12,9 @@ use crate::{
         SearchRecordsRequest, SearchResultVersionScope,
     },
     repository::{
-        RecordRelationshipFilter, RecordSearchFilter, RecordSearchSort, RelationshipFacetHop,
-        RepositoryError, SearchContext, decode_search_cursor,
+        EXPORT_STATUSES, RecordRelationshipFilter, RecordSearchFilter, RecordSearchSort,
+        RelationshipFacetHop, RepositoryError, SearchContext, decode_search_cursor,
+        valid_connection_key,
     },
 };
 use attricat_validation::saved_search;
@@ -32,10 +33,6 @@ use uuid::Uuid;
 
 const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
 const MAX_SEARCH_FILTERS: usize = 20;
-/// The most records of a blueprint an export status filter may match; the
-/// Explorer pages through them like any other candidate set. A larger match
-/// is refused rather than cut.
-const MAX_EXPORT_STATUS_MATCHES: i64 = 50_000;
 /// Relationship hops a filter, sort or relationship path may traverse.
 const MAX_RELATIONSHIP_HOPS: usize = 3;
 
@@ -294,26 +291,19 @@ pub(super) async fn search_record_previews(
             .await?;
         matching = Some(intersect_record_ids(matching, filtered));
     }
+    // The export status filter is a predicate of the page query, so it never
+    // materializes the records it matches.
     if let Some(export) = &input.export_status {
-        let filtered = repository
-            .export_status_record_ids(
-                &export.extension_id,
-                export.connection.as_deref(),
-                &export.status,
-                current.blueprint.id,
-                MAX_EXPORT_STATUS_MATCHES,
-            )
-            .instrument(tracing::info_span!(
-                "sql.operation",
-                label = "export-status-filter"
-            ))
-            .await?
-            .ok_or_else(|| {
-                ApiError::invalid_input(format!(
-                    "more than {MAX_EXPORT_STATUS_MATCHES} records have this export status; retry or resync them first"
-                ))
-            })?;
-        matching = Some(intersect_record_ids(matching, filtered));
+        if !EXPORT_STATUSES.contains(&export.status.as_str()) {
+            return Err(ApiError::invalid_input("unknown export status".to_owned()));
+        }
+        if export
+            .connection
+            .as_deref()
+            .is_some_and(|connection| !valid_connection_key(connection))
+        {
+            return Err(ApiError::invalid_input("invalid connection key".to_owned()));
+        }
     }
     if !relationship_filters.is_empty() {
         let filtered = repository
@@ -372,6 +362,7 @@ pub(super) async fn search_record_previews(
             matching.as_deref(),
             &input.system_tags,
             input.outdated,
+            input.export_status.as_ref(),
             current.blueprint.version,
             include_total.then_some(SEARCH_TOTAL_COUNT_CAP + 1),
         )
@@ -449,6 +440,7 @@ pub(super) async fn search_record_previews(
                         matching.as_deref(),
                         &input.system_tags,
                         input.outdated,
+                        input.export_status.as_ref(),
                         current.blueprint.version,
                         sort,
                     )
@@ -466,6 +458,7 @@ pub(super) async fn search_record_previews(
                         matching.as_deref(),
                         &input.system_tags,
                         input.outdated,
+                        input.export_status.as_ref(),
                         current.blueprint.version,
                     )
                     .instrument(tracing::info_span!("sql.operation", label = "records-page"))
@@ -486,6 +479,7 @@ pub(super) async fn search_record_previews(
                 None,
                 &[],
                 true,
+                None,
                 current.blueprint.version,
                 SEARCH_TOTAL_COUNT_CAP + 1,
             )

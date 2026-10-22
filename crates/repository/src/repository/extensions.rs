@@ -1629,7 +1629,9 @@ impl AttricatRepository {
         }
         Ok(())
     }
-    pub(crate) fn extension_workspace(&self) -> Uuid {
+
+    /// The workspace this repository is scoped to.
+    pub fn extension_workspace(&self) -> Uuid {
         self.workspace_id.0
     }
 
@@ -1701,11 +1703,6 @@ impl AttricatRepository {
             }
         }
         Ok(destinations)
-    }
-
-    /// The workspace this repository is scoped to.
-    pub fn scoped_workspace_id(&self) -> Uuid {
-        self.workspace_id.0
     }
 
     /// Prevent lifecycle changes that would leave another enabled installation

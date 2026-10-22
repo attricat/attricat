@@ -133,8 +133,11 @@ CREATE TABLE extension_host_permission_budgets (
     PRIMARY KEY (workspace_id, extension_id, host_permission_id)
 );
 
--- A deferred batch's resumption time, for operators.
-ALTER TABLE extension_operation_runs ADD COLUMN resume_at TIMESTAMPTZ;
+-- A deferred batch's resumption time, for operators, and how many times in
+-- a row the run's batch asked to wait without completing.
+ALTER TABLE extension_operation_runs
+    ADD COLUMN resume_at TIMESTAMPTZ,
+    ADD COLUMN deferrals INTEGER NOT NULL DEFAULT 0 CHECK (deferrals >= 0);
 -- The destination connection a connector job targets, and its optional
 -- change trigger: record events after `trigger_watermark` start a run once
 -- the newest of them is `trigger_debounce_seconds` old. A trigger whose run

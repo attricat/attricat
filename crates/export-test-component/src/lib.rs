@@ -311,6 +311,12 @@ impl deferrable_operations::Guest for Component {
                 }
                 checkpoint["retried"] = json!(true);
             }
+            Some("retry_always") => {
+                return Err(outcomes::Failure::Retry(outcomes::Retry {
+                    message: "destination throttled".into(),
+                    after_ms: Some(1),
+                }));
+            }
             Some("reject") => {
                 return Err(outcomes::Failure::Rejected(outcomes::Rejection {
                     code: "feed_rejected".into(),

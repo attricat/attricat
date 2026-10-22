@@ -271,7 +271,7 @@ impl HostState {
     }
 
     /// Issues a short-lived public link to a file a live record references,
-    /// so a marketplace can fetch it.
+    /// so a marketplace can fetch it. A run links only records in its scope.
     pub(super) async fn file_link_call(&self, request: &str) -> Result<String, String> {
         self.require("attricat.read")
             .map_err(|error| error.to_string())?;
@@ -294,6 +294,10 @@ impl HostState {
             .any(|target| target.record_id == input.record_id)
         {
             return Err("the record does not reference that file".into());
+        }
+        if let Some(run_id) = self.run_id {
+            super::transfer::ensure_run_covers_record(&self.repository, run_id, input.record_id)
+                .await?;
         }
         let mut token = [0u8; 32];
         SystemRandom::new()

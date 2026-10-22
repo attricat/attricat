@@ -126,7 +126,7 @@ pub(super) async fn admit_request(
         .take(
             &format!(
                 "network:{}:{}:{}",
-                repository.scoped_workspace_id(),
+                repository.extension_workspace(),
                 installation.extension_id,
                 rule.id
             ),
@@ -144,7 +144,7 @@ async fn lowered_budget(
     rule: &HostPermission,
 ) -> Option<(i32, i32)> {
     let key = (
-        repository.scoped_workspace_id(),
+        repository.extension_workspace(),
         installation.extension_id.clone(),
         rule.id.clone(),
     );
@@ -378,10 +378,8 @@ impl HostState {
         }
         let mut sent_token = None;
         if let Some(connection) = &input.connection {
-            self.require("connections.use")
-                .map_err(|error| error.to_string())?;
-            let (token, kind) =
-                match connections::access_token(&self.repository, &self.installation, connection)
+            let token =
+                match connections::insert_access_token(self, connection, &rule.id, &mut headers)
                     .await
                 {
                     Ok(token) => token,
@@ -393,21 +391,6 @@ impl HostState {
                     }
                     Err(error) => return Err(error.to_string()),
                 };
-            if !kind.api_host_permissions.contains(&rule.id) {
-                return Err(
-                    "this connection's token may not be sent to that host permission".into(),
-                );
-            }
-            let (name, prefix) = kind.token_header.as_ref().map_or_else(
-                || ("authorization".to_owned(), "Bearer ".to_owned()),
-                |header| (header.name.to_ascii_lowercase(), header.prefix.clone()),
-            );
-            headers.insert(
-                reqwest::header::HeaderName::from_bytes(name.as_bytes())
-                    .map_err(|_| "invalid token header")?,
-                reqwest::header::HeaderValue::from_str(&(prefix + &token))
-                    .map_err(|_| "token cannot be used as a header")?,
-            );
             sent_token = Some(token);
         }
         if let Err(wait) = admit_request(&self.repository, &self.installation, rule).await {
