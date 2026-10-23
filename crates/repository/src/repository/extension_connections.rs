@@ -371,15 +371,16 @@ impl ConnectionRefresh {
     }
 
     /// Ends a device authorization that expired or was refused and releases
-    /// the claim. An active connection keeps its tokens and status; one that
-    /// was waiting for this authorization fails.
+    /// the claim. An active connection keeps its tokens and status, and a
+    /// revoked one stays revoked; one that was waiting for this
+    /// authorization fails.
     pub async fn abandon_device_authorization(
         mut self,
         message: &str,
     ) -> Result<(), RepositoryError> {
         let message: String = message.chars().take(1024).collect();
         let (workspace_id, id, claim) = (self.workspace_id, self.credentials.id, self.claim);
-        self.settle(sqlx::query("UPDATE extension_connections SET device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,device_polled_at=NULL,status=CASE WHEN status='active' THEN 'active' ELSE 'failed' END,last_error=$3,refresh_claim=NULL,refresh_claimed_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_claim=$4")
+        self.settle(sqlx::query("UPDATE extension_connections SET device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,device_polled_at=NULL,status=CASE WHEN status IN ('active','revoked') THEN status ELSE 'failed' END,last_error=$3,refresh_claim=NULL,refresh_claimed_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_claim=$4")
             .bind(workspace_id).bind(id).bind(message).bind(claim))
             .await
     }
@@ -532,14 +533,20 @@ impl AttricatRepository {
         // sent there, so the connection waits for a new authorization unless
         // a refresh token comes with the change.
         let origin = |url: &str| url::Url::parse(url).ok().map(|url| url.origin());
-        let moved = patch
-            .token_url
-            .as_deref()
-            .is_some_and(|url| origin(url) != origin(&current.token_url))
-            || patch.device_authorization_url.as_ref().is_some_and(|url| {
-                url.as_deref().map(origin)
-                    != current.device_authorization_url.as_deref().map(origin)
-            });
+        let token_origin = origin(patch.token_url.as_deref().unwrap_or(&current.token_url));
+        // A device endpoint moves when it is set to an origin that neither
+        // it nor the token endpoint had; adding one at the token endpoint's
+        // origin, or removing it, sends nothing anywhere new.
+        let moved = token_origin != origin(&current.token_url)
+            || patch
+                .device_authorization_url
+                .as_ref()
+                .and_then(|url| url.as_deref())
+                .is_some_and(|url| {
+                    let to = origin(url);
+                    to != token_origin
+                        && current.device_authorization_url.as_deref().map(origin) != Some(to)
+                });
         if moved && current.has_client_secret && client_secret.is_none() {
             return Err(RepositoryError::InvalidExtension(
                 "enter the client secret again to move the token endpoint to another host".into(),
@@ -552,6 +559,12 @@ impl AttricatRepository {
              scope=CASE WHEN $7 THEN $8 ELSE scope END,parameters=COALESCE($9,parameters),\
              client_secret_ciphertext=COALESCE($10,client_secret_ciphertext),refresh_token_ciphertext=CASE WHEN $13 THEN $11 ELSE COALESCE($11,refresh_token_ciphertext) END,\
              access_token_ciphertext=CASE WHEN $12 THEN NULL ELSE access_token_ciphertext END,\
+             device_code_ciphertext=CASE WHEN $13 THEN NULL ELSE device_code_ciphertext END,\
+             device_user_code=CASE WHEN $13 THEN NULL ELSE device_user_code END,\
+             device_verification_uri=CASE WHEN $13 THEN NULL ELSE device_verification_uri END,\
+             device_expires_at=CASE WHEN $13 THEN NULL ELSE device_expires_at END,\
+             device_interval_seconds=CASE WHEN $13 THEN NULL ELSE device_interval_seconds END,\
+             device_polled_at=CASE WHEN $13 THEN NULL ELSE device_polled_at END,\
              access_token_expires_at=CASE WHEN $12 THEN NULL ELSE access_token_expires_at END,\
              status=CASE WHEN $11::bytea IS NOT NULL OR (grant_type='client_credentials' AND $10::bytea IS NOT NULL) THEN 'active' \
                WHEN $13 THEN 'pending_authorization' \

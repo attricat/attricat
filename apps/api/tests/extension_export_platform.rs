@@ -423,7 +423,16 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
     };
     // A resync leases a record settled before it started, and still does
     // after its own lease was released without a result.
-    let resync_since = Some(chrono::Utc::now());
+    // The resync starts just after the record settled, by the database's
+    // clock, which this process's clock can trail.
+    let settled_at = repository
+        .export_mapping_get(EXTENSION, None, api::repository::MappingKey::Record(record))
+        .await
+        .unwrap()
+        .unwrap()
+        .settled_at
+        .unwrap();
+    let resync_since = Some(settled_at + chrono::TimeDelta::milliseconds(1));
     let ExportBegin::Proceed { lease_token, .. } =
         begin_as("run:resync", false, resync_since).await
     else {

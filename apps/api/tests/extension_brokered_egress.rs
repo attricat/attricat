@@ -986,6 +986,7 @@ max_bytes = 1024
 async fn moving_the_token_endpoint_to_another_host_needs_the_secret_and_drops_tokens(
     pool: sqlx::PgPool,
 ) {
+    shared_mock();
     let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
@@ -1008,6 +1009,25 @@ async fn moving_the_token_endpoint_to_another_host_needs_the_secret_and_drops_to
         client_secret: client_secret.map(str::to_owned),
         refresh_token: None,
     };
+    // A device endpoint at the token endpoint's origin moves nothing.
+    let same_origin = repository
+        .update_extension_connection(
+            EXTENSION,
+            "rotating",
+            ExtensionConnectionPatch {
+                display_name: None,
+                token_url: None,
+                device_authorization_url: Some(Some("https://shop.mock.test/oauth/device".into())),
+                scope: None,
+                parameters: None,
+                client_secret: None,
+                refresh_token: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(same_origin.has_refresh_token);
+    assert_eq!(same_origin.status, "active");
     // The stored secret is never sent to another host unasked.
     assert!(
         repository

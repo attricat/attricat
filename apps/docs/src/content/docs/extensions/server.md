@@ -70,7 +70,7 @@ A 1.1 `event-handler` exports `handle-event(event, delivery)`, which returns `re
 | --- | --- |
 | `rejected { code, message, record-id?, connection? }` | The failure is recorded and never retried; the delivery completes. With a `record-id`, the record's [export status](#export-mappings) becomes `rejected` with the code and message. |
 | `retry { message, after-ms? }` | Only this handler is retried, after `after-ms` or a backoff from 5 seconds doubling to one hour, up to 10 attempts. After that the delivery is recorded as `exhausted`, and records the handler still leases become `retrying` with error `retries_exhausted`. |
-| `fault(message)` | The installation is quarantined. |
+| `fault(message)` | The installation is quarantined, and records the handler leased become `retrying` with error `handler_fault`. |
 
 Traps, running out of fuel or memory, and timeouts count as faults. Outcomes are kept per event and handler, so when one handler of an event is retried, handlers that already completed are not called again. Rejected and exhausted deliveries stay visible for 30 days on the extension's management page.
 
@@ -158,7 +158,8 @@ The result has an `outcome`:
 | --- | --- | --- |
 | `response` | `status`, `headers`, `body_base64` | The destination answered, with any status. |
 | `rate_limited` | `retry_after_ms` | The rule's budget is spent. Nothing was sent. For a rule without a declared budget the wait is the shared minute window. |
-| `uncertain` | | Transport failure or timeout. The destination may have received the request. |
+| `unreachable` | | The connection or TLS handshake failed. Nothing was sent, so you can send the request again. |
+| `uncertain` | | Any other transport failure or a timeout. The destination may have received the request. |
 | `connection_unavailable` | `message` | The connection's token could not be refreshed for a temporary reason. |
 
 `headers` holds `content-type`, `etag`, `retry-after`, and the headers the rule lists in `response_headers`. Redirects are never followed: a 3xx response is returned as it is, and you can request its `Location` through a granted rule. A 401 response discards the connection's cached token, so the next request gets a new one.

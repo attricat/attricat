@@ -2165,6 +2165,18 @@ impl WasmExtensionTaskHandler {
                     error = %error,
                     "extension handler failed; quarantining extension"
                 );
+                // Records it was pushing show as retrying rather than keep a
+                // lease and an older status.
+                if exports_mappings(installation) {
+                    repository
+                        .fail_export_leases(
+                            &installation.extension_id,
+                            &handler_lease_holder(event.id, &handler.id),
+                            "handler_fault",
+                            &error,
+                        )
+                        .await?;
+                }
                 quarantine_after_fault(repository, &installation.extension_id).await?;
                 Ok(HandlerStep::Faulted(Box::new(
                     ExtensionRuntimeError::Runtime(error),

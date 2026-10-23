@@ -156,10 +156,6 @@ impl From<EventDeliveryRow> for EventDelivery {
     }
 }
 
-/// How long [`AttricatRepository::committed_event_high_water`] waits for
-/// event writers at the outbox boundary.
-const HIGH_WATER_LOCK_TIMEOUT: &str = "2s";
-
 pub(crate) async fn lock_outbox_boundary(
     transaction: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
@@ -334,27 +330,23 @@ impl AttricatRepository {
     /// The highest event sequence below which every event has committed.
     /// Read under the outbox boundary, so no event with an allocated but
     /// uncommitted sequence can later appear below it. Event writers hold
-    /// the boundary only while they commit, so the wait is normally short.
-    /// With `bounded`, a write transaction that holds it longer than
-    /// [`HIGH_WATER_LOCK_TIMEOUT`] makes this `None`, for readers that can
-    /// simply try again later; otherwise it waits for the writer.
+    /// the boundary only while they commit, so the wait is normally short;
+    /// behind a write that holds it longer than `wait` (a Postgres interval
+    /// such as `2s`) this is `None`, so no reader stalls or holds a pooled
+    /// connection for long.
     pub(crate) async fn committed_event_high_water(
         &self,
-        bounded: bool,
+        wait: &str,
     ) -> Result<Option<i64>, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
-        if bounded {
-            sqlx::query(&format!(
-                "SET LOCAL lock_timeout = '{HIGH_WATER_LOCK_TIMEOUT}'"
-            ))
+        sqlx::query(&format!("SET LOCAL lock_timeout = '{wait}'"))
             .execute(&mut *transaction)
             .await?;
-        }
         match lock_outbox_boundary(&mut transaction, workspace_id).await {
             Ok(()) => {}
             Err(RepositoryError::Database(sqlx::Error::Database(error)))
-                if bounded && error.code().as_deref() == Some("55P03") =>
+                if error.code().as_deref() == Some("55P03") =>
             {
                 return Ok(None);
             }

@@ -910,8 +910,18 @@ impl OperationState {
                 .header(reqwest::header::CONTENT_LENGTH, artifact.content_length)
                 .body(reqwest::Body::wrap_stream(stream.stream)),
         };
-        let Ok(response) = request.send().await else {
-            return bounded_serialize(&json!({"outcome":"uncertain"}));
+        let response = match request.send().await {
+            Ok(response) => response,
+            // A v2 delivery whose connection failed sent nothing: the key is
+            // forgotten, so the same delivery may be sent again.
+            Err(error) if error.is_connect() && input.any_artifact => {
+                self.repository
+                    .forget_extension_http_delivery(id)
+                    .await
+                    .map_err(|_| "delivery state could not be persisted")?;
+                return bounded_serialize(&json!({"outcome":"unreachable"}));
+            }
+            Err(_) => return bounded_serialize(&json!({"outcome":"uncertain"})),
         };
         if response.status().is_redirection() {
             return bounded_serialize(&json!({"outcome":"uncertain"}));

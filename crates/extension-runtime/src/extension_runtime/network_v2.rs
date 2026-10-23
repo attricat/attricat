@@ -416,17 +416,27 @@ impl HostState {
         let addresses = resolve_public_destination(&host, port, timeout).await?;
         let client = pinned_client(&host, &addresses, timeout)?;
         let started = Instant::now();
-        let Ok(response) = client
+        let response = match client
             .request(method, url)
             .headers(headers)
             .body(body)
             .send()
             .await
-        else {
+        {
+            Ok(response) => response,
+            // A connection or TLS handshake that failed sent nothing, so the
+            // request may safely be sent again.
+            Err(error) if error.is_connect() => {
+                counter!("attricat_extension_network_requests_total", "outcome" => "unreachable")
+                    .increment(1);
+                return bounded_serialize(&json!({"outcome": "unreachable"}));
+            }
             // No automatic retries: the peer may have received the request.
-            counter!("attricat_extension_network_requests_total", "outcome" => "uncertain")
-                .increment(1);
-            return bounded_serialize(&json!({"outcome": "uncertain"}));
+            Err(_) => {
+                counter!("attricat_extension_network_requests_total", "outcome" => "uncertain")
+                    .increment(1);
+                return bounded_serialize(&json!({"outcome": "uncertain"}));
+            }
         };
         // Redirects are never followed. A 3xx response is returned as it is,
         // so a component may request its Location through a granted rule

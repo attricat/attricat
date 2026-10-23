@@ -70,7 +70,7 @@ Zdarzenie czeka, aż jego rekord przez `debounce_ms` (do godziny) nie będzie si
 | --- | --- |
 | `rejected { code, message, record-id?, connection? }` | Niepowodzenie jest zapisywane i nigdy nie jest ponawiane; dostarczenie się kończy. Z `record-id` [stan eksportu](#mapowania-eksportu) rekordu zmienia się na `rejected` z tym kodem i komunikatem. |
 | `retry { message, after-ms? }` | Ponawiana jest tylko ta procedura obsługi, po `after-ms` albo z rosnącym odstępem od 5 sekund do godziny, najwyżej 10 razy. Potem dostarczenie jest zapisywane jako `exhausted`, a rekordy, które procedura nadal dzierżawi, przechodzą w stan `retrying` z błędem `retries_exhausted`. |
-| `fault(message)` | Instalacja zostaje poddana kwarantannie. |
+| `fault(message)` | Instalacja zostaje poddana kwarantannie, a rekordy dzierżawione przez procedurę przechodzą w stan `retrying` z błędem `handler_fault`. |
 
 Pułapki, wyczerpanie paliwa lub pamięci i przekroczenie limitu czasu są traktowane jak `fault`. Wyniki są zapisywane osobno dla każdego zdarzenia i procedury obsługi, więc gdy ponawiana jest jedna procedura obsługi zdarzenia, te, które już się zakończyły, nie są wywoływane ponownie. Odrzucone i wyczerpane dostarczenia są widoczne przez 30 dni na stronie zarządzania rozszerzeniem.
 
@@ -158,7 +158,8 @@ Wynik ma pole `outcome`:
 | --- | --- | --- |
 | `response` | `status`, `headers`, `body_base64` | Miejsce docelowe odpowiedziało, z dowolnym statusem. |
 | `rate_limited` | `retry_after_ms` | Limit żądań reguły jest wyczerpany. Nic nie zostało wysłane. Dla reguły bez zadeklarowanego limitu czas oczekiwania to wspólne okno jednej minuty. |
-| `uncertain` | | Błąd transportu lub przekroczenie limitu czasu. Miejsce docelowe mogło otrzymać żądanie. |
+| `unreachable` | | Nie udało się nawiązać połączenia ani uzgodnić TLS. Nic nie zostało wysłane, więc możesz wysłać żądanie ponownie. |
+| `uncertain` | | Inny błąd transportu lub przekroczenie limitu czasu. Miejsce docelowe mogło otrzymać żądanie. |
 | `connection_unavailable` | `message` | Nie udało się odświeżyć tokenu połączenia z przyczyny przejściowej. |
 
 `headers` zawiera `content-type`, `etag`, `retry-after` oraz nagłówki wymienione w `response_headers` reguły. Przekierowania nigdy nie są śledzone: odpowiedź 3xx jest zwracana bez zmian, a jej `Location` możesz pobrać przez przyznaną regułę. Odpowiedź 401 usuwa zapamiętany token połączenia, więc następne żądanie otrzyma nowy.

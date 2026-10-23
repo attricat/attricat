@@ -624,7 +624,7 @@ whose `handle-event(event, delivery)` returns `result<_, failure>`, and
 |---|---|---|
 | `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes | A rejection that names a record, from an extension with `exports.mappings`, settles that record and replays the batch after a second, so the component finds the record settled and moves on. A newly settled record is progress and is not counted; a repeated rejection, or one of a record another worker holds, counts toward the 100 waits in a row below; a record another worker holds is replayed once that worker's lease ends. A rejection that cannot be recorded (for example for an unknown connection, or of a record outside the run's scope), and any other rejection, dead-letters the run with code `rejected`, without retries |
 | `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted`; records the handler still leases become `retrying` with error `retries_exhausted` and their leases end | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget, up to 100 times in a row before a completed batch; past that, and without `after-ms`, it is a failure within that budget. A replayed dead-lettered run starts with fresh failure and deferral budgets |
-| `fault(message)` | Quarantines the installation | Fails the run and quarantines the installation |
+| `fault(message)` | Quarantines the installation; records the handler leased become `retrying` with error `handler_fault` | Fails the run and quarantines the installation |
 
 Traps, fuel or memory exhaustion, timeouts and invalid batch results are
 faults. An error returned by a 1.1 lifecycle export (`prepare`, `start`,
@@ -782,9 +782,11 @@ record_revision, occurred_at}`, with a `next_cursor` bound to the blueprint and
 channel and `more`. An empty cursor starts at the oldest change. Persist the
 cursor (for example in extension storage, per job and channel) to continue
 where the last run stopped. The feed ends at the committed end of the event
-log, and waits for event writes in progress rather than return a short
-page. Change-triggered jobs skip a tick instead when a write holds that
-boundary for more than two seconds.
+log, and waits up to ten seconds for event writes in progress. Behind a
+longer write a page has no records but `more: true` and the same cursor, so
+the component calls again rather than take it for the end. Change-triggered
+jobs skip a tick instead when a write holds that boundary for more than two
+seconds.
 
 `api.call("connector.scope.v1", "{}")` returns the run's job, blueprint,
 revision, context, channel, connection and mode, or `null` outside connector
@@ -814,7 +816,9 @@ The rule's `response_headers` list extra response headers to return beyond
 `x-amzn-ratelimit-limit` or request IDs); `set-cookie` and authentication
 headers can never be listed. The result is `{outcome: "response", status,
 headers, body_base64}`, `{outcome: "rate_limited", retry_after_ms}` when the
-rule's budget is spent, `{outcome: "uncertain"}` after a transport failure,
+rule's budget is spent, `{outcome: "unreachable"}` when the connection or
+TLS handshake failed (nothing was sent, so it may be sent again),
+`{outcome: "uncertain"}` after any other transport failure,
 a timeout or a response larger than the rule's `max_response_bytes` (the
 request may have been applied), or `{outcome: "connection_unavailable", message}` when a token could
 not be refreshed for a temporary reason. Redirects are never followed; v2
@@ -856,7 +860,9 @@ v2 transfers answer a spent request budget with
 with `{outcome: "connection_unavailable"}` instead of an error, and charge the
 budget for a transfer that passes its checks: caller headers, multipart forms
 and secret header names are checked first, and the budget is charged before
-DNS is resolved, so failing lookups are throttled too. A 401 from the destination discards
+DNS is resolved, so failing lookups are throttled too. A v2 delivery whose
+connection failed answers `{outcome: "unreachable"}` and forgets its key, so
+it may be sent again. A 401 from the destination discards
 the connection's cached token and is not recorded against the delivery key,
 so the same key is sent again with a fresh token. A connection-authorized v2
 fetch answers a 401 with `{outcome: "failed", status: 401}` after discarding
