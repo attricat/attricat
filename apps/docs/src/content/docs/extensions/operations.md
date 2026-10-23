@@ -46,7 +46,7 @@ A run whose release is disabled, quarantined, or loses a grant during a batch pa
 - After each batch, the checkpoint is saved. The batch key changes only once the checkpoint is saved.
 - If a worker crashes before the checkpoint, the batch runs again with the **same batch key**. If your component writes to the catalog or an external system, make those writes idempotent on the batch key.
 - Cancelling a queued run ends it immediately. Cancelling a running one asks the component to stop at the next batch.
-- A run that keeps failing becomes a dead letter. An operator can replay it.
+- A run that keeps failing becomes a dead letter. An operator can replay it; the replayed run starts with a fresh failure budget and 100 new deferrals.
 
 ## Start, watch, and download
 
@@ -120,11 +120,11 @@ A delivery attempt is recorded before any network traffic. After a timeout or cr
 
 Host API 1.1 adds versions that fit marketplace and cloud storage uploads:
 
-- `transfer.fetch-input-v2` and `transfer.deliver-output-v2` take the v1 fields plus `headers` (headers you control, such as the exact `Content-Type` a presigned URL was signed for) and `connection` (adds the [connection's](/extensions/server/#connections) token). They accept query strings, such as presigned S3 or GCS URLs, when the rule sets `allow_query`.
+- `transfer.fetch-input-v2` and `transfer.deliver-output-v2` take the v1 fields plus `headers` (headers you control, such as the exact `Content-Type` a presigned URL was signed for) and `connection` (adds the [connection's](/extensions/server/#connections) token). They accept query strings, such as presigned S3 or GCS URLs, when the rule sets `allow_query`. When a fetch with a `connection` gets a 401, the token is discarded and the call answers `{"outcome": "failed", "status": 401}`, so you can retry with a fresh token.
 - A v2 delivery sends `Idempotency-Key` only when you pass `idempotency_key`. A `PUT` to a presigned URL is idempotent by itself. A `POST` still needs `idempotent_delivery: true` on its rule.
 - `multipart: {"fields": [{"name", "value"}], "file_field", "filename"?}` sends a `multipart/form-data` form with the artifact as its file part, for form-style staged uploads.
 - A v2 delivery can upload a completed input artifact of the run as well as an output.
-- `transfer.open-record-file({"record_id", "file_id", "variant"?})` copies a file a live record references, up to 16 MiB, into an input artifact of the run and returns its artifact ID, so you can upload it directly. `variant` picks an image variant instead of the original. It needs `attricat.read`, `attricat.files.read`, and `artifacts.read`. Connector runs can only open files of their blueprint's records, and interactive runs only of their selection.
+- `transfer.open-record-file({"record_id", "file_id", "variant"?})` copies a file a live record references, up to 16 MiB, into an input artifact of the run and returns its artifact ID, so you can upload it directly. `variant` picks an image variant instead of the original. Records that share a file get the same artifact. It needs `attricat.read`, `attricat.files.read`, and `artifacts.read`. Connector runs can only open files of their blueprint's records, and interactive runs only of their selection.
 
 Every request a transfer makes counts against its rule's [request budget](/extensions/manifest/#request-budgets).
 
@@ -230,4 +230,4 @@ POST /api/blueprint-connector-jobs/{id}/resync
 {"idempotency_key": "resync-2026-03-01", "status": "rejected"}
 ```
 
-Pass `record_ids` for given records, or `status` for the records with that export status on the job's connection, but not both. Without either, every published record is exported. A resync reads the same rows as any run, but `begin` leases records that are already synced, so an exporter should skip records whose stored content hash is unchanged and push the rest. The idempotency key covers the selection: the same key with other `record_ids` or another `status` starts a new resync.
+Pass `record_ids` for given records, or `status` for the records with that export status on the job's connection, but not both. Without either, every published record is exported. A resync reads the same rows as any run, but `begin` leases records settled before the run started, so an exporter should skip records whose stored content hash is unchanged and push the rest. The idempotency key covers the selection: the same key with other `record_ids` or another `status` starts a new resync.

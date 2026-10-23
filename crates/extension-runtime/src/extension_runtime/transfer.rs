@@ -186,6 +186,41 @@ fn caller_headers(
     Ok(())
 }
 
+/// Checks caller headers before a transfer spends its request budget,
+/// including clashes with the request's secret headers.
+fn checked_caller_headers(
+    secrets: &[SecretHeader],
+    supplied: HashMap<String, String>,
+) -> Result<reqwest::header::HeaderMap, String> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    let secret_names: Vec<reqwest::header::HeaderName> = secrets
+        .iter()
+        .filter_map(|secret| reqwest::header::HeaderName::from_bytes(secret.header.as_bytes()).ok())
+        .collect();
+    for name in &secret_names {
+        headers.insert(name.clone(), reqwest::header::HeaderValue::from_static(""));
+    }
+    caller_headers(&mut headers, supplied)?;
+    for name in &secret_names {
+        headers.remove(name);
+    }
+    Ok(headers)
+}
+
+/// Adds checked caller headers to a resolved transfer's headers.
+fn merge_caller_headers(
+    headers: &mut reqwest::header::HeaderMap,
+    caller: &reqwest::header::HeaderMap,
+) -> Result<(), String> {
+    for (name, value) in caller {
+        if headers.contains_key(name) {
+            return Err("unsafe transfer header".into());
+        }
+        headers.insert(name.clone(), value.clone());
+    }
+    Ok(())
+}
+
 impl OperationState {
     /// Discards the access token a destination answered with 401, so the
     /// next transfer refreshes it; a token refreshed meanwhile is kept.
@@ -363,6 +398,11 @@ impl OperationState {
             connection.as_ref(),
         )
         .await;
+        // A connection's rejected token was discarded above, so the
+        // component may retry with a fresh one, as after a delivery.
+        if status == 401 && connection.is_some() {
+            return bounded_serialize(&json!({"outcome":"failed","status":status}));
+        }
         if response
             .headers()
             .get(reqwest::header::CONTENT_ENCODING)
@@ -563,6 +603,7 @@ impl OperationState {
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_active("network.request").await?;
         let url = https_url(&input.url)?;
+        let caller = checked_caller_headers(&input.secret_headers, input.headers)?;
         let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
         if let Some(replayed) =
             Self::replayed_fetch(&self.repository, self.run_id, &input.transfer_key, &digest)
@@ -583,7 +624,7 @@ impl OperationState {
             Ok(target) => target,
             Err(refusal) => return refusal.into_outcome(),
         };
-        caller_headers(&mut target.headers, input.headers)?;
+        merge_caller_headers(&mut target.headers, &caller)?;
         self.fetch_range(
             &host,
             target,
@@ -672,6 +713,33 @@ impl OperationState {
         if input.multipart.is_some() && input.method != "POST" {
             return Err("multipart deliveries use POST".into());
         }
+        // The input is checked before the transfer spends its request budget
+        // or refreshes a token.
+        let content_type = input
+            .headers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("content-type"))
+            .map(|(_, value)| value.clone());
+        let caller = checked_caller_headers(
+            &input.secret_headers,
+            input
+                .headers
+                .into_iter()
+                .filter(|(name, _)| !name.eq_ignore_ascii_case("content-type"))
+                .collect(),
+        )?;
+        if let Some(multipart) = &input.multipart
+            && (multipart.fields.len() > MAX_MULTIPART_FIELDS
+                || multipart.file_field.is_empty()
+                || multipart.file_field.len() > 256
+                || multipart.fields.iter().any(|field| {
+                    field.name.is_empty()
+                        || field.name.len() > 256
+                        || field.value.len() > MAX_MULTIPART_VALUE_BYTES
+                }))
+        {
+            return Err("invalid multipart form".into());
+        }
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_active("network.request").await?;
         // A replay of a recorded delivery returns its outcome before it
@@ -706,31 +774,7 @@ impl OperationState {
             Err(refusal) if input.any_artifact => return refusal.into_outcome(),
             Err(refusal) => return Err(refusal.into_error()),
         };
-        let content_type = input
-            .headers
-            .iter()
-            .find(|(name, _)| name.eq_ignore_ascii_case("content-type"))
-            .map(|(_, value)| value.clone());
-        caller_headers(
-            &mut headers,
-            input
-                .headers
-                .into_iter()
-                .filter(|(name, _)| !name.eq_ignore_ascii_case("content-type"))
-                .collect(),
-        )?;
-        if let Some(multipart) = &input.multipart
-            && (multipart.fields.len() > MAX_MULTIPART_FIELDS
-                || multipart.file_field.is_empty()
-                || multipart.file_field.len() > 256
-                || multipart.fields.iter().any(|field| {
-                    field.name.is_empty()
-                        || field.name.len() > 256
-                        || field.value.len() > MAX_MULTIPART_VALUE_BYTES
-                }))
-        {
-            return Err("invalid multipart form".into());
-        }
+        merge_caller_headers(&mut headers, &caller)?;
         // The released contract delivers outputs only; v2 also delivers a
         // completed input of the run, such as an opened record file.
         let artifact = if input.any_artifact {
@@ -874,7 +918,13 @@ impl OperationState {
         {
             return Err("the record does not reference that file".into());
         }
-        ensure_run_covers_record(&self.repository, self.run_id, input.record_id).await?;
+        ensure_run_reaches_record(
+            &self.repository,
+            self.run_id,
+            input.record_id,
+            RunReach::Read,
+        )
+        .await?;
         let file = self
             .repository
             .file_object(input.file_id, input.variant.as_deref())
@@ -893,7 +943,9 @@ impl OperationState {
             input.file_id,
             input.variant.as_deref().unwrap_or("original")
         );
-        let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
+        // The artifact holds the file's bytes whichever record referenced
+        // it, so another record of the run sharing the file reuses it.
+        let digest = format!("{:x}", Sha256::digest(transfer_key.as_bytes()));
         if let Some((id, _)) = self
             .repository
             .previous_extension_http_input(self.run_id, &transfer_key, &digest)
@@ -960,56 +1012,47 @@ fn validate_range(
     Ok(())
 }
 
-/// Refuses a record outside a run's scope: a connector run serves only its
-/// selection and, for a channel export, published records; an interactive
-/// run only the records it was started on.
-pub(super) async fn ensure_run_covers_record(
-    repository: &AttricatRepository,
-    run_id: Uuid,
-    record_id: Uuid,
-) -> Result<(), String> {
-    if repository
-        .connector_run_scope(run_id)
-        .await
-        .map_err(|error| error.to_string())?
-        .is_some()
-        && !repository
-            .connector_run_covers_record(run_id, record_id)
-            .await
-            .map_err(|error| error.to_string())?
-    {
-        return Err("the record is outside the run's scope".into());
-    }
-    if let Some(scope) = repository
-        .interactive_run_scope(run_id)
-        .await
-        .map_err(|error| error.to_string())?
-        && !scope.record_ids.contains(&record_id)
-    {
-        return Err("the record is outside the run selection".into());
-    }
-    Ok(())
+/// What a run does with a record it is checked for.
+#[derive(Clone, Copy)]
+pub(super) enum RunReach {
+    /// Reads it: a connector run serves only its selection and, for a
+    /// channel export, published records.
+    Read,
+    /// Writes its export mapping: a connector run writes any record of its
+    /// blueprint, including ones it withdraws.
+    Map,
 }
 
-/// Refuses an export mapping write for a record outside a run's scope: a
-/// connector run writes only records of its blueprint (including ones it
-/// withdraws), an interactive run only its selection.
-pub(super) async fn ensure_run_may_map_record(
+/// Refuses a record outside a run's scope for `reach`. An interactive run
+/// reaches only the records it was started on.
+pub(super) async fn ensure_run_reaches_record(
     repository: &AttricatRepository,
     run_id: Uuid,
     record_id: Uuid,
+    reach: RunReach,
 ) -> Result<(), String> {
     if repository
         .connector_run_scope(run_id)
         .await
         .map_err(|error| error.to_string())?
         .is_some()
-        && !repository
-            .connector_run_may_map_record(run_id, record_id)
-            .await
-            .map_err(|error| error.to_string())?
     {
-        return Err("the record is outside the run's scope".into());
+        let reached = match reach {
+            RunReach::Read => {
+                repository
+                    .connector_run_covers_record(run_id, record_id)
+                    .await
+            }
+            RunReach::Map => {
+                repository
+                    .connector_run_may_map_record(run_id, record_id)
+                    .await
+            }
+        }
+        .map_err(|error| error.to_string())?;
+        if !reached {
+            return Err("the record is outside the run's scope".into());
+        }
     }
     if let Some(scope) = repository
         .interactive_run_scope(run_id)

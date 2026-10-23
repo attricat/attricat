@@ -387,8 +387,10 @@ impl AttricatRepository {
     /// so, leases the record for this destination. A revision older than the
     /// mapping's is always stale. The mapping's own revision is stale once
     /// settled (synced, withdrawn or rejected) unless `force` is set or an
-    /// operator requested a retry. `holder`
-    /// names the invocation taking the lease, so its own rejection of the
+    /// operator requested a retry. In a resync run started at
+    /// `resync_since`, a mapping settled before then is pushed again; one the
+    /// run settled itself, for example by rejecting it, stays stale so a
+    /// replayed batch moves on. `holder` names the invocation taking the lease, so its own rejection of the
     /// record settles at the revision it was pushing.
     #[allow(clippy::too_many_arguments)]
     pub async fn export_mapping_begin(
@@ -400,6 +402,7 @@ impl AttricatRepository {
         lease: Option<Duration>,
         force: bool,
         holder: Option<&str>,
+        resync_since: Option<DateTime<Utc>>,
     ) -> Result<ExportBegin, RepositoryError> {
         check_connection(connection)?;
         if record_revision < 0 {
@@ -432,6 +435,7 @@ impl AttricatRepository {
             || (!force
                 && settled
                 && mapping.retry_requested_at.is_none()
+                && !resync_since.is_some_and(|since| mapping.updated_at < since)
                 && mapping.record_revision == record_revision)
         {
             transaction.commit().await?;

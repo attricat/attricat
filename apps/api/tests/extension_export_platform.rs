@@ -373,7 +373,7 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
         let repository = repository.clone();
         async move {
             repository
-                .export_mapping_begin(EXTENSION, None, record, revision, None, false, None)
+                .export_mapping_begin(EXTENSION, None, record, revision, None, false, None, None)
                 .await
                 .unwrap()
         }
@@ -522,7 +522,16 @@ async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool
         let repository = repository.clone();
         async move {
             match repository
-                .export_mapping_begin(EXTENSION, None, record, revision, None, false, Some(holder))
+                .export_mapping_begin(
+                    EXTENSION,
+                    None,
+                    record,
+                    revision,
+                    None,
+                    false,
+                    Some(holder),
+                    None,
+                )
                 .await
                 .unwrap()
             {
@@ -889,17 +898,28 @@ async fn connector_runs_read_resolved_rows_close_out_withdrawals_and_resync(pool
     let rows = checkpoint["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["record_id"], json!(product_ids[1]));
-    // The synced record was leased again rather than found stale, and its
-    // settled push cleared the resync's retry request.
+    // The synced record was leased again rather than found stale, and the
+    // component skipped it by its unchanged content hash.
     assert_eq!(rows[0]["outcome"], "unchanged");
-    let pending_retry: bool = sqlx::query_scalar(
-        "SELECT retry_requested_at IS NOT NULL FROM extension_export_mappings WHERE record_id=$1",
-    )
-    .bind(product_ids[1])
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert!(!pending_retry);
+    // A resync leaves nothing behind for later runs: once settled, the record
+    // is stale again outside a resync.
+    let revision = content_revision(&pool, product_ids[1]).await;
+    assert!(matches!(
+        repository
+            .export_mapping_begin(
+                EXTENSION,
+                None,
+                product_ids[1],
+                revision,
+                None,
+                false,
+                None,
+                None
+            )
+            .await
+            .unwrap(),
+        ExportBegin::Stale { .. }
+    ));
 
     // An idempotency key names one selection: reusing it for another
     // selection starts another resync, and repeating a request finds its run.
@@ -1008,6 +1028,13 @@ input = {{fail = "{fail}"}}
         .execute(&pool)
         .await
         .unwrap();
+    // The deferral made the task due by this process's clock, which the
+    // database clock can trail; make it due on both.
+    sqlx::query("UPDATE tasks SET available_at=now()-interval '1 minute' WHERE subject_id=$1 AND status='queued'")
+        .bind(throttled[0])
+        .execute(&pool)
+        .await
+        .unwrap();
     drain_extension_operations(&repository, store.clone()).await;
     assert_eq!(deferrals().await, (100, Some("operation".to_owned())));
     // Settle it so later drains do not wait on its backoff.
@@ -1033,6 +1060,26 @@ input = {{fail = "{fail}"}}
         ("dead_letter", Some("rejected"))
     );
     assert_eq!(installation_state(&pool).await, "enabled");
+    // A replayed run gets a fresh deferral budget.
+    sqlx::query("UPDATE extension_operation_runs SET deferrals=100 WHERE id=$1")
+        .bind(rejected[0])
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .replay_extension_operation(rejected[0])
+            .await
+            .unwrap()
+    );
+    let replayed: (i32, Option<chrono::DateTime<chrono::Utc>>) =
+        sqlx::query_as("SELECT deferrals,resume_at FROM extension_operation_runs WHERE id=$1")
+            .bind(rejected[0])
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(replayed, (0, None));
+    drain_operations(&repository, &pool, store.clone()).await;
 
     // A rejection of one record settles that record; the run continues.
     let current = (products.0, revision.blueprint.version);

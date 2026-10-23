@@ -159,6 +159,13 @@ impl HostState {
                     TimeDelta::try_milliseconds(milliseconds.min(i64::MAX as u64) as i64)
                         .unwrap_or(TimeDelta::MAX)
                 });
+                let resync_since = match self.run_id {
+                    Some(run_id) => repository
+                        .resync_run_started_at(run_id)
+                        .await
+                        .map_err(error)?,
+                    None => None,
+                };
                 let begin = repository
                     .export_mapping_begin(
                         extension_id,
@@ -168,6 +175,7 @@ impl HostState {
                         lease,
                         input.force,
                         self.lease_holder.as_deref(),
+                        resync_since,
                     )
                     .await
                     .map_err(error)?;
@@ -240,8 +248,13 @@ impl HostState {
     async fn ensure_may_map(&self, record_id: Uuid) -> Result<(), String> {
         match self.run_id {
             Some(run_id) => {
-                super::transfer::ensure_run_may_map_record(&self.repository, run_id, record_id)
-                    .await
+                super::transfer::ensure_run_reaches_record(
+                    &self.repository,
+                    run_id,
+                    record_id,
+                    super::transfer::RunReach::Map,
+                )
+                .await
             }
             None => Ok(()),
         }
@@ -315,8 +328,13 @@ impl HostState {
             return Err("the record does not reference that file".into());
         }
         if let Some(run_id) = self.run_id {
-            super::transfer::ensure_run_covers_record(&self.repository, run_id, input.record_id)
-                .await?;
+            super::transfer::ensure_run_reaches_record(
+                &self.repository,
+                run_id,
+                input.record_id,
+                super::transfer::RunReach::Read,
+            )
+            .await?;
         }
         let mut token = [0u8; 32];
         SystemRandom::new()

@@ -279,9 +279,9 @@ impl AttricatRepository {
     }
 
     /// Starts a resync of an export job: every published record, or only
-    /// `record_ids`. The covered mappings are marked for retry, so `begin`
-    /// leases records already synced and the component skips those whose
-    /// stored content hash is unchanged. `selection` describes what the caller asked for, so the same key with
+    /// `record_ids`. In its runs `begin` leases records settled before the
+    /// run started, and the component skips those whose stored content hash
+    /// is unchanged. `selection` describes what the caller asked for, so the same key with
     /// a different selection starts a different resync.
     pub async fn resync_blueprint_connector_job(
         &self,
@@ -304,11 +304,6 @@ impl AttricatRepository {
             }
             None => key.to_owned(),
         };
-        // A resync pushes records already synced, so it requests a retry of
-        // the mappings it covers; each settled push clears that request.
-        sqlx::query("UPDATE extension_export_mappings m SET retry_requested_at=clock_timestamp(),updated_at=clock_timestamp() FROM blueprint_connector_jobs j, records r WHERE j.workspace_id=$1 AND j.id=$2 AND j.direction='export' AND m.workspace_id=$1 AND m.extension_id=j.extension_id AND m.connection IS NOT DISTINCT FROM j.connection AND r.workspace_id=$1 AND r.id=m.record_id AND r.blueprint_id=j.blueprint_id AND r.deleted_at IS NULL AND ($3::uuid[] IS NULL OR m.record_id=ANY($3))")
-            .bind(self.extension_workspace()).bind(id).bind(&record_ids)
-            .execute(&self.pool).await?;
         self.run_blueprint_connector_job_as(id, &key, ConnectorRunMode::Resync, record_ids)
             .await
     }
@@ -487,66 +482,50 @@ impl AttricatRepository {
         .bind(high_water)
         .execute(&self.pool)
         .await?;
-        // Only jobs with pending changes are considered, the longest-waiting
-        // first, so idle jobs cannot crowd out ones that have work.
-        let jobs: Vec<(Uuid, Uuid, Vec<String>, i32, i64)> = sqlx::query_as(&format!(
-            "SELECT j.id,j.blueprint_id,j.trigger_events,j.trigger_debounce_seconds,j.trigger_watermark FROM blueprint_connector_jobs j \
+        // Only jobs whose pending changes are due are selected, the
+        // longest-waiting first, so neither idle jobs nor jobs still inside
+        // their debounce crowd out ones that have work. The oldest and newest
+        // pending change are each one ordered row, so a debouncing job never
+        // reads its whole change window.
+        let pending_change = |newest: bool| {
+            format!(
+                "(SELECT c.occurred_at FROM ({}) c ORDER BY c.sequence {} LIMIT 1)",
+                trigger_changes_sql(
+                    "j.workspace_id",
+                    "j.trigger_watermark",
+                    Some("$3"),
+                    "j.trigger_events",
+                    "j.blueprint_id"
+                ),
+                if newest { "DESC" } else { "ASC" }
+            )
+        };
+        let jobs: Vec<(Uuid, Uuid, Vec<String>, i64)> = sqlx::query_as(&format!(
+            "SELECT j.id,j.blueprint_id,j.trigger_events,j.trigger_watermark FROM blueprint_connector_jobs j \
+             CROSS JOIN LATERAL (SELECT {} AS oldest,{} AS newest) p \
              WHERE j.workspace_id=$1 AND j.enabled AND j.code IS NOT NULL AND j.trigger_events IS NOT NULL AND j.trigger_watermark IS NOT NULL \
                AND (j.trigger_blocked_until IS NULL OR j.trigger_blocked_until<=clock_timestamp()) \
-               AND EXISTS ({}) \
+               AND p.newest IS NOT NULL \
+               AND (p.newest<=clock_timestamp()-make_interval(secs => j.trigger_debounce_seconds) \
+                 OR p.oldest<=clock_timestamp()-make_interval(secs => j.trigger_debounce_seconds*$4)) \
              ORDER BY j.trigger_watermark,j.id LIMIT $2",
-            trigger_changes_sql(
-                "j.workspace_id",
-                "j.trigger_watermark",
-                Some("$3"),
-                "j.trigger_events",
-                "j.blueprint_id"
-            )
+            pending_change(false),
+            pending_change(true)
         ))
         .bind(self.extension_workspace())
         .bind(TRIGGERED_JOBS_PER_TICK)
         .bind(high_water)
+        .bind(TRIGGER_MAX_WAIT_FACTOR)
         .fetch_all(&self.pool)
         .await?;
         let mut started = 0;
         // Every read stops at the committed high water, so an event that
         // commits later with a lower sequence is never passed over.
-        let changes_sql = trigger_changes_sql("$1", "$2", Some("$5"), "$3", "$4");
-        // The oldest and newest pending change decide whether a job is due;
-        // each is one ordered row, so a job inside its debounce does not read
-        // its whole change window on every tick.
-        let pending_change = |newest: bool| {
-            format!(
-                "SELECT c.occurred_at FROM ({changes_sql}) c ORDER BY c.sequence {} LIMIT 1",
-                if newest { "DESC" } else { "ASC" }
-            )
-        };
-        let (oldest_sql, newest_sql) = (pending_change(false), pending_change(true));
         let window_sql = format!(
-            "SELECT DISTINCT c.sequence,c.record_id FROM ({changes_sql}) c ORDER BY c.sequence LIMIT $6"
+            "SELECT DISTINCT c.sequence,c.record_id FROM ({}) c ORDER BY c.sequence LIMIT $6",
+            trigger_changes_sql("$1", "$2", Some("$5"), "$3", "$4")
         );
-        for (id, blueprint_id, events, debounce, watermark) in jobs {
-            let mut bounds = Vec::with_capacity(2);
-            for sql in [&oldest_sql, &newest_sql] {
-                bounds.push(
-                    sqlx::query_scalar::<_, DateTime<Utc>>(sql)
-                        .bind(self.extension_workspace())
-                        .bind(watermark)
-                        .bind(&events)
-                        .bind(blueprint_id)
-                        .bind(high_water)
-                        .fetch_optional(&self.pool)
-                        .await?,
-                );
-            }
-            let [Some(oldest), Some(newest)] = bounds[..] else {
-                continue;
-            };
-            let debounce = Duration::seconds(i64::from(debounce));
-            let now = Utc::now();
-            if now - newest < debounce && now - oldest < debounce * TRIGGER_MAX_WAIT_FACTOR {
-                continue;
-            }
+        for (id, blueprint_id, events, watermark) in jobs {
             let mut changes: Vec<(i64, Uuid)> = sqlx::query_as(&window_sql)
                 .bind(self.extension_workspace())
                 .bind(watermark)
@@ -639,6 +618,15 @@ impl AttricatRepository {
         run_id: Uuid,
     ) -> Result<Option<ConnectorRunDetails>, RepositoryError> {
         Ok(sqlx::query_as("SELECT j.id AS job_id,j.code AS job_code,j.direction,r.connector_blueprint_id AS blueprint_id,r.connector_blueprint_version AS blueprint_version,r.connector_context_id AS context_id,r.connector_channel_id AS channel_id,r.connector_connection AS connection,COALESCE(r.connector_mode,'incremental') AS mode,cardinality(r.connector_record_ids)::bigint AS record_count,r.connector_record_ids AS record_ids FROM extension_operation_runs r JOIN blueprint_connector_jobs j ON j.id=r.connector_job_id AND j.workspace_id=r.workspace_id WHERE r.id=$1 AND r.workspace_id=$2")
+            .bind(run_id).bind(self.extension_workspace()).fetch_optional(&self.pool).await?)
+    }
+
+    /// When a resync run started, or `None` for any other run.
+    pub async fn resync_run_started_at(
+        &self,
+        run_id: Uuid,
+    ) -> Result<Option<DateTime<Utc>>, RepositoryError> {
+        Ok(sqlx::query_scalar("SELECT created_at FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 AND connector_mode='resync'")
             .bind(run_id).bind(self.extension_workspace()).fetch_optional(&self.pool).await?)
     }
 

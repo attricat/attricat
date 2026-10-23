@@ -623,7 +623,7 @@ whose `handle-event(event, delivery)` returns `result<_, failure>`, and
 | Case | Event handler | Operation batch |
 |---|---|---|
 | `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes | A rejection that names a record, from an extension with `exports.mappings`, settles that record and replays the batch after a second, so the component finds the record settled and moves on; this counts toward the 100 waits in a row below. Any other rejection dead-letters the run with code `rejected`, without retries |
-| `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted` | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget, up to 100 times in a row before a completed batch; past that, and without `after-ms`, it is a failure within that budget |
+| `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted` | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget, up to 100 times in a row before a completed batch; past that, and without `after-ms`, it is a failure within that budget. A replayed dead-lettered run starts with fresh failure and deferral budgets |
 | `fault(message)` | Quarantines the installation | Fails the run and quarantines the installation |
 
 Traps, fuel or memory exhaustion, timeouts and invalid batch results are
@@ -837,13 +837,17 @@ input artifact of the run as well as an output. Like `network.request.v2`, the
 v2 transfers answer a spent request budget with
 `{outcome: "rate_limited", retry_after_ms}` and an unavailable token endpoint
 with `{outcome: "connection_unavailable"}` instead of an error, and charge the
-budget only for a transfer that is sent. A 401 from the destination discards
+budget only for a transfer that is sent. Caller headers and multipart forms
+are checked before the budget is charged. A 401 from the destination discards
 the connection's cached token and is not recorded against the delivery key,
-so the same key is sent again with a fresh token.
+so the same key is sent again with a fresh token. A connection-authorized v2
+fetch answers a 401 with `{outcome: "failed", status: 401}` after discarding
+the token, so the component can retry.
 
 `transfer.open-record-file({record_id, file_id, variant?})` copies a file a
 live record references (up to 16 MiB) into a run-bound input artifact for a
-direct binary upload. It needs `attricat.read`, `attricat.files.read` and
+direct binary upload. Records of a run that share a file reuse its
+artifact. It needs `attricat.read`, `attricat.files.read` and
 `artifacts.read`; connector runs are confined to their blueprint and
 interactive runs to their selection.
 
@@ -944,10 +948,11 @@ records', including linked records since deleted. Runs record their mode:
 `POST /blueprint-connector-jobs/{id}/resync` `{idempotency_key, record_ids? |
 status?}` is the backfill action: it re-exports every published record of the
 job, or only the given records or the records with an export status on the
-job's connection. A resync requests a retry of the existing mappings it
-covers, so `begin` leases records already synced; exporters skip records whose
-stored content hash is unchanged and push the rest. Each settled push clears
-the request. The idempotency key covers the request's selection, so reusing a
+job's connection. In a resync run `begin` leases records settled before the
+run started; exporters skip records whose stored content hash is unchanged
+and push the rest. A record the run settles itself, for example by rejecting
+it, stays settled, so a replayed batch moves on, and a resync leaves nothing
+behind for later runs. The idempotency key covers the request's selection, so reusing a
 key with other `record_ids` or another `status` starts another resync.
 
 Event handlers can be debounced too: `debounce_ms` (and optional

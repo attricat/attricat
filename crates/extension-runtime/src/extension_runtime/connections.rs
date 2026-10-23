@@ -2,9 +2,13 @@
 //!
 //! The host runs every token request itself: client credentials, refresh
 //! tokens (rotating or not), the device authorization grant and an operator's
-//! authorization-code exchange. A refresh holds the connection's row lock, so
-//! a rotating refresh token is never used twice, and re-checks the cached
-//! token after taking the lock in case another worker refreshed it first.
+//! authorization-code exchange. A refresh first takes a time-limited claim on
+//! the connection, so while it lasts no other worker uses a rotating refresh
+//! token too, and re-checks the cached token after claiming in case another
+//! worker refreshed it first; others wait for the claim to settle. No row lock
+//! is held across the token request, and tokens issued after the claim lapsed
+//! are still stored, since the provider may already have rotated the refresh
+//! token.
 //! Token endpoints are reached through the connection kind's host-permission
 //! rule with the same DNS pinning, TLS and no-redirect policy as every other
 //! mediated request. Tokens never reach a component, a log or an error.

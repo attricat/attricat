@@ -46,7 +46,7 @@ Przebieg, którego wydanie zostanie wyłączone, poddane kwarantannie lub utraci
 - Po każdej partii zapisywany jest punkt kontrolny. Klucz partii zmienia się dopiero po zapisaniu punktu kontrolnego.
 - Jeśli proces roboczy ulegnie awarii przed punktem kontrolnym, partia jest wykonywana ponownie z **tym samym kluczem partii**. Jeśli Twój komponent zapisuje do katalogu lub systemu zewnętrznego, zadbaj, aby te zapisy były idempotentne względem klucza partii.
 - Anulowanie przebiegu oczekującego w kolejce kończy go natychmiast. Anulowanie trwającego prosi komponent o zatrzymanie się przy następnej partii.
-- Przebieg, który stale kończy się błędem, staje się martwą wiadomością (dead letter). Operator może go odtworzyć.
+- Przebieg, który stale kończy się błędem, staje się martwą wiadomością (dead letter). Operator może go odtworzyć; odtworzony przebieg zaczyna z nowym budżetem niepowodzeń i 100 nowymi odroczeniami.
 
 ## Uruchamiaj, obserwuj i pobieraj
 
@@ -120,11 +120,11 @@ Próba dostarczenia jest zapisywana przed jakimkolwiek ruchem sieciowym. Po prze
 
 API hosta 1.1 dodaje wersje dopasowane do przesyłania plików do marketplace'ów i magazynów w chmurze:
 
-- `transfer.fetch-input-v2` i `transfer.deliver-output-v2` przyjmują pola v1 oraz `headers` (nagłówki, nad którymi masz kontrolę, np. dokładny `Content-Type`, dla którego podpisano adres URL) i `connection` (dodaje token [połączenia](/pl/extensions/server/#połączenia)). Przyjmują ciągi zapytania, np. podpisane adresy URL S3 lub GCS, gdy reguła ustawia `allow_query`.
+- `transfer.fetch-input-v2` i `transfer.deliver-output-v2` przyjmują pola v1 oraz `headers` (nagłówki, nad którymi masz kontrolę, np. dokładny `Content-Type`, dla którego podpisano adres URL) i `connection` (dodaje token [połączenia](/pl/extensions/server/#połączenia)). Przyjmują ciągi zapytania, np. podpisane adresy URL S3 lub GCS, gdy reguła ustawia `allow_query`. Gdy pobieranie z `connection` otrzyma 401, token jest odrzucany, a wywołanie odpowiada `{"outcome": "failed", "status": 401}`, więc możesz ponowić je z nowym tokenem.
 - Dostarczenie v2 wysyła `Idempotency-Key` tylko wtedy, gdy przekażesz `idempotency_key`. `PUT` na podpisany adres URL jest idempotentny sam w sobie. `POST` nadal wymaga `idempotent_delivery: true` w regule.
 - `multipart: {"fields": [{"name", "value"}], "file_field", "filename"?}` wysyła formularz `multipart/form-data` z artefaktem jako częścią z plikiem, na potrzeby przesyłania etapowego w postaci formularza.
 - Dostarczenie v2 może przesłać nie tylko dane wyjściowe, ale też ukończony artefakt wejściowy przebiegu.
-- `transfer.open-record-file({"record_id", "file_id", "variant"?})` kopiuje plik, do którego odwołuje się aktywny rekord, do 16 MiB, do artefaktu wejściowego przebiegu i zwraca jego identyfikator, aby można go było przesłać bezpośrednio. `variant` wybiera wariant obrazu zamiast oryginału. Wymaga `attricat.read`, `attricat.files.read` i `artifacts.read`. Przebiegi konektorów mogą otwierać tylko pliki rekordów swojego Schematu, a przebiegi interaktywne tylko pliki z zaznaczenia.
+- `transfer.open-record-file({"record_id", "file_id", "variant"?})` kopiuje plik, do którego odwołuje się aktywny rekord, do 16 MiB, do artefaktu wejściowego przebiegu i zwraca jego identyfikator, aby można go było przesłać bezpośrednio. `variant` wybiera wariant obrazu zamiast oryginału. Rekordy, które współdzielą plik, dostają ten sam artefakt. Wymaga `attricat.read`, `attricat.files.read` i `artifacts.read`. Przebiegi konektorów mogą otwierać tylko pliki rekordów swojego Schematu, a przebiegi interaktywne tylko pliki z zaznaczenia.
 
 Każde żądanie wykonane przy przesyłaniu jest wliczane do [limitu żądań](/pl/extensions/manifest/#limity-żądań) jego reguły.
 
@@ -230,4 +230,4 @@ POST /api/blueprint-connector-jobs/{id}/resync
 {"idempotency_key": "resync-2026-03-01", "status": "rejected"}
 ```
 
-Przekaż `record_ids` dla wybranych rekordów albo `status` dla rekordów z tym stanem eksportu w połączeniu zadania, ale nie oba naraz. Bez żadnego z nich eksportowany jest każdy opublikowany rekord. Ponowna synchronizacja odczytuje te same wiersze co każdy przebieg, ale `begin` dzierżawi także rekordy już zsynchronizowane, więc eksporter powinien pominąć rekordy, których zapisany skrót treści się nie zmienił, i wysłać pozostałe. Klucz idempotencji obejmuje wybór: ten sam klucz z innymi `record_ids` lub innym `status` uruchamia nową synchronizację.
+Przekaż `record_ids` dla wybranych rekordów albo `status` dla rekordów z tym stanem eksportu w połączeniu zadania, ale nie oba naraz. Bez żadnego z nich eksportowany jest każdy opublikowany rekord. Ponowna synchronizacja odczytuje te same wiersze co każdy przebieg, ale `begin` dzierżawi rekordy rozstrzygnięte przed rozpoczęciem przebiegu, więc eksporter powinien pominąć rekordy, których zapisany skrót treści się nie zmienił, i wysłać pozostałe. Klucz idempotencji obejmuje wybór: ten sam klucz z innymi `record_ids` lub innym `status` uruchamia nową synchronizację.

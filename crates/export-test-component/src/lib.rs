@@ -161,6 +161,7 @@ fn run_transfer(steps: &Value, batch_key: &str) -> Result<Value, String> {
             transfer::fetch_input_v2 as fn(&str) -> Result<String, String>,
         ),
         ("record_file", transfer::open_record_file),
+        ("record_file_again", transfer::open_record_file),
     ] {
         let Some(request) = steps.get(name) else {
             continue;

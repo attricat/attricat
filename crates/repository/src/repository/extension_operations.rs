@@ -700,6 +700,7 @@ impl AttricatRepository {
         Ok(changed == 1)
     }
 
+    /// A replayed run starts with a fresh failure and deferral budget.
     /// Returns `InvalidContext` when an interactive run's selection context
     /// was deleted after it failed: replaying it could never read its
     /// selection. The share lock serializes with `delete_context`.
@@ -725,7 +726,7 @@ impl AttricatRepository {
             }
         }
         let changed = sqlx::query(
-            "UPDATE extension_operation_runs SET status='pending',cancellation_requested=false,cancellation_delivered=false,attempts=0,last_error_code=NULL,last_error_message=NULL,completed_at=NULL,cancelled_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter' AND NOT outputs_expired",
+            "UPDATE extension_operation_runs SET status='pending',cancellation_requested=false,cancellation_delivered=false,attempts=0,deferrals=0,resume_at=NULL,last_error_code=NULL,last_error_message=NULL,completed_at=NULL,cancelled_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter' AND NOT outputs_expired",
         )
         .bind(id)
         .bind(self.extension_workspace())

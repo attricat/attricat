@@ -857,13 +857,36 @@ max_bytes = 1024
         .unwrap();
     assert_ne!(stored, token);
 
+    // Another record references the same file.
+    let sharing = create_record(&client, &base_url, &blueprint).await;
+    let sharing_id: Uuid = sharing["id"].as_str().unwrap().parse().unwrap();
+    let value_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO attribute_values SELECT (jsonb_populate_record(NULL::attribute_values, to_jsonb(v) || jsonb_build_object('id', $3::uuid, 'record_id', $2::uuid))).* FROM attribute_values v WHERE v.record_id=$1 AND v.active")
+        .bind(record_id)
+        .bind(sharing_id)
+        .bind(value_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO attribute_file_references SELECT (jsonb_populate_record(NULL::attribute_file_references, to_jsonb(r) || jsonb_build_object('attribute_value_id', $2::uuid))).* FROM attribute_file_references r JOIN attribute_values v ON v.id=r.attribute_value_id WHERE v.record_id=$1 AND v.active")
+        .bind(record_id)
+        .bind(value_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
     // A run reads the same file as an input artifact for a binary upload.
     let run = repository
         .start_extension_operation(StartExtensionOperation {
             extension_id: EXTENSION.into(),
             expected_release_id: release,
             operation_id: "transfer".into(),
-            input: json!({"transfer": {"record_file": {"record_id": record_id, "file_id": file_id}}}),
+            // A second record sharing the file reuses its artifact instead of
+            // being refused.
+            input: json!({"transfer": {
+                "record_file": {"record_id": record_id, "file_id": file_id},
+                "record_file_again": {"record_id": sharing_id, "file_id": file_id},
+            }}),
             source_reference: json!({}),
             destination_reference: json!({}),
             idempotency_key: "record-file".into(),
@@ -886,6 +909,13 @@ max_bytes = 1024
     assert_eq!(
         checkpoint["transfer"]["record_file"]["media_type"],
         "text/plain"
+    );
+    let again = &checkpoint["transfer"]["record_file_again"];
+    assert_eq!(again["text"], "product photo", "{checkpoint}");
+    assert_eq!(again["result"]["replayed"], true);
+    assert_eq!(
+        again["result"]["artifact_id"],
+        checkpoint["transfer"]["record_file"]["result"]["artifact_id"]
     );
 
     // Disabling the extension stops its links working.
