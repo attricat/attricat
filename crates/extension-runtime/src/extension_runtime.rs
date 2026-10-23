@@ -1788,70 +1788,78 @@ impl WasmExtensionTaskHandler {
         } else {
             repository.extension_handler_attempts(event.id).await?
         };
-        for candidate in installations {
-            let handler_ids: Vec<String> = candidate
-                .manifest
-                .server
-                .as_ref()
-                .into_iter()
-                .flat_map(|server| server.event_handlers.iter())
-                .filter(|handler| {
-                    handler
-                        .event_types
-                        .iter()
-                        .any(|event_type| event_type == &event.event_type)
-                })
-                .map(|handler| handler.id.clone())
-                .collect();
-            for handler_id in handler_ids {
-                // The list above is only a dispatch hint. Re-read enabled state,
-                // exact installed release, configuration, and required grants
-                // immediately before every component invocation.
-                let Some(installation) = repository
-                    .runtime_extension_installation(
-                        &candidate.extension_id,
-                        candidate.installed_release_id,
-                    )
-                    .await?
-                else {
-                    continue;
-                };
-                let Some(handler) = installation.manifest.server.as_ref().and_then(|server| {
-                    server.event_handlers.iter().find(|handler| {
-                        handler.id == handler_id
-                            && handler
-                                .event_types
-                                .iter()
-                                .any(|event_type| event_type == &event.event_type)
+        let delivered: Result<(), Box<dyn std::error::Error + Send + Sync>> = async {
+            for candidate in installations {
+                let handler_ids: Vec<String> = candidate
+                    .manifest
+                    .server
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|server| server.event_handlers.iter())
+                    .filter(|handler| {
+                        handler
+                            .event_types
+                            .iter()
+                            .any(|event_type| event_type == &event.event_type)
                     })
-                }) else {
-                    continue;
-                };
-                match self
-                    .deliver_to_handler(
-                        &repository,
-                        &installation,
-                        handler,
-                        event,
-                        attempts.remove(&(installation.extension_id.clone(), handler.id.clone())),
-                        &mut dispatch,
-                    )
-                    .await?
-                {
-                    HandlerStep::Completed => completed.push((
-                        installation.extension_id.clone(),
-                        handler.id.clone(),
-                        installation.installed_release_id,
-                    )),
-                    HandlerStep::Settled => {}
-                    HandlerStep::Faulted(error) => {
-                        // Completed handlers are not invoked again when the
-                        // failure budget retries this delivery.
-                        Self::remember_completed(&repository, event, &completed).await?;
-                        return Err(error);
+                    .map(|handler| handler.id.clone())
+                    .collect();
+                for handler_id in handler_ids {
+                    // The list above is only a dispatch hint. Re-read enabled state,
+                    // exact installed release, configuration, and required grants
+                    // immediately before every component invocation.
+                    let Some(installation) = repository
+                        .runtime_extension_installation(
+                            &candidate.extension_id,
+                            candidate.installed_release_id,
+                        )
+                        .await?
+                    else {
+                        continue;
+                    };
+                    let Some(handler) = installation.manifest.server.as_ref().and_then(|server| {
+                        server.event_handlers.iter().find(|handler| {
+                            handler.id == handler_id
+                                && handler
+                                    .event_types
+                                    .iter()
+                                    .any(|event_type| event_type == &event.event_type)
+                        })
+                    }) else {
+                        continue;
+                    };
+                    match self
+                        .deliver_to_handler(
+                            &repository,
+                            &installation,
+                            handler,
+                            event,
+                            attempts
+                                .remove(&(installation.extension_id.clone(), handler.id.clone())),
+                            &mut dispatch,
+                        )
+                        .await?
+                    {
+                        HandlerStep::Completed => completed.push((
+                            installation.extension_id.clone(),
+                            handler.id.clone(),
+                            installation.installed_release_id,
+                        )),
+                        HandlerStep::Settled => {}
+                        HandlerStep::Faulted(error) => return Err(error),
                     }
                 }
             }
+            Ok(())
+        }
+        .await;
+        if let Err(error) = delivered {
+            // Completed handlers are not invoked again when this delivery is
+            // retried, whether a component faulted or the repository failed.
+            if let Err(remember) = Self::remember_completed(&repository, event, &completed).await {
+                tracing::warn!(event = %event.id, error = %remember, "completed handlers could not be recorded");
+            }
+            return Err(error);
         }
         if dispatch.resume_at.is_some() {
             Self::remember_completed(&repository, event, &completed).await?;

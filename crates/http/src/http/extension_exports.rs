@@ -209,7 +209,7 @@ pub(super) async fn retry_export(
                 continue;
             }
             match repository
-                .resync_blueprint_connector_job(job.id, &key, Some(ids))
+                .resync_blueprint_connector_job(job.id, &key, None, Some(ids))
                 .await
             {
                 Ok(runs) => run_ids.extend(runs),
@@ -704,6 +704,24 @@ pub(super) async fn resync_connector_job(
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<ResyncRequest>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
+    // The idempotency key covers the request's selection, not the records
+    // a status resolves to now, so a retried request finds its run.
+    let selection = match (&input.record_ids, &input.status) {
+        (Some(ids), None) => {
+            let mut ids = ids.clone();
+            ids.sort_unstable();
+            ids.dedup();
+            Some(format!(
+                "records:{}",
+                ids.iter()
+                    .map(Uuid::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ))
+        }
+        (None, Some(status)) => Some(format!("status:{status}")),
+        _ => None,
+    };
     let record_ids = match (input.record_ids, input.status) {
         (Some(_), Some(_)) => {
             return Err(ApiError::invalid_input(
@@ -741,7 +759,12 @@ pub(super) async fn resync_connector_job(
         (None, None) => None,
     };
     let runs = repository
-        .resync_blueprint_connector_job(id, &input.idempotency_key, record_ids)
+        .resync_blueprint_connector_job(
+            id,
+            &input.idempotency_key,
+            selection.as_deref(),
+            record_ids,
+        )
         .await?;
     Ok((StatusCode::ACCEPTED, Json(json!({"run_ids": runs}))))
 }

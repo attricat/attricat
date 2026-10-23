@@ -700,9 +700,10 @@ deleted, unpublished and older-version records it withdraws), or an
 interactive run's selected records.
 
 `begin` is the guard against reordered and duplicated work. It answers
-`stale` when the mapping is settled (`synced`, `withdrawn` or `rejected`) at the
-same or a newer revision, unless an operator requested a retry or `force` is
-set. Otherwise it leases the record for `lease_ms` (default 2 minutes, at most
+`stale` for a revision older than the mapping's, whatever its status, since
+the commit would be refused after the push. At the mapping's own revision it
+answers `stale` when the mapping is settled (`synced`, `withdrawn` or
+`rejected`), unless an operator requested a retry or `force` is set. Otherwise it leases the record for `lease_ms` (default 2 minutes, at most
 15) so an event handler and a connector job never push the same record at the
 same time. A retried delivery or batch takes its own earlier lease back. A
 leased `commit` without `record_revision` is for the leased revision. `commit` records the result and releases the lease; without a lease
@@ -735,7 +736,7 @@ app shows it:
 `{connection?, record_ids?, status?, run?}` sets the selected mappings (up to
 1,000, by IDs or by status; a status matching more is refused, not cut) to
 `pending`, records the retry request (records selected by ID alone that were
-never exported get a pending mapping), emits
+never exported get a pending mapping; deleted records are never selected), emits
 `export.retry_requested.v1` for each record to that extension only, and is
 audited. With `run: true` it also starts a [resync](#connector-jobs-for-exports)
 of just those records on each of the extension's export jobs that target the
@@ -935,14 +936,19 @@ starts at the end of the event log. The run is confined to the changed records
 (up to 10,000; more changes run the whole job) and the trigger's watermark
 moves past them, so a burst of edits causes one run. A matching event of a
 record that a live record of the blueprint links to through a relationship
-counts as a change of the linking record, because `page-v2` can embed it. Runs record their mode:
+counts as a change of the linking record, because `page-v2` can embed it. A
+`page-v2` row's `content_revision` is the newest of its own and its expanded
+records', including linked records since deleted. Runs record their mode:
 `incremental`, `triggered` or `resync`.
 
 `POST /blueprint-connector-jobs/{id}/resync` `{idempotency_key, record_ids? |
 status?}` is the backfill action: it re-exports every published record of the
 job, or only the given records or the records with an export status on the
-job's connection. A resync run reads the same rows as any run; exporters skip
-records whose stored content hash is unchanged and push the rest.
+job's connection. A resync requests a retry of the existing mappings it
+covers, so `begin` leases records already synced; exporters skip records whose
+stored content hash is unchanged and push the rest. Each settled push clears
+the request. The idempotency key covers the request's selection, so reusing a
+key with other `record_ids` or another `status` starts another resync.
 
 Event handlers can be debounced too: `debounce_ms` (and optional
 `max_wait_ms`, default ten times the debounce) on an event handler delays a

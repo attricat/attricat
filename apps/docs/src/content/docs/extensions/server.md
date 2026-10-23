@@ -199,7 +199,8 @@ Inside an operation run, `begin`, `commit`, `release`, and `delete` accept only 
 
 Call `begin` before pushing a record. It protects against reordered and duplicate work:
 
-- It answers `stale` when the mapping is already `synced`, `withdrawn`, or `rejected` at the same or a newer revision, unless an operator asked for a retry or you pass `force`.
+- It answers `stale` for a revision older than the mapping's, whatever its status, because the commit would be refused after the push.
+- At the mapping's own revision, it answers `stale` when the mapping is already `synced`, `withdrawn`, or `rejected`, unless an operator asked for a retry or you pass `force`.
 - Otherwise it leases the record for `lease_ms` (default two minutes, at most 15), so an event handler and a connector run never push the same record at the same time. It answers `busy` while someone else holds the lease.
 
 `commit` stores the result and releases the lease. Without a lease token it fails while another worker holds a live lease, and a `synced` result never replaces a newer synced revision. If a batch fails, release the leases it holds.

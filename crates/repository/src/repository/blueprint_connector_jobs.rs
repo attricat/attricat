@@ -196,9 +196,9 @@ impl AttricatRepository {
         // boundary keeps an uncommitted event from landing below it; it
         // blocks event writers until the publish commits, so it is taken
         // only when a trigger starts watching.
-        let starts_watching = prepared.iter().any(|(job, ..)| {
-            job.trigger.is_some() && !watching.contains(&job.code)
-        });
+        let starts_watching = prepared
+            .iter()
+            .any(|(job, ..)| job.trigger.is_some() && !watching.contains(&job.code));
         let high_water: i64 = if starts_watching {
             super::domain_events::lock_outbox_boundary(tx, ws).await?;
             sqlx::query_scalar(
@@ -279,15 +279,37 @@ impl AttricatRepository {
     }
 
     /// Starts a resync of an export job: every published record, or only
-    /// `record_ids`. Its runs tell the component to skip records whose
-    /// stored content hash is unchanged rather than records already synced.
+    /// `record_ids`. The covered mappings are marked for retry, so `begin`
+    /// leases records already synced and the component skips those whose
+    /// stored content hash is unchanged. `selection` describes what the caller asked for, so the same key with
+    /// a different selection starts a different resync.
     pub async fn resync_blueprint_connector_job(
         &self,
         id: Uuid,
         key: &str,
+        selection: Option<&str>,
         record_ids: Option<Vec<Uuid>>,
     ) -> Result<Vec<Uuid>, RepositoryError> {
-        self.run_blueprint_connector_job_as(id, key, ConnectorRunMode::Resync, record_ids)
+        if key.is_empty() || key.len() > MAX_RUN_KEY_BYTES || !key.is_ascii() {
+            return Err(invalid("invalid run key"));
+        }
+        let key = match selection {
+            Some(selection) => {
+                use sha2::{Digest, Sha256};
+                let digest = Sha256::digest(format!("{key}\0{selection}"));
+                digest[..16]
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect()
+            }
+            None => key.to_owned(),
+        };
+        // A resync pushes records already synced, so it requests a retry of
+        // the mappings it covers; each settled push clears that request.
+        sqlx::query("UPDATE extension_export_mappings m SET retry_requested_at=clock_timestamp(),updated_at=clock_timestamp() FROM blueprint_connector_jobs j, records r WHERE j.workspace_id=$1 AND j.id=$2 AND j.direction='export' AND m.workspace_id=$1 AND m.extension_id=j.extension_id AND m.connection IS NOT DISTINCT FROM j.connection AND r.workspace_id=$1 AND r.id=m.record_id AND r.blueprint_id=j.blueprint_id AND r.deleted_at IS NULL AND ($3::uuid[] IS NULL OR m.record_id=ANY($3))")
+            .bind(self.extension_workspace()).bind(id).bind(&record_ids)
+            .execute(&self.pool).await?;
+        self.run_blueprint_connector_job_as(id, &key, ConnectorRunMode::Resync, record_ids)
             .await
     }
 

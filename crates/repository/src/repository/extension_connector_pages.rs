@@ -236,6 +236,31 @@ impl AttricatRepository {
             .collect())
     }
 
+    /// The content revision in `channel` as of `snapshot_at` of each of
+    /// `record_ids`, deleted ones included: a deleted related record changes
+    /// the rows that embedded it.
+    async fn revisions_of(
+        &self,
+        record_ids: &[Uuid],
+        snapshot_at: DateTime<Utc>,
+        channel: Option<Uuid>,
+    ) -> Result<HashMap<Uuid, Option<i64>>, RepositoryError> {
+        if record_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let rows: Vec<(Uuid, Option<i64>)> = sqlx::query_as(&format!(
+            "SELECT r.id, {} FROM records r WHERE r.id = ANY($1) AND r.workspace_id = $2",
+            super::extension_attricat_data::content_revision_sql("r", Some("$3"), Some("$4"))
+        ))
+        .bind(record_ids)
+        .bind(self.workspace_id.0)
+        .bind(snapshot_at)
+        .bind(channel)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().collect())
+    }
+
     /// A page of v2 connector rows. Values are as of the page's snapshot;
     /// expanded related records are read as of the same snapshot.
     pub async fn extension_connector_page_v2(
@@ -314,6 +339,14 @@ impl AttricatRepository {
         let targets = self
             .records_of(&target_ids, page.snapshot_at, request.channel_id)
             .await?;
+        let gone: Vec<Uuid> = target_ids
+            .iter()
+            .copied()
+            .filter(|id| !targets.contains_key(id))
+            .collect();
+        let gone_revisions = self
+            .revisions_of(&gone, page.snapshot_at, request.channel_id)
+            .await?;
         let unread: Vec<Uuid> = target_ids
             .iter()
             .copied()
@@ -353,11 +386,16 @@ impl AttricatRepository {
                 };
                 let mut items = Vec::new();
                 for target in target_refs.iter().take(MAX_EXPANDED_TARGETS) {
-                    let Some(target) = target
-                        .as_str()
-                        .and_then(|id| id.parse::<Uuid>().ok())
-                        .and_then(|id| targets.get(&id))
+                    let Some(target_id) = target.as_str().and_then(|id| id.parse::<Uuid>().ok())
                     else {
+                        continue;
+                    };
+                    let Some(target) = targets.get(&target_id) else {
+                        // A deleted target is not embedded, but its deletion
+                        // still changes the row.
+                        if let Some(revision) = gone_revisions.get(&target_id) {
+                            content_revision = content_revision.max(*revision);
+                        }
                         continue;
                     };
                     let item = expanded.entry(target.id).or_insert_with(|| {

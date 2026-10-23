@@ -473,8 +473,7 @@ async fn token_request(
         .and_then(|value| value.as_i64().or_else(|| value.as_str()?.parse().ok()))
         .filter(|seconds| *seconds > 0)
         .map(|seconds| {
-            Utc::now()
-                + TimeDelta::seconds(seconds.clamp(MIN_TOKEN_LIFETIME_SECONDS, 365 * 86_400))
+            Utc::now() + TimeDelta::seconds(seconds.clamp(MIN_TOKEN_LIFETIME_SECONDS, 365 * 86_400))
         });
     Ok(IssuedTokens {
         access_token,

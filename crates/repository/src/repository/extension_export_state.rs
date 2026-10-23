@@ -384,9 +384,10 @@ impl AttricatRepository {
     }
 
     /// Decides whether `record_revision` of a record should be pushed and, if
-    /// so, leases the record for this destination. A revision that is not
-    /// newer than one already pushed (synced, withdrawn or rejected) is stale
-    /// unless `force` is set or an operator requested a retry. `holder`
+    /// so, leases the record for this destination. A revision older than the
+    /// mapping's is always stale. The mapping's own revision is stale once
+    /// settled (synced, withdrawn or rejected) unless `force` is set or an
+    /// operator requested a retry. `holder`
     /// names the invocation taking the lease, so its own rejection of the
     /// record settles at the revision it was pushing.
     #[allow(clippy::too_many_arguments)]
@@ -424,11 +425,14 @@ impl AttricatRepository {
             transaction.commit().await?;
             return Ok(ExportBegin::Busy { lease_until: until });
         }
+        // A revision older than the mapping's is stale whatever its status,
+        // because its commit would be refused after the push.
         let settled = matches!(mapping.status.as_str(), "synced" | "withdrawn" | "rejected");
-        if !force
-            && settled
-            && mapping.retry_requested_at.is_none()
-            && mapping.record_revision >= record_revision
+        if mapping.record_revision > record_revision
+            || (!force
+                && settled
+                && mapping.retry_requested_at.is_none()
+                && mapping.record_revision == record_revision)
         {
             transaction.commit().await?;
             return Ok(ExportBegin::Stale { mapping });
@@ -755,7 +759,8 @@ impl AttricatRepository {
     /// Marks the selected mappings for retry and emits
     /// `export.retry_requested.v1` per record, in one audited transaction.
     /// Records selected by ID without a status that were never exported get
-    /// a pending mapping first. Returns the selected record IDs. A status
+    /// a pending mapping first. Deleted records are never selected, since no
+    /// run would push them. Returns the selected record IDs. A status
     /// that matches more than
     /// [`MAX_EXPORT_RETRY_RECORDS`] records is refused rather than cut.
     pub async fn request_export_retry(
@@ -797,7 +802,7 @@ impl AttricatRepository {
                 .bind(self.extension_workspace()).bind(extension_id).bind(&selection.connection).bind(record_ids)
                 .execute(&mut *transaction).await?;
         }
-        let ids: Vec<Uuid> = sqlx::query_scalar("WITH selected AS (SELECT id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND ($4::uuid[] IS NULL OR record_id=ANY($4)) AND ($5::text IS NULL OR status=$5) ORDER BY record_id LIMIT $6 FOR UPDATE) UPDATE extension_export_mappings m SET status='pending',retry_requested_at=clock_timestamp(),attempts=0,updated_at=clock_timestamp() FROM selected s WHERE m.id=s.id RETURNING m.record_id")
+        let ids: Vec<Uuid> = sqlx::query_scalar("WITH selected AS (SELECT id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND ($4::uuid[] IS NULL OR record_id=ANY($4)) AND ($5::text IS NULL OR status=$5) AND EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=$1 AND r.id=record_id AND r.deleted_at IS NULL) ORDER BY record_id LIMIT $6 FOR UPDATE) UPDATE extension_export_mappings m SET status='pending',retry_requested_at=clock_timestamp(),attempts=0,updated_at=clock_timestamp() FROM selected s WHERE m.id=s.id RETURNING m.record_id")
             .bind(self.extension_workspace()).bind(extension_id).bind(&selection.connection)
             .bind(&selection.record_ids).bind(&selection.status).bind(MAX_EXPORT_RETRY_RECORDS + 1)
             .fetch_all(&mut *transaction).await?;

@@ -472,6 +472,42 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
         .unwrap()
         .unwrap();
     assert_eq!(found.record_id, record);
+
+    // A newer revision still being retried holds off an older one, whose
+    // commit would be refused after it pushed.
+    repository
+        .export_mapping_commit(
+            EXTENSION,
+            None,
+            record,
+            None,
+            ExportMappingUpdate {
+                status: "retrying".into(),
+                record_revision: Some(updated),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert!(matches!(begin(created).await, ExportBegin::Stale { .. }));
+    assert!(matches!(begin(updated).await, ExportBegin::Proceed { .. }));
+
+    // A deleted record is never selected for a retry, since no run would
+    // push it.
+    repository.delete_record(record).await.unwrap();
+    let retried = repository
+        .request_export_retry(
+            EXTENSION,
+            api::repository::ExportRetrySelection {
+                connection: None,
+                record_ids: None,
+                status: Some("retrying".into()),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(retried.is_empty());
+    assert_eq!(mapping_status(&pool, record).await.unwrap().0, "retrying");
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -837,7 +873,7 @@ async fn connector_runs_read_resolved_rows_close_out_withdrawals_and_resync(pool
 
     // A resync of one record re-reads only it and skips it by content hash.
     let runs = repository
-        .resync_blueprint_connector_job(job.id, "resync", Some(vec![product_ids[1]]))
+        .resync_blueprint_connector_job(job.id, "resync", None, Some(vec![product_ids[1]]))
         .await
         .unwrap();
     let mode: String =
@@ -853,6 +889,33 @@ async fn connector_runs_read_resolved_rows_close_out_withdrawals_and_resync(pool
     let rows = checkpoint["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["record_id"], json!(product_ids[1]));
+    // The synced record was leased again rather than found stale, and its
+    // settled push cleared the resync's retry request.
+    assert_eq!(rows[0]["outcome"], "unchanged");
+    let pending_retry: bool = sqlx::query_scalar(
+        "SELECT retry_requested_at IS NOT NULL FROM extension_export_mappings WHERE record_id=$1",
+    )
+    .bind(product_ids[1])
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(!pending_retry);
+
+    // An idempotency key names one selection: reusing it for another
+    // selection starts another resync, and repeating a request finds its run.
+    let resync = |selection: &'static str| {
+        let repository = repository.clone();
+        let records = Some(vec![product_ids[1]]);
+        async move {
+            repository
+                .resync_blueprint_connector_job(job.id, "key", Some(selection), records)
+                .await
+                .unwrap()
+        }
+    };
+    let first = resync("status:synced").await;
+    assert_eq!(resync("status:synced").await, first);
+    assert_ne!(resync("status:rejected").await, first);
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -1276,7 +1339,7 @@ trigger = {events = ["attribute_value.changed.v1"], debounce_seconds = 1}
             .await
             .unwrap();
     assert_eq!(filter, vec![product]);
-    drain_operations(&repository, &pool, store).await;
+    drain_operations(&repository, &pool, store.clone()).await;
     let (status, checkpoint, _) = run_status(&pool, run).await;
     assert_eq!(status, "completed", "{checkpoint}");
     let row = &checkpoint["rows"][0]["row"];
@@ -1285,6 +1348,33 @@ trigger = {events = ["attribute_value.changed.v1"], debounce_seconds = 1}
     let variant_revision = content_revision(&pool, variant).await;
     assert!(variant_revision > content_revision(&pool, product).await);
     assert_eq!(row["content_revision"], json!(variant_revision));
+    assert_eq!(checkpoint["rows"][0]["outcome"], "pushed");
+
+    // Deleting the variant leaves the link in place but drops it from the
+    // row, so the deletion still makes the row newer than what was pushed.
+    repository.delete_record(variant).await.unwrap();
+    let deleted: i64 = sqlx::query_scalar(
+        "SELECT sequence FROM domain_events WHERE aggregate_id=$1 AND event_type='record.deleted.v1'",
+    )
+    .bind(variant)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let job: Uuid = sqlx::query_scalar("SELECT id FROM blueprint_connector_jobs")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let runs = repository
+        .run_blueprint_connector_job(job, "after-delete")
+        .await
+        .unwrap();
+    drain_operations(&repository, &pool, store).await;
+    let (status, checkpoint, _) = run_status(&pool, runs[0]).await;
+    assert_eq!(status, "completed", "{checkpoint}");
+    let row = &checkpoint["rows"][0];
+    assert_eq!(row["row"]["related"]["variants"], json!([]));
+    assert_eq!(row["row"]["content_revision"], json!(deleted));
+    assert_eq!(row["outcome"], "pushed");
 }
 
 #[sqlx::test(migrations = "./migrations")]

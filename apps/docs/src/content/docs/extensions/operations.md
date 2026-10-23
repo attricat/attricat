@@ -144,7 +144,7 @@ Host API 1.1 adds connector calls for exporters:
   - `values`: scalar values resolved through the context's fallback chain, so values inherited from parent contexts are included;
   - `relationships`: relationship targets by attribute code;
   - `files`: file references (`file_id`, `filename`, `mime_type`, `byte_size`, `sha256`) by attribute code, for `open-record-file` and [`files.link.v1`](/extensions/server/#public-file-links);
-  - `related`: for up to four relationship codes named in `expand`, the targets' values, relationships, files, revision, and whether each is published in the channel. Use it for variants and parent/child listings. With `expand`, the row's `content_revision` is the newest revision of the record and the records it embeds, so editing a variant makes its parent's row newer than the revision last committed for it.
+  - `related`: for up to four relationship codes named in `expand`, the targets' values, relationships, files, revision, and whether each is published in the channel. Use it for variants and parent/child listings. With `expand`, the row's `content_revision` is the newest revision of the record and the records it embeds, so editing or deleting a variant makes its parent's row newer than the revision last committed for it.
 - `attricat.withdrawn(cursor, limit)` lists 1 to 100 records of the job's blueprint that were unpublished from the run's channel (and are still unpublished) or deleted, in event order, as `{record_id, reason, record_revision, occurred_at}`, with `next_cursor` and `more`. An empty cursor starts at the oldest change. Save the cursor, for example in extension storage per job and channel, so the next run continues where this one stopped.
 - `api.call("connector.scope.v1", "{}")` returns the run's job, blueprint, revision, context, channel, connection, and mode, or `null` outside a connector run.
 
@@ -230,4 +230,4 @@ POST /api/blueprint-connector-jobs/{id}/resync
 {"idempotency_key": "resync-2026-03-01", "status": "rejected"}
 ```
 
-Pass `record_ids` for given records, or `status` for the records with that export status on the job's connection, but not both. Without either, every published record is exported. A resync reads the same rows as any run; an exporter should skip records whose stored content hash is unchanged and push the rest.
+Pass `record_ids` for given records, or `status` for the records with that export status on the job's connection, but not both. Without either, every published record is exported. A resync reads the same rows as any run, but `begin` leases records that are already synced, so an exporter should skip records whose stored content hash is unchanged and push the rest. The idempotency key covers the selection: the same key with other `record_ids` or another `status` starts a new resync.
