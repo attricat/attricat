@@ -9,7 +9,7 @@
 //! responses without following them. URLs, query strings,
 //! bodies and secrets never reach logs, traces, metrics or errors.
 
-use attricat_extension_manifest::extensions::{DEFAULT_RATE_LIMIT, HostPermission, RateLimit};
+use attricat_extension_manifest::extensions::{HostPermission, RateLimit};
 
 use super::*;
 use crate::extension_runtime::connections::{self, TokenError};
@@ -115,9 +115,10 @@ pub(super) async fn admit_request(
         {
             Ok(())
         } else {
-            Err(Duration::from_secs(
-                u64::from(DEFAULT_RATE_LIMIT.per_seconds) / u64::from(DEFAULT_RATE_LIMIT.requests),
-            ))
+            // The shared default is a sliding window, which cannot tell when
+            // its oldest request leaves; a whole window is when a slot is
+            // certainly free.
+            Err(super::NETWORK_RATE_WINDOW)
         };
     };
     let lowered = lowered_budget(repository, installation, rule).await;

@@ -157,7 +157,7 @@ The result has an `outcome`:
 | `outcome` | Fields | Meaning |
 | --- | --- | --- |
 | `response` | `status`, `headers`, `body_base64` | The destination answered, with any status. |
-| `rate_limited` | `retry_after_ms` | The rule's budget is spent. Nothing was sent. |
+| `rate_limited` | `retry_after_ms` | The rule's budget is spent. Nothing was sent. For a rule without a declared budget the wait is the shared minute window. |
 | `uncertain` | | Transport failure or timeout. The destination may have received the request. |
 | `connection_unavailable` | `message` | The connection's token could not be refreshed for a temporary reason. |
 
@@ -182,7 +182,7 @@ With `exports.mappings`, Attricat keeps one mapping per installation, connection
 
 The mapping status is the record's export status that people see on the record page, in the Explorer, and on Data health. Statuses are `pending`, `synced`, `rejected`, `retrying`, `uncertain`, and `withdrawn`.
 
-Every record has a `content_revision`: the sequence of the latest event that changed its values, relationships, publication, or lifecycle. It only grows. Annotation changes do not advance it, so your own bookkeeping never makes a record look changed. Publication changes count only for the channel being read: a connector page row counts those of the run's channel, and a read without a channel counts none, so publishing to another channel never makes your export look stale. Typed reads, [connector page v2](/extensions/operations/#export-pages-and-withdrawals) rows, and `event-handler` deliveries carry it.
+Every record has a `content_revision`: the sequence of the latest event that changed its values, relationships, publication, or lifecycle. It only grows. Annotation changes do not advance it, so your own bookkeeping never makes a record look changed. Publication changes count only for the channel being read: a connector page row counts those of the run's channel, and a read without a channel counts none, so publishing to another channel never makes your export look stale. Typed reads, [connector page v2](/extensions/operations/#export-pages-and-withdrawals) rows, and `event-handler` deliveries carry it. A delivery of a publish or unpublish event carries the revision without publication changes, like a read without a channel.
 
 These `api.call` operations work in event handlers and operation runs alike. `connection` is optional everywhere; without it the mapping belongs to the extension's default destination.
 

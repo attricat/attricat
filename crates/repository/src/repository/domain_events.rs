@@ -156,6 +156,10 @@ impl From<EventDeliveryRow> for EventDelivery {
     }
 }
 
+/// How long [`AttricatRepository::committed_event_high_water`] waits for
+/// event writers at the outbox boundary.
+const HIGH_WATER_LOCK_TIMEOUT: &str = "2s";
+
 pub(crate) async fn lock_outbox_boundary(
     transaction: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
@@ -329,19 +333,27 @@ impl AttricatRepository {
 
     /// The highest event sequence below which every event has committed.
     /// Read under the outbox boundary, so no event with an allocated but
-    /// uncommitted sequence can later appear below it. `None` while an event
-    /// writer holds the boundary: readers that can wait for a later call do
-    /// not stall behind a long write transaction, nor block other writers.
+    /// uncommitted sequence can later appear below it. Event writers hold
+    /// the boundary only while they commit, so the wait is normally short;
+    /// behind a write transaction that holds it longer than
+    /// [`HIGH_WATER_LOCK_TIMEOUT`] this is `None`, so readers that can try
+    /// again later neither stall nor queue other writers behind them.
     pub(crate) async fn committed_event_high_water(&self) -> Result<Option<i64>, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
-        let locked: bool =
-            sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))")
-                .bind(format!("workflow-activation-boundary:{workspace_id}"))
-                .fetch_one(&mut *transaction)
-                .await?;
-        if !locked {
-            return Ok(None);
+        sqlx::query(&format!(
+            "SET LOCAL lock_timeout = '{HIGH_WATER_LOCK_TIMEOUT}'"
+        ))
+        .execute(&mut *transaction)
+        .await?;
+        match lock_outbox_boundary(&mut transaction, workspace_id).await {
+            Ok(()) => {}
+            Err(RepositoryError::Database(sqlx::Error::Database(error)))
+                if error.code().as_deref() == Some("55P03") =>
+            {
+                return Ok(None);
+            }
+            Err(error) => return Err(error),
         }
         let high_water = sqlx::query_scalar::<_, i64>(
             "SELECT COALESCE(max(sequence), 0) FROM domain_events WHERE workspace_id = $1",

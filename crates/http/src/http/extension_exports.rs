@@ -183,6 +183,10 @@ pub(super) struct RetryRequest {
     /// extension that targets the connection.
     #[serde(default)]
     run: bool,
+    /// Makes the resync idempotent: a request sent again with the same key
+    /// and records finds the runs it started instead of starting more.
+    #[serde(default)]
+    idempotency_key: Option<String>,
 }
 
 /// Marks records for another push and notifies the extension; optionally
@@ -204,6 +208,15 @@ pub(super) async fn retry_export(
     {
         return Err(ApiError::forbidden());
     }
+    if input
+        .idempotency_key
+        .as_ref()
+        .is_some_and(|key| key.is_empty() || key.len() > 40 || !key.is_ascii())
+    {
+        return Err(ApiError::invalid_input(
+            "idempotency_key must be 1-40 ASCII bytes".into(),
+        ));
+    }
     let record_ids = repository
         .request_export_retry(
             &extension_id,
@@ -220,7 +233,10 @@ pub(super) async fn retry_export(
     let mut run_ids = Vec::new();
     let mut job_errors = Vec::new();
     if input.run && !record_ids.is_empty() {
-        let key = format!("retry-{}", Uuid::new_v4().simple());
+        let key = input
+            .idempotency_key
+            .clone()
+            .unwrap_or_else(|| format!("retry-{}", Uuid::new_v4().simple()));
         for job in repository
             .extension_export_connector_jobs(&extension_id)
             .await?
@@ -233,8 +249,19 @@ pub(super) async fn retry_export(
             if ids.is_empty() {
                 continue;
             }
+            // A caller's key names this record set, so the same key with
+            // other records starts another resync.
+            let selection = input.idempotency_key.as_ref().map(|_| {
+                format!(
+                    "retry:{}",
+                    ids.iter()
+                        .map(Uuid::to_string)
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+            });
             match repository
-                .resync_blueprint_connector_job(job.id, &key, None, Some(ids))
+                .resync_blueprint_connector_job(job.id, &key, selection.as_deref(), Some(ids))
                 .await
             {
                 Ok(runs) => run_ids.extend(runs),

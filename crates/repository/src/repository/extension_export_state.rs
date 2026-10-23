@@ -192,8 +192,9 @@ pub enum RejectionRecord {
     /// It already was, at this revision or a newer one, or the record was
     /// deleted: nothing changed.
     Unchanged,
-    /// Another worker holds the record's lease; its push settles it.
-    Busy,
+    /// Another worker holds the record's lease until `until`; its push
+    /// settles it.
+    Busy { until: DateTime<Utc> },
     /// It cannot be recorded, for example for an unknown connection.
     Refused,
 }
@@ -214,6 +215,20 @@ pub(crate) fn connection_is(column: &str, param: &str, connection: Option<&str>)
     match connection {
         Some(_) => format!("{column}={param}"),
         None => format!("{column} IS NULL AND {param}::text IS NULL"),
+    }
+}
+
+impl AttricatRepository {
+    /// Whether the extension has a connection named `connection`.
+    pub(crate) async fn extension_connection_exists<'e>(
+        &self,
+        executor: impl sqlx::PgExecutor<'e>,
+        extension_id: &str,
+        connection: &str,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3)")
+            .bind(self.extension_workspace()).bind(extension_id).bind(connection)
+            .fetch_one(executor).await?)
     }
 }
 
@@ -393,9 +408,9 @@ impl AttricatRepository {
             return Err(RepositoryError::NotFound("record"));
         }
         if let Some(connection) = connection {
-            let known: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3)")
-                .bind(ws).bind(extension_id).bind(connection)
-                .fetch_one(&mut **transaction).await?;
+            let known = self
+                .extension_connection_exists(&mut **transaction, extension_id, connection)
+                .await?;
             if !known {
                 return Err(RepositoryError::NotFound("extension connection"));
             }
@@ -741,10 +756,18 @@ impl AttricatRepository {
                 _ => RejectionRecord::Settled,
             }),
             Err(RepositoryError::NotFound("record")) => Ok(RejectionRecord::Unchanged),
-            Err(RepositoryError::ExportMappingConflict(message)) if message.contains("leased") => {
-                Ok(RejectionRecord::Busy)
-            }
-            Err(RepositoryError::ExportMappingConflict(_)) => Ok(RejectionRecord::Unchanged),
+            // A refused rejection is busy when another worker's lease was
+            // live, and outdated otherwise.
+            Err(RepositoryError::ExportMappingConflict(_)) => Ok(
+                match before.and_then(|before| {
+                    before.lease_until.filter(|until| {
+                        *until > Utc::now() && before.lease_holder.as_deref() != holder
+                    })
+                }) {
+                    Some(until) => RejectionRecord::Busy { until },
+                    None => RejectionRecord::Unchanged,
+                },
+            ),
             Err(RepositoryError::NotFound(_) | RepositoryError::InvalidExtension(_)) => {
                 Ok(RejectionRecord::Refused)
             }
@@ -848,9 +871,9 @@ impl AttricatRepository {
         // pending mapping so the retry selects and pushes them too.
         if let (Some(record_ids), None) = (&selection.record_ids, &selection.status) {
             if let Some(connection) = &selection.connection {
-                let known: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3)")
-                    .bind(self.extension_workspace()).bind(extension_id).bind(connection)
-                    .fetch_one(&mut *transaction).await?;
+                let known = self
+                    .extension_connection_exists(&mut *transaction, extension_id, connection)
+                    .await?;
                 if !known {
                     return Err(RepositoryError::NotFound("extension connection"));
                 }

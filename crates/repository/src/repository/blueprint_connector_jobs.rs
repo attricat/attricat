@@ -346,9 +346,9 @@ impl AttricatRepository {
             })
             .ok_or_else(|| invalid("connector operation is unavailable"))?;
         if let Some(connection) = &job.connection {
-            let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3)")
-                .bind(self.extension_workspace()).bind(&job.extension_id).bind(connection)
-                .fetch_one(&self.pool).await?;
+            let exists = self
+                .extension_connection_exists(&self.pool, &job.extension_id, connection)
+                .await?;
             if !exists {
                 return Err(invalid("the job's connection does not exist"));
             }

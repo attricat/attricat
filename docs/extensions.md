@@ -622,7 +622,7 @@ whose `handle-event(event, delivery)` returns `result<_, failure>`, and
 
 | Case | Event handler | Operation batch |
 |---|---|---|
-| `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes | A rejection that names a record, from an extension with `exports.mappings`, settles that record and replays the batch after a second, so the component finds the record settled and moves on. A newly settled record is progress and is not counted; a repeated rejection, or one of a record another worker holds, counts toward the 100 waits in a row below. A rejection that cannot be recorded (for example for an unknown connection, or of a record outside the run's scope), and any other rejection, dead-letters the run with code `rejected`, without retries |
+| `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes | A rejection that names a record, from an extension with `exports.mappings`, settles that record and replays the batch after a second, so the component finds the record settled and moves on. A newly settled record is progress and is not counted; a repeated rejection, or one of a record another worker holds, counts toward the 100 waits in a row below; a record another worker holds is replayed once that worker's lease ends. A rejection that cannot be recorded (for example for an unknown connection, or of a record outside the run's scope), and any other rejection, dead-letters the run with code `rejected`, without retries |
 | `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted` | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget, up to 100 times in a row before a completed batch; past that, and without `after-ms`, it is a failure within that budget. A replayed dead-lettered run starts with fresh failure and deferral budgets |
 | `fault(message)` | Quarantines the installation | Fails the run and quarantines the installation |
 
@@ -741,7 +741,9 @@ never exported get a pending mapping; deleted records are never selected), emits
 `export.retry_requested.v1` for each record to that extension only, and is
 audited. With `run: true` it also starts a [resync](#connector-jobs-for-exports)
 of just those records on each of the extension's export jobs that target the
-connection, so a record is retried without rerunning a whole job. The status
+connection, so a record is retried without rerunning a whole job. An optional
+`idempotency_key` (1-40 ASCII bytes) makes those resyncs idempotent: the same
+key and records find the runs already started. The status
 page and the retry name records across the workspace, so besides
 `extensions.read` or `extensions.manage` they need a workspace-wide
 `records.read` grant.
@@ -773,8 +775,10 @@ record_revision, occurred_at}`, with a `next_cursor` bound to the blueprint and
 channel and `more`. An empty cursor starts at the oldest change. Persist the
 cursor (for example in extension storage, per job and channel) to continue
 where the last run stopped. The feed ends at the committed end of the event
-log; while an event write holds that boundary a page is empty with `more:
-false` and an unchanged cursor, rather than waiting for the write.
+log; behind an event write that holds that boundary for more than two
+seconds a page is empty with `more: false` and an unchanged cursor, rather
+than waiting for the write. Change-triggered jobs likewise skip such a
+tick.
 
 `api.call("connector.scope.v1", "{}")` returns the run's job, blueprint,
 revision, context, channel, connection and mode, or `null` outside connector
@@ -826,7 +830,8 @@ lower a budget, never raise it, with `PUT
 budgets. Buckets are per workspace, extension and rule, and shared across
 replicas with `CACHE_BACKEND=redis`. Each process caches a lowered budget for
 10 seconds. Rules without a budget keep the shared
-60 requests per minute per release.
+60 requests per minute per release; v2 calls throttled by it report the
+whole minute as the wait.
 
 ### Transfers, record files and public links
 

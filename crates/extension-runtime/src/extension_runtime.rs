@@ -1613,6 +1613,22 @@ impl ExtensionOperationTaskHandler {
         error: BatchError,
         operation_started: Instant,
     ) -> Result<TaskOutcome, TaskHandlerError> {
+        // A run whose release lost its authorization mid-batch (it was
+        // disabled, quarantined or lost a grant) pauses like one that finds
+        // it unauthorized before the batch, whatever the batch reported.
+        let Some(installation) = repository
+            .runtime_extension_installation(&run.extension_id, run.installed_release_id)
+            .await
+            .map_err(operation_task_error)?
+        else {
+            repository
+                .pause_extension_operation_task(task)
+                .await
+                .map_err(operation_task_error)?;
+            return Ok(TaskOutcome::Reschedule {
+                at: chrono::Utc::now() + PAUSED_OPERATION_RECHECK_DELAY,
+            });
+        };
         let outcome = match error {
             // A retry with an explicit delay is the batch asking to wait,
             // like a deferral, so it does not spend the failure budget until
@@ -1642,11 +1658,7 @@ impl ExtensionOperationTaskHandler {
                 }
             }
             BatchError::Failure(InvocationFailure::Rejected(rejection)) => {
-                let exports = repository
-                    .runtime_extension_installation(&run.extension_id, run.installed_release_id)
-                    .await
-                    .map_err(operation_task_error)?
-                    .is_some_and(|installation| exports_mappings(&installation));
+                let exports = exports_mappings(&installation);
                 let mut recorded = None;
                 if let Some(record_id) = rejection.record_id
                     && exports
@@ -1727,21 +1739,22 @@ impl ExtensionOperationTaskHandler {
                 // capped, so a component that keeps rejecting the same batch
                 // is still dead-lettered. One that cannot be recorded would
                 // only be rejected again, so it dead-letters the run.
-                let limit = match recorded {
-                    Some(RejectionRecord::Settled) => Some(None),
-                    Some(RejectionRecord::Unchanged | RejectionRecord::Busy) => {
-                        Some(Some(MAX_RETRY_DEFERRALS))
+                // A record another worker holds is replayed once its lease
+                // ends, so a long push is waited for rather than counted down.
+                let replay_at = chrono::Utc::now() + RECORD_REJECTION_REPLAY_DELAY;
+                let deferral = match recorded {
+                    Some(RejectionRecord::Settled) => Some((None, replay_at)),
+                    Some(RejectionRecord::Unchanged) => {
+                        Some((Some(MAX_RETRY_DEFERRALS), replay_at))
+                    }
+                    Some(RejectionRecord::Busy { until }) => {
+                        Some((Some(MAX_RETRY_DEFERRALS), until.max(replay_at)))
                     }
                     Some(RejectionRecord::Refused) | None => None,
                 };
-                let settled_record = match limit {
-                    Some(limit) => repository
-                        .defer_extension_operation_task(
-                            task,
-                            &message,
-                            chrono::Utc::now() + RECORD_REJECTION_REPLAY_DELAY,
-                            limit,
-                        )
+                let settled_record = match deferral {
+                    Some((limit, at)) => repository
+                        .defer_extension_operation_task(task, &message, at, limit)
                         .await
                         .map_err(operation_task_error)?,
                     None => false,
@@ -1757,23 +1770,6 @@ impl ExtensionOperationTaskHandler {
                 }
             }
             error => {
-                // A run whose release lost its authorization mid-batch (it
-                // was disabled, quarantined or lost a grant) pauses like one
-                // that finds it unauthorized before the batch.
-                if repository
-                    .runtime_extension_installation(&run.extension_id, run.installed_release_id)
-                    .await
-                    .map_err(operation_task_error)?
-                    .is_none()
-                {
-                    repository
-                        .pause_extension_operation_task(task)
-                        .await
-                        .map_err(operation_task_error)?;
-                    return Ok(TaskOutcome::Reschedule {
-                        at: chrono::Utc::now() + PAUSED_OPERATION_RECHECK_DELAY,
-                    });
-                }
                 if deferrable && error.is_fault() {
                     tracing::warn!(
                         extension = %run.extension_id,
@@ -1834,6 +1830,7 @@ impl WasmExtensionTaskHandler {
         let mut dispatch = EventDispatch::default();
         let mut completed: Vec<(String, String, Uuid)> = Vec::new();
         let installations = repository.enabled_extension_handlers(event).await?;
+        dispatch.handled = !installations.is_empty();
         let mut attempts = if installations.is_empty() {
             Default::default()
         } else {
@@ -2022,9 +2019,29 @@ impl WasmExtensionTaskHandler {
             }
         }
         let attempt = attempts + 1;
+        // A publication event concerns one channel, which a handler does not
+        // export to by itself, so its delivery carries the record's revision
+        // without publication events, on the scale of typed reads. Mapping
+        // revisions then never run ahead of what a channel export reads.
+        let record_revision = match event.record_content_revision() {
+            Some(_)
+                if [
+                    attricat_events::RECORD_PUBLISHED_V1,
+                    attricat_events::RECORD_UNPUBLISHED_V1,
+                ]
+                .contains(&event.event_type.as_str()) =>
+            {
+                Some(
+                    repository
+                        .record_content_revision_at(event.aggregate_id, event.occurred_at, None)
+                        .await?,
+                )
+            }
+            revision => revision,
+        };
         let delivery = EventDeliveryAttempt {
             sequence: event.sequence,
-            record_revision: event.record_content_revision(),
+            record_revision,
             attempt: attempt as u32,
         };
         let outcome = self
@@ -2148,6 +2165,8 @@ impl WasmExtensionTaskHandler {
 struct EventDispatch {
     /// The earliest time a retrying or debouncing handler is due.
     resume_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Whether any handler took the event, so outcomes may be stored.
+    handled: bool,
 }
 
 impl EventDispatch {
@@ -2213,16 +2232,19 @@ impl TaskHandler for WasmExtensionTaskHandler {
                 code: "receipt",
                 message: error.to_string(),
             })?;
-        // Cleared on every settled delivery, not only when this run stored an
-        // outcome: an earlier run may have stored one for a handler whose
-        // extension has since been disabled.
-        repository
-            .clear_extension_handler_attempts(delivery.event.id)
-            .await
-            .map_err(|error| TaskHandlerError {
-                code: "receipt",
-                message: error.to_string(),
-            })?;
+        // Cleared when a handler took the event, which covers every outcome
+        // this delivery stored. One stored by an earlier run for a handler
+        // whose extension has since been disabled is left to the retention
+        // sweep, so events no handler takes cost no write.
+        if dispatch.handled {
+            repository
+                .clear_extension_handler_attempts(delivery.event.id)
+                .await
+                .map_err(|error| TaskHandlerError {
+                    code: "receipt",
+                    message: error.to_string(),
+                })?;
+        }
         Ok(TaskOutcome::Complete)
     }
 }

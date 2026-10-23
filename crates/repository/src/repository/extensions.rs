@@ -1480,6 +1480,10 @@ impl AttricatRepository {
             .bind(current.id)
             .execute(&mut *transaction)
             .await?;
+        // The grants its links were issued under are gone, so the links go
+        // too; re-enabling the new release never revives them.
+        self.revoke_extension_file_links(&mut transaction, &current.extension_id)
+            .await?;
         self.write_extension_lifecycle(
             &mut transaction,
             &row,
