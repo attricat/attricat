@@ -288,7 +288,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
             )));
         }
         if !CONNECTOR_JOB_DIRECTIONS.contains(&job.direction.as_str())
-            || (job.direction == "import") != job.context.is_some()
+            || (job.direction == "import" && job.context.is_none())
             || (job.direction == "export" && job.input_file_id.is_some())
             || job.interval_seconds.is_some_and(|seconds| {
                 !(MIN_CONNECTOR_INTERVAL_SECONDS..=MAX_CONNECTOR_INTERVAL_SECONDS)

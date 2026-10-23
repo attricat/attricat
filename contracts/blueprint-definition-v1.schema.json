@@ -86,7 +86,7 @@
           ]
         },
         "context": {
-          "description": "Context code that receives imported values. Required for imports.",
+          "description": "Context code that receives imported values, required for imports; for\nan export, the publication channel it exports.",
           "type": [
             "string",
             "null"

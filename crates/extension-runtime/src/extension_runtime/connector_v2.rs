@@ -89,6 +89,7 @@ impl OperationState {
             .extension_withdrawn_records(
                 scope.blueprint_id,
                 scope.channel_id,
+                scope.record_ids.as_deref(),
                 Some(cursor.as_str()),
                 limit,
             )
@@ -131,6 +132,17 @@ impl OperationState {
             .map_err(|error| error.to_string())?;
         if in_scope.len() != record_ids.len() {
             return Err("annotation targets a record outside the job's blueprint".into());
+        }
+        // A run confined to selected records annotates only those.
+        if let Some(selection) = self
+            .repository
+            .connector_run_details(self.run_id)
+            .await
+            .map_err(|error| error.to_string())?
+            .and_then(|details| details.record_ids)
+            && record_ids.iter().any(|id| !selection.contains(id))
+        {
+            return Err("annotation targets a record outside the run's selection".into());
         }
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_all_active(batch_capabilities(&batch)).await?;

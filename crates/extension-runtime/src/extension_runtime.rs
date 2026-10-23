@@ -1683,21 +1683,29 @@ impl ExtensionOperationTaskHandler {
                     // A connector run's rejection belongs to the run's
                     // connection unless it names another; any other run's
                     // without one to the default destination.
+                    // A connector run writes only its own connection's
+                    // mappings, so a rejection naming another is refused.
+                    let own_connection = details.map(|details| details.connection);
+                    let foreign = matches!(
+                        (&own_connection, &rejection.connection),
+                        (Some(own), Some(named)) if own.as_deref() != Some(named.as_str())
+                    );
                     let connection = match rejection.connection {
                         Some(connection) => Some(connection),
-                        None => details.and_then(|details| details.connection),
+                        None => own_connection.flatten(),
                     };
                     // A run settles only records it may map, like its
                     // mappings calls.
                     recorded = Some(RejectionRecord::Refused);
-                    if transfer::ensure_run_reaches_record(
-                        repository,
-                        run.id,
-                        record_id,
-                        transfer::RunReach::Map,
-                    )
-                    .await
-                    .is_ok()
+                    if !foreign
+                        && transfer::ensure_run_reaches_record(
+                            repository,
+                            run.id,
+                            record_id,
+                            transfer::RunReach::Map,
+                        )
+                        .await
+                        .is_ok()
                     {
                         // A result committed before the run started is one
                         // the run saw, even when its revision counts more

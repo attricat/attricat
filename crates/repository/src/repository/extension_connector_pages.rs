@@ -174,7 +174,7 @@ impl AttricatRepository {
              JOIN attributes a ON a.id=av.attribute_id AND a.blueprint_id=rec.blueprint_id AND a.blueprint_version=rec.blueprint_version AND a.value_type='file' \
              JOIN attribute_file_references r ON r.attribute_value_id=av.id \
              JOIN files f ON f.id=r.file_id AND f.workspace_id=av.workspace_id AND f.deleted_at IS NULL \
-             WHERE av.workspace_id=$1 AND av.record_id=ANY($2) \
+             WHERE av.workspace_id=$1 AND av.record_id=ANY($2) AND av.active \
              ORDER BY av.record_id,a.position,av.context_id,r.position",
         )
         .bind(self.workspace_id.0)
@@ -445,6 +445,7 @@ impl AttricatRepository {
         &self,
         blueprint_id: Uuid,
         channel_id: Option<Uuid>,
+        record_ids: Option<&[Uuid]>,
         cursor: Option<&str>,
         limit: u32,
     ) -> Result<Value, RepositoryError> {
@@ -505,6 +506,7 @@ impl AttricatRepository {
                AND (($3::uuid IS NULL AND e.event_type IN ('record.unpublished.v1','record.deleted.v1')) \
                  OR (e.event_type='record.unpublished.v1' AND e.payload->>'context_id'=$3::text)) \
                AND EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=e.workspace_id AND r.id=e.aggregate_id AND r.blueprint_id=$4) \
+               AND ($7::uuid[] IS NULL OR e.aggregate_id=ANY($7)) \
              ORDER BY e.sequence LIMIT $5",
         )
         .bind(self.workspace_id.0)
@@ -513,6 +515,7 @@ impl AttricatRepository {
         .bind(blueprint_id)
         .bind(i64::from(limit))
         .bind(high_water)
+        .bind(record_ids)
         .fetch_all(&self.pool)
         .await?;
         // A record published again since is no longer withdrawn.

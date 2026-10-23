@@ -1087,6 +1087,8 @@ pub(super) struct RunFacts {
     selection: Option<Vec<Uuid>>,
     /// When a resync run started.
     pub(super) resync_since: Option<chrono::DateTime<chrono::Utc>>,
+    /// A connector run's connection, the only one whose mappings it writes.
+    connection: Option<Option<String>>,
 }
 
 impl RunFacts {
@@ -1109,7 +1111,23 @@ impl RunFacts {
                 .resync_run_started_at(run_id)
                 .await
                 .map_err(|error| error.to_string())?,
+            connection: repository
+                .connector_run_details(run_id)
+                .await
+                .map_err(|error| error.to_string())?
+                .map(|details| details.connection),
         })
+    }
+
+    /// Refuses a mapping write for another connection than a connector
+    /// run's own.
+    pub(super) fn ensure_connection(&self, connection: Option<&str>) -> Result<(), String> {
+        match &self.connection {
+            Some(own) if own.as_deref() != connection => {
+                Err("a connector run writes only its own connection's mappings".into())
+            }
+            _ => Ok(()),
+        }
     }
 
     /// Refuses a record outside the run's scope for `reach`. An interactive

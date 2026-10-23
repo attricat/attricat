@@ -155,7 +155,8 @@ impl HostState {
             }
             "mappings.begin.v1" => {
                 let input: MappingBegin = parse_host_request(request, "mapping request")?;
-                self.ensure_may_map(input.record_id).await?;
+                self.ensure_may_map(input.record_id, input.connection.as_deref())
+                    .await?;
                 let lease = input.lease_ms.map(|milliseconds| {
                     TimeDelta::try_milliseconds(milliseconds.min(i64::MAX as u64) as i64)
                         .unwrap_or(TimeDelta::MAX)
@@ -185,7 +186,8 @@ impl HostState {
             }
             "mappings.commit.v1" => {
                 let input: MappingCommit = parse_host_request(request, "mapping request")?;
-                self.ensure_may_map(input.record_id).await?;
+                self.ensure_may_map(input.record_id, input.connection.as_deref())
+                    .await?;
                 let mapping = repository
                     .export_mapping_commit(
                         extension_id,
@@ -209,7 +211,8 @@ impl HostState {
             }
             "mappings.release.v1" => {
                 let input: MappingRecord = parse_host_request(request, "mapping request")?;
-                self.ensure_may_map(input.record_id).await?;
+                self.ensure_may_map(input.record_id, input.connection.as_deref())
+                    .await?;
                 let lease_token = input
                     .lease_token
                     .ok_or_else(|| "lease_token is required".to_owned())?;
@@ -226,7 +229,8 @@ impl HostState {
             }
             "mappings.delete.v1" => {
                 let input: MappingRecord = parse_host_request(request, "mapping request")?;
-                self.ensure_may_map(input.record_id).await?;
+                self.ensure_may_map(input.record_id, input.connection.as_deref())
+                    .await?;
                 let deleted = repository
                     .export_mapping_delete(
                         extension_id,
@@ -249,12 +253,17 @@ impl HostState {
     }
 
     /// Inside an operation run, refuses a mapping write for a record outside
-    /// the run's scope.
-    async fn ensure_may_map(&self, record_id: Uuid) -> Result<(), String> {
+    /// the run's scope, or for another connection than a connector run's.
+    async fn ensure_may_map(
+        &self,
+        record_id: Uuid,
+        connection: Option<&str>,
+    ) -> Result<(), String> {
         match self.run_id {
             Some(run_id) => {
-                self.run_facts(run_id)
-                    .await?
+                let facts = self.run_facts(run_id).await?;
+                facts.ensure_connection(connection)?;
+                facts
                     .ensure_reaches(
                         &self.repository,
                         run_id,

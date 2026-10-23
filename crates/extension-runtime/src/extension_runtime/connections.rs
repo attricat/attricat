@@ -104,12 +104,23 @@ pub(super) async fn insert_access_token(
 ) -> Result<String, TokenError> {
     host.require("connections.use")
         .map_err(|error| TokenError::Invalid(error.to_string()))?;
-    let (token, kind) = access_token(&host.repository, &host.installation, connection).await?;
-    if !kind.api_host_permissions.iter().any(|id| id == rule_id) {
+    // The rule is checked before the token is read, so a misrouted request
+    // never causes a refresh (which spends a rotating refresh token).
+    let described = host
+        .repository
+        .extension_connection(&host.installation.extension_id, connection)
+        .await
+        .map_err(|error| TokenError::Invalid(error.to_string()))?;
+    if !connection_kind(&host.installation, &described.kind)?
+        .api_host_permissions
+        .iter()
+        .any(|id| id == rule_id)
+    {
         return Err(TokenError::Invalid(
             "this connection's token may not be sent to that host permission".into(),
         ));
     }
+    let (token, kind) = access_token(&host.repository, &host.installation, connection).await?;
     let (name, prefix) = kind.token_header.as_ref().map_or_else(
         || ("authorization".to_owned(), "Bearer ".to_owned()),
         |header| (header.name.to_ascii_lowercase(), header.prefix.clone()),

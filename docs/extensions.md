@@ -697,7 +697,8 @@ exporter can withdraw the item. Components with `exports.mappings` use these
 Inside an operation run, `begin`, `commit`, `release` and `delete` accept only
 records in the run's scope: records of a connector run's blueprint (including
 deleted, unpublished and older-version records it withdraws), or an
-interactive run's selected records.
+interactive run's selected records. A connector run writes only its own
+connection's mappings.
 
 `begin` is the guard against reordered and duplicated work. It answers
 `stale` for a revision older than the mapping's, whatever its status, since
@@ -774,7 +775,8 @@ than the revision last committed for it.
 
 `attricat.withdrawn(cursor, limit)` (1–100) lists records of the job's
 blueprint that were unpublished from the run's channel (and are still
-unpublished), in event order; deleting a record unpublishes it from every
+unpublished), in event order, and only of the run's selected records when it
+has a selection; deleting a record unpublishes it from every
 channel it was live in, reported with reason `deleted`, so a record never
 published in the channel is never reported. Without a channel every
 unpublication and deletion is listed. Items come as `{record_id, reason,
@@ -791,7 +793,8 @@ seconds.
 `api.call("connector.scope.v1", "{}")` returns the run's job, blueprint,
 revision, context, channel, connection and mode, or `null` outside connector
 runs. Scoped connector runs may now use `attricat-data.batch` for
-annotation-only batches on records of the job's blueprint, to record external
+annotation-only batches on records of the job's blueprint (and of its
+selection, when the run has one), to record external
 IDs or sync state where checks and the Explorer can see them; value writes stay
 unavailable to export runs.
 
@@ -947,8 +950,11 @@ connection re-created under the same name keeps the destination's external IDs.
 
 ### Connector jobs for exports
 
-An export job may name the `connection` it pushes to and declare a change
-`trigger`:
+An export job may name the `connection` it pushes to, the publication
+channel it exports as `context`, and a change `trigger`. Without `context` a
+job runs once per enabled channel; because export mappings hold one status
+per record and connection, a job of an extension with `exports.mappings` is
+refused when several channels are enabled and it names none.
 
 ```toml
 [[connector_jobs]]

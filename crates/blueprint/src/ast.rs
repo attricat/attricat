@@ -74,7 +74,8 @@ pub struct ConnectorJobDefinition {
     /// Operation input table passed to the extension.
     #[schemars(with = "serde_json::Map<String, serde_json::Value>")]
     pub input: toml::Value,
-    /// Context code that receives imported values. Required for imports.
+    /// Context code that receives imported values, required for imports; for
+    /// an export, the publication channel it exports.
     #[schemars(extend("x-attricat-reference" = "context"))]
     pub context: Option<String>,
     /// Uploaded file supplied to an import.

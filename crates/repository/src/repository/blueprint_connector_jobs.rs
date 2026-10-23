@@ -357,8 +357,26 @@ impl AttricatRepository {
             .bind(self.extension_workspace()).bind(job.blueprint_id).fetch_optional(&self.pool).await?
             .flatten().ok_or_else(|| invalid("blueprint is no longer published"))?;
         let channels: Vec<Uuid> = if job.direction == "export" {
-            sqlx::query_scalar("SELECT context_id FROM publication_channels WHERE workspace_id=$1 AND enabled ORDER BY context_id")
-                .bind(self.extension_workspace()).fetch_all(&self.pool).await?
+            let enabled: Vec<Uuid> = sqlx::query_scalar("SELECT context_id FROM publication_channels WHERE workspace_id=$1 AND enabled ORDER BY context_id")
+                .bind(self.extension_workspace()).fetch_all(&self.pool).await?;
+            match job.context_id {
+                Some(channel) if enabled.contains(&channel) => vec![channel],
+                Some(_) => {
+                    return Err(invalid(
+                        "the job's context is not an enabled publication channel",
+                    ));
+                }
+                // Export mappings hold one status per record and connection,
+                // so runs of several channels would overwrite each other's.
+                None if enabled.len() > 1
+                    && installation.capability_grants.contains("exports.mappings") =>
+                {
+                    return Err(invalid(
+                        "set the job's context to the one channel it exports; several channels are enabled",
+                    ));
+                }
+                None => enabled,
+            }
         } else {
             vec![job.context_id.expect("validated import context")]
         };

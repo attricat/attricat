@@ -1580,6 +1580,16 @@ trigger = {events = ["attribute_value.changed.v1"], debounce_seconds = 1}
     assert_eq!(row["row"]["related"]["variants"], json!([]));
     assert_eq!(row["row"]["content_revision"], json!(deleted));
     assert_eq!(row["outcome"], "pushed");
+
+    // Mappings keep one status per record and connection, so a job of an
+    // extension with mappings exports one channel: with several enabled it
+    // must name its channel as `context`.
+    child_channel(&repository, &pool, "web").await;
+    let refused = repository
+        .run_blueprint_connector_job(job, "two-channels")
+        .await
+        .unwrap_err();
+    assert!(refused.to_string().contains("context"), "{refused}");
 }
 
 #[sqlx::test(migrations = "./migrations")]
