@@ -161,13 +161,24 @@ pub(super) async fn extension_export_status(
             true,
         )
         .await?;
+    // Counts and failures describe the whole extension, so only the first
+    // page computes them; later pages carry only mappings.
+    let first = query.after.is_none();
     Ok(Json(ExtensionExportStatus {
-        counts: repository.export_status_counts(Some(&extension_id)).await?,
+        counts: if first {
+            repository.export_status_counts(Some(&extension_id)).await?
+        } else {
+            Vec::new()
+        },
         mappings,
         next,
-        handler_failures: repository
-            .extension_handler_failures(&extension_id, HANDLER_FAILURE_LIMIT)
-            .await?,
+        handler_failures: if first {
+            repository
+                .extension_handler_failures(&extension_id, HANDLER_FAILURE_LIMIT)
+                .await?
+        } else {
+            Vec::new()
+        },
     }))
 }
 

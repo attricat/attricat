@@ -735,6 +735,8 @@ pub enum RepositoryError {
     ExtensionAlreadyInstalled,
     #[error("{0}")]
     ExportMappingConflict(String),
+    #[error("a connection with this name already exists")]
+    ExtensionConnectionExists,
     #[error("invalid domain event: {0}")]
     InvalidDomainEvent(#[from] crate::domain_events::EventContractError),
     #[error("publication context is not an enabled channel")]

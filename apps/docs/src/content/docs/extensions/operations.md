@@ -46,7 +46,7 @@ A run whose release is disabled, quarantined, or loses a grant during a batch pa
 - After each batch, the checkpoint is saved. The batch key changes only once the checkpoint is saved.
 - If a worker crashes before the checkpoint, the batch runs again with the **same batch key**. If your component writes to the catalog or an external system, make those writes idempotent on the batch key.
 - Cancelling a queued run ends it immediately. Cancelling a running one asks the component to stop at the next batch.
-- A run that keeps failing becomes a dead letter. An operator can replay it; the replayed run starts with a fresh failure budget and 100 new deferrals.
+- A run that keeps failing becomes a dead letter, and records it leased but did not settle become `retrying` with an error. An operator can replay it; the replayed run starts with a fresh failure budget and 100 new deferrals.
 
 ## Start, watch, and download
 

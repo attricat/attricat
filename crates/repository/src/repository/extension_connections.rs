@@ -482,7 +482,7 @@ impl AttricatRepository {
             .fetch_one(&mut *transaction).await
             .map_err(|error| match error {
                 sqlx::Error::Database(database) if database.is_unique_violation() => {
-                    RepositoryError::ExportMappingConflict("a connection with this name already exists".into())
+                    RepositoryError::ExtensionConnectionExists
                 }
                 error => error.into(),
             })?;

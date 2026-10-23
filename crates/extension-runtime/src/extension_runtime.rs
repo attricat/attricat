@@ -1720,7 +1720,9 @@ impl ExtensionOperationTaskHandler {
                             .await
                             .ok()
                             .flatten()
-                            .filter(|mapping| mapping.updated_at <= run.created_at)
+                            .filter(|mapping| {
+                                mapping.settled_at.is_some_and(|at| at <= run.created_at)
+                            })
                             .map_or(0, |mapping| mapping.record_revision);
                         recorded = Some(
                             repository
@@ -1796,6 +1798,23 @@ impl ExtensionOperationTaskHandler {
                 if terminal { "failed" } else { "retrying" }
             }
         };
+        // A run that ends without finishing its batch leaves the records it
+        // leased showing as retrying, as a handler that gives up does.
+        if matches!(outcome, "failed" | "rejected") && exports_mappings(&installation) {
+            repository
+                .fail_export_leases(
+                    &run.extension_id,
+                    &run_lease_holder(run.id),
+                    if outcome == "failed" {
+                        "run_failed"
+                    } else {
+                        "run_rejected"
+                    },
+                    "the run ended before it settled this record",
+                )
+                .await
+                .map_err(operation_task_error)?;
+        }
         counter!("attricat_extension_operations_total", "outcome" => outcome).increment(1);
         histogram!("attricat_extension_operation_duration_seconds", "outcome" => outcome)
             .record(operation_started.elapsed().as_secs_f64());
@@ -2103,6 +2122,18 @@ impl WasmExtensionTaskHandler {
                             revision,
                             Some(&handler_lease_holder(event.id, &handler.id)),
                             &rejection.code,
+                            &rejection.message,
+                        )
+                        .await?;
+                }
+                // Other records the handler leased before it rejected were
+                // not pushed either.
+                if exports_mappings(installation) {
+                    repository
+                        .fail_export_leases(
+                            &installation.extension_id,
+                            &handler_lease_holder(event.id, &handler.id),
+                            "handler_rejected",
                             &rejection.message,
                         )
                         .await?;

@@ -444,7 +444,9 @@ impl RepositoryError {
             }
             Self::InvalidRuleDefinition(_) => plain(Unprocessable, Code::InvalidRuleDefinition),
             Self::ExtensionAlreadyInstalled => plain(Conflict, Code::ExtensionAlreadyInstalled),
-            Self::ExportMappingConflict(_) => plain(Conflict, Code::Conflict),
+            Self::ExportMappingConflict(_) | Self::ExtensionConnectionExists => {
+                plain(Conflict, Code::Conflict)
+            }
             Self::ApprovalAlreadyDecided => plain(Conflict, Code::ApprovalAlreadyDecided),
             Self::ReusableAttributeAlreadyAttached
             | Self::BlueprintCodeTaken

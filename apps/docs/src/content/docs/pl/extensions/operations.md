@@ -46,7 +46,7 @@ Przebieg, którego wydanie zostanie wyłączone, poddane kwarantannie lub utraci
 - Po każdej partii zapisywany jest punkt kontrolny. Klucz partii zmienia się dopiero po zapisaniu punktu kontrolnego.
 - Jeśli proces roboczy ulegnie awarii przed punktem kontrolnym, partia jest wykonywana ponownie z **tym samym kluczem partii**. Jeśli Twój komponent zapisuje do katalogu lub systemu zewnętrznego, zadbaj, aby te zapisy były idempotentne względem klucza partii.
 - Anulowanie przebiegu oczekującego w kolejce kończy go natychmiast. Anulowanie trwającego prosi komponent o zatrzymanie się przy następnej partii.
-- Przebieg, który stale kończy się błędem, staje się martwą wiadomością (dead letter). Operator może go odtworzyć; odtworzony przebieg zaczyna z nowym budżetem niepowodzeń i 100 nowymi odroczeniami.
+- Przebieg, który stale kończy się błędem, staje się martwą wiadomością (dead letter), a rekordy, które dzierżawił, ale ich nie rozstrzygnął, przechodzą w stan `retrying` z błędem. Operator może go odtworzyć; odtworzony przebieg zaczyna z nowym budżetem niepowodzeń i 100 nowymi odroczeniami.
 
 ## Uruchamiaj, obserwuj i pobieraj
 

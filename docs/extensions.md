@@ -622,7 +622,7 @@ whose `handle-event(event, delivery)` returns `result<_, failure>`, and
 
 | Case | Event handler | Operation batch |
 |---|---|---|
-| `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes | A rejection that names a record, from an extension with `exports.mappings`, settles that record and replays the batch after a second, so the component finds the record settled and moves on. A newly settled record is progress and is not counted; a repeated rejection, or one of a record another worker holds, counts toward the 100 waits in a row below; a record another worker holds is replayed once that worker's lease ends. A rejection that cannot be recorded (for example for an unknown connection, or of a record outside the run's scope), and any other rejection, dead-letters the run with code `rejected`, without retries |
+| `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes, and other records the handler leased become `retrying` with error `handler_rejected` | A rejection that names a record, from an extension with `exports.mappings`, settles that record and replays the batch after a second, so the component finds the record settled and moves on. A newly settled record is progress and is not counted; a repeated rejection, or one of a record another worker holds, counts toward the 100 waits in a row below; a record another worker holds is replayed once that worker's lease ends. A rejection that cannot be recorded (for example for an unknown connection, or of a record outside the run's scope), and any other rejection, dead-letters the run with code `rejected`, without retries |
 | `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted`; records the handler still leases become `retrying` with error `retries_exhausted` and their leases end | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget, up to 100 times in a row before a completed batch; past that, and without `after-ms`, it is a failure within that budget. A replayed dead-lettered run starts with fresh failure and deferral budgets |
 | `fault(message)` | Quarantines the installation; records the handler leased become `retrying` with error `handler_fault` | Fails the run and quarantines the installation |
 
@@ -742,7 +742,9 @@ The `mappings.list.v1` host call still lists every mapping.
 1,000, by IDs or by status; a status matching more is refused, not cut) to
 `pending`, records the retry request (only for an installed extension granted
 `exports.mappings`; any other is not found) (records selected by ID alone that were
-never exported get a pending mapping; deleted records are never selected), emits
+never exported get a pending mapping when the extension exports their
+blueprint to that connection by a job, or handles `export.retry_requested.v1`
+itself; deleted records are never selected), emits
 `export.retry_requested.v1` for each record to that extension only, and is
 audited. With `run: true` it also starts a [resync](#connector-jobs-for-exports)
 of just those records on each of the extension's export jobs that target the

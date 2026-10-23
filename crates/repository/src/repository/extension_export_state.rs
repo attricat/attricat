@@ -776,18 +776,17 @@ impl AttricatRepository {
                 _ => RejectionRecord::Settled,
             }),
             Err(RepositoryError::NotFound("record")) => Ok(RejectionRecord::Unchanged),
-            // A refused rejection is busy when another worker's lease was
-            // live, and outdated otherwise.
-            Err(RepositoryError::ExportMappingConflict(_)) => Ok(
-                match before.and_then(|before| {
-                    before.lease_until.filter(|until| {
-                        *until > Utc::now() && before.lease_holder.as_deref() != holder
-                    })
-                }) {
+            // A refused rejection is busy when another worker's lease is
+            // live now, by the database's clock, and outdated otherwise.
+            Err(RepositoryError::ExportMappingConflict(_)) => {
+                let until: Option<DateTime<Utc>> = sqlx::query_scalar(&format!("SELECT lease_until FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 AND lease_until>clock_timestamp() AND lease_holder IS DISTINCT FROM $5", connection_is("connection", "$3", connection)))
+                    .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id).bind(holder)
+                    .fetch_optional(&self.pool).await?;
+                Ok(match until {
                     Some(until) => RejectionRecord::Busy { until },
                     None => RejectionRecord::Unchanged,
-                },
-            ),
+                })
+            }
             Err(RepositoryError::NotFound(_) | RepositoryError::InvalidExtension(_)) => {
                 Ok(RejectionRecord::Refused)
             }
@@ -918,8 +917,24 @@ impl AttricatRepository {
                     return Err(RepositoryError::NotFound("extension connection"));
                 }
             }
-            sqlx::query("INSERT INTO extension_export_mappings(id,workspace_id,extension_id,connection,record_id,status) SELECT gen_random_uuid(),$1,$2,$3,r.id,'pending' FROM records r WHERE r.workspace_id=$1 AND r.id=ANY($4) AND r.deleted_at IS NULL ON CONFLICT DO NOTHING")
-                .bind(self.extension_workspace()).bind(extension_id).bind(&selection.connection).bind(record_ids)
+            // Only records something will push get one: those of a
+            // blueprint the extension exports to this connection by a job,
+            // or any record when the extension handles retry requests itself.
+            let handles_retries = self
+                .installed_extension(extension_id)
+                .await?
+                .manifest
+                .pointer("/server/event_handlers")
+                .and_then(Value::as_array)
+                .is_some_and(|handlers| {
+                    handlers.iter().any(|handler| {
+                        handler["event_types"].as_array().is_some_and(|types| {
+                            types.iter().any(|t| t == EXPORT_RETRY_REQUESTED_V1)
+                        })
+                    })
+                });
+            sqlx::query("INSERT INTO extension_export_mappings(id,workspace_id,extension_id,connection,record_id,status) SELECT gen_random_uuid(),$1,$2,$3,r.id,'pending' FROM records r WHERE r.workspace_id=$1 AND r.id=ANY($4) AND r.deleted_at IS NULL AND ($5 OR EXISTS(SELECT 1 FROM blueprint_connector_jobs j WHERE j.workspace_id=$1 AND j.extension_id=$2 AND j.direction='export' AND j.connection IS NOT DISTINCT FROM $3 AND j.blueprint_id=r.blueprint_id AND j.code IS NOT NULL)) ON CONFLICT DO NOTHING")
+                .bind(self.extension_workspace()).bind(extension_id).bind(&selection.connection).bind(record_ids).bind(handles_retries)
                 .execute(&mut *transaction).await?;
         }
         let ids: Vec<Uuid> = sqlx::query_scalar(&format!("WITH selected AS (SELECT id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::uuid[] IS NULL OR record_id=ANY($4)) AND ($5::text IS NULL OR status=$5) AND EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=$1 AND r.id=record_id AND r.deleted_at IS NULL) ORDER BY record_id LIMIT $6 FOR UPDATE) UPDATE extension_export_mappings m SET status='pending',retry_requested_at=clock_timestamp(),attempts=0,updated_at=clock_timestamp() FROM selected s WHERE m.id=s.id RETURNING m.record_id", connection_is("connection", "$3", selection.connection.as_deref())))
