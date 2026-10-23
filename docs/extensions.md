@@ -622,7 +622,7 @@ whose `handle-event(event, delivery)` returns `result<_, failure>`, and
 
 | Case | Event handler | Operation batch |
 |---|---|---|
-| `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes | The run is dead-lettered with code `rejected`, without retries |
+| `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes | A rejection that names a record, from an extension with `exports.mappings`, settles that record and replays the batch after a second, so the component finds the record settled and moves on; this counts toward the 100 waits in a row below. Any other rejection dead-letters the run with code `rejected`, without retries |
 | `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted` | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget, up to 100 times in a row before a completed batch; past that, and without `after-ms`, it is a failure within that budget |
 | `fault(message)` | Quarantines the installation | Fails the run and quarantines the installation |
 
@@ -669,8 +669,12 @@ event that changed its values, relationships, publication or lifecycle
 `unpublished`, `attribute_value.changed`, `restored`, `relationship.changed`).
 It is read from the event outbox, so it is monotonic per record and writing
 an event never locks the record row. Annotation changes do not advance it, so an exporter's
-own bookkeeping never makes its output look stale. Typed `api.read` records,
-connector page v2 rows and `event-handler` deliveries carry it.
+own bookkeeping never makes its output look stale. Publication events count
+only for the channel being read: connector page rows count those of the run's
+channel, and reads without a channel (typed `api.read` records) count none, so
+publishing to another channel never makes an export look stale. Typed
+`api.read` records, connector page v2 rows and `event-handler` deliveries
+carry it; a delivery's revision is the event's own sequence.
 
 The host keeps a mapping per installation, connection and record in
 `extension_export_mappings`: the external ID (indexed), named external IDs,
@@ -730,7 +734,8 @@ app shows it:
 `POST /extensions/{extension_id}/export-status/retry` with
 `{connection?, record_ids?, status?, run?}` sets the selected mappings (up to
 1,000, by IDs or by status; a status matching more is refused, not cut) to
-`pending`, records the retry request, emits
+`pending`, records the retry request (records selected by ID alone that were
+never exported get a pending mapping), emits
 `export.retry_requested.v1` for each record to that extension only, and is
 audited. With `run: true` it also starts a [resync](#connector-jobs-for-exports)
 of just those records on each of the extension's export jobs that target the

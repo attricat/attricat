@@ -342,6 +342,26 @@ impl deferrable_operations::Guest for Component {
             for row in page["rows"].as_array().cloned().unwrap_or_default() {
                 let record_id = row["record_id"].as_str().unwrap_or_default().to_owned();
                 let revision = row["content_revision"].as_i64().unwrap_or(0);
+                // The destination rejects such a record; the rejection
+                // settles it, so the replayed batch finds it stale and moves on.
+                if row["values"]["title"]
+                    .as_str()
+                    .is_some_and(|title| title.starts_with("reject"))
+                {
+                    let begin = call(
+                        "mappings.begin.v1",
+                        json!({"connection": connection, "record_id": record_id, "record_revision": revision}),
+                    )
+                    .map_err(fault)?;
+                    if begin["outcome"].as_str() == Some("proceed") {
+                        return Err(outcomes::Failure::Rejected(outcomes::Rejection {
+                            code: "invalid_title".into(),
+                            message: "the destination rejects the title".into(),
+                            record_id: Some(record_id),
+                            connection: None,
+                        }));
+                    }
+                }
                 let content = json!({"values": row["values"], "related": row["related"], "files": row["files"]});
                 let outcome = push(&connection, &record_id, revision, &content).map_err(fault)?;
                 let mut rows = checkpoint["rows"].as_array().cloned().unwrap_or_default();

@@ -726,7 +726,7 @@ impl AttricatRepository {
             r#"SELECT r.id, r.blueprint_id, r.blueprint_version, r.projections, r.system_tags, r.system_metadata, ('attricat.sample'=ANY(r.system_tags)) AS is_sample, r.created_at, r.updated_at, r.deleted_at, {} AS content_revision
                FROM records r
                WHERE r.id = $1 AND r.workspace_id = $2 AND r.deleted_at IS NULL"#,
-            super::extension_attricat_data::content_revision_sql("r", None)
+            super::extension_attricat_data::content_revision_sql("r", None, None)
         ))
         .bind(record_id)
         .bind(self.workspace_id.0)

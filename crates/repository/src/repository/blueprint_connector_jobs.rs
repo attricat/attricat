@@ -193,14 +193,23 @@ impl AttricatRepository {
             .bind(ws).bind(blueprint_id).execute(&mut **tx).await?;
         // A change trigger starts watching at the current end of the event
         // log, so publishing a job never replays history. The outbox
-        // boundary keeps an uncommitted event from landing below it.
-        super::domain_events::lock_outbox_boundary(tx, ws).await?;
-        let high_water: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1",
-        )
-        .bind(ws)
-        .fetch_one(&mut **tx)
-        .await?;
+        // boundary keeps an uncommitted event from landing below it; it
+        // blocks event writers until the publish commits, so it is taken
+        // only when a trigger starts watching.
+        let starts_watching = prepared.iter().any(|(job, ..)| {
+            job.trigger.is_some() && !watching.contains(&job.code)
+        });
+        let high_water: i64 = if starts_watching {
+            super::domain_events::lock_outbox_boundary(tx, ws).await?;
+            sqlx::query_scalar(
+                "SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1",
+            )
+            .bind(ws)
+            .fetch_one(&mut **tx)
+            .await?
+        } else {
+            0
+        };
         for (job, input, context_id, file) in prepared {
             let (trigger_events, trigger_debounce) = job
                 .trigger
@@ -467,17 +476,20 @@ impl AttricatRepository {
             trigger_changes_sql(
                 "j.workspace_id",
                 "j.trigger_watermark",
-                None,
+                Some("$3"),
                 "j.trigger_events",
                 "j.blueprint_id"
             )
         ))
         .bind(self.extension_workspace())
         .bind(TRIGGERED_JOBS_PER_TICK)
+        .bind(high_water)
         .fetch_all(&self.pool)
         .await?;
         let mut started = 0;
-        let changes_sql = trigger_changes_sql("$1", "$2", None, "$3", "$4");
+        // Every read stops at the committed high water, so an event that
+        // commits later with a lower sequence is never passed over.
+        let changes_sql = trigger_changes_sql("$1", "$2", Some("$5"), "$3", "$4");
         // The oldest and newest pending change decide whether a job is due;
         // each is one ordered row, so a job inside its debounce does not read
         // its whole change window on every tick.
@@ -489,7 +501,7 @@ impl AttricatRepository {
         };
         let (oldest_sql, newest_sql) = (pending_change(false), pending_change(true));
         let window_sql = format!(
-            "SELECT c.sequence,c.record_id FROM ({changes_sql}) c ORDER BY c.sequence LIMIT $5"
+            "SELECT DISTINCT c.sequence,c.record_id FROM ({changes_sql}) c ORDER BY c.sequence LIMIT $6"
         );
         for (id, blueprint_id, events, debounce, watermark) in jobs {
             let mut bounds = Vec::with_capacity(2);
@@ -500,6 +512,7 @@ impl AttricatRepository {
                         .bind(watermark)
                         .bind(&events)
                         .bind(blueprint_id)
+                        .bind(high_water)
                         .fetch_optional(&self.pool)
                         .await?,
                 );
@@ -517,30 +530,32 @@ impl AttricatRepository {
                 .bind(watermark)
                 .bind(&events)
                 .bind(blueprint_id)
+                .bind(high_water)
                 .bind(MAX_CONNECTOR_RECORD_FILTER as i64 + 1)
                 .fetch_all(&self.pool)
                 .await?;
-            let Some(&(mut high_water, _)) = changes.last() else {
+            let Some(&(mut covered, _)) = changes.last() else {
                 continue;
             };
             // One event can change many linking records, so a full window may
             // end inside an event. Leave that event to the next run, unless
             // it alone fills the window, in which case export every record.
             let full = changes.len() > MAX_CONNECTOR_RECORD_FILTER;
-            if full && changes[0].0 != high_water {
-                changes.retain(|change| change.0 != high_water);
-                high_water = changes.last().map_or(high_water, |change| change.0);
+            let whole_job = full && changes[0].0 == covered;
+            if full && !whole_job {
+                changes.retain(|change| change.0 != covered);
+                covered = changes.last().map_or(covered, |change| change.0);
             }
             let mut record_ids: Vec<Uuid> = changes.iter().map(|change| change.1).collect();
             record_ids.sort_unstable();
             record_ids.dedup();
-            // The run covers events up to `high_water` only, so the records
-            // of this window are all that changed.
-            let filter = (record_ids.len() <= MAX_CONNECTOR_RECORD_FILTER).then_some(record_ids);
+            // The run covers events up to `covered` only, so the records of
+            // this window are all that changed.
+            let filter = (!whole_job).then_some(record_ids);
             match self
                 .run_blueprint_connector_job_as(
                     id,
-                    &high_water.to_string(),
+                    &covered.to_string(),
                     ConnectorRunMode::Triggered,
                     filter,
                 )
@@ -560,7 +575,7 @@ impl AttricatRepository {
                 }
             }
             sqlx::query("UPDATE blueprint_connector_jobs SET trigger_watermark=$3,trigger_blocked_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND trigger_watermark=$4")
-                .bind(id).bind(self.extension_workspace()).bind(high_water).bind(watermark)
+                .bind(id).bind(self.extension_workspace()).bind(covered).bind(watermark)
                 .execute(&self.pool).await?;
         }
         Ok(started)

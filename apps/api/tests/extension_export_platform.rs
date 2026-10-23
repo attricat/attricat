@@ -637,14 +637,14 @@ async fn catalog_pages_pair_snapshot_values_with_snapshot_revisions(pool: sqlx::
     // it can have read.
     assert_eq!(
         repository
-            .record_content_revision_at(chair, first.snapshot_at)
+            .record_content_revision_at(chair, first.snapshot_at, None)
             .await
             .unwrap(),
         created
     );
     assert_eq!(
         repository
-            .record_content_revision_at(chair, chrono::Utc::now())
+            .record_content_revision_at(chair, chrono::Utc::now(), None)
             .await
             .unwrap(),
         edited
@@ -867,7 +867,7 @@ async fn batch_failures_retry_reject_or_fault_by_their_kind(pool: sqlx::PgPool) 
         PERMISSIONS,
     )
     .await;
-    child_channel(&repository, &pool, "marketplace").await;
+    let channel = child_channel(&repository, &pool, "marketplace").await;
     published_blueprint(&repository, VARIANT_BLUEPRINT).await;
     let products = published_blueprint(&repository, &product_blueprint("")).await;
     let job_for = |fail: &str| {
@@ -887,7 +887,8 @@ input = {{fail = "{fail}"}}
             products.0,
             CreateBlueprint {
                 definition: product_blueprint(&format!(
-                    "{}{}{}{}{}",
+                    "{}{}{}{}{}{}",
+                    job_for("none"),
                     job_for("retry"),
                     job_for("reject"),
                     job_for("prepare"),
@@ -969,6 +970,22 @@ input = {{fail = "{fail}"}}
         ("dead_letter", Some("rejected"))
     );
     assert_eq!(installation_state(&pool).await, "enabled");
+
+    // A rejection of one record settles that record; the run continues.
+    let current = (products.0, revision.blueprint.version);
+    let invalid = titled_record(&repository, current, "reject: no GTIN").await;
+    let valid = titled_record(&repository, current, "Shirt").await;
+    publish(&pool, invalid, channel).await;
+    publish(&pool, valid, channel).await;
+    let partial = repository
+        .run_blueprint_connector_job(job("fail_none"), "partial")
+        .await
+        .unwrap();
+    drain_operations(&repository, &pool, store.clone()).await;
+    let (status, checkpoint, _) = run_status(&pool, partial[0]).await;
+    assert_eq!(status, "completed", "{checkpoint}");
+    assert_eq!(mapping_status(&pool, invalid).await.unwrap().0, "rejected");
+    assert_eq!(mapping_status(&pool, valid).await.unwrap().0, "synced");
 
     // An error returned by a lifecycle call fails the run without
     // quarantining the extension.

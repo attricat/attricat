@@ -207,11 +207,13 @@ impl AttricatRepository {
     }
 
     /// Live records among `record_ids`, by ID, with their content revision
-    /// as of `snapshot_at` so it matches values read at that snapshot.
+    /// in `channel` as of `snapshot_at` so it matches values read at that
+    /// snapshot.
     async fn records_of(
         &self,
         record_ids: &[Uuid],
         snapshot_at: DateTime<Utc>,
+        channel: Option<Uuid>,
     ) -> Result<HashMap<Uuid, Record>, RepositoryError> {
         if record_ids.is_empty() {
             return Ok(HashMap::new());
@@ -219,11 +221,12 @@ impl AttricatRepository {
         let records: Vec<Record> = sqlx::query_as::<_, Db<Record>>(&format!(
             "SELECT r.id, r.blueprint_id, r.blueprint_version, r.projections, r.system_tags, r.system_metadata, ('attricat.sample'=ANY(r.system_tags)) AS is_sample, r.created_at, r.updated_at, r.deleted_at, {} AS content_revision \
              FROM records r WHERE r.id = ANY($1) AND r.workspace_id = $2 AND r.deleted_at IS NULL",
-            super::extension_attricat_data::content_revision_sql("r", Some("$3"))
+            super::extension_attricat_data::content_revision_sql("r", Some("$3"), Some("$4"))
         ))
         .bind(record_ids)
         .bind(self.workspace_id.0)
         .bind(snapshot_at)
+        .bind(channel)
         .fetch_all(&self.pool)
         .await?
         .into_domain();
@@ -308,7 +311,9 @@ impl AttricatRepository {
             .collect();
         target_ids.sort_unstable();
         target_ids.dedup();
-        let targets = self.records_of(&target_ids, page.snapshot_at).await?;
+        let targets = self
+            .records_of(&target_ids, page.snapshot_at, request.channel_id)
+            .await?;
         let unread: Vec<Uuid> = target_ids
             .iter()
             .copied()
@@ -430,9 +435,13 @@ impl AttricatRepository {
             }
             _ => 0,
         };
+        // The cursor moves to the last event read, so the feed stops at the
+        // committed high water: an event that commits later with a lower
+        // sequence would otherwise fall behind the cursor and be skipped.
+        let high_water = self.committed_event_high_water().await?;
         let events: Vec<(i64, String, Uuid, DateTime<Utc>)> = sqlx::query_as(
             "SELECT e.sequence,e.event_type,e.aggregate_id,e.occurred_at FROM domain_events e \
-             WHERE e.workspace_id=$1 AND e.aggregate_kind='record' AND e.sequence>$2 \
+             WHERE e.workspace_id=$1 AND e.aggregate_kind='record' AND e.sequence>$2 AND e.sequence<=$6 \
                AND e.event_type IN ('record.unpublished.v1','record.deleted.v1') \
                AND ($3::uuid IS NULL OR e.event_type<>'record.unpublished.v1' OR e.payload->>'context_id'=$3::text) \
                AND EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=e.workspace_id AND r.id=e.aggregate_id AND r.blueprint_id=$4) \
@@ -443,6 +452,7 @@ impl AttricatRepository {
         .bind(channel_id)
         .bind(blueprint_id)
         .bind(i64::from(limit))
+        .bind(high_water)
         .fetch_all(&self.pool)
         .await?;
         // A record published again since is no longer withdrawn.

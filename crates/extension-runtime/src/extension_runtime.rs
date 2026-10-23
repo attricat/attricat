@@ -96,6 +96,8 @@ const PAUSED_OPERATION_RECHECK_DELAY: chrono::TimeDelta = chrono::TimeDelta::sec
 /// How many times in a row a run's batch may ask to wait with a typed retry
 /// delay before further waits spend the run's failure budget.
 const MAX_RETRY_DEFERRALS: i32 = 100;
+/// How soon a batch replays after it rejected one record.
+const RECORD_REJECTION_REPLAY_DELAY: chrono::TimeDelta = chrono::TimeDelta::seconds(1);
 /// Headers a component may never set on an outbound request.
 const RESERVED_REQUEST_HEADERS: [&str; 4] =
     ["host", "content-length", "connection", "transfer-encoding"];
@@ -1644,8 +1646,16 @@ impl ExtensionOperationTaskHandler {
                     // otherwise the revision at the run's start is the oldest
                     // it can have read, so a newer result committed meanwhile
                     // is not overwritten.
+                    let details = repository
+                        .connector_run_details(run.id)
+                        .await
+                        .map_err(operation_task_error)?;
                     let revision = repository
-                        .record_content_revision_at(record_id, run.created_at)
+                        .record_content_revision_at(
+                            record_id,
+                            run.created_at,
+                            details.as_ref().and_then(|details| details.channel_id),
+                        )
                         .await
                         .map_err(operation_task_error)?;
                     // A connector run's rejection belongs to the run's
@@ -1653,11 +1663,7 @@ impl ExtensionOperationTaskHandler {
                     // without one to the default destination.
                     let connection = match rejection.connection {
                         Some(connection) => Some(connection),
-                        None => repository
-                            .connector_run_details(run.id)
-                            .await
-                            .map_err(operation_task_error)?
-                            .and_then(|details| details.connection),
+                        None => details.and_then(|details| details.connection),
                     };
                     repository
                         .record_export_rejection(
@@ -1672,14 +1678,32 @@ impl ExtensionOperationTaskHandler {
                         .await
                         .map_err(operation_task_error)?;
                 }
-                repository
-                    .reject_extension_operation_task(
-                        task,
-                        &format!("{}: {}", rejection.code, rejection.message),
-                    )
-                    .await
-                    .map_err(operation_task_error)?;
-                "rejected"
+                let message = format!("{}: {}", rejection.code, rejection.message);
+                // A rejection of one record settles that record, so the
+                // batch replays and the component moves past it (its mapping
+                // now reads as settled); the rest of the run continues. Like
+                // a deferral this is capped, so a component that keeps
+                // rejecting the same batch is still dead-lettered.
+                let settled_record = rejection.record_id.is_some()
+                    && exports
+                    && repository
+                        .defer_extension_operation_task(
+                            task,
+                            &message,
+                            chrono::Utc::now() + RECORD_REJECTION_REPLAY_DELAY,
+                            MAX_RETRY_DEFERRALS,
+                        )
+                        .await
+                        .map_err(operation_task_error)?;
+                if settled_record {
+                    "record_rejected"
+                } else {
+                    repository
+                        .reject_extension_operation_task(task, &message)
+                        .await
+                        .map_err(operation_task_error)?;
+                    "rejected"
+                }
             }
             error => {
                 // A run whose release lost its authorization mid-batch (it
@@ -1723,7 +1747,7 @@ impl ExtensionOperationTaskHandler {
         // Only a failed or rejected run is dead-lettered; one that waits
         // resumes, so the task metric must not count it as a dead letter.
         Ok(match outcome {
-            "deferred" => TaskOutcome::Settled {
+            "deferred" | "record_rejected" => TaskOutcome::Settled {
                 outcome: "rescheduled",
             },
             "retrying" => TaskOutcome::Settled { outcome: "retry" },
@@ -1989,7 +2013,7 @@ impl WasmExtensionTaskHandler {
                     } else {
                         Some(
                             repository
-                                .record_content_revision_at(record_id, event.occurred_at)
+                                .record_content_revision_at(record_id, event.occurred_at, None)
                                 .await?,
                         )
                     };

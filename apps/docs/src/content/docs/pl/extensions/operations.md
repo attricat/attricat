@@ -31,7 +31,7 @@ Komponent zbudowany dla [świata](/pl/extensions/server/#wersja-api-hosta) `outc
 
 `failure` przyjmuje jedną z postaci:
 
-- `rejected { code, message, record-id?, connection? }`: przebieg staje się martwą wiadomością z kodem `rejected`, bez ponowień.
+- `rejected { code, message, record-id?, connection? }`: gdy wskazuje rekord, a rozszerzenie ma `exports.mappings`, status eksportu rekordu zmienia się na `rejected`, a partia uruchamia się ponownie po sekundzie. Mapowanie jest już rozstrzygnięte, więc komponent pomija rekord, a reszta przebiegu jest kontynuowana; podobnie jak opóźnienie ponowienia, zdarza się to najwyżej 100 razy z rzędu. Każde inne odrzucenie zamienia przebieg w martwą wiadomość z kodem `rejected`, bez ponowień.
 - `retry { message, after-ms? }`: partia jest wykonywana ponownie z tym samym kluczem partii po podanym czasie. Z `after-ms` czeka bez zużywania budżetu niepowodzeń przebiegu, najwyżej 100 razy z rzędu, zanim jakaś partia się zakończy; potem, a także bez `after-ms`, każde ponowienie liczy się do tego budżetu.
 - `fault(message)`: przebieg kończy się błędem, a instalacja zostaje poddana kwarantannie.
 

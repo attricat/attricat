@@ -186,17 +186,35 @@ struct ExtensionAttricatChangeCursor {
 /// the outbox when read, so writing an event never touches the record row
 /// and cannot deadlock with a writer that locked that row first. `record` is
 /// the alias of a `records` row; `as_of` a SQL timestamp expression.
-pub(crate) fn content_revision_sql(record: &str, as_of: Option<&str>) -> String {
+/// Publication changes count only for `channel` (a SQL UUID expression,
+/// which may be NULL): a change in another channel does not alter what is
+/// exported to this one. Without a channel they do not count at all.
+pub(crate) fn content_revision_sql(
+    record: &str,
+    as_of: Option<&str>,
+    channel: Option<&str>,
+) -> String {
     let types = crate::domain_events::RECORD_CONTENT_EVENT_TYPES_V1
         .iter()
         .map(|event_type| format!("'{event_type}'"))
         .collect::<Vec<_>>()
         .join(",");
     let as_of = as_of.map_or_else(String::new, |at| format!(" AND d.occurred_at <= {at}"));
+    let publication = format!(
+        "'{}','{}'",
+        crate::domain_events::RECORD_PUBLISHED_V1,
+        crate::domain_events::RECORD_UNPUBLISHED_V1
+    );
+    let channel = match channel {
+        Some(channel) => format!(
+            " AND (d.event_type NOT IN ({publication}) OR d.payload->>'context_id'=({channel})::text)"
+        ),
+        None => format!(" AND d.event_type NOT IN ({publication})"),
+    };
     format!(
         "(SELECT COALESCE(max(d.sequence),0) FROM domain_events d \
          WHERE d.workspace_id={record}.workspace_id AND d.aggregate_kind='record' \
-           AND d.aggregate_id={record}.id AND d.event_type IN ({types}){as_of})"
+           AND d.aggregate_id={record}.id AND d.event_type IN ({types}){as_of}{channel})"
     )
 }
 
@@ -293,7 +311,7 @@ impl AttricatRepository {
                AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM record_channel_publications p WHERE p.workspace_id=e.workspace_id AND p.record_id=e.id AND p.context_id=$7 AND p.published_at IS NOT NULL)) \
                AND ($9::uuid[] IS NULL OR e.id=ANY($9)) \
              ORDER BY e.created_at,e.id LIMIT $8",
-            content_revision_sql("e", Some("$4"))
+            content_revision_sql("e", Some("$4"), Some("$7"))
         ))
         .bind(workspace_id).bind(request.blueprint_id).bind(request.blueprint_version)
         .bind(snapshot_at).bind(created_at).bind(record_id).bind(request.publication_context_id)
@@ -421,7 +439,7 @@ impl AttricatRepository {
         };
         let record = sqlx::query_as::<_, Db<Record>>(&format!(
             "SELECT r.id,r.blueprint_id,r.blueprint_version,r.projections,r.system_tags,r.system_metadata,('attricat.sample'=ANY(r.system_tags)) AS is_sample,r.created_at,r.updated_at,r.deleted_at,{} AS content_revision FROM records r WHERE r.id=$1 AND r.workspace_id=$2 AND r.deleted_at IS NULL",
-            content_revision_sql("r", None)
+            content_revision_sql("r", None, None)
         ))
         .bind(record_id)
         .bind(self.workspace_id.0)

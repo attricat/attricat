@@ -3732,10 +3732,6 @@ const TREE_FACET_COUNTS_FRESH: Duration = Duration::from_secs(30);
 /// one request reloads them get the previous counts instead of waiting.
 const TREE_FACET_COUNTS_STALE: Duration = Duration::from_secs(10 * 60);
 
-/// The `records e` source and filter of a query over every search match, for
-/// matching IDs bound at `$parameter`. The ID list drives the join: with an
-/// `e.id = ANY(...)` filter, a cached generic plan scans every record of the
-/// blueprint and compares each one against the whole list.
 /// The predicate of an optional [`ExportStatusFilter`] bound as JSON at
 /// `parameter`, over the records aliased `e`.
 fn export_status_clause(parameter: usize) -> String {
@@ -3748,6 +3744,7 @@ fn export_status_clause(parameter: usize) -> String {
     )
 }
 
+/// The JSON bound for [`export_status_clause`].
 fn export_status_param(filter: Option<&ExportStatusFilter>) -> Option<Value> {
     filter.map(|filter| {
         serde_json::json!({
@@ -3758,6 +3755,10 @@ fn export_status_param(filter: Option<&ExportStatusFilter>) -> Option<Value> {
     })
 }
 
+/// The `records e` source and filter of a query over every search match, for
+/// matching IDs bound at `$parameter`. The ID list drives the join: with an
+/// `e.id = ANY(...)` filter, a cached generic plan scans every record of the
+/// blueprint and compares each one against the whole list.
 fn matching_records(matching: bool, parameter: usize) -> (String, String) {
     if matching {
         (

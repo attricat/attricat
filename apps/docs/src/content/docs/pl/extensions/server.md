@@ -182,7 +182,7 @@ Z `exports.mappings` Attricat przechowuje jedno mapowanie na instalację, połą
 
 Status mapowania to stan eksportu rekordu, który użytkownicy widzą na stronie rekordu, w przeglądarce rekordów i na stronie Stan danych. Statusy to `pending`, `synced`, `rejected`, `retrying`, `uncertain` i `withdrawn`.
 
-Każdy rekord ma `content_revision`: numer sekwencyjny ostatniego zdarzenia, które zmieniło jego wartości, relacje, publikację lub cykl życia. Ta wartość tylko rośnie. Zmiany adnotacji jej nie zwiększają, więc Twoje własne zapisy pomocnicze nigdy nie sprawiają, że rekord wygląda na zmieniony. Zawierają ją odczyty typowane, wiersze [strony konektora v2](/pl/extensions/operations/#strony-eksportu-i-wycofania) i dostarczenia do `event-handler`.
+Każdy rekord ma `content_revision`: numer sekwencyjny ostatniego zdarzenia, które zmieniło jego wartości, relacje, publikację lub cykl życia. Ta wartość tylko rośnie. Zmiany adnotacji jej nie zwiększają, więc Twoje własne zapisy pomocnicze nigdy nie sprawiają, że rekord wygląda na zmieniony. Zmiany publikacji liczą się tylko dla odczytywanego kanału: wiersz strony konektora uwzględnia zmiany w kanale przebiegu, a odczyt bez kanału nie uwzględnia żadnych, więc publikacja w innym kanale nigdy nie sprawia, że eksport wygląda na nieaktualny. Zawierają ją odczyty typowane, wiersze [strony konektora v2](/pl/extensions/operations/#strony-eksportu-i-wycofania) i dostarczenia do `event-handler`.
 
 Poniższe operacje `api.call` działają tak samo w procedurach obsługi zdarzeń i w przebiegach operacji. `connection` jest wszędzie opcjonalne; bez niego mapowanie należy do domyślnego miejsca docelowego rozszerzenia.
 

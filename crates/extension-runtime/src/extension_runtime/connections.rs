@@ -20,6 +20,8 @@ use crate::repository::{
 /// A cached access token is refreshed this long before it expires, or half
 /// its lifetime before for a shorter-lived token.
 const TOKEN_EXPIRY_SKEW: TimeDelta = TimeDelta::seconds(60);
+/// The shortest lifetime a token response's `expires_in` is taken to state.
+const MIN_TOKEN_LIFETIME_SECONDS: i64 = 30;
 /// How often a caller waiting for another worker's refresh rechecks it.
 const REFRESH_WAIT_STEP: std::time::Duration = std::time::Duration::from_millis(200);
 /// How long a caller waits for another worker's refresh.
@@ -462,10 +464,18 @@ async fn token_request(
         .filter(|token| !token.is_empty())
         .ok_or_else(|| TokenError::Temporary("token response lacks an access token".into()))?
         .to_owned();
+    // `expires_in: 0` or less states no usable lifetime and is treated like
+    // a response without `expires_in`. A very short lifetime is treated
+    // as `MIN_TOKEN_LIFETIME_SECONDS`, so it cannot make every request
+    // refresh the token.
     let expires_at = body
         .get("expires_in")
         .and_then(|value| value.as_i64().or_else(|| value.as_str()?.parse().ok()))
-        .map(|seconds| Utc::now() + TimeDelta::seconds(seconds.clamp(0, 365 * 86_400)));
+        .filter(|seconds| *seconds > 0)
+        .map(|seconds| {
+            Utc::now()
+                + TimeDelta::seconds(seconds.clamp(MIN_TOKEN_LIFETIME_SECONDS, 365 * 86_400))
+        });
     Ok(IssuedTokens {
         access_token,
         expires_at,

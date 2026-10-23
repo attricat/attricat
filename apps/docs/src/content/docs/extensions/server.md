@@ -182,7 +182,7 @@ With `exports.mappings`, Attricat keeps one mapping per installation, connection
 
 The mapping status is the record's export status that people see on the record page, in the Explorer, and on Data health. Statuses are `pending`, `synced`, `rejected`, `retrying`, `uncertain`, and `withdrawn`.
 
-Every record has a `content_revision`: the sequence of the latest event that changed its values, relationships, publication, or lifecycle. It only grows. Annotation changes do not advance it, so your own bookkeeping never makes a record look changed. Typed reads, [connector page v2](/extensions/operations/#export-pages-and-withdrawals) rows, and `event-handler` deliveries carry it.
+Every record has a `content_revision`: the sequence of the latest event that changed its values, relationships, publication, or lifecycle. It only grows. Annotation changes do not advance it, so your own bookkeeping never makes a record look changed. Publication changes count only for the channel being read: a connector page row counts those of the run's channel, and a read without a channel counts none, so publishing to another channel never makes your export look stale. Typed reads, [connector page v2](/extensions/operations/#export-pages-and-withdrawals) rows, and `event-handler` deliveries carry it.
 
 These `api.call` operations work in event handlers and operation runs alike. `connection` is optional everywhere; without it the mapping belongs to the extension's default destination.
 

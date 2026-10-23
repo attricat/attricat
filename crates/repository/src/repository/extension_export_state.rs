@@ -630,19 +630,21 @@ impl AttricatRepository {
 
     /// The content revision `record_id` had at `at`: the oldest revision a
     /// run that started at `at` can have read, for a rejection that names no
-    /// revision of its own.
+    /// revision of its own. `channel` is the channel the run reads.
     pub async fn record_content_revision_at(
         &self,
         record_id: Uuid,
         at: DateTime<Utc>,
+        channel: Option<Uuid>,
     ) -> Result<i64, RepositoryError> {
         Ok(sqlx::query_scalar(&format!(
             "SELECT {} FROM records r WHERE r.workspace_id=$1 AND r.id=$2",
-            super::extension_attricat_data::content_revision_sql("r", Some("$3"))
+            super::extension_attricat_data::content_revision_sql("r", Some("$3"), Some("$4"))
         ))
         .bind(self.extension_workspace())
         .bind(record_id)
         .bind(at)
+        .bind(channel)
         .fetch_optional(&self.pool)
         .await?
         .unwrap_or(0))
@@ -752,7 +754,9 @@ impl AttricatRepository {
 
     /// Marks the selected mappings for retry and emits
     /// `export.retry_requested.v1` per record, in one audited transaction.
-    /// Returns the selected record IDs. A status that matches more than
+    /// Records selected by ID without a status that were never exported get
+    /// a pending mapping first. Returns the selected record IDs. A status
+    /// that matches more than
     /// [`MAX_EXPORT_RETRY_RECORDS`] records is refused rather than cut.
     pub async fn request_export_retry(
         &self,
@@ -778,6 +782,21 @@ impl AttricatRepository {
             return Err(invalid("a retry needs record IDs or a status"));
         }
         let mut transaction = self.pool.begin().await?;
+        // Records chosen by ID may never have been exported; give them a
+        // pending mapping so the retry selects and pushes them too.
+        if let (Some(record_ids), None) = (&selection.record_ids, &selection.status) {
+            if let Some(connection) = &selection.connection {
+                let known: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3)")
+                    .bind(self.extension_workspace()).bind(extension_id).bind(connection)
+                    .fetch_one(&mut *transaction).await?;
+                if !known {
+                    return Err(RepositoryError::NotFound("extension connection"));
+                }
+            }
+            sqlx::query("INSERT INTO extension_export_mappings(id,workspace_id,extension_id,connection,record_id,status) SELECT gen_random_uuid(),$1,$2,$3,r.id,'pending' FROM records r WHERE r.workspace_id=$1 AND r.id=ANY($4) AND r.deleted_at IS NULL ON CONFLICT DO NOTHING")
+                .bind(self.extension_workspace()).bind(extension_id).bind(&selection.connection).bind(record_ids)
+                .execute(&mut *transaction).await?;
+        }
         let ids: Vec<Uuid> = sqlx::query_scalar("WITH selected AS (SELECT id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND ($4::uuid[] IS NULL OR record_id=ANY($4)) AND ($5::text IS NULL OR status=$5) ORDER BY record_id LIMIT $6 FOR UPDATE) UPDATE extension_export_mappings m SET status='pending',retry_requested_at=clock_timestamp(),attempts=0,updated_at=clock_timestamp() FROM selected s WHERE m.id=s.id RETURNING m.record_id")
             .bind(self.extension_workspace()).bind(extension_id).bind(&selection.connection)
             .bind(&selection.record_ids).bind(&selection.status).bind(MAX_EXPORT_RETRY_RECORDS + 1)
