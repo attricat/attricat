@@ -325,7 +325,9 @@ impl ConnectionRefresh {
     /// rotated the refresh token, and losing the new one would break the
     /// connection. They are discarded when an operator changed the grant
     /// they were obtained with (its client secret or refresh token), so the
-    /// new credentials win. When only the token URL or scope changed, the
+    /// new credentials win, and when the token endpoint moved to another
+    /// origin, whose tokens they are not. When only the token URL's path or
+    /// the scope changed, the
     /// rotated refresh token is still kept but the access token is not, so
     /// the next call refreshes under the new settings.
     pub async fn complete(mut self, tokens: IssuedTokens) -> Result<(), RepositoryError> {
@@ -338,7 +340,7 @@ impl ConnectionRefresh {
             .transpose()?;
         let (workspace_id, claim) = (self.workspace_id, self.claim);
         let basis = std::mem::take(&mut self.basis);
-        self.settle(sqlx::query("UPDATE extension_connections SET access_token_ciphertext=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 THEN $3 END,access_token_expires_at=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 THEN $4 END,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claim END,refresh_claimed_until=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 AND refresh_token_ciphertext IS NOT DISTINCT FROM $8")
+        self.settle(sqlx::query("UPDATE extension_connections SET access_token_ciphertext=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 THEN $3 END,access_token_expires_at=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 THEN $4 END,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claim END,refresh_claimed_until=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 AND refresh_token_ciphertext IS NOT DISTINCT FROM $8 AND split_part(token_url,'/',1)=split_part($9,'/',1) AND split_part(token_url,'/',3)=split_part($9,'/',3)")
             .bind(workspace_id).bind(id).bind(access).bind(tokens.expires_at).bind(refresh).bind(claim)
             .bind(basis.client_secret).bind(basis.refresh_token).bind(basis.token_url).bind(basis.scope))
             .await
@@ -499,7 +501,13 @@ impl AttricatRepository {
         connection: &str,
         patch: ExtensionConnectionPatch,
     ) -> Result<ExtensionConnection, RepositoryError> {
-        let current = self.extension_connection(extension_id, connection).await?;
+        // The row is locked while the change is judged against it, so two
+        // concurrent changes cannot both pass checks made on the old row.
+        let mut transaction = self.pool.begin().await?;
+        let current: ExtensionConnection = sqlx::query_as(&format!("SELECT {CONNECTION_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3 FOR UPDATE"))
+            .bind(self.extension_workspace()).bind(extension_id).bind(connection)
+            .fetch_optional(&mut *transaction).await?
+            .ok_or(RepositoryError::NotFound("extension connection"))?;
         let id = current.id;
         let client_secret = patch
             .client_secret
@@ -552,7 +560,6 @@ impl AttricatRepository {
                 "enter the client secret again to move the token endpoint to another host".into(),
             ));
         }
-        let mut transaction = self.pool.begin().await?;
         let updated = sqlx::query_as(&format!(
             "UPDATE extension_connections SET display_name=COALESCE($3,display_name),token_url=COALESCE($4,token_url),\
              device_authorization_url=CASE WHEN $5 THEN $6 ELSE device_authorization_url END,\

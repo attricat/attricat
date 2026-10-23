@@ -500,24 +500,37 @@ impl AttricatRepository {
         // a record unpublishes it from every channel it was live in (reason
         // `record_deleted`), so a record never published there is never
         // reported. Without a channel every deletion counts too.
-        let events: Vec<WithdrawalEvent> = sqlx::query_as(
-            "SELECT e.sequence,e.event_type,e.aggregate_id,e.occurred_at,e.payload->>'reason' FROM domain_events e \
-             WHERE e.workspace_id=$1 AND e.aggregate_kind='record' AND e.sequence>$2 AND e.sequence<=$6 \
-               AND (($3::uuid IS NULL AND e.event_type IN ('record.unpublished.v1','record.deleted.v1')) \
-                 OR (e.event_type='record.unpublished.v1' AND e.payload->>'context_id'=$3::text)) \
-               AND EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=e.workspace_id AND r.id=e.aggregate_id AND r.blueprint_id=$4) \
-               AND ($7::uuid[] IS NULL OR e.aggregate_id=ANY($7)) \
-             ORDER BY e.sequence LIMIT $5",
-        )
-        .bind(self.workspace_id.0)
-        .bind(after_sequence)
-        .bind(channel_id)
-        .bind(blueprint_id)
-        .bind(i64::from(limit))
-        .bind(high_water)
-        .bind(record_ids)
-        .fetch_all(&self.pool)
-        .await?;
+        // A run confined to selected records reports each one's latest
+        // withdrawal and hands the cursor back unchanged: the cursor is the
+        // whole channel's, and moving it past events of records outside the
+        // selection would hide them from later runs.
+        let selective = record_ids.is_some();
+        let filter = "e.workspace_id=$1 AND e.aggregate_kind='record' AND e.sequence>$2 AND e.sequence<=$6 \
+             AND (($3::uuid IS NULL AND e.event_type IN ('record.unpublished.v1','record.deleted.v1')) \
+               OR (e.event_type='record.unpublished.v1' AND e.payload->>'context_id'=$3::text)) \
+             AND EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=e.workspace_id AND r.id=e.aggregate_id AND r.blueprint_id=$4) \
+             AND ($7::uuid[] IS NULL OR e.aggregate_id=ANY($7))";
+        let sql = if selective {
+            format!(
+                "SELECT * FROM (SELECT DISTINCT ON (e.aggregate_id) e.sequence,e.event_type,e.aggregate_id,e.occurred_at,e.payload->>'reason' \
+                 FROM domain_events e WHERE {filter} ORDER BY e.aggregate_id,e.sequence DESC) w ORDER BY 1 LIMIT $5"
+            )
+        } else {
+            format!(
+                "SELECT e.sequence,e.event_type,e.aggregate_id,e.occurred_at,e.payload->>'reason' \
+                 FROM domain_events e WHERE {filter} ORDER BY e.sequence LIMIT $5"
+            )
+        };
+        let events: Vec<WithdrawalEvent> = sqlx::query_as(&sql)
+            .bind(self.workspace_id.0)
+            .bind(if selective { 0 } else { after_sequence })
+            .bind(channel_id)
+            .bind(blueprint_id)
+            .bind(i64::from(limit))
+            .bind(high_water)
+            .bind(record_ids)
+            .fetch_all(&self.pool)
+            .await?;
         // A record published again since is no longer withdrawn.
         let republished = match channel_id {
             Some(channel) => {
@@ -559,14 +572,14 @@ impl AttricatRepository {
                 workspace_id: self.workspace_id.0,
                 blueprint_id,
                 channel_id,
-                after_sequence: last,
+                after_sequence: if selective { after_sequence } else { last },
             })
             .expect("withdrawn cursor serializes"),
         );
         Ok(json!({
             "records": items,
             "next_cursor": next_cursor,
-            "more": events.len() == limit as usize,
+            "more": !selective && events.len() == limit as usize,
         }))
     }
 }

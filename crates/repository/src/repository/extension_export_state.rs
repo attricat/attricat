@@ -906,6 +906,14 @@ impl AttricatRepository {
         if !exporter {
             return Err(RepositoryError::NotFound("export extension"));
         }
+        // A disabled or quarantined extension would receive none of the
+        // retry requests, leaving the records pending with no error.
+        let enabled: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_installations WHERE workspace_id=$1 AND extension_id=$2 AND state='enabled')")
+            .bind(self.extension_workspace()).bind(extension_id)
+            .fetch_one(&mut *transaction).await?;
+        if !enabled {
+            return Err(invalid("enable the extension before retrying its exports"));
+        }
         // Records chosen by ID may never have been exported; give them a
         // pending mapping so the retry selects and pushes them too.
         if let (Some(record_ids), None) = (&selection.record_ids, &selection.status) {

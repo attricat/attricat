@@ -24,6 +24,7 @@ pub const STATE_KEYS: &[&str] = &[
     "relationshipFacets",
     "attributeFilters",
     "browseBy",
+    "exportStatus",
 ];
 pub const FILTER_OPERATOR_IS_SET: &str = "is_set";
 pub const FILTER_OPERATORS: &[&str] = &[
@@ -62,6 +63,26 @@ fn valid_attribute_filter(filter: &Value) -> bool {
                     value.is_string() || value.is_number() || value.is_boolean()
                 }
             })
+    })
+}
+
+/// `{extension, connection?, status}`: records with that export status at
+/// one destination.
+fn valid_export_status(filter: &Value) -> bool {
+    filter.as_object().is_some_and(|filter| {
+        filter
+            .keys()
+            .all(|key| matches!(key.as_str(), "extension" | "connection" | "status"))
+            && non_empty_str(filter.get("extension")).is_some_and(|id| id.len() <= 128)
+            && filter.get("connection").is_none_or(|connection| {
+                connection
+                    .as_str()
+                    .is_some_and(crate::is_valid_connection_key)
+            })
+            && matches!(
+                filter.get("status").and_then(Value::as_str),
+                Some("pending" | "synced" | "rejected" | "retrying" | "uncertain" | "withdrawn")
+            )
     })
 }
 
@@ -161,6 +182,9 @@ pub fn validate_state(kind: &str, state: &Value) -> Result<(), String> {
             .get("browseBy")
             .is_some_and(|value| !valid_browse_by(value))
         || object
+            .get("exportStatus")
+            .is_some_and(|value| !valid_export_status(value))
+        || object
             .get("version")
             .is_some_and(|version| version.as_u64().is_none_or(|version| version == 0))
         || ["allVersions", "locked"]
@@ -247,6 +271,31 @@ pub fn field_path(path: &str) -> Result<Vec<&str>, String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn export_status_filters_are_saved_and_checked() {
+        let filtered = |filter| json!({"blueprint": "product", "exportStatus": filter});
+        validate_state(
+            EXPLORER_SEARCH_KIND,
+            &filtered(
+                json!({"extension": "acme.shop", "connection": "shop-eu", "status": "rejected"}),
+            ),
+        )
+        .unwrap();
+        validate_state(
+            EXPLORER_SEARCH_KIND,
+            &filtered(json!({"extension": "acme.shop", "status": "synced"})),
+        )
+        .unwrap();
+        for invalid in [
+            json!({"extension": "acme.shop", "status": "lost"}),
+            json!({"extension": "", "status": "synced"}),
+            json!({"extension": "acme.shop", "connection": "a b", "status": "synced"}),
+            json!({"extension": "acme.shop", "status": "synced", "extra": 1}),
+        ] {
+            assert!(validate_state(EXPLORER_SEARCH_KIND, &filtered(invalid)).is_err());
+        }
+    }
 
     #[test]
     fn validates_and_normalizes_like_every_writer() {

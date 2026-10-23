@@ -805,9 +805,14 @@ async fn catalog_pages_pair_snapshot_values_with_snapshot_revisions(pool: sqlx::
             .unwrap(),
         created
     );
+    // Now by the database's clock, which this process's clock can trail.
+    let now: chrono::DateTime<chrono::Utc> = sqlx::query_scalar("SELECT clock_timestamp()")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(
         repository
-            .record_content_revision_at(chair, chrono::Utc::now(), None)
+            .record_content_revision_at(chair, now, None)
             .await
             .unwrap(),
         edited
@@ -1038,6 +1043,35 @@ async fn connector_runs_read_resolved_rows_close_out_withdrawals_and_resync(pool
             .unwrap(),
         ExportBegin::Stale { .. }
     ));
+
+    // A run confined to selected records reads each one's withdrawal and
+    // hands the cursor back unchanged, so a full run still sees the rest.
+    let withdrawn = |selection: Vec<Uuid>| {
+        let repository = repository.clone();
+        async move {
+            repository
+                .extension_withdrawn_records(products.0, Some(channel), Some(&selection), None, 16)
+                .await
+                .unwrap()
+        }
+    };
+    let unselected = withdrawn(vec![product_ids[1]]).await;
+    assert_eq!(unselected["records"], json!([]));
+    assert_eq!(unselected["more"], false);
+    let selected = withdrawn(vec![product_ids[0]]).await;
+    assert_eq!(selected["records"][0]["record_id"], json!(product_ids[0]));
+    assert_eq!(selected["next_cursor"], unselected["next_cursor"]);
+    let full = repository
+        .extension_withdrawn_records(
+            products.0,
+            Some(channel),
+            None,
+            selected["next_cursor"].as_str(),
+            16,
+        )
+        .await
+        .unwrap();
+    assert_eq!(full["records"][0]["record_id"], json!(product_ids[0]));
 
     // An idempotency key names one selection: reusing it for another
     // selection starts another resync, and repeating a request finds its run.

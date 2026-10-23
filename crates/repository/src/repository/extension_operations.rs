@@ -598,7 +598,8 @@ impl AttricatRepository {
     /// one transaction. A run may wait at most `limit` times in a row
     /// without completing a batch; past that nothing changes and this
     /// returns false, so the caller spends the failure budget instead.
-    /// Without a limit the wait is progress and is not counted.
+    /// Without a limit the wait is progress: like a checkpoint, it starts
+    /// the count of waits in a row again.
     pub async fn defer_extension_operation_task(
         &self,
         task: &ClaimedTask,
@@ -625,9 +626,9 @@ impl AttricatRepository {
         let task_changed = sqlx::query("UPDATE tasks SET status='queued',available_at=$4,lease_owner=NULL,lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3")
             .bind(task.id).bind(&task.lease_owner).bind(task.lease_token).bind(at)
             .execute(&mut *transaction).await?.rows_affected();
-        let run_changed = sqlx::query("UPDATE extension_operation_runs SET status='pending',deferrals=deferrals+$6,last_error_code='retry',last_error_message=$4,resume_at=$5,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3")
+        let run_changed = sqlx::query("UPDATE extension_operation_runs SET status='pending',deferrals=CASE WHEN $6 THEN deferrals+1 ELSE 0 END,last_error_code='retry',last_error_message=$4,resume_at=$5,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3")
             .bind(task.subject_id).bind(self.extension_workspace()).bind(task.lease_token)
-            .bind(&message).bind(at).bind(i32::from(limit.is_some()))
+            .bind(&message).bind(at).bind(limit.is_some())
             .execute(&mut *transaction).await?.rows_affected();
         if task_changed != 1 || run_changed != 1 {
             return Err(RepositoryError::InvalidExtension(

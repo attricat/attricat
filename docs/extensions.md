@@ -741,7 +741,7 @@ The `mappings.list.v1` host call still lists every mapping.
 `{connection?, record_ids?, status?, run?}` sets the selected mappings (up to
 1,000, by IDs or by status; a status matching more is refused, not cut) to
 `pending`, records the retry request (only for an installed extension granted
-`exports.mappings`; any other is not found) (records selected by ID alone that were
+`exports.mappings`, any other is not found, and only while it is enabled) (records selected by ID alone that were
 never exported get a pending mapping when the extension exports their
 blueprint to that connection by a job, or handles `export.retry_requested.v1`
 itself; deleted records are never selected), emits
@@ -777,8 +777,10 @@ than the revision last committed for it.
 
 `attricat.withdrawn(cursor, limit)` (1–100) lists records of the job's
 blueprint that were unpublished from the run's channel (and are still
-unpublished), in event order, and only of the run's selected records when it
-has a selection; deleting a record unpublishes it from every
+unpublished), in event order. A run confined to selected records gets each
+selected record's latest withdrawal on one page instead, and the cursor back
+unchanged, so it never hides other records' withdrawals from later runs.
+Deleting a record unpublishes it from every
 channel it was live in, reported with reason `deleted`, so a record never
 published in the channel is never reported. Without a channel every
 unpublication and deletion is listed. Items come as `{record_id, reason,
