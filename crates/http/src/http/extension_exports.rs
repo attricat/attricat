@@ -921,13 +921,15 @@ pub(super) async fn public_file(
     let allowed = repository
         .runtime_extension_installation(&extension_id, installed.installed_release_id)
         .await?
+        // A link keeps needing every grant it was issued under.
         .is_some_and(|installation| {
-            installation
-                .capability_grants
-                .contains("attricat.files.public_links")
-                && installation
-                    .capability_grants
-                    .contains("attricat.files.read")
+            [
+                "attricat.read",
+                "attricat.files.read",
+                "attricat.files.public_links",
+            ]
+            .iter()
+            .all(|grant| installation.capability_grants.contains(*grant))
         });
     if !allowed
         || !repository

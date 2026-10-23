@@ -160,10 +160,7 @@ impl HostState {
                         .unwrap_or(TimeDelta::MAX)
                 });
                 let resync_since = match self.run_id {
-                    Some(run_id) => repository
-                        .resync_run_started_at(run_id)
-                        .await
-                        .map_err(error)?,
+                    Some(run_id) => self.run_facts(run_id).await?.resync_since,
                     None => None,
                 };
                 let begin = repository
@@ -243,18 +240,27 @@ impl HostState {
         }
     }
 
+    /// The scope of this invocation's run, loaded once.
+    async fn run_facts(&self, run_id: Uuid) -> Result<&super::transfer::RunFacts, String> {
+        self.run_facts
+            .get_or_try_init(|| super::transfer::RunFacts::load(&self.repository, run_id))
+            .await
+    }
+
     /// Inside an operation run, refuses a mapping write for a record outside
     /// the run's scope.
     async fn ensure_may_map(&self, record_id: Uuid) -> Result<(), String> {
         match self.run_id {
             Some(run_id) => {
-                super::transfer::ensure_run_reaches_record(
-                    &self.repository,
-                    run_id,
-                    record_id,
-                    super::transfer::RunReach::Map,
-                )
-                .await
+                self.run_facts(run_id)
+                    .await?
+                    .ensure_reaches(
+                        &self.repository,
+                        run_id,
+                        record_id,
+                        super::transfer::RunReach::Map,
+                    )
+                    .await
             }
             None => Ok(()),
         }
@@ -328,13 +334,15 @@ impl HostState {
             return Err("the record does not reference that file".into());
         }
         if let Some(run_id) = self.run_id {
-            super::transfer::ensure_run_reaches_record(
-                &self.repository,
-                run_id,
-                input.record_id,
-                super::transfer::RunReach::Read,
-            )
-            .await?;
+            self.run_facts(run_id)
+                .await?
+                .ensure_reaches(
+                    &self.repository,
+                    run_id,
+                    input.record_id,
+                    super::transfer::RunReach::Read,
+                )
+                .await?;
         }
         let mut token = [0u8; 32];
         SystemRandom::new()

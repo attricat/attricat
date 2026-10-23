@@ -187,15 +187,33 @@ fn caller_headers(
 }
 
 /// Checks caller headers before a transfer spends its request budget,
-/// including clashes with the request's secret headers.
+/// including clashes with the request's secret headers and, when it uses a
+/// connection, with the header a connection's token is sent in.
 fn checked_caller_headers(
+    installation: &ExtensionRuntimeInstallation,
+    connection: Option<&str>,
     secrets: &[SecretHeader],
     supplied: HashMap<String, String>,
 ) -> Result<reqwest::header::HeaderMap, String> {
     let mut headers = reqwest::header::HeaderMap::new();
+    let token_headers = connection
+        .is_some()
+        .then(|| installation.manifest.server.as_ref())
+        .flatten()
+        .into_iter()
+        .flat_map(|server| server.connections.iter())
+        .map(|kind| {
+            kind.token_header
+                .as_ref()
+                .map_or("authorization".to_owned(), |header| {
+                    header.name.to_ascii_lowercase()
+                })
+        });
     let secret_names: Vec<reqwest::header::HeaderName> = secrets
         .iter()
-        .filter_map(|secret| reqwest::header::HeaderName::from_bytes(secret.header.as_bytes()).ok())
+        .map(|secret| secret.header.clone())
+        .chain(token_headers)
+        .filter_map(|name| reqwest::header::HeaderName::from_bytes(name.as_bytes()).ok())
         .collect();
     for name in &secret_names {
         headers.insert(name.clone(), reqwest::header::HeaderValue::from_static(""));
@@ -608,7 +626,12 @@ impl OperationState {
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_active("network.request").await?;
         let url = https_url(&input.url)?;
-        let caller = checked_caller_headers(&input.secret_headers, input.headers)?;
+        let caller = checked_caller_headers(
+            &self.installation,
+            input.connection.as_deref(),
+            &input.secret_headers,
+            input.headers,
+        )?;
         let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
         if let Some(replayed) =
             Self::replayed_fetch(&self.repository, self.run_id, &input.transfer_key, &digest)
@@ -726,6 +749,8 @@ impl OperationState {
             .find(|(name, _)| name.eq_ignore_ascii_case("content-type"))
             .map(|(_, value)| value.clone());
         let caller = checked_caller_headers(
+            &self.installation,
+            input.connection.as_deref(),
             &input.secret_headers,
             input
                 .headers
@@ -1028,44 +1053,87 @@ pub(super) enum RunReach {
     Map,
 }
 
-/// Refuses a record outside a run's scope for `reach`. An interactive run
-/// reaches only the records it was started on.
+/// What bounds a run's records. It is fixed for the run, so an invocation
+/// loads it once.
+pub(super) struct RunFacts {
+    /// A connector run, whose records are checked one by one.
+    connector: bool,
+    /// An interactive run's selection.
+    selection: Option<Vec<Uuid>>,
+    /// When a resync run started.
+    pub(super) resync_since: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl RunFacts {
+    pub(super) async fn load(
+        repository: &AttricatRepository,
+        run_id: Uuid,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            connector: repository
+                .connector_run_scope(run_id)
+                .await
+                .map_err(|error| error.to_string())?
+                .is_some(),
+            selection: repository
+                .interactive_run_scope(run_id)
+                .await
+                .map_err(|error| error.to_string())?
+                .map(|scope| scope.record_ids),
+            resync_since: repository
+                .resync_run_started_at(run_id)
+                .await
+                .map_err(|error| error.to_string())?,
+        })
+    }
+
+    /// Refuses a record outside the run's scope for `reach`. An interactive
+    /// run reaches only the records it was started on.
+    pub(super) async fn ensure_reaches(
+        &self,
+        repository: &AttricatRepository,
+        run_id: Uuid,
+        record_id: Uuid,
+        reach: RunReach,
+    ) -> Result<(), String> {
+        if self.connector {
+            let reached = match reach {
+                RunReach::Read => {
+                    repository
+                        .connector_run_covers_record(run_id, record_id)
+                        .await
+                }
+                RunReach::Map => {
+                    repository
+                        .connector_run_may_map_record(run_id, record_id)
+                        .await
+                }
+            }
+            .map_err(|error| error.to_string())?;
+            if !reached {
+                return Err("the record is outside the run's scope".into());
+            }
+        }
+        if self
+            .selection
+            .as_ref()
+            .is_some_and(|selection| !selection.contains(&record_id))
+        {
+            return Err("the record is outside the run selection".into());
+        }
+        Ok(())
+    }
+}
+
+/// Refuses a record outside a run's scope for `reach`.
 pub(super) async fn ensure_run_reaches_record(
     repository: &AttricatRepository,
     run_id: Uuid,
     record_id: Uuid,
     reach: RunReach,
 ) -> Result<(), String> {
-    if repository
-        .connector_run_scope(run_id)
+    RunFacts::load(repository, run_id)
+        .await?
+        .ensure_reaches(repository, run_id, record_id, reach)
         .await
-        .map_err(|error| error.to_string())?
-        .is_some()
-    {
-        let reached = match reach {
-            RunReach::Read => {
-                repository
-                    .connector_run_covers_record(run_id, record_id)
-                    .await
-            }
-            RunReach::Map => {
-                repository
-                    .connector_run_may_map_record(run_id, record_id)
-                    .await
-            }
-        }
-        .map_err(|error| error.to_string())?;
-        if !reached {
-            return Err("the record is outside the run's scope".into());
-        }
-    }
-    if let Some(scope) = repository
-        .interactive_run_scope(run_id)
-        .await
-        .map_err(|error| error.to_string())?
-        && !scope.record_ids.contains(&record_id)
-    {
-        return Err("the record is outside the run selection".into());
-    }
-    Ok(())
 }

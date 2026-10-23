@@ -567,6 +567,8 @@ struct HostState {
     /// The operation run of a batch invocation, whose scope bounds the
     /// records it may reach.
     run_id: Option<Uuid>,
+    /// The run's scope, loaded on first use.
+    run_facts: Arc<tokio::sync::OnceCell<transfer::RunFacts>>,
 }
 
 /// The export lease holder of an operation run.
@@ -593,6 +595,7 @@ impl HostState {
                 .build(),
             lease_holder: None,
             run_id: None,
+            run_facts: Arc::default(),
         }
     }
 
@@ -1672,20 +1675,48 @@ impl ExtensionOperationTaskHandler {
                         Some(connection) => Some(connection),
                         None => details.and_then(|details| details.connection),
                     };
-                    recorded = Some(
-                        repository
-                            .record_export_rejection(
+                    // A run settles only records it may map, like its
+                    // mappings calls.
+                    recorded = Some(RejectionRecord::Refused);
+                    if transfer::ensure_run_reaches_record(
+                        repository,
+                        run.id,
+                        record_id,
+                        transfer::RunReach::Map,
+                    )
+                    .await
+                    .is_ok()
+                    {
+                        // A result committed before the run started is one
+                        // the run saw, even when its revision counts more
+                        // than the record's own (an expanded related record),
+                        // so the rejection settles past it.
+                        let committed_before = repository
+                            .export_mapping_get(
                                 &run.extension_id,
                                 connection.as_deref(),
-                                record_id,
-                                Some(revision),
-                                Some(&run_lease_holder(run.id)),
-                                &rejection.code,
-                                &rejection.message,
+                                crate::repository::MappingKey::Record(record_id),
                             )
                             .await
-                            .map_err(operation_task_error)?,
-                    );
+                            .ok()
+                            .flatten()
+                            .filter(|mapping| mapping.updated_at <= run.created_at)
+                            .map_or(0, |mapping| mapping.record_revision);
+                        recorded = Some(
+                            repository
+                                .record_export_rejection(
+                                    &run.extension_id,
+                                    connection.as_deref(),
+                                    record_id,
+                                    Some(revision.max(committed_before)),
+                                    Some(&run_lease_holder(run.id)),
+                                    &rejection.code,
+                                    &rejection.message,
+                                )
+                                .await
+                                .map_err(operation_task_error)?,
+                        );
+                    }
                 }
                 let message = format!("{}: {}", rejection.code, rejection.message);
                 // A rejection of one record settles that record, so the

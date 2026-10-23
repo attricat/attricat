@@ -106,6 +106,9 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
   const canRead = useCan('records_read');
   const canWrite = useCan('records_write');
   const canPreview = canRead && canWrite;
+  // A retry names records across the workspace, so it needs workspace-wide
+  // read access as well.
+  const canRetry = canManage && canRead;
   const [preview, setPreview] = useState<{
     destination: ExportDestination;
     connection: string | null;
@@ -231,7 +234,7 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
                         {t('extensionExports.preview')}
                       </Button>
                     )}
-                    {canManage &&
+                    {canRetry &&
                       mapping &&
                       retryableExportStatuses.includes(mapping.status) && (
                         <Button

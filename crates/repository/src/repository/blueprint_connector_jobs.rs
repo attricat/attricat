@@ -290,9 +290,7 @@ impl AttricatRepository {
         selection: Option<&str>,
         record_ids: Option<Vec<Uuid>>,
     ) -> Result<Vec<Uuid>, RepositoryError> {
-        if key.is_empty() || key.len() > MAX_RUN_KEY_BYTES || !key.is_ascii() {
-            return Err(invalid("invalid run key"));
-        }
+        check_run_key(key)?;
         let key = match selection {
             Some(selection) => {
                 use sha2::{Digest, Sha256};
@@ -315,9 +313,7 @@ impl AttricatRepository {
         mode: ConnectorRunMode,
         record_ids: Option<Vec<Uuid>>,
     ) -> Result<Vec<Uuid>, RepositoryError> {
-        if key.is_empty() || key.len() > MAX_RUN_KEY_BYTES || !key.is_ascii() {
-            return Err(invalid("invalid run key"));
-        }
+        check_run_key(key)?;
         if record_ids
             .as_ref()
             .is_some_and(|ids| ids.is_empty() || ids.len() > MAX_CONNECTOR_RECORD_FILTER)
@@ -585,6 +581,15 @@ impl AttricatRepository {
         }
         Ok(started)
     }
+}
+
+/// A caller's run key: 1-40 ASCII bytes. A resync key hashed with its
+/// selection is 32 hex characters, so it passes too.
+fn check_run_key(key: &str) -> Result<(), RepositoryError> {
+    if key.is_empty() || key.len() > MAX_RUN_KEY_BYTES || !key.is_ascii() {
+        return Err(invalid("invalid run key"));
+    }
+    Ok(())
 }
 
 /// The changes after `after` (and up to `upto`) that trigger a job of

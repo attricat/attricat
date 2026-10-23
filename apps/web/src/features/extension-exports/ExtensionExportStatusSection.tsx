@@ -30,6 +30,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { ExportIcon } from '../../components/systemIcons';
 import { Timestamp } from '../../time/Timestamp';
+import { useCan } from '../auth/useCan';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { extensionExportStatus, retryExports } from './api';
 import {
@@ -75,7 +76,10 @@ export const ExtensionExportStatusSection = ({
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const exports = manifest.server?.exports ?? [];
+  // The status lists records across the workspace, so it needs
+  // workspace-wide read access.
+  const canReadRecords = useCan('records_read');
+  const exports = canReadRecords ? (manifest.server?.exports ?? []) : [];
   // Until an operator picks one, show the first connection with exports.
   const [chosenConnection, setConnection] = useState<string | null>();
   const [status, setStatus] = useState<ExportStatus>('rejected');

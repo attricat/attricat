@@ -622,7 +622,7 @@ whose `handle-event(event, delivery)` returns `result<_, failure>`, and
 
 | Case | Event handler | Operation batch |
 |---|---|---|
-| `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes | A rejection that names a record, from an extension with `exports.mappings`, settles that record and replays the batch after a second, so the component finds the record settled and moves on. A newly settled record is progress and is not counted; a repeated rejection, or one of a record another worker holds, counts toward the 100 waits in a row below. A rejection that cannot be recorded (for example for an unknown connection), and any other rejection, dead-letters the run with code `rejected`, without retries |
+| `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes | A rejection that names a record, from an extension with `exports.mappings`, settles that record and replays the batch after a second, so the component finds the record settled and moves on. A newly settled record is progress and is not counted; a repeated rejection, or one of a record another worker holds, counts toward the 100 waits in a row below. A rejection that cannot be recorded (for example for an unknown connection, or of a record outside the run's scope), and any other rejection, dead-letters the run with code `rejected`, without retries |
 | `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted` | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget, up to 100 times in a row before a completed batch; past that, and without `after-ms`, it is a failure within that budget. A replayed dead-lettered run starts with fresh failure and deferral budgets |
 | `fault(message)` | Quarantines the installation | Fails the run and quarantines the installation |
 
@@ -866,8 +866,8 @@ submitted. It needs `attricat.files.public_links`, `attricat.files.read` and
 deployment's `EXTENSION_PUBLIC_FILE_BASE_URL`. Inside an operation run it
 links only records in the run's scope, as `open-record-file` does. Only the
 token's SHA-256 is stored. `GET /api/public/extension-files/{token}` serves the file without a
-session while the link is unexpired, the extension is enabled with both
-file capabilities, and the record the link was issued for still references the file.
+session while the link is unexpired, the extension is enabled with all three
+grants it was issued under, and the record the link was issued for still references the file.
 Deleting the record or replacing the file stops the link at once; disabling,
 quarantining or removing the extension revokes its links for good.
 
