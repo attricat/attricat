@@ -27,6 +27,12 @@ enum Lease<'a> {
     Rejection(Option<&'a str>),
 }
 
+/// The mappings an operator can still act on: of an installed extension,
+/// and of the default destination or a connection that still exists.
+/// Mappings outlive both, so a re-created connection keeps its IDs.
+const CURRENT_DESTINATION: &str = "EXISTS(SELECT 1 FROM extension_installations i WHERE i.workspace_id=extension_export_mappings.workspace_id AND i.extension_id=extension_export_mappings.extension_id) \
+    AND (extension_export_mappings.connection IS NULL OR EXISTS(SELECT 1 FROM extension_connections c WHERE c.workspace_id=extension_export_mappings.workspace_id AND c.extension_id=extension_export_mappings.extension_id AND c.connection=extension_export_mappings.connection))";
+
 /// The per-record export statuses, in the order the UI lists them.
 pub const EXPORT_STATUSES: &[&str] = attricat_validation::EXPORT_STATUSES;
 /// The most mapping rows one page returns.
@@ -805,12 +811,13 @@ impl AttricatRepository {
 
     // ---- management -------------------------------------------------------
 
-    /// Every extension's mapping of one record.
+    /// Every installed extension's mapping of one record, for destinations
+    /// that still exist.
     pub async fn export_mappings_for_record(
         &self,
         record_id: Uuid,
     ) -> Result<Vec<ExportMapping>, RepositoryError> {
-        Ok(sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND record_id=$2 ORDER BY extension_id,connection NULLS FIRST"))
+        Ok(sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND record_id=$2 AND {CURRENT_DESTINATION} ORDER BY extension_id,connection NULLS FIRST"))
             .bind(self.extension_workspace()).bind(record_id)
             .fetch_all(&self.pool).await?)
     }
@@ -832,7 +839,7 @@ impl AttricatRepository {
         &self,
         extension_id: Option<&str>,
     ) -> Result<Vec<ExportStatusCount>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT extension_id,connection,status,count(*)::bigint AS count FROM extension_export_mappings WHERE workspace_id=$1 AND ($2::text IS NULL OR extension_id=$2) AND (status='withdrawn' OR EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=extension_export_mappings.workspace_id AND r.id=extension_export_mappings.record_id AND r.deleted_at IS NULL)) GROUP BY extension_id,connection,status ORDER BY extension_id,connection NULLS FIRST,status")
+        Ok(sqlx::query_as(&format!("SELECT extension_id,connection,status,count(*)::bigint AS count FROM extension_export_mappings WHERE workspace_id=$1 AND ($2::text IS NULL OR extension_id=$2) AND {CURRENT_DESTINATION} AND (status='withdrawn' OR EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=extension_export_mappings.workspace_id AND r.id=extension_export_mappings.record_id AND r.deleted_at IS NULL)) GROUP BY extension_id,connection,status ORDER BY extension_id,connection NULLS FIRST,status"))
             .bind(self.extension_workspace()).bind(extension_id)
             .fetch_all(&self.pool).await?)
     }

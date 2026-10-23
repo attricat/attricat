@@ -229,6 +229,51 @@ pub(super) async fn retry_export(
             "idempotency_key must be 1-40 ASCII bytes".into(),
         ));
     }
+    // With a key, the request as sent (not the records a status resolves
+    // to now) names the retry, and a request sent again returns the runs
+    // the first one started without retrying anything twice.
+    let request_selection = input.idempotency_key.as_ref().map(|_| {
+        let mut ids = input.record_ids.clone().unwrap_or_default();
+        ids.sort_unstable();
+        ids.dedup();
+        format!(
+            "retry:{}:{}:{}",
+            input.connection.as_deref().unwrap_or(""),
+            input.status.as_deref().unwrap_or(""),
+            ids.iter()
+                .map(Uuid::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    });
+    if let (true, Some(key), Some(selection)) =
+        (input.run, &input.idempotency_key, &request_selection)
+    {
+        let mut run_ids = Vec::new();
+        let mut record_ids = Vec::new();
+        for job in repository
+            .extension_export_connector_jobs(&extension_id)
+            .await?
+            .into_iter()
+            .filter(|job| job.connection == input.connection)
+        {
+            for (run, records) in repository
+                .resync_runs_with_key(job.id, key, Some(selection))
+                .await?
+            {
+                run_ids.push(run);
+                record_ids.extend(records.unwrap_or_default());
+            }
+        }
+        if !run_ids.is_empty() {
+            record_ids.sort_unstable();
+            record_ids.dedup();
+            return Ok((
+                StatusCode::ACCEPTED,
+                Json(json!({"record_ids": record_ids, "run_ids": run_ids, "job_errors": []})),
+            ));
+        }
+    }
     let record_ids = repository
         .request_export_retry(
             &extension_id,
@@ -261,19 +306,13 @@ pub(super) async fn retry_export(
             if ids.is_empty() {
                 continue;
             }
-            // A caller's key names this record set, so the same key with
-            // other records starts another resync.
-            let selection = input.idempotency_key.as_ref().map(|_| {
-                format!(
-                    "retry:{}",
-                    ids.iter()
-                        .map(Uuid::to_string)
-                        .collect::<Vec<_>>()
-                        .join(",")
-                )
-            });
             match repository
-                .resync_blueprint_connector_job(job.id, &key, selection.as_deref(), Some(ids))
+                .resync_blueprint_connector_job(
+                    job.id,
+                    &key,
+                    request_selection.as_deref(),
+                    Some(ids),
+                )
                 .await
             {
                 Ok(runs) => run_ids.extend(runs),
@@ -734,6 +773,11 @@ pub(super) async fn set_budget(
             Some((input.requests, input.per_seconds)),
         )
         .await?;
+    crate::extension_runtime::forget_lowered_budget(
+        repository.extension_workspace(),
+        &extension_id,
+        &host_permission_id,
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -744,6 +788,11 @@ pub(super) async fn clear_budget(
     repository
         .set_extension_host_permission_budget(&extension_id, &host_permission_id, None)
         .await?;
+    crate::extension_runtime::forget_lowered_budget(
+        repository.extension_workspace(),
+        &extension_id,
+        &host_permission_id,
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 

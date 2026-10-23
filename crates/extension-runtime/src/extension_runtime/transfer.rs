@@ -973,13 +973,14 @@ impl OperationState {
         {
             return Err("the record does not reference that file".into());
         }
-        ensure_run_reaches_record(
-            &self.repository,
-            self.run_id,
-            input.record_id,
-            RunReach::Read,
-        )
-        .await?;
+        // The run's scope is loaded once per invocation.
+        let (repository, run_id) = (self.repository.clone(), self.run_id);
+        self.run_facts
+            .clone()
+            .get_or_try_init(|| RunFacts::load(&repository, run_id))
+            .await?
+            .ensure_reaches(&repository, run_id, input.record_id, RunReach::Read)
+            .await?;
         let file = self
             .repository
             .file_object(input.file_id, input.variant.as_deref())

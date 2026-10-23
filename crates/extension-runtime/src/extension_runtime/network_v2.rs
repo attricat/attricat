@@ -138,6 +138,20 @@ pub(super) async fn admit_request(
         .await
 }
 
+/// Drops this process's cached budget of a rule, so an operator's change
+/// applies at once here; other replicas see it within
+/// [`LOWERED_BUDGET_TTL`].
+pub fn forget_lowered_budget(workspace_id: Uuid, extension_id: &str, host_permission_id: &str) {
+    LOWERED_BUDGETS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&(
+            workspace_id,
+            extension_id.to_owned(),
+            host_permission_id.to_owned(),
+        ));
+}
+
 /// The operator-lowered budget of `rule`, cached for [`LOWERED_BUDGET_TTL`].
 async fn lowered_budget(
     repository: &AttricatRepository,

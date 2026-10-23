@@ -73,6 +73,7 @@ mod unified;
 use unified::host_unified::attricat::host as wit;
 
 pub use export_host::use_public_file_link_base;
+pub use network_v2::forget_lowered_budget;
 use operation_batch::{BatchError, BatchResult, run_operation_batch};
 use outcomes::retry_backoff;
 pub use outcomes::{InvocationFailure, Rejection};
@@ -494,6 +495,8 @@ struct OperationState {
     run_id: Uuid,
     batch_key: String,
     artifacts: ResourceTable,
+    /// The run's scope, loaded on first use.
+    run_facts: Arc<tokio::sync::OnceCell<transfer::RunFacts>>,
 }
 
 impl OperationState {
@@ -510,6 +513,7 @@ impl OperationState {
             run_id,
             batch_key: String::new(),
             artifacts: ResourceTable::new(),
+            run_facts: Arc::default(),
         }
     }
 

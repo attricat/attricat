@@ -90,7 +90,12 @@ export const ExtensionExportStatusSection = ({
       status: null,
     }),
     queryFn: () =>
-      extensionExportStatus(extensionId, { connection: null, status: null }),
+      // Only the counts are read, so one mapping row is enough.
+      extensionExportStatus(extensionId, {
+        connection: null,
+        status: null,
+        limit: 1,
+      }),
     enabled: exports.length > 0,
   });
   const connection =

@@ -36,9 +36,13 @@ export const extensionExportStatus = (
     connection: string | null;
     status: ExportStatus | null;
     after?: string | null;
+    /** Rows per page; a caller that needs only the counts asks for one. */
+    limit?: number;
   },
 ) => {
-  const params = new URLSearchParams({ limit: String(exportStatusPageSize) });
+  const params = new URLSearchParams({
+    limit: String(filter.limit ?? exportStatusPageSize),
+  });
   if (filter.connection) params.set('connection', filter.connection);
   if (filter.status) params.set('status', filter.status);
   if (filter.after) params.set('after', filter.after);

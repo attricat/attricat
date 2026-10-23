@@ -304,20 +304,26 @@ impl AttricatRepository {
         selection: Option<&str>,
         record_ids: Option<Vec<Uuid>>,
     ) -> Result<Vec<Uuid>, RepositoryError> {
-        check_run_key(key)?;
-        let key = match selection {
-            Some(selection) => {
-                use sha2::{Digest, Sha256};
-                let digest = Sha256::digest(format!("{key}\0{selection}"));
-                digest[..16]
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect()
-            }
-            None => key.to_owned(),
-        };
+        let key = resync_key(key, selection)?;
         self.run_blueprint_connector_job_as(id, &key, ConnectorRunMode::Resync, record_ids)
             .await
+    }
+
+    /// The runs, with their selected records, that a resync of job `id`
+    /// with `key` and `selection` already started.
+    pub async fn resync_runs_with_key(
+        &self,
+        id: Uuid,
+        key: &str,
+        selection: Option<&str>,
+    ) -> Result<Vec<(Uuid, Option<Vec<Uuid>>)>, RepositoryError> {
+        let key = resync_key(key, selection)?
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        Ok(sqlx::query_as("SELECT id,connector_record_ids FROM extension_operation_runs WHERE workspace_id=$1 AND connector_job_id=$2 AND idempotency_key LIKE $3 ORDER BY created_at,id")
+            .bind(self.extension_workspace()).bind(id).bind(format!("resync:{id}:{key}:%"))
+            .fetch_all(&self.pool).await?)
     }
 
     async fn run_blueprint_connector_job_as(
@@ -613,6 +619,23 @@ impl AttricatRepository {
         }
         Ok(started)
     }
+}
+
+/// The run key of a resync: the caller's key, or with a `selection`, a
+/// digest of both, so the same key with another selection is another resync.
+fn resync_key(key: &str, selection: Option<&str>) -> Result<String, RepositoryError> {
+    check_run_key(key)?;
+    Ok(match selection {
+        Some(selection) => {
+            use sha2::{Digest, Sha256};
+            let digest = Sha256::digest(format!("{key}\0{selection}"));
+            digest[..16]
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect()
+        }
+        None => key.to_owned(),
+    })
 }
 
 /// A caller's run key: 1-40 ASCII bytes. A resync key hashed with its

@@ -1097,6 +1097,16 @@ async fn connector_runs_read_resolved_rows_close_out_withdrawals_and_resync(pool
     let first = resync("status:synced").await;
     assert_eq!(resync("status:synced").await, first);
     assert_ne!(resync("status:rejected").await, first);
+    // A retry sent again finds the runs its key started.
+    let started = repository
+        .resync_runs_with_key(job.id, "key", Some("status:synced"))
+        .await
+        .unwrap();
+    assert_eq!(
+        started.iter().map(|(run, _)| *run).collect::<Vec<_>>(),
+        first
+    );
+    assert_eq!(started[0].1, Some(vec![product_ids[1]]));
 }
 
 #[sqlx::test(migrations = "./migrations")]
