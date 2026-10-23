@@ -263,11 +263,10 @@ impl OperationState {
             .port_or_known_default()
             .ok_or("HTTPS URL needs a port")?;
         let timeout = Duration::from_millis(rule.timeout_ms);
-        let resolved = resolve_public_destination(&address, port, timeout).await?;
-        let mut headers = reqwest::header::HeaderMap::new();
         if secrets.len() > MAX_TRANSFER_SECRET_HEADERS {
             return Err("too many secret headers".into());
         }
+        let mut names = Vec::with_capacity(secrets.len());
         for secret in secrets {
             valid_secret_name(&secret.secret)?;
             let name = reqwest::header::HeaderName::from_bytes(secret.header.as_bytes())
@@ -275,10 +274,22 @@ impl OperationState {
             if RESERVED_REQUEST_HEADERS.contains(&name.as_str())
                 || RESERVED_TRANSFER_HEADERS.contains(&name.as_str())
                 || secret.prefix.len() > MAX_SECRET_HEADER_PREFIX_BYTES
-                || headers.contains_key(&name)
+                || names.contains(&name)
             {
                 return Err("unsafe secret header".into());
             }
+            names.push(name);
+        }
+        // The budget is spent only by a transfer that passed the checks
+        // above, but before DNS is resolved, so failing or slow lookups are
+        // throttled too, and before the connection's token is read, so a
+        // throttled transfer never causes a token refresh.
+        if let Err(wait) = admit_request(&host.repository, &host.installation, rule).await {
+            return Err(TargetRefusal::RateLimited(wait));
+        }
+        let resolved = resolve_public_destination(&address, port, timeout).await?;
+        let mut headers = reqwest::header::HeaderMap::new();
+        for (secret, name) in secrets.iter().zip(names) {
             let value = host
                 .repository
                 .workspace_extension_secret_value(&secret.secret)
@@ -290,12 +301,6 @@ impl OperationState {
                 reqwest::header::HeaderValue::from_str(&(secret.prefix.clone() + &value))
                     .map_err(|_| "invalid secret header value")?,
             );
-        }
-        // The budget is spent only by a transfer that passed the checks
-        // above, and before the connection's token is read, so a throttled
-        // transfer never causes a token refresh.
-        if let Err(wait) = admit_request(&host.repository, &host.installation, rule).await {
-            return Err(TargetRefusal::RateLimited(wait));
         }
         let mut sent = None;
         if let Some(connection) = connection {

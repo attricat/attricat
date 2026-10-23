@@ -133,11 +133,24 @@ pub(super) struct ExtensionExportStatus {
     handler_failures: Vec<HandlerFailure>,
 }
 
+/// An extension's mappings and handler failures across the workspace. They
+/// name records and carry destination IDs and errors, so the caller needs a
+/// workspace-wide `records.read` grant as well as `extensions.read`.
 pub(super) async fn extension_export_status(
+    State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
+    principal: AuthenticatedPrincipal,
+    workspace: ActiveWorkspace,
     ApiPath(extension_id): ApiPath<String>,
     ApiQuery(query): ApiQuery<ExportStatusQuery>,
 ) -> Result<Json<ExtensionExportStatus>, ApiError> {
+    if !state
+        .repository
+        .principal_may(principal.actor(), workspace.0, "records.read", None, None)
+        .await?
+    {
+        return Err(ApiError::forbidden());
+    }
     let (mappings, next) = repository
         .export_mapping_list(
             &extension_id,
@@ -174,11 +187,23 @@ pub(super) struct RetryRequest {
 
 /// Marks records for another push and notifies the extension; optionally
 /// resyncs just those records at once, without rerunning whole jobs.
+/// Like the status view, it names records selected by status, so it needs a
+/// workspace-wide `records.read` grant too.
 pub(super) async fn retry_export(
+    State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
+    principal: AuthenticatedPrincipal,
+    workspace: ActiveWorkspace,
     ApiPath(extension_id): ApiPath<String>,
     ApiJson(input): ApiJson<RetryRequest>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
+    if !state
+        .repository
+        .principal_may(principal.actor(), workspace.0, "records.read", None, None)
+        .await?
+    {
+        return Err(ApiError::forbidden());
+    }
     let record_ids = repository
         .request_export_retry(
             &extension_id,

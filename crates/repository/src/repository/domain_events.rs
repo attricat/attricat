@@ -329,11 +329,20 @@ impl AttricatRepository {
 
     /// The highest event sequence below which every event has committed.
     /// Read under the outbox boundary, so no event with an allocated but
-    /// uncommitted sequence can later appear below it.
-    pub(crate) async fn committed_event_high_water(&self) -> Result<i64, RepositoryError> {
+    /// uncommitted sequence can later appear below it. `None` while an event
+    /// writer holds the boundary: readers that can wait for a later call do
+    /// not stall behind a long write transaction, nor block other writers.
+    pub(crate) async fn committed_event_high_water(&self) -> Result<Option<i64>, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
-        lock_outbox_boundary(&mut transaction, workspace_id).await?;
+        let locked: bool =
+            sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))")
+                .bind(format!("workflow-activation-boundary:{workspace_id}"))
+                .fetch_one(&mut *transaction)
+                .await?;
+        if !locked {
+            return Ok(None);
+        }
         let high_water = sqlx::query_scalar::<_, i64>(
             "SELECT COALESCE(max(sequence), 0) FROM domain_events WHERE workspace_id = $1",
         )
@@ -341,7 +350,7 @@ impl AttricatRepository {
         .fetch_one(&mut *transaction)
         .await?;
         transaction.commit().await?;
-        Ok(high_water)
+        Ok(Some(high_water))
     }
 
     pub async fn create_event_consumer(

@@ -26,10 +26,14 @@ use crate::repository::{
 const TOKEN_EXPIRY_SKEW: TimeDelta = TimeDelta::seconds(60);
 /// The shortest lifetime a token response's `expires_in` is taken to state.
 const MIN_TOKEN_LIFETIME_SECONDS: i64 = 30;
-/// How often a caller waiting for another worker's refresh rechecks it.
+/// How soon a caller waiting for another worker's refresh first rechecks
+/// it; the wait doubles up to [`REFRESH_WAIT_MAX_STEP`].
 const REFRESH_WAIT_STEP: std::time::Duration = std::time::Duration::from_millis(200);
-/// How long a caller waits for another worker's refresh.
-const REFRESH_WAIT_LIMIT: std::time::Duration = std::time::Duration::from_secs(30);
+const REFRESH_WAIT_MAX_STEP: std::time::Duration = std::time::Duration::from_secs(1);
+/// How long a caller waits for another worker's refresh before answering
+/// that the connection is temporarily unavailable, so a slow token endpoint
+/// never holds component invocations or HTTP requests for long.
+const REFRESH_WAIT_LIMIT: std::time::Duration = std::time::Duration::from_secs(5);
 const DEVICE_CODE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
 /// The largest token endpoint response read.
 const MAX_TOKEN_RESPONSE_BYTES: usize = 64 * 1024;
@@ -148,6 +152,7 @@ pub async fn access_token(
     // One worker refreshes; the others wait for its token without holding a
     // database connection.
     let started = std::time::Instant::now();
+    let mut step = REFRESH_WAIT_STEP;
     let refresh = loop {
         if let Some(refresh) = repository
             .claim_extension_connection_refresh(&installation.extension_id, connection)
@@ -161,7 +166,8 @@ pub async fn access_token(
                 "another worker is still refreshing the token".into(),
             ));
         }
-        tokio::time::sleep(REFRESH_WAIT_STEP).await;
+        tokio::time::sleep(step).await;
+        step = (step * 2).min(REFRESH_WAIT_MAX_STEP);
         let cached = repository
             .extension_connection_access_token(&installation.extension_id, connection)
             .await

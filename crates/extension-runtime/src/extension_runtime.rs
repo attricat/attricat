@@ -49,7 +49,8 @@ use crate::{
         DeliveryState, ExtensionAttricatBatch, ExtensionAttricatIntent,
         ExtensionAttricatPageRequest, ExtensionConfigurationScope, ExtensionOperationArtifact,
         ExtensionRuntimeInstallation, HandlerAttemptOutcome, MAX_EXTENSION_BATCH_INTENTS,
-        MAX_EXTENSION_LOOKUP_VALUE_BYTES, MaterializeScope, RepositoryError, SystemRepository,
+        MAX_EXTENSION_LOOKUP_VALUE_BYTES, MaterializeScope, RejectionRecord, RepositoryError,
+        SystemRepository,
     },
     storage::{ObjectStore, ObjectStoreError, StoredObject},
     task_queue::TaskKind,
@@ -1619,7 +1620,12 @@ impl ExtensionOperationTaskHandler {
                     + chrono::TimeDelta::from_std(delay).unwrap_or(chrono::TimeDelta::zero());
                 let deferred = after.is_some()
                     && repository
-                        .defer_extension_operation_task(task, &message, at, MAX_RETRY_DEFERRALS)
+                        .defer_extension_operation_task(
+                            task,
+                            &message,
+                            at,
+                            Some(MAX_RETRY_DEFERRALS),
+                        )
                         .await
                         .map_err(operation_task_error)?;
                 if deferred {
@@ -1638,6 +1644,7 @@ impl ExtensionOperationTaskHandler {
                     .await
                     .map_err(operation_task_error)?
                     .is_some_and(|installation| exports_mappings(&installation));
+                let mut recorded = None;
                 if let Some(record_id) = rejection.record_id
                     && exports
                 {
@@ -1665,36 +1672,49 @@ impl ExtensionOperationTaskHandler {
                         Some(connection) => Some(connection),
                         None => details.and_then(|details| details.connection),
                     };
-                    repository
-                        .record_export_rejection(
-                            &run.extension_id,
-                            connection.as_deref(),
-                            record_id,
-                            Some(revision),
-                            Some(&run_lease_holder(run.id)),
-                            &rejection.code,
-                            &rejection.message,
-                        )
-                        .await
-                        .map_err(operation_task_error)?;
+                    recorded = Some(
+                        repository
+                            .record_export_rejection(
+                                &run.extension_id,
+                                connection.as_deref(),
+                                record_id,
+                                Some(revision),
+                                Some(&run_lease_holder(run.id)),
+                                &rejection.code,
+                                &rejection.message,
+                            )
+                            .await
+                            .map_err(operation_task_error)?,
+                    );
                 }
                 let message = format!("{}: {}", rejection.code, rejection.message);
                 // A rejection of one record settles that record, so the
                 // batch replays and the component moves past it (its mapping
-                // now reads as settled); the rest of the run continues. Like
-                // a deferral this is capped, so a component that keeps
-                // rejecting the same batch is still dead-lettered.
-                let settled_record = rejection.record_id.is_some()
-                    && exports
-                    && repository
+                // now reads as settled); the rest of the run continues. A
+                // newly settled record is progress and is not counted; a
+                // repeat or a record leased elsewhere waits like a deferral,
+                // capped, so a component that keeps rejecting the same batch
+                // is still dead-lettered. One that cannot be recorded would
+                // only be rejected again, so it dead-letters the run.
+                let limit = match recorded {
+                    Some(RejectionRecord::Settled) => Some(None),
+                    Some(RejectionRecord::Unchanged | RejectionRecord::Busy) => {
+                        Some(Some(MAX_RETRY_DEFERRALS))
+                    }
+                    Some(RejectionRecord::Refused) | None => None,
+                };
+                let settled_record = match limit {
+                    Some(limit) => repository
                         .defer_extension_operation_task(
                             task,
                             &message,
                             chrono::Utc::now() + RECORD_REJECTION_REPLAY_DELAY,
-                            MAX_RETRY_DEFERRALS,
+                            limit,
                         )
                         .await
-                        .map_err(operation_task_error)?;
+                        .map_err(operation_task_error)?,
+                    None => false,
+                };
                 if settled_record {
                     "record_rejected"
                 } else {
@@ -2179,6 +2199,9 @@ impl TaskHandler for WasmExtensionTaskHandler {
 /// How often the coordinator runs its operation storage, schedule and
 /// connector sweeps per workspace.
 const COORDINATOR_SWEEP_INTERVAL: Duration = Duration::from_secs(5);
+/// How often expired handler attempts and file links are deleted per
+/// workspace; they are kept for a day or more, so hourly is plenty.
+const RETENTION_SWEEP_INTERVAL: Duration = Duration::from_secs(3600);
 
 /// What the coordinator remembers about one workspace between ticks.
 #[derive(Default)]
@@ -2191,6 +2214,7 @@ struct CoordinatedWorkspace {
     /// A historical batch was enqueued and more may remain.
     history_pending: bool,
     last_sweep: Option<Instant>,
+    last_retention_sweep: Option<Instant>,
 }
 
 /// Intake is only a producer/coordinator. It registers at the high-water mark
@@ -2261,6 +2285,12 @@ async fn coordinate_workspace(
         }
         scoped.produce_due_extension_operation_schedules().await?;
         scoped.produce_due_blueprint_connector_jobs().await?;
+    }
+    if state
+        .last_retention_sweep
+        .is_none_or(|last| last.elapsed() >= RETENTION_SWEEP_INTERVAL)
+    {
+        state.last_retention_sweep = Some(Instant::now());
         scoped.sweep_extension_handler_attempts().await?;
         scoped.sweep_extension_file_links().await?;
     }

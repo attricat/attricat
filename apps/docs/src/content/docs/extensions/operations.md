@@ -31,7 +31,7 @@ A component built for the `outcome-extension` [world](/extensions/server/#host-a
 
 `failure` is one of:
 
-- `rejected { code, message, record-id?, connection? }`: when it names a record and the extension has `exports.mappings`, the record's export status becomes `rejected` and the batch runs again a second later. The mapping now reads as settled, so the component moves past the record and the rest of the run continues; like a retry delay, this happens at most 100 times in a row. Any other rejection makes the run a dead letter with code `rejected`, without retries.
+- `rejected { code, message, record-id?, connection? }`: when it names a record and the extension has `exports.mappings`, the record's export status becomes `rejected` and the batch runs again a second later. The mapping now reads as settled, so the component moves past the record and the rest of the run continues. Each newly rejected record is progress, so a batch may reject any number of records; repeating a rejection, or rejecting a record another worker holds, counts like a retry delay, at most 100 times in a row. A rejection that cannot be recorded, for example for an unknown connection, and any other rejection make the run a dead letter with code `rejected`, without retries.
 - `retry { message, after-ms? }`: the batch runs again with the same batch key after the delay. With `after-ms` it waits without spending the run's failure budget, up to 100 times in a row before a batch completes; past that, and without `after-ms`, each retry counts against the budget.
 - `fault(message)`: the run fails and the installation is quarantined.
 
@@ -145,7 +145,7 @@ Host API 1.1 adds connector calls for exporters:
   - `relationships`: relationship targets by attribute code;
   - `files`: file references (`file_id`, `filename`, `mime_type`, `byte_size`, `sha256`) by attribute code, for `open-record-file` and [`files.link.v1`](/extensions/server/#public-file-links);
   - `related`: for up to four relationship codes named in `expand`, the targets' values, relationships, files, revision, and whether each is published in the channel. Use it for variants and parent/child listings. With `expand`, the row's `content_revision` is the newest revision of the record and the records it embeds, so editing or deleting a variant makes its parent's row newer than the revision last committed for it.
-- `attricat.withdrawn(cursor, limit)` lists 1 to 100 records of the job's blueprint that were unpublished from the run's channel (and are still unpublished) or deleted, in event order, as `{record_id, reason, record_revision, occurred_at}`, with `next_cursor` and `more`. An empty cursor starts at the oldest change. Save the cursor, for example in extension storage per job and channel, so the next run continues where this one stopped.
+- `attricat.withdrawn(cursor, limit)` lists 1 to 100 records of the job's blueprint that were unpublished from the run's channel (and are still unpublished) or deleted, in event order, as `{record_id, reason, record_revision, occurred_at}`, with `next_cursor` and `more`. An empty cursor starts at the oldest change. Save the cursor, for example in extension storage per job and channel, so the next run continues where this one stopped. While Attricat is writing events, a page can come back empty with `more: false` and the same cursor; the next run picks up from there.
 - `api.call("connector.scope.v1", "{}")` returns the run's job, blueprint, revision, context, channel, connection, and mode, or `null` outside a connector run.
 
 ## Schedules

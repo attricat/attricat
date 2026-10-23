@@ -12,7 +12,7 @@ use api::{
     model::{CreateAttributeContext, CreateBlueprint, NewAttributeValue},
     repository::{
         AttricatRepository, ExportBegin, ExportMappingUpdate, ExportRetrySelection,
-        ExtensionAttricatPageRequest, MaterializeScope,
+        ExtensionAttricatPageRequest, MaterializeScope, RejectionRecord,
     },
     storage::FakeObjectStore,
     task_queue::TaskKind,
@@ -1135,20 +1135,60 @@ async fn export_status_preview_and_retry_are_served_over_http(pool: sqlx::PgPool
     let blueprint = published_blueprint(&repository, VARIANT_BLUEPRINT).await;
     let record = titled_record(&repository, blueprint, "Chair").await;
     titled_record(&repository, blueprint, "Table").await;
-    repository
-        .record_export_rejection(
-            EXTENSION,
-            None,
-            record,
-            None,
-            None,
-            "missing_gtin",
-            "GTIN is required",
-        )
-        .await
-        .unwrap();
+    let rejection = |connection: Option<&'static str>| {
+        let repository = repository.clone();
+        async move {
+            repository
+                .record_export_rejection(
+                    EXTENSION,
+                    connection,
+                    record,
+                    None,
+                    None,
+                    "missing_gtin",
+                    "GTIN is required",
+                )
+                .await
+                .unwrap()
+        }
+    };
+    assert_eq!(rejection(None).await, RejectionRecord::Settled);
+    // A repeat changes nothing, and an unknown connection cannot be recorded.
+    assert_eq!(rejection(None).await, RejectionRecord::Unchanged);
+    assert_eq!(rejection(Some("gone")).await, RejectionRecord::Refused);
+    // Retrying needs an extension that keeps export mappings.
+    assert!(matches!(
+        repository
+            .request_export_retry(
+                "acme.unknown",
+                ExportRetrySelection {
+                    connection: None,
+                    record_ids: Some(vec![record]),
+                    status: None,
+                },
+            )
+            .await,
+        Err(api::repository::RepositoryError::NotFound(_))
+    ));
     let (base_url, server) = start_server_with_object_store(pool.clone(), store).await;
     let client = authenticated_client();
+
+    // The extension's status page names records across the workspace, so
+    // `extensions.read` alone is not enough.
+    let reader = member_with_role(
+        &pool,
+        create_role(&pool, "extension_reader", &["extensions.read"]).await,
+    )
+    .await;
+    expect_status(
+        client_for(reader)
+            .get(format!("{base_url}/extensions/{EXTENSION}/export-status"))
+            .send()
+            .await
+            .unwrap(),
+        reqwest::StatusCode::FORBIDDEN,
+    )
+    .await;
 
     // The Explorer filters by export status.
     let found = expect_status(

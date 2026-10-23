@@ -184,12 +184,37 @@ pub struct ExportStatusCount {
     pub count: i64,
 }
 
+/// What [`AttricatRepository::record_export_rejection`] made of a rejection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RejectionRecord {
+    /// The record is now settled as rejected.
+    Settled,
+    /// It already was, at this revision or a newer one, or the record was
+    /// deleted: nothing changed.
+    Unchanged,
+    /// Another worker holds the record's lease; its push settles it.
+    Busy,
+    /// It cannot be recorded, for example for an unknown connection.
+    Refused,
+}
+
 /// Which mappings a retry selects.
 #[derive(Clone, Debug)]
 pub struct ExportRetrySelection {
     pub connection: Option<String>,
     pub record_ids: Option<Vec<Uuid>>,
     pub status: Option<String>,
+}
+
+/// Matches a mapping's `column` to the connection bound at `param`: equal
+/// to it, or NULL for the default destination. Unlike `IS NOT DISTINCT FROM`
+/// both forms can use the mapping indexes; `param` stays referenced either
+/// way so the query binds the same parameters.
+pub(crate) fn connection_is(column: &str, param: &str, connection: Option<&str>) -> String {
+    match connection {
+        Some(_) => format!("{column}={param}"),
+        None => format!("{column} IS NULL AND {param}::text IS NULL"),
+    }
 }
 
 fn bounded_json(value: &Value, max: usize, label: &str) -> Result<(), RepositoryError> {
@@ -301,7 +326,7 @@ impl AttricatRepository {
         check_connection(connection)?;
         let ws = self.extension_workspace();
         Ok(match key {
-            MappingKey::Record(record_id) => sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND record_id=$4"))
+            MappingKey::Record(record_id) => sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4", connection_is("connection", "$3", connection)))
                 .bind(ws).bind(extension_id).bind(connection).bind(record_id)
                 .fetch_optional(&self.pool).await?,
             MappingKey::ExternalId(external_id) => {
@@ -310,7 +335,7 @@ impl AttricatRepository {
                 }
                 // External IDs are unique per destination in practice; the
                 // oldest mapping wins if an exporter reused one.
-                sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND external_id=$4 ORDER BY created_at,id LIMIT 1"))
+                sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND external_id=$4 ORDER BY created_at,id LIMIT 1", connection_is("connection", "$3", connection)))
                     .bind(ws).bind(extension_id).bind(connection).bind(external_id)
                     .fetch_optional(&self.pool).await?
             }
@@ -336,7 +361,7 @@ impl AttricatRepository {
         if status.is_some_and(|status| !EXPORT_STATUSES.contains(&status)) {
             return Err(invalid("unknown export status"));
         }
-        let mut rows: Vec<ExportMapping> = sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND ($4::text IS NULL OR status=$4) AND ($5::uuid IS NULL OR record_id>$5) ORDER BY record_id LIMIT $6"))
+        let mut rows: Vec<ExportMapping> = sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::text IS NULL OR status=$4) AND ($5::uuid IS NULL OR record_id>$5) ORDER BY record_id LIMIT $6", connection_is("connection", "$3", connection)))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(status)
             .bind(after).bind(i64::from(limit) + 1)
             .fetch_all(&self.pool).await?;
@@ -378,7 +403,7 @@ impl AttricatRepository {
         sqlx::query("INSERT INTO extension_export_mappings(id,workspace_id,extension_id,connection,record_id,status) VALUES($1,$2,$3,$4,$5,'pending') ON CONFLICT DO NOTHING")
             .bind(Uuid::new_v4()).bind(ws).bind(extension_id).bind(connection).bind(record_id)
             .execute(&mut **transaction).await?;
-        Ok(sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND record_id=$4 FOR UPDATE"))
+        Ok(sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 FOR UPDATE", connection_is("connection", "$3", connection)))
             .bind(ws).bind(extension_id).bind(connection).bind(record_id)
             .fetch_one(&mut **transaction).await?)
     }
@@ -442,7 +467,7 @@ impl AttricatRepository {
             return Ok(ExportBegin::Stale { mapping });
         }
         let token = Uuid::new_v4();
-        let mapping: ExportMapping = sqlx::query_as(&format!("UPDATE extension_export_mappings SET lease_token=$5,lease_until=$6,leased_at=clock_timestamp(),lease_holder=$7,leased_revision=$8,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND record_id=$4 RETURNING {MAPPING_FIELDS}"))
+        let mapping: ExportMapping = sqlx::query_as(&format!("UPDATE extension_export_mappings SET lease_token=$5,lease_until=$6,leased_at=clock_timestamp(),lease_holder=$7,leased_revision=$8,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 RETURNING {MAPPING_FIELDS}", connection_is("connection", "$3", connection)))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id)
             .bind(token).bind(now + lease).bind(holder).bind(record_revision)
             .fetch_one(&mut *transaction).await?;
@@ -563,7 +588,7 @@ impl AttricatRepository {
             // A refused result still ends the lease of the worker that sent
             // it, so the record is not held until the lease expires.
             if holds_lease {
-                sqlx::query("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND record_id=$4")
+                sqlx::query(&format!("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4", connection_is("connection", "$3", connection)))
                     .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id)
                     .execute(&mut *transaction).await?;
                 transaction.commit().await?;
@@ -586,8 +611,9 @@ impl AttricatRepository {
              synced_at=CASE WHEN $5='synced' THEN clock_timestamp() ELSE synced_at END,\
              retry_requested_at=CASE WHEN $14 AND (leased_at IS NULL OR retry_requested_at <= leased_at) THEN NULL ELSE retry_requested_at END,\
              lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() \
-             WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND record_id=$4 \
-             RETURNING {MAPPING_FIELDS}"
+             WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 \
+             RETURNING {MAPPING_FIELDS}",
+            connection_is("connection", "$3", connection)
         ))
         .bind(self.extension_workspace())
         .bind(extension_id)
@@ -619,7 +645,7 @@ impl AttricatRepository {
         lease_token: Uuid,
     ) -> Result<bool, RepositoryError> {
         check_connection(connection)?;
-        Ok(sqlx::query("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND record_id=$4 AND lease_token=$5")
+        Ok(sqlx::query(&format!("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 AND lease_token=$5", connection_is("connection", "$3", connection)))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id).bind(lease_token)
             .execute(&self.pool).await?.rows_affected() == 1)
     }
@@ -631,7 +657,7 @@ impl AttricatRepository {
         record_id: Uuid,
     ) -> Result<bool, RepositoryError> {
         check_connection(connection)?;
-        Ok(sqlx::query("DELETE FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND record_id=$4")
+        Ok(sqlx::query(&format!("DELETE FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4", connection_is("connection", "$3", connection)))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id)
             .execute(&self.pool).await?.rows_affected() == 1)
     }
@@ -665,8 +691,8 @@ impl AttricatRepository {
     /// Otherwise `record_revision` is the revision the rejection concerns. A
     /// rejection of a revision older than the mapping's is outdated and kept
     /// out of the status. A rejection that cannot be recorded (an unknown or
-    /// invalid connection or a deleted record) is ignored, so it never fails
-    /// the delivery or run that reported it.
+    /// invalid connection or a deleted record) never fails the delivery or
+    /// run that reported it; the result says what became of it.
     #[allow(clippy::too_many_arguments)]
     pub async fn record_export_rejection(
         &self,
@@ -677,7 +703,12 @@ impl AttricatRepository {
         holder: Option<&str>,
         code: &str,
         message: &str,
-    ) -> Result<(), RepositoryError> {
+    ) -> Result<RejectionRecord, RepositoryError> {
+        let before = self
+            .export_mapping_get(extension_id, connection, MappingKey::Record(record_id))
+            .await
+            .ok()
+            .flatten();
         let result = async {
             let update = ExportMappingUpdate {
                 status: "rejected".into(),
@@ -697,12 +728,26 @@ impl AttricatRepository {
         }
         .await;
         match result {
-            Ok(())
-            | Err(
-                RepositoryError::NotFound(_)
-                | RepositoryError::ExportMappingConflict(_)
-                | RepositoryError::InvalidExtension(_),
-            ) => Ok(()),
+            // A rejection the mapping already recorded unleased is a repeat.
+            Ok(()) => Ok(match before {
+                Some(before)
+                    if before.status == "rejected"
+                        && before.lease_token.is_none()
+                        && record_revision
+                            .is_none_or(|revision| before.record_revision >= revision) =>
+                {
+                    RejectionRecord::Unchanged
+                }
+                _ => RejectionRecord::Settled,
+            }),
+            Err(RepositoryError::NotFound("record")) => Ok(RejectionRecord::Unchanged),
+            Err(RepositoryError::ExportMappingConflict(message)) if message.contains("leased") => {
+                Ok(RejectionRecord::Busy)
+            }
+            Err(RepositoryError::ExportMappingConflict(_)) => Ok(RejectionRecord::Unchanged),
+            Err(RepositoryError::NotFound(_) | RepositoryError::InvalidExtension(_)) => {
+                Ok(RejectionRecord::Refused)
+            }
             Err(error) => Err(error),
         }
     }
@@ -754,7 +799,7 @@ impl AttricatRepository {
         if !EXPORT_STATUSES.contains(&status) {
             return Err(invalid("unknown export status"));
         }
-        let ids: Vec<Uuid> = sqlx::query_scalar("SELECT m.record_id FROM extension_export_mappings m JOIN records r ON r.workspace_id=m.workspace_id AND r.id=m.record_id WHERE m.workspace_id=$1 AND m.extension_id=$2 AND m.connection IS NOT DISTINCT FROM $3 AND m.status=$4 AND r.blueprint_id=$5 AND r.deleted_at IS NULL ORDER BY m.record_id LIMIT $6")
+        let ids: Vec<Uuid> = sqlx::query_scalar(&format!("SELECT m.record_id FROM extension_export_mappings m JOIN records r ON r.workspace_id=m.workspace_id AND r.id=m.record_id WHERE m.workspace_id=$1 AND m.extension_id=$2 AND {} AND m.status=$4 AND r.blueprint_id=$5 AND r.deleted_at IS NULL ORDER BY m.record_id LIMIT $6", connection_is("m.connection", "$3", connection)))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(status).bind(blueprint_id).bind(limit.saturating_add(1))
             .fetch_all(&self.pool).await?;
         Ok((ids.len() as i64 <= limit).then_some(ids))
@@ -791,6 +836,14 @@ impl AttricatRepository {
             return Err(invalid("a retry needs record IDs or a status"));
         }
         let mut transaction = self.pool.begin().await?;
+        // Only an installed extension granted export mappings has mappings
+        // to retry; any other would get rows nothing ever settles.
+        let exporter: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_installations i JOIN extension_grants g ON g.installation_id=i.id AND g.grant_kind='capability' AND g.grant_id='exports.mappings' WHERE i.workspace_id=$1 AND i.extension_id=$2)")
+            .bind(self.extension_workspace()).bind(extension_id)
+            .fetch_one(&mut *transaction).await?;
+        if !exporter {
+            return Err(RepositoryError::NotFound("export extension"));
+        }
         // Records chosen by ID may never have been exported; give them a
         // pending mapping so the retry selects and pushes them too.
         if let (Some(record_ids), None) = (&selection.record_ids, &selection.status) {
@@ -806,7 +859,7 @@ impl AttricatRepository {
                 .bind(self.extension_workspace()).bind(extension_id).bind(&selection.connection).bind(record_ids)
                 .execute(&mut *transaction).await?;
         }
-        let ids: Vec<Uuid> = sqlx::query_scalar("WITH selected AS (SELECT id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND connection IS NOT DISTINCT FROM $3 AND ($4::uuid[] IS NULL OR record_id=ANY($4)) AND ($5::text IS NULL OR status=$5) AND EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=$1 AND r.id=record_id AND r.deleted_at IS NULL) ORDER BY record_id LIMIT $6 FOR UPDATE) UPDATE extension_export_mappings m SET status='pending',retry_requested_at=clock_timestamp(),attempts=0,updated_at=clock_timestamp() FROM selected s WHERE m.id=s.id RETURNING m.record_id")
+        let ids: Vec<Uuid> = sqlx::query_scalar(&format!("WITH selected AS (SELECT id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::uuid[] IS NULL OR record_id=ANY($4)) AND ($5::text IS NULL OR status=$5) AND EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=$1 AND r.id=record_id AND r.deleted_at IS NULL) ORDER BY record_id LIMIT $6 FOR UPDATE) UPDATE extension_export_mappings m SET status='pending',retry_requested_at=clock_timestamp(),attempts=0,updated_at=clock_timestamp() FROM selected s WHERE m.id=s.id RETURNING m.record_id", connection_is("connection", "$3", selection.connection.as_deref())))
             .bind(self.extension_workspace()).bind(extension_id).bind(&selection.connection)
             .bind(&selection.record_ids).bind(&selection.status).bind(MAX_EXPORT_RETRY_RECORDS + 1)
             .fetch_all(&mut *transaction).await?;

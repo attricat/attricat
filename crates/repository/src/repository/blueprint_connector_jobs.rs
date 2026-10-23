@@ -464,7 +464,11 @@ impl AttricatRepository {
         // A job with no matching change up to the committed end of the log
         // moves its watermark there, so the next sweep scans only newer
         // events instead of all history since the job's last run.
-        let high_water = self.committed_event_high_water().await?;
+        // A sweep that finds an event writer at the boundary waits for the
+        // next tick rather than for the writer.
+        let Some(high_water) = self.committed_event_high_water().await? else {
+            return Ok(0);
+        };
         sqlx::query(&format!(
             "UPDATE blueprint_connector_jobs j SET trigger_watermark=$2 \
              WHERE j.workspace_id=$1 AND j.enabled AND j.code IS NOT NULL AND j.trigger_events IS NOT NULL \
