@@ -147,7 +147,7 @@ async fn a_full_catalog_keeps_every_mapping_in_host_storage(pool: sqlx::PgPool) 
         .unwrap();
     assert_eq!(counts.iter().map(|count| count.count).sum::<i64>(), RECORDS);
     let (page, next) = repository
-        .export_mapping_list(EXTENSION, None, Some("synced"), None, 100)
+        .export_mapping_list(EXTENSION, None, Some("synced"), None, 100, false)
         .await
         .unwrap();
     assert_eq!(page.len(), 100);

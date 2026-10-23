@@ -652,21 +652,31 @@ impl AttricatRepository {
 
     /// Whether a connector run's catalog covers `record_id`: a live record of
     /// the run's blueprint version, among its selected records when it has a
-    /// selection, and published in its channel when it exports to one.
+    /// selection, and published in its channel when it exports to one; or a
+    /// live record such a record links to.
     pub async fn connector_run_covers_record(
         &self,
         run_id: Uuid,
         record_id: Uuid,
     ) -> Result<bool, RepositoryError> {
-        Ok(sqlx::query_scalar(
+        // `e` is a record the run's catalog serves.
+        let served = "e.deleted_at IS NULL \
+            AND e.blueprint_id=r.connector_blueprint_id AND e.blueprint_version=r.connector_blueprint_version \
+            AND (r.connector_record_ids IS NULL OR e.id=ANY(r.connector_record_ids)) \
+            AND (r.connector_channel_id IS NULL OR EXISTS (SELECT 1 FROM record_channel_publications p \
+              WHERE p.workspace_id=r.workspace_id AND p.record_id=e.id AND p.context_id=r.connector_channel_id AND p.published_at IS NOT NULL))";
+        // A served record, or a live record one links to, which page-v2
+        // expands with its files.
+        Ok(sqlx::query_scalar(&format!(
             "SELECT EXISTS(SELECT 1 FROM extension_operation_runs r \
-               JOIN records e ON e.workspace_id=r.workspace_id AND e.id=$3 AND e.deleted_at IS NULL \
-                 AND e.blueprint_id=r.connector_blueprint_id AND e.blueprint_version=r.connector_blueprint_version \
-             WHERE r.id=$1 AND r.workspace_id=$2 \
-               AND (r.connector_record_ids IS NULL OR $3=ANY(r.connector_record_ids)) \
-               AND (r.connector_channel_id IS NULL OR EXISTS (SELECT 1 FROM record_channel_publications p \
-                 WHERE p.workspace_id=r.workspace_id AND p.record_id=e.id AND p.context_id=r.connector_channel_id AND p.published_at IS NOT NULL)))",
-        )
+               JOIN records e ON e.workspace_id=r.workspace_id AND e.id=$3 \
+             WHERE r.id=$1 AND r.workspace_id=$2 AND {served}) \
+             OR EXISTS(SELECT 1 FROM attribute_values av \
+               JOIN records t ON t.workspace_id=av.workspace_id AND t.id=av.relationship_target_record_id AND t.deleted_at IS NULL \
+               JOIN extension_operation_runs r ON r.id=$1 AND r.workspace_id=av.workspace_id \
+               JOIN records e ON e.workspace_id=av.workspace_id AND e.id=av.record_id \
+             WHERE av.workspace_id=$2 AND av.relationship_target_record_id=$3 AND av.active AND {served})"
+        ))
         .bind(run_id)
         .bind(self.extension_workspace())
         .bind(record_id)

@@ -324,7 +324,10 @@ impl ConnectionRefresh {
     /// stored even when the claim has lapsed: the provider may already have
     /// rotated the refresh token, and losing the new one would break the
     /// connection. They are discarded when an operator changed the grant
-    /// they were obtained with, so the new credentials win.
+    /// they were obtained with (its client secret or refresh token), so the
+    /// new credentials win. When only the token URL or scope changed, the
+    /// rotated refresh token is still kept but the access token is not, so
+    /// the next call refreshes under the new settings.
     pub async fn complete(mut self, tokens: IssuedTokens) -> Result<(), RepositoryError> {
         let id = self.credentials.id;
         let access = seal(id, "access_token", &tokens.access_token)?;
@@ -335,7 +338,7 @@ impl ConnectionRefresh {
             .transpose()?;
         let (workspace_id, claim) = (self.workspace_id, self.claim);
         let basis = std::mem::take(&mut self.basis);
-        self.settle(sqlx::query("UPDATE extension_connections SET access_token_ciphertext=$3,access_token_expires_at=$4,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claim END,refresh_claimed_until=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 AND refresh_token_ciphertext IS NOT DISTINCT FROM $8 AND token_url=$9 AND scope IS NOT DISTINCT FROM $10")
+        self.settle(sqlx::query("UPDATE extension_connections SET access_token_ciphertext=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 THEN $3 END,access_token_expires_at=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 THEN $4 END,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claim END,refresh_claimed_until=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 AND refresh_token_ciphertext IS NOT DISTINCT FROM $8")
             .bind(workspace_id).bind(id).bind(access).bind(tokens.expires_at).bind(refresh).bind(claim)
             .bind(basis.client_secret).bind(basis.refresh_token).bind(basis.token_url).bind(basis.scope))
             .await

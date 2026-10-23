@@ -147,6 +147,7 @@ impl HostState {
                         input.status.as_deref(),
                         input.after,
                         input.limit.unwrap_or(MAX_EXPORT_MAPPING_PAGE),
+                        false,
                     )
                     .await
                     .map_err(error)?;

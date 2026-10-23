@@ -217,7 +217,7 @@ Niektóre miejsca docelowe same pobierają obrazy, czasem kilka godzin po zgłos
 { "file_id": "…", "record_id": "…", "expires_in_seconds": 86400 }
 ```
 
-Zwraca `{"url": "…", "expires_at": "…"}`. Link jest ważny od 60 sekund do 7 dni. W przebiegu operacji można linkować tylko rekordy objęte przebiegiem: wybór przebiegu konektora (a w eksporcie do kanału opublikowane rekordy) albo rekordy wybrane w przebiegu interaktywnym. Każdy, kto ma link, może pobrać plik, dopóki link nie wygasł, a rozszerzenie jest włączone i ma wszystkie trzy uprawnienia. Przechowywany jest tylko skrót tokenu. Wdrożenie musi ustawić [`EXTENSION_PUBLIC_FILE_BASE_URL`](/pl/reference/configuration/#rozszerzenia); w przeciwnym razie wywołanie kończy się błędem.
+Zwraca `{"url": "…", "expires_at": "…"}`. Link jest ważny od 60 sekund do 7 dni. W przebiegu operacji można linkować tylko rekordy objęte przebiegiem: wybór przebiegu konektora (a w eksporcie do kanału opublikowane rekordy) i aktywne rekordy, do których one linkują, albo rekordy wybrane w przebiegu interaktywnym. Każdy, kto ma link, może pobrać plik, dopóki link nie wygasł, a rozszerzenie jest włączone i ma wszystkie trzy uprawnienia. Przechowywany jest tylko skrót tokenu. Wdrożenie musi ustawić [`EXTENSION_PUBLIC_FILE_BASE_URL`](/pl/reference/configuration/#rozszerzenia); w przeciwnym razie wywołanie kończy się błędem.
 
 ## Publikuj zdarzenia dla innych rozszerzeń
 

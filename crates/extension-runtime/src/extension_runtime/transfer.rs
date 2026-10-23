@@ -186,33 +186,40 @@ fn caller_headers(
     Ok(())
 }
 
-/// Checks caller headers before a transfer spends its request budget,
-/// including clashes with the request's secret headers and, when it uses a
-/// connection, with the header a connection's token is sent in.
-fn checked_caller_headers(
+/// The header `connection`'s token is sent in. An unknown connection has
+/// none here; the transfer refuses it when it resolves the token.
+async fn token_header(
+    repository: &AttricatRepository,
     installation: &ExtensionRuntimeInstallation,
     connection: Option<&str>,
+) -> Option<String> {
+    let connection = repository
+        .extension_connection(&installation.extension_id, connection?)
+        .await
+        .ok()?;
+    let kind = connections::connection_kind(installation, &connection.kind).ok()?;
+    Some(
+        kind.token_header
+            .as_ref()
+            .map_or("authorization".to_owned(), |header| {
+                header.name.to_ascii_lowercase()
+            }),
+    )
+}
+
+/// Checks caller headers before a transfer spends its request budget,
+/// including clashes with the request's secret headers and with
+/// `token_header`, the header the connection it uses sends its token in.
+fn checked_caller_headers(
+    token_header: Option<String>,
     secrets: &[SecretHeader],
     supplied: HashMap<String, String>,
 ) -> Result<reqwest::header::HeaderMap, String> {
     let mut headers = reqwest::header::HeaderMap::new();
-    let token_headers = connection
-        .is_some()
-        .then(|| installation.manifest.server.as_ref())
-        .flatten()
-        .into_iter()
-        .flat_map(|server| server.connections.iter())
-        .map(|kind| {
-            kind.token_header
-                .as_ref()
-                .map_or("authorization".to_owned(), |header| {
-                    header.name.to_ascii_lowercase()
-                })
-        });
     let secret_names: Vec<reqwest::header::HeaderName> = secrets
         .iter()
         .map(|secret| secret.header.clone())
-        .chain(token_headers)
+        .chain(token_header)
         .filter_map(|name| reqwest::header::HeaderName::from_bytes(name.as_bytes()).ok())
         .collect();
     for name in &secret_names {
@@ -627,8 +634,12 @@ impl OperationState {
         host.require_active("network.request").await?;
         let url = https_url(&input.url)?;
         let caller = checked_caller_headers(
-            &self.installation,
-            input.connection.as_deref(),
+            token_header(
+                &host.repository,
+                &host.installation,
+                input.connection.as_deref(),
+            )
+            .await,
             &input.secret_headers,
             input.headers,
         )?;
@@ -749,8 +760,12 @@ impl OperationState {
             .find(|(name, _)| name.eq_ignore_ascii_case("content-type"))
             .map(|(_, value)| value.clone());
         let caller = checked_caller_headers(
-            &self.installation,
-            input.connection.as_deref(),
+            token_header(
+                &self.repository,
+                &self.installation,
+                input.connection.as_deref(),
+            )
+            .await,
             &input.secret_headers,
             input
                 .headers

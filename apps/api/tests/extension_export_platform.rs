@@ -402,6 +402,82 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
     // stale and never push again.
     assert!(matches!(begin(created).await, ExportBegin::Stale { .. }));
     assert!(matches!(begin(updated).await, ExportBegin::Stale { .. }));
+
+    let begin_as = |holder: &'static str, force: bool, resync_since| {
+        let repository = repository.clone();
+        async move {
+            repository
+                .export_mapping_begin(
+                    EXTENSION,
+                    None,
+                    record,
+                    updated,
+                    None,
+                    force,
+                    Some(holder),
+                    resync_since,
+                )
+                .await
+                .unwrap()
+        }
+    };
+    // A resync leases a record settled before it started, and still does
+    // after its own lease was released without a result.
+    let resync_since = Some(chrono::Utc::now());
+    let ExportBegin::Proceed { lease_token, .. } =
+        begin_as("run:resync", false, resync_since).await
+    else {
+        panic!("a resync pushes a record settled before it");
+    };
+    assert!(
+        repository
+            .export_mapping_release(EXTENSION, None, record, lease_token)
+            .await
+            .unwrap()
+    );
+    assert!(matches!(
+        begin_as("run:resync", false, resync_since).await,
+        ExportBegin::Proceed { .. }
+    ));
+    // A retried invocation that finds its record stale ends its own lease.
+    assert!(matches!(
+        begin_as("run:resync", false, None).await,
+        ExportBegin::Stale { .. }
+    ));
+    assert!(matches!(
+        begin_as("handler:other", false, None).await,
+        ExportBegin::Stale { .. }
+    ));
+    let mapping = repository
+        .export_mapping_get(EXTENSION, None, api::repository::MappingKey::Record(record))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(mapping.lease_token.is_none());
+    // A result the resync settles makes the record stale for it.
+    let ExportBegin::Proceed { lease_token, .. } =
+        begin_as("run:resync", false, resync_since).await
+    else {
+        panic!("the resync leases the record again");
+    };
+    repository
+        .export_mapping_commit(
+            EXTENSION,
+            None,
+            record,
+            Some(lease_token),
+            ExportMappingUpdate {
+                status: "synced".into(),
+                record_revision: Some(updated),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        begin_as("run:resync", false, resync_since).await,
+        ExportBegin::Stale { .. }
+    ));
     // A late result for an older revision cannot replace the newer one.
     let late = repository
         .export_mapping_commit(

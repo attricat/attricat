@@ -158,6 +158,7 @@ pub(super) async fn extension_export_status(
             query.status.as_deref(),
             query.after,
             query.limit.unwrap_or(50).clamp(1, MAX_EXPORT_MAPPING_PAGE),
+            true,
         )
         .await?;
     Ok(Json(ExtensionExportStatus {

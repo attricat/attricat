@@ -130,6 +130,10 @@ fn resolve_values(
     resolved
 }
 
+/// One unpublication or deletion: sequence, event type, record, time and the
+/// unpublication's reason.
+type WithdrawalEvent = (i64, String, Uuid, DateTime<Utc>, Option<String>);
+
 #[derive(Serialize, Deserialize)]
 struct WithdrawnCursor {
     workspace_id: Uuid,
@@ -498,11 +502,15 @@ impl AttricatRepository {
                 "more": false,
             }));
         };
-        let events: Vec<(i64, String, Uuid, DateTime<Utc>)> = sqlx::query_as(
-            "SELECT e.sequence,e.event_type,e.aggregate_id,e.occurred_at FROM domain_events e \
+        // A channel's feed reads only that channel's unpublications: deleting
+        // a record unpublishes it from every channel it was live in (reason
+        // `record_deleted`), so a record never published there is never
+        // reported. Without a channel every deletion counts too.
+        let events: Vec<WithdrawalEvent> = sqlx::query_as(
+            "SELECT e.sequence,e.event_type,e.aggregate_id,e.occurred_at,e.payload->>'reason' FROM domain_events e \
              WHERE e.workspace_id=$1 AND e.aggregate_kind='record' AND e.sequence>$2 AND e.sequence<=$6 \
-               AND e.event_type IN ('record.unpublished.v1','record.deleted.v1') \
-               AND ($3::uuid IS NULL OR e.event_type<>'record.unpublished.v1' OR e.payload->>'context_id'=$3::text) \
+               AND (($3::uuid IS NULL AND e.event_type IN ('record.unpublished.v1','record.deleted.v1')) \
+                 OR (e.event_type='record.unpublished.v1' AND e.payload->>'context_id'=$3::text)) \
                AND EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=e.workspace_id AND r.id=e.aggregate_id AND r.blueprint_id=$4) \
              ORDER BY e.sequence LIMIT $5",
         )
@@ -519,8 +527,8 @@ impl AttricatRepository {
             Some(channel) => {
                 let unpublished: Vec<Uuid> = events
                     .iter()
-                    .filter(|(_, event_type, _, _)| event_type != "record.deleted.v1")
-                    .map(|(_, _, record_id, _)| *record_id)
+                    .filter(|(_, event_type, ..)| event_type != "record.deleted.v1")
+                    .map(|(_, _, record_id, ..)| *record_id)
                     .collect();
                 if unpublished.is_empty() {
                     HashSet::new()
@@ -532,9 +540,11 @@ impl AttricatRepository {
         };
         let mut items = Vec::with_capacity(events.len());
         let mut last = after_sequence;
-        for (sequence, event_type, record_id, occurred_at) in &events {
+        for (sequence, event_type, record_id, occurred_at, cause) in &events {
             last = *sequence;
-            let reason = if event_type == "record.deleted.v1" {
+            let reason = if event_type == "record.deleted.v1"
+                || cause.as_deref() == Some("record_deleted")
+            {
                 "deleted"
             } else if republished.contains(record_id) {
                 continue;

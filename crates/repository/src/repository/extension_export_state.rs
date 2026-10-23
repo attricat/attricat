@@ -118,6 +118,9 @@ pub struct ExportMapping {
     pub attempts: i32,
     pub retry_requested_at: Option<DateTime<Utc>>,
     pub synced_at: Option<DateTime<Utc>>,
+    /// When it last settled; leases and releases leave it alone.
+    #[serde(skip)]
+    pub settled_at: Option<DateTime<Utc>>,
     pub updated_at: DateTime<Utc>,
     #[serde(skip)]
     pub lease_token: Option<Uuid>,
@@ -131,7 +134,7 @@ pub struct ExportMapping {
     pub leased_revision: Option<i64>,
 }
 
-const MAPPING_FIELDS: &str = "extension_id,connection,record_id,external_id,external_ids,content_hash,record_revision,status,error,attempts,retry_requested_at,synced_at,updated_at,lease_token,lease_until,lease_holder,leased_revision";
+const MAPPING_FIELDS: &str = "extension_id,connection,record_id,external_id,external_ids,content_hash,record_revision,status,error,attempts,retry_requested_at,synced_at,settled_at,updated_at,lease_token,lease_until,lease_holder,leased_revision";
 
 /// How a mapping is selected.
 #[derive(Clone, Copy, Debug)]
@@ -359,6 +362,8 @@ impl AttricatRepository {
 
     /// A page of one connection's mappings in record ID order, optionally of
     /// one status. `after` is the last record ID of the previous page.
+    /// `live_only` leaves out deleted records' mappings other than withdrawn
+    /// ones, as the status counts do.
     pub async fn export_mapping_list(
         &self,
         extension_id: &str,
@@ -366,6 +371,7 @@ impl AttricatRepository {
         status: Option<&str>,
         after: Option<Uuid>,
         limit: u32,
+        live_only: bool,
     ) -> Result<(Vec<ExportMapping>, Option<Uuid>), RepositoryError> {
         check_connection(connection)?;
         if limit == 0 || limit > MAX_EXPORT_MAPPING_PAGE {
@@ -376,9 +382,9 @@ impl AttricatRepository {
         if status.is_some_and(|status| !EXPORT_STATUSES.contains(&status)) {
             return Err(invalid("unknown export status"));
         }
-        let mut rows: Vec<ExportMapping> = sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::text IS NULL OR status=$4) AND ($5::uuid IS NULL OR record_id>$5) ORDER BY record_id LIMIT $6", connection_is("connection", "$3", connection)))
+        let mut rows: Vec<ExportMapping> = sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::text IS NULL OR status=$4) AND ($5::uuid IS NULL OR record_id>$5) AND (NOT $7 OR (status='withdrawn' OR EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=extension_export_mappings.workspace_id AND r.id=extension_export_mappings.record_id AND r.deleted_at IS NULL))) ORDER BY record_id LIMIT $6", connection_is("connection", "$3", connection)))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(status)
-            .bind(after).bind(i64::from(limit) + 1)
+            .bind(after).bind(i64::from(limit) + 1).bind(live_only)
             .fetch_all(&self.pool).await?;
         let next = if rows.len() > limit as usize {
             rows.truncate(limit as usize);
@@ -475,9 +481,22 @@ impl AttricatRepository {
             || (!force
                 && settled
                 && mapping.retry_requested_at.is_none()
-                && !resync_since.is_some_and(|since| mapping.updated_at < since)
+                && !resync_since
+                    .is_some_and(|since| mapping.settled_at.is_none_or(|settled| settled < since))
                 && mapping.record_revision == record_revision)
         {
+            // A retried delivery or batch that finds its record stale ends
+            // the lease it took before, so others are not held off.
+            let own_lease = holder.is_some()
+                && mapping.lease_holder.as_deref() == holder
+                && mapping.lease_until.is_some_and(|until| until > now);
+            let mapping = if own_lease {
+                sqlx::query_as(&format!("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 RETURNING {MAPPING_FIELDS}", connection_is("connection", "$3", connection)))
+                    .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id)
+                    .fetch_one(&mut *transaction).await?
+            } else {
+                mapping
+            };
             transaction.commit().await?;
             return Ok(ExportBegin::Stale { mapping });
         }
@@ -624,6 +643,7 @@ impl AttricatRepository {
              content_hash=CASE WHEN $10 THEN $11 ELSE content_hash END,\
              error=$12,attempts=CASE WHEN $13 THEN attempts+1 ELSE 0 END,\
              synced_at=CASE WHEN $5='synced' THEN clock_timestamp() ELSE synced_at END,\
+             settled_at=CASE WHEN $14 THEN clock_timestamp() ELSE settled_at END,\
              retry_requested_at=CASE WHEN $14 AND (leased_at IS NULL OR retry_requested_at <= leased_at) THEN NULL ELSE retry_requested_at END,\
              lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() \
              WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 \
@@ -798,11 +818,13 @@ impl AttricatRepository {
     }
 
     /// Status counts per extension and connection, optionally of one extension.
+    /// Deleted records count only as withdrawn, so every other count is of
+    /// records an operator can still retry.
     pub async fn export_status_counts(
         &self,
         extension_id: Option<&str>,
     ) -> Result<Vec<ExportStatusCount>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT extension_id,connection,status,count(*)::bigint AS count FROM extension_export_mappings WHERE workspace_id=$1 AND ($2::text IS NULL OR extension_id=$2) GROUP BY extension_id,connection,status ORDER BY extension_id,connection NULLS FIRST,status")
+        Ok(sqlx::query_as("SELECT extension_id,connection,status,count(*)::bigint AS count FROM extension_export_mappings WHERE workspace_id=$1 AND ($2::text IS NULL OR extension_id=$2) AND (status='withdrawn' OR EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=extension_export_mappings.workspace_id AND r.id=extension_export_mappings.record_id AND r.deleted_at IS NULL)) GROUP BY extension_id,connection,status ORDER BY extension_id,connection NULLS FIRST,status")
             .bind(self.extension_workspace()).bind(extension_id)
             .fetch_all(&self.pool).await?)
     }

@@ -732,6 +732,10 @@ app shows it:
 - on the extension's management page, as per-connection status counts, the
   records in a chosen status with retry, and failed handler deliveries.
 
+Counts and the management page leave out deleted records except as
+`withdrawn`, so every other status they show is one an operator can retry.
+The `mappings.list.v1` host call still lists every mapping.
+
 `POST /extensions/{extension_id}/export-status/retry` with
 `{connection?, record_ids?, status?, run?}` sets the selected mappings (up to
 1,000, by IDs or by status; a status matching more is refused, not cut) to
@@ -770,7 +774,10 @@ than the revision last committed for it.
 
 `attricat.withdrawn(cursor, limit)` (1–100) lists records of the job's
 blueprint that were unpublished from the run's channel (and are still
-unpublished) or deleted, in event order, as `{record_id, reason,
+unpublished), in event order; deleting a record unpublishes it from every
+channel it was live in, reported with reason `deleted`, so a record never
+published in the channel is never reported. Without a channel every
+unpublication and deletion is listed. Items come as `{record_id, reason,
 record_revision, occurred_at}`, with a `next_cursor` bound to the blueprint and
 channel and `more`. An empty cursor starts at the oldest change. Persist the
 cursor (for example in extension storage, per job and channel) to continue
@@ -860,8 +867,9 @@ the token, so the component can retry.
 live record references (up to 16 MiB) into a run-bound input artifact for a
 direct binary upload. Records of a run that share a file reuse its
 artifact. It needs `attricat.read`, `attricat.files.read` and
-`artifacts.read`; connector runs are confined to their blueprint and
-interactive runs to their selection.
+`artifacts.read`; connector runs are confined to the records they serve and
+the live records those link to (which page-v2 expands), and interactive runs
+to their selection.
 
 `files.link.v1` (`{file_id, record_id, expires_in_seconds}`, 60 s to 7 days)
 issues a public, unguessable link to a record's file for destinations that

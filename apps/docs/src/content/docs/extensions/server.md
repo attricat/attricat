@@ -217,7 +217,7 @@ Some destinations fetch images themselves, sometimes hours after a listing is su
 { "file_id": "…", "record_id": "…", "expires_in_seconds": 86400 }
 ```
 
-It returns `{"url": "…", "expires_at": "…"}`. A link lives from 60 seconds to 7 days. Inside an operation run, only records the run covers can be linked: a connector run's selection (and, for a channel export, published records) or an interactive run's selected records. Anyone with the link can download the file while it is unexpired and the extension is enabled with all three capabilities. Only a hash of the token is stored. The deployment must set [`EXTENSION_PUBLIC_FILE_BASE_URL`](/reference/configuration/#extensions); otherwise the call fails.
+It returns `{"url": "…", "expires_at": "…"}`. A link lives from 60 seconds to 7 days. Inside an operation run, only records the run covers can be linked: a connector run's selection (and, for a channel export, published records) and the live records those link to, or an interactive run's selected records. Anyone with the link can download the file while it is unexpired and the extension is enabled with all three capabilities. Only a hash of the token is stored. The deployment must set [`EXTENSION_PUBLIC_FILE_BASE_URL`](/reference/configuration/#extensions); otherwise the call fails.
 
 ## Publish events for other extensions
 
