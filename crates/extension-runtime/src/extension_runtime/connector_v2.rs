@@ -89,7 +89,7 @@ impl OperationState {
             .extension_withdrawn_records(
                 scope.blueprint_id,
                 scope.channel_id,
-                scope.record_ids.as_deref(),
+                scope.record_ids.as_deref().map(|ids| (ids, self.run_id)),
                 Some(cursor.as_str()),
                 limit,
             )

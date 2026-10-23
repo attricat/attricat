@@ -28,14 +28,7 @@ enum Lease<'a> {
 }
 
 /// The per-record export statuses, in the order the UI lists them.
-pub const EXPORT_STATUSES: &[&str] = &[
-    "pending",
-    "retrying",
-    "uncertain",
-    "rejected",
-    "synced",
-    "withdrawn",
-];
+pub const EXPORT_STATUSES: &[&str] = attricat_validation::EXPORT_STATUSES;
 /// The most mapping rows one page returns.
 pub const MAX_EXPORT_MAPPING_PAGE: u32 = 100;
 /// The most records one retry request may select.
@@ -532,6 +525,7 @@ impl AttricatRepository {
             update,
         )
         .await
+        .map(|(_, committed)| committed)
     }
 
     async fn commit_export_mapping(
@@ -541,7 +535,7 @@ impl AttricatRepository {
         record_id: Uuid,
         lease: Lease<'_>,
         update: ExportMappingUpdate,
-    ) -> Result<ExportMapping, RepositoryError> {
+    ) -> Result<(ExportMapping, ExportMapping), RepositoryError> {
         check_connection(connection)?;
         if !EXPORT_STATUSES.contains(&update.status.as_str()) {
             return Err(invalid("unknown export status"));
@@ -636,7 +630,7 @@ impl AttricatRepository {
             "rejected" | "retrying" | "uncertain"
         );
         let settled = matches!(update.status.as_str(), "synced" | "withdrawn" | "rejected");
-        let mapping: ExportMapping = sqlx::query_as(&format!(
+        let committed: ExportMapping = sqlx::query_as(&format!(
             "UPDATE extension_export_mappings SET status=$5,record_revision=$6,\
              external_id=CASE WHEN $7 THEN $8 ELSE external_id END,\
              external_ids=COALESCE($9,external_ids),\
@@ -667,7 +661,8 @@ impl AttricatRepository {
         .fetch_one(&mut *transaction)
         .await?;
         transaction.commit().await?;
-        Ok(mapping)
+        // The mapping as it was under the lock, and as committed.
+        Ok((mapping, committed))
     }
 
     /// Releases a lease without recording a result, for example after a
@@ -739,11 +734,6 @@ impl AttricatRepository {
         code: &str,
         message: &str,
     ) -> Result<RejectionRecord, RepositoryError> {
-        let before = self
-            .export_mapping_get(extension_id, connection, MappingKey::Record(record_id))
-            .await
-            .ok()
-            .flatten();
         let result = async {
             let update = ExportMappingUpdate {
                 status: "rejected".into(),
@@ -759,12 +749,13 @@ impl AttricatRepository {
                 update,
             )
             .await
-            .map(|_| ())
+            .map(|(before, _)| before)
         }
         .await;
         match result {
-            // A rejection the mapping already recorded unleased is a repeat.
-            Ok(()) => Ok(match before {
+            // A rejection the mapping already recorded unleased is a repeat;
+            // `before` is the mapping as the commit found it under its lock.
+            Ok(before) => Ok(match Some(before) {
                 Some(before)
                     if before.status == "rejected"
                         && before.lease_token.is_none()

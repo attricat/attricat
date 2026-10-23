@@ -698,7 +698,7 @@ Inside an operation run, `begin`, `commit`, `release` and `delete` accept only
 records in the run's scope: records of a connector run's blueprint (including
 deleted, unpublished and older-version records it withdraws), or an
 interactive run's selected records. A connector run writes only its own
-connection's mappings.
+connection's mappings, and a run confined to selected records only theirs.
 
 `begin` is the guard against reordered and duplicated work. It answers
 `stale` for a revision older than the mapping's, whatever its status, since
@@ -778,8 +778,9 @@ than the revision last committed for it.
 `attricat.withdrawn(cursor, limit)` (1–100) lists records of the job's
 blueprint that were unpublished from the run's channel (and are still
 unpublished), in event order. A run confined to selected records gets each
-selected record's latest withdrawal on one page instead, and the cursor back
-unchanged, so it never hides other records' withdrawals from later runs.
+selected record's latest withdrawal instead, paged by record with `more`; its
+cursor keeps the channel's position, so it never hides other records'
+withdrawals from later runs, and another run starts its selection again.
 Deleting a record unpublishes it from every
 channel it was live in, reported with reason `deleted`, so a record never
 published in the channel is never reported. Without a channel every

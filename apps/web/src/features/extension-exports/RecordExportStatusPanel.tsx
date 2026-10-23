@@ -220,20 +220,25 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
                     spacing={1}
                     sx={{ justifyContent: 'flex-end' }}
                   >
-                    {canPreview && destination?.preview && (
-                      <Button
-                        size="small"
-                        startIcon={<EyeIcon />}
-                        onClick={() =>
-                          setPreview({
-                            destination,
-                            connection: mapping?.connection ?? null,
-                          })
-                        }
-                      >
-                        {t('extensionExports.preview')}
-                      </Button>
-                    )}
+                    {/* A destination of a connection kind previews for a
+                        connection, which a record never exported has not
+                        got yet. */}
+                    {canPreview &&
+                      destination?.preview &&
+                      (!destination.connection_kind || mapping?.connection) && (
+                        <Button
+                          size="small"
+                          startIcon={<EyeIcon />}
+                          onClick={() =>
+                            setPreview({
+                              destination,
+                              connection: mapping?.connection ?? null,
+                            })
+                          }
+                        >
+                          {t('extensionExports.preview')}
+                        </Button>
+                      )}
                     {canRetry &&
                       mapping &&
                       retryableExportStatuses.includes(mapping.status) && (

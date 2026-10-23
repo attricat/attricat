@@ -644,7 +644,7 @@ input = { profile = { version = 1, columns = [{ header = "ID", attribute = "exte
 | `extension_id` | ciąg znaków | Wymagany | Identyfikator rozszerzenia konektora. |
 | `operation_id` | ciąg znaków | Wymagany | Operacja zadeklarowana przez rozszerzenie. |
 | `input` | tabela | Wymagany | Dane wejściowe operacji, weryfikowane względem schematu operacji. |
-| `context` | kod kontekstu | | Wymagany dla importów: zaimportowane wartości są zapisywane w tym kontekście. Dla eksportów kanał publikacji do eksportu; bez niego zadanie uruchamia się raz dla każdego włączonego kanału. Zadanie rozszerzenia, które prowadzi mapowania eksportu, musi go ustawić, gdy włączonych jest kilka kanałów. |
+| `context` | kod kontekstu | | Wymagany dla importów: zaimportowane wartości są zapisywane w tym kontekście. Dla eksportów kanał publikacji do eksportu (musi nim być); bez niego zadanie uruchamia się raz dla każdego włączonego kanału. Zadanie rozszerzenia, które prowadzi mapowania eksportu, musi go ustawić, gdy włączonych jest kilka kanałów. |
 | `input_file_id` | UUID | | Tylko importy. Gotowy plik obszaru roboczego do zaimportowania. |
 | `interval_seconds` | liczba całkowita | Tylko ręcznie | Uruchamia zadanie co N sekund, od 60 do 2592000. |
 | `enabled` | wartość logiczna | `true` | Ustaw `false`, aby wstrzymać zadanie. |

@@ -340,7 +340,24 @@ impl ConnectionRefresh {
             .transpose()?;
         let (workspace_id, claim) = (self.workspace_id, self.claim);
         let basis = std::mem::take(&mut self.basis);
-        self.settle(sqlx::query("UPDATE extension_connections SET access_token_ciphertext=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 THEN $3 END,access_token_expires_at=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 THEN $4 END,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claim END,refresh_claimed_until=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 AND refresh_token_ciphertext IS NOT DISTINCT FROM $8 AND split_part(token_url,'/',1)=split_part($9,'/',1) AND split_part(token_url,'/',3)=split_part($9,'/',3)")
+        // Tokens from an endpoint that has since moved to another origin
+        // belong to the old provider and are dropped. Origins are compared
+        // as the connection update compares them.
+        let origin = |url: &str| url::Url::parse(url).ok().map(|url| url.origin());
+        let current: Option<String> = sqlx::query_scalar(
+            "SELECT token_url FROM extension_connections WHERE workspace_id=$1 AND id=$2",
+        )
+        .bind(workspace_id)
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        if current.as_deref().map(origin) != Some(origin(&basis.token_url)) {
+            let _ = self.settle(release_claim(workspace_id, id, claim)).await;
+            return Err(RepositoryError::InvalidExtension(
+                "the connection changed during the token refresh".into(),
+            ));
+        }
+        self.settle(sqlx::query("UPDATE extension_connections SET access_token_ciphertext=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 THEN $3 END,access_token_expires_at=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 THEN $4 END,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claim END,refresh_claimed_until=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 AND refresh_token_ciphertext IS NOT DISTINCT FROM $8")
             .bind(workspace_id).bind(id).bind(access).bind(tokens.expires_at).bind(refresh).bind(claim)
             .bind(basis.client_secret).bind(basis.refresh_token).bind(basis.token_url).bind(basis.scope))
             .await

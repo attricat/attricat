@@ -79,10 +79,10 @@ fn valid_export_status(filter: &Value) -> bool {
                     .as_str()
                     .is_some_and(crate::is_valid_connection_key)
             })
-            && matches!(
-                filter.get("status").and_then(Value::as_str),
-                Some("pending" | "synced" | "rejected" | "retrying" | "uncertain" | "withdrawn")
-            )
+            && filter
+                .get("status")
+                .and_then(Value::as_str)
+                .is_some_and(|status| crate::EXPORT_STATUSES.contains(&status))
     })
 }
 

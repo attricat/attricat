@@ -140,6 +140,10 @@ struct WithdrawnCursor {
     blueprint_id: Uuid,
     channel_id: Option<Uuid>,
     after_sequence: i64,
+    /// A selective run's position: its run and the last record it read.
+    /// Another run, and every full run, ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    selection: Option<(Uuid, Uuid)>,
 }
 
 impl AttricatRepository {
@@ -440,15 +444,18 @@ impl AttricatRepository {
     }
 
     /// Records of `blueprint_id` withdrawn from `channel_id` (unpublished and
-    /// still unpublished) or deleted since the cursor, in event order.
+    /// still unpublished) or deleted since the cursor, in event order. A run
+    /// `selection` (its records and run ID) reads each selected record's
+    /// latest withdrawal instead, in record order.
     pub async fn extension_withdrawn_records(
         &self,
         blueprint_id: Uuid,
         channel_id: Option<Uuid>,
-        record_ids: Option<&[Uuid]>,
+        selection: Option<(&[Uuid], Uuid)>,
         cursor: Option<&str>,
         limit: u32,
     ) -> Result<Value, RepositoryError> {
+        let record_ids = selection.map(|(ids, _)| ids);
         if limit == 0 || limit > MAX_WITHDRAWN_PAGE {
             return Err(RepositoryError::InvalidExtension(format!(
                 "withdrawn page limit must be 1-{MAX_WITHDRAWN_PAGE}"
@@ -456,7 +463,7 @@ impl AttricatRepository {
         }
         let invalid_cursor =
             || RepositoryError::InvalidExtension("withdrawn cursor is invalid".into());
-        let after_sequence = match cursor {
+        let (after_sequence, position) = match cursor {
             Some(cursor) if !cursor.is_empty() => {
                 if cursor.len() > MAX_WITHDRAWN_CURSOR_BYTES {
                     return Err(invalid_cursor());
@@ -474,10 +481,14 @@ impl AttricatRepository {
                         "withdrawn cursor does not match this run's scope".into(),
                     ));
                 }
-                decoded.after_sequence
+                (decoded.after_sequence, decoded.selection)
             }
-            _ => 0,
+            _ => (0, None),
         };
+        // A selective run resumes after the last record it read itself.
+        let resume_after = selection.and_then(|(_, run)| {
+            position.and_then(|(cursor_run, last)| (cursor_run == run).then_some(last))
+        });
         // The cursor moves to the last event read, so the feed stops at the
         // committed high water: an event that commits later with a lower
         // sequence would otherwise fall behind the cursor and be skipped.
@@ -491,6 +502,7 @@ impl AttricatRepository {
                     blueprint_id,
                     channel_id,
                     after_sequence,
+                    selection: position,
                 })
                 .expect("withdrawn cursor serializes"),
             );
@@ -501,19 +513,20 @@ impl AttricatRepository {
         // `record_deleted`), so a record never published there is never
         // reported. Without a channel every deletion counts too.
         // A run confined to selected records reports each one's latest
-        // withdrawal and hands the cursor back unchanged: the cursor is the
-        // whole channel's, and moving it past events of records outside the
-        // selection would hide them from later runs.
+        // withdrawal, paging by record, and keeps the channel's position
+        // unchanged: moving it past events of records outside the selection
+        // would hide them from later runs.
         let selective = record_ids.is_some();
         let filter = "e.workspace_id=$1 AND e.aggregate_kind='record' AND e.sequence>$2 AND e.sequence<=$6 \
              AND (($3::uuid IS NULL AND e.event_type IN ('record.unpublished.v1','record.deleted.v1')) \
                OR (e.event_type='record.unpublished.v1' AND e.payload->>'context_id'=$3::text)) \
              AND EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=e.workspace_id AND r.id=e.aggregate_id AND r.blueprint_id=$4) \
-             AND ($7::uuid[] IS NULL OR e.aggregate_id=ANY($7))";
+             AND ($7::uuid[] IS NULL OR e.aggregate_id=ANY($7)) \
+             AND ($8::uuid IS NULL OR e.aggregate_id>$8)";
         let sql = if selective {
             format!(
                 "SELECT * FROM (SELECT DISTINCT ON (e.aggregate_id) e.sequence,e.event_type,e.aggregate_id,e.occurred_at,e.payload->>'reason' \
-                 FROM domain_events e WHERE {filter} ORDER BY e.aggregate_id,e.sequence DESC) w ORDER BY 1 LIMIT $5"
+                 FROM domain_events e WHERE {filter} ORDER BY e.aggregate_id,e.sequence DESC) w ORDER BY 3 LIMIT $5"
             )
         } else {
             format!(
@@ -529,6 +542,7 @@ impl AttricatRepository {
             .bind(i64::from(limit))
             .bind(high_water)
             .bind(record_ids)
+            .bind(resume_after)
             .fetch_all(&self.pool)
             .await?;
         // A record published again since is no longer withdrawn.
@@ -573,13 +587,20 @@ impl AttricatRepository {
                 blueprint_id,
                 channel_id,
                 after_sequence: if selective { after_sequence } else { last },
+                selection: match selection {
+                    Some((_, run)) => events
+                        .last()
+                        .map(|(_, _, record_id, ..)| (run, *record_id))
+                        .or(position),
+                    None => None,
+                },
             })
             .expect("withdrawn cursor serializes"),
         );
         Ok(json!({
             "records": items,
             "next_cursor": next_cursor,
-            "more": !selective && events.len() == limit as usize,
+            "more": events.len() == limit as usize,
         }))
     }
 }

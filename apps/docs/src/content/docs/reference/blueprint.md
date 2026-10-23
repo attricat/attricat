@@ -644,7 +644,7 @@ input = { profile = { version = 1, columns = [{ header = "ID", attribute = "exte
 | `extension_id` | string | Required | Connector extension ID. |
 | `operation_id` | string | Required | Operation declared by the extension. |
 | `input` | table | Required | Operation input, validated against the operation's schema. |
-| `context` | context code | | Required for imports: imported values are written to this context. For exports, the publication channel to export; without it the job runs once per enabled channel. A job of an extension that keeps export mappings must set it when several channels are enabled. |
+| `context` | context code | | Required for imports: imported values are written to this context. For exports, the publication channel to export (it must be one); without it the job runs once per enabled channel. A job of an extension that keeps export mappings must set it when several channels are enabled. |
 | `input_file_id` | UUID | | Imports only. A ready workspace file to import. |
 | `interval_seconds` | integer | Manual only | Run every N seconds, 60 to 2592000. |
 | `enabled` | boolean | `true` | Set `false` to pause the job. |

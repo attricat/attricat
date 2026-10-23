@@ -1044,31 +1044,40 @@ async fn connector_runs_read_resolved_rows_close_out_withdrawals_and_resync(pool
         ExportBegin::Stale { .. }
     ));
 
-    // A run confined to selected records reads each one's withdrawal and
-    // hands the cursor back unchanged, so a full run still sees the rest.
-    let withdrawn = |selection: Vec<Uuid>| {
+    // A run confined to selected records reads each one's withdrawal, a page
+    // at a time, and keeps the channel's position, so a full run still sees
+    // the rest.
+    let run = Uuid::new_v4();
+    let withdrawn = |selection: Vec<Uuid>, run: Uuid, cursor: Option<String>| {
         let repository = repository.clone();
         async move {
             repository
-                .extension_withdrawn_records(products.0, Some(channel), Some(&selection), None, 16)
+                .extension_withdrawn_records(
+                    products.0,
+                    Some(channel),
+                    Some((&selection, run)),
+                    cursor.as_deref(),
+                    1,
+                )
                 .await
                 .unwrap()
         }
     };
-    let unselected = withdrawn(vec![product_ids[1]]).await;
+    let unselected = withdrawn(vec![product_ids[1]], run, None).await;
     assert_eq!(unselected["records"], json!([]));
     assert_eq!(unselected["more"], false);
-    let selected = withdrawn(vec![product_ids[0]]).await;
+    let selected = withdrawn(vec![product_ids[0]], run, None).await;
     assert_eq!(selected["records"][0]["record_id"], json!(product_ids[0]));
-    assert_eq!(selected["next_cursor"], unselected["next_cursor"]);
+    assert_eq!(selected["more"], true);
+    let cursor = selected["next_cursor"].as_str().map(str::to_owned);
+    let rest = withdrawn(vec![product_ids[0]], run, cursor.clone()).await;
+    assert_eq!(rest["records"], json!([]));
+    assert_eq!(rest["more"], false);
+    // Another run starts its selection again.
+    let again = withdrawn(vec![product_ids[0]], Uuid::new_v4(), cursor.clone()).await;
+    assert_eq!(again["records"][0]["record_id"], json!(product_ids[0]));
     let full = repository
-        .extension_withdrawn_records(
-            products.0,
-            Some(channel),
-            None,
-            selected["next_cursor"].as_str(),
-            16,
-        )
+        .extension_withdrawn_records(products.0, Some(channel), None, cursor.as_deref(), 16)
         .await
         .unwrap();
     assert_eq!(full["records"][0]["record_id"], json!(product_ids[0]));

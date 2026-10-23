@@ -152,7 +152,21 @@ impl AttricatRepository {
             {
                 return Err(invalid("the connector extension declares no connections"));
             }
+            // An import writes into its context; an export's context is the
+            // publication channel it exports.
             let context_id: Option<Uuid> = match job.context.as_deref() {
+                Some(code) if job.direction == "export" => Some(
+                    sqlx::query_scalar(
+                        "SELECT c.id FROM attribute_contexts c JOIN publication_channels p ON p.workspace_id=c.workspace_id AND p.context_id=c.id WHERE c.workspace_id=$1 AND c.code=$2",
+                    )
+                    .bind(ws)
+                    .bind(code)
+                    .fetch_optional(&mut **tx)
+                    .await?
+                    .ok_or_else(|| {
+                        invalid(&format!("export job '{}': '{code}' is not a publication channel", job.code))
+                    })?,
+                ),
                 Some(code) => Some(
                     sqlx::query_scalar(
                         "SELECT id FROM attribute_contexts WHERE workspace_id=$1 AND code=$2",
@@ -703,10 +717,10 @@ impl AttricatRepository {
     }
 
     /// Whether a connector run may write the export mapping of `record_id`:
-    /// a record of the run's blueprint. Unlike
-    /// [`Self::connector_run_covers_record`] this includes deleted,
-    /// unpublished and older-version records and ones outside the run's
-    /// selection, whose withdrawals the run's withdrawn feed reports.
+    /// a record of the run's blueprint, within its selection when it has
+    /// one. Unlike [`Self::connector_run_covers_record`] this includes
+    /// deleted, unpublished and older-version records, whose withdrawals the
+    /// run's withdrawn feed reports.
     pub async fn connector_run_may_map_record(
         &self,
         run_id: Uuid,
@@ -715,7 +729,8 @@ impl AttricatRepository {
         Ok(sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM extension_operation_runs r \
                JOIN records e ON e.workspace_id=r.workspace_id AND e.id=$3 AND e.blueprint_id=r.connector_blueprint_id \
-             WHERE r.id=$1 AND r.workspace_id=$2)",
+             WHERE r.id=$1 AND r.workspace_id=$2 \
+               AND (r.connector_record_ids IS NULL OR $3=ANY(r.connector_record_ids)))",
         )
         .bind(run_id)
         .bind(self.extension_workspace())
