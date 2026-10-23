@@ -249,28 +249,67 @@ pub(super) async fn retry_export(
     if let (true, Some(key), Some(selection)) =
         (input.run, &input.idempotency_key, &request_selection)
     {
-        let mut run_ids = Vec::new();
-        let mut record_ids = Vec::new();
-        for job in repository
+        let jobs: Vec<_> = repository
             .extension_export_connector_jobs(&extension_id)
             .await?
             .into_iter()
             .filter(|job| job.connection == input.connection)
-        {
-            for (run, records) in repository
+            .collect();
+        let mut run_ids = Vec::new();
+        let mut record_ids = Vec::new();
+        let mut missing = Vec::new();
+        for job in jobs {
+            let runs = repository
                 .resync_runs_with_key(job.id, key, Some(selection))
-                .await?
-            {
+                .await?;
+            if runs.is_empty() {
+                missing.push(job);
+            }
+            for (run, records) in runs {
                 run_ids.push(run);
                 record_ids.extend(records.unwrap_or_default());
             }
         }
         if !run_ids.is_empty() {
+            // The retry was recorded the first time. A job that did not start
+            // then is resynced now when the request named its records; a
+            // status names records the first request has since changed, so
+            // such a job is reported instead.
+            let mut job_errors = Vec::new();
+            for job in missing {
+                let ids = match &input.record_ids {
+                    Some(ids) => {
+                        repository
+                            .records_of_blueprint(job.blueprint_id, ids)
+                            .await?
+                    }
+                    None => {
+                        job_errors.push(json!({"job_id": job.id, "message": "this job did not start a resync for the first request; resync it directly"}));
+                        continue;
+                    }
+                };
+                if ids.is_empty() {
+                    continue;
+                }
+                match repository
+                    .resync_blueprint_connector_job(job.id, key, Some(selection), Some(ids.clone()))
+                    .await
+                {
+                    Ok(runs) => {
+                        run_ids.extend(runs);
+                        record_ids.extend(ids);
+                    }
+                    Err(error) => job_errors
+                        .push(json!({"job_id": job.id, "message": resync_error_message(&error)})),
+                }
+            }
             record_ids.sort_unstable();
             record_ids.dedup();
             return Ok((
                 StatusCode::ACCEPTED,
-                Json(json!({"record_ids": record_ids, "run_ids": run_ids, "job_errors": []})),
+                Json(
+                    json!({"record_ids": record_ids, "run_ids": run_ids, "job_errors": job_errors}),
+                ),
             ));
         }
     }
@@ -318,12 +357,8 @@ pub(super) async fn retry_export(
                 Ok(runs) => run_ids.extend(runs),
                 Err(error) => {
                     tracing::warn!(job = %job.id, %error, "export retry resync could not start");
-                    let message = match &error {
-                        RepositoryError::InvalidExtension(message) => message.clone(),
-                        RepositoryError::NotFound(what) => format!("{what} not found"),
-                        _ => "the job could not start a resync".to_owned(),
-                    };
-                    job_errors.push(json!({"job_id": job.id, "message": message}));
+                    job_errors
+                        .push(json!({"job_id": job.id, "message": resync_error_message(&error)}));
                 }
             }
         }
@@ -332,6 +367,15 @@ pub(super) async fn retry_export(
         StatusCode::ACCEPTED,
         Json(json!({"record_ids": record_ids, "run_ids": run_ids, "job_errors": job_errors})),
     ))
+}
+
+/// What a client is told about a job whose retry resync could not start.
+fn resync_error_message(error: &RepositoryError) -> String {
+    match error {
+        RepositoryError::InvalidExtension(message) => message.clone(),
+        RepositoryError::NotFound(what) => format!("{what} not found"),
+        _ => "the job could not start a resync".to_owned(),
+    }
 }
 
 // ---- connections ----------------------------------------------------------

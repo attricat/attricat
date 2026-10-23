@@ -626,6 +626,35 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
         .unwrap();
     assert!(retried.is_empty());
     assert_eq!(mapping_status(&pool, record).await.unwrap().0, "retrying");
+    // A deleted record is never pushed again: only its withdrawal is
+    // recorded.
+    assert!(matches!(begin(updated).await, ExportBegin::Stale { .. }));
+    let commit = |status: &'static str| {
+        let repository = repository.clone();
+        async move {
+            repository
+                .export_mapping_commit(
+                    EXTENSION,
+                    None,
+                    record,
+                    None,
+                    ExportMappingUpdate {
+                        status: status.into(),
+                        record_revision: Some(updated),
+                        ..Default::default()
+                    },
+                )
+                .await
+        }
+    };
+    assert!(commit("synced").await.is_err());
+    // The lease an earlier step left ends first.
+    sqlx::query("UPDATE extension_export_mappings SET lease_until=now()-interval '1 second' WHERE record_id=$1")
+        .bind(record)
+        .execute(&pool)
+        .await
+        .unwrap();
+    commit("withdrawn").await.unwrap();
 }
 
 #[sqlx::test(migrations = "./migrations")]

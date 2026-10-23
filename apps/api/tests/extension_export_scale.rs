@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use api::repository::{AttricatRepository, ExportBegin, ExportMappingUpdate, MappingKey};
 use support::*;
+use uuid::Uuid;
 
 const EXTENSION: &str = "acme.scale";
 const RECORDS: i64 = 100_000;
@@ -45,6 +46,24 @@ async fn a_full_catalog_keeps_every_mapping_in_host_storage(pool: sqlx::PgPool) 
     .execute(&pool)
     .await
     .unwrap();
+    // The exporter is installed; status counts leave out mappings of removed
+    // extensions.
+    let release = Uuid::new_v4();
+    sqlx::query("INSERT INTO installed_extension_releases (id, workspace_id, extension_id, version, manifest, manifest_sha256, source) VALUES ($1, $2, $3, '1.0.0', '{}'::jsonb, repeat('0', 64), 'test')")
+        .bind(release)
+        .bind(bootstrap_workspace_id())
+        .bind(EXTENSION)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO extension_installations (id, workspace_id, extension_id, installed_release_id, state) VALUES ($1, $2, $3, $4, 'enabled')")
+        .bind(Uuid::new_v4())
+        .bind(bootstrap_workspace_id())
+        .bind(EXTENSION)
+        .bind(release)
+        .execute(&pool)
+        .await
+        .unwrap();
     // Every record was pushed once: one mapping each, as an exporter's
     // commits would leave them.
     sqlx::query(

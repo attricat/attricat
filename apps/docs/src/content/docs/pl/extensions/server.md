@@ -200,7 +200,7 @@ W przebiegu operacji `begin`, `commit`, `release` i `delete` przyjmują tylko re
 
 Wywołaj `begin` przed wysłaniem rekordu. Chroni ono przed pracą wykonaną w złej kolejności lub dwukrotnie:
 
-- Odpowiada `stale` dla rewizji starszej niż rewizja mapowania, niezależnie od jego statusu, ponieważ zatwierdzenie zostałoby odrzucone po wysłaniu.
+- Odpowiada `stale` dla rewizji starszej niż rewizja mapowania, niezależnie od jego statusu, ponieważ zatwierdzenie zostałoby odrzucone po wysłaniu, a także dla usuniętego rekordu: jego mapowanie przyjmuje tylko zatwierdzenie `withdrawn`.
 - Dla rewizji samego mapowania odpowiada `stale`, gdy mapowanie ma już status `synced`, `withdrawn` lub `rejected`, chyba że operator poprosił o ponowienie albo przekazujesz `force`.
 - W przeciwnym razie dzierżawi rekord na `lease_ms` (domyślnie dwie minuty, najwyżej 15), aby procedura obsługi zdarzeń i przebieg konektora nigdy nie wysyłały tego samego rekordu jednocześnie. Odpowiada `busy`, dopóki dzierżawę trzyma ktoś inny.
 

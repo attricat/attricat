@@ -27,6 +27,9 @@ type BudgetKey = (Uuid, String, String);
 type BudgetCache = HashMap<BudgetKey, (Instant, Option<(i32, i32)>)>;
 static LOWERED_BUDGETS: std::sync::LazyLock<std::sync::Mutex<BudgetCache>> =
     std::sync::LazyLock::new(Default::default);
+/// Bumped by every invalidation, so a read that began before one does not
+/// cache the value it read.
+static BUDGET_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Response headers every request returns.
 const DEFAULT_RESPONSE_HEADERS: [&str; 3] = ["content-type", "etag", "retry-after"];
@@ -142,6 +145,7 @@ pub(super) async fn admit_request(
 /// applies at once here; other replicas see it within
 /// [`LOWERED_BUDGET_TTL`].
 pub fn forget_lowered_budget(workspace_id: Uuid, extension_id: &str, host_permission_id: &str) {
+    BUDGET_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     LOWERED_BUDGETS
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -172,6 +176,7 @@ async fn lowered_budget(
     if let Some(budget) = cached {
         return budget;
     }
+    let generation = BUDGET_GENERATION.load(std::sync::atomic::Ordering::SeqCst);
     // A failed read applies the declared budget without caching it.
     let budget = repository
         .extension_host_permission_budget(&installation.extension_id, &rule.id)
@@ -180,6 +185,10 @@ async fn lowered_budget(
     let mut budgets = LOWERED_BUDGETS
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+    // An invalidation since the read began may postdate what it read.
+    if BUDGET_GENERATION.load(std::sync::atomic::Ordering::SeqCst) != generation {
+        return budget;
+    }
     if budgets.len() >= MAX_CACHED_BUDGETS {
         budgets.retain(|_, (read_at, _)| read_at.elapsed() < LOWERED_BUDGET_TTL);
         if budgets.len() >= MAX_CACHED_BUDGETS {

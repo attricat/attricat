@@ -30,8 +30,12 @@ enum Lease<'a> {
 /// The mappings an operator can still act on: of an installed extension,
 /// and of the default destination or a connection that still exists.
 /// Mappings outlive both, so a re-created connection keeps its IDs.
-const CURRENT_DESTINATION: &str = "EXISTS(SELECT 1 FROM extension_installations i WHERE i.workspace_id=extension_export_mappings.workspace_id AND i.extension_id=extension_export_mappings.extension_id) \
-    AND (extension_export_mappings.connection IS NULL OR EXISTS(SELECT 1 FROM extension_connections c WHERE c.workspace_id=extension_export_mappings.workspace_id AND c.extension_id=extension_export_mappings.extension_id AND c.connection=extension_export_mappings.connection))";
+fn current_destination(mapping: &str) -> String {
+    format!(
+        "EXISTS(SELECT 1 FROM extension_installations i WHERE i.workspace_id={mapping}.workspace_id AND i.extension_id={mapping}.extension_id) \
+         AND ({mapping}.connection IS NULL OR EXISTS(SELECT 1 FROM extension_connections c WHERE c.workspace_id={mapping}.workspace_id AND c.extension_id={mapping}.extension_id AND c.connection={mapping}.connection))"
+    )
+}
 
 /// The per-record export statuses, in the order the UI lists them.
 pub const EXPORT_STATUSES: &[&str] = attricat_validation::EXPORT_STATUSES;
@@ -381,7 +385,7 @@ impl AttricatRepository {
         if status.is_some_and(|status| !EXPORT_STATUSES.contains(&status)) {
             return Err(invalid("unknown export status"));
         }
-        let mut rows: Vec<ExportMapping> = sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::text IS NULL OR status=$4) AND ($5::uuid IS NULL OR record_id>$5) AND (NOT $7 OR (status='withdrawn' OR EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=extension_export_mappings.workspace_id AND r.id=extension_export_mappings.record_id AND r.deleted_at IS NULL))) ORDER BY record_id LIMIT $6", connection_is("connection", "$3", connection)))
+        let mut rows: Vec<ExportMapping> = sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::text IS NULL OR status=$4) AND ($5::uuid IS NULL OR record_id>$5) AND (NOT $7 OR ((status='withdrawn' OR EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=extension_export_mappings.workspace_id AND r.id=extension_export_mappings.record_id AND r.deleted_at IS NULL)) AND {})) ORDER BY record_id LIMIT $6", connection_is("connection", "$3", connection), current_destination("extension_export_mappings")))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(status)
             .bind(after).bind(i64::from(limit) + 1).bind(live_only)
             .fetch_all(&self.pool).await?;
@@ -400,18 +404,17 @@ impl AttricatRepository {
         extension_id: &str,
         connection: Option<&str>,
         record_id: Uuid,
-    ) -> Result<ExportMapping, RepositoryError> {
+    ) -> Result<(ExportMapping, bool), RepositoryError> {
         let ws = self.extension_workspace();
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM records WHERE workspace_id=$1 AND id=$2)",
+        // Whether the record is deleted: only its withdrawal is recorded then.
+        let deleted: bool = sqlx::query_scalar(
+            "SELECT deleted_at IS NOT NULL FROM records WHERE workspace_id=$1 AND id=$2",
         )
         .bind(ws)
         .bind(record_id)
-        .fetch_one(&mut **transaction)
-        .await?;
-        if !exists {
-            return Err(RepositoryError::NotFound("record"));
-        }
+        .fetch_optional(&mut **transaction)
+        .await?
+        .ok_or(RepositoryError::NotFound("record"))?;
         if let Some(connection) = connection {
             let known = self
                 .extension_connection_exists(&mut **transaction, extension_id, connection)
@@ -423,9 +426,10 @@ impl AttricatRepository {
         sqlx::query("INSERT INTO extension_export_mappings(id,workspace_id,extension_id,connection,record_id,status) VALUES($1,$2,$3,$4,$5,'pending') ON CONFLICT DO NOTHING")
             .bind(Uuid::new_v4()).bind(ws).bind(extension_id).bind(connection).bind(record_id)
             .execute(&mut **transaction).await?;
-        Ok(sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 FOR UPDATE", connection_is("connection", "$3", connection)))
+        let mapping = sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 FOR UPDATE", connection_is("connection", "$3", connection)))
             .bind(ws).bind(extension_id).bind(connection).bind(record_id)
-            .fetch_one(&mut **transaction).await?)
+            .fetch_one(&mut **transaction).await?;
+        Ok((mapping, deleted))
     }
 
     /// Decides whether `record_revision` of a record should be pushed and, if
@@ -458,9 +462,15 @@ impl AttricatRepository {
             return Err(invalid("lease must be 1 ms to 15 minutes"));
         }
         let mut transaction = self.pool.begin().await?;
-        let mapping = self
+        let (mapping, deleted) = self
             .locked_mapping(&mut transaction, extension_id, connection, record_id)
             .await?;
+        // A deleted record is never pushed again; its withdrawal is
+        // committed without a lease.
+        if deleted {
+            transaction.commit().await?;
+            return Ok(ExportBegin::Stale { mapping });
+        }
         let now: DateTime<Utc> = sqlx::query_scalar("SELECT clock_timestamp()")
             .fetch_one(&mut *transaction)
             .await?;
@@ -572,9 +582,14 @@ impl AttricatRepository {
             return Err(invalid("record revision must not be negative"));
         }
         let mut transaction = self.pool.begin().await?;
-        let mapping = self
+        let (mapping, deleted) = self
             .locked_mapping(&mut transaction, extension_id, connection, record_id)
             .await?;
+        if deleted && update.status != "withdrawn" {
+            return Err(RepositoryError::ExportMappingConflict(
+                "the record is deleted; only its withdrawal can be recorded".into(),
+            ));
+        }
         let now: DateTime<Utc> = sqlx::query_scalar("SELECT clock_timestamp()")
             .fetch_one(&mut *transaction)
             .await?;
@@ -817,7 +832,7 @@ impl AttricatRepository {
         &self,
         record_id: Uuid,
     ) -> Result<Vec<ExportMapping>, RepositoryError> {
-        Ok(sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND record_id=$2 AND {CURRENT_DESTINATION} ORDER BY extension_id,connection NULLS FIRST"))
+        Ok(sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND record_id=$2 AND {} ORDER BY extension_id,connection NULLS FIRST", current_destination("extension_export_mappings")))
             .bind(self.extension_workspace()).bind(record_id)
             .fetch_all(&self.pool).await?)
     }
@@ -839,7 +854,7 @@ impl AttricatRepository {
         &self,
         extension_id: Option<&str>,
     ) -> Result<Vec<ExportStatusCount>, RepositoryError> {
-        Ok(sqlx::query_as(&format!("SELECT extension_id,connection,status,count(*)::bigint AS count FROM extension_export_mappings WHERE workspace_id=$1 AND ($2::text IS NULL OR extension_id=$2) AND {CURRENT_DESTINATION} AND (status='withdrawn' OR EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=extension_export_mappings.workspace_id AND r.id=extension_export_mappings.record_id AND r.deleted_at IS NULL)) GROUP BY extension_id,connection,status ORDER BY extension_id,connection NULLS FIRST,status"))
+        Ok(sqlx::query_as(&format!("SELECT extension_id,connection,status,count(*)::bigint AS count FROM extension_export_mappings WHERE workspace_id=$1 AND ($2::text IS NULL OR extension_id=$2) AND {} AND (status='withdrawn' OR EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=extension_export_mappings.workspace_id AND r.id=extension_export_mappings.record_id AND r.deleted_at IS NULL)) GROUP BY extension_id,connection,status ORDER BY extension_id,connection NULLS FIRST,status", current_destination("extension_export_mappings")))
             .bind(self.extension_workspace()).bind(extension_id)
             .fetch_all(&self.pool).await?)
     }
@@ -859,7 +874,7 @@ impl AttricatRepository {
         if !EXPORT_STATUSES.contains(&status) {
             return Err(invalid("unknown export status"));
         }
-        let ids: Vec<Uuid> = sqlx::query_scalar(&format!("SELECT m.record_id FROM extension_export_mappings m JOIN records r ON r.workspace_id=m.workspace_id AND r.id=m.record_id WHERE m.workspace_id=$1 AND m.extension_id=$2 AND {} AND m.status=$4 AND r.blueprint_id=$5 AND r.deleted_at IS NULL ORDER BY m.record_id LIMIT $6", connection_is("m.connection", "$3", connection)))
+        let ids: Vec<Uuid> = sqlx::query_scalar(&format!("SELECT m.record_id FROM extension_export_mappings m JOIN records r ON r.workspace_id=m.workspace_id AND r.id=m.record_id WHERE m.workspace_id=$1 AND m.extension_id=$2 AND {} AND m.status=$4 AND r.blueprint_id=$5 AND r.deleted_at IS NULL AND {} ORDER BY m.record_id LIMIT $6", connection_is("m.connection", "$3", connection), current_destination("m")))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(status).bind(blueprint_id).bind(limit.saturating_add(1))
             .fetch_all(&self.pool).await?;
         Ok((ids.len() as i64 <= limit).then_some(ids))
@@ -939,11 +954,11 @@ impl AttricatRepository {
                         })
                     })
                 });
-            sqlx::query("INSERT INTO extension_export_mappings(id,workspace_id,extension_id,connection,record_id,status) SELECT gen_random_uuid(),$1,$2,$3,r.id,'pending' FROM records r WHERE r.workspace_id=$1 AND r.id=ANY($4) AND r.deleted_at IS NULL AND ($5 OR EXISTS(SELECT 1 FROM blueprint_connector_jobs j WHERE j.workspace_id=$1 AND j.extension_id=$2 AND j.direction='export' AND j.connection IS NOT DISTINCT FROM $3 AND j.blueprint_id=r.blueprint_id AND j.code IS NOT NULL)) ON CONFLICT DO NOTHING")
+            sqlx::query("INSERT INTO extension_export_mappings(id,workspace_id,extension_id,connection,record_id,status) SELECT gen_random_uuid(),$1,$2,$3,r.id,'pending' FROM records r WHERE r.workspace_id=$1 AND r.id=ANY($4) AND r.deleted_at IS NULL AND ($5 OR EXISTS(SELECT 1 FROM blueprint_connector_jobs j WHERE j.workspace_id=$1 AND j.extension_id=$2 AND j.direction='export' AND j.connection IS NOT DISTINCT FROM $3 AND j.blueprint_id=r.blueprint_id AND j.code IS NOT NULL AND j.enabled)) ON CONFLICT DO NOTHING")
                 .bind(self.extension_workspace()).bind(extension_id).bind(&selection.connection).bind(record_ids).bind(handles_retries)
                 .execute(&mut *transaction).await?;
         }
-        let ids: Vec<Uuid> = sqlx::query_scalar(&format!("WITH selected AS (SELECT id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::uuid[] IS NULL OR record_id=ANY($4)) AND ($5::text IS NULL OR status=$5) AND EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=$1 AND r.id=record_id AND r.deleted_at IS NULL) ORDER BY record_id LIMIT $6 FOR UPDATE) UPDATE extension_export_mappings m SET status='pending',retry_requested_at=clock_timestamp(),attempts=0,updated_at=clock_timestamp() FROM selected s WHERE m.id=s.id RETURNING m.record_id", connection_is("connection", "$3", selection.connection.as_deref())))
+        let ids: Vec<Uuid> = sqlx::query_scalar(&format!("WITH selected AS (SELECT id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::uuid[] IS NULL OR record_id=ANY($4)) AND ($5::text IS NULL OR status=$5) AND EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=$1 AND r.id=record_id AND r.deleted_at IS NULL) AND {} ORDER BY record_id LIMIT $6 FOR UPDATE) UPDATE extension_export_mappings m SET status='pending',retry_requested_at=clock_timestamp(),attempts=0,updated_at=clock_timestamp() FROM selected s WHERE m.id=s.id RETURNING m.record_id", connection_is("connection", "$3", selection.connection.as_deref()), current_destination("extension_export_mappings")))
             .bind(self.extension_workspace()).bind(extension_id).bind(&selection.connection)
             .bind(&selection.record_ids).bind(&selection.status).bind(MAX_EXPORT_RETRY_RECORDS + 1)
             .fetch_all(&mut *transaction).await?;

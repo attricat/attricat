@@ -702,7 +702,8 @@ connection's mappings, and a run confined to selected records only theirs.
 
 `begin` is the guard against reordered and duplicated work. It answers
 `stale` for a revision older than the mapping's, whatever its status, since
-the commit would be refused after the push. At the mapping's own revision it
+the commit would be refused after the push, and for a deleted record, whose
+mapping accepts only a `withdrawn` commit. At the mapping's own revision it
 answers `stale` when the mapping is settled (`synced`, `withdrawn` or
 `rejected`), unless an operator requested a retry or `force` is set. Otherwise it leases the record for `lease_ms` (default 2 minutes, at most
 15) so an event handler and a connector job never push the same record at the
@@ -736,7 +737,8 @@ app shows it:
 Counts and the management page leave out deleted records except as
 `withdrawn`, so every other status they show is one an operator can retry.
 Statuses of a removed extension or a deleted connection are kept, so a
-re-created connection keeps its external IDs, but are shown nowhere.
+re-created connection keeps its external IDs, but are neither shown nor
+selected by a status retry or resync.
 The `mappings.list.v1` host call still lists every mapping.
 
 `POST /extensions/{extension_id}/export-status/retry` with
@@ -752,7 +754,9 @@ audited. With `run: true` it also starts a [resync](#connector-jobs-for-exports)
 of just those records on each of the extension's export jobs that target the
 connection, so a record is retried without rerunning a whole job. An optional
 `idempotency_key` (1-40 ASCII bytes) makes the request idempotent: sent again
-as it was, it returns the runs it started without retrying anything again. The status
+as it was, it returns the runs it started without retrying anything again;
+a job that did not start then is resynced now when the request named its
+records, or listed in `job_errors`. The status
 page and the retry name records across the workspace, so besides
 `extensions.read` or `extensions.manage` they need a workspace-wide
 `records.read` grant.
