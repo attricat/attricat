@@ -370,6 +370,20 @@ impl ConnectionRefresh {
             .await
     }
 
+    /// Ends a device authorization that expired or was refused and releases
+    /// the claim. An active connection keeps its tokens and status; one that
+    /// was waiting for this authorization fails.
+    pub async fn abandon_device_authorization(
+        mut self,
+        message: &str,
+    ) -> Result<(), RepositoryError> {
+        let message: String = message.chars().take(1024).collect();
+        let (workspace_id, id, claim) = (self.workspace_id, self.credentials.id, self.claim);
+        self.settle(sqlx::query("UPDATE extension_connections SET device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,device_polled_at=NULL,status=CASE WHEN status='active' THEN 'active' ELSE 'failed' END,last_error=$3,refresh_claim=NULL,refresh_claimed_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_claim=$4")
+            .bind(workspace_id).bind(id).bind(message).bind(claim))
+            .await
+    }
+
     /// Releases the claim without changing the connection.
     pub async fn release(mut self) -> Result<(), RepositoryError> {
         let (workspace_id, id, claim) = (self.workspace_id, self.credentials.id, self.claim);
@@ -513,15 +527,34 @@ impl AttricatRepository {
                 .scope
                 .as_ref()
                 .is_some_and(|scope| *scope != current.scope);
+        // A token endpoint moved to another origin is another provider: the
+        // stored secret must be entered again and the stored tokens are not
+        // sent there, so the connection waits for a new authorization unless
+        // a refresh token comes with the change.
+        let origin = |url: &str| url::Url::parse(url).ok().map(|url| url.origin());
+        let moved = patch
+            .token_url
+            .as_deref()
+            .is_some_and(|url| origin(url) != origin(&current.token_url))
+            || patch.device_authorization_url.as_ref().is_some_and(|url| {
+                url.as_deref().map(origin)
+                    != current.device_authorization_url.as_deref().map(origin)
+            });
+        if moved && current.has_client_secret && client_secret.is_none() {
+            return Err(RepositoryError::InvalidExtension(
+                "enter the client secret again to move the token endpoint to another host".into(),
+            ));
+        }
         let mut transaction = self.pool.begin().await?;
         let updated = sqlx::query_as(&format!(
             "UPDATE extension_connections SET display_name=COALESCE($3,display_name),token_url=COALESCE($4,token_url),\
              device_authorization_url=CASE WHEN $5 THEN $6 ELSE device_authorization_url END,\
              scope=CASE WHEN $7 THEN $8 ELSE scope END,parameters=COALESCE($9,parameters),\
-             client_secret_ciphertext=COALESCE($10,client_secret_ciphertext),refresh_token_ciphertext=COALESCE($11,refresh_token_ciphertext),\
+             client_secret_ciphertext=COALESCE($10,client_secret_ciphertext),refresh_token_ciphertext=CASE WHEN $13 THEN $11 ELSE COALESCE($11,refresh_token_ciphertext) END,\
              access_token_ciphertext=CASE WHEN $12 THEN NULL ELSE access_token_ciphertext END,\
              access_token_expires_at=CASE WHEN $12 THEN NULL ELSE access_token_expires_at END,\
              status=CASE WHEN $11::bytea IS NOT NULL OR (grant_type='client_credentials' AND $10::bytea IS NOT NULL) THEN 'active' \
+               WHEN $13 THEN 'pending_authorization' \
                WHEN $12 AND status='failed' AND (refresh_token_ciphertext IS NOT NULL OR (grant_type='client_credentials' AND client_secret_ciphertext IS NOT NULL)) THEN 'active' ELSE status END,\
              last_error=CASE WHEN $12 THEN NULL ELSE last_error END,\
              refresh_claim=CASE WHEN $12 THEN NULL ELSE refresh_claim END,\
@@ -539,7 +572,8 @@ impl AttricatRepository {
         .bind(&patch.parameters)
         .bind(client_secret)
         .bind(refresh_token)
-        .bind(changed)
+        .bind(changed || moved)
+        .bind(moved)
         .fetch_one(&mut *transaction)
         .await?;
         self.write_audit_event(&mut transaction).await?;
@@ -678,7 +712,9 @@ impl AttricatRepository {
         Ok(())
     }
 
-    /// Stores a started device authorization for an operator to approve.
+    /// Stores a started device authorization for an operator to approve. A
+    /// connection that is already active keeps working on its current tokens
+    /// until the new authorization is approved.
     pub async fn record_extension_device_authorization(
         &self,
         extension_id: &str,
@@ -688,7 +724,7 @@ impl AttricatRepository {
         let current = self.extension_connection(extension_id, connection).await?;
         let device_code = seal(current.id, "device_code", &authorization.device_code)?;
         let mut transaction = self.pool.begin().await?;
-        let updated = sqlx::query_as(&format!("UPDATE extension_connections SET device_code_ciphertext=$3,device_user_code=$4,device_verification_uri=$5,device_expires_at=$6,device_interval_seconds=$7,device_polled_at=NULL,status='pending_authorization',last_error=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}"))
+        let updated = sqlx::query_as(&format!("UPDATE extension_connections SET device_code_ciphertext=$3,device_user_code=$4,device_verification_uri=$5,device_expires_at=$6,device_interval_seconds=$7,device_polled_at=NULL,status=CASE WHEN status='active' AND (access_token_ciphertext IS NOT NULL OR refresh_token_ciphertext IS NOT NULL) THEN 'active' ELSE 'pending_authorization' END,last_error=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}"))
             .bind(self.extension_workspace()).bind(current.id).bind(device_code)
             .bind(&authorization.user_code).bind(&authorization.verification_uri)
             .bind(authorization.expires_at).bind(authorization.interval_seconds.clamp(1, 3600))

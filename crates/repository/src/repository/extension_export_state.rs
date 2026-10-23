@@ -795,6 +795,23 @@ impl AttricatRepository {
         }
     }
 
+    /// Marks the mappings `holder` still leases as `retrying` with an error
+    /// and ends those leases, for an invocation that gave up without a
+    /// result. Their revision is kept, so a later push of the leased
+    /// revision proceeds.
+    pub async fn fail_export_leases(
+        &self,
+        extension_id: &str,
+        holder: &str,
+        code: &str,
+        message: &str,
+    ) -> Result<u64, RepositoryError> {
+        Ok(sqlx::query("UPDATE extension_export_mappings SET status='retrying',error=jsonb_build_object('code',$4::text,'message',$5::text),attempts=attempts+1,lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND lease_holder=$3 AND lease_until>clock_timestamp()")
+            .bind(self.extension_workspace()).bind(extension_id).bind(holder).bind(code)
+            .bind(message.chars().take(1024).collect::<String>())
+            .execute(&self.pool).await?.rows_affected())
+    }
+
     // ---- management -------------------------------------------------------
 
     /// Every extension's mapping of one record.

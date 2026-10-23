@@ -13,7 +13,10 @@ use api::{
         DevelopmentEgress, ExtensionRuntime, ExtensionRuntimeConfig, connections,
         use_development_egress,
     },
-    repository::{AttricatRepository, NewExtensionConnection, StartExtensionOperation},
+    repository::{
+        AttricatRepository, ExtensionConnectionPatch, NewExtensionConnection,
+        StartExtensionOperation,
+    },
     storage::FakeObjectStore,
 };
 use axum::{
@@ -977,6 +980,49 @@ max_bytes = 1024
         .unwrap();
     assert_eq!(public_status(token).await, StatusCode::NOT_FOUND);
     server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn moving_the_token_endpoint_to_another_host_needs_the_secret_and_drops_tokens(
+    pool: sqlx::PgPool,
+) {
+    let repository = AttricatRepository::system(pool.clone())
+        .for_workspace(bootstrap_workspace_id())
+        .await
+        .unwrap();
+    let store = Arc::new(FakeObjectStore::available());
+    api::extension_installer::ExtensionInstaller::new(repository.clone(), store)
+        .install("test", &archive())
+        .await
+        .unwrap();
+    repository
+        .create_extension_connection(connection("rotating", "refresh_token"))
+        .await
+        .unwrap();
+    let moved = |client_secret: Option<&str>| ExtensionConnectionPatch {
+        display_name: None,
+        token_url: Some("https://other.mock.test/oauth/token".into()),
+        device_authorization_url: None,
+        scope: None,
+        parameters: None,
+        client_secret: client_secret.map(str::to_owned),
+        refresh_token: None,
+    };
+    // The stored secret is never sent to another host unasked.
+    assert!(
+        repository
+            .update_extension_connection(EXTENSION, "rotating", moved(None))
+            .await
+            .is_err()
+    );
+    let updated = repository
+        .update_extension_connection(EXTENSION, "rotating", moved(Some("n3w")))
+        .await
+        .unwrap();
+    assert!(updated.has_client_secret);
+    assert!(!updated.has_refresh_token);
+    assert!(!updated.has_access_token);
+    assert_eq!(updated.status, "pending_authorization");
 }
 
 fn base64_decode(value: &str) -> Vec<u8> {

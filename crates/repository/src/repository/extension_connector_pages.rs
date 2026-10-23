@@ -480,28 +480,12 @@ impl AttricatRepository {
         // The cursor moves to the last event read, so the feed stops at the
         // committed high water: an event that commits later with a lower
         // sequence would otherwise fall behind the cursor and be skipped.
-        // While an event writer holds the boundary the page is empty and the
-        // cursor stays put, so the next call or run continues from it.
-        let Some(high_water) = self.committed_event_high_water().await? else {
-            return Ok(json!({
-                "records": [],
-                "next_cursor": cursor.filter(|cursor| !cursor.is_empty()).map_or_else(
-                    || {
-                        URL_SAFE_NO_PAD.encode(
-                            serde_json::to_vec(&WithdrawnCursor {
-                                workspace_id: self.workspace_id.0,
-                                blueprint_id,
-                                channel_id,
-                                after_sequence,
-                            })
-                            .expect("withdrawn cursor serializes"),
-                        )
-                    },
-                    str::to_owned,
-                ),
-                "more": false,
-            }));
-        };
+        // The feed waits for event writers rather than return a short page
+        // a component could take for the end of its withdrawals.
+        let high_water = self
+            .committed_event_high_water(false)
+            .await?
+            .expect("an unbounded wait reads the high water");
         // A channel's feed reads only that channel's unpublications: deleting
         // a record unpublishes it from every channel it was live in (reason
         // `record_deleted`), so a record never published there is never

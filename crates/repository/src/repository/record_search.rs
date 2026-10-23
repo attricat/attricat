@@ -980,7 +980,7 @@ impl AttricatRepository {
         current_blueprint_version: i64,
     ) -> Result<(Vec<RecordPreview>, Option<String>), RepositoryError> {
         validate_system_tags(system_tags)?;
-        let export_status_sql = export_status_clause(12);
+        let export_status_sql = export_status_clause(12, export_status);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
@@ -1070,7 +1070,7 @@ impl AttricatRepository {
     ) -> Result<i64, RepositoryError> {
         validate_system_tags(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 3);
-        let export_status_sql = export_status_clause(9);
+        let export_status_sql = export_status_clause(9, export_status);
         Ok(sqlx::query_scalar::<_, i64>(&format!(
             r#"SELECT COUNT(*)
                  FROM (
@@ -1113,7 +1113,7 @@ impl AttricatRepository {
     ) -> Result<Vec<i64>, RepositoryError> {
         validate_system_tags(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 4);
-        let export_status_sql = export_status_clause(8);
+        let export_status_sql = export_status_clause(8, export_status);
         Ok(sqlx::query_scalar::<_, i64>(&format!(
             r#"SELECT e.blueprint_version
                  FROM {records}
@@ -1172,7 +1172,7 @@ impl AttricatRepository {
         };
         validate_system_tags(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 4);
-        let export_status_sql = export_status_clause(9);
+        let export_status_sql = export_status_clause(9, export_status);
         let (versions, count) = sqlx::query_as::<_, (Vec<i64>, i64)>(&format!(
             r#"WITH matches AS MATERIALIZED (
                    SELECT e.blueprint_version
@@ -1342,7 +1342,7 @@ impl AttricatRepository {
             &resolved_context("sort_value", "sort_attribute", "$15"),
         )
         .replace("{edge_context}", &resolved_context("edge", "path_attribute", "$15"));
-        let export_status_sql = export_status_clause(16);
+        let export_status_sql = export_status_clause(16, export_status);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
@@ -1457,7 +1457,7 @@ impl AttricatRepository {
         } else {
             ("e.blueprint_version", "")
         };
-        let export_status_sql = export_status_clause(11);
+        let export_status_sql = export_status_clause(11, export_status);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                          b.views AS blueprint_views,
@@ -1547,8 +1547,8 @@ impl AttricatRepository {
         .fetch_all(&self.pool)
         .await?;
         let mut rows = Vec::new();
-        let leaf_export_status = export_status_clause(18);
-        let null_export_status = export_status_clause(16);
+        let leaf_export_status = export_status_clause(18, export_status);
+        let null_export_status = export_status_clause(16, export_status);
 
         if !cursor_is_null {
             let reverse_joins = relationship_sort_reverse_joins(sort.relationship_path.len())?;
@@ -3734,12 +3734,19 @@ const TREE_FACET_COUNTS_STALE: Duration = Duration::from_secs(10 * 60);
 
 /// The predicate of an optional [`ExportStatusFilter`] bound as JSON at
 /// `parameter`, over the records aliased `e`.
-fn export_status_clause(parameter: usize) -> String {
+fn export_status_clause(parameter: usize, filter: Option<&ExportStatusFilter>) -> String {
+    // Equality or IS NULL, unlike IS NOT DISTINCT FROM, can use the mapping
+    // indexes.
+    let connection = if filter.is_some_and(|filter| filter.connection.is_some()) {
+        format!("export_mapping.connection = ${parameter}->>'connection'")
+    } else {
+        "export_mapping.connection IS NULL".to_owned()
+    };
     format!(
         "AND (${parameter}::jsonb IS NULL OR EXISTS (SELECT 1 FROM extension_export_mappings export_mapping \
          WHERE export_mapping.workspace_id = e.workspace_id AND export_mapping.record_id = e.id \
            AND export_mapping.extension_id = ${parameter}->>'extension_id' \
-           AND export_mapping.connection IS NOT DISTINCT FROM ${parameter}->>'connection' \
+           AND {connection} \
            AND export_mapping.status = ${parameter}->>'status'))"
     )
 }

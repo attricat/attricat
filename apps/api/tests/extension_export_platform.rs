@@ -478,6 +478,39 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
         begin_as("run:resync", false, resync_since).await,
         ExportBegin::Stale { .. }
     ));
+    // A handler that gives up marks the records it still leases as retrying
+    // and ends its leases.
+    let ExportBegin::Proceed { .. } = begin_as("handler:gave-up", true, None).await else {
+        panic!("a forced push leases the record");
+    };
+    assert_eq!(
+        repository
+            .fail_export_leases(EXTENSION, "handler:gave-up", "retries_exhausted", "busy")
+            .await
+            .unwrap(),
+        1
+    );
+    let mapping = repository
+        .export_mapping_get(EXTENSION, None, api::repository::MappingKey::Record(record))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(mapping.status, "retrying");
+    assert!(mapping.lease_token.is_none());
+    repository
+        .export_mapping_commit(
+            EXTENSION,
+            None,
+            record,
+            None,
+            ExportMappingUpdate {
+                status: "synced".into(),
+                record_revision: Some(updated),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
     // A late result for an older revision cannot replace the newer one.
     let late = repository
         .export_mapping_commit(

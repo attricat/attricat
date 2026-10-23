@@ -69,7 +69,7 @@ A 1.1 `event-handler` exports `handle-event(event, delivery)`, which returns `re
 | Case | What happens |
 | --- | --- |
 | `rejected { code, message, record-id?, connection? }` | The failure is recorded and never retried; the delivery completes. With a `record-id`, the record's [export status](#export-mappings) becomes `rejected` with the code and message. |
-| `retry { message, after-ms? }` | Only this handler is retried, after `after-ms` or a backoff from 5 seconds doubling to one hour, up to 10 attempts. After that the delivery is recorded as `exhausted`. |
+| `retry { message, after-ms? }` | Only this handler is retried, after `after-ms` or a backoff from 5 seconds doubling to one hour, up to 10 attempts. After that the delivery is recorded as `exhausted`, and records the handler still leases become `retrying` with error `retries_exhausted`. |
 | `fault(message)` | The installation is quarantined. |
 
 Traps, running out of fuel or memory, and timeouts count as faults. Outcomes are kept per event and handler, so when one handler of an event is retried, handlers that already completed are not called again. Rejected and exhausted deliveries stay visible for 30 days on the extension's management page.

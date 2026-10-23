@@ -2067,16 +2067,10 @@ impl WasmExtensionTaskHandler {
             InvocationFailure::Rejected(rejection) => {
                 counter!("attricat_extension_invocations_total", "outcome" => "rejected")
                     .increment(1);
-                repository
-                    .record_extension_handler_attempt(HandlerAttemptOutcome {
-                        error_code: Some(&rejection.code),
-                        error_message: Some(&rejection.message),
-                        record_id: rejection.record_id,
-                        ..record("rejected", attempt, None)
-                    })
-                    .await?;
                 // A rejection that names no connection belongs to the
-                // default destination.
+                // default destination. The record's status is written before
+                // the handler's outcome, so a retried delivery that fails in
+                // between writes it again rather than finding it settled.
                 if let Some(record_id) = rejection.record_id
                     && exports_mappings(installation)
                 {
@@ -2105,11 +2099,31 @@ impl WasmExtensionTaskHandler {
                         )
                         .await?;
                 }
+                repository
+                    .record_extension_handler_attempt(HandlerAttemptOutcome {
+                        error_code: Some(&rejection.code),
+                        error_message: Some(&rejection.message),
+                        record_id: rejection.record_id,
+                        ..record("rejected", attempt, None)
+                    })
+                    .await?;
                 Ok(HandlerStep::Settled)
             }
             InvocationFailure::Retry { message, .. } if attempt >= MAX_HANDLER_ATTEMPTS => {
                 counter!("attricat_extension_invocations_total", "outcome" => "exhausted")
                     .increment(1);
+                // Records the handler still leases show as retrying, so an
+                // operator finds and retries them, and its leases end.
+                if exports_mappings(installation) {
+                    repository
+                        .fail_export_leases(
+                            &installation.extension_id,
+                            &handler_lease_holder(event.id, &handler.id),
+                            "retries_exhausted",
+                            &message,
+                        )
+                        .await?;
+                }
                 repository
                     .record_extension_handler_attempt(HandlerAttemptOutcome {
                         error_code: Some("retries_exhausted"),

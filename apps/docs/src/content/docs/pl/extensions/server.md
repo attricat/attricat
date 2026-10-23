@@ -69,7 +69,7 @@ Zdarzenie czeka, aż jego rekord przez `debounce_ms` (do godziny) nie będzie si
 | Przypadek | Co się dzieje |
 | --- | --- |
 | `rejected { code, message, record-id?, connection? }` | Niepowodzenie jest zapisywane i nigdy nie jest ponawiane; dostarczenie się kończy. Z `record-id` [stan eksportu](#mapowania-eksportu) rekordu zmienia się na `rejected` z tym kodem i komunikatem. |
-| `retry { message, after-ms? }` | Ponawiana jest tylko ta procedura obsługi, po `after-ms` albo z rosnącym odstępem od 5 sekund do godziny, najwyżej 10 razy. Potem dostarczenie jest zapisywane jako `exhausted`. |
+| `retry { message, after-ms? }` | Ponawiana jest tylko ta procedura obsługi, po `after-ms` albo z rosnącym odstępem od 5 sekund do godziny, najwyżej 10 razy. Potem dostarczenie jest zapisywane jako `exhausted`, a rekordy, które procedura nadal dzierżawi, przechodzą w stan `retrying` z błędem `retries_exhausted`. |
 | `fault(message)` | Instalacja zostaje poddana kwarantannie. |
 
 Pułapki, wyczerpanie paliwa lub pamięci i przekroczenie limitu czasu są traktowane jak `fault`. Wyniki są zapisywane osobno dla każdego zdarzenia i procedury obsługi, więc gdy ponawiana jest jedna procedura obsługi zdarzenia, te, które już się zakończyły, nie są wywoływane ponownie. Odrzucone i wyczerpane dostarczenia są widoczne przez 30 dni na stronie zarządzania rozszerzeniem.

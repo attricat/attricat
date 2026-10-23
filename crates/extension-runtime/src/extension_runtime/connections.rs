@@ -349,7 +349,7 @@ pub async fn poll_device_authorization(
         .is_some_and(|expires_at| expires_at <= Utc::now())
     {
         let _ = refresh
-            .fail("the device authorization expired; start it again", true)
+            .abandon_device_authorization("the device authorization expired; start it again")
             .await;
         return Err(TokenError::Rejected(
             "the device authorization expired; start it again".into(),
@@ -390,10 +390,16 @@ pub async fn poll_device_authorization(
             .pending(slow_down)
             .await
             .map_err(|error| TokenError::Temporary(error.to_string()))?,
-        Err(error) => {
+        // A refused device grant ends the authorization; it does not revoke
+        // tokens an active connection already holds.
+        Err(error @ TokenError::Rejected(_)) => {
             let _ = refresh
-                .fail(&error.to_string(), matches!(error, TokenError::Rejected(_)))
+                .abandon_device_authorization(&error.to_string())
                 .await;
+            return Err(error);
+        }
+        Err(error) => {
+            let _ = refresh.fail(&error.to_string(), false).await;
             return Err(error);
         }
     }

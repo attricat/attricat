@@ -623,7 +623,7 @@ whose `handle-event(event, delivery)` returns `result<_, failure>`, and
 | Case | Event handler | Operation batch |
 |---|---|---|
 | `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes | A rejection that names a record, from an extension with `exports.mappings`, settles that record and replays the batch after a second, so the component finds the record settled and moves on. A newly settled record is progress and is not counted; a repeated rejection, or one of a record another worker holds, counts toward the 100 waits in a row below; a record another worker holds is replayed once that worker's lease ends. A rejection that cannot be recorded (for example for an unknown connection, or of a record outside the run's scope), and any other rejection, dead-letters the run with code `rejected`, without retries |
-| `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted` | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget, up to 100 times in a row before a completed batch; past that, and without `after-ms`, it is a failure within that budget. A replayed dead-lettered run starts with fresh failure and deferral budgets |
+| `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted`; records the handler still leases become `retrying` with error `retries_exhausted` and their leases end | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget, up to 100 times in a row before a completed batch; past that, and without `after-ms`, it is a failure within that budget. A replayed dead-lettered run starts with fresh failure and deferral budgets |
 | `fault(message)` | Quarantines the installation | Fails the run and quarantines the installation |
 
 Traps, fuel or memory exhaustion, timeouts and invalid batch results are
@@ -782,10 +782,9 @@ record_revision, occurred_at}`, with a `next_cursor` bound to the blueprint and
 channel and `more`. An empty cursor starts at the oldest change. Persist the
 cursor (for example in extension storage, per job and channel) to continue
 where the last run stopped. The feed ends at the committed end of the event
-log; behind an event write that holds that boundary for more than two
-seconds a page is empty with `more: false` and an unchanged cursor, rather
-than waiting for the write. Change-triggered jobs likewise skip such a
-tick.
+log, and waits for event writes in progress rather than return a short
+page. Change-triggered jobs skip a tick instead when a write holds that
+boundary for more than two seconds.
 
 `api.call("connector.scope.v1", "{}")` returns the run's job, blueprint,
 revision, context, channel, connection and mode, or `null` outside connector
@@ -882,7 +881,8 @@ token's SHA-256 is stored. `GET /api/public/extension-files/{token}` serves the 
 session while the link is unexpired, the extension is enabled with all three
 grants it was issued under, and the record the link was issued for still references the file.
 Deleting the record or replacing the file stops the link at once; disabling,
-quarantining or removing the extension revokes its links for good.
+quarantining, upgrading or removing the extension, or revoking one of the
+three grants, revokes its links for good.
 
 ### Credential connections
 
@@ -921,7 +921,10 @@ The host runs the grants itself: `client_credentials` (Shopify), `refresh_token`
 the user code, `.../device-authorization/poll` completes it) and an
 operator's authorization-code exchange (`POST .../authorization-code`
 `{code, redirect_uri, code_verifier?}`, for apps whose redirect URI is not an
-Attricat route; callback ingress is tracked in #279). `client_authentication`
+Attricat route; callback ingress is tracked in #279). Starting device
+authorization again on an active connection keeps it working on its current
+tokens until the new code is approved; an expired or refused code then only
+ends that authorization. `client_authentication`
 selects `client_secret_post` (`body`) or HTTP Basic (`basic`). A token is
 refreshed 60 seconds before it expires (half its lifetime before, for a token
 issued for less than two minutes). One worker claims the refresh and re-checks
@@ -930,7 +933,9 @@ database connection, so a rotating refresh token (Allegro) is never used
 twice. A rejected grant marks the connection `failed` for an
 operator; temporary failures keep it usable. Changing the token URL, scope or
 credentials discards the cached access token, and gives a `failed` connection
-another try. `POST .../test` obtains a token.
+another try. Moving the token or device endpoint to another origin needs the
+client secret entered again and drops the stored tokens, so the connection
+waits for a new authorization unless a refresh token comes with the change. `POST .../test` obtains a token.
 Deleting a connection deletes its credentials but keeps its mappings, so a
 connection re-created under the same name keeps the destination's external IDs.
 

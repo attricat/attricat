@@ -781,7 +781,12 @@ pub(super) async fn resync_connector_job(
                 "filter a resync by record IDs or by status, not both".into(),
             ));
         }
-        (Some(ids), None) => Some(ids),
+        // The run selects each record once, as its idempotency key does.
+        (Some(mut ids), None) => {
+            ids.sort_unstable();
+            ids.dedup();
+            Some(ids)
+        }
         (None, Some(status)) => {
             if !EXPORT_STATUSES.contains(&status.as_str()) {
                 return Err(ApiError::invalid_input("unknown export status".into()));

@@ -1327,6 +1327,19 @@ impl AttricatRepository {
         }
         sqlx::query("DELETE FROM extension_grants WHERE installation_id = $1 AND grant_kind = $2 AND grant_id = $3")
             .bind(current.id).bind(grant_kind).bind(grant_id).execute(&mut *transaction).await?;
+        // Links need every grant they were issued under; once one is
+        // revoked they end, so granting it again never revives them.
+        if grant_kind == GRANT_KIND_CAPABILITY
+            && [
+                "attricat.read",
+                "attricat.files.read",
+                "attricat.files.public_links",
+            ]
+            .contains(&grant_id)
+        {
+            self.revoke_extension_file_links(&mut transaction, &current.extension_id)
+                .await?;
+        }
         self.write_extension_lifecycle(
             &mut transaction,
             &current,

@@ -462,7 +462,7 @@ impl AttricatRepository {
         // events instead of all history since the job's last run.
         // A sweep that finds an event writer at the boundary waits for the
         // next tick rather than for the writer.
-        let Some(high_water) = self.committed_event_high_water().await? else {
+        let Some(high_water) = self.committed_event_high_water(true).await? else {
             return Ok(0);
         };
         sqlx::query(&format!(
