@@ -140,4 +140,16 @@ describe('export status filter', () => {
     expect(parsed.exportStatus).toBeUndefined();
     expect(exportStatusRequest(parsed)).toBeUndefined();
   });
+
+  it('drops a malformed connection from the URL', () => {
+    const parsed = parseExplorerSearch({
+      blueprint: 'product',
+      exportStatus: {
+        extension: 'acme.shop',
+        connection: 'shop eu',
+        status: 'rejected',
+      },
+    });
+    expect(parsed.exportStatus).toBeUndefined();
+  });
 });

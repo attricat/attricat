@@ -711,7 +711,9 @@ same time. A retried delivery or batch takes its own earlier lease back. A
 leased `commit` without `record_revision` is for the leased revision. `commit` records the result and releases the lease; without a lease
 token it fails while another worker holds a live lease, and a result for an
 older revision than the mapping's is refused, so a late push never replaces a
-newer outcome. A refused commit still ends its own lease. A component that
+newer outcome. A rejection recorded without a lease leaves an operator's
+pending retry standing, since its attempt may have begun before the retry, and
+one the mapping already records changes nothing. A refused commit still ends its own lease. A component that
 fails a batch should
 release the leases it holds. Statuses are `pending`, `synced`, `rejected`,
 `retrying`, `uncertain` and `withdrawn`.
@@ -754,8 +756,8 @@ audited. With `run: true` it also starts a [resync](#connector-jobs-for-exports)
 of just those records on each of the extension's export jobs that target the
 connection, so a record is retried without rerunning a whole job. An optional
 `idempotency_key` (1-40 ASCII bytes) makes the request idempotent: sent again
-as it was, it finds the records it retried (named by its retry events)
-without retrying them again, and resyncs them under the same run keys, so a
+as it was (even concurrently), it finds the records it retried without
+retrying them again (keys are remembered for a week), and resyncs them under the same run keys, so a
 job that already started returns its run and one that could not start then
 starts now. The status
 page and the retry name records across the workspace, so besides

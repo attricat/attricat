@@ -30,7 +30,12 @@ export const browseBySchema = z.union([
 /** Records with one export status at one export extension's destination. */
 export const exportStatusFilterSchema = z.object({
   extension: z.string().trim().min(1),
-  connection: z.string().trim().min(1).optional(),
+  // The server's connection key pattern, so a malformed link drops the
+  // filter instead of failing the search.
+  connection: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]{1,128}$/)
+    .optional(),
   status: z.enum(exportStatuses),
 });
 export type ExportStatusFilter = z.infer<typeof exportStatusFilterSchema>;

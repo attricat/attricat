@@ -1173,16 +1173,6 @@ async fn connector_runs_read_resolved_rows_close_out_withdrawals_and_resync(pool
     let first = resync("status:synced").await;
     assert_eq!(resync("status:synced").await, first);
     assert_ne!(resync("status:rejected").await, first);
-    // A retry sent again finds the runs its key started.
-    let started = repository
-        .resync_runs_with_key(job.id, "key", Some("status:synced"))
-        .await
-        .unwrap();
-    assert_eq!(
-        started.iter().map(|(run, _)| *run).collect::<Vec<_>>(),
-        first
-    );
-    assert_eq!(started[0].1, Some(vec![product_ids[1]]));
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -1402,6 +1392,14 @@ async fn export_status_preview_and_retry_are_served_over_http(pool: sqlx::PgPool
     assert_eq!(rejection(None).await, RejectionRecord::Settled);
     // A repeat changes nothing, and an unknown connection cannot be recorded.
     assert_eq!(rejection(None).await, RejectionRecord::Unchanged);
+    // The repeat wrote nothing: still one attempt.
+    let attempts: i32 =
+        sqlx::query_scalar("SELECT attempts FROM extension_export_mappings WHERE record_id=$1")
+            .bind(record)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(attempts, 1);
     assert_eq!(rejection(Some("gone")).await, RejectionRecord::Refused);
     // Retrying needs an extension that keeps export mappings.
     assert!(matches!(

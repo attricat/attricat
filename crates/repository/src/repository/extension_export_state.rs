@@ -317,6 +317,14 @@ impl AttricatRepository {
             .execute(&self.pool).await?.rows_affected())
     }
 
+    /// Forgets keyed retry requests after a week: a client resends a timed
+    /// out request within minutes, not days.
+    pub async fn sweep_export_retry_requests(&self) -> Result<u64, RepositoryError> {
+        Ok(sqlx::query("DELETE FROM extension_export_retry_requests WHERE workspace_id=$1 AND created_at < now() - interval '7 days'")
+            .bind(self.extension_workspace())
+            .execute(&self.pool).await?.rows_affected())
+    }
+
     /// Recent rejected and exhausted deliveries of an extension's handlers.
     pub async fn extension_handler_failures(
         &self,
@@ -707,6 +715,19 @@ impl AttricatRepository {
                 "the mapping already records a newer record revision".into(),
             ));
         }
+        let rejection = matches!(lease, Lease::Rejection(_));
+        // A rejection the unleased mapping already records changes nothing:
+        // a replayed delivery or batch neither counts another attempt nor
+        // moves its settle time.
+        if rejection
+            && !holds_lease
+            && mapping.status == "rejected"
+            && mapping.lease_token.is_none()
+            && mapping.record_revision >= revision
+        {
+            transaction.commit().await?;
+            return Ok((mapping.clone(), mapping));
+        }
         let failed = matches!(
             update.status.as_str(),
             "rejected" | "retrying" | "uncertain"
@@ -720,7 +741,7 @@ impl AttricatRepository {
              error=$12,attempts=CASE WHEN $13 THEN attempts+1 ELSE 0 END,\
              synced_at=CASE WHEN $5='synced' THEN clock_timestamp() ELSE synced_at END,\
              settled_at=CASE WHEN $14 THEN clock_timestamp() ELSE settled_at END,\
-             retry_requested_at=CASE WHEN $14 AND (leased_at IS NULL OR retry_requested_at <= leased_at) THEN NULL ELSE retry_requested_at END,\
+             retry_requested_at=CASE WHEN $15 AND (leased_at IS NULL OR retry_requested_at <= leased_at) THEN NULL ELSE retry_requested_at END,\
              lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() \
              WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 \
              RETURNING {MAPPING_FIELDS}",
@@ -740,6 +761,9 @@ impl AttricatRepository {
         .bind(if update.status == "synced" { None } else { update.error.clone() })
         .bind(failed)
         .bind(settled)
+        // An unleased rejection may concern an attempt begun before an
+        // operator's retry, so it leaves that retry standing.
+        .bind(settled && (holds_lease || !rejection))
         .fetch_one(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -971,16 +995,6 @@ impl AttricatRepository {
         if selection.record_ids.is_none() && selection.status.is_none() {
             return Err(invalid("a retry needs record IDs or a status"));
         }
-        // A request recorded before returns its records unchanged; they are
-        // the records its retry events name.
-        if let Some(key) = &selection.request_key {
-            let recorded: Vec<Uuid> = sqlx::query_scalar("SELECT DISTINCT aggregate_id FROM domain_events WHERE workspace_id=$1 AND event_type=$2 AND payload->>'extension_id'=$3 AND payload->>'request_key'=$4 ORDER BY aggregate_id")
-                .bind(self.extension_workspace()).bind(EXPORT_RETRY_REQUESTED_V1).bind(extension_id).bind(key)
-                .fetch_all(&self.pool).await?;
-            if !recorded.is_empty() {
-                return Ok(recorded);
-            }
-        }
         let mut transaction = self.pool.begin().await?;
         // Only an installed extension granted export mappings has mappings
         // to retry; any other would get rows nothing ever settles.
@@ -997,6 +1011,20 @@ impl AttricatRepository {
             .fetch_one(&mut *transaction).await?;
         if !enabled {
             return Err(invalid("enable the extension before retrying its exports"));
+        }
+        // A keyed request claims its key in this transaction. One sent
+        // before, even concurrently, holds it: the records it retried are
+        // returned and nothing is retried twice.
+        if let Some(key) = &selection.request_key {
+            let claimed = sqlx::query("INSERT INTO extension_export_retry_requests(workspace_id,extension_id,request_key) VALUES($1,$2,$3) ON CONFLICT DO NOTHING")
+                .bind(self.extension_workspace()).bind(extension_id).bind(key)
+                .execute(&mut *transaction).await?.rows_affected() == 1;
+            if !claimed {
+                let recorded: Vec<Uuid> = sqlx::query_scalar("SELECT record_ids FROM extension_export_retry_requests WHERE workspace_id=$1 AND extension_id=$2 AND request_key=$3")
+                    .bind(self.extension_workspace()).bind(extension_id).bind(key)
+                    .fetch_one(&mut *transaction).await?;
+                return Ok(recorded);
+            }
         }
         // Records chosen by ID may never have been exported; give them a
         // pending mapping so the retry selects and pushes them too.
@@ -1050,12 +1078,16 @@ impl AttricatRepository {
                         "record_id": record_id,
                         "extension_id": extension_id,
                         "connection": selection.connection,
-                        "request_key": selection.request_key,
                     }),
                 )
             })
             .collect();
         self.enqueue_events(&mut transaction, events).await?;
+        if let Some(key) = &selection.request_key {
+            sqlx::query("UPDATE extension_export_retry_requests SET record_ids=$4 WHERE workspace_id=$1 AND extension_id=$2 AND request_key=$3")
+                .bind(self.extension_workspace()).bind(extension_id).bind(key).bind(&ids)
+                .execute(&mut *transaction).await?;
+        }
         self.write_audit_event(&mut transaction).await?;
         transaction.commit().await?;
         Ok(ids)

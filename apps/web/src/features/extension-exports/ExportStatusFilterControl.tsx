@@ -41,7 +41,10 @@ export const ExportStatusFilterControl = ({
     extensionId;
   if (value) {
     const label = t('extensionExports.filterChip', {
-      destination: destinationTitle(value.extension),
+      // The connection tells apart filters on one extension's accounts.
+      destination: value.connection
+        ? `${destinationTitle(value.extension)} · ${value.connection}`
+        : destinationTitle(value.extension),
       status: t(`extensionExports.status.${value.status}`),
     });
     return (

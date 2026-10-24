@@ -309,23 +309,6 @@ impl AttricatRepository {
             .await
     }
 
-    /// The runs, with their selected records, that a resync of job `id`
-    /// with `key` and `selection` already started.
-    pub async fn resync_runs_with_key(
-        &self,
-        id: Uuid,
-        key: &str,
-        selection: Option<&str>,
-    ) -> Result<Vec<(Uuid, Option<Vec<Uuid>>)>, RepositoryError> {
-        let key = resync_key(key, selection)?
-            .replace('\\', "\\\\")
-            .replace('%', "\\%")
-            .replace('_', "\\_");
-        Ok(sqlx::query_as("SELECT id,connector_record_ids FROM extension_operation_runs WHERE workspace_id=$1 AND connector_job_id=$2 AND idempotency_key LIKE $3 ORDER BY created_at,id")
-            .bind(self.extension_workspace()).bind(id).bind(format!("resync:{id}:{key}:%"))
-            .fetch_all(&self.pool).await?)
-    }
-
     async fn run_blueprint_connector_job_as(
         &self,
         id: Uuid,
