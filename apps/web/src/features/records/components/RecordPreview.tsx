@@ -42,6 +42,8 @@ import { useRecordContextSelection } from '../useRecordContexts';
 import { useRecordPreviewData } from '../useRecordPreviewData';
 import { RecordFindingsPanel } from '../../rules/RecordFindingsPanel';
 import { DataQualityFindingsChip } from './DataQualityFindingsChip';
+import { RecordExportStatusChip } from '../../extension-exports/RecordExportStatusChip';
+import { RecordExportStatusPanel } from '../../extension-exports/RecordExportStatusPanel';
 import { DeleteRecordDialog } from './DeleteRecordDialog';
 import { DuplicateRecordDialog } from './DuplicateRecordDialog';
 import { RecordAgentDrawer } from './RecordAgentDrawer';
@@ -209,6 +211,13 @@ export const RecordPreview = ({
               recordId={recordId}
               onOpen={() => {
                 setTab(recordPreviewTabs.dataQuality);
+                setTabReveal((count) => count + 1);
+              }}
+            />
+            <RecordExportStatusChip
+              recordId={recordId}
+              onOpen={() => {
+                setTab(recordPreviewTabs.exports);
                 setTabReveal((count) => count + 1);
               }}
             />
@@ -420,6 +429,11 @@ export const RecordPreview = ({
                         recordId={recordId}
                       />
                     ),
+                  },
+                  {
+                    key: recordPreviewTabs.exports,
+                    label: t('extensionExports.recordTab'),
+                    content: <RecordExportStatusPanel recordId={recordId} />,
                   },
                 ]}
                 value={tab}

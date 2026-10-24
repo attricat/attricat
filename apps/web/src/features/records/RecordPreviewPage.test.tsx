@@ -70,6 +70,11 @@ vi.mock('../rules/api', async (importOriginal) => ({
   listUnresolvedRecordFindings: vi.fn(),
 }));
 
+vi.mock('../extension-exports/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../extension-exports/api')>()),
+  recordExportStatus: vi.fn(async () => ({ statuses: [], destinations: [] })),
+}));
+
 vi.mock('../record-comments/RecordCommentsPanel', () => ({
   RecordCommentsPanel: () => <section aria-label="Comments" />,
 }));
@@ -425,7 +430,7 @@ describe('RecordPreviewPage', () => {
     );
   });
 
-  it('shows data quality, comments and record control in tabs, one at a time', async () => {
+  it('shows data quality, comments, record control and exports in tabs, one at a time', async () => {
     const user = userEvent.setup();
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
@@ -480,6 +485,7 @@ describe('RecordPreviewPage', () => {
       'Data quality',
       'Comments',
       'Record control',
+      'Exports',
     ]);
     expect(
       (await screen.findByRole('tabpanel', { name: 'Data quality' }))

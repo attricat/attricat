@@ -84,6 +84,12 @@ pub enum TaskOutcome {
     },
     /// The handler atomically dead-lettered its domain row and envelope.
     DeadLettered,
+    /// The handler settled its domain row and envelope itself without
+    /// dead-lettering them, for example by scheduling a retry; `outcome`
+    /// labels the task metric (`retry` or `rescheduled`).
+    Settled {
+        outcome: &'static str,
+    },
 }
 
 #[derive(Debug)]
@@ -379,6 +385,7 @@ async fn execute(repository: SystemRepository, handler: Arc<dyn TaskHandler>, ta
             .await
             .map(|_| "rescheduled"),
         Ok(TaskOutcome::DeadLettered) => Ok("dead_letter"),
+        Ok(TaskOutcome::Settled { outcome }) => Ok(outcome),
         Err(error) => {
             let (code, message) = bounded_error(error.code, &error.message);
             tracing::error!(task_id = %task.id, kind = %kind, %code, %message, "task handler failed");

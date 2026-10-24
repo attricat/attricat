@@ -11,11 +11,20 @@ Rozszerzenie to archiwum `.tar.zst` z plikiem `manifest.json` w katalogu główn
 
 Rozszerzenie referencyjne `attricat-extension-example` pokazuje, jak wszystkie te elementy działają razem: oblicza numeryczne atrybuty z formuł i ma stronę warsztatu, akcję rekordu, komórkę tabeli oraz serwerową obsługę zdarzeń.
 
+## Od czego zacząć
+
+| Chcesz | Przeczytaj |
+| --- | --- |
+| Pokazać coś na stronie rekordu lub w przeglądarce rekordów | [Minimalny manifest](#minimalny-manifest), a potem [Kontrybucje klienckie](/pl/extensions/client/) |
+| Reagować na zmiany w katalogu albo obsłużyć swój interfejs logiką serwerową | [Zbuduj komponent serwerowy](#zbuduj-komponent-serwerowy), a potem [Środowisko wykonawcze serwera](/pl/extensions/server/) |
+| Importować lub eksportować pliki albo przetwarzać zaznaczone rekordy | [Operacje](/pl/extensions/operations/) |
+| Synchronizować katalog z marketplace'em lub sklepem internetowym | [Konektory eksportu](/pl/extensions/exports/) |
+
 ## Model bezpieczeństwa
 
 Kod rozszerzenia nigdy nie działa we własnym procesie ani na stronie Attricat.
 
-- Komponenty serwerowe działają w piaskownicy WebAssembly bez systemu plików, środowiska, zegara i gniazd. Wszystko, co robią, przechodzi przez wywołania hosta, a każde wywołanie jest sprawdzane pod kątem uprawnień przyznanych przez administratora.
+- Komponenty serwerowe działają w piaskownicy WebAssembly bez systemu plików, środowiska, gniazd i zegara systemowego. Wszystko, co robią, przechodzi przez wywołania hosta, a każde wywołanie jest sprawdzane pod kątem uprawnień przyznanych przez administratora.
 - Komponenty klienckie działają w ramkach `<iframe sandbox="allow-scripts">` z nieprzezroczystym pochodzeniem (opaque origin) i zasadami Content Security Policy blokującymi dostęp do sieci. Komunikują się z Attricat przez kanał wiadomości, który udostępnia tylko przyznane im operacje.
 - Zmiany w katalogu wprowadzone przez rozszerzenie przechodzą przez tę samą walidację, dziennik audytu i strumień zdarzeń co edycje wykonane przez osobę.
 
@@ -73,6 +82,53 @@ Trzy numery wersji są od siebie niezależne:
 
 Attricat nigdy nie instaluje wydania, którego zakres `host_api` nie obejmuje działającej wersji API hosta.
 
+## Zbuduj komponent serwerowy
+
+Artefakt serwerowy to komponent WebAssembly, który importuje wyłącznie interfejsy `attricat:host`. Nadaje się każdy język, który potrafi tworzyć komponenty; poniższe przykłady używają Rusta i [`wit-bindgen`](https://github.com/bytecodealliance/wit-bindgen).
+
+1. Skopiuj plik `crates/extension-runtime/wit-host/attricat-extension.wit` z repozytorium Attricat do katalogu `wit/` swojego pakietu.
+2. Wygeneruj powiązania dla [świata](/pl/extensions/server/#wersja-api-hosta) i zaimplementuj jego eksporty:
+
+   ```rust
+   // Cargo.toml: crate-type = ["cdylib"]; zależności wit-bindgen, serde_json
+   wit_bindgen::generate!({ path: "wit", world: "handler-extension" });
+
+   use attricat::host::api::{self, Event};
+   use exports::attricat::host::handler::{CommandRequest, CommandResponse, Guest};
+
+   struct Extension;
+
+   impl Guest for Extension {
+       fn handle_event(event: Event) -> Result<(), String> {
+           if event.event_type != "record.updated.v1" {
+               return Ok(());
+           }
+           // Wymaga logging.write. Ignoruj nieudany wpis: błąd tutaj objąłby rozszerzenie kwarantanną.
+           let _ = api::log("info", &format!("record changed: {}", event.aggregate_id));
+           Ok(())
+       }
+
+       fn handle_command(request: CommandRequest) -> Result<CommandResponse, String> {
+           match request.handler.as_str() {
+               "ping" => Ok(CommandResponse { payload: r#"{"ok":true}"#.into() }),
+               other => Err(format!("unknown command {other}")),
+           }
+       }
+   }
+
+   export!(Extension);
+   ```
+
+3. Zbuduj moduł dla `wasm32-unknown-unknown` i opakuj go jako komponent:
+
+   ```sh
+   cargo build --release --target wasm32-unknown-unknown
+   wasm-tools component new target/wasm32-unknown-unknown/release/acme_inventory.wasm \
+     -o dist/server.wasm
+   ```
+
+Nie buduj dla `wasm32-wasip1` ani `wasm32-wasip2`: te cele importują interfejsy WASI, których Attricat nigdy nie udostępnia, więc nie da się utworzyć instancji komponentu. Aby to sprawdzić, uruchom `wasm-tools component wit dist/server.wasm`. Każdy wymieniony `import` powinien być interfejsem `attricat:host/…`.
+
 ## Spakuj
 
 Zbuduj artefakty, a następnie utwórz archiwum tar skompresowane zstd, którego katalog główny zawiera `manifest.json`, każdą zadeklarowaną ścieżkę artefaktu i ikony:
@@ -102,9 +158,18 @@ Każde przesłanie to nowe wydanie, więc po każdym trzeba ponownie przyznać u
 Sprawdź, czy Twój kod obsługuje:
 
 - **Zduplikowane zdarzenia i zdarzenia w innej kolejności.** Dostarczanie odbywa się co najmniej raz. Używaj identyfikatora zdarzenia jako klucza idempotencji.
-- **Własne zdarzenia.** Zapis wykonany przez Twoją obsługę zdarzeń tworzy nowe zdarzenie. Ignoruj zdarzenia, których źródłem jest Twoje rozszerzenie, inaczej powstanie pętla.
+- **Własne zdarzenia.** Zapis wykonany przez Twoją obsługę zdarzeń tworzy nowe zdarzenie, które ta obsługa również otrzyma. W `event-handler` z wersji 1.1 pomijaj dostarczenia, których `source-name` to `extension:<identyfikator-twojego-rozszerzenia>`. `handler` z wersji 1.0 nie widzi źródła, więc niech jego zapisy prowadzą do stanu stałego: odczytaj bieżącą wartość i zapisuj tylko wtedy, gdy jest inna. W przeciwnym razie procedura obsługi będzie wyzwalać samą siebie bez końca.
+- **Błędy powodujące kwarantannę.** W eksporcie `handler` z wersji 1.0 każdy błąd zwrócony z `handle-event` obejmuje instalację kwarantanną. Dla błędnych danych, których ponowienie nie naprawi, zwracaj `Ok` i zapisz problem w magazynie lub dzienniku. W API hosta 1.1 zgłoś go jako [typowany wynik](/pl/extensions/server/#typowane-wyniki).
 - **Brakujące uprawnienia.** Uprawnienia opcjonalne mogą nie zostać przyznane; zadbaj o łagodną degradację.
 - **Tryb jasny i ciemny.** W komponentach klienckich odczytuj `attricat.theme`.
+
+### Debugowanie
+
+- `api.log(level, message)` z `logging.write` zapisuje wpis w dzienniku serwera Attricat, oznaczony identyfikatorem rozszerzenia. Poziomy to `trace`, `debug`, `info`, `warn` i `error`. Wpisy są ograniczone do 16 KiB.
+- Każde wywołanie hosta zwraca `Err(message)`, gdy zostanie odrzucone, np. `missing capability 'storage.extension'`. Przekazuj te komunikaty do swoich dzienników; wskazują brakujące uprawnienie.
+- Instalacja objęta kwarantanną pokazuje swój stan na swojej stronie w **Zarządzanie → Rozszerzenia**. Usuń przyczynę, w razie błędu w kodzie przesyłając poprawione wydanie, i włącz rozszerzenie ponownie.
+- Dla operacji `acli extension-operation show <run-id>` pokazuje stan, postęp i błąd przebiegu.
+- W ramce klienckiej narzędzia deweloperskie przeglądarki pokazują wyjście konsoli i błędy. Wybierz ramkę rozszerzenia w menu kontekstu konsoli.
 
 ## Opublikuj
 

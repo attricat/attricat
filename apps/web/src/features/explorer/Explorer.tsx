@@ -209,6 +209,8 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
               onRemove={actions.removeAttributeFilter}
               onUpdate={actions.updateAttributeFilter}
               onUpdateFacet={actions.updateFacet}
+              exportStatus={search.exportStatus}
+              onExportStatusChange={actions.setExportStatus}
               pathAttributes={selectedBlueprint.data?.table_path_attributes}
               relationshipAttributes={relationshipFields}
             />

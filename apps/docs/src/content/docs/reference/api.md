@@ -17,7 +17,7 @@ API routes are served below `/api`, for example `GET https://attricat.example.co
 
 Clients never send a workspace ID; it always comes from the token or session.
 
-Public routes that need no credentials: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, and `POST /onboarding/complete`.
+Public routes that need no credentials: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, and `GET /public/extension-files/{token}`, where the token in the link is the credential.
 
 ## Conventions
 
@@ -108,6 +108,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `GET` | `/blueprints/{id}/migration-batches` | Background migration batches. |
 | `GET` | `/blueprints/{id}/connector-jobs` | Connector jobs. |
 | `POST` | `/blueprint-connector-jobs/{id}/run` | Run a connector job, with `{"idempotency_key": "…"}`. |
+| `POST` | `/blueprint-connector-jobs/{id}/resync` | Export again every published record of an export job: `{"idempotency_key": "…"}`, plus either `record_ids` (only those records) or `status` (only records with that export status on the job's connection; more than 10,000 such records is a `422`, so resync the whole job instead). Returns `{"run_ids": [...]}`. |
 | `GET`, `POST` | `/reusable-attributes`; `POST /reusable-attributes/{id}/versions`; `POST /reusable-attribute-revisions/{id}/publish`; `GET`, `POST /reusable-attribute-groups` | Reusable attributes. |
 | `POST` | `/reusable-attributes/validate`, `/reusable-attributes/{id}/versions/validate` | Run every check that creating the reusable attribute, or its next revision, would run, without storing it. |
 
@@ -139,6 +140,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `POST` | `/v1/records/{id}/reusable-attributes`, `/v1/records/{id}/reusable-attribute-groups/{group_id}` | Attach a reusable attribute or group. |
 | `GET` | `/v1/records/{id}/status-transitions?context_id=…` | Declared transitions from the saved status in one context (default context if omitted): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, unmet}]}`. `denial_code` is `status_transition_forbidden`, `status_separation_of_duties` or `transition_conditions_unmet`; `unmet` lists unmet conditions and enforcing rules as violations. |
 | `GET` | `/v1/records/{id}/approvals` | Approvals recorded by status transitions, newest first and 20 per page, with who approved, when, a digest of the covered content, and why an approval was voided. Returns `{"items","has_more"}`; continue with `before_time` (the last item's `approved_at`) and `before_id`. |
+| `GET` | `/v1/records/{id}/export-status` | The record's export status at every export extension (`statuses`: connection, status, external ID, error, last sync) and the enabled export destinations (`destinations`). |
 | `GET` | `/v1/records/{id}/retention-holds` | Retention holds on the record's files, newest first and 20 per page. Returns `{"items","has_more"}`; continue with `before_time` (the last item's `created_at`) and `before_id`. |
 
 ### Batch changes
@@ -197,6 +199,7 @@ POST /api/v1/records/search
     "selected_target_ids": ["e8b7a8d3-c954-4c0f-b658-0f686ba466a3"]
   }],
   "system_tags": ["needs-review"],
+  "export_status": { "extension_id": "acme.shopify", "connection": "shop-eu", "status": "rejected" },
   "context_code": "PL",
   "sort": { "field": "title", "direction": "asc" },
   "page": { "size": 50, "cursor": null }
@@ -207,6 +210,7 @@ POST /api/v1/records/search
 - `query` uses the [search syntax](/guides/search-syntax/).
 - `source_relationship_field` can be a relationship path of up to three hops, such as `model.brand`. Each hop needs a single target blueprint and `cardinality = "one"`, and resolves in the facet's context with its own context fallback. The children endpoint accepts the same paths.
 - A `relationship_tree_facets` item without `source_relationship_field` filters the searched blueprint by its own `hierarchy_field`: a record matches when it is a selected node or one of its descendants. The children endpoint accepts the same omission to list the blueprint's own tree, counting each node and everything below it.
+- `export_status` keeps records with that export status at one extension's connection, or its default destination when `connection` is omitted. `status` is `pending`, `synced`, `rejected`, `retrying`, `uncertain`, or `withdrawn`. It combines with the other filters like any of them, with no limit on how many records have the status.
 - Filter operators are `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt`, and `lte`. `field` can be a relationship path of up to three hops.
 - `context_code` (default `default`) is the context in which filters, sorting, and `table_values` are resolved, inheriting from parent contexts per attribute. `query` matches values in every context.
 - `sort.field` must be a scalar column in the blueprint's table view, `blueprint_version`, or `publication_status` (with `sort.context_code` naming a channel).
@@ -372,6 +376,17 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/extension-operation-runs[/{id}]`, `…/artifacts`, `…/deliveries` | Runs, outputs, deliveries. |
 | `GET` | `/extension-operation-runs/{id}/artifacts/{artifact_id}/download` | Download an output. |
 | `POST`, `GET`, `PATCH` | `/extensions/{id}/operation-schedules`, `/extension-operation-schedules[/{id}]` | Schedules. |
+| `GET` | `/extensions/{id}/export-status` | Status counts per connection and status, a page of export mappings (`?connection=&status=&after=&limit=`, up to 100, continue with `next`), and the 20 most recent rejected or exhausted event deliveries (`handler_failures`); counts and failures come only with the first page. It names records across the workspace, so it also needs a workspace-wide `records.read` grant. |
+| `POST` | `/extensions/{id}/export-status/retry` | `{"connection"?, "record_ids"?, "status"?, "run"?, "idempotency_key"?}`, with record IDs, a status, or both: set up to 1,000 matching records back to `pending` (records chosen by ID alone that were never exported start as `pending` when one of the extension's export jobs covers their blueprint and connection, or the extension handles retry requests itself; deleted records and withdrawn mappings are never selected, and `"status": "withdrawn"` is refused: publish the record again instead) and send the extension `export.retry_requested.v1` for each. With `"run": true`, also resync just those records on the extension's export jobs for that connection; with `idempotency_key` (1–40 ASCII bytes) the same request sent again retries nothing twice: it finds the records it retried and the runs it started, and starts a run only for a job that could not start before. Returns `202` with `{"record_ids", "run_ids", "job_errors"}`; a job that cannot resync is listed in `job_errors` and does not fail the retry. Needs a workspace-wide `records.read` grant too; an extension that is not installed with `exports.mappings` is a `404`, and a disabled one a `422`. |
+| `POST` | `/extensions/{id}/exports/{export_id}/preview` | `{"record_id", "connection"?}`: the payload the destination's preview command builds for one record, conventionally `{"payload", "issues"}`. Nothing is pushed. Needs `records.write`, like other extension commands, and `records.read` across the whole workspace; `connection` must be a connection of the export's kind. |
+| `GET`, `POST` | `/extensions/{id}/connections` | List connections, or create one: `{"connection", "kind", "display_name", "grant_type", "token_url", "device_authorization_url"?, "client_id", "scope"?, "parameters"?, "client_secret"?, "refresh_token"?}`. Responses never contain secrets or tokens, only whether they are stored. |
+| `PATCH`, `DELETE` | `/extensions/{id}/connections/{connection}` | Change `display_name`, `token_url`, `device_authorization_url`, `scope` (an empty string clears it), or `parameters`, or replace `client_secret` or `refresh_token`; or delete the connection with its credentials. Moving `token_url` or `device_authorization_url` to another host needs `client_secret` again and drops the stored tokens, so the connection waits for authorization unless a `refresh_token` is sent too. Its export mappings stay, so a connection re-created under the same name keeps the destination's external IDs. |
+| `POST` | `/extensions/{id}/connections/{connection}/device-authorization`, `…/device-authorization/poll` | Start the device authorization grant (the response holds the user code and verification URL), then complete it once the user has approved. An active connection keeps working while a new authorization is pending. |
+| `POST` | `/extensions/{id}/connections/{connection}/authorization-code` | Exchange an authorization code: `{"code", "redirect_uri", "code_verifier"?}`. |
+| `POST` | `/extensions/{id}/connections/{connection}/test` | Get an access token to check the connection. |
+| `GET` | `/extensions/{id}/host-permission-budgets` | Each host permission's declared and lowered request budget. |
+| `PUT`, `DELETE` | `/extensions/{id}/host-permission-budgets/{host_permission_id}` | Lower a declared budget with `{"requests", "per_seconds"}`, never above the declared rate, or reset it. |
+| `GET` | `/public/extension-files/{token}` | A file behind a public link an extension issued. No credentials; it works while the link is unexpired and the extension is enabled with `attricat.files.public_links` and `attricat.files.read`. |
 
 ### Solution packs
 
@@ -392,6 +407,7 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/health/live`, `/health/ready` | Probes. |
 | `GET` | `/system/health` | Running API version, source branch, and commit (`data_health.read`). |
 | `GET` | `/metrics` | Prometheus metrics. |
+| `GET` | `/export-status` | Export status counts per extension, connection, and status, with the enabled export destinations (`data_health.read`). |
 | `GET` | `/data-health/summary`, `/blueprints`, `/freshness`, `/completeness`, `/contexts`, `/relationships`, `/storage`, `/background-processing` | Data health. |
 | `POST` | `/data-health/refresh` | Clear the data-health cache. |
 | `GET` | `/event-deliveries/dead-letters` | Failed event deliveries. |

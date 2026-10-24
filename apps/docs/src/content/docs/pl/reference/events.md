@@ -7,8 +7,6 @@ Każda zmiana w katalogu zapisuje zdarzenie w tej samej transakcji bazy danych c
 
 Zdarzenia napędzają [przepływy pracy](/pl/builders/workflows/), [reguły](/pl/builders/rules/) i [procedury obsługi zdarzeń w rozszerzeniach](/pl/extensions/server/#obsługuj-zdarzenia-katalogu). Nie są udostępniane jako publiczny strumień.
 
-`record.updated.v1`.
-
 ## Typy zdarzeń
 
 | Typ | Rejestrowane, gdy |
@@ -26,8 +24,9 @@ Zdarzenia napędzają [przepływy pracy](/pl/builders/workflows/), [reguły](/pl
 | `blueprint.revision_created.v1` | Powstaje szkic nowej wersji schematu. |
 | `blueprint.published.v1` | Wersja schematu zostaje opublikowana. |
 | `context.created.v1`, `context.updated.v1`, `context.deleted.v1` | Kontekst się zmienia. |
+| `export.retry_requested.v1` | Operator prosi rozszerzenie eksportujące o ponowne wysłanie rekordu. |
 
-Rozszerzenia publikują własne typy o nazwach `plugin.<extension-id>.<name>.vN`. Przestrzenie nazw `record`, `attribute_value`, `relationship`, `blueprint` i `context` są zarezerwowane.
+Rozszerzenia publikują własne typy o nazwach `plugin.<extension-id>.<name>.vN`. Przestrzenie nazw `record`, `attribute_value`, `relationship`, `blueprint`, `context` i `export` są zarezerwowane.
 
 Przyrostek wersji nigdy nie zmienia znaczenia. Niezgodny ładunek otrzymuje nowy typ `.vN`, a konsumenci subskrybują dokładnie te wersje, które rozumieją.
 
@@ -78,6 +77,16 @@ Aby działać na bieżącym stanie rekordu, odczytaj go; ładunek jest wyłączn
 - **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików trafia do dziennika audytu, ale nie tworzy zdarzenia ani faktu.
 - Zmiany tagów i metadanych systemowych nie są wartościami atrybutów i nie dodają faktów.
 - **Migracje:** `record.migrated.v1` nie zawiera `facts`. Jego ładunek wskazuje rekord, jego schemat, `source_version`, `target_version` i `migration_id`. Jeśli migracja usunęła relację lub zmieniła jej cele, `released_relationships` wymienia cele, których rekord już nie wskazuje, jako `attribute_code` i `target_record_ids` (najwyżej 100 na relację i 1000 na zdarzenie).
+
+## Prośby o ponowienie eksportu
+
+`export.retry_requested.v1` jest zapisywane raz dla każdego rekordu, gdy ktoś [ponawia eksport](/pl/builders/extensions/#stan-eksportu). Jego agregatem jest rekord, a ładunek wygląda tak:
+
+```json
+{ "record_id": "7f1c…", "extension_id": "acme.shopify", "connection": "shop-eu" }
+```
+
+`connection` ma wartość `null` dla domyślnego miejsca docelowego rozszerzenia. Zdarzenie otrzymuje tylko rozszerzenie wskazane w `extension_id` i tylko wtedy, gdy któraś z jego procedur obsługi subskrybuje ten typ.
 
 ## Gwarancje dostarczania
 

@@ -115,6 +115,21 @@ When the blueprint has a newer published revision, a warning icon next to the bl
 
 If your workspace uses publication channels, the record page shows its status per channel and **Publish** / **Unpublish** actions. See [Publishing](/guides/publishing/).
 
+## Exports
+
+If an extension exports records to a marketplace or storefront, the record's **Exports** tab shows, for each destination, the export status, the record's ID at the destination, the destination's error message, and when it was last synced. A warning chip in the record header opens the tab when an export was rejected, is uncertain, or is retrying.
+
+| Status | Meaning |
+| --- | --- |
+| Pending | Waiting to be exported. |
+| Synced | The destination has the record's current content. |
+| Rejected | The destination refused the record. The error says why. After you fix the record, the next export tries it again. |
+| Retrying | A temporary failure; the extension tries again. |
+| Uncertain | The destination may or may not have received the last push. The extension checks before pushing again. |
+| Withdrawn | The record was removed from the destination after it was unpublished or deleted. |
+
+**Preview** shows the payload the extension would send for the record, and what the destination would reject, without sending anything. **Retry** asks the extension to export the record again; it needs the `extensions.manage` permission.
+
 ## Ask an agent
 
 **Ask about this record** starts an [agent conversation](/guides/agents/) about the record you are looking at.

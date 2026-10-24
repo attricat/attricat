@@ -32,6 +32,7 @@ import {
   relationshipFiltersFromSearch,
   relationshipTreeFacetsRequest,
   relationshipTreeSelectionsFromSearch,
+  exportStatusRequest,
   requestSort,
 } from './explorerSearchState';
 import { isRelationshipPath } from './explorerTableColumns';
@@ -158,6 +159,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
         signal,
         sort,
         version: effectiveVersion,
+        exportStatus: exportStatusRequest(search),
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,

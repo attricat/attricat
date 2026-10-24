@@ -166,6 +166,10 @@ pub struct Record {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
+    /// The sequence of the latest event that changed what the record exports.
+    /// Present only where a read selects it (extension reads and pages).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_revision: Option<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -513,6 +517,10 @@ pub struct SearchRecordsRequest {
     /// All requested tags must be present. System tags are outside blueprint data.
     #[serde(default)]
     pub system_tags: Vec<String>,
+    /// Restrict results to records with this export status at one export
+    /// extension's destination.
+    #[serde(default)]
+    pub export_status: Option<ExportStatusFilter>,
     /// Restrict results to records pinned to an older published blueprint revision.
     #[serde(default)]
     pub outdated: bool,
@@ -542,6 +550,17 @@ pub struct SearchRecordsRequest {
 
 fn default_true() -> bool {
     true
+}
+
+/// Records whose export to `extension_id` (and `connection`, or its default
+/// destination) has `status`.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExportStatusFilter {
+    pub extension_id: String,
+    #[serde(default)]
+    pub connection: Option<String>,
+    pub status: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]

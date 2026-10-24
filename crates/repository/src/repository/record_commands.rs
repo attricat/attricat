@@ -716,6 +716,25 @@ impl AttricatRepository {
         .into_domain())
     }
 
+    /// [`Self::get_record`] with its content revision, for extension reads
+    /// that compare it with the export mapping store.
+    pub async fn get_record_with_revision(
+        &self,
+        record_id: Uuid,
+    ) -> Result<Option<Record>, RepositoryError> {
+        Ok(sqlx::query_as::<_, Db<Record>>(&format!(
+            r#"SELECT r.id, r.blueprint_id, r.blueprint_version, r.projections, r.system_tags, r.system_metadata, ('attricat.sample'=ANY(r.system_tags)) AS is_sample, r.created_at, r.updated_at, r.deleted_at, {} AS content_revision
+               FROM records r
+               WHERE r.id = $1 AND r.workspace_id = $2 AND r.deleted_at IS NULL"#,
+            super::extension_attricat_data::content_revision_sql("r", None, None)
+        ))
+        .bind(record_id)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&self.pool)
+        .await?
+        .into_domain())
+    }
+
     /// Whether a live record exists, without loading its projections.
     pub async fn record_exists(&self, record_id: Uuid) -> Result<bool, RepositoryError> {
         Ok(sqlx::query_scalar(

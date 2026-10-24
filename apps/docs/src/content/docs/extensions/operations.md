@@ -21,7 +21,32 @@ An **operation** is long-running server work, such as exporting 200,000 products
 }
 ```
 
-The component implements `prepare`, `start`, `process-batch`, `checkpoint`, `finish`, and `cancel`. Each call receives the run ID, the configuration snapshot, the validated input, the last checkpoint, and a **batch key**.
+The component implements `prepare`, `start`, `process-batch`, `checkpoint`, `finish`, and `cancel`. Each call receives an `operation-request` with the run ID, the operation's `handler` as `operation-id`, the configuration snapshot, the validated input, the last checkpoint, and a **batch key**. The configuration, input, and checkpoint are JSON strings.
+
+Attricat runs one batch at a time:
+
+1. On the first batch, it calls `prepare`, then `start`. If the worker stops before the first batch completes, they are called again, so keep them free of side effects you cannot repeat.
+2. It calls `process-batch`. Do a bounded amount of work and return `{checkpoint, progress, done}`. `checkpoint` and `progress` must be JSON objects; the checkpoint is at most 64 KiB, so store cursors and counters in it, not data.
+3. It saves the checkpoint and calls `checkpoint` with it.
+4. When `done` is true, it calls `finish`. Otherwise the next batch gets the saved checkpoint and a new batch key.
+
+The checkpoint starts as `{}`. When someone cancels a running operation, the next batch calls `cancel` instead of `process-batch`, and the run ends.
+
+## Defer and fail batches (1.1)
+
+A component built for the `outcome-extension` [world](/extensions/server/#host-api-version) exports `deferrable-operations` instead of `operations`. Its `process-batch` returns `result<batch-outcome, failure>`.
+
+`batch-outcome` adds `resume-after-ms` to the 1.0 result. Attricat saves the checkpoint, releases the run, and queues it again after the delay (at most 24 hours) instead of at once. Use it to wait for a destination to process a feed, to poll a long-running job, or to back off after throttling. The run list shows `resume_at` while the run waits.
+
+`failure` is one of:
+
+- `rejected { code, message, record-id?, connection? }`: when it names a record and the extension has `exports.mappings`, the record's export status becomes `rejected` and the batch runs again a second later. The mapping now reads as settled, so the component moves past the record and the rest of the run continues. Each newly rejected record is progress, so a batch may reject any number of records; repeating a rejection, or rejecting a record another worker holds, counts like a retry delay, at most 100 times in a row. A record another worker holds is replayed once that worker's lease ends. A rejection that cannot be recorded, for example for an unknown connection or a record outside the run, and any other rejection make the run a dead letter with code `rejected`, without retries.
+- `retry { message, after-ms? }`: the batch runs again with the same batch key after the delay. With `after-ms` it waits without spending the run's failure budget, up to 100 times in a row before a batch completes; past that, and without `after-ms`, each retry counts against the budget.
+- `fault(message)`: the run fails and the installation is quarantined.
+
+Traps, fuel or memory exhaustion, timeouts, and invalid batch results are faults too. An error returned by `prepare`, `start`, `checkpoint`, `finish`, or `cancel` fails the run without quarantining the installation.
+
+A run whose release is disabled, quarantined, or loses a grant during a batch pauses instead of failing.
 
 ## How runs are durable
 
@@ -30,7 +55,7 @@ The component implements `prepare`, `start`, `process-batch`, `checkpoint`, `fin
 - After each batch, the checkpoint is saved. The batch key changes only once the checkpoint is saved.
 - If a worker crashes before the checkpoint, the batch runs again with the **same batch key**. If your component writes to the catalog or an external system, make those writes idempotent on the batch key.
 - Cancelling a queued run ends it immediately. Cancelling a running one asks the component to stop at the next batch.
-- A run that keeps failing becomes a dead letter. An operator can replay it.
+- A run that keeps failing becomes a dead letter, and records it leased but did not settle become `retrying` with an error. An operator can replay it; the replayed run starts with a fresh failure budget and 100 new deferrals.
 
 ## Start, watch, and download
 
@@ -102,11 +127,25 @@ With `network.request` and a host permission that sets `max_transfer_bytes`, a c
 
 A delivery attempt is recorded before any network traffic. After a timeout or crash the result is `uncertain` and it is never resent automatically. `acli extension-operation deliveries <run-id>` shows the delivery history.
 
+Host API 1.1 adds versions that fit marketplace and cloud storage uploads:
+
+- `transfer.fetch-input-v2` and `transfer.deliver-output-v2` take the v1 fields plus `headers` (headers you control, such as the exact `Content-Type` a presigned URL was signed for) and `connection` (adds the [connection's](/extensions/exports/#connections) token). They accept query strings, such as presigned S3 or GCS URLs, when the rule sets `allow_query`. When a fetch with a `connection` gets a 401, the token is discarded and the call answers `{"outcome": "failed", "status": 401}`, so you can retry with a fresh token. A `deliver-output-v2` whose connection or TLS handshake fails answers `{"outcome": "unreachable"}`: nothing was sent, and the same delivery key may be sent again.
+- A v2 delivery sends `Idempotency-Key` only when you pass `idempotency_key`. A `PUT` to a presigned URL is idempotent by itself. A `POST` still needs `idempotent_delivery: true` on its rule.
+- `multipart: {"fields": [{"name", "value"}], "file_field", "filename"?}` sends a `multipart/form-data` form with the artifact as its file part, for form-style staged uploads.
+- A v2 delivery can upload a completed input artifact of the run as well as an output.
+- `transfer.open-record-file({"record_id", "file_id", "variant"?})` copies a file a live record references, up to 16 MiB, into an input artifact of the run and returns its artifact ID, so you can upload it directly. `variant` picks an image variant instead of the original. Records that share a file get the same artifact. It needs `attricat.read`, `attricat.files.read`, and `artifacts.read`. Connector runs can only open files of the records they export and of the live records those link to (the related records `page-v2` expands), and interactive runs only of their selection.
+
+Every request a transfer makes counts against its rule's [request budget](/extensions/manifest/#request-budgets).
+
 ## Attricat access in operations
 
 Operations can call `attricat-data.read` and `attricat-data.batch` (the same JSON as `attricat.read.v1` and `attricat.command.v1`), plus connector-shaped `schema`, `page`, and `upsert-batch` calls. Pages hold up to 100 records and batches up to 100 intents. Batches must carry the current batch key, and each intent key is recorded, so a replayed batch returns `already_applied` instead of writing twice.
 
 Page cursors resolve values as of the first page, using value history, and expire after 30 days. This is not a database snapshot: records created, deleted, or migrated during a long export can still change which records appear. Freeze the source if you need an exact export.
+
+In a connector run, `attricat-data.batch` also accepts annotation-only batches on records of the job's blueprint, so an exporter can [annotate](#record-annotations) records with external IDs or sync state where checks and the Explorer can see them. Export runs still cannot write values.
+
+Export runs read records with the 1.1 `attricat.page-v2` and `attricat.withdrawn` calls instead. See [Export connectors](/extensions/exports/#read-records-to-export).
 
 ## Schedules
 
@@ -146,10 +185,11 @@ input = { profile = { version = 1, business_key = "sku", columns = [
 ```
 
 - Jobs are validated against the enabled extension when the blueprint revision is published. An invalid job blocks publication.
-- An **export** job creates one run per enabled [publication channel](/guides/publishing/). Each run reads values in that channel's context and includes only records published to it.
+- An **export** job creates one run per enabled [publication channel](/guides/publishing/), or only for the channel it names as `context`. Each run reads values in that channel's context and includes only records published to it.
 - An **import** job creates one run that writes to its `context`.
 - A later revision matches jobs by `code`. A job left out of the new revision is disabled; its history stays.
 - Set `enabled = false` to pause a job.
+- An export job can name the `connection` it pushes to. Without one, it uses the extension's default destination.
 - For the CSV connector, Attricat fills the profile's blueprint ID, revision, and context in for each run, so the TOML only needs the columns (and `business_key` for imports).
 
 Run a job by hand:
@@ -159,4 +199,6 @@ acli connector-job list <blueprint-id>
 acli connector-job run <job-id> --idempotency-key manual-2026-03-01
 ```
 
-Managing connector jobs needs `extensions.manage`. Jobs cannot be triggered by catalog events yet; run them manually or on an interval.
+Managing connector jobs needs `extensions.manage`.
+
+Export jobs can also run when records change, push to a named connection, and be resynced. See [Export connectors](/extensions/exports/).

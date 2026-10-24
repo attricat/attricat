@@ -53,7 +53,9 @@ Ramka pozostaje zamontowana, gdy użytkownik przełącza kontekst lub motyw. Nas
 | `attricat:context-changed.v1` | `client.events` | Na starcie i przy każdej zmianie kontekstu miejsca osadzenia. |
 | `attricat:theme-changed.v1` | | Za każdym razem, gdy użytkownik przełącza tryb jasny i ciemny. |
 
-Kolejne pośredniczone operacje, każda z własnym uprawnieniem, obejmują okna potwierdzenia, pobieranie plików, otwieranie dozwolonych adresów HTTPS, odczyt i przesyłanie plików w kontekście pliku, wyszukiwanie w katalogu, aktualizacje na żywo, zapis do schowka i odczyt ustawień regionalnych. Okna dialogowe i postęp tych operacji rysuje host.
+Ramka nie ma innych składowych. W szczególności nie ma `fetch` do API, dostępu do adresu URL przeglądarki ani możliwości wywołania innego rozszerzenia. Manifest przyjmuje niektóre uprawnienia [zarezerwowane](/pl/extensions/manifest/#interakcja-z-klientem) dla przyszłych API ramki; ich przyznanie na razie niczego nie daje.
+
+Wywołania zwracają obietnice. Wywołanie, na które nie pozwalają Twoje uprawnienia albo które host odrzuci, kończy się odrzuceniem z obiektem `Error`, którego komunikat podaje przyczynę.
 
 Twój interfejs musi dostarczać własne przetłumaczone teksty i dostępne etykiety.
 
@@ -130,6 +132,7 @@ Kontrybucja `dialog` wymaga pola `title`. Twoje akcje w wersji 2 otwierają ją 
 | `navigation` | `embedded` | | Kompaktowa ramka na pasku bocznym. |
 | `audit_event_panel` | `panel` | `client.audit_event_panel` | `event_id` otwartego zdarzenia audytu. |
 | `data_health_card` | `panel` | `client.data_health_card` | Brak. Karta na stronie Stan danych. |
+| `export_mapping` | `panel` | `client.export_mapping` | `export_id`. Wyświetlany w sekcji stanu eksportu na stronie zarządzania Twoim rozszerzeniem, raz dla każdego miejsca docelowego eksportu zadeklarowanego w wydaniu. Służy do edycji dużych mapowań miejsca docelowego przechowywanych w magazynie rozszerzenia, np. atrybutów na atrybuty typu produktu. W przeciwieństwie do innych paneli może wywoływać Twoje polecenia serwerowe (z `client.commands`), więc polecenie może zwalidować mapowanie przed zapisaniem. Z tego panelu mogą je wywoływać tylko osoby z `extensions.manage`. |
 
 Każdy pozostały obiekt kontekstu zawiera `context_version: 1`.
 

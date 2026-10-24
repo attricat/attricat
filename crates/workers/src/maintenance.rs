@@ -38,12 +38,16 @@ pub enum RetentionFamily {
     UserActionTokens,
     WorkspaceInvitations,
     RateLimitWindows,
+    ExtensionHandlerOutcomes,
+    ExtensionFileLinks,
+    ExtensionAuthorizationRequests,
+    ExtensionExportRetryRequests,
     AuditEvents,
     ReadNotifications,
 }
 
 impl RetentionFamily {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 19] = [
         Self::ValueHistory,
         Self::Tasks,
         Self::RuleRuns,
@@ -57,6 +61,10 @@ impl RetentionFamily {
         Self::UserActionTokens,
         Self::WorkspaceInvitations,
         Self::RateLimitWindows,
+        Self::ExtensionHandlerOutcomes,
+        Self::ExtensionFileLinks,
+        Self::ExtensionAuthorizationRequests,
+        Self::ExtensionExportRetryRequests,
         Self::AuditEvents,
         Self::ReadNotifications,
     ];
@@ -76,6 +84,10 @@ impl RetentionFamily {
             Self::UserActionTokens => "user_action_tokens",
             Self::WorkspaceInvitations => "workspace_invitations",
             Self::RateLimitWindows => "rate_limit_windows",
+            Self::ExtensionHandlerOutcomes => "extension_handler_outcomes",
+            Self::ExtensionFileLinks => "extension_file_links",
+            Self::ExtensionAuthorizationRequests => "extension_authorization_requests",
+            Self::ExtensionExportRetryRequests => "extension_export_retry_requests",
             Self::AuditEvents => "audit_events",
             Self::ReadNotifications => "read_notifications",
         }
@@ -382,6 +394,24 @@ async fn purge_batch(
                 .await
         }
         RetentionFamily::RateLimitWindows => repository.purge_rate_limit_windows_batch(limit).await,
+        RetentionFamily::ExtensionHandlerOutcomes => {
+            repository
+                .purge_extension_handler_outcomes_batch(limit)
+                .await
+        }
+        RetentionFamily::ExtensionFileLinks => {
+            repository.purge_extension_file_links_batch(limit).await
+        }
+        RetentionFamily::ExtensionAuthorizationRequests => {
+            repository
+                .purge_extension_authorization_requests_batch(limit)
+                .await
+        }
+        RetentionFamily::ExtensionExportRetryRequests => {
+            repository
+                .purge_extension_export_retry_requests_batch(limit)
+                .await
+        }
         RetentionFamily::AuditEvents => match config.audit_events {
             Some(days) => repository.purge_audit_events_batch(days, limit).await,
             None => Ok(0),

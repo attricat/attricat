@@ -340,9 +340,18 @@ pub(super) async fn authorize(
 }
 
 fn is_public_route(path: &str) -> bool {
+    // Extension-issued public file links carry their own unguessable token.
+    if path
+        .strip_prefix("/public/extension-files/")
+        .is_some_and(|token| !token.is_empty() && !token.contains('/'))
+    {
+        return true;
+    }
     matches!(
         path,
-        "/health"
+        // The OAuth callback carries a single-use, unguessable state.
+        "/public/extension-oauth/callback"
+            | "/health"
             | "/health/live"
             | "/health/ready"
             | "/auth/login"
@@ -352,6 +361,19 @@ fn is_public_route(path: &str) -> bool {
             | "/auth/password-reset/confirm"
             | "/onboarding/complete"
     )
+}
+
+/// The digest of the browser session cookie a request carries, if any. Used
+/// by public routes that must recognize the signed-in browser without
+/// authorizing the request; callers validate the session themselves.
+pub(super) fn session_cookie_digest(headers: &axum::http::HeaderMap) -> Option<SessionDigest> {
+    let raw = cookie_value(
+        headers.get("cookie").and_then(|value| value.to_str().ok()),
+        SESSION_COOKIE,
+    )?;
+    SessionSecret::from_delivery_value(raw)
+        .ok()
+        .map(|secret| secret.digest())
 }
 
 fn cookie_value(header: Option<&str>, name: &str) -> Option<String> {
@@ -373,6 +395,7 @@ mod route_tests {
             "/auth/sample-logins",
             "/health/ready",
             "/onboarding/complete",
+            "/public/extension-oauth/callback",
         ] {
             assert!(is_public_route(super::super::canonical_route(route)));
             assert!(is_public_route(super::super::canonical_route(&format!(

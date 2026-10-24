@@ -48,8 +48,9 @@ use crate::{
         AttricatRepository, ClaimedExtensionOperationRun, ClaimedTask, CoordinatorLeadership,
         DeliveryState, ExtensionAttricatBatch, ExtensionAttricatIntent,
         ExtensionAttricatPageRequest, ExtensionConfigurationScope, ExtensionOperationArtifact,
-        ExtensionRuntimeInstallation, MAX_EXTENSION_BATCH_INTENTS,
-        MAX_EXTENSION_LOOKUP_VALUE_BYTES, MaterializeScope, RepositoryError, SystemRepository,
+        ExtensionRuntimeInstallation, HandlerAttemptOutcome, MAX_EXTENSION_BATCH_INTENTS,
+        MAX_EXTENSION_LOOKUP_VALUE_BYTES, MaterializeScope, RejectionRecord, RepositoryError,
+        SystemRepository,
     },
     storage::{ObjectStore, ObjectStoreError, StoredObject},
     task_queue::TaskKind,
@@ -59,13 +60,23 @@ use attricat_workers::coordinator;
 
 #[cfg(test)]
 mod abi_evolution_tests;
+pub mod connections;
+mod connector_v2;
+mod export_host;
 mod interactive;
+mod network_v2;
 mod operation_batch;
+mod outcomes;
+mod transfer;
 mod unified;
 
 use unified::host_unified::attricat::host as wit;
 
-use operation_batch::run_operation_batch;
+pub use export_host::use_public_file_link_base;
+pub use network_v2::forget_lowered_budget;
+use operation_batch::{BatchError, BatchResult, run_operation_batch};
+use outcomes::retry_backoff;
+pub use outcomes::{InvocationFailure, Rejection};
 
 const MAX_HOST_MESSAGE_BYTES: usize = 16 * 1024;
 const MAX_HOST_JSON_BYTES: usize = 64 * 1024;
@@ -84,6 +95,11 @@ const WASM_EVENT_CONSUMER: &str = "attricat.extensions.wasm";
 /// How long a paused operation run waits before checking whether its pinned
 /// release is authorized again.
 const PAUSED_OPERATION_RECHECK_DELAY: chrono::TimeDelta = chrono::TimeDelta::seconds(30);
+/// How many times in a row a run's batch may ask to wait with a typed retry
+/// delay before further waits spend the run's failure budget.
+const MAX_RETRY_DEFERRALS: i32 = 100;
+/// How soon a batch replays after it rejected one record.
+const RECORD_REJECTION_REPLAY_DELAY: chrono::TimeDelta = chrono::TimeDelta::seconds(1);
 /// Headers a component may never set on an outbound request.
 const RESERVED_REQUEST_HEADERS: [&str; 4] =
     ["host", "content-length", "connection", "transfer-encoding"];
@@ -354,14 +370,15 @@ impl ExtensionRuntime {
 
     /// Executes one bounded operation batch. The component and its ABI come
     /// from the run's immutable release snapshot, so no current-installation
-    /// lookup can substitute upgraded code.
+    /// lookup can substitute upgraded code. The flag tells whether the 1.1
+    /// `deferrable-operations` export ran.
     async fn invoke_operation_batch(
         &self,
         installation: &ExtensionRuntimeInstallation,
         repository: AttricatRepository,
         run: &ClaimedExtensionOperationRun,
         cancelling: bool,
-    ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
+    ) -> (bool, Result<BatchResult, BatchError>) {
         self.invoke_unified_batch(installation, repository, run, cancelling)
             .await
     }
@@ -406,11 +423,39 @@ impl ExtensionRuntime {
         repository: AttricatRepository,
         handler: &ManifestEventHandler,
         event: &DomainEvent,
-    ) -> Result<(), ExtensionRuntimeError> {
-        self.invoke_unified_event(installation, repository, handler, event)
+        delivery: &EventDeliveryAttempt,
+    ) -> Result<Result<(), InvocationFailure>, ExtensionRuntimeError> {
+        self.invoke_unified_event(installation, repository, handler, event, delivery)
             .await
     }
 }
+
+/// Quarantines an installation after a component fault. A concurrent
+/// invocation may have quarantined it first; that is not an error.
+async fn quarantine_after_fault(
+    repository: &AttricatRepository,
+    extension_id: &str,
+) -> Result<(), RepositoryError> {
+    match repository
+        .quarantine_extension(extension_id, "runtime_failure")
+        .await
+    {
+        Ok(_) | Err(RepositoryError::InvalidExtensionTransition(_)) => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+/// What a 1.1 handler learns about the delivery it handles.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct EventDeliveryAttempt {
+    pub sequence: i64,
+    pub record_revision: Option<i64>,
+    pub attempt: u32,
+}
+
+/// The most attempts of one handler for one event before its retries are
+/// exhausted and the delivery is recorded as failed.
+const MAX_HANDLER_ATTEMPTS: i32 = 10;
 
 fn operation_task_error(error: impl ToString) -> TaskHandlerError {
     TaskHandlerError {
@@ -450,6 +495,8 @@ struct OperationState {
     run_id: Uuid,
     batch_key: String,
     artifacts: ResourceTable,
+    /// The run's scope, loaded on first use.
+    run_facts: Arc<tokio::sync::OnceCell<transfer::RunFacts>>,
 }
 
 impl OperationState {
@@ -466,6 +513,7 @@ impl OperationState {
             run_id,
             batch_key: String::new(),
             artifacts: ResourceTable::new(),
+            run_facts: Arc::default(),
         }
     }
 
@@ -517,6 +565,24 @@ struct HostState {
     installation: ExtensionRuntimeInstallation,
     repository: AttricatRepository,
     limits: StoreLimits,
+    /// The invocation that holds the export leases it takes, so its own
+    /// rejection of a record settles the revision it leased.
+    lease_holder: Option<String>,
+    /// The operation run of a batch invocation, whose scope bounds the
+    /// records it may reach.
+    run_id: Option<Uuid>,
+    /// The run's scope, loaded on first use.
+    run_facts: Arc<tokio::sync::OnceCell<transfer::RunFacts>>,
+}
+
+/// The export lease holder of an operation run.
+fn run_lease_holder(run_id: Uuid) -> String {
+    format!("run:{run_id}")
+}
+
+/// The export lease holder of one handler's delivery of an event.
+fn handler_lease_holder(event_id: Uuid, handler_id: &str) -> String {
+    format!("handler:{event_id}:{handler_id}")
 }
 
 impl HostState {
@@ -531,6 +597,9 @@ impl HostState {
             limits: StoreLimitsBuilder::new()
                 .memory_size(max_memory_bytes)
                 .build(),
+            lease_holder: None,
+            run_id: None,
+            run_facts: Arc::default(),
         }
     }
 
@@ -578,7 +647,15 @@ impl HostState {
                 }
             }
             "events.emit.v1" => "events.emit",
-            "network.request.v1" => "network.request",
+            "network.request.v1" | "network.request.v2" => "network.request",
+            "mappings.get.v1"
+            | "mappings.list.v1"
+            | "mappings.begin.v1"
+            | "mappings.commit.v1"
+            | "mappings.release.v1"
+            | "mappings.delete.v1" => "exports.mappings",
+            "connections.get.v1" | "connections.list.v1" => "connections.use",
+            "files.link.v1" => "attricat.files.public_links",
             _ => return Err("unknown host operation".into()),
         };
         // The invocation was selected from a snapshot, but grants, configuration,
@@ -631,6 +708,18 @@ impl HostState {
         if operation == "network.request.v1" {
             return self.network_request(&request).await;
         }
+        if operation == "network.request.v2" {
+            return self.network_request_v2(&request).await;
+        }
+        if operation.starts_with("mappings.") {
+            return self.mappings_call(&operation, &request).await;
+        }
+        if operation.starts_with("connections.") {
+            return self.connections_call(&operation, &request).await;
+        }
+        if operation == "files.link.v1" {
+            return self.file_link_call(&request).await;
+        }
         self.storage_call(&operation, &request).await
     }
 
@@ -666,7 +755,7 @@ impl HostState {
         };
         let record = self
             .repository
-            .get_record(record_id)
+            .get_record_with_revision(record_id)
             .await
             .map_err(|error| error.to_string())?
             .ok_or_else(|| "record not found".to_owned())?;
@@ -951,11 +1040,9 @@ impl HostState {
             .ok_or_else(|| "HTTPS URL needs a port".to_owned())?;
         // Admit the call before DNS so failed and slow lookups also consume the
         // extension's network budget. A reqwest timeout does not cover this lookup.
-        if !allow_network_request(
-            self.installation.installed_release_id,
-            &self.installation.extension_id,
-        )
-        .await
+        if network_v2::admit_request(&self.repository, &self.installation, rule)
+            .await
+            .is_err()
         {
             return Err("network request rate limit exceeded".into());
         }
@@ -1327,6 +1414,13 @@ struct NetworkRequest {
     idempotency_key: Option<String>,
 }
 
+/// Whether an extension keeps export mappings, so a rejection it reports for
+/// a record is that record's export status. Other extensions' rejections stay
+/// handler outcomes only.
+fn exports_mappings(installation: &ExtensionRuntimeInstallation) -> bool {
+    installation.capability_grants.contains("exports.mappings")
+}
+
 /// Shared-task executor for release-pinned checkpointed operations. The
 /// checkpoint is committed under the task lease only after WASM returns; a
 /// crash before that transaction repeats the batch, so operation components
@@ -1419,7 +1513,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
         if initiator_revoked && !cancellation_requested {
             return self.fail_for_revoked_initiator(&repository, &task).await;
         }
-        let (checkpoint, progress, done) = match self
+        let (deferrable, result) = self
             .runtime
             .invoke_operation_batch(
                 &installation,
@@ -1427,21 +1521,23 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 &run,
                 cancellation_requested,
             )
-            .await
-        {
-            Ok(value) => value,
+            .await;
+        let batch = match result {
+            Ok(batch) => batch,
             Err(_) if initiator_revoked => {
                 return self.fail_for_revoked_initiator(&repository, &task).await;
             }
             Err(error) => {
-                repository
-                    .fail_extension_operation_task(&task, &error.to_string())
-                    .await
-                    .map_err(operation_task_error)?;
-                counter!("attricat_extension_operations_total", "outcome" => "failed").increment(1);
-                histogram!("attricat_extension_operation_duration_seconds", "outcome" => "failed")
-                    .record(operation_started.elapsed().as_secs_f64());
-                return Ok(TaskOutcome::DeadLettered);
+                return self
+                    .handle_batch_failure(
+                        &repository,
+                        &task,
+                        &run,
+                        deferrable,
+                        error,
+                        operation_started,
+                    )
+                    .await;
             }
         };
         // Cancellation may arrive while a batch runs. The database never
@@ -1461,6 +1557,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 self.runtime
                     .invoke_operation_batch(&installation, repository.clone(), &run, true)
                     .await
+                    .1
                     .map_err(operation_task_error)?;
             }
             repository
@@ -1468,11 +1565,30 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 .await
                 .map_err(operation_task_error)?;
         }
+        // A deferred batch resumes later; cancellation resumes at once.
+        let resume_at = batch
+            .resume_after
+            .filter(|_| !cancellation_delivered)
+            .and_then(|delay| chrono::TimeDelta::from_std(delay).ok())
+            .map(|delay| chrono::Utc::now() + delay);
         let terminal = repository
-            .checkpoint_extension_operation_task(&task, &run, checkpoint, progress, done)
+            .checkpoint_extension_operation_task_until(
+                &task,
+                &run,
+                batch.checkpoint,
+                batch.progress,
+                batch.done,
+                resume_at,
+            )
             .await
             .map_err(operation_task_error)?;
-        let outcome = if terminal { "completed" } else { "rescheduled" };
+        let outcome = if terminal {
+            "completed"
+        } else if resume_at.is_some() {
+            "deferred"
+        } else {
+            "rescheduled"
+        };
         counter!("attricat_extension_operations_total", "outcome" => outcome).increment(1);
         histogram!("attricat_extension_operation_duration_seconds", "outcome" => outcome)
             .record(operation_started.elapsed().as_secs_f64());
@@ -1480,9 +1596,243 @@ impl TaskHandler for ExtensionOperationTaskHandler {
             Ok(TaskOutcome::Complete)
         } else {
             Ok(TaskOutcome::Reschedule {
-                at: chrono::Utc::now(),
+                at: resume_at.unwrap_or_else(chrono::Utc::now),
             })
         }
+    }
+}
+
+impl ExtensionOperationTaskHandler {
+    /// Applies a failed batch: a typed retry re-runs the same batch after a
+    /// backoff, a rejection dead-letters the run at once, and anything else
+    /// fails it through the envelope's failure budget. Only a 1.1 component's
+    /// fault (a trap, invalid output or a typed `fault`) also quarantines its
+    /// installation; an error a lifecycle export returns only fails the run.
+    async fn handle_batch_failure(
+        &self,
+        repository: &AttricatRepository,
+        task: &ClaimedTask,
+        run: &ClaimedExtensionOperationRun,
+        deferrable: bool,
+        error: BatchError,
+        operation_started: Instant,
+    ) -> Result<TaskOutcome, TaskHandlerError> {
+        // A run whose release lost its authorization mid-batch (it was
+        // disabled, quarantined or lost a grant) pauses like one that finds
+        // it unauthorized before the batch, whatever the batch reported.
+        let Some(installation) = repository
+            .runtime_extension_installation(&run.extension_id, run.installed_release_id)
+            .await
+            .map_err(operation_task_error)?
+        else {
+            repository
+                .pause_extension_operation_task(task)
+                .await
+                .map_err(operation_task_error)?;
+            return Ok(TaskOutcome::Reschedule {
+                at: chrono::Utc::now() + PAUSED_OPERATION_RECHECK_DELAY,
+            });
+        };
+        let outcome = match error {
+            // A retry with an explicit delay is the batch asking to wait,
+            // like a deferral, so it does not spend the failure budget until
+            // the run has waited `MAX_RETRY_DEFERRALS` times in a row.
+            BatchError::Failure(InvocationFailure::Retry { message, after }) => {
+                let delay = after.unwrap_or_else(|| retry_backoff(task.failures.max(0) as u32 + 1));
+                let at = chrono::Utc::now()
+                    + chrono::TimeDelta::from_std(delay).unwrap_or(chrono::TimeDelta::zero());
+                let deferred = after.is_some()
+                    && repository
+                        .defer_extension_operation_task(
+                            task,
+                            &message,
+                            at,
+                            Some(MAX_RETRY_DEFERRALS),
+                        )
+                        .await
+                        .map_err(operation_task_error)?;
+                if deferred {
+                    "deferred"
+                } else {
+                    let terminal = repository
+                        .retry_extension_operation_task(task, &message, at)
+                        .await
+                        .map_err(operation_task_error)?;
+                    if terminal { "failed" } else { "retrying" }
+                }
+            }
+            BatchError::Failure(InvocationFailure::Rejected(rejection)) => {
+                let exports = exports_mappings(&installation);
+                let mut recorded = None;
+                if let Some(record_id) = rejection.record_id
+                    && exports
+                {
+                    // A run's rejection names no revision. When the run holds
+                    // the record's lease, the revision it leased is settled;
+                    // otherwise it is chosen below so that a newer result
+                    // committed meanwhile is not overwritten.
+                    let details = repository
+                        .connector_run_details(run.id)
+                        .await
+                        .map_err(operation_task_error)?;
+                    let channel = details.as_ref().and_then(|details| details.channel_id);
+                    let revision = repository
+                        .record_content_revision_at(record_id, run.created_at, channel)
+                        .await
+                        .map_err(operation_task_error)?;
+                    // A connector run's rejection belongs to the run's
+                    // connection unless it names another; any other run's
+                    // without one to the default destination.
+                    // A connector run writes only its own connection's
+                    // mappings, so a rejection naming another is refused.
+                    let own_connection = details.map(|details| details.connection);
+                    let foreign = matches!(
+                        (&own_connection, &rejection.connection),
+                        (Some(own), Some(named)) if own.as_deref() != Some(named.as_str())
+                    );
+                    let connection = match rejection.connection {
+                        Some(connection) => Some(connection),
+                        None => own_connection.flatten(),
+                    };
+                    // A run settles only records it may map, like its
+                    // mappings calls.
+                    recorded = Some(RejectionRecord::Refused);
+                    if !foreign
+                        && transfer::ensure_run_reaches_record(
+                            repository,
+                            run.id,
+                            record_id,
+                            transfer::RunReach::Map,
+                        )
+                        .await
+                        .is_ok()
+                    {
+                        let mapping = repository
+                            .export_mapping_get(
+                                &run.extension_id,
+                                connection.as_deref(),
+                                crate::repository::MappingKey::Record(record_id),
+                            )
+                            .await
+                            .ok()
+                            .flatten();
+                        // The revision at the run's start is the oldest the
+                        // batch can have read, so an edit made since is never
+                        // taken for rejected and stays to be pushed. A result
+                        // committed before the run started is one the run
+                        // saw, even when its revision counts more than the
+                        // record's own (an expanded related record), so the
+                        // rejection settles past it.
+                        let committed_before = mapping
+                            .as_ref()
+                            .filter(|mapping| {
+                                mapping.settled_at.is_some_and(|at| at <= run.created_at)
+                            })
+                            .map_or(0, |mapping| mapping.record_revision);
+                        let revision = revision.max(committed_before);
+                        recorded = Some(
+                            repository
+                                .record_export_rejection(
+                                    &run.extension_id,
+                                    connection.as_deref(),
+                                    record_id,
+                                    Some(revision),
+                                    Some(&run_lease_holder(run.id)),
+                                    &rejection.code,
+                                    &rejection.message,
+                                )
+                                .await
+                                .map_err(operation_task_error)?,
+                        );
+                    }
+                }
+                let message = format!("{}: {}", rejection.code, rejection.message);
+                // A rejection of one record settles that record, so the
+                // batch replays and the component moves past it (its mapping
+                // now reads as settled); the rest of the run continues. A
+                // newly settled record is progress and is not counted; a
+                // repeat or a record leased elsewhere waits like a deferral,
+                // capped, so a component that keeps rejecting the same batch
+                // is still dead-lettered. One that cannot be recorded would
+                // only be rejected again, so it dead-letters the run.
+                // A record another worker holds is replayed once its lease
+                // ends, so a long push is waited for rather than counted down.
+                let replay_at = chrono::Utc::now() + RECORD_REJECTION_REPLAY_DELAY;
+                let deferral = match recorded {
+                    Some(RejectionRecord::Settled) => Some((None, replay_at)),
+                    Some(RejectionRecord::Unchanged) => {
+                        Some((Some(MAX_RETRY_DEFERRALS), replay_at))
+                    }
+                    Some(RejectionRecord::Busy { until }) => {
+                        Some((Some(MAX_RETRY_DEFERRALS), until.max(replay_at)))
+                    }
+                    Some(RejectionRecord::Refused) | None => None,
+                };
+                let settled_record = match deferral {
+                    Some((limit, at)) => repository
+                        .defer_extension_operation_task(task, &message, at, limit)
+                        .await
+                        .map_err(operation_task_error)?,
+                    None => false,
+                };
+                if settled_record {
+                    "record_rejected"
+                } else {
+                    repository
+                        .reject_extension_operation_task(task, &message)
+                        .await
+                        .map_err(operation_task_error)?;
+                    "rejected"
+                }
+            }
+            error => {
+                if deferrable && error.is_fault() {
+                    tracing::warn!(
+                        extension = %run.extension_id,
+                        installed_release_id = %run.installed_release_id,
+                        error = %error,
+                        "extension operation faulted; quarantining extension"
+                    );
+                    quarantine_after_fault(repository, &run.extension_id)
+                        .await
+                        .map_err(operation_task_error)?;
+                }
+                let terminal = repository
+                    .fail_extension_operation_task(task, &error.to_string())
+                    .await
+                    .map_err(operation_task_error)?;
+                if terminal { "failed" } else { "retrying" }
+            }
+        };
+        // A run that ends without finishing its batch leaves the records it
+        // leased showing as retrying, as a handler that gives up does.
+        if matches!(outcome, "failed" | "rejected") && exports_mappings(&installation) {
+            repository
+                .fail_export_leases(
+                    &run.extension_id,
+                    &run_lease_holder(run.id),
+                    if outcome == "failed" {
+                        "run_failed"
+                    } else {
+                        "run_rejected"
+                    },
+                    "the run ended before it settled this record",
+                )
+                .await
+                .map_err(operation_task_error)?;
+        }
+        counter!("attricat_extension_operations_total", "outcome" => outcome).increment(1);
+        histogram!("attricat_extension_operation_duration_seconds", "outcome" => outcome)
+            .record(operation_started.elapsed().as_secs_f64());
+        // Only a failed or rejected run is dead-lettered; one that waits
+        // resumes, so the task metric must not count it as a dead letter.
+        Ok(match outcome {
+            "deferred" | "record_rejected" => TaskOutcome::Settled {
+                outcome: "rescheduled",
+            },
+            "retrying" => TaskOutcome::Settled { outcome: "retry" },
+            _ => TaskOutcome::DeadLettered,
+        })
     }
 }
 
@@ -1502,86 +1852,418 @@ impl WasmExtensionTaskHandler {
         }
     }
 
+    /// Delivers `event` to every subscribed handler that has not settled it
+    /// yet. Returns when the task should run again for handlers that are
+    /// retrying or debouncing, or `None` once every handler has settled.
     async fn invoke_event(
         &self,
-        event: DomainEvent,
+        event: &DomainEvent,
         repository: AttricatRepository,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let installations = repository.enabled_extension_handlers(&event).await?;
-        for candidate in installations {
-            let handler_ids: Vec<String> = candidate
-                .manifest
-                .server
-                .as_ref()
-                .into_iter()
-                .flat_map(|server| server.event_handlers.iter())
-                .filter(|handler| {
-                    handler
-                        .event_types
-                        .iter()
-                        .any(|event_type| event_type == &event.event_type)
-                })
-                .map(|handler| handler.id.clone())
-                .collect();
-            for handler_id in handler_ids {
-                // The list above is only a dispatch hint. Re-read enabled state,
-                // exact installed release, configuration, and required grants
-                // immediately before every component invocation.
-                let Some(installation) = repository
-                    .runtime_extension_installation(
-                        &candidate.extension_id,
-                        candidate.installed_release_id,
-                    )
-                    .await?
-                else {
-                    continue;
-                };
-                let Some(handler) = installation.manifest.server.as_ref().and_then(|server| {
-                    server.event_handlers.iter().find(|handler| {
-                        handler.id == handler_id
-                            && handler
-                                .event_types
-                                .iter()
-                                .any(|event_type| event_type == &event.event_type)
+    ) -> Result<EventDispatch, Box<dyn std::error::Error + Send + Sync>> {
+        let mut dispatch = EventDispatch::default();
+        let mut completed: Vec<(String, String, Uuid)> = Vec::new();
+        let installations = repository.enabled_extension_handlers(event).await?;
+        dispatch.handled = !installations.is_empty();
+        let mut attempts = if installations.is_empty() {
+            Default::default()
+        } else {
+            repository.extension_handler_attempts(event.id).await?
+        };
+        let delivered: Result<(), Box<dyn std::error::Error + Send + Sync>> = async {
+            for candidate in installations {
+                let handler_ids: Vec<String> = candidate
+                    .manifest
+                    .server
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|server| server.event_handlers.iter())
+                    .filter(|handler| {
+                        handler
+                            .event_types
+                            .iter()
+                            .any(|event_type| event_type == &event.event_type)
                     })
-                }) else {
-                    continue;
-                };
-                if let Err(error) = self
-                    .runtime
-                    .invoke(
-                        &installation,
-                        repository.for_extension(&installation.extension_id),
-                        handler,
-                        &event,
-                    )
-                    .await
-                {
-                    metrics::counter!("attricat_extension_invocations_total", "outcome" => "failed")
-                        .increment(1);
-                    tracing::warn!(
-                        extension = %installation.extension_id,
-                        installed_release_id = %installation.installed_release_id,
-                        handler = %handler.id,
-                        event_id = %event.id,
-                        event_sequence = event.sequence,
-                        event_type = %event.event_type,
-                        aggregate_kind = %event.aggregate_kind,
-                        aggregate_id = %event.aggregate_id,
-                        correlation_id = %event.correlation_id,
-                        error = %error,
-                        error_debug = ?error,
-                        "extension handler failed; quarantining extension"
-                    );
-                    repository
-                        .quarantine_extension(&installation.extension_id, "runtime_failure")
-                        .await?;
-                    return Err(Box::new(error));
+                    .map(|handler| handler.id.clone())
+                    .collect();
+                for handler_id in handler_ids {
+                    // The list above is only a dispatch hint. Re-read enabled state,
+                    // exact installed release, configuration, and required grants
+                    // immediately before every component invocation.
+                    let Some(installation) = repository
+                        .runtime_extension_installation(
+                            &candidate.extension_id,
+                            candidate.installed_release_id,
+                        )
+                        .await?
+                    else {
+                        continue;
+                    };
+                    let Some(handler) = installation.manifest.server.as_ref().and_then(|server| {
+                        server.event_handlers.iter().find(|handler| {
+                            handler.id == handler_id
+                                && handler
+                                    .event_types
+                                    .iter()
+                                    .any(|event_type| event_type == &event.event_type)
+                        })
+                    }) else {
+                        continue;
+                    };
+                    match self
+                        .deliver_to_handler(
+                            &repository,
+                            &installation,
+                            handler,
+                            event,
+                            attempts
+                                .remove(&(installation.extension_id.clone(), handler.id.clone())),
+                            &mut dispatch,
+                        )
+                        .await?
+                    {
+                        HandlerStep::Completed => completed.push((
+                            installation.extension_id.clone(),
+                            handler.id.clone(),
+                            installation.installed_release_id,
+                        )),
+                        HandlerStep::Settled => {}
+                        HandlerStep::Faulted(error) => return Err(error),
+                    }
                 }
             }
+            Ok(())
+        }
+        .await;
+        if let Err(error) = delivered {
+            // Completed handlers are not invoked again when this delivery is
+            // retried, whether a component faulted or the repository failed.
+            if let Err(remember) = Self::remember_completed(&repository, event, &completed).await {
+                tracing::warn!(event = %event.id, error = %remember, "completed handlers could not be recorded");
+            }
+            return Err(error);
+        }
+        if dispatch.resume_at.is_some() {
+            Self::remember_completed(&repository, event, &completed).await?;
+        }
+        Ok(dispatch)
+    }
+
+    async fn remember_completed(
+        repository: &AttricatRepository,
+        event: &DomainEvent,
+        completed: &[(String, String, Uuid)],
+    ) -> Result<(), RepositoryError> {
+        for (extension_id, handler_id, release) in completed {
+            repository
+                .record_extension_handler_attempt(HandlerAttemptOutcome {
+                    event_id: event.id,
+                    extension_id,
+                    handler_id,
+                    installed_release_id: *release,
+                    status: "completed",
+                    attempts: 1,
+                    next_attempt_at: None,
+                    error_code: None,
+                    error_message: None,
+                    record_id: None,
+                })
+                .await?;
         }
         Ok(())
     }
+
+    /// Delivers one event to one handler, honoring its stored outcome and
+    /// debounce window, and records the new outcome.
+    async fn deliver_to_handler(
+        &self,
+        repository: &AttricatRepository,
+        installation: &ExtensionRuntimeInstallation,
+        handler: &ManifestEventHandler,
+        event: &DomainEvent,
+        previous: Option<crate::repository::HandlerAttempt>,
+        dispatch: &mut EventDispatch,
+    ) -> Result<HandlerStep, RepositoryError> {
+        let now = chrono::Utc::now();
+        let record = |status: &'static str,
+                      attempts: i32,
+                      next_attempt_at: Option<chrono::DateTime<chrono::Utc>>| {
+            HandlerAttemptOutcome {
+                event_id: event.id,
+                extension_id: &installation.extension_id,
+                handler_id: &handler.id,
+                installed_release_id: installation.installed_release_id,
+                status,
+                attempts,
+                next_attempt_at,
+                error_code: None,
+                error_message: None,
+                record_id: None,
+            }
+        };
+        let attempts = previous.as_ref().map_or(0, |attempt| attempt.attempts);
+        match previous.as_ref().map(|attempt| attempt.status.as_str()) {
+            Some("completed" | "superseded" | "rejected" | "exhausted") => {
+                return Ok(HandlerStep::Settled);
+            }
+            Some("retrying" | "debouncing") => {
+                if let Some(due) = previous
+                    .as_ref()
+                    .and_then(|attempt| attempt.next_attempt_at)
+                    .filter(|due| *due > now)
+                {
+                    dispatch.resume_no_later_than(due);
+                    return Ok(HandlerStep::Settled);
+                }
+            }
+            _ => {}
+        }
+        // A debounced handler sees a record's event only after the record has
+        // been quiet for the window; a newer event of the same record
+        // supersedes it, unless the event has waited its longest.
+        if let Some((debounce, max_wait)) = handler.debounce()
+            && event.aggregate_kind == "record"
+        {
+            let delay = |duration: Duration| {
+                chrono::TimeDelta::from_std(duration).unwrap_or(chrono::TimeDelta::zero())
+            };
+            let due = event.occurred_at + delay(debounce);
+            if previous.is_none() && due > now {
+                repository
+                    .record_extension_handler_attempt(record("debouncing", 0, Some(due)))
+                    .await?;
+                dispatch.resume_no_later_than(due);
+                return Ok(HandlerStep::Settled);
+            }
+            if now < event.occurred_at + delay(max_wait)
+                && repository
+                    .newer_record_event_exists(
+                        &installation.extension_id,
+                        event,
+                        &handler.event_types,
+                    )
+                    .await?
+            {
+                // The newer event's delivery pushes the record, so leases an
+                // earlier attempt took end rather than hold it off.
+                if exports_mappings(installation) {
+                    repository
+                        .release_export_leases(
+                            &installation.extension_id,
+                            &handler_lease_holder(event.id, &handler.id),
+                        )
+                        .await?;
+                }
+                repository
+                    .record_extension_handler_attempt(record("superseded", attempts, None))
+                    .await?;
+                counter!("attricat_extension_invocations_total", "outcome" => "superseded")
+                    .increment(1);
+                return Ok(HandlerStep::Settled);
+            }
+        }
+        let attempt = attempts + 1;
+        // A publication event concerns one channel, which a handler does not
+        // export to by itself, so its delivery carries the record's revision
+        // without publication events, on the scale of typed reads. Mapping
+        // revisions then never run ahead of what a channel export reads.
+        let record_revision = match event.record_content_revision() {
+            Some(_)
+                if [
+                    attricat_events::RECORD_PUBLISHED_V1,
+                    attricat_events::RECORD_UNPUBLISHED_V1,
+                ]
+                .contains(&event.event_type.as_str()) =>
+            {
+                Some(
+                    repository
+                        .record_content_revision_at(event.aggregate_id, event.occurred_at, None)
+                        .await?,
+                )
+            }
+            revision => revision,
+        };
+        let delivery = EventDeliveryAttempt {
+            sequence: event.sequence,
+            record_revision,
+            attempt: attempt as u32,
+        };
+        let outcome = self
+            .runtime
+            .invoke(
+                installation,
+                repository.for_extension(&installation.extension_id),
+                handler,
+                event,
+                &delivery,
+            )
+            .await;
+        let failure = match outcome {
+            Ok(Ok(())) => {
+                counter!("attricat_extension_invocations_total", "outcome" => "completed")
+                    .increment(1);
+                return Ok(HandlerStep::Completed);
+            }
+            Ok(Err(failure)) => failure,
+            Err(error) => InvocationFailure::Fault(error.to_string()),
+        };
+        match failure {
+            InvocationFailure::Rejected(rejection) => {
+                counter!("attricat_extension_invocations_total", "outcome" => "rejected")
+                    .increment(1);
+                // A rejection that names no connection belongs to the
+                // default destination. The record's status is written before
+                // the handler's outcome, so a retried delivery that fails in
+                // between writes it again rather than finding it settled.
+                if let Some(record_id) = rejection.record_id
+                    && exports_mappings(installation)
+                {
+                    let connection = rejection.connection;
+                    // The delivery's revision is the event record's; another
+                    // record's rejection concerns that record's revision when
+                    // the event happened.
+                    let revision = if record_id == event.aggregate_id {
+                        delivery.record_revision
+                    } else {
+                        Some(
+                            repository
+                                .record_content_revision_at(record_id, event.occurred_at, None)
+                                .await?,
+                        )
+                    };
+                    repository
+                        .record_export_rejection(
+                            &installation.extension_id,
+                            connection.as_deref(),
+                            record_id,
+                            revision,
+                            Some(&handler_lease_holder(event.id, &handler.id)),
+                            &rejection.code,
+                            &rejection.message,
+                        )
+                        .await?;
+                }
+                // Other records the handler leased before it rejected were
+                // not pushed either.
+                if exports_mappings(installation) {
+                    repository
+                        .fail_export_leases(
+                            &installation.extension_id,
+                            &handler_lease_holder(event.id, &handler.id),
+                            "handler_rejected",
+                            &rejection.message,
+                        )
+                        .await?;
+                }
+                repository
+                    .record_extension_handler_attempt(HandlerAttemptOutcome {
+                        error_code: Some(&rejection.code),
+                        error_message: Some(&rejection.message),
+                        record_id: rejection.record_id,
+                        ..record("rejected", attempt, None)
+                    })
+                    .await?;
+                Ok(HandlerStep::Settled)
+            }
+            InvocationFailure::Retry { message, .. } if attempt >= MAX_HANDLER_ATTEMPTS => {
+                counter!("attricat_extension_invocations_total", "outcome" => "exhausted")
+                    .increment(1);
+                // Records the handler still leases show as retrying, so an
+                // operator finds and retries them, and its leases end.
+                if exports_mappings(installation) {
+                    repository
+                        .fail_export_leases(
+                            &installation.extension_id,
+                            &handler_lease_holder(event.id, &handler.id),
+                            "retries_exhausted",
+                            &message,
+                        )
+                        .await?;
+                }
+                repository
+                    .record_extension_handler_attempt(HandlerAttemptOutcome {
+                        error_code: Some("retries_exhausted"),
+                        error_message: Some(&message),
+                        ..record("exhausted", attempt, None)
+                    })
+                    .await?;
+                Ok(HandlerStep::Settled)
+            }
+            InvocationFailure::Retry { message, after } => {
+                counter!("attricat_extension_invocations_total", "outcome" => "retrying")
+                    .increment(1);
+                let delay = after.unwrap_or_else(|| retry_backoff(attempt as u32));
+                let due =
+                    now + chrono::TimeDelta::from_std(delay).unwrap_or(chrono::TimeDelta::zero());
+                repository
+                    .record_extension_handler_attempt(HandlerAttemptOutcome {
+                        error_code: Some("retry"),
+                        error_message: Some(&message),
+                        ..record("retrying", attempt, Some(due))
+                    })
+                    .await?;
+                dispatch.resume_no_later_than(due);
+                Ok(HandlerStep::Settled)
+            }
+            InvocationFailure::Fault(error) => {
+                metrics::counter!("attricat_extension_invocations_total", "outcome" => "failed")
+                    .increment(1);
+                tracing::warn!(
+                    extension = %installation.extension_id,
+                    installed_release_id = %installation.installed_release_id,
+                    handler = %handler.id,
+                    event_id = %event.id,
+                    event_sequence = event.sequence,
+                    event_type = %event.event_type,
+                    aggregate_kind = %event.aggregate_kind,
+                    aggregate_id = %event.aggregate_id,
+                    correlation_id = %event.correlation_id,
+                    error = %error,
+                    "extension handler failed; quarantining extension"
+                );
+                // Records it was pushing show as retrying rather than keep a
+                // lease and an older status.
+                if exports_mappings(installation) {
+                    repository
+                        .fail_export_leases(
+                            &installation.extension_id,
+                            &handler_lease_holder(event.id, &handler.id),
+                            "handler_fault",
+                            &error,
+                        )
+                        .await?;
+                }
+                quarantine_after_fault(repository, &installation.extension_id).await?;
+                Ok(HandlerStep::Faulted(Box::new(
+                    ExtensionRuntimeError::Runtime(error),
+                )))
+            }
+        }
+    }
+}
+
+/// The result of delivering one event to its handlers.
+#[derive(Default)]
+struct EventDispatch {
+    /// The earliest time a retrying or debouncing handler is due.
+    resume_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Whether any handler took the event, so outcomes may be stored.
+    handled: bool,
+}
+
+impl EventDispatch {
+    fn resume_no_later_than(&mut self, at: chrono::DateTime<chrono::Utc>) {
+        self.resume_at = Some(self.resume_at.map_or(at, |current| current.min(at)));
+    }
+}
+
+/// How one handler's delivery ended.
+enum HandlerStep {
+    /// Invoked successfully just now.
+    Completed,
+    /// Already settled, rejected, retrying later, debouncing or superseded.
+    Settled,
+    /// The component faulted and its installation was quarantined.
+    Faulted(Box<dyn std::error::Error + Send + Sync>),
 }
 
 #[async_trait]
@@ -1612,12 +2294,18 @@ impl TaskHandler for WasmExtensionTaskHandler {
         };
         let context =
             repository.for_event_delivery_task(&delivery.event, WASM_EVENT_CONSUMER, &task);
-        self.invoke_event(delivery.event, context)
+        let dispatch = self
+            .invoke_event(&delivery.event, context)
             .await
             .map_err(|error| TaskHandlerError {
                 code: "extension",
                 message: error.to_string(),
             })?;
+        // Retrying and debouncing handlers keep the delivery open; it runs
+        // again when the earliest of them is due.
+        if let Some(at) = dispatch.resume_at {
+            return Ok(TaskOutcome::Reschedule { at });
+        }
         repository
             .complete_task_event_delivery(&task)
             .await
@@ -1625,6 +2313,19 @@ impl TaskHandler for WasmExtensionTaskHandler {
                 code: "receipt",
                 message: error.to_string(),
             })?;
+        // Cleared when a handler took the event, which covers every outcome
+        // this delivery stored. One stored by an earlier run for a handler
+        // whose extension has since been disabled is left to the retention
+        // sweep, so events no handler takes cost no write.
+        if dispatch.handled {
+            repository
+                .clear_extension_handler_attempts(delivery.event.id)
+                .await
+                .map_err(|error| TaskHandlerError {
+                    code: "receipt",
+                    message: error.to_string(),
+                })?;
+        }
         Ok(TaskOutcome::Complete)
     }
 }
@@ -1940,6 +2641,49 @@ fn transfer_key_valid(key: &str) -> bool {
     !key.is_empty() && key.len() <= MAX_TRANSFER_KEY_BYTES && key.is_ascii()
 }
 
+/// Development-only egress overrides, so the broker can reach a local mock of
+/// a marketplace: hostnames resolved to fixed (possibly private) addresses
+/// and an extra trusted root certificate. Never configured in production;
+/// the composition root installs it only with `ATTRICAT_DEVTOOLS`.
+#[derive(Clone, Debug, Default)]
+pub struct DevelopmentEgress {
+    /// `(host pattern, address)`; a pattern is an exact host or `*.suffix`.
+    pub resolve: Vec<(String, std::net::SocketAddr)>,
+    /// PEM certificates trusted in addition to the system roots.
+    pub extra_root_certificates_pem: Vec<u8>,
+}
+
+static DEVELOPMENT_EGRESS: OnceLock<DevelopmentEgress> = OnceLock::new();
+
+/// Installs development egress overrides. Call before the runtime serves
+/// requests; later calls are ignored.
+pub fn use_development_egress(egress: DevelopmentEgress) {
+    let _ = DEVELOPMENT_EGRESS.set(egress);
+}
+
+fn development_address(host: &str, port: u16) -> Option<std::net::SocketAddr> {
+    DEVELOPMENT_EGRESS
+        .get()?
+        .resolve
+        .iter()
+        .find_map(|(pattern, address)| {
+            let matches = match pattern.strip_prefix("*.") {
+                Some(suffix) => host
+                    .strip_suffix(suffix)
+                    .is_some_and(|prefix| prefix.ends_with('.') && prefix.len() > 1),
+                None => host.eq_ignore_ascii_case(pattern),
+            };
+            // An override keeps the requested port unless it names its own.
+            matches.then(|| {
+                let mut address = *address;
+                if address.port() == 0 {
+                    address.set_port(port);
+                }
+                address
+            })
+        })
+}
+
 /// Resolves an outbound destination within `timeout` and accepts it only when
 /// every resolved address is public.
 async fn resolve_public_destination(
@@ -1947,6 +2691,9 @@ async fn resolve_public_destination(
     port: u16,
     timeout: Duration,
 ) -> Result<Vec<std::net::SocketAddr>, String> {
+    if let Some(address) = development_address(host, port) {
+        return Ok(vec![address]);
+    }
     let addresses: Vec<std::net::SocketAddr> =
         tokio::time::timeout(timeout, tokio::net::lookup_host((host, port)))
             .await
@@ -1969,7 +2716,7 @@ fn pinned_client(
     addresses: &[std::net::SocketAddr],
     timeout: Duration,
 ) -> Result<Client, String> {
-    Client::builder()
+    let mut builder = Client::builder()
         // Environment proxy settings would bypass the checked/pinned target
         // address and turn this broker into an SSRF proxy.
         .no_proxy()
@@ -1977,351 +2724,20 @@ fn pinned_client(
         .https_only(true)
         .resolve_to_addrs(host, addresses)
         .connect_timeout(timeout)
-        .timeout(timeout)
+        .timeout(timeout);
+    if let Some(egress) = DEVELOPMENT_EGRESS.get()
+        && !egress.extra_root_certificates_pem.is_empty()
+    {
+        for certificate in
+            reqwest::Certificate::from_pem_bundle(&egress.extra_root_certificates_pem)
+                .map_err(|_| "development root certificate is invalid")?
+        {
+            builder = builder.add_root_certificate(certificate);
+        }
+    }
+    builder
         .build()
         .map_err(|_| "network client unavailable".into())
-}
-
-impl OperationState {
-    /// Same DNS pinning, no-proxy, TLS and no-redirect policy as network.request,
-    /// but without copying file content into JSON or exposing a socket to WASM.
-    async fn transfer_client(
-        host: &HostState,
-        permission: &str,
-        method: &str,
-        raw_url: &str,
-        secrets: &[SecretHeader],
-    ) -> Result<(Client, Url, reqwest::header::HeaderMap, u64), String> {
-        let url = transfer_url(raw_url)?;
-        let rule = host
-            .installation
-            .manifest
-            .host_permissions
-            .iter()
-            .chain(host.installation.manifest.optional_host_permissions.iter())
-            .find(|r| {
-                r.id == permission
-                    && r.max_transfer_bytes > 0
-                    && host.installation.host_permission_grants.contains(&r.id)
-                    && r.allows_request(&url, method)
-            })
-            .ok_or_else(|| "destination is not granted for bulk transfer".to_owned())?;
-        if method == "POST" && !rule.idempotent_delivery {
-            return Err(
-                "POST bulk delivery requires an explicit idempotent destination declaration".into(),
-            );
-        }
-        if !allow_network_request(
-            host.installation.installed_release_id,
-            &host.installation.extension_id,
-        )
-        .await
-        {
-            return Err("network request rate limit exceeded".into());
-        }
-        let address = url.host_str().ok_or("HTTPS URL needs a host")?;
-        let port = url
-            .port_or_known_default()
-            .ok_or("HTTPS URL needs a port")?;
-        let timeout = Duration::from_millis(rule.timeout_ms);
-        let resolved = resolve_public_destination(address, port, timeout).await?;
-        let mut headers = reqwest::header::HeaderMap::new();
-        if secrets.len() > MAX_TRANSFER_SECRET_HEADERS {
-            return Err("too many secret headers".into());
-        }
-        for secret in secrets {
-            valid_secret_name(&secret.secret)?;
-            let name = reqwest::header::HeaderName::from_bytes(secret.header.as_bytes())
-                .map_err(|_| "invalid secret header")?;
-            if RESERVED_REQUEST_HEADERS.contains(&name.as_str())
-                || RESERVED_TRANSFER_HEADERS.contains(&name.as_str())
-                || secret.prefix.len() > MAX_SECRET_HEADER_PREFIX_BYTES
-                || headers.contains_key(&name)
-            {
-                return Err("unsafe secret header".into());
-            }
-            let value = host
-                .repository
-                .workspace_extension_secret_value(&secret.secret)
-                .await
-                .map_err(|_| "secret lookup failed")?
-                .ok_or("secret reference unavailable")?;
-            headers.insert(
-                name,
-                reqwest::header::HeaderValue::from_str(&(secret.prefix.clone() + &value))
-                    .map_err(|_| "invalid secret header value")?,
-            );
-        }
-        let client = pinned_client(address, &resolved, timeout)?;
-        Ok((client, url, headers, rule.max_transfer_bytes))
-    }
-}
-
-impl OperationState {
-    async fn transfer_fetch_input(&mut self, request: String) -> Result<String, String> {
-        let input: TransferFetch = parse_host_request(&request, "transfer request")?;
-        if !transfer_key_valid(&input.transfer_key)
-            || input.max_bytes == 0
-            || input.max_bytes > MAX_TRANSFER_RANGE_BYTES
-            || input
-                .offset
-                .checked_add(u64::from(input.max_bytes))
-                .is_none()
-        {
-            return Err("invalid bounded transfer range".into());
-        }
-        if input.offset > 0 && input.etag.is_none() {
-            return Err("resumed input requires an ETag".into());
-        }
-        let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
-        host.require_active("network.request").await?;
-        let (client, url, mut headers, grant_bytes) = Self::transfer_client(
-            &host,
-            &input.host_permission_id,
-            "GET",
-            &input.url,
-            &input.secret_headers,
-        )
-        .await?;
-        if u64::from(input.max_bytes) > grant_bytes {
-            return Err("range exceeds granted bulk transfer limit".into());
-        }
-        let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
-        if let Some((id, etag)) = self
-            .repository
-            .previous_extension_http_input(self.run_id, &input.transfer_key, &digest)
-            .await
-            .map_err(|error| error.to_string())?
-        {
-            return bounded_serialize(&json!({"artifact_id":id,"etag":etag,"replayed":true}));
-        }
-        let end = input.offset + u64::from(input.max_bytes) - 1;
-        headers.insert(
-            reqwest::header::ACCEPT_ENCODING,
-            reqwest::header::HeaderValue::from_static("identity"),
-        );
-        headers.insert(
-            reqwest::header::RANGE,
-            reqwest::header::HeaderValue::from_str(&format!("bytes={}-{}", input.offset, end))
-                .map_err(|_| "invalid range")?,
-        );
-        if let Some(etag) = &input.etag {
-            if etag.len() > MAX_ETAG_BYTES {
-                return Err("ETag is too long".into());
-            }
-            headers.insert(
-                reqwest::header::IF_MATCH,
-                reqwest::header::HeaderValue::from_str(etag).map_err(|_| "invalid ETag")?,
-            );
-        }
-        let response = client
-            .get(url)
-            .headers(headers)
-            .send()
-            .await
-            .map_err(|_| "source transfer failed")?;
-        if response.status().is_redirection() {
-            return Err("redirect responses are denied".into());
-        }
-        let status = response.status().as_u16();
-        if response
-            .headers()
-            .get(reqwest::header::CONTENT_ENCODING)
-            .is_some_and(|v| v != "identity")
-        {
-            return Err("compressed range responses are not supported".into());
-        }
-        if status != 200 && status != 206 {
-            return Err(format!("source returned HTTP {status}"));
-        }
-        if input.offset > 0 && status != 206 {
-            return Err("source ignored range request".into());
-        }
-        if status == 206 {
-            let expected = format!("bytes {}-", input.offset);
-            if !response
-                .headers()
-                .get(reqwest::header::CONTENT_RANGE)
-                .and_then(|v| v.to_str().ok())
-                .is_some_and(|v| v.starts_with(&expected))
-            {
-                return Err("source returned a mismatched range".into());
-            }
-        }
-        let etag = response
-            .headers()
-            .get(reqwest::header::ETAG)
-            .and_then(|v| v.to_str().ok())
-            .filter(|v| v.len() <= MAX_ETAG_BYTES)
-            .map(str::to_owned);
-        if input
-            .etag
-            .as_deref()
-            .is_some_and(|expected| etag.as_deref() != Some(expected))
-        {
-            return Err("source identity changed".into());
-        }
-        if response
-            .content_length()
-            .is_some_and(|v| v > u64::from(input.max_bytes))
-        {
-            return Err("source range exceeds limit".into());
-        }
-        let media = response
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .filter(|v| !v.is_empty() && v.len() <= MAX_MEDIA_TYPE_BYTES && v.is_ascii())
-            .unwrap_or("application/octet-stream")
-            .to_owned();
-        let artifact = self
-            .repository
-            .begin_extension_http_input(
-                self.run_id,
-                &host.installation.extension_id,
-                host.installation.installed_release_id,
-                i64::from(input.max_bytes),
-                &media,
-            )
-            .await
-            .map_err(|error| error.to_string())?;
-        let path = std::env::temp_dir().join(format!("attricat-http-input-{}", artifact.id));
-        let result = async {
-            let mut file = File::create(&path).map_err(|_| "temporary transfer unavailable".to_owned())?;
-            let mut hash = Sha256::new();
-            let mut length = 0usize;
-            let mut stream = response.bytes_stream();
-            while let Some(chunk) = stream.next().await {
-                let chunk = chunk.map_err(|_| "source transfer interrupted".to_owned())?;
-                length = length.checked_add(chunk.len()).ok_or("source range exceeds limit")?;
-                if length > input.max_bytes as usize { return Err("source range exceeds limit".into()); }
-                file.write_all(&chunk).map_err(|_| "temporary transfer unavailable".to_owned())?;
-                hash.update(&chunk);
-            }
-            drop(file);
-            if length == 0 { return Err("source returned an empty range".into()); }
-            let object_key = artifact.object_key.as_deref().ok_or("source artifact has no key")?;
-            self.object_store.put_file(object_key, &path, Some(&media)).await.map_err(|_| "transfer storage unavailable".to_owned())?;
-            self.repository.complete_extension_http_input(artifact.id, self.run_id, crate::repository::CompletedHttpInput {
-                transfer_key: &input.transfer_key,
-                request_digest: &digest,
-                source_etag: etag.as_deref(),
-                length: length as i64,
-                sha256: &format!("{:x}",hash.finalize()),
-            }).await
-                .map_err(|error| error.to_string())?;
-            bounded_serialize(&json!({"artifact_id":artifact.id,"etag":etag,"offset":input.offset,"length":length,"replayed":false}))
-        }.await;
-        let _ = std::fs::remove_file(&path);
-        if result.is_err() {
-            let _ = self
-                .repository
-                .abort_extension_http_input(artifact.id, self.run_id)
-                .await;
-            if let Some(key) = &artifact.object_key {
-                let _ = self.object_store.delete(key).await;
-            }
-        }
-        result
-    }
-
-    async fn transfer_deliver_output(&mut self, request: String) -> Result<String, String> {
-        let input: TransferDelivery = parse_host_request(&request, "delivery request")?;
-        if !transfer_key_valid(&input.delivery_key)
-            || !matches!(input.method.as_str(), "PUT" | "POST")
-        {
-            return Err("invalid delivery method or key".into());
-        }
-        let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
-        host.require_active("network.request").await?;
-        let (client, url, mut headers, max_bytes) = Self::transfer_client(
-            &host,
-            &input.host_permission_id,
-            &input.method,
-            &input.url,
-            &input.secret_headers,
-        )
-        .await?;
-        let artifact = self
-            .repository
-            .extension_output_artifact(self.run_id, input.artifact_id)
-            .await
-            .map_err(|_| "output is not authorized")?;
-        if artifact.state != "completed"
-            || artifact.content_length <= 0
-            || artifact.content_length as u64 > max_bytes
-        {
-            return Err("output exceeds granted delivery limit or is not finalized".into());
-        }
-        let digest = format!(
-            "{:x}",
-            Sha256::digest(
-                format!(
-                    "{}:{}:{}:{}",
-                    input.host_permission_id, input.url, input.method, input.artifact_id
-                )
-                .as_bytes()
-            )
-        );
-        let attempt = self
-            .repository
-            .begin_extension_http_delivery(
-                self.run_id,
-                &input.delivery_key,
-                input.artifact_id,
-                &digest,
-            )
-            .await
-            .map_err(|error| error.to_string())?;
-        let id = match attempt {
-            DeliveryState::Succeeded(status) => {
-                return bounded_serialize(&json!({"outcome":"succeeded","status":status}));
-            }
-            DeliveryState::Failed(status) => {
-                return bounded_serialize(&json!({"outcome":"failed","status":status}));
-            }
-            DeliveryState::Uncertain => return bounded_serialize(&json!({"outcome":"uncertain"})),
-            DeliveryState::Send(id) => id,
-        };
-        // Once the durable uncertain marker exists we must not resend on any
-        // failure path, including a process crash before the HTTP request.
-        let idempotency = format!("{}:{}", self.run_id, input.delivery_key);
-        headers.insert(
-            "idempotency-key",
-            reqwest::header::HeaderValue::from_str(&idempotency)
-                .map_err(|_| "invalid delivery key")?,
-        );
-        let object_key = artifact.object_key.ok_or("output object unavailable")?;
-        let stream = self
-            .object_store
-            .get_stream(&object_key)
-            .await
-            .map_err(|_| "output storage unavailable")?;
-        let method =
-            Method::from_bytes(input.method.as_bytes()).map_err(|_| "invalid delivery method")?;
-        let response = client
-            .request(method, url)
-            .headers(headers)
-            .header(reqwest::header::CONTENT_TYPE, artifact.media_type)
-            .header(reqwest::header::CONTENT_LENGTH, artifact.content_length)
-            .body(reqwest::Body::wrap_stream(stream.stream))
-            .send()
-            .await;
-        let Ok(response) = response else {
-            return bounded_serialize(&json!({"outcome":"uncertain"}));
-        };
-        if response.status().is_redirection() {
-            return bounded_serialize(&json!({"outcome":"uncertain"}));
-        }
-        let status = response.status().as_u16();
-        self.repository
-            .complete_extension_http_delivery(id, status)
-            .await
-            .map_err(|_| "delivery confirmation could not be persisted")?;
-        bounded_serialize(
-            &json!({"outcome": if (200..300).contains(&status) { "succeeded" } else { "failed" },"status":status}),
-        )
-    }
 }
 
 impl OperationState {
@@ -2559,18 +2975,17 @@ impl OperationState {
         if request.len() > MAX_HOST_JSON_BYTES {
             return Err("request exceeds host JSON limit".into());
         }
-        if self
+        let scope = self
             .repository
             .connector_run_scope(self.run_id)
             .await
-            .map_err(|error| error.to_string())?
-            .is_some()
-        {
-            return Err("scoped jobs must use host-filtered connector catalog calls".into());
-        }
+            .map_err(|error| error.to_string())?;
         let input: AttricatCommandRequest = parse_storage_request(&request)?;
         let AttricatCommandRequest::Batch { batch } = input;
         require_operation_batch_key(&batch.batch_key, &self.batch_key)?;
+        if let Some((blueprint_id, ..)) = scope {
+            return self.scoped_annotation_batch(blueprint_id, batch).await;
+        }
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_all_active(batch_capabilities(&batch)).await?;
         let repository = host

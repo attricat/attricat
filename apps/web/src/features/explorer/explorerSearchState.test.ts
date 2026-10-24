@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  exportStatusRequest,
   relationshipFiltersFromSearch,
   relationshipTreeFacetsRequest,
   relationshipTreeSelectionsFromSearch,
   updateRelationshipFacets,
 } from './explorerSearchState';
-import type { ExplorerSearch } from './search';
+import { parseExplorerSearch, type ExplorerSearch } from './search';
 
 const brandId = '123e4567-e89b-12d3-a456-426614174001';
 const shoesId = '123e4567-e89b-12d3-a456-426614174002';
@@ -103,5 +104,52 @@ describe('relationship facet requests', () => {
         selectedIds: [],
       }),
     ).toEqual([{ field: 'brand', selectedIds: [brandId] }]);
+  });
+});
+
+describe('export status filter', () => {
+  it('round-trips through the URL and becomes the request field', () => {
+    const parsed = parseExplorerSearch({
+      blueprint: 'product',
+      exportStatus: {
+        extension: 'acme.shop',
+        connection: 'shop-eu',
+        status: 'rejected',
+      },
+    });
+    expect(exportStatusRequest(parsed)).toEqual({
+      extension_id: 'acme.shop',
+      connection: 'shop-eu',
+      status: 'rejected',
+    });
+    expect(
+      exportStatusRequest(
+        parseExplorerSearch({
+          blueprint: 'product',
+          exportStatus: { extension: 'acme.shop', status: 'synced' },
+        }),
+      ),
+    ).toEqual({ extension_id: 'acme.shop', status: 'synced' });
+  });
+
+  it('drops an unknown status from the URL', () => {
+    const parsed = parseExplorerSearch({
+      blueprint: 'product',
+      exportStatus: { extension: 'acme.shop', status: 'exploded' },
+    });
+    expect(parsed.exportStatus).toBeUndefined();
+    expect(exportStatusRequest(parsed)).toBeUndefined();
+  });
+
+  it('drops a malformed connection from the URL', () => {
+    const parsed = parseExplorerSearch({
+      blueprint: 'product',
+      exportStatus: {
+        extension: 'acme.shop',
+        connection: 'shop eu',
+        status: 'rejected',
+      },
+    });
+    expect(parsed.exportStatus).toBeUndefined();
   });
 });

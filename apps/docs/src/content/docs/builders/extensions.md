@@ -24,7 +24,7 @@ Uploaded archives get the same checks as registry installs: size limits, safe fi
 A new installation starts **disabled**. Before enabling it:
 
 1. **Read the requested permissions.** Each one names a capability, such as `attricat.write` (change records), `events.subscribe` (react to changes), `network.request` (call external services), or `client.record_action` (add a button to record pages). The [manifest reference](/extensions/manifest/#capabilities) lists them all.
-2. **Check network access.** `network.request` only allows calls to the URL patterns listed as host permissions. Each pattern shows its hosts, methods, size limits, and timeout.
+2. **Check network access.** `network.request` only allows calls to the URL patterns listed as host permissions. Each pattern shows its hosts, methods, size limits, and timeout, and whether it may send query strings.
 3. **Configure** the extension if it has settings.
 4. **Grant** the required permissions. Optional permissions can be left out; the extension must work without them.
 5. **Enable** it.
@@ -54,10 +54,41 @@ PUT /workspace/extension-secrets/destination-token
 
 `GET /workspace/extension-secrets` lists names only, and `DELETE` removes a secret. Values are write-only: nobody can read them back, and an extension with `secrets.read` receives a value only while it runs.
 
+## Connections
+
+Extensions that export to marketplaces or storefronts reach the destination through **connections**: one per account, such as a Shopify shop or an Amazon seller account in one region. An extension can have several connections of each kind it declares. Manage them in the **Connections** section of the extension's page under **Manage → Extensions**.
+
+Attricat stores client secrets and tokens encrypted, obtains and refreshes access tokens itself, and adds them only to requests to the destination's API. The extension never sees them, and nobody can read them back. The deployment needs the [`extension_credential_key`](/reference/configuration/#secrets) secret before connections can be created.
+
+To add one, choose **Add connection** and fill in:
+
+- **Kind**, from the kinds the extension declares;
+- **Name**, a short identifier that [connector jobs](/reference/blueprint/#connector-jobs) use with `connection = "…"`, and a **Display name**;
+- **Client ID**, and the **Client secret** if the destination requires one;
+- **Authorization**, the OAuth grant the destination uses:
+  - **Client credentials** needs the client secret. The connection works at once.
+  - **Refresh token** needs a refresh token you obtained from the destination.
+  - **Device code** needs the destination's device authorization URL. After creating the connection, choose **Authorize**, enter the code shown at the destination's page and approve, then choose **Check authorization**.
+  - **Authorization code**: enter the destination's **Authorization URL**, and register the redirect URI the connection shows with your app at the destination. Then choose **Authorize in browser**, approve the app at the destination, and you are sent back to the extension's page with the connection active. Complete it within ten minutes, in the same browser where you are signed in to Attricat: the authorization only finishes for the session that started it. If the deployment has no [`EXTENSION_OAUTH_CALLBACK_URL`](/reference/configuration/#extensions), copy the code from the destination's redirect instead, enter it with the redirect URI, and choose **Connect**.
+- **Token URL** and any **Scope** the destination requires. The token and device authorization URLs must match a host permission the extension declares for this kind.
+- **Parameters**: a JSON object of non-secret settings the extension reads, such as a shop domain or marketplace ID.
+
+**Test** gets an access token to check the connection. To rotate a credential, enter a **New client secret** or **New refresh token** and choose **Replace**. A connection whose grant the destination rejects is marked **Failed** until you fix it; temporary failures do not change its status. **Delete** removes the connection with its stored credentials and its export status.
+
+## Request budgets
+
+A host permission can declare how many requests the extension may send, such as five per second. The **Request budgets** section lists each host permission's declared budget. **Lower** sets a smaller one, for example to leave room for other systems that use the same account. You cannot raise a budget above what the extension declares. **Reset** returns to the declared budget. Host permissions without a declared budget share 60 requests per minute.
+
+## Export status
+
+For an extension that declares export destinations, the **Export status** section counts records per connection and status. Select a status to list its records with the destination's error, select records, and **Retry** them, or retry all records in that status. A retry marks the records as pending and asks the extension to export them again. The section also lists event deliveries the extension rejected or gave up on in the last 30 days, and any mapping editor the extension provides for each destination.
+
+Each record's status is also on its [Exports tab](/guides/records/#exports), and the Data health page counts problems across extensions.
+
 ## When something goes wrong
 
 - **Disable** an extension to stop it without losing its configuration and grants.
-- **Quarantine** marks an installation as unsafe. Attricat quarantines an extension automatically when its server code crashes, runs out of memory or time, or returns an error while handling an event. Re-enabling it checks the release and configuration again.
+- **Quarantine** marks an installation as unsafe. Attricat quarantines an extension automatically when its server code crashes or runs out of memory or time. Older extensions are also quarantined when they return an error while handling an event; extensions built for host API 1.1 report a rejected record or a temporary failure instead, which is retried or shown in the export status. Re-enabling it checks the release and configuration again.
 - **Remove** uninstalls it. Its history stays in the audit log.
 - The workspace **extensions mode** switch turns off every extension in the workspace at once, without changing any installation. Turn it back on to restore the ones that were enabled.
 

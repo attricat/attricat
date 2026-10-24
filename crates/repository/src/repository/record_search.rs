@@ -1,5 +1,6 @@
 use super::*;
 use super::{record_projection::display_label, system_annotations::validate_system_tags};
+use crate::model::ExportStatusFilter;
 use attricat_validation::saved_search::MAX_RELATIONSHIP_HOPS;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
@@ -975,12 +976,15 @@ impl AttricatRepository {
         matching_record_ids: Option<&[Uuid]>,
         system_tags: &[String],
         outdated: bool,
+        export_status: Option<&ExportStatusFilter>,
         current_blueprint_version: i64,
     ) -> Result<(Vec<RecordPreview>, Option<String>), RepositoryError> {
         validate_system_tags(system_tags)?;
-        let sql = r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
+        let export_status_sql = export_status_clause(12, export_status);
+        let sql = format!(
+            r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
-                      (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
+                      (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
                          FROM attributes attribute
                         WHERE attribute.blueprint_id = e.blueprint_id
                           AND attribute.blueprint_version = e.blueprint_version
@@ -1018,11 +1022,13 @@ impl AttricatRepository {
                    )
                   AND ($6::uuid[] IS NULL OR e.id = ANY($6))
                   AND ($7::text[] IS NULL OR e.system_tags @> $7)
+                  {export_status_sql}
                   AND (NOT $8 OR e.blueprint_version <> $9)
                  ORDER BY e.created_at, e.id
-                 LIMIT $10"#;
+                 LIMIT $10"#
+        );
         let (cursor_created_at, cursor_id) = cursor.unzip();
-        let rows = sqlx::query_as::<_, RecordPreviewRow>(sql)
+        let rows = sqlx::query_as::<_, RecordPreviewRow>(&sql)
             .bind(blueprint_id)
             .bind(blueprint_version)
             .bind(query)
@@ -1034,6 +1040,7 @@ impl AttricatRepository {
             .bind(current_blueprint_version)
             .bind(limit + 1)
             .bind(self.workspace_id.0)
+            .bind(export_status_param(export_status))
             .fetch_all(&self.pool)
             .await?;
         let mut items: Vec<_> = rows.into_iter().map(record_preview).collect();
@@ -1057,11 +1064,13 @@ impl AttricatRepository {
         matching_record_ids: Option<&[Uuid]>,
         system_tags: &[String],
         outdated: bool,
+        export_status: Option<&ExportStatusFilter>,
         current_blueprint_version: i64,
         limit: i64,
     ) -> Result<i64, RepositoryError> {
         validate_system_tags(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 3);
+        let export_status_sql = export_status_clause(9, export_status);
         Ok(sqlx::query_scalar::<_, i64>(&format!(
             r#"SELECT COUNT(*)
                  FROM (
@@ -1073,6 +1082,7 @@ impl AttricatRepository {
                        AND e.deleted_at IS NULL
                        {matching}
                        AND ($4::text[] IS NULL OR e.system_tags @> $4)
+                       {export_status_sql}
                        AND (NOT $5 OR e.blueprint_version <> $6)
                      LIMIT $7
                  ) matches"#,
@@ -1085,10 +1095,12 @@ impl AttricatRepository {
         .bind(current_blueprint_version)
         .bind(limit)
         .bind(self.workspace_id.0)
+        .bind(export_status_param(export_status))
         .fetch_one(&self.pool)
         .await?)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn search_result_versions(
         &self,
         blueprint_id: Uuid,
@@ -1096,10 +1108,12 @@ impl AttricatRepository {
         matching_record_ids: Option<&[Uuid]>,
         system_tags: &[String],
         outdated: bool,
+        export_status: Option<&ExportStatusFilter>,
         current_blueprint_version: i64,
     ) -> Result<Vec<i64>, RepositoryError> {
         validate_system_tags(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 4);
+        let export_status_sql = export_status_clause(8, export_status);
         Ok(sqlx::query_scalar::<_, i64>(&format!(
             r#"SELECT e.blueprint_version
                  FROM {records}
@@ -1109,6 +1123,7 @@ impl AttricatRepository {
                   AND e.deleted_at IS NULL
                   {matching}
                   AND ($5::text[] IS NULL OR e.system_tags @> $5)
+                  {export_status_sql}
                   AND (NOT $6 OR e.blueprint_version <> $7)
                 GROUP BY e.blueprint_version
                 ORDER BY e.blueprint_version DESC
@@ -1121,6 +1136,7 @@ impl AttricatRepository {
         .bind((!system_tags.is_empty()).then_some(system_tags))
         .bind(outdated)
         .bind(current_blueprint_version)
+        .bind(export_status_param(export_status))
         .fetch_all(&self.pool)
         .await?)
     }
@@ -1135,6 +1151,7 @@ impl AttricatRepository {
         matching_record_ids: Option<&[Uuid]>,
         system_tags: &[String],
         outdated: bool,
+        export_status: Option<&ExportStatusFilter>,
         current_blueprint_version: i64,
         count_limit: Option<i64>,
     ) -> Result<(Vec<i64>, Option<i64>), RepositoryError> {
@@ -1146,6 +1163,7 @@ impl AttricatRepository {
                     matching_record_ids,
                     system_tags,
                     outdated,
+                    export_status,
                     current_blueprint_version,
                 )
                 .await?,
@@ -1154,6 +1172,7 @@ impl AttricatRepository {
         };
         validate_system_tags(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 4);
+        let export_status_sql = export_status_clause(9, export_status);
         let (versions, count) = sqlx::query_as::<_, (Vec<i64>, i64)>(&format!(
             r#"WITH matches AS MATERIALIZED (
                    SELECT e.blueprint_version
@@ -1164,6 +1183,7 @@ impl AttricatRepository {
                       AND e.deleted_at IS NULL
                       {matching}
                       AND ($5::text[] IS NULL OR e.system_tags @> $5)
+                      {export_status_sql}
                       AND (NOT $6 OR e.blueprint_version <> $7)
                )
                SELECT ARRAY(
@@ -1182,6 +1202,7 @@ impl AttricatRepository {
         .bind(outdated)
         .bind(current_blueprint_version)
         .bind(count_limit)
+        .bind(export_status_param(export_status))
         .fetch_one(&self.pool)
         .await?;
         Ok((versions, Some(count)))
@@ -1200,6 +1221,7 @@ impl AttricatRepository {
         matching_record_ids: Option<&[Uuid]>,
         system_tags: &[String],
         outdated: bool,
+        export_status: Option<&ExportStatusFilter>,
         current_blueprint_version: i64,
         sort: &RecordSearchSort,
     ) -> Result<(Vec<RecordPreview>, Option<String>), RepositoryError> {
@@ -1236,6 +1258,7 @@ impl AttricatRepository {
                     matching_record_ids,
                     system_tags,
                     outdated,
+                    export_status,
                     current_blueprint_version,
                     sort,
                     cursor.as_ref(),
@@ -1251,6 +1274,7 @@ impl AttricatRepository {
                     matching_record_ids,
                     system_tags,
                     outdated,
+                    export_status,
                     current_blueprint_version,
                     sort,
                     cursor_value,
@@ -1318,6 +1342,7 @@ impl AttricatRepository {
             &resolved_context("sort_value", "sort_attribute", "$15"),
         )
         .replace("{edge_context}", &resolved_context("edge", "path_attribute", "$15"));
+        let export_status_sql = export_status_clause(16, export_status);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
@@ -1333,6 +1358,7 @@ impl AttricatRepository {
                   AND e.workspace_id = $14 AND e.deleted_at IS NULL
                   AND ($3::uuid[] IS NULL OR e.id = ANY($3))
                   AND ($4::text[] IS NULL OR e.system_tags @> $4)
+                  {export_status_sql}
                   AND (NOT $5 OR e.blueprint_version <> $6)
                   AND ($9::uuid IS NULL
                     OR ({nulls_first} AND (
@@ -1370,6 +1396,7 @@ impl AttricatRepository {
             .bind(limit + 1)
             .bind(self.workspace_id.0)
             .bind(&sort.context.ids)
+            .bind(export_status_param(export_status))
             .fetch_all(&self.pool)
             .await?;
         let mut rows = rows;
@@ -1397,6 +1424,7 @@ impl AttricatRepository {
         matching_record_ids: Option<&[Uuid]>,
         system_tags: &[String],
         outdated: bool,
+        export_status: Option<&ExportStatusFilter>,
         current_blueprint_version: i64,
         sort: &RecordSearchSort,
         cursor: Option<&SortedSearchCursor>,
@@ -1424,11 +1452,12 @@ impl AttricatRepository {
         let (expression, join) = if sort.field == "publication_status" {
             (
                 "CASE WHEN p.published_at IS NULL THEN 0 ELSE 1 END",
-                "LEFT JOIN record_channel_publications p ON p.workspace_id = e.workspace_id AND p.record_id = e.id AND p.context_id = $11",
+                "LEFT JOIN record_channel_publications p ON p.workspace_id = e.workspace_id AND p.record_id = e.id AND p.context_id = $12",
             )
         } else {
             ("e.blueprint_version", "")
         };
+        let export_status_sql = export_status_clause(11, export_status);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                          b.views AS blueprint_views,
@@ -1443,6 +1472,7 @@ impl AttricatRepository {
                     AND e.workspace_id = $10 AND e.deleted_at IS NULL
                     AND ($3::uuid[] IS NULL OR e.id = ANY($3))
                     AND ($4::text[] IS NULL OR e.system_tags @> $4)
+                    {export_status_sql}
                     AND (NOT $5 OR e.blueprint_version <> $6)
                     AND ($8::uuid IS NULL OR ({expression}) {comparison} $7::bigint
                          OR (({expression}) = $7 AND e.id > $8))
@@ -1459,7 +1489,8 @@ impl AttricatRepository {
             .bind(cursor_version)
             .bind(cursor.map(|cursor| cursor.id))
             .bind(limit + 1)
-            .bind(self.workspace_id.0);
+            .bind(self.workspace_id.0)
+            .bind(export_status_param(export_status));
         let mut rows = if sort.field == "publication_status" {
             query
                 .bind(sort.publication_context_id)
@@ -1493,6 +1524,7 @@ impl AttricatRepository {
         matching_record_ids: Option<&[Uuid]>,
         system_tags: &[String],
         outdated: bool,
+        export_status: Option<&ExportStatusFilter>,
         current_blueprint_version: i64,
         sort: &RecordSearchSort,
         cursor_value: Option<String>,
@@ -1515,6 +1547,8 @@ impl AttricatRepository {
         .fetch_all(&self.pool)
         .await?;
         let mut rows = Vec::new();
+        let leaf_export_status = export_status_clause(18, export_status);
+        let null_export_status = export_status_clause(16, export_status);
 
         if !cursor_is_null {
             let reverse_joins = relationship_sort_reverse_joins(sort.relationship_path.len())?;
@@ -1546,6 +1580,7 @@ impl AttricatRepository {
                       AND e.workspace_id = $14 AND e.deleted_at IS NULL
                       AND ($3::uuid[] IS NULL OR e.id = ANY($3))
                       AND ($4::text[] IS NULL OR e.system_tags @> $4)
+                      {leaf_export_status}
                       AND (NOT $5 OR e.blueprint_version <> $6)
                       AND NOT $8
                       AND ($9::uuid IS NULL OR sort_value.{column} {comparison} $7::{column_type}
@@ -1573,6 +1608,7 @@ impl AttricatRepository {
                 .bind(&sort.context.ids)
                 .bind(cursor_target_id)
                 .bind(&leaf_attribute_ids)
+                .bind(export_status_param(export_status))
                 .fetch_all(&self.pool)
                 .await?;
         }
@@ -1598,6 +1634,7 @@ impl AttricatRepository {
                       AND sort_value.id IS NULL
                       AND ($3::uuid[] IS NULL OR e.id = ANY($3))
                       AND ($4::text[] IS NULL OR e.system_tags @> $4)
+                      {null_export_status}
                       AND (NOT $5 OR e.blueprint_version <> $6)
                       AND $7::text IS NULL AND $8
                       AND ($9::uuid IS NULL OR e.id > $9)
@@ -1620,6 +1657,7 @@ impl AttricatRepository {
                 .bind(remaining)
                 .bind(workspace_id)
                 .bind(&sort.context.ids)
+                .bind(export_status_param(export_status))
                 .fetch_all(&self.pool)
                 .await?;
             rows.append(&mut null_rows);
@@ -3693,6 +3731,37 @@ const TREE_FACET_COUNTS_FRESH: Duration = Duration::from_secs(30);
 /// How long expired counts are kept after that, so requests arriving while
 /// one request reloads them get the previous counts instead of waiting.
 const TREE_FACET_COUNTS_STALE: Duration = Duration::from_secs(10 * 60);
+
+/// The predicate of an optional [`ExportStatusFilter`] bound as JSON at
+/// `parameter`, over the records aliased `e`.
+fn export_status_clause(parameter: usize, filter: Option<&ExportStatusFilter>) -> String {
+    // Equality or IS NULL, unlike IS NOT DISTINCT FROM, can use the mapping
+    // indexes.
+    let connection = if filter.is_some_and(|filter| filter.connection.is_some()) {
+        format!("export_mapping.connection = ${parameter}->>'connection'")
+    } else {
+        "export_mapping.connection IS NULL".to_owned()
+    };
+    format!(
+        "AND (${parameter}::jsonb IS NULL OR EXISTS (SELECT 1 FROM extension_export_mappings export_mapping \
+         WHERE export_mapping.workspace_id = e.workspace_id AND export_mapping.record_id = e.id \
+           AND export_mapping.extension_id = ${parameter}->>'extension_id' \
+           AND {connection} AND {current} \
+           AND export_mapping.status = ${parameter}->>'status'))",
+        current = super::extension_export_state::current_destination("export_mapping")
+    )
+}
+
+/// The JSON bound for [`export_status_clause`].
+fn export_status_param(filter: Option<&ExportStatusFilter>) -> Option<Value> {
+    filter.map(|filter| {
+        serde_json::json!({
+            "extension_id": filter.extension_id,
+            "connection": filter.connection,
+            "status": filter.status,
+        })
+    })
+}
 
 /// The `records e` source and filter of a query over every search match, for
 /// matching IDs bound at `$parameter`. The ID list drives the join: with an

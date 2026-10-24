@@ -39,6 +39,7 @@ export const extensionOutletNames = [
   'audit_event_panel',
   'data_health_card',
   'action_dialog',
+  'export_mapping',
 ] as const;
 export const navigationOutlet = 'navigation';
 /** The host-managed dialog opened by an extension's selection actions. */

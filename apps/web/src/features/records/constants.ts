@@ -25,6 +25,7 @@ export const recordPreviewTabs = {
   dataQuality: 'data-quality',
   comments: 'comments',
   recordControl: 'record-control',
+  exports: 'exports',
 } as const;
 export type RecordPreviewTabKey =
   (typeof recordPreviewTabs)[keyof typeof recordPreviewTabs];

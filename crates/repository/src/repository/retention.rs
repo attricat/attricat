@@ -251,7 +251,8 @@ impl<S: RepositoryScope> AttricatRepository<S> {
     /// delivery is pending, leased or dead-lettered, or still has a queued or
     /// leased envelope, and so does each workspace's newest event, which
     /// activation boundaries and new consumers read. Workflow runs keep their
-    /// copy of the trigger event (`trigger_event_id` becomes null).
+    /// copy of the trigger event (`trigger_event_id` becomes null); extension
+    /// handler outcomes of the event go with it.
     ///
     /// Each workspace scans its own sequence range, from where its last batch
     /// stopped up to a ceiling: the slowest consumer's watermark, the event
@@ -313,6 +314,12 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             .bind(&delivery_ids)
             .execute(&mut *tx)
             .await?;
+        // Retrying and debouncing handlers keep their delivery open, so only
+        // settled outcomes are left here, and they name the event.
+        sqlx::query("DELETE FROM extension_handler_attempts WHERE event_id = ANY($1)")
+            .bind(&ids)
+            .execute(&mut *tx)
+            .await?;
         let deleted = sqlx::query("DELETE FROM domain_events WHERE id = ANY($1)")
             .bind(&ids)
             .execute(&mut *tx)
@@ -351,6 +358,65 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             .await?;
         tx.commit().await?;
         Ok(deleted)
+    }
+
+    /// Extension handler outcomes last updated 30 days ago: rejected and
+    /// exhausted ones, which the extension's page lists, and those of a
+    /// delivery that ended without settling (dead-lettered). Outcomes of a
+    /// delivery that is still open stay, so a late retry never runs a
+    /// completed handler again.
+    pub async fn purge_extension_handler_outcomes_batch(
+        &self,
+        limit: i64,
+    ) -> Result<u64, RepositoryError> {
+        self.purge_with(
+            "WITH expired AS (SELECT a.workspace_id, a.event_id, a.extension_id, a.handler_id FROM extension_handler_attempts a WHERE a.updated_at < clock_timestamp() - interval '30 days' AND (a.status IN ('rejected', 'exhausted') OR NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.event_id = a.event_id AND d.status IN ('pending', 'leased'))) ORDER BY a.updated_at LIMIT $1 FOR UPDATE OF a SKIP LOCKED) DELETE FROM extension_handler_attempts a USING expired e WHERE a.workspace_id = e.workspace_id AND a.event_id = e.event_id AND a.extension_id = e.extension_id AND a.handler_id = e.handler_id",
+            None,
+            limit,
+        )
+        .await
+    }
+
+    /// Public extension file links that expired more than a day ago.
+    pub async fn purge_extension_file_links_batch(
+        &self,
+        limit: i64,
+    ) -> Result<u64, RepositoryError> {
+        self.purge_with(
+            "WITH expired AS (SELECT id FROM extension_file_links WHERE expires_at < clock_timestamp() - interval '1 day' ORDER BY expires_at LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM extension_file_links l USING expired e WHERE l.id = e.id",
+            None,
+            limit,
+        )
+        .await
+    }
+
+    /// Browser authorizations of extension connections that expired without
+    /// completing: the state digest, verifier and session binding are
+    /// cleared, and the connection itself stays.
+    pub async fn purge_extension_authorization_requests_batch(
+        &self,
+        limit: i64,
+    ) -> Result<u64, RepositoryError> {
+        self.purge_with(
+            "WITH expired AS (SELECT id FROM extension_connections WHERE authorization_expires_at < clock_timestamp() ORDER BY authorization_expires_at LIMIT $1 FOR UPDATE SKIP LOCKED) UPDATE extension_connections c SET authorization_state_sha256 = NULL, authorization_verifier_ciphertext = NULL, authorization_session_sha256 = NULL, authorization_expires_at = NULL FROM expired e WHERE c.id = e.id",
+            None,
+            limit,
+        )
+        .await
+    }
+
+    /// Keyed export retry requests after a week: a client resends a timed
+    /// out request within minutes, not days.
+    pub async fn purge_extension_export_retry_requests_batch(
+        &self,
+        limit: i64,
+    ) -> Result<u64, RepositoryError> {
+        self.purge_with(
+            "WITH expired AS (SELECT workspace_id, extension_id, request_key FROM extension_export_retry_requests WHERE created_at < now() - interval '7 days' ORDER BY created_at LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM extension_export_retry_requests r USING expired e WHERE r.workspace_id = e.workspace_id AND r.extension_id = e.extension_id AND r.request_key = e.request_key",
+            None,
+            limit,
+        )
+        .await
     }
 
     /// Rate-limit rows whose 15-minute window has ended. The limiters reset

@@ -77,8 +77,16 @@
           "pattern": "^[A-Za-z0-9_-]+$",
           "type": "string"
         },
+        "connection": {
+          "description": "The extension connection (destination account) an export pushes to.\nWithout it the extension's default destination is used.",
+          "pattern": "^[A-Za-z0-9._-]{1,128}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "context": {
-          "description": "Context code that receives imported values. Required for imports.",
+          "description": "Context code that receives imported values, required for imports; for\nan export, the publication channel it exports.",
           "type": [
             "string",
             "null"
@@ -127,6 +135,17 @@
         "operation_id": {
           "description": "Connector operation declared by the extension.",
           "type": "string"
+        },
+        "trigger": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConnectorJobTrigger"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Also run an export when records of this blueprint change, once they\nhave been quiet for `debounce_seconds`."
         }
       },
       "required": [
@@ -135,6 +154,31 @@
         "extension_id",
         "operation_id",
         "input"
+      ],
+      "type": "object"
+    },
+    "ConnectorJobTrigger": {
+      "additionalProperties": false,
+      "description": "A change trigger of an export connector job.",
+      "properties": {
+        "debounce_seconds": {
+          "description": "Quiet period before a triggered run, from 1 to 3600 seconds.",
+          "format": "int32",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "events": {
+          "description": "Record event types that start a run, such as `record.updated.v1`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "events",
+        "debounce_seconds"
       ],
       "type": "object"
     },

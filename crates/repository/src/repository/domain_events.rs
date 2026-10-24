@@ -156,7 +156,7 @@ impl From<EventDeliveryRow> for EventDelivery {
     }
 }
 
-async fn lock_outbox_boundary(
+pub(crate) async fn lock_outbox_boundary(
     transaction: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
 ) -> Result<(), RepositoryError> {
@@ -325,6 +325,41 @@ impl AttricatRepository {
         .await?;
         transaction.commit().await?;
         Ok(consumer)
+    }
+
+    /// The highest event sequence below which every event has committed.
+    /// Read under the outbox boundary, so no event with an allocated but
+    /// uncommitted sequence can later appear below it. Event writers hold
+    /// the boundary only while they commit, so the wait is normally short;
+    /// behind a write that holds it longer than `wait` (a Postgres interval
+    /// such as `2s`) this is `None`, so no reader stalls or holds a pooled
+    /// connection for long.
+    pub(crate) async fn committed_event_high_water(
+        &self,
+        wait: &str,
+    ) -> Result<Option<i64>, RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query(&format!("SET LOCAL lock_timeout = '{wait}'"))
+            .execute(&mut *transaction)
+            .await?;
+        match lock_outbox_boundary(&mut transaction, workspace_id).await {
+            Ok(()) => {}
+            Err(RepositoryError::Database(sqlx::Error::Database(error)))
+                if error.code().as_deref() == Some("55P03") =>
+            {
+                return Ok(None);
+            }
+            Err(error) => return Err(error),
+        }
+        let high_water = sqlx::query_scalar::<_, i64>(
+            "SELECT COALESCE(max(sequence), 0) FROM domain_events WHERE workspace_id = $1",
+        )
+        .bind(workspace_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(Some(high_water))
     }
 
     pub async fn create_event_consumer(

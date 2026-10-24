@@ -31,7 +31,7 @@ fn resolved_value(
 /// See [`AttricatRepository::preview_scope`].
 pub(super) struct PreviewScope {
     requested_context: AttributeContext,
-    tree: std::sync::Arc<ContextTree>,
+    pub(super) tree: std::sync::Arc<ContextTree>,
 }
 
 #[derive(sqlx::FromRow)]

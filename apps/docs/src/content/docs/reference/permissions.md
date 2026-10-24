@@ -27,14 +27,14 @@ A missing or expired sign-in returns `401`. A signed-in person without the permi
 | `records.publish` | Publishing and unpublishing records to channels. | ✓ | ✓ | | |
 | `contexts.read` | Contexts and publication channels. | ✓ | ✓ | ✓ | ✓ |
 | `contexts.write` | Creating, changing, and deleting contexts; enabling publication channels. | ✓ | ✓ | ✓ | |
-| `data_health.read` | Data health, background processing, metrics, and dead-letter event lists. | ✓ | ✓ | ✓ | ✓ |
+| `data_health.read` | Data health, background processing, metrics, and dead-letter event lists; export status counts and the Explorer's **Export status** filter. | ✓ | ✓ | ✓ | ✓ |
 | `agents.run` | Agent conversations and approvals. | ✓ | ✓ | | |
 | `rules.read` | Rules, runs, and findings. | ✓ | ✓ | | |
 | `rules.manage` | Creating, publishing, enabling, and running rules; acknowledging findings. | ✓ | ✓ | | |
 | `workflows.read` | Workflows and run history. | ✓ | ✓ | | |
 | `workflows.manage` | Creating, publishing, enabling, running, and replaying workflows. | ✓ | ✓ | | |
-| `extensions.read` | Browsing extension registries and installed extensions. | ✓ | ✓ | | |
-| `extensions.manage` | Installing, configuring, granting, enabling, and removing extensions; registries, layout, secrets, operations, and connector jobs. | ✓ | ✓ | | |
+| `extensions.read` | Browsing extension registries and installed extensions, with their export status, connections (without secrets), and request budgets. | ✓ | ✓ | | |
+| `extensions.manage` | Installing, configuring, granting, enabling, and removing extensions; registries, layout, secrets, operations, and connector jobs; connections, request budgets, export retries, and resyncs. | ✓ | ✓ | | |
 | `solution_packs.manage` | Inspecting, planning, and applying solution packs; presentation assets. | ✓ | ✓ | | |
 | `files.hold` | Placing and releasing explicit retention holds on files. | ✓ | ✓ | | |
 | `records.unlock` | Unlocking a record whose status locks it, to any status, outside the blueprint's transitions. | ✓ | ✓ | | |

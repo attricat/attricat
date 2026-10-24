@@ -33,6 +33,8 @@ type Props = {
   runtimeScope?: ExtensionRuntimeScope;
   /** Saved records this action surface applies to (selection-aware outlets). */
   selection?: ActionSelection;
+  /** Mounts only this extension's contributions, on its own page. */
+  extensionId?: string;
 };
 
 /**
@@ -49,6 +51,7 @@ export const ExtensionOutlet = ({
   onNavigate,
   runtimeScope,
   selection,
+  extensionId,
 }: Props) => {
   const { t } = useTranslation();
   const runtime = useExtensionRuntime(runtimeScope);
@@ -77,6 +80,9 @@ export const ExtensionOutlet = ({
     outlet,
     context,
     selection,
+  ).filter(
+    (contribution) =>
+      extensionId === undefined || contribution.extension_id === extensionId,
   );
   const policy = outletPolicies[outlet];
   switch (policy.kind) {

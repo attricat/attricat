@@ -644,10 +644,25 @@ input = { profile = { version = 1, columns = [{ header = "ID", attribute = "exte
 | `extension_id` | ciąg znaków | Wymagany | Identyfikator rozszerzenia konektora. |
 | `operation_id` | ciąg znaków | Wymagany | Operacja zadeklarowana przez rozszerzenie. |
 | `input` | tabela | Wymagany | Dane wejściowe operacji, weryfikowane względem schematu operacji. |
-| `context` | kod kontekstu | | Wymagany dla importów, odrzucany dla eksportów. Zaimportowane wartości są zapisywane w tym kontekście. |
+| `context` | kod kontekstu | | Wymagany dla importów: zaimportowane wartości są zapisywane w tym kontekście. Dla eksportów kanał publikacji do eksportu (musi nim być); bez niego zadanie uruchamia się raz dla każdego włączonego kanału. Zadanie rozszerzenia, które prowadzi mapowania eksportu, musi go ustawić, gdy włączonych jest kilka kanałów. |
 | `input_file_id` | UUID | | Tylko importy. Gotowy plik obszaru roboczego do zaimportowania. |
 | `interval_seconds` | liczba całkowita | Tylko ręcznie | Uruchamia zadanie co N sekund, od 60 do 2592000. |
 | `enabled` | wartość logiczna | `true` | Ustaw `false`, aby wstrzymać zadanie. |
+| `connection` | ciąg znaków | Domyślne miejsce docelowe | Tylko eksporty. [Połączenie](/pl/builders/extensions/#połączenia) rozszerzenia, do którego zadanie wysyła dane: od 1 do 128 liter ASCII, cyfr, `.`, `_` lub `-`. |
+| `trigger` | tabela | | Tylko eksporty. Uruchamia zadanie także wtedy, gdy rekordy się zmieniają: `{ events = [...], debounce_seconds = N }`. |
+
+`trigger.events` zawiera co najmniej jedno z: `record.created.v1`, `record.updated.v1`, `record.deleted.v1`, `record.migrated.v1`, `record.published.v1`, `record.unpublished.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1` i `relationship.changed.v1`. `trigger.debounce_seconds` ma wartość od 1 do 3600: przebieg rusza, gdy od najnowszego pasującego zdarzenia rekordów schematu minie tyle sekund albo gdy najstarsza oczekująca zmiana ma dziesięciokrotność tego czasu, i obejmuje tylko zmienione rekordy. Zdarzenie rekordu, do którego rekordy schematu odwołują się przez relację, liczy się jako zmiana rekordów odwołujących się.
+
+```toml
+[[connector_jobs]]
+code = "shopify"
+direction = "export"
+extension_id = "acme.shopify"
+operation_id = "export"
+connection = "shop-eu"
+trigger = { events = ["record.updated.v1", "record.published.v1"], debounce_seconds = 30 }
+input = {}
+```
 
 Zadania są sprawdzane względem włączonego rozszerzenia podczas publikacji wersji; nieprawidłowe zadanie blokuje publikację. Zadanie usunięte w późniejszej wersji zostaje wyłączone, a jego historia uruchomień jest zachowywana. Zadanie eksportu uruchamia się raz dla każdego włączonego kanału eksportu i eksportuje tylko rekordy opublikowane w tym kanale. Zobacz [Operacje i konektory](/pl/extensions/operations/).
 

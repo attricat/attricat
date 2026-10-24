@@ -33,6 +33,10 @@ import { useRelationshipFilterPaths } from './useRelationshipFilterPaths';
 import { smallIconSize } from '../../components/iconSizes';
 import { useTimeZone } from '../../time/useInstantFormat';
 import { lexiconText } from '../lexicon/lexicon';
+import {
+  ExportStatusFilterControl,
+  type ExportStatusFilterValue,
+} from '../extension-exports/ExportStatusFilterControl';
 
 type Props = {
   filters: AttributeFilter[];
@@ -49,6 +53,8 @@ type Props = {
   onRemove: (index: number) => void;
   onUpdate: (index: number, filter: AttributeFilter) => void;
   onUpdateFacet?: (field: string, updates: RelationshipFacetUpdate) => void;
+  exportStatus?: ExportStatusFilterValue;
+  onExportStatusChange?: (value: ExportStatusFilterValue | undefined) => void;
 };
 
 type EditorState = {
@@ -88,6 +94,8 @@ export const ExplorerFilterBar = ({
   onRemove,
   onUpdate,
   onUpdateFacet = () => undefined,
+  exportStatus,
+  onExportStatusChange,
 }: Props) => {
   const { t } = useTranslation();
   const timeZone = useTimeZone();
@@ -287,6 +295,12 @@ export const ExplorerFilterBar = ({
         >
           {t('explorer.addAttributeFilter')}
         </Button>
+      )}
+      {onExportStatusChange && (
+        <ExportStatusFilterControl
+          value={exportStatus}
+          onChange={onExportStatusChange}
+        />
       )}
       {maximumReached && (
         <Typography color="text.secondary" variant="body2">

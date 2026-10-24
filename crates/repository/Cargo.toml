@@ -26,6 +26,7 @@ chrono-tz.workspace = true
 futures-util.workspace = true
 metrics.workspace = true
 reqwest.workspace = true
+ring.workspace = true
 rust_decimal.workspace = true
 semver.workspace = true
 schemars.workspace = true

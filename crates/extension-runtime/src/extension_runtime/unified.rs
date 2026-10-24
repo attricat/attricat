@@ -1,9 +1,12 @@
-//! Host implementation of the `attricat:host` ABI, currently 1.0.0.
+//! Host implementation of the `attricat:host` ABI, currently 1.1.0.
 //!
 //! Every import is linked for every invocation; the host instantiates the
 //! component once and loads only the export the invocation needs, so a
-//! component may target the combined `attricat-extension` world or the
-//! narrower `handler-extension` or `operation-extension` world.
+//! component may target the combined `attricat-extension` world, the
+//! narrower `handler-extension` or `operation-extension` world, or the 1.1
+//! `outcome-extension` world. When a component exports the 1.1 interfaces
+//! (`event-handler`, `command-handler`, `deferrable-operations`) the host
+//! calls them instead of the 1.0 `handler` and `operations`.
 //!
 //! Run-bound interfaces are implemented by the operation state (including
 //! the interactive selection confinement) and fail outside an operation run.
@@ -16,9 +19,18 @@
 use super::*;
 
 pub(super) mod host_unified {
+    // A host-only world that combines every export of the package, so one
+    // binding covers components of every released world.
     wasmtime::component::bindgen!({
         path: "wit-host",
-        world: "attricat-extension",
+        inline: "
+            package attricat:host-bindings;
+            world host {
+                include attricat:host/attricat-extension@1.1.0;
+                include attricat:host/outcome-extension@1.1.0;
+            }
+        ",
+        world: "attricat:host-bindings/host",
         with: {
             "attricat:host/artifacts.input-artifact": crate::extension_runtime::InputArtifactStream,
             "attricat:host/artifacts.output-artifact": crate::extension_runtime::OutputArtifactStream,
@@ -29,7 +41,10 @@ pub(super) mod host_unified {
 }
 
 use host_unified::attricat::host as v16;
-use host_unified::exports::attricat::host::{handler as v16_handler, operations as v16_operations};
+use host_unified::exports::attricat::host::{
+    command_handler as v11_command_handler, deferrable_operations as v11_operations,
+    event_handler as v11_event_handler, handler as v16_handler, operations as v16_operations,
+};
 
 const RUN_ONLY_ERROR: &str = "this interface is available only during an operation run";
 const RUN_ATTRICAT_ERROR: &str =
@@ -93,6 +108,12 @@ impl v16::api::Host for UnifiedState {
             "attricat.read.v1" | "attricat.command.v1"
         ) {
             self.deny_in_run()?;
+        }
+        if operation == "connector.scope.v1" {
+            return match self.operation.as_mut() {
+                Some(run) => run.connector_scope().await,
+                None => Ok("null".into()),
+            };
         }
         self.host.call(operation, request).await
     }
@@ -160,6 +181,14 @@ impl v16::attricat::Host for UnifiedState {
     async fn upsert_batch(&mut self, request: String) -> Result<(), String> {
         <OperationState as v16::attricat::Host>::upsert_batch(self.run()?, request).await
     }
+
+    async fn page_v2(&mut self, request: String) -> Result<String, String> {
+        <OperationState as v16::attricat::Host>::page_v2(self.run()?, request).await
+    }
+
+    async fn withdrawn(&mut self, cursor: String, limit: u32) -> Result<String, String> {
+        <OperationState as v16::attricat::Host>::withdrawn(self.run()?, cursor, limit).await
+    }
 }
 
 impl v16::transfer::Host for UnifiedState {
@@ -170,7 +199,34 @@ impl v16::transfer::Host for UnifiedState {
     async fn deliver_output(&mut self, request: String) -> Result<String, String> {
         <OperationState as v16::transfer::Host>::deliver_output(self.run()?, request).await
     }
+
+    async fn fetch_input_v2(&mut self, request: String) -> Result<String, String> {
+        <OperationState as v16::transfer::Host>::fetch_input_v2(self.run()?, request).await
+    }
+
+    async fn deliver_output_v2(&mut self, request: String) -> Result<String, String> {
+        <OperationState as v16::transfer::Host>::deliver_output_v2(self.run()?, request).await
+    }
+
+    async fn open_record_file(&mut self, request: String) -> Result<String, String> {
+        <OperationState as v16::transfer::Host>::open_record_file(self.run()?, request).await
+    }
 }
+
+impl v16::clock::Host for UnifiedState {
+    async fn now(&mut self) -> v16::clock::Instant {
+        let elapsed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        v16::clock::Instant {
+            seconds: elapsed.as_secs(),
+            nanoseconds: elapsed.subsec_nanos(),
+        }
+    }
+}
+
+// Types-only interfaces still get a (method-less) host trait.
+impl v16::outcomes::Host for UnifiedState {}
 
 impl v16::artifacts::Host for UnifiedState {
     async fn open_input(
@@ -299,12 +355,14 @@ fn to_wit_v16_event(event: &DomainEvent) -> v16::api::Event {
 
 impl ExtensionRuntime {
     /// Instantiates a unified component with every import linked. `operation`
-    /// is present only for an operation-run batch.
+    /// is present only for an operation-run batch; `lease_holder` names the
+    /// invocation for the export leases it takes.
     async fn instantiate_unified(
         &self,
         installation: &ExtensionRuntimeInstallation,
         repository: AttricatRepository,
         operation: Option<OperationState>,
+        lease_holder: Option<String>,
     ) -> Result<
         (
             Store<UnifiedState>,
@@ -314,14 +372,14 @@ impl ExtensionRuntime {
         ExtensionRuntimeError,
     > {
         let component = self.component(installation).await?;
-        let state = UnifiedState {
-            host: HostState::new(
-                installation.clone(),
-                repository,
-                self.config.max_memory_bytes,
-            ),
-            operation,
-        };
+        let mut host = HostState::new(
+            installation.clone(),
+            repository,
+            self.config.max_memory_bytes,
+        );
+        host.lease_holder = lease_holder;
+        host.run_id = operation.as_ref().map(|operation| operation.run_id);
+        let state = UnifiedState { host, operation };
         let mut store = Store::new(&self.engine, state);
         store.limiter(|state| &mut state.host.limits);
         store.set_fuel(self.config.fuel).map_err(runtime_error)?;
@@ -365,43 +423,87 @@ impl ExtensionRuntime {
         Ok(pre)
     }
 
-    async fn unified_handler(
-        &self,
-        installation: &ExtensionRuntimeInstallation,
-        repository: AttricatRepository,
-    ) -> Result<(Store<UnifiedState>, v16_handler::Guest), ExtensionRuntimeError> {
-        let (mut store, pre, instance) = self
-            .instantiate_unified(installation, repository, None)
-            .await?;
-        let handler = v16_handler::GuestIndices::new(&pre)
-            .and_then(|indices| indices.load(&mut store, &instance))
-            .map_err(|error| {
-                runtime_error(format!(
-                    "component does not export attricat:host/handler: {error}"
-                ))
-            })?;
-        Ok((store, handler))
+    /// Loads the 1.1 export `load_v11` when the component has it, otherwise
+    /// the 1.0 export `load_v10`.
+    fn load_export<V11, V10>(
+        store: &mut Store<UnifiedState>,
+        pre: &wasmtime::component::InstancePre<UnifiedState>,
+        instance: &wasmtime::component::Instance,
+        load_v11: impl FnOnce(
+            &wasmtime::component::InstancePre<UnifiedState>,
+            &mut Store<UnifiedState>,
+            &wasmtime::component::Instance,
+        ) -> wasmtime::Result<V11>,
+        load_v10: impl FnOnce(
+            &wasmtime::component::InstancePre<UnifiedState>,
+            &mut Store<UnifiedState>,
+            &wasmtime::component::Instance,
+        ) -> wasmtime::Result<V10>,
+        missing: &str,
+    ) -> Result<Export<V11, V10>, ExtensionRuntimeError> {
+        if let Ok(export) = load_v11(pre, store, instance) {
+            return Ok(Export::V11(export));
+        }
+        load_v10(pre, store, instance)
+            .map(Export::V10)
+            .map_err(|error| runtime_error(format!("component does not export {missing}: {error}")))
     }
 
+    /// Invokes an event handler. `Ok` carries the handler's outcome; a 1.0
+    /// handler's error, a trap, fuel or memory exhaustion and a timeout are
+    /// all faults.
     pub(super) async fn invoke_unified_event(
         &self,
         installation: &ExtensionRuntimeInstallation,
         repository: AttricatRepository,
         handler: &ManifestEventHandler,
         event: &DomainEvent,
-    ) -> Result<(), ExtensionRuntimeError> {
-        let (mut store, guest) = self.unified_handler(installation, repository).await?;
-        match guest
-            .call_handle_event(&mut store, &to_wit_v16_event(event))
-            .await
-        {
-            Ok(Ok(())) => Ok(()),
-            Ok(Err(message)) => Err(runtime_error(format!(
-                "handler '{}' failed: {message}",
-                handler.id
-            ))),
-            Err(error) => Err(runtime_error(error)),
-        }
+        delivery: &EventDeliveryAttempt,
+    ) -> Result<Result<(), InvocationFailure>, ExtensionRuntimeError> {
+        let (mut store, pre, instance) = self
+            .instantiate_unified(
+                installation,
+                repository,
+                None,
+                Some(super::handler_lease_holder(event.id, &handler.id)),
+            )
+            .await?;
+        let export = Self::load_export(
+            &mut store,
+            &pre,
+            &instance,
+            |pre, store, instance| v11_event_handler::GuestIndices::new(pre)?.load(store, instance),
+            |pre, store, instance| v16_handler::GuestIndices::new(pre)?.load(store, instance),
+            "attricat:host/event-handler or attricat:host/handler",
+        )?;
+        let wit_event = to_wit_v16_event(event);
+        Ok(match export {
+            Export::V11(guest) => {
+                let delivery = v11_event_handler::Delivery {
+                    sequence: delivery.sequence,
+                    record_revision: delivery.record_revision,
+                    attempt: delivery.attempt,
+                    source_kind: event.source_kind.clone(),
+                    source_name: event.source_name.clone(),
+                };
+                match guest
+                    .call_handle_event(&mut store, &wit_event, &delivery)
+                    .await
+                {
+                    Ok(Ok(())) => Ok(()),
+                    Ok(Err(failure)) => Err(failure.into()),
+                    Err(error) => Err(InvocationFailure::Fault(error.to_string())),
+                }
+            }
+            Export::V10(guest) => match guest.call_handle_event(&mut store, &wit_event).await {
+                Ok(Ok(())) => Ok(()),
+                Ok(Err(message)) => Err(InvocationFailure::Fault(format!(
+                    "handler '{}' failed: {message}",
+                    handler.id
+                ))),
+                Err(error) => Err(InvocationFailure::Fault(error.to_string())),
+            },
+        })
     }
 
     pub(super) async fn invoke_unified_command(
@@ -412,17 +514,47 @@ impl ExtensionRuntime {
         request: &str,
         max_response_bytes: u64,
     ) -> Result<String, ExtensionRuntimeError> {
-        let (mut store, guest) = self.unified_handler(installation, repository).await?;
-        let command = v16_handler::CommandRequest {
-            handler: handler.to_owned(),
-            payload: request.to_owned(),
+        let (mut store, pre, instance) = self
+            .instantiate_unified(installation, repository, None, None)
+            .await?;
+        let export = Self::load_export(
+            &mut store,
+            &pre,
+            &instance,
+            |pre, store, instance| {
+                v11_command_handler::GuestIndices::new(pre)?.load(store, instance)
+            },
+            |pre, store, instance| v16_handler::GuestIndices::new(pre)?.load(store, instance),
+            "attricat:host/command-handler or attricat:host/handler",
+        )?;
+        let response = match export {
+            Export::V11(guest) => guest
+                .call_handle_command(
+                    &mut store,
+                    &v11_command_handler::CommandRequest {
+                        handler: handler.to_owned(),
+                        payload: request.to_owned(),
+                    },
+                )
+                .await
+                .map(|result| result.map(|response| response.payload)),
+            Export::V10(guest) => guest
+                .call_handle_command(
+                    &mut store,
+                    &v16_handler::CommandRequest {
+                        handler: handler.to_owned(),
+                        payload: request.to_owned(),
+                    },
+                )
+                .await
+                .map(|result| result.map(|response| response.payload)),
         };
-        match guest.call_handle_command(&mut store, &command).await {
-            Ok(Ok(response))
-                if response.payload.len() <= MAX_HOST_JSON_BYTES
-                    && response.payload.len() <= max_response_bytes as usize =>
+        match response {
+            Ok(Ok(payload))
+                if payload.len() <= MAX_HOST_JSON_BYTES
+                    && payload.len() <= max_response_bytes as usize =>
             {
-                Ok(response.payload)
+                Ok(payload)
             }
             Ok(Ok(_)) => Err(runtime_error(
                 "command response exceeds its declared byte limit",
@@ -432,36 +564,65 @@ impl ExtensionRuntime {
         }
     }
 
-    /// Executes one batch through the unified world. The lifecycle mirrors the
-    /// released 1.4/1.5 operation worlds exactly.
+    /// Executes one batch through the 1.1 `deferrable-operations` export when
+    /// the component has it, otherwise through the 1.0 `operations` export.
+    /// Returns whether the 1.1 export ran, because only its faults quarantine.
     pub(super) async fn invoke_unified_batch(
         &self,
         installation: &ExtensionRuntimeInstallation,
         repository: AttricatRepository,
         run: &ClaimedExtensionOperationRun,
         cancelling: bool,
-    ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
+    ) -> (bool, Result<BatchResult, BatchError>) {
         let operation = self
             .operation_state(installation, repository.clone(), run.id)
             .with_batch_key(&run.batch_key);
-        let (mut store, pre, instance) = self
-            .instantiate_unified(installation, repository, Some(operation))
-            .await?;
-        let operations = v16_operations::GuestIndices::new(&pre)
-            .and_then(|indices| indices.load(&mut store, &instance))
-            .map_err(|error| {
-                runtime_error(format!(
-                    "component does not export attricat:host/operations: {error}"
-                ))
-            })?;
-        run_operation_batch(&mut store, &operations, run, cancelling).await
+        let (mut store, pre, instance) = match self
+            .instantiate_unified(
+                installation,
+                repository,
+                Some(operation),
+                Some(super::run_lease_holder(run.id)),
+            )
+            .await
+        {
+            Ok(instance) => instance,
+            Err(error) => return (false, Err(error.into())),
+        };
+        let export = match Self::load_export(
+            &mut store,
+            &pre,
+            &instance,
+            |pre, store, instance| v11_operations::GuestIndices::new(pre)?.load(store, instance),
+            |pre, store, instance| v16_operations::GuestIndices::new(pre)?.load(store, instance),
+            "attricat:host/deferrable-operations or attricat:host/operations",
+        ) {
+            Ok(export) => export,
+            Err(error) => return (false, Err(error.into())),
+        };
+        match export {
+            Export::V11(operations) => (
+                true,
+                run_operation_batch(&mut store, &operations, run, cancelling).await,
+            ),
+            Export::V10(operations) => (
+                false,
+                run_operation_batch(&mut store, &operations, run, cancelling).await,
+            ),
+        }
     }
+}
+
+/// The export a component provides: the 1.1 interface or its 1.0 predecessor.
+enum Export<V11, V10> {
+    V11(V11),
+    V10(V10),
 }
 
 /// The unified world's linker; built once per runtime.
 pub(super) fn linker(engine: &Engine) -> Result<Linker<UnifiedState>, ExtensionRuntimeError> {
     let mut linker = Linker::new(engine);
-    host_unified::AttricatExtension::add_to_linker::<UnifiedState, HasSelf<UnifiedState>>(
+    host_unified::Host_::add_to_linker::<UnifiedState, HasSelf<UnifiedState>>(
         &mut linker,
         |state| state,
     )

@@ -24,6 +24,29 @@ pub fn is_valid_code(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
+/// The per-record export statuses, in the order the UI lists them. Saved
+/// Explorer searches filter by them too.
+pub const EXPORT_STATUSES: &[&str] = &[
+    "pending",
+    "retrying",
+    "uncertain",
+    "rejected",
+    "synced",
+    "withdrawn",
+];
+
+/// The JSON Schema `pattern` equivalent of [`is_valid_connection_key`]. The
+/// migrations' `CHECK` constraints on connection columns repeat it.
+pub const CONNECTION_KEY_PATTERN: &str = "^[A-Za-z0-9._-]{1,128}$";
+
+/// Returns whether a value is a valid extension connection name.
+pub fn is_valid_connection_key(value: &str) -> bool {
+    (1..=128).contains(&value.len())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
 #[derive(Debug, PartialEq)]
 pub struct JsonSchemaViolation {
     pub instance_path: String,

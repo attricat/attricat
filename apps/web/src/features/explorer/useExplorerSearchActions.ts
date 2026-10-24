@@ -16,6 +16,7 @@ import type {
   BrowseBy,
   ExplorerSearch,
   ExplorerSort,
+  ExportStatusFilter,
 } from './search';
 
 /** URL-backed Explorer search transitions. */
@@ -45,6 +46,8 @@ export const useExplorerSearchActions = (
     });
 
   return {
+    setExportStatus: (exportStatus: ExportStatusFilter | undefined) =>
+      go({ ...search, exportStatus }),
     addAttributeFilter: (filter: AttributeFilter) =>
       go({
         ...search,

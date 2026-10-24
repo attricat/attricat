@@ -69,6 +69,7 @@ pub mod secret {
     pub const BOOTSTRAP_OWNER_PASSWORD: &str = "bootstrap_owner_password";
     pub const E2E_FIXTURE_PASSWORD: &str = "e2e_fixture_password";
     pub const FILE_WORKER_METRICS_TOKEN: &str = "file_worker_metrics_token";
+    pub const EXTENSION_CREDENTIAL_KEY: &str = "extension_credential_key";
 }
 
 /// Environment variables that used to carry a secret. Startup refuses them
@@ -187,6 +188,32 @@ pub struct ExtensionsConfig {
     /// Development only: solution packs install locally built extensions
     /// from this directory. Requires `ATTRICAT_DEVTOOLS`.
     pub local_extensions_dir: Option<String>,
+    /// AES-256 key encrypting extension connection credentials; without it
+    /// connections cannot be created or used.
+    pub credential_key: Option<[u8; 32]>,
+    /// Externally reachable base URL of extension-issued public file links
+    /// (`EXTENSION_PUBLIC_FILE_BASE_URL`, ending in
+    /// `/api/public/extension-files/`); without it links are unavailable.
+    pub public_file_base_url: Option<url::Url>,
+    /// Externally reachable URL of the public OAuth callback
+    /// (`EXTENSION_OAUTH_CALLBACK_URL`, the `/api/public/extension-oauth/callback`
+    /// route), which operators register as their apps' redirect URI. Without
+    /// it, authorization-code connections are authorized by pasting codes.
+    pub oauth_callback_url: Option<url::Url>,
+    /// Where the callback sends the browser afterwards
+    /// (`EXTENSION_OAUTH_RETURN_URL`, the web app's `/manage/extensions/`,
+    /// ending in '/'). Defaults to that path on the callback URL's origin.
+    pub oauth_return_url: Option<url::Url>,
+    /// Development only: egress overrides that let the extension broker
+    /// reach local marketplace mocks. Requires `ATTRICAT_DEVTOOLS`.
+    pub development_egress: Option<DevelopmentEgressConfig>,
+}
+
+/// `EXTENSION_DEV_EGRESS_RESOLVE` (`host=ip:port,*.suffix=ip:port`) and
+/// `EXTENSION_DEV_EGRESS_CA_FILE` (a PEM bundle).
+pub struct DevelopmentEgressConfig {
+    pub resolve: Vec<(String, SocketAddr)>,
+    pub ca_file: Option<String>,
 }
 
 pub struct FileWorkerConfig {
@@ -366,6 +393,25 @@ impl Config {
                     source.var("EXTENSION_DENYLIST"),
                 )?,
                 local_extensions_dir,
+                credential_key: credential_key(source)?,
+                public_file_base_url: source
+                    .var("EXTENSION_PUBLIC_FILE_BASE_URL")
+                    .map(|value| {
+                        url::Url::parse(value)
+                            .ok()
+                            .filter(|url| {
+                                matches!(url.scheme(), "https" | "http") && url.path().ends_with('/')
+                            })
+                            .ok_or_else(|| {
+                                ConfigError::from(
+                                    "EXTENSION_PUBLIC_FILE_BASE_URL must be an HTTP(S) URL ending in '/'",
+                                )
+                            })
+                    })
+                    .transpose()?,
+                oauth_callback_url: oauth_callback_url(source)?,
+                oauth_return_url: oauth_return_url(source)?,
+                development_egress: development_egress(source, devtools_enabled)?,
             },
             retention: RetentionConfig::from_values(get)
                 .map_err(|error| format!("invalid retention configuration: {error}"))?,
@@ -435,6 +481,97 @@ fn bootstrap(source: &Source, demo_mode: bool) -> Result<BootstrapConfig, Config
         sample_accounts,
         e2e_fixture,
     })
+}
+
+/// An absolute HTTP(S) URL without credentials, query or fragment. A
+/// trailing ':' without a port is refused: URL parsing would silently use the
+/// scheme's default port, as when `$API_PORT` was unset in `host:$API_PORT`.
+fn plain_http_url(value: &str) -> Option<url::Url> {
+    let authority = value.split_once("://").map_or(value, |(_, rest)| {
+        rest.split(['/', '?', '#']).next().unwrap_or(rest)
+    });
+    if authority.ends_with(':') {
+        return None;
+    }
+    url::Url::parse(value).ok().filter(|url| {
+        matches!(url.scheme(), "https" | "http")
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.query().is_none()
+            && url.fragment().is_none()
+    })
+}
+
+fn oauth_callback_url(source: &Source) -> Result<Option<url::Url>, ConfigError> {
+    source
+        .var("EXTENSION_OAUTH_CALLBACK_URL")
+        .map(|value| {
+            plain_http_url(value)
+                .filter(|url| url.path().ends_with("/public/extension-oauth/callback"))
+                .ok_or_else(|| {
+                    ConfigError::from(
+                        "EXTENSION_OAUTH_CALLBACK_URL must be an HTTP(S) URL ending in /api/public/extension-oauth/callback",
+                    )
+                })
+        })
+        .transpose()
+}
+
+fn oauth_return_url(source: &Source) -> Result<Option<url::Url>, ConfigError> {
+    source
+        .var("EXTENSION_OAUTH_RETURN_URL")
+        .map(|value| {
+            plain_http_url(value)
+                .filter(|url| url.path().ends_with('/'))
+                .ok_or_else(|| {
+                    ConfigError::from(
+                        "EXTENSION_OAUTH_RETURN_URL must be an HTTP(S) URL ending in '/'",
+                    )
+                })
+        })
+        .transpose()
+}
+
+fn credential_key(source: &Source) -> Result<Option<[u8; 32]>, ConfigError> {
+    use base64::Engine as _;
+    let Some(secret) = source.secret(secret::EXTENSION_CREDENTIAL_KEY)? else {
+        return Ok(None);
+    };
+    base64::engine::general_purpose::STANDARD
+        .decode(secrecy::ExposeSecret::expose_secret(&secret).trim())
+        .ok()
+        .and_then(|bytes| <[u8; 32]>::try_from(bytes).ok())
+        .map(Some)
+        .ok_or_else(|| "the extension_credential_key secret must be 32 base64-encoded bytes".into())
+}
+
+fn development_egress(
+    source: &Source,
+    devtools_enabled: bool,
+) -> Result<Option<DevelopmentEgressConfig>, ConfigError> {
+    let resolve = source.var("EXTENSION_DEV_EGRESS_RESOLVE");
+    let ca_file = source.owned("EXTENSION_DEV_EGRESS_CA_FILE");
+    if resolve.is_none() && ca_file.is_none() {
+        return Ok(None);
+    }
+    if !devtools_enabled {
+        return Err("EXTENSION_DEV_EGRESS_* settings require ATTRICAT_DEVTOOLS=true".into());
+    }
+    let resolve = resolve
+        .unwrap_or_default()
+        .split(',')
+        .filter(|entry| !entry.trim().is_empty())
+        .map(|entry| {
+            let (host, address) = entry.trim().split_once('=').ok_or_else(|| {
+                ConfigError::from("EXTENSION_DEV_EGRESS_RESOLVE entries are host=ip:port")
+            })?;
+            let address = address.parse::<SocketAddr>().map_err(|_| {
+                ConfigError::from("EXTENSION_DEV_EGRESS_RESOLVE has an invalid address")
+            })?;
+            Ok((host.to_ascii_lowercase(), address))
+        })
+        .collect::<Result<Vec<_>, ConfigError>>()?;
+    Ok(Some(DevelopmentEgressConfig { resolve, ca_file }))
 }
 
 fn file_worker(source: &Source) -> Result<FileWorkerConfig, ConfigError> {
@@ -730,6 +867,108 @@ mod tests {
         );
         assert!(load(&secrets, &[("CACHE_BACKEND", "redis")]).is_err());
         assert!(load(&secrets, &[("EXTENSIONS_MODE", "off")]).is_err());
+        // Development egress overrides bypass the public-address check.
+        assert!(
+            load(
+                &secrets,
+                &[("EXTENSION_DEV_EGRESS_RESOLVE", "*.mock.test=127.0.0.1:9443")]
+            )
+            .is_err()
+        );
+        assert!(
+            load(
+                &secrets,
+                &[(
+                    "EXTENSION_PUBLIC_FILE_BASE_URL",
+                    "https://attricat.test/files"
+                )]
+            )
+            .is_err()
+        );
+        assert!(
+            load(
+                &secrets,
+                &[(
+                    "EXTENSION_OAUTH_CALLBACK_URL",
+                    "https://attricat.test/callback"
+                )]
+            )
+            .is_err()
+        );
+        assert!(
+            load(
+                &secrets,
+                &[(
+                    "EXTENSION_OAUTH_CALLBACK_URL",
+                    "http://127.0.0.1:/api/public/extension-oauth/callback"
+                )]
+            )
+            .is_err()
+        );
+        assert!(
+            load(
+                &secrets,
+                &[(
+                    "EXTENSION_OAUTH_RETURN_URL",
+                    "http://127.0.0.1:/manage/extensions/"
+                )]
+            )
+            .is_err()
+        );
+        assert!(
+            load(
+                &secrets,
+                &[(
+                    "EXTENSION_OAUTH_RETURN_URL",
+                    "https://attricat.test/manage/extensions?x=1"
+                )]
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn export_platform_settings_are_parsed() {
+        let secrets = Secrets::new(&[
+            (secret::DATABASE_URL, "postgres://db"),
+            (secret::S3_SECRET_ACCESS_KEY, "s3-secret"),
+            (
+                secret::EXTENSION_CREDENTIAL_KEY,
+                "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=\n",
+            ),
+        ]);
+        let config = load(
+            &secrets,
+            &[
+                ("ATTRICAT_DEVTOOLS", "true"),
+                (
+                    "EXTENSION_DEV_EGRESS_RESOLVE",
+                    "*.mock.test=127.0.0.1:9443, api.mock.test=127.0.0.1:9444",
+                ),
+                (
+                    "EXTENSION_PUBLIC_FILE_BASE_URL",
+                    "https://attricat.test/api/public/extension-files/",
+                ),
+                (
+                    "EXTENSION_OAUTH_CALLBACK_URL",
+                    "https://attricat.test/api/public/extension-oauth/callback",
+                ),
+            ],
+        )
+        .unwrap();
+        assert!(config.extensions.oauth_callback_url.is_some());
+        assert!(config.extensions.oauth_return_url.is_none());
+        assert_eq!(config.extensions.credential_key, Some([1; 32]));
+        let egress = config.extensions.development_egress.unwrap();
+        assert_eq!(egress.resolve.len(), 2);
+        assert_eq!(egress.resolve[0].0, "*.mock.test");
+        assert!(config.extensions.public_file_base_url.is_some());
+        let short_key = Secrets::new(&[
+            (secret::DATABASE_URL, "postgres://db"),
+            (secret::S3_SECRET_ACCESS_KEY, "s3-secret"),
+            (secret::EXTENSION_CREDENTIAL_KEY, "c2hvcnQ="),
+        ]);
+        assert!(load(&short_key, &[]).is_err());
     }
 
     #[test]
