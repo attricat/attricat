@@ -644,10 +644,25 @@ input = { profile = { version = 1, columns = [{ header = "ID", attribute = "exte
 | `extension_id` | string | Required | Connector extension ID. |
 | `operation_id` | string | Required | Operation declared by the extension. |
 | `input` | table | Required | Operation input, validated against the operation's schema. |
-| `context` | context code | | Required for imports, rejected for exports. Imported values are written to this context. |
+| `context` | context code | | Required for imports: imported values are written to this context. For exports, the publication channel to export (it must be one); without it the job runs once per enabled channel. A job of an extension that keeps export mappings must set it when several channels are enabled. |
 | `input_file_id` | UUID | | Imports only. A ready workspace file to import. |
 | `interval_seconds` | integer | Manual only | Run every N seconds, 60 to 2592000. |
 | `enabled` | boolean | `true` | Set `false` to pause the job. |
+| `connection` | string | Default destination | Exports only. The extension [connection](/builders/extensions/#connections) the job pushes to: 1 to 128 ASCII letters, digits, `.`, `_`, or `-`. |
+| `trigger` | table | | Exports only. Also run the job when records change: `{ events = [...], debounce_seconds = N }`. |
+
+`trigger.events` lists one or more of `record.created.v1`, `record.updated.v1`, `record.deleted.v1`, `record.migrated.v1`, `record.published.v1`, `record.unpublished.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, and `relationship.changed.v1`. `trigger.debounce_seconds` is 1 to 3600: a run starts once the newest matching event of the blueprint's records is that old, or once the oldest pending change is ten times that old, and covers only the changed records. An event of a record that the blueprint's records link to through a relationship counts as a change of the linking records.
+
+```toml
+[[connector_jobs]]
+code = "shopify"
+direction = "export"
+extension_id = "acme.shopify"
+operation_id = "export"
+connection = "shop-eu"
+trigger = { events = ["record.updated.v1", "record.published.v1"], debounce_seconds = 30 }
+input = {}
+```
 
 Jobs are checked against the enabled extension when the revision is published; an invalid job blocks publication. A job removed in a later revision is disabled and its run history is kept. An export job runs once per enabled publication channel and exports only records published to that channel. See [Operations and connectors](/extensions/operations/).
 

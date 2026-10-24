@@ -70,6 +70,9 @@ or inaccessible configured bucket.
 | `EXTENSION_OFFICIAL_REGISTRY` | `attricat/attricat-extensions` | API | Canonical public GitHub `owner/repository` used as every workspace's immutable official extension source. |
 | `EXTENSIONS_MODE` | `enabled` | API | Deployment emergency gate. Set `disabled` to block all new extension execution, artifacts, runtime descriptors, commands, storage, host calls, and event delivery without changing installations or grants. Any other value stops startup. Changing it takes a restart. |
 | `EXTENSION_DENYLIST` | Empty | API | Comma-separated targeted containment entries. Each entry is an extension ID (`acme.extension`) or exact release (`acme.extension@uuid`). Read at startup and applied at every runtime gate. |
+| `EXTENSION_PUBLIC_FILE_BASE_URL` | Unset | API | Externally reachable base URL of extension-issued public file links, ending in `/api/public/extension-files/`, for example `https://attricat.example.com/api/public/extension-files/`. Marketplaces fetch listing images from it. Unset, `files.link.v1` is unavailable. |
+| `EXTENSION_DEV_EGRESS_RESOLVE` | Unset | API | Development only; requires `ATTRICAT_DEVTOOLS=true`. Comma-separated `host=ip:port` (or `*.suffix=ip:port`) overrides that let the extension broker reach a local mock, such as `*.mock.test=127.0.0.1:9443`. They bypass the public-address check, so never set them in production. |
+| `EXTENSION_DEV_EGRESS_CA_FILE` | Unset | API | Development only; requires `ATTRICAT_DEVTOOLS=true`. A PEM bundle the extension broker trusts in addition to the system roots, for a local mock's certificate. |
 | `POSTGRES_DB` | `attricat` | Docker Compose | Local PostgreSQL database name. |
 | `POSTGRES_USER` | `postgres` | Docker Compose | Local PostgreSQL user. |
 | `POSTGRES_PASSWORD` | `postgres` | Docker Compose | Local PostgreSQL password. |
@@ -123,6 +126,7 @@ exists but cannot be read stops startup.
 | `smtp_password` | Unset | API | SMTP password, paired with `SMTP_USERNAME`. |
 | `llm_api_key` | Unset (agents unavailable) | API only | API key for the OpenAI-compatible agent provider. Never send, persist, or log it. |
 | `redis_url` | Unset | API | Redis URL, required when `CACHE_BACKEND=redis`. It is a secret because it usually carries the Redis password. `redis://` and TLS `rediss://` (rustls, platform root certificates) are supported, as are the `valkey` schemes and the `-cluster` and `-sentinel` forms. |
+| `extension_credential_key` | Unset | API | 32 random bytes, base64-encoded, that encrypt extension connection credentials (client secrets, refresh and access tokens, device codes) with AES-256-GCM. Without it extension connections cannot be created or used. Keep it stable: rotating it makes stored credentials unreadable, so operators must reconnect. `just setup` writes a local one. |
 | `bootstrap_owner_password` | Unset | API | Optional one-time local password for a newly bootstrapped owner. It is hashed before persistence and never updates an existing credential. Required by `ATTRICAT_SAMPLE_ACCOUNTS` and `ATTRICAT_DEMO_MODE`. |
 | `e2e_fixture_password` | Unset | API test environments | Test fixture user password paired with `ATTRICAT_E2E_FIXTURE_EMAIL`; never provide it in production. |
 | `file_worker_metrics_token` | Unset on loopback | File worker | Bearer token for `/metrics`; required at startup when the operations listener is not loopback. |

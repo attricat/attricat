@@ -184,6 +184,44 @@ struct ExtensionAttricatChangeCursor {
     retention_floor: i64,
 }
 
+/// SQL for a record's content revision: the sequence of the latest domain
+/// event that changed its values, relationships, publication or lifecycle
+/// (annotations do not count), optionally as of `as_of`. It is derived from
+/// the outbox when read, so writing an event never touches the record row
+/// and cannot deadlock with a writer that locked that row first. `record` is
+/// the alias of a `records` row; `as_of` a SQL timestamp expression.
+/// Publication changes count only for `channel` (a SQL UUID expression,
+/// which may be NULL): a change in another channel does not alter what is
+/// exported to this one. Without a channel they do not count at all.
+pub(crate) fn content_revision_sql(
+    record: &str,
+    as_of: Option<&str>,
+    channel: Option<&str>,
+) -> String {
+    let types = crate::domain_events::RECORD_CONTENT_EVENT_TYPES_V1
+        .iter()
+        .map(|event_type| format!("'{event_type}'"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let as_of = as_of.map_or_else(String::new, |at| format!(" AND d.occurred_at <= {at}"));
+    let publication = format!(
+        "'{}','{}'",
+        crate::domain_events::RECORD_PUBLISHED_V1,
+        crate::domain_events::RECORD_UNPUBLISHED_V1
+    );
+    let channel = match channel {
+        Some(channel) => format!(
+            " AND (d.event_type NOT IN ({publication}) OR d.payload->>'context_id'=({channel})::text)"
+        ),
+        None => format!(" AND d.event_type NOT IN ({publication})"),
+    };
+    format!(
+        "(SELECT COALESCE(max(d.sequence),0) FROM domain_events d \
+         WHERE d.workspace_id={record}.workspace_id AND d.aggregate_kind='record' \
+           AND d.aggregate_id={record}.id AND d.event_type IN ({types}){as_of}{channel})"
+    )
+}
+
 impl AttricatRepository {
     /// Lists an immutable-as-of-start record set. New records created after
     /// `snapshot_at` are deliberately left for a later export; updates do not
@@ -191,6 +229,15 @@ impl AttricatRepository {
     pub async fn extension_attricat_page(
         &self,
         request: ExtensionAttricatPageRequest,
+    ) -> Result<ExtensionAttricatPage, RepositoryError> {
+        self.extension_attricat_page_of(request, None).await
+    }
+
+    /// [`Self::extension_attricat_page`] restricted to `record_ids` when given.
+    pub(crate) async fn extension_attricat_page_of(
+        &self,
+        request: ExtensionAttricatPageRequest,
+        record_ids: Option<&[Uuid]>,
     ) -> Result<ExtensionAttricatPage, RepositoryError> {
         if request.limit == 0 || request.limit > MAX_EXTENSION_ATTRICAT_PAGE_SIZE {
             return Err(RepositoryError::InvalidExtension(format!(
@@ -254,18 +301,25 @@ impl AttricatRepository {
                 return Err(RepositoryError::NotFound("context"));
             }
         }
-        let rows = sqlx::query_as::<_, Db<Record>>(
-            "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,('attricat.sample'=ANY(e.system_tags)) AS is_sample,e.created_at,e.updated_at,e.deleted_at \
+        // Values are read as of `snapshot_at`, so the revision must be too: a
+        // live revision paired with older values would let an exporter mark
+        // an edit synced that it never pushed. Content events are stamped
+        // after their values, so the revision never runs ahead of the values.
+        let rows = sqlx::query_as::<_, Db<Record>>(&format!(
+            "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,('attricat.sample'=ANY(e.system_tags)) AS is_sample,e.created_at,e.updated_at,e.deleted_at, \
+               {} AS content_revision \
              FROM records e \
              WHERE e.workspace_id=$1 AND (e.deleted_at IS NULL OR e.deleted_at > $4) AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
                AND e.created_at <= $4 \
                AND ($5::timestamptz IS NULL OR (e.created_at,e.id) > ($5,$6)) \
                AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM record_channel_publications p WHERE p.workspace_id=e.workspace_id AND p.record_id=e.id AND p.context_id=$7 AND p.published_at IS NOT NULL)) \
+               AND ($9::uuid[] IS NULL OR e.id=ANY($9)) \
              ORDER BY e.created_at,e.id LIMIT $8",
-        )
+            content_revision_sql("e", Some("$4"), Some("$7"))
+        ))
         .bind(workspace_id).bind(request.blueprint_id).bind(request.blueprint_version)
         .bind(snapshot_at).bind(created_at).bind(record_id).bind(request.publication_context_id)
-        .bind(i64::from(request.limit) + 1).fetch_all(&self.pool).await?;
+        .bind(i64::from(request.limit) + 1).bind(record_ids).fetch_all(&self.pool).await?;
         let mut records = rows.into_domain();
         let next_cursor = if records.len() > request.limit as usize {
             records.pop();
@@ -406,9 +460,10 @@ impl AttricatRepository {
         else {
             return Ok(None);
         };
-        let record = sqlx::query_as::<_, Db<Record>>(
-            "SELECT id,blueprint_id,blueprint_version,projections,system_tags,system_metadata,('attricat.sample'=ANY(system_tags)) AS is_sample,created_at,updated_at,deleted_at FROM records WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL",
-        )
+        let record = sqlx::query_as::<_, Db<Record>>(&format!(
+            "SELECT r.id,r.blueprint_id,r.blueprint_version,r.projections,r.system_tags,r.system_metadata,('attricat.sample'=ANY(r.system_tags)) AS is_sample,r.created_at,r.updated_at,r.deleted_at,{} AS content_revision FROM records r WHERE r.id=$1 AND r.workspace_id=$2 AND r.deleted_at IS NULL",
+            content_revision_sql("r", None, None)
+        ))
         .bind(record_id)
         .bind(self.workspace_id.0)
         .fetch_optional(&mut *transaction)

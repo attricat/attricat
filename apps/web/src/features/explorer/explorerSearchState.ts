@@ -173,7 +173,18 @@ export const explorerResultsQueryKey = (
     relationshipTreeFacets: relationshipTreeSelectionsFromSearch(search),
     sort,
     version,
+    exportStatus: search.exportStatus,
   });
+
+/** The search request's export status filter. */
+export const exportStatusRequest = (search: ExplorerSearch) =>
+  search.exportStatus && {
+    extension_id: search.exportStatus.extension,
+    ...(search.exportStatus.connection
+      ? { connection: search.exportStatus.connection }
+      : {}),
+    status: search.exportStatus.status,
+  };
 
 /** Merges submitted search form values into the current Explorer search. */
 export const submittedExplorerSearch = (

@@ -135,7 +135,9 @@ The v1 capability catalogue is: `attricat.read`, `attricat.write`,
 `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`,
 `client.operations.start`, `client.operations.read`,
 `client.operations.cancel`, `attricat.annotations.write`, `network.request`,
-and `webhooks.receive`.
+and `webhooks.receive`. Host ABI 1.1 adds `exports.mappings`,
+`connections.use`, `attricat.files.read`, `attricat.files.public_links` and
+`client.export_mapping` (see [Export platform](#export-platform-attricathost-11)).
 
 Required `permissions` and `host_permissions` must be granted before an
 extension can be enabled. Optional variants are independently grantable and
@@ -149,7 +151,10 @@ allow only `http` or `https`, an exact host or leftmost `*.` subdomain wildcard,
 an optional exact numeric port, and a path prefix ending in `/*`. They reject
 queries, fragments, userinfo, wildcard schemes/hosts, arbitrary ports,
 localhost, and loopback/private/link-local/unspecified IP destinations.
-Redirects are disabled; a future redirect contract must re-check its target.
+Redirects are never followed. A rule may also declare `allow_query` (requests
+through `network.request.v2` and transfer v2 may carry query strings),
+`response_headers` (extra response headers v2 returns) and a `rate_limit`
+budget; see [Export platform](#export-platform-attricathost-11).
 WASM components receive no ambient sockets. The mediated HTTPS API described
 below enforces the host policy at each call.
 
@@ -180,8 +185,9 @@ host-permission grant. Quarantine may occur from any installed state; direct
 re-enablement revalidates the installed release and its configuration before
 handlers resume. Upgrade snapshots a newly selected installed release, clears grants and
 configuration, and leaves a formerly enabled installation disabled. Removal
-deletes current state but retains installed-release and append-only lifecycle
-history.
+deletes current state, including the extension's connections and their
+credentials, host-permission budgets and handler outcomes, but retains
+installed-release and append-only lifecycle history and export mappings.
 
 Each lifecycle mutation uses an explicit Rust/SQLx transaction to write the
 current state, an append-only lifecycle record, and the existing generic audit
@@ -200,20 +206,25 @@ implemented. Webhook delivery remains follow-on work.
 
 The host ABI is the single WIT package `attricat:host` at
 `crates/extension-runtime/wit-host/attricat-extension.wit`, currently
-`attricat:host@1.0.0` (`SUPPORTED_HOST_API` in `crates/extension-manifest`). A
+`attricat:host@1.1.0` (`SUPPORTED_HOST_API` in `crates/extension-manifest`). A
 release's `attricat.host_api` range must accept that version, for example
-`">=1.0.0, <2.0.0"` or `"^1.0"`. A release whose range accepts it may use every
+`">=1.0.0, <2.0.0"`, `"^1.0"` or `"^1.1"`. A release whose range accepts it may use every
 server and client feature in one component: event handlers, client commands,
 typed reads and writes, scoped configuration, scheduled, connector and
 interactive operations, artifacts, transfer, connector jobs, every UI outlet,
 and version 2 selection actions. There are no per-feature `host_api` gates.
 
 The package defines the interfaces `api`, `handler`, `artifacts`,
-`attricat-data`, `catalog`, `transfer`, `selection` and `operations`. The
-`imports` world imports every host interface. A component targets the combined
-`attricat-extension` world (exports `handler` and `operations`), or the narrower
-`handler-extension` or `operation-extension` world. The host links every
-import for every invocation and loads only the export it needs. Run-bound
+`attricat-data`, `catalog`, `transfer`, `selection` and `operations`, and since
+1.1 `clock`, `outcomes`, `event-handler`, `command-handler` and
+`deferrable-operations`. The `imports` world imports every host interface. A
+component targets the combined `attricat-extension` world (exports `handler`
+and `operations`), the narrower `handler-extension` or `operation-extension`
+world, or the 1.1 `outcome-extension` world (exports `event-handler`,
+`command-handler` and `deferrable-operations`; see
+[Export platform](#export-platform-attricathost-11)). When a component exports
+a 1.1 interface the host calls it instead of its 1.0 predecessor. The host
+links every import for every invocation and loads only the export it needs. Run-bound
 interfaces (`artifacts`, `attricat-data`, `catalog`, `transfer`, `selection`)
 return an error outside an operation run. Direct catalog access through `api`
 (`read`, `write`, and the `attricat.read.v1`/`attricat.command.v1` calls) returns
@@ -270,8 +281,11 @@ as a hint and immediately re-reads a locked snapshot of enabled state, exact
 installed release, configuration, and required grants before each invocation.
 Deliveries are at-least-once, may be reordered, and handlers must therefore be
 idempotent. Component traps, fuel or
-memory exhaustion, timeouts, and returned handler failures are traced, metered,
-and quarantine the installation before the delivery is retried/dead-lettered.
+memory exhaustion, timeouts, and returned handler failures of a 1.0 `handler`
+are traced, metered, and quarantine the installation before the delivery is
+retried/dead-lettered. A 1.1 `event-handler` distinguishes record rejections,
+temporary failures and faults instead; see
+[Handler outcomes](#handler-and-batch-outcomes).
 
 The component host ABI uses bounded JSON strings (64 KiB) and bounded log
 messages (16 KiB). Every operation is capability checked at the point of call.
@@ -320,9 +334,10 @@ capabilities, grants, and matching host-permission rule on every call. It only
 allows query-free HTTPS, validates every DNS answer as public before connecting,
 pins the connection to those checked addresses, verifies TLS, disables
 redirects, streams bounded request/response bodies, applies each rule's timeout
-and byte limits, and limits an extension release to 60 requests per minute.
-That limit is counted per API process; with `CACHE_BACKEND=redis` it is shared
-across replicas.
+and byte limits, and admits each request against its rule's request budget
+(see [Request budgets](#per-rule-request-budgets)); rules without a declared
+budget share 60 requests per minute per release. Budgets are counted per API
+process; with `CACHE_BACKEND=redis` they are shared across replicas.
 Only status and selected safe response headers are returned; response bytes are
 base64 encoded.
 
@@ -411,8 +426,8 @@ and 64 KiB-or-smaller request/checkpoint limits. The `operations` interface in
 containing the run ID, handler selector, configuration snapshot, input,
 checkpoint, and durable batch key. The host calls `prepare`, `start`,
 `process-batch`, `checkpoint`, `finish`, and cooperative `cancel`. The batch
-key is scoped to the run: `<run_id>:<batch_number>`. Every run records host
-ABI version 1.0.0.
+key is scoped to the run: `<run_id>:<batch_number>`. Every run records the
+host ABI version it started under.
 
 Attricat creates one durable run per workspace, pinned installed release, operation,
 and idempotency key. The task queue leases the run with a fresh token; every
@@ -585,8 +600,514 @@ remain available via `/extension-operation-runs`.
 
 The host enforces page filters from run metadata; the `catalog` interface
 signature carries no filter. Existing unscoped operations
-and schedules remain available separately. Attricat-event triggers are not
-configured for connector jobs yet; run them manually or on an interval.
+and schedules remain available separately. An export job may also declare a
+change `trigger` and a destination `connection`, and can be resynced; see
+[Connector jobs for exports](#connector-jobs-for-exports).
+
+## Export platform (attricat:host 1.1)
+
+Host ABI 1.1 adds what marketplace and storefront exporters (Amazon SP-API,
+Shopify Admin GraphQL, Allegro REST) need without ambient network, file
+system or credential access. The integrations themselves live in their own
+repositories. `examples/marketplace-export` contains a test exporter for all
+three, a local mock of their APIs and an end-to-end script; see
+[Testing exports locally](#testing-exports-locally).
+
+### Handler and batch outcomes
+
+A component built for the `outcome-extension` world exports `event-handler`,
+whose `handle-event(event, delivery)` returns `result<_, failure>`, and
+`deferrable-operations`, whose `process-batch` returns
+`result<batch-outcome, failure>`. `failure` (interface `outcomes`) is one of:
+
+| Case | Event handler | Operation batch |
+|---|---|---|
+| `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes, and other records the handler leased become `retrying` with error `handler_rejected` | A rejection that names a record, from an extension with `exports.mappings`, settles that record and replays the batch after a second, so the component finds the record settled and moves on. A newly settled record is progress and is not counted; a repeated rejection, or one of a record another worker holds, counts toward the 100 waits in a row below; a record another worker holds is replayed once that worker's lease ends. A rejection that cannot be recorded (for example for an unknown connection, or of a record outside the run's scope), and any other rejection, dead-letters the run with code `rejected`, without retries |
+| `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted`; records the handler still leases become `retrying` with error `retries_exhausted` and their leases end | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget, up to 100 times in a row before a completed batch; past that, and without `after-ms`, it is a failure within that budget. A replayed dead-lettered run starts with fresh failure and deferral budgets |
+| `fault(message)` | Quarantines the installation; records the handler leased become `retrying` with error `handler_fault` | Fails the run and quarantines the installation |
+
+Traps, fuel or memory exhaustion, timeouts and invalid batch results are
+faults. An error returned by a 1.1 lifecycle export (`prepare`, `start`,
+`checkpoint`, `finish` or `cancel`) fails the run without quarantine. A
+rejection that
+names a record from an extension with `exports.mappings` also sets that
+record's [export status](#per-record-export-status) to `rejected` with the code
+and message. When the rejecting run or handler delivery holds the record's
+lease, the rejection settles the revision it leased and ends that lease; while
+another one holds it, that push settles the record instead. A rejection of a
+revision older than the mapping's is ignored. A connector run's rejection
+without a `connection` belongs to the run's connection; any other rejection
+without one belongs to the extension's default destination. A handler's
+rejection of a record other than the event's is settled at that record's
+revision when the event happened. Handler outcomes are stored per
+event and handler in `extension_handler_attempts`: handlers that already
+completed are not invoked again when another handler of the same event is
+retried. Rejected and exhausted outcomes stay visible for 30 days
+(`GET /extensions/{extension_id}/export-status` lists them as
+`handler_failures`). `delivery` carries the event's `sequence`, the record's
+`record-revision` for record content events, and the `attempt` number.
+
+A 1.0 component keeps its released behavior: any `handle-event` error
+quarantines it. A run whose release loses its authorization during a batch
+(disabled, quarantined, grant revoked) pauses instead of failing, like a run
+that finds it unauthorized before the batch.
+
+`batch-outcome` adds `resume-after-ms` to the 1.0 batch result: the host
+commits the checkpoint, releases the run's lease and re-queues it after the
+delay (at most 24 hours), instead of at once. Use it to wait for an Amazon
+feed, to poll Allegro offer commands or to back off after a throttle. The run
+list shows `resume_at` while it waits.
+
+`clock.now()` returns UTC wall-clock time for token expiry, poll scheduling and
+feed timestamps.
+
+### Record revisions and the mapping store
+
+Every record has a `content_revision`: the sequence of the latest domain
+event that changed its values, relationships, publication or lifecycle
+(`record.created`, `updated`, `deleted`, `migrated`, `published`,
+`unpublished`, `attribute_value.changed`, `restored`, `relationship.changed`).
+It is read from the event outbox, so it is monotonic per record and writing
+an event never locks the record row. Annotation changes do not advance it, so an exporter's
+own bookkeeping never makes its output look stale. Publication events count
+only for the channel being read: connector page rows count those of the run's
+channel, and reads without a channel (typed `api.read` records) count none, so
+publishing to another channel never makes an export look stale. Typed
+`api.read` records, connector page v2 rows and `event-handler` deliveries
+carry it; a delivery's revision is the event's own sequence.
+
+The host keeps a mapping per installation, connection and record in
+`extension_export_mappings`: the external ID (indexed), named external IDs,
+the last pushed content hash and record revision, a status, the last error and
+timestamps. It is sized for full catalogs (a 100,000-record test keeps every
+mapping with index-backed lookups) and is workspace-scoped. Rows are deleted
+with their record or connection; a soft-deleted record keeps its row so the
+exporter can withdraw the item. Components with `exports.mappings` use these
+`api.call` operations from handlers and runs alike:
+
+| Operation | Request | Result |
+|---|---|---|
+| `mappings.get.v1` | `{connection?, record_id}` or `{connection?, external_id}` | `{mapping}` or `{mapping: null}` |
+| `mappings.list.v1` | `{connection?, status?, after?, limit?}` (1–100) | `{mappings, next}` |
+| `mappings.begin.v1` | `{connection?, record_id, record_revision, lease_ms?, force?}` | `{outcome: "proceed", lease_token, mapping}`, `{outcome: "stale", mapping}` or `{outcome: "busy", lease_until}` |
+| `mappings.commit.v1` | `{connection?, record_id, lease_token?, status, record_revision?, external_id?, external_ids?, content_hash?, error?}` | `{mapping}` |
+| `mappings.release.v1` | `{connection?, record_id, lease_token}` | `{released}` |
+| `mappings.delete.v1` | `{connection?, record_id}` | `{deleted}` |
+
+Inside an operation run, `begin`, `commit`, `release` and `delete` accept only
+records in the run's scope: records of a connector run's blueprint (including
+deleted, unpublished and older-version records it withdraws), or an
+interactive run's selected records. A connector run writes only its own
+connection's mappings, and a run confined to selected records only theirs;
+a connector run of a connection also sends only that connection's token, and
+one of the default destination sends no connection token.
+
+`begin` is the guard against reordered and duplicated work. It answers
+`stale` for a revision older than the mapping's, whatever its status, since
+the commit would be refused after the push, and for a deleted record, whose
+mapping accepts only a `withdrawn` commit. At the mapping's own revision it
+answers `stale` when the mapping is settled (`synced` or `rejected`; a
+`withdrawn` record published again unchanged is pushed again), unless an operator requested a retry or `force` is set. Otherwise it leases the record for `lease_ms` (default 2 minutes, at most
+15) so an event handler and a connector job never push the same record at the
+same time. A retried delivery or batch takes its own earlier lease back, keeping its
+token, so an earlier attempt still pushing can commit. A
+leased `commit` without `record_revision` is for the leased revision. `commit` records the result and releases the lease; without a lease
+token it fails while another worker holds a live lease, and a result for an
+older revision than the mapping's is refused, so a late push never replaces a
+newer outcome. A result recorded without a lease leaves an operator's pending
+retry standing, since its attempt may have begun before the retry, and a
+rejection the mapping already records changes nothing. `delete` is refused
+while another worker holds a live lease (pass `lease_token` for your own). A refused commit still ends its own lease. A component that
+fails a batch should
+release the leases it holds. Statuses are `pending`, `synced`, `rejected`,
+`retrying`, `uncertain` and `withdrawn`.
+
+Large destination reference data (taxonomies, product-type definitions,
+category parameter caches) belongs in extension storage, whose quota is
+65,536 keys and 256 MiB per installation (64 KiB per value).
+
+### Per-record export status
+
+The mapping status is the per-record, per-destination export status. The web
+app shows it:
+
+- on the record page, in an **Exports** tab with the status, external ID,
+  destination error, last sync, a **Preview** of the destination payload and
+  **Retry**; a warning chip in the record header opens it when an export was
+  rejected, is uncertain or is retrying;
+- in the Explorer, as an **Export status** filter;
+- on Data Health, as an **Exports** card with counts per extension;
+- on the extension's management page, as per-connection status counts, the
+  records in a chosen status with retry, and failed handler deliveries.
+
+Counts and the management page leave out deleted records except as
+`withdrawn`, so every other status they show is one an operator can retry.
+Statuses of a removed extension or a deleted connection are kept, so a
+re-created connection keeps its external IDs, but are neither shown nor
+selected by a status retry or resync.
+The `mappings.list.v1` host call still lists every mapping.
+
+`POST /extensions/{extension_id}/export-status/retry` with
+`{connection?, record_ids?, status?, run?}` sets the selected mappings (up to
+1,000, by IDs or by status; a status matching more is refused, not cut) to
+`pending`, records the retry request (only for an installed extension granted
+`exports.mappings`, any other is not found, and only while it is enabled) (records selected by ID alone that were
+never exported get a pending mapping when the extension exports their
+blueprint to that connection by a job, or handles `export.retry_requested.v1`
+itself; deleted records and withdrawn mappings are never selected, and a
+retry by status `withdrawn` is refused: publishing the record again exports
+it), emits
+`export.retry_requested.v1` for each record to that extension only, and is
+audited. With `run: true` it also starts a [resync](#connector-jobs-for-exports)
+of just those records on each of the extension's export jobs that target the
+connection, so a record is retried without rerunning a whole job. An optional
+`idempotency_key` (1-40 ASCII bytes) makes the request idempotent: sent again
+as it was (even concurrently), it finds the records it retried without
+retrying them again (keys are remembered for a week), and resyncs them under the same run keys, so a
+job that already started returns its run and one that could not start then
+starts now. The status
+page and the retry name records across the workspace, so besides
+`extensions.read` or `extensions.manage` they need a workspace-wide
+`records.read` grant.
+
+### Connector page v2 and withdrawals
+
+`attricat.page-v2({cursor, limit, expand?})` (1–16 rows) reads the run's
+host-selected blueprint, context and channel. Each row has `record_id`,
+`content_revision`, `blueprint_version`, `updated_at`, and:
+
+- `values`: scalar values resolved through the context's fallback chain, so
+  values inherited from parent contexts are included (as of the page snapshot);
+- `relationships`: relationship targets by attribute code;
+- `files`: file references (`file_id`, `filename`, `mime_type`, `byte_size`,
+  `sha256`) by attribute code, usable with `open-record-file` and
+  `files.link.v1`;
+- `related`: for up to four relationship codes named in `expand`, the targets'
+  resolved values, relationships, files, revision and whether each is
+  published in the channel, for variants and parent/child listings.
+
+With `expand`, a row's `content_revision` is the newest revision of the record
+and the records it embeds, so editing a variant makes its parent's row newer
+than the revision last committed for it.
+
+`attricat.withdrawn(cursor, limit)` (1–100) lists records of the job's
+blueprint that were unpublished from the run's channel (and are still
+unpublished), in event order. A run confined to selected records gets each
+selected record's latest withdrawal instead, paged by record with `more`; its
+cursor keeps the channel's position, so it never hides other records'
+withdrawals from later runs, and another run starts its selection again.
+Deleting a record unpublishes it from every
+channel it was live in, reported with reason `deleted`, so a record never
+published in the channel is never reported. Without a channel every
+unpublication and deletion is listed. Items come as `{record_id, reason,
+record_revision, occurred_at}`, with a `next_cursor` bound to the blueprint and
+channel and `more`. An empty cursor starts at the oldest change. Persist the
+cursor (for example in extension storage, per job and channel) to continue
+where the last run stopped. The feed ends at the committed end of the event
+log, and waits up to ten seconds for event writes in progress. Behind a
+longer write a page has no records but `more: true` and the same cursor, so
+the component calls again rather than take it for the end. Change-triggered
+jobs skip a tick instead when a write holds that boundary for more than two
+seconds.
+
+`api.call("connector.scope.v1", "{}")` returns the run's job, blueprint,
+revision, context, channel, connection and mode, or `null` outside connector
+runs. Scoped connector runs may now use `attricat-data.batch` for
+annotation-only batches on records of the job's blueprint (and of its
+selection, when the run has one), to record external
+IDs or sync state where checks and the Explorer can see them; value writes stay
+unavailable to export runs.
+
+### Brokered requests: network.request.v2
+
+`network.request.v2` takes the v1 fields plus:
+
+- query strings, when the matching rule declares `allow_query: true` (for
+  example `?marketplaceIds=` or presigned URLs). Query values never appear in
+  logs, traces, metrics, errors or the persisted delivery history;
+- `body_base64` for binary bodies (instead of `body`);
+- `secret_body: {format: "form" | "json", fields: [{field, secret}]}`, which
+  substitutes workspace secrets into a form or JSON body (a JSON `field` is a
+  top-level key or a JSON pointer), so the component never sees, for example,
+  an LWA client secret;
+- `connection`, which injects the [connection's](#credential-connections) access
+  token as the kind's token header (`Authorization: Bearer` by default), only
+  into requests matched by one of the kind's `api_host_permissions`.
+
+The rule's `response_headers` list extra response headers to return beyond
+`content-type`, `etag` and `retry-after` (for example `location`,
+`x-amzn-ratelimit-limit` or request IDs); `set-cookie` and authentication
+headers can never be listed. The result is `{outcome: "response", status,
+headers, body_base64}`, `{outcome: "rate_limited", retry_after_ms}` when the
+rule's budget is spent, `{outcome: "unreachable"}` when the connection or
+TLS handshake failed (nothing was sent, so it may be sent again),
+`{outcome: "uncertain"}` after any other transport failure,
+a timeout or a response larger than the rule's `max_response_bytes` (the
+request may have been applied), or `{outcome: "connection_unavailable", message}` when a token could
+not be refreshed for a temporary reason. Redirects are never followed; v2
+returns a 3xx response as it is, so a component may request its `Location`
+through a granted rule (Allegro answers finished offer commands with
+`303 See Other`). A 401 response discards the connection's cached token.
+
+### Per-rule request budgets
+
+A host-permission rule may declare `rate_limit: {requests, per_seconds,
+burst?}`: a token bucket refilling `requests` tokens every `per_seconds`,
+holding up to `burst` (default `requests`). Every request matched by the rule,
+including transfers, takes a token; v1 calls fail with `network request rate
+limit exceeded` and v2 calls return `rate_limited` with the wait. Operators may
+lower a budget, never raise it, with `PUT
+/extensions/{extension_id}/host-permission-budgets/{host_permission_id}`
+`{requests, per_seconds}` (and reset it with `DELETE`); `GET
+/extensions/{extension_id}/host-permission-budgets` lists declared and lowered
+budgets. Buckets are per workspace, extension and rule, and shared across
+replicas with `CACHE_BACKEND=redis`. Each process caches a lowered budget for
+10 seconds; the replica that serves the change applies it at once. Rules without a budget keep the shared
+60 requests per minute per release; v2 calls throttled by it report the
+whole minute as the wait.
+
+### Transfers, record files and public links
+
+`transfer.fetch-input-v2` and `transfer.deliver-output-v2` take the v1 fields
+plus `headers` (caller-controlled signed headers, for example the exact
+`Content-Type` a presigned URL was signed for) and `connection`, and accept
+query strings on rules with `allow_query` (S3 and GCS presigned URLs). A v2
+delivery sends `Idempotency-Key` only when `idempotency_key` is given; PUT to
+a presigned URL is idempotent by itself. `multipart: {fields: [{name, value}],
+file_field, filename?}` posts a `multipart/form-data` form with the artifact
+as its file part, for Shopify's form-style staged uploads. A POST still needs
+`idempotent_delivery: true` on its rule. A v2 delivery may upload a completed
+input artifact of the run as well as an output. Like `network.request.v2`, the
+v2 transfers answer a spent request budget with
+`{outcome: "rate_limited", retry_after_ms}` and an unavailable token endpoint
+with `{outcome: "connection_unavailable"}` instead of an error, and charge the
+budget for a transfer that passes its checks: caller headers, multipart forms
+and secret header names are checked first, and the budget is charged before
+DNS is resolved, so failing lookups are throttled too. A v2 delivery whose
+connection failed answers `{outcome: "unreachable"}` and forgets its key, so
+it may be sent again. A 401 from the destination discards
+the connection's cached token and is not recorded against the delivery key,
+so the same key is sent again with a fresh token. A connection-authorized v2
+fetch answers a 401 with `{outcome: "failed", status: 401}` after discarding
+the token, so the component can retry.
+
+`transfer.open-record-file({record_id, file_id, variant?})` copies a file a
+live record references (up to 16 MiB) into a run-bound input artifact for a
+direct binary upload. Records of a run that share a file reuse its
+artifact. It needs `attricat.read`, `attricat.files.read` and
+`artifacts.read`; connector runs are confined to the records they serve and
+the live records those link to (which page-v2 expands), and interactive runs
+to their selection.
+
+`files.link.v1` (`{file_id, record_id, expires_in_seconds}`, 60 s to 7 days)
+issues a public, unguessable link to a record's file for destinations that
+fetch media themselves, as Amazon and Allegro do, hours after a listing is
+submitted. It needs `attricat.files.public_links`, `attricat.files.read` and
+`attricat.read`, and the
+deployment's `EXTENSION_PUBLIC_FILE_BASE_URL`. Inside an operation run it
+links only records in the run's scope, as `open-record-file` does. Only the
+token's SHA-256 is stored. `GET /api/public/extension-files/{token}` serves the file without a
+session while the link is unexpired, the extension is enabled with all three
+grants it was issued under, and the record the link was issued for still references the file.
+Deleting the record or replacing the file stops the link at once; disabling,
+quarantining, upgrading or removing the extension, or revoking one of the
+three grants, revokes its links for good.
+
+### Credential connections
+
+A manifest declares connection kinds under `server.connections`:
+
+```json
+{
+  "id": "amazon",
+  "title": "Amazon seller account",
+  "grant_types": ["refresh_token"],
+  "host_permission": "amazon-lwa",
+  "api_host_permissions": ["amazon-sp"],
+  "token_header": {"name": "x-amz-access-token"},
+  "client_authentication": "body",
+  "parameters_schema": {"type": "object", "required": ["seller_id"]}
+}
+```
+
+Operators create named connections of a kind (several per installation, such
+as several Shopify shops or Amazon EU and US accounts) with
+`POST /extensions/{extension_id}/connections` (`connection`, `kind`,
+`display_name`, `grant_type`, `token_url`, `device_authorization_url?`,
+`client_id`, `scope?`, `parameters?`, `client_secret?`, `refresh_token?`), or
+in the extension's **Connections** section. Token and device endpoints must
+match the kind's `host_permission`. The host stores client secrets, refresh
+tokens, access tokens and device codes only as AES-256-GCM ciphertext bound to
+their row and field, under the `extension_credential_key` secret; without it
+connections cannot be created. The management API, logs, traces, audit
+records and errors never contain them, and components only learn a
+connection's non-secret description (`connections.get.v1`,
+`connections.list.v1`, requiring `connections.use`).
+
+The host runs the grants itself: `client_credentials` (Shopify), `refresh_token`
+(Amazon LWA, Allegro), the device authorization grant (Allegro;
+`POST .../connections/{connection}/device-authorization` starts it and shows
+the user code, `.../device-authorization/poll` completes it) and an
+operator's authorization-code exchange (`POST .../authorization-code`
+`{code, redirect_uri, code_verifier?}`, for apps whose redirect URI is not an
+Attricat route; callback ingress is tracked in #279). Token and device
+endpoint requests count against the kind's host-permission budget. A device
+authorization whose user code or verification link is unusable (too long, or
+not http(s)) is refused. Starting device
+authorization while a refresh or poll of the connection is under way is
+refused with `409`. Starting device
+authorization again on an active connection keeps it working on its current
+tokens until the new code is approved; an expired or refused code then only
+ends that authorization. `client_authentication`
+selects `client_secret_post` (`body`) or HTTP Basic (`basic`). A token is
+refreshed 60 seconds before it expires (half its lifetime before, for a token
+issued for less than two minutes). One worker claims the refresh and re-checks
+the token after claiming it; the others wait for its token without holding a
+database connection, so a rotating refresh token (Allegro) is never used
+twice. A rejected grant marks the connection `failed` for an
+operator; temporary failures keep it usable. Changing the token URL, scope or
+credentials discards the cached access token, and gives a `failed` connection
+another try. A refresh under way keeps its claim through such a change, and
+a refresh token it receives is kept unless the operator replaced the refresh
+token meanwhile. Moving the token or device endpoint to another origin needs the
+client secret entered again and drops the stored tokens, so the connection
+waits for a new authorization unless a refresh token comes with the change. `POST .../test` obtains a token.
+Deleting a connection deletes its credentials but keeps its mappings, so a
+connection re-created under the same name keeps the destination's external IDs.
+
+### Connector jobs for exports
+
+An export job may name the `connection` it pushes to, the publication
+channel it exports as `context`, and a change `trigger`. Without `context` a
+job runs once per enabled channel; because export mappings hold one status
+per record and connection, a job of an extension with `exports.mappings` is
+refused when several channels are enabled and it names none.
+
+```toml
+[[connector_jobs]]
+code = "shopify"
+direction = "export"
+extension_id = "acme.shopify"
+operation_id = "export"
+connection = "shop-eu"
+trigger = {events = ["record.updated.v1", "attribute_value.changed.v1"], debounce_seconds = 30}
+input = {}
+```
+
+A trigger starts a run once the newest matching event of the blueprint's
+records is `debounce_seconds` old, or once the oldest pending change is ten
+debounces old, so steady edits cannot starve it. Jobs with pending changes are
+checked longest-waiting first. A run that cannot be queued keeps the watermark
+and the job waits five minutes before it tries again, so failing jobs cannot
+hold up others. A trigger that was disabled or removed and is published again
+starts at the end of the event log. The run is confined to the changed records
+(up to 10,000; more changes run the whole job) and the trigger's watermark
+moves past them, so a burst of edits causes one run. A matching event of a
+record that a live record of the blueprint links to through a relationship
+counts as a change of the linking record, because `page-v2` can embed it. A
+`page-v2` row's `content_revision` is the newest of its own and its expanded
+records', including linked records since deleted. Runs record their mode:
+`incremental`, `triggered` or `resync`.
+
+`POST /blueprint-connector-jobs/{id}/resync` `{idempotency_key, record_ids? |
+status?}` is the backfill action: it re-exports every published record of the
+job, or only the given records or the records with an export status on the
+job's connection. In a resync run `begin` leases records settled before the
+run started; exporters skip records whose stored content hash is unchanged
+and push the rest. A record the run settles itself, for example by rejecting
+it, stays settled, so a replayed batch moves on, and a resync leaves nothing
+behind for later runs. The idempotency key covers the request's selection, so reusing a
+key with other `record_ids` or another `status` starts another resync.
+
+Event handlers can be debounced too: `debounce_ms` (and optional
+`max_wait_ms`, default ten times the debounce) on an event handler delays a
+record's events until the record has been quiet that long and skips events a
+newer event of the same record supersedes, unless the event has waited its
+longest. A superseded delivery ends the export leases its earlier attempts
+took, so the newer event's delivery is not held off. A retry request concerns one connection: only a later retry
+request of the same extension and connection supersedes it, and it
+supersedes no other event.
+
+### Preview, reconciliation and drift
+
+`server.exports` declares an extension's destinations: `{id, title,
+connection?, preview_command?, resync_operation?, reconcile_operation?}`.
+`POST /extensions/{extension_id}/exports/{export_id}/preview`
+`{record_id, connection?}` invokes the preview command with that payload and
+returns its response, conventionally `{payload, issues}`: the destination
+payload and what the destination would reject (for example missing
+product-type attributes), without pushing. The command reads with the
+extension's own access, so the preview needs `records.write` like any other
+command plus `records.read` across the whole workspace, and `connection` must be a connection of the export's kind.
+
+Amazon and Allegro have no idempotency keys. After an `uncertain` result,
+commit the mapping as `uncertain`; before pushing that record again, look it up
+on the destination by SKU or external ID (`GET /listings/.../{sku}`,
+`GET /sale/offers?external.id=`), record what it found, and only then
+create or update. `mappings.get.v1` by `external_id` supports the reverse
+lookup. A drift check is an operation (`reconcile_operation`) that pages the
+destination, compares it with `mappings.list.v1` and records differences:
+items edited or deleted on the destination, listings unknown to Attricat, and
+mappings pointing at missing items.
+
+### Decisions
+
+- **Channels and marketplaces.** A connector job still runs once per enabled
+  publication channel, with values resolved in that channel's context. A
+  destination account is a connection: one channel can feed several
+  connections (one job each), and one connection can carry several
+  marketplaces of an account (for example Amazon marketplace IDs as connection
+  parameters, chosen per row by the exporter). Mappings are per connection.
+- **Price, currency, units and stock.** Exporters push what the catalog holds.
+  Price and stock that live in an ERP or vary per channel are synced on their
+  own fast path, by a separate job (or a change-triggered job on the
+  attributes that hold them), not merged into the content export. Currency is
+  a connection parameter or catalog value, never an exporter default.
+- **Mapping configuration at destination scale.** Attribute-to-product-type
+  and value mappings live in extension storage (one key per destination
+  category) and are edited in the `export_mapping` panel outlet, which the
+  extension's management page mounts once per export destination with
+  `{context_version: 1, export_id}` (requires `client.export_mapping`).
+  Scoped configuration remains for small per-blueprint settings.
+- **Webhook ingress** (OAuth callbacks, inbound order and stock events) is
+  tracked in #279 and is not needed for pure export.
+
+### Testing exports locally
+
+`examples/marketplace-export/mock-server/server.mjs` serves Shopify, Amazon
+(LWA, SP-API, S3 feed documents) and Allegro stand-ins over HTTPS for
+`*.mock.test`, with the test CA in `apps/api/tests/fixtures/mock-tls`, plus an
+inspection API on `http://127.0.0.1:9080` (`/state`, `/requests`, `/fail` to
+inject 429, 5xx or a response that never arrives, `/allegro/approve`). It never
+contacts the real services. Point the broker at it in development only
+(`ATTRICAT_DEVTOOLS=true`):
+
+```sh
+EXTENSION_DEV_EGRESS_RESOLVE=*.mock.test=127.0.0.1:9443
+EXTENSION_DEV_EGRESS_CA_FILE=$PWD/apps/api/tests/fixtures/mock-tls/ca.pem
+EXTENSION_PUBLIC_FILE_BASE_URL=http://127.0.0.1:$API_PORT/api/public/extension-files/
+```
+
+Then build the test exporter, start the mock and run the scenario against the
+worktree stack:
+
+```sh
+node examples/marketplace-export/pack.mjs
+node examples/marketplace-export/mock-server/server.mjs &
+source .worktree && API_LOG=<api log file> node examples/marketplace-export/e2e.mjs
+```
+
+The scenario side-loads the exporter, creates Shopify (client credentials),
+Amazon (refresh token) and Allegro (device code) connections, publishes
+listings with variants and an image, and checks variants, staged image
+uploads, single-item and feed listings polled to completion, Allegro offer
+commands polled through deferral, rejections, throttling, a 5xx, an uncertain
+push reconciled by SKU, a single-record retry, withdrawal after unpublishing,
+and that no credential reaches the API log or the mock's query strings.
+
+The Rust suites `extension_export_platform`, `extension_brokered_egress` and
+`extension_export_scale` (in `apps/api/tests`) cover the same contracts against
+a local TLS mock without the dev stack.
 
 ## Client extension runtime (v1)
 
@@ -761,6 +1282,13 @@ navigation. Key presses inside the sandboxed frame never reach the host, so a
 dialog frame should call `attricat.dialog.close()` on Escape. Closing it
   before starting a run creates nothing; closing it afterwards does not cancel
   the run.
+
+- **`export_mapping`** (`panel`, requiring `client.export_mapping`) appears in
+  the export status section of the extension's own management page, once per
+  export destination the release declares, with the strict context
+  `{ "context_version": 1, "export_id" }`. Use it to edit large destination
+  mappings (attribute to product-type attribute, value to destination value)
+  kept in extension storage. Only the extension's own contribution mounts there.
 
 - **`data_health_card`** (`panel`, requiring `client.data_health_card`)
   appears as a host-owned card below the Data Health summary cards, only when

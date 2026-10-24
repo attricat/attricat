@@ -78,3 +78,5 @@ A retained edit still has to pass each channel's [publication checks](#require-c
 ## Exports
 
 Connector export jobs declared on a blueprint run once per enabled channel and include only records published to that channel at the time each page is read. A record unpublished during an export drops out of the pages that follow. Data already sent to an external system cannot be recalled. See [Connector jobs](/reference/blueprint/#connector-jobs).
+
+Marketplace and storefront exporters can also withdraw a record from the destination after it is unpublished or deleted. Each record's export status is on its [Exports tab](/guides/records/#exports).

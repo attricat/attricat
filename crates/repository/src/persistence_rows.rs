@@ -187,18 +187,28 @@ domain_row!(RecordReusableAttribute {
     facetable,
     position,
 });
-domain_row!(Record {
-    id,
-    blueprint_id,
-    blueprint_version,
-    projections,
-    system_tags,
-    system_metadata,
-    is_sample,
-    created_at,
-    updated_at,
-    deleted_at,
-});
+impl DomainRow for Record {
+    fn from_pg_row(row: &PgRow) -> Result<Self, sqlx::Error> {
+        Ok(Self {
+            id: row.try_get("id")?,
+            blueprint_id: row.try_get("blueprint_id")?,
+            blueprint_version: row.try_get("blueprint_version")?,
+            projections: row.try_get("projections")?,
+            system_tags: row.try_get("system_tags")?,
+            system_metadata: row.try_get("system_metadata")?,
+            is_sample: row.try_get("is_sample")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
+            deleted_at: row.try_get("deleted_at")?,
+            // Only reads that need it select the revision.
+            content_revision: match row.try_get("content_revision") {
+                Ok(revision) => Some(revision),
+                Err(sqlx::Error::ColumnNotFound(_)) => None,
+                Err(error) => return Err(error),
+            },
+        })
+    }
+}
 domain_row!(AttributeContext {
     id,
     code,

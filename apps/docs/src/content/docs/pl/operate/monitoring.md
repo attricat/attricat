@@ -17,6 +17,8 @@ description: Obserwuj stan danych katalogu, kolejki w tle, metryki, ślady i nie
 
 **Nieaktualne po** określa, co jest uznawane za zaległe, od 1 do 3650 dni (domyślnie 90). Wyniki są domyślnie buforowane przez pięć minut (`DATA_HEALTH_CACHE_TTL_SECONDS`); **Odśwież** czyści bufor.
 
+Gdy rozszerzenie eksportuje rekordy, karta **Eksporty** pokazuje, ile rekordów każde miejsce docelowe odrzuciło, ile ma stan niepewny, a ile jest ponawianych, obok liczby zsynchronizowanych. Aby zobaczyć te rekordy i ponowić ich eksport, otwórz stronę rozszerzenia w **Zarządzanie → Rozszerzenia**; zobacz [Stan eksportu](/pl/builders/extensions/#stan-eksportu).
+
 Rozszerzenia mogą dodawać karty do tej strony.
 
 ## Przetwarzanie w tle

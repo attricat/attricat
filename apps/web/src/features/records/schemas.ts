@@ -618,6 +618,13 @@ export const searchRecordsRequestSchema = z.object({
     )
     .optional(),
   system_tags: z.array(z.string()).optional(),
+  export_status: z
+    .object({
+      extension_id: z.string().min(1),
+      connection: z.string().min(1).optional(),
+      status: z.string().min(1),
+    })
+    .optional(),
   sort: z
     .object({
       field: z.string().min(1),

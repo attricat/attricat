@@ -150,14 +150,17 @@ dependencies = [
  "attricat-storage",
  "attricat-workers",
  "axum",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "dotenvy",
+ "hyper-util",
  "image",
  "metrics",
  "metrics-exporter-prometheus",
  "reqwest",
  "rust_decimal",
+ "rustls",
  "secrecy",
  "serde_json",
  "sha2 0.10.9",
@@ -165,6 +168,7 @@ dependencies = [
  "subtle",
  "tar",
  "tokio",
+ "tokio-rustls",
  "tracing",
  "url",
  "uuid",
@@ -365,6 +369,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "attricat-export-test-component"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "attricat-extension-manifest"
 version = "0.1.0"
 dependencies = [
@@ -392,10 +404,12 @@ dependencies = [
  "attricat-storage",
  "attricat-workers",
  "base64 0.22.1",
+ "bytes",
  "chrono",
  "futures-util",
  "metrics",
  "reqwest",
+ "ring",
  "semver",
  "serde",
  "serde_json",
@@ -484,6 +498,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "attricat-marketplace-test-component"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "attricat-repository"
 version = "0.1.0"
 dependencies = [
@@ -506,6 +529,7 @@ dependencies = [
  "futures-util",
  "metrics",
  "reqwest",
+ "ring",
  "rust_decimal",
  "schemars",
  "semver",

@@ -27,6 +27,7 @@ type ClaimedOperationRunRow = (
     Value,
     i32,
     String,
+    DateTime<Utc>,
 );
 
 #[derive(Clone, Debug)]
@@ -62,6 +63,8 @@ pub struct ClaimedExtensionOperationRun {
     /// checkpoint's contents because `{}` is a valid extension checkpoint.
     pub lifecycle_started: bool,
     pub cancelling: bool,
+    /// Every catalog read of the run is at or after this time.
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Clone, Debug, sqlx::FromRow)]
@@ -180,7 +183,7 @@ impl AttricatRepository {
     pub(crate) async fn start_extension_operation_scoped(
         &self,
         input: StartExtensionOperation,
-        scope: Option<(Uuid, Uuid, Uuid, i64, Option<Uuid>)>,
+        scope: Option<super::blueprint_connector_jobs::ConnectorRunScope>,
     ) -> Result<Uuid, RepositoryError> {
         if input.idempotency_key.is_empty()
             || input.idempotency_key.len() > MAX_IDEMPOTENCY_BYTES
@@ -240,7 +243,7 @@ impl AttricatRepository {
         let abi = crate::extensions::SUPPORTED_HOST_API;
         let id = Uuid::new_v4();
         let inserted: Option<Uuid> = sqlx::query_scalar(
-            "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,source_reference,destination_reference,idempotency_key,schedule_id,connector_job_id,connector_blueprint_id,connector_context_id,connector_blueprint_version,connector_channel_id) VALUES($1,$2,$3,$4,$13,$5,$6,$7,$8,$9,$10,$11,$12,$14,$15,$16,$17,$18,$19) ON CONFLICT(workspace_id,extension_id,installed_release_id,operation_id,idempotency_key) DO NOTHING RETURNING id",
+            "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,source_reference,destination_reference,idempotency_key,schedule_id,connector_job_id,connector_blueprint_id,connector_context_id,connector_blueprint_version,connector_channel_id,connector_connection,connector_mode,connector_record_ids) VALUES($1,$2,$3,$4,$13,$5,$6,$7,$8,$9,$10,$11,$12,$14,$15,$16,$17,$18,$19,$20,$21,$22) ON CONFLICT(workspace_id,extension_id,installed_release_id,operation_id,idempotency_key) DO NOTHING RETURNING id",
         )
         .bind(id)
         .bind(self.extension_workspace())
@@ -256,11 +259,14 @@ impl AttricatRepository {
         .bind(&input.idempotency_key)
         .bind(abi)
         .bind(input.schedule_id)
-        .bind(scope.map(|s| s.0))
-        .bind(scope.map(|s| s.1))
-        .bind(scope.map(|s| s.2))
-        .bind(scope.map(|s| s.3))
-        .bind(scope.and_then(|s| s.4))
+        .bind(scope.as_ref().map(|s| s.job_id))
+        .bind(scope.as_ref().map(|s| s.blueprint_id))
+        .bind(scope.as_ref().map(|s| s.context_id))
+        .bind(scope.as_ref().map(|s| s.blueprint_version))
+        .bind(scope.as_ref().and_then(|s| s.channel_id))
+        .bind(scope.as_ref().and_then(|s| s.connection.clone()))
+        .bind(scope.as_ref().map(|s| s.mode.as_str()))
+        .bind(scope.as_ref().and_then(|s| s.record_ids.clone()))
         .fetch_optional(&mut *transaction)
         .await?;
         if let Some(run_id) = inserted {
@@ -310,7 +316,7 @@ impl AttricatRepository {
             .ensure_task_fence(&mut transaction)
             .await?;
         let row: Option<ClaimedOperationRunRow> = sqlx::query_as(
-            "SELECT status,cancellation_requested,lifecycle_started,extension_id,installed_release_id,operation_id,configuration_snapshot,input,checkpoint,batch_number,abi_version FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
+            "SELECT status,cancellation_requested,lifecycle_started,extension_id,installed_release_id,operation_id,configuration_snapshot,input,checkpoint,batch_number,abi_version,created_at FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
         )
         .bind(task.subject_id)
         .bind(self.extension_workspace())
@@ -328,6 +334,7 @@ impl AttricatRepository {
             checkpoint,
             batch_number,
             abi_version,
+            created_at,
         )) = row
         else {
             return Err(RepositoryError::InvalidExtension(
@@ -387,6 +394,7 @@ impl AttricatRepository {
             max_checkpoint_bytes: handler.1,
             lifecycle_started,
             cancelling,
+            created_at,
         }))
     }
 
@@ -429,6 +437,21 @@ impl AttricatRepository {
         progress: Value,
         done: bool,
     ) -> Result<bool, RepositoryError> {
+        self.checkpoint_extension_operation_task_until(task, run, checkpoint, progress, done, None)
+            .await
+    }
+
+    /// [`Self::checkpoint_extension_operation_task`] for a batch that asked to
+    /// be resumed at `resume_at` rather than at once.
+    pub async fn checkpoint_extension_operation_task_until(
+        &self,
+        task: &ClaimedTask,
+        run: &ClaimedExtensionOperationRun,
+        checkpoint: Value,
+        progress: Value,
+        done: bool,
+        resume_at: Option<chrono::DateTime<Utc>>,
+    ) -> Result<bool, RepositoryError> {
         bounded_object(&checkpoint, "checkpoint")?;
         bounded_object(&progress, "progress")?;
         let mut transaction = self.pool.begin().await?;
@@ -436,7 +459,7 @@ impl AttricatRepository {
             .ensure_task_fence(&mut transaction)
             .await?;
         let changed: Option<String> = sqlx::query_scalar(
-            "UPDATE extension_operation_runs SET checkpoint=$3,progress=$4,lifecycle_started=true,batch_number=batch_number+1,status=CASE WHEN cancellation_requested AND cancellation_delivered THEN 'cancelled' WHEN cancellation_requested THEN 'pending' WHEN $5 THEN 'completed' ELSE 'pending' END,completed_at=CASE WHEN $5 AND NOT cancellation_requested THEN clock_timestamp() ELSE completed_at END,cancelled_at=CASE WHEN cancellation_requested AND cancellation_delivered THEN clock_timestamp() ELSE cancelled_at END,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$6 RETURNING status",
+            "UPDATE extension_operation_runs SET checkpoint=$3,progress=$4,lifecycle_started=true,batch_number=batch_number+1,deferrals=0,status=CASE WHEN cancellation_requested AND cancellation_delivered THEN 'cancelled' WHEN cancellation_requested THEN 'pending' WHEN $5 THEN 'completed' ELSE 'pending' END,completed_at=CASE WHEN $5 AND NOT cancellation_requested THEN clock_timestamp() ELSE completed_at END,cancelled_at=CASE WHEN cancellation_requested AND cancellation_delivered THEN clock_timestamp() ELSE cancelled_at END,resume_at=$7,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$6 RETURNING status",
         )
         .bind(run.id)
         .bind(self.extension_workspace())
@@ -447,6 +470,7 @@ impl AttricatRepository {
         .bind(redact(&progress))
         .bind(done)
         .bind(task.lease_token)
+        .bind(resume_at)
         .fetch_optional(&mut *transaction)
         .await?;
         let Some(status) = changed else {
@@ -517,32 +541,45 @@ impl AttricatRepository {
         task: &ClaimedTask,
         error: &str,
     ) -> Result<bool, RepositoryError> {
+        self.retry_extension_operation_task(task, error, Utc::now() + Duration::seconds(1))
+            .await
+    }
+
+    /// Releases a failed batch for a retry at `at` without committing a
+    /// checkpoint, so the same batch key replays. The envelope's failure
+    /// budget decides whether the run is retried or dead-lettered.
+    pub async fn retry_extension_operation_task(
+        &self,
+        task: &ClaimedTask,
+        error: &str,
+        at: chrono::DateTime<Utc>,
+    ) -> Result<bool, RepositoryError> {
         let error = bounded_message(error);
         let mut transaction = self.pool.begin().await?;
         self.for_extension_operation_task(task)
             .ensure_task_fence(&mut transaction)
             .await?;
-        // The envelope's failure budget decides whether the run is retried.
         let terminal = self
             .retry_task_at_in_transaction(
                 &mut transaction,
                 task.id,
                 &task.lease_owner,
                 task.lease_token,
-                Utc::now() + Duration::seconds(1),
+                at,
                 "operation",
                 &error,
             )
             .await?
             == TaskStatus::DeadLetter;
         let changed = sqlx::query(
-            "UPDATE extension_operation_runs SET status=CASE WHEN $3 THEN 'dead_letter' ELSE 'pending' END,last_error_code='operation',last_error_message=$4,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$5",
+            "UPDATE extension_operation_runs SET status=CASE WHEN $3 THEN 'dead_letter' ELSE 'pending' END,last_error_code='operation',last_error_message=$4,resume_at=CASE WHEN $3 THEN NULL ELSE $6 END,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$5",
         )
         .bind(task.subject_id)
         .bind(self.extension_workspace())
         .bind(terminal)
         .bind(&error)
         .bind(task.lease_token)
+        .bind(at)
         .execute(&mut *transaction)
         .await?
         .rows_affected();
@@ -553,6 +590,86 @@ impl AttricatRepository {
         }
         transaction.commit().await?;
         Ok(terminal)
+    }
+
+    /// Re-runs the same batch at `at` without spending the failure budget,
+    /// for a batch that asked to wait (a typed retry with an explicit delay,
+    /// such as a destination's 429). The run and its task are released in
+    /// one transaction. A run may wait at most `limit` times in a row
+    /// without completing a batch; past that nothing changes and this
+    /// returns false, so the caller spends the failure budget instead.
+    /// Without a limit the wait is progress: like a checkpoint, it starts
+    /// the count of waits in a row again.
+    pub async fn defer_extension_operation_task(
+        &self,
+        task: &ClaimedTask,
+        message: &str,
+        at: chrono::DateTime<Utc>,
+        limit: Option<i32>,
+    ) -> Result<bool, RepositoryError> {
+        let message = bounded_message(message);
+        let mut transaction = self.pool.begin().await?;
+        self.for_extension_operation_task(task)
+            .ensure_task_fence(&mut transaction)
+            .await?;
+        let deferrals: Option<i32> = sqlx::query_scalar("SELECT deferrals FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3 FOR UPDATE")
+            .bind(task.subject_id).bind(self.extension_workspace()).bind(task.lease_token)
+            .fetch_optional(&mut *transaction).await?;
+        let Some(deferrals) = deferrals else {
+            return Err(RepositoryError::InvalidExtension(
+                "operation run lost its lease".into(),
+            ));
+        };
+        if limit.is_some_and(|limit| deferrals >= limit) {
+            return Ok(false);
+        }
+        let task_changed = sqlx::query("UPDATE tasks SET status='queued',available_at=$4,lease_owner=NULL,lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3")
+            .bind(task.id).bind(&task.lease_owner).bind(task.lease_token).bind(at)
+            .execute(&mut *transaction).await?.rows_affected();
+        let run_changed = sqlx::query("UPDATE extension_operation_runs SET status='pending',deferrals=CASE WHEN $6 THEN deferrals+1 ELSE 0 END,last_error_code='retry',last_error_message=$4,resume_at=$5,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3")
+            .bind(task.subject_id).bind(self.extension_workspace()).bind(task.lease_token)
+            .bind(&message).bind(at).bind(limit.is_some())
+            .execute(&mut *transaction).await?.rows_affected();
+        if task_changed != 1 || run_changed != 1 {
+            return Err(RepositoryError::InvalidExtension(
+                "operation run lost its lease".into(),
+            ));
+        }
+        transaction.commit().await?;
+        Ok(true)
+    }
+
+    /// Dead-letters a run whose batch reported a permanent (rejected)
+    /// failure. Nothing is retried; an operator may replay the run.
+    pub async fn reject_extension_operation_task(
+        &self,
+        task: &ClaimedTask,
+        error: &str,
+    ) -> Result<(), RepositoryError> {
+        let error = bounded_message(error);
+        let mut transaction = self.pool.begin().await?;
+        self.for_extension_operation_task(task)
+            .ensure_task_fence(&mut transaction)
+            .await?;
+        let changed = sqlx::query(
+            "UPDATE extension_operation_runs SET status='dead_letter',last_error_code='rejected',last_error_message=$3,resume_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$4",
+        )
+        .bind(task.subject_id)
+        .bind(self.extension_workspace())
+        .bind(&error)
+        .bind(task.lease_token)
+        .execute(&mut *transaction)
+        .await?
+        .rows_affected();
+        if changed != 1 {
+            return Err(RepositoryError::InvalidExtension(
+                "operation run lost its lease".into(),
+            ));
+        }
+        self.dead_letter_task_in_transaction(&mut transaction, task, "rejected", &error)
+            .await?;
+        transaction.commit().await?;
+        Ok(())
     }
 
     pub async fn cancel_extension_operation(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -585,6 +702,7 @@ impl AttricatRepository {
         Ok(changed == 1)
     }
 
+    /// A replayed run starts with a fresh failure and deferral budget.
     /// Returns `InvalidContext` when an interactive run's selection context
     /// was deleted after it failed: replaying it could never read its
     /// selection. The share lock serializes with `delete_context`.
@@ -610,7 +728,7 @@ impl AttricatRepository {
             }
         }
         let changed = sqlx::query(
-            "UPDATE extension_operation_runs SET status='pending',cancellation_requested=false,cancellation_delivered=false,attempts=0,last_error_code=NULL,last_error_message=NULL,completed_at=NULL,cancelled_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter' AND NOT outputs_expired",
+            "UPDATE extension_operation_runs SET status='pending',cancellation_requested=false,cancellation_delivered=false,attempts=0,deferrals=0,resume_at=NULL,last_error_code=NULL,last_error_message=NULL,completed_at=NULL,cancelled_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter' AND NOT outputs_expired",
         )
         .bind(id)
         .bind(self.extension_workspace())

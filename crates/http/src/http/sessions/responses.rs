@@ -54,6 +54,8 @@ pub(super) struct SessionCapabilities {
     records_delete: bool,
     blueprints_write: bool,
     records_write: bool,
+    /// Workspace-wide read access, which an export preview needs.
+    records_read: bool,
     blueprints_publish: bool,
     contexts_write: bool,
     agents_run: bool,
@@ -82,6 +84,7 @@ impl SessionResponse {
         c.records_delete &= permits("records.delete");
         c.blueprints_write &= permits("blueprints.write");
         c.records_write &= permits("records.write");
+        c.records_read &= permits("records.read");
         c.blueprints_publish &= permits("blueprints.publish");
         c.contexts_write &= permits("contexts.write");
         c.agents_run &= permits("agents.run");
@@ -185,7 +188,7 @@ async fn session_response_payload_with_identifier(
 }
 
 /// Workspace-wide permissions reported as session capability flags.
-const CAPABILITY_PERMISSIONS: [&str; 22] = [
+const CAPABILITY_PERMISSIONS: [&str; 23] = [
     "audit.read",
     "data_health.read",
     "members.manage",
@@ -205,6 +208,7 @@ const CAPABILITY_PERMISSIONS: [&str; 22] = [
     "records.delete",
     "blueprints.write",
     "records.write",
+    "records.read",
     "blueprints.publish",
     "contexts.write",
     "agents.run",
@@ -242,6 +246,7 @@ async fn session_capabilities(
         records_delete: has("records.delete"),
         blueprints_write: has("blueprints.write"),
         records_write: has("records.write"),
+        records_read: has("records.read"),
         blueprints_publish: has("blueprints.publish"),
         contexts_write: has("contexts.write"),
         agents_run: has("agents.run"),

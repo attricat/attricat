@@ -138,6 +138,23 @@ impl AttricatRepository {
         Ok(())
     }
 
+    /// The recorded state of a delivery key, without starting a delivery.
+    /// A replay returns it before spending a request budget or a token.
+    pub async fn previous_extension_http_delivery(
+        &self,
+        run: Uuid,
+        key: &str,
+        destination_digest: &str,
+    ) -> Result<Option<DeliveryState>, RepositoryError> {
+        let existing: Option<(String, String, Option<i32>)> = sqlx::query_as("SELECT destination_digest,state,http_status FROM extension_operation_http_deliveries WHERE operation_run_id=$1 AND workspace_id=$2 AND delivery_key=$3")
+            .bind(run).bind(self.extension_workspace()).bind(key).fetch_optional(&self.pool).await?;
+        existing
+            .map(|(digest, state, status)| {
+                delivery_state(&digest, destination_digest, &state, status)
+            })
+            .transpose()
+    }
+
     pub async fn begin_extension_http_delivery(
         &self,
         run: Uuid,
@@ -147,7 +164,8 @@ impl AttricatRepository {
     ) -> Result<DeliveryState, RepositoryError> {
         let mut tx = self.pool.begin().await?;
         self.ensure_task_fence(&mut tx).await?;
-        let valid: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_operation_runs r JOIN extension_operation_artifacts a ON a.operation_run_id=r.id WHERE r.id=$1 AND r.workspace_id=$2 AND r.status='leased' AND a.id=$3 AND a.direction='output' AND a.state='completed')")
+        // Outputs and completed inputs (an opened record file) can be delivered.
+        let valid: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_operation_runs r JOIN extension_operation_artifacts a ON a.operation_run_id=r.id WHERE r.id=$1 AND r.workspace_id=$2 AND r.status='leased' AND a.id=$3 AND a.state='completed')")
             .bind(run).bind(self.extension_workspace()).bind(artifact).fetch_one(&mut *tx).await?;
         if !valid {
             return Err(denied());
@@ -155,20 +173,25 @@ impl AttricatRepository {
         let existing: Option<(String,String,Option<i32>)> = sqlx::query_as("SELECT destination_digest,state,http_status FROM extension_operation_http_deliveries WHERE operation_run_id=$1 AND workspace_id=$2 AND delivery_key=$3")
             .bind(run).bind(self.extension_workspace()).bind(key).fetch_optional(&mut *tx).await?;
         if let Some((digest, state, status)) = existing {
-            if digest != destination_digest {
-                return Err(denied());
-            }
-            return Ok(match (state.as_str(), status) {
-                ("succeeded", Some(v)) => DeliveryState::Succeeded(v as u16),
-                ("failed", Some(v)) => DeliveryState::Failed(v as u16),
-                _ => DeliveryState::Uncertain,
-            });
+            return delivery_state(&digest, destination_digest, &state, status);
         }
         let id = Uuid::new_v4();
         sqlx::query("INSERT INTO extension_operation_http_deliveries(id,workspace_id,operation_run_id,delivery_key,artifact_id,destination_digest) VALUES($1,$2,$3,$4,$5,$6)")
             .bind(id).bind(self.extension_workspace()).bind(run).bind(key).bind(artifact).bind(destination_digest).execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(DeliveryState::Send(id))
+    }
+
+    /// Forgets a sent delivery the destination refused as unauthorized
+    /// (401), so the same key is sent again with a fresh token instead of
+    /// replaying the refusal. Nothing was applied, so resending is safe.
+    pub async fn forget_extension_http_delivery(&self, id: Uuid) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
+        sqlx::query("DELETE FROM extension_operation_http_deliveries WHERE id=$1 AND workspace_id=$2 AND state='uncertain'")
+            .bind(id).bind(self.extension_workspace()).execute(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(())
     }
 
     pub async fn complete_extension_http_delivery(
@@ -183,4 +206,22 @@ impl AttricatRepository {
         tx.commit().await?;
         Ok(())
     }
+}
+
+/// A recorded delivery's state; a different destination under the same key
+/// is refused.
+fn delivery_state(
+    digest: &str,
+    destination_digest: &str,
+    state: &str,
+    status: Option<i32>,
+) -> Result<DeliveryState, RepositoryError> {
+    if digest != destination_digest {
+        return Err(denied());
+    }
+    Ok(match (state, status) {
+        ("succeeded", Some(v)) => DeliveryState::Succeeded(v as u16),
+        ("failed", Some(v)) => DeliveryState::Failed(v as u16),
+        _ => DeliveryState::Uncertain,
+    })
 }

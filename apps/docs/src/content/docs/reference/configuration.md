@@ -22,6 +22,7 @@ Attricat never reads a password, key or token from an environment variable. Each
 | `redis_url` | Unset | Redis connection URL. Required when `CACHE_BACKEND` is `redis`. Use `rediss://` (or `valkeys://`) for TLS. |
 | `bootstrap_owner_password` | Unset | Optional first password for a newly created owner. It is hashed before storage and never changes an existing password. Supply it for the first start only, then empty the file. |
 | `file_worker_metrics_token` | Unset | Bearer token required on the file worker's `/metrics`. The file worker refuses a non-loopback operations listener without it. |
+| `extension_credential_key` | Unset | 32 random bytes, base64-encoded, that encrypt extension [connection](/builders/extensions/#connections) credentials (client secrets, refresh and access tokens, device codes) with AES-256-GCM. Without it, connections cannot be created or used. Any other length stops startup. Keep it stable: a new key makes stored credentials unreadable, and every connection must be set up again. Generate one with `openssl rand -base64 32`. |
 
 Startup stops if one of these is set as an environment variable, such as `LLM_API_KEY` or `SMTP_PASSWORD`, so a credential is never silently ignored. A `DATABASE_URL` variable is ignored. `ATTRICAT_SECRETS_DIR` reads the files from another directory instead of `/run/secrets`.
 
@@ -237,6 +238,9 @@ These agent limits are fixed: 32 KiB per user message, 16 attachments per messag
 | `EXTENSION_OFFICIAL_REGISTRY` | `attricat/attricat-extensions` | GitHub `owner/repository` used as every workspace's built-in extension registry. |
 | `EXTENSIONS_MODE` | `enabled` | Emergency switch. Set `disabled` to stop all extension execution, artifact delivery, commands, storage, host calls, and event delivery across the deployment. Installations and grants are left unchanged. Any other value stops startup. A change takes effect when the API restarts. |
 | `EXTENSION_DENYLIST` | Empty | Comma-separated list of extension IDs (`acme.inventory`) or exact releases (`acme.inventory@<release-uuid>`) to block. Read at startup and checked on every runtime call. |
+| `EXTENSION_PUBLIC_FILE_BASE_URL` | Unset | Externally reachable base URL of the public file links extensions issue, ending in `/api/public/extension-files/`, for example `https://attricat.example.com/api/public/extension-files/`. Marketplaces fetch listing images from it. It must be an HTTP(S) URL ending in `/`. Unset, extensions cannot issue file links. |
+| `EXTENSION_DEV_EGRESS_RESOLVE` | Unset | Development only; requires `ATTRICAT_DEVTOOLS=true`, otherwise startup stops. Comma-separated `host=ip:port` or `*.suffix=ip:port` entries that send extension requests for those hosts to a local mock, such as `*.mock.test=127.0.0.1:9443`. They bypass the public-address check, so never set them in production. |
+| `EXTENSION_DEV_EGRESS_CA_FILE` | Unset | Development only; requires `ATTRICAT_DEVTOOLS=true`. A PEM file of certificates that extension requests trust in addition to the system roots, for a local mock's certificate. Never set it in production. |
 
 ## Web app development server
 

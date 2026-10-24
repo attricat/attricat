@@ -170,6 +170,18 @@ impl AttricatRepository {
             .ok_or_else(|| invalid("staged output artifact is missing"))
     }
 
+    /// A completed artifact of the run in either direction, for deliveries
+    /// that upload an input (such as an opened record file) unchanged.
+    pub async fn extension_run_artifact(
+        &self,
+        run: Uuid,
+        id: Uuid,
+    ) -> Result<ExtensionOperationArtifact, RepositoryError> {
+        sqlx::query_as("SELECT id,workspace_id,extension_id,installed_release_id,operation_run_id,direction,state,content_length,media_type,checksum_sha256,object_key,created_at,completed_at FROM extension_operation_artifacts WHERE id=$1 AND workspace_id=$2 AND operation_run_id=$3")
+            .bind(id).bind(self.extension_workspace()).bind(run).fetch_optional(&self.pool).await?
+            .ok_or_else(|| invalid("run artifact is missing"))
+    }
+
     pub async fn set_extension_output_artifact(
         &self,
         run: Uuid,

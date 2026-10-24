@@ -59,6 +59,8 @@ Filtr możesz również utworzyć z poziomu tabeli: otwórz menu komórki i wybi
 
 Każdy aktywny filtr jest widoczny jako etykieta pod polem wyszukiwania. Wszystkie filtry, fasety i zapytanie wyszukiwania muszą pasować jednocześnie.
 
+**Stan eksportu** pojawia się, gdy jakieś rozszerzenie eksportuje rekordy. Zawęża wyniki do rekordów z jednym stanem, np. **Odrzucony**, w jednym miejscu docelowym. Wymaga uprawnienia `data_health.read`.
+
 ## Fasety relacji
 
 Na szerokich ekranach panel **Przeglądaj według** obok wyników wyświetla cele jednego atrybutu relacji wraz z licznikami. Kliknij cel, aby zachować tylko powiązane z nim rekordy. Kliknij go ponownie lub wybierz **Wszystkie**, aby wyczyścić wybór. Wybór pojawia się jako pigułka filtra, tak jak inne filtry.

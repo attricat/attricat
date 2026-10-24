@@ -130,6 +130,7 @@ A `dialog` contribution needs a `title`. Your version 2 actions open it with `at
 | `navigation` | `embedded` | | A compact frame in the sidebar. |
 | `audit_event_panel` | `panel` | `client.audit_event_panel` | `event_id` of an opened audit event. |
 | `data_health_card` | `panel` | `client.data_health_card` | None. A card on the Data health page. |
+| `export_mapping` | `panel` | `client.export_mapping` | `export_id`. Shown in the export status section of your extension's own management page, once per export destination your release declares. Use it to edit large destination mappings kept in extension storage, such as attributes to product-type attributes, through your server commands. |
 
 Every other context object contains `context_version: 1`.
 

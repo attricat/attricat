@@ -22,6 +22,7 @@ Attricat nigdy nie odczytuje hasła, klucza ani tokenu ze zmiennej środowiskowe
 | `redis_url` | Nieustawiony | Adres połączenia z Redis. Wymagany, gdy `CACHE_BACKEND` ma wartość `redis`. Dla TLS użyj `rediss://` (lub `valkeys://`). |
 | `bootstrap_owner_password` | Nieustawiony | Opcjonalne pierwsze hasło nowo utworzonego właściciela. Jest haszowane przed zapisaniem i nigdy nie zmienia istniejącego hasła. Podaj je tylko przy pierwszym uruchomieniu, a następnie opróżnij plik. |
 | `file_worker_metrics_token` | Nieustawiony | Token Bearer wymagany dla `/metrics` procesu roboczego plików. Bez niego proces roboczy odrzuca nasłuch operacyjny spoza interfejsu loopback. |
+| `extension_credential_key` | Nieustawiony | 32 losowe bajty zakodowane w base64, którymi szyfrowane są dane uwierzytelniające [połączeń](/pl/builders/extensions/#połączenia) rozszerzeń (sekrety klienta, tokeny odświeżania i dostępu, kody urządzeń) algorytmem AES-256-GCM. Bez niego nie można tworzyć ani używać połączeń. Inna długość zatrzymuje uruchamianie. Nie zmieniaj go: nowy klucz sprawia, że zapisanych danych uwierzytelniających nie da się odczytać, i każde połączenie trzeba skonfigurować od nowa. Wygeneruj go poleceniem `openssl rand -base64 32`. |
 
 Start zostaje przerwany, jeśli któryś z nich jest ustawiony jako zmienna środowiskowa, np. `LLM_API_KEY` lub `SMTP_PASSWORD`, więc dane uwierzytelniające nigdy nie są po cichu pomijane. Zmienna `DATABASE_URL` jest ignorowana. `ATTRICAT_SECRETS_DIR` wskazuje inny katalog z plikami zamiast `/run/secrets`.
 
@@ -237,6 +238,9 @@ Te limity agentów są stałe: 32 KiB na wiadomość użytkownika, 16 załączni
 | `EXTENSION_OFFICIAL_REGISTRY` | `attricat/attricat-extensions` | `owner/repository` w GitHubie używane jako wbudowany rejestr rozszerzeń każdego obszaru roboczego. |
 | `EXTENSIONS_MODE` | `enabled` | Wyłącznik awaryjny. Ustaw `disabled`, aby zatrzymać w całym wdrożeniu wykonywanie rozszerzeń, dostarczanie artefaktów, polecenia, magazyn, wywołania hosta i dostarczanie zdarzeń. Instalacje i przyznane uprawnienia pozostają bez zmian. Każda inna wartość przerywa start. Zmiana działa po ponownym uruchomieniu API. |
 | `EXTENSION_DENYLIST` | Pusta | Rozdzielona przecinkami lista identyfikatorów rozszerzeń (`acme.inventory`) lub konkretnych wydań (`acme.inventory@<release-uuid>`) do zablokowania. Odczytywana przy starcie i sprawdzana przy każdym wywołaniu w czasie działania. |
+| `EXTENSION_PUBLIC_FILE_BASE_URL` | Nieustawiona | Osiągalny z zewnątrz bazowy adres URL publicznych linków do plików wydawanych przez rozszerzenia, zakończony `/api/public/extension-files/`, np. `https://attricat.example.com/api/public/extension-files/`. Marketplace'y pobierają z niego zdjęcia ofert. Musi to być adres HTTP(S) zakończony `/`. Bez niego rozszerzenia nie mogą wydawać linków do plików. |
+| `EXTENSION_DEV_EGRESS_RESOLVE` | Nieustawiona | Tylko do programowania; wymaga `ATTRICAT_DEVTOOLS=true`, w przeciwnym razie uruchamianie zostaje zatrzymane. Rozdzielone przecinkami wpisy `host=ip:port` lub `*.sufiks=ip:port`, które kierują żądania rozszerzeń do tych hostów na lokalną atrapę, np. `*.mock.test=127.0.0.1:9443`. Omijają kontrolę adresu publicznego, więc nigdy nie ustawiaj ich w produkcji. |
+| `EXTENSION_DEV_EGRESS_CA_FILE` | Nieustawiona | Tylko do programowania; wymaga `ATTRICAT_DEVTOOLS=true`. Plik PEM z certyfikatami, którym żądania rozszerzeń ufają oprócz certyfikatów głównych systemu, dla certyfikatu lokalnej atrapy. Nigdy nie ustawiaj go w produkcji. |
 
 ## Serwer deweloperski aplikacji webowej
 

@@ -12,8 +12,9 @@ use crate::{
         SearchRecordsRequest, SearchResultVersionScope,
     },
     repository::{
-        RecordRelationshipFilter, RecordSearchFilter, RecordSearchSort, RelationshipFacetHop,
-        RepositoryError, SearchContext, decode_search_cursor,
+        EXPORT_STATUSES, RecordRelationshipFilter, RecordSearchFilter, RecordSearchSort,
+        RelationshipFacetHop, RepositoryError, SearchContext, decode_search_cursor,
+        valid_connection_key,
     },
 };
 use attricat_validation::saved_search;
@@ -290,6 +291,20 @@ pub(super) async fn search_record_previews(
             .await?;
         matching = Some(intersect_record_ids(matching, filtered));
     }
+    // The export status filter is a predicate of the page query, so it never
+    // materializes the records it matches.
+    if let Some(export) = &input.export_status {
+        if !EXPORT_STATUSES.contains(&export.status.as_str()) {
+            return Err(ApiError::invalid_input("unknown export status".to_owned()));
+        }
+        if export
+            .connection
+            .as_deref()
+            .is_some_and(|connection| !valid_connection_key(connection))
+        {
+            return Err(ApiError::invalid_input("invalid connection key".to_owned()));
+        }
+    }
     if !relationship_filters.is_empty() {
         let filtered = repository
             .filter_relationship_record_ids(
@@ -347,6 +362,7 @@ pub(super) async fn search_record_previews(
             matching.as_deref(),
             &input.system_tags,
             input.outdated,
+            input.export_status.as_ref(),
             current.blueprint.version,
             include_total.then_some(SEARCH_TOTAL_COUNT_CAP + 1),
         )
@@ -424,6 +440,7 @@ pub(super) async fn search_record_previews(
                         matching.as_deref(),
                         &input.system_tags,
                         input.outdated,
+                        input.export_status.as_ref(),
                         current.blueprint.version,
                         sort,
                     )
@@ -441,6 +458,7 @@ pub(super) async fn search_record_previews(
                         matching.as_deref(),
                         &input.system_tags,
                         input.outdated,
+                        input.export_status.as_ref(),
                         current.blueprint.version,
                     )
                     .instrument(tracing::info_span!("sql.operation", label = "records-page"))
@@ -461,6 +479,7 @@ pub(super) async fn search_record_previews(
                 None,
                 &[],
                 true,
+                None,
                 current.blueprint.version,
                 SEARCH_TOTAL_COUNT_CAP + 1,
             )

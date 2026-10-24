@@ -47,6 +47,12 @@ export const outletContextSchemas = {
     .strict(),
   blueprint_publish_check: blueprintRevisionContextSchema,
   data_health_card: z.object({ context_version: contextVersion }).strict(),
+  export_mapping: z
+    .object({
+      context_version: contextVersion,
+      export_id: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/),
+    })
+    .strict(),
   explorer_bulk_action: z
     .object({
       context_version: contextVersion,

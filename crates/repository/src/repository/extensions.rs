@@ -177,6 +177,15 @@ pub(crate) fn validate_workspace_extension_layout(layout: &Value) -> Result<(), 
     Ok(())
 }
 
+/// A retry request reaches only the extension it names.
+fn export_retry_addressed_to(
+    extension_id: &str,
+    event: &crate::domain_events::DomainEvent,
+) -> bool {
+    event.event_type != crate::domain_events::EXPORT_RETRY_REQUESTED_V1
+        || event.payload.get("extension_id").and_then(Value::as_str) == Some(extension_id)
+}
+
 /// Core Attricat events retain existing subscription semantics. Extension-owned
 /// events additionally require a matching declared provider contract.
 fn event_contract_subscription_allowed(
@@ -272,6 +281,21 @@ pub struct ExtensionGrant {
     pub grant_kind: String,
     pub grant_id: String,
     pub granted_at: DateTime<Utc>,
+}
+
+/// An export destination of an enabled extension, as the export status
+/// surfaces name it.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct ExportDestinationDescriptor {
+    pub extension_id: String,
+    pub extension_name: String,
+    pub export_id: String,
+    pub title: String,
+    pub connection_kind: Option<String>,
+    /// Whether the destination previews a record's payload.
+    pub preview: bool,
+    pub resync_operation: Option<String>,
+    pub reconcile_operation: Option<String>,
 }
 
 /// Immutable snapshot plus invocation-time state used by the WASM runtime.
@@ -986,7 +1010,8 @@ impl AttricatRepository {
                                 .iter()
                                 .any(|registered| registered == event_type)
                         })
-                    }) && event_contract_subscription_allowed(&installation.manifest, event);
+                    }) && event_contract_subscription_allowed(&installation.manifest, event)
+                        && export_retry_addressed_to(&installation.extension_id, event);
                 if subscribed {
                     enabled.push(installation);
                 }
@@ -1302,6 +1327,13 @@ impl AttricatRepository {
         }
         sqlx::query("DELETE FROM extension_grants WHERE installation_id = $1 AND grant_kind = $2 AND grant_id = $3")
             .bind(current.id).bind(grant_kind).bind(grant_id).execute(&mut *transaction).await?;
+        // Links need every grant they were issued under; once one is
+        // revoked they end, so granting it again never revives them.
+        if grant_kind == GRANT_KIND_CAPABILITY && super::PUBLIC_FILE_LINK_GRANTS.contains(&grant_id)
+        {
+            self.revoke_extension_file_links(&mut transaction, &current.extension_id)
+                .await?;
+        }
         self.write_extension_lifecycle(
             &mut transaction,
             &current,
@@ -1391,6 +1423,8 @@ impl AttricatRepository {
         let row = self
             .update_extension_state(&mut transaction, &current, ExtensionState::Quarantined)
             .await?;
+        self.revoke_extension_file_links(&mut transaction, &current.extension_id)
+            .await?;
         self.write_extension_lifecycle(
             &mut transaction,
             &row,
@@ -1453,6 +1487,10 @@ impl AttricatRepository {
             .bind(current.id)
             .execute(&mut *transaction)
             .await?;
+        // The grants its links were issued under are gone, so the links go
+        // too; re-enabling the new release never revives them.
+        self.revoke_extension_file_links(&mut transaction, &current.extension_id)
+            .await?;
         self.write_extension_lifecycle(
             &mut transaction,
             &row,
@@ -1487,6 +1525,25 @@ impl AttricatRepository {
             .bind(current.id)
             .execute(&mut *transaction)
             .await?;
+        self.revoke_extension_file_links(&mut transaction, &current.extension_id)
+            .await?;
+        // Credentials, operator budgets, handler outcomes and retry keys go
+        // with the installation, so a later install of the same ID starts
+        // without them. Export mappings stay: they only name destination IDs.
+        for table in [
+            "extension_connections",
+            "extension_host_permission_budgets",
+            "extension_handler_attempts",
+            "extension_export_retry_requests",
+        ] {
+            sqlx::query(&format!(
+                "DELETE FROM {table} WHERE workspace_id = $1 AND extension_id = $2"
+            ))
+            .bind(self.workspace_id.0)
+            .bind(&current.extension_id)
+            .execute(&mut *transaction)
+            .await?;
+        }
         self.commit_extension_mutation(transaction, "remove", &current.extension_id)
             .await
     }
@@ -1530,6 +1587,10 @@ impl AttricatRepository {
         let row = self
             .update_extension_state(&mut transaction, &current, state.clone())
             .await?;
+        if state == ExtensionState::Disabled {
+            self.revoke_extension_file_links(&mut transaction, &current.extension_id)
+                .await?;
+        }
         self.write_extension_lifecycle(
             &mut transaction,
             &row,
@@ -1596,8 +1657,80 @@ impl AttricatRepository {
         }
         Ok(())
     }
-    pub(crate) fn extension_workspace(&self) -> Uuid {
+
+    /// The workspace this repository is scoped to.
+    pub fn extension_workspace(&self) -> Uuid {
         self.workspace_id.0
+    }
+
+    /// Every export destination of the enabled, authorized installations.
+    pub async fn enabled_export_destinations(
+        &self,
+    ) -> Result<Vec<ExportDestinationDescriptor>, RepositoryError> {
+        // Cached per extensions generation like the client contributions;
+        // the deployment policy is applied to the cached list on every read.
+        let destinations = match self.generations() {
+            Some(generations) => self
+                .cache
+                .fetch(
+                    CacheKey::new(
+                        "export_destinations",
+                        &[
+                            &self.extension_workspace(),
+                            &generations.extensions_generation,
+                        ],
+                    ),
+                    &[],
+                    Policy::Generation,
+                    || self.unfiltered_export_destinations(),
+                )
+                .await?
+                .as_ref()
+                .clone(),
+            None => self.unfiltered_export_destinations().await?,
+        };
+        Ok(destinations
+            .into_iter()
+            .filter(|(release, destination)| {
+                extension_policy::allows(&destination.extension_id, *release)
+            })
+            .map(|(_, destination)| destination)
+            .collect())
+    }
+
+    /// Every enabled, authorized installation's export destinations with its
+    /// installed release, before the deployment policy is applied.
+    async fn unfiltered_export_destinations(
+        &self,
+    ) -> Result<Vec<(Uuid, ExportDestinationDescriptor)>, RepositoryError> {
+        let mut destinations = Vec::new();
+        for row in self.runtime_installation_rows(None).await? {
+            let Some(installation) = self.runtime_installation(row).await? else {
+                continue;
+            };
+            for export in installation
+                .manifest
+                .server
+                .iter()
+                .flat_map(|server| server.exports.iter())
+            {
+                destinations.push((
+                    installation.installed_release_id,
+                    ExportDestinationDescriptor {
+                        extension_id: installation.extension_id.clone(),
+                        extension_name: installation.manifest.name.clone(),
+                        export_id: export.id.clone(),
+                        title: export.title.clone(),
+                        connection_kind: export.connection.clone(),
+                        preview: export.preview_command.is_some()
+                            && installation.capability_grants.contains("client.commands"),
+                        resync_operation: export.resync_operation.clone(),
+                        reconcile_operation: export.reconcile_operation.clone(),
+                    },
+                ));
+            }
+        }
+        Ok(destinations)
     }
 
     /// Prevent lifecycle changes that would leave another enabled installation
@@ -1644,7 +1777,7 @@ impl AttricatRepository {
         sqlx::query_as("SELECT id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2 FOR UPDATE")
             .bind(self.extension_workspace()).bind(extension_id).fetch_optional(&mut **transaction).await?.ok_or(RepositoryError::NotFound("extension installation"))
     }
-    async fn installed_release_manifest(
+    pub(crate) async fn installed_release_manifest(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         installed_release_id: Uuid,

@@ -623,7 +623,7 @@ where
     .ok_or_else(ApiError::forbidden)
 }
 
-async fn download(
+pub(super) async fn download(
     state: &AppState,
     file: FileObject,
     headers: &HeaderMap,

@@ -23,14 +23,19 @@ dotenvy.workspace = true
 metrics.workspace = true
 metrics-exporter-prometheus.workspace = true
 secrecy.workspace = true
+base64.workspace = true
 sqlx.workspace = true
 subtle.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
 async-stream.workspace = true
+hyper-util = { version = "0.1", features = ["server-auto", "service", "tokio"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 async-trait.workspace = true
 axum.workspace = true
 bytes.workspace = true

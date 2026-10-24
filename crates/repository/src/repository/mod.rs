@@ -79,6 +79,9 @@ mod error_codes;
 mod extension_annotations;
 mod extension_attricat_commands;
 mod extension_attricat_data;
+mod extension_connections;
+mod extension_connector_pages;
+mod extension_export_state;
 mod extension_interactive_operations;
 mod extension_operation_artifacts;
 mod extension_operation_http_transfer;
@@ -171,7 +174,9 @@ pub use attricat_cache::QueryCache;
 pub use attricat_domain::model::{FileMetadata, FileVariantMetadata};
 pub use audit_events::{AuditEventFilter, AuditEventPage};
 pub use avatars::{AVATAR_VARIANT_KIND, OwnAvatar};
-pub use blueprint_connector_jobs::BlueprintConnectorJob;
+pub use blueprint_connector_jobs::{
+    BlueprintConnectorJob, ConnectorRunDetails, ConnectorRunMode, MAX_CONNECTOR_RECORD_FILTER,
+};
 pub use domain_events::{
     EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery, MaterializeScope,
 };
@@ -184,6 +189,20 @@ pub use extension_attricat_data::{
     ExtensionAttricatIntentOutcome, ExtensionAttricatIntentStatus, ExtensionAttricatPage,
     ExtensionAttricatPageRequest, MAX_EXTENSION_ATTRICAT_PAGE_SIZE, MAX_EXTENSION_BATCH_INTENTS,
     MAX_EXTENSION_LOOKUP_VALUE_BYTES,
+};
+pub use extension_connections::{
+    ConnectionAccessToken, ConnectionCredentials, ConnectionRefresh, DeviceAuthorization,
+    ExtensionConnection, ExtensionConnectionPatch, IssuedTokens, NewExtensionConnection,
+    PUBLIC_FILE_LINK_GRANTS, use_extension_credential_key,
+};
+pub use extension_connector_pages::{
+    ConnectorPageV2Request, MAX_EXPANDED_RELATIONSHIPS, MAX_WITHDRAWN_PAGE,
+};
+pub use extension_export_state::{
+    EXPORT_STATUSES, ExportBegin, ExportConnectionLabel, ExportMapping, ExportMappingUpdate,
+    ExportRetrySelection, ExportStatusCount, HandlerAttempt, HandlerAttemptOutcome, HandlerFailure,
+    MAX_EXPORT_LEASE, MAX_EXPORT_MAPPING_PAGE, MAX_EXPORT_RETRY_RECORDS, MappingKey,
+    RejectionRecord, valid_connection_key,
 };
 pub use extension_interactive_operations::{
     INITIATOR_ACCESS_REVOKED, InteractiveRun, InteractiveRunArtifact, InteractiveRunFailure,
@@ -207,9 +226,9 @@ pub use extension_storage::{
     MAX_EXTENSION_STORAGE_LIST_LIMIT,
 };
 pub use extensions::{
-    ClientExtensionContribution, ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord,
-    ExtensionRuntimeInstallation, ExtensionState, InstalledExtension, extension_manifest_sha256,
-    required_extension_grants,
+    ClientExtensionContribution, ExportDestinationDescriptor, ExtensionGrant,
+    ExtensionInstallation, ExtensionLifecycleRecord, ExtensionRuntimeInstallation, ExtensionState,
+    InstalledExtension, extension_manifest_sha256, required_extension_grants,
 };
 pub use files::{FileObject, FilePolicy, FileUploadResult, NewUploadedFile, StagedUploadResult};
 pub use generations::WorkspaceGenerations;
@@ -692,6 +711,10 @@ pub enum RepositoryError {
     InvalidExtensionTransition(&'static str),
     #[error("extension is already installed")]
     ExtensionAlreadyInstalled,
+    #[error("{0}")]
+    ExportMappingConflict(String),
+    #[error("a connection with this name already exists")]
+    ExtensionConnectionExists,
     #[error("invalid domain event: {0}")]
     InvalidDomainEvent(#[from] crate::domain_events::EventContractError),
     #[error("publication context is not an enabled channel")]

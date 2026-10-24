@@ -5,7 +5,7 @@ description: The catalog events Attricat records for every change, their envelop
 
 Every catalog change records an event in the same database transaction as the change and its audit record. If the change is saved, so is the event; if it fails, neither exists.
 
-Events drive [workflows](/builders/workflows/), [rules](/builders/rules/), and [extension event handlers](/extensions/server/#handle-attricat-events). They are not exposed as a public feed.
+Events drive [workflows](/builders/workflows/), [rules](/builders/rules/), and [extension event handlers](/extensions/server/#handle-catalog-events). They are not exposed as a public feed.
 
 ## Event types
 
@@ -24,8 +24,9 @@ Events drive [workflows](/builders/workflows/), [rules](/builders/rules/), and [
 | `blueprint.revision_created.v1` | A new blueprint revision is drafted. |
 | `blueprint.published.v1` | A blueprint revision is published. |
 | `context.created.v1`, `context.updated.v1`, `context.deleted.v1` | A context changes. |
+| `export.retry_requested.v1` | An operator asks an export extension to push a record again. |
 
-Extensions publish their own types, named `plugin.<extension-id>.<name>.vN`. The `record`, `attribute_value`, `relationship`, `blueprint`, and `context` namespaces are reserved.
+Extensions publish their own types, named `plugin.<extension-id>.<name>.vN`. The `record`, `attribute_value`, `relationship`, `blueprint`, `context`, and `export` namespaces are reserved.
 
 A version suffix never changes meaning. An incompatible payload gets a new `.vN` type, and consumers subscribe to the exact versions they understand.
 
@@ -76,6 +77,16 @@ To act on the record's current state, read it; the payload is only a description
 - **File attributes:** uploading, linking, reordering, or removing files is recorded in the audit log but records no event and no fact.
 - System tag and system metadata changes are not attribute values and add no fact.
 - **Migrations:** `record.migrated.v1` has no `facts`. Its payload names the record, its blueprint, `source_version`, `target_version`, and `migration_id`. When the migration dropped or re-pointed a relationship, `released_relationships` lists the targets the record no longer points to, as `attribute_code` and `target_record_ids` (at most 100 per relationship and 1,000 per event).
+
+## Export retry requests
+
+`export.retry_requested.v1` is recorded once per record when someone [retries an export](/builders/extensions/#export-status). Its aggregate is the record, and its payload is:
+
+```json
+{ "record_id": "7f1c…", "extension_id": "acme.shopify", "connection": "shop-eu" }
+```
+
+`connection` is `null` for the extension's default destination. Only the extension named in `extension_id` receives it, and only if one of its handlers subscribes to the type.
 
 ## Delivery guarantees
 

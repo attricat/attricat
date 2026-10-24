@@ -17,7 +17,7 @@ Trasy API są dostępne pod `/api`, np. `GET https://attricat.example.com/api/bl
 
 Klienci nigdy nie wysyłają identyfikatora obszaru roboczego; zawsze pochodzi on z tokenu lub sesji.
 
-Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm` i `POST /onboarding/complete`.
+Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete` oraz `GET /public/extension-files/{token}`, gdzie danymi uwierzytelniającymi jest token z linku.
 
 ## Konwencje
 
@@ -108,6 +108,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `GET` | `/blueprints/{id}/migration-batches` | Partie migracji w tle. |
 | `GET` | `/blueprints/{id}/connector-jobs` | Zadania konektorów. |
 | `POST` | `/blueprint-connector-jobs/{id}/run` | Uruchamia zadanie konektora z `{"idempotency_key": "…"}`. |
+| `POST` | `/blueprint-connector-jobs/{id}/resync` | Ponownie eksportuje każdy opublikowany rekord zadania eksportu: `{"idempotency_key": "…"}` oraz `record_ids` (tylko te rekordy) albo `status` (tylko rekordy z tym stanem eksportu w połączeniu zadania; ponad 10 000 takich rekordów daje błąd `422`, więc wtedy wykonaj ponowny eksport całego zadania). Zwraca `{"run_ids": [...]}`. |
 | `GET`, `POST` | `/reusable-attributes`; `POST /reusable-attributes/{id}/versions`; `POST /reusable-attribute-revisions/{id}/publish`; `GET`, `POST /reusable-attribute-groups` | Atrybuty wielokrotnego użytku. |
 | `POST` | `/reusable-attributes/validate`, `/reusable-attributes/{id}/versions/validate` | Uruchamia wszystkie kontrole, które wykonałoby utworzenie atrybutu wielokrotnego użytku lub jego kolejnej wersji, niczego nie zapisując. |
 
@@ -139,6 +140,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `POST` | `/v1/records/{id}/reusable-attributes`, `/v1/records/{id}/reusable-attribute-groups/{group_id}` | Dołącza atrybut lub grupę atrybutów wielokrotnego użytku. |
 | `GET` | `/v1/records/{id}/status-transitions?context_id=…` | Zadeklarowane przejścia z zapisanego statusu w jednym kontekście (bez parametru: kontekst domyślny): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, unmet}]}`. `denial_code` to `status_transition_forbidden`, `status_separation_of_duties` lub `transition_conditions_unmet`; `unmet` wymienia niespełnione warunki i egzekwowane reguły jako naruszenia. |
 | `GET` | `/v1/records/{id}/approvals` | Zatwierdzenia zarejestrowane przez przejścia statusów, od najnowszych, po 20 na stronę, z osobą zatwierdzającą, czasem, skrótem objętej treści i powodem unieważnienia. Zwraca `{"items","has_more"}`; kontynuuj z `before_time` (`approved_at` ostatniego elementu) i `before_id`. |
+| `GET` | `/v1/records/{id}/export-status` | Stan eksportu rekordu we wszystkich rozszerzeniach eksportujących (`statuses`: połączenie, status, zewnętrzny identyfikator, błąd, ostatnia synchronizacja) oraz włączone miejsca docelowe eksportu (`destinations`). |
 | `GET` | `/v1/records/{id}/retention-holds` | Blokady retencji na plikach rekordu, od najnowszych, po 20 na stronę. Zwraca `{"items","has_more"}`; kontynuuj z `before_time` (`created_at` ostatniego elementu) i `before_id`. |
 
 ### Zmiany wsadowe
@@ -197,6 +199,7 @@ POST /api/v1/records/search
     "selected_target_ids": ["e8b7a8d3-c954-4c0f-b658-0f686ba466a3"]
   }],
   "system_tags": ["needs-review"],
+  "export_status": { "extension_id": "acme.shopify", "connection": "shop-eu", "status": "rejected" },
   "context_code": "PL",
   "sort": { "field": "title", "direction": "asc" },
   "page": { "size": 50, "cursor": null }
@@ -207,6 +210,7 @@ POST /api/v1/records/search
 - `query` używa [składni wyszukiwania](/pl/guides/search-syntax/).
 - `source_relationship_field` może być ścieżką relacji o maksymalnie trzech krokach, na przykład `model.brand`. Każdy krok musi mieć jeden schemat docelowy i `cardinality = "one"` i jest rozstrzygany w kontekście fasety z własnym dziedziczeniem kontekstu. Punkt końcowy elementów podrzędnych przyjmuje te same ścieżki.
 - Element `relationship_tree_facets` bez `source_relationship_field` filtruje przeszukiwany schemat według jego własnego `hierarchy_field`: rekord pasuje, gdy jest wybranym węzłem lub jednym z jego potomków. Punkt końcowy elementów podrzędnych przyjmuje to samo pominięcie, aby wyświetlić własne drzewo schematu, licząc każdy węzeł wraz ze wszystkim, co znajduje się pod nim.
+- `export_status` zostawia rekordy z danym stanem eksportu w połączeniu jednego rozszerzenia albo w jego domyślnym miejscu docelowym, gdy pominięto `connection`. `status` to `pending`, `synced`, `rejected`, `retrying`, `uncertain` lub `withdrawn`. Łączy się z pozostałymi filtrami jak każdy z nich i nie ma limitu liczby rekordów w danym stanie.
 - Operatory filtrów to `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt` i `lte`. `field` może być ścieżką relacji o maksymalnie trzech krokach.
 - `context_code` (domyślnie `default`) to kontekst, w którym rozstrzygane są filtry, sortowanie i `table_values`, z dziedziczeniem z kontekstów nadrzędnych zależnie od atrybutu. `query` dopasowuje wartości we wszystkich kontekstach.
 - `sort.field` musi być kolumną skalarną w widoku tabeli schematu, `blueprint_version` lub `publication_status` (z `sort.context_code` wskazującym kanał).
@@ -372,6 +376,17 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 | `GET` | `/extension-operation-runs[/{id}]`, `…/artifacts`, `…/deliveries` | Uruchomienia, wyniki, dostarczenia. |
 | `GET` | `/extension-operation-runs/{id}/artifacts/{artifact_id}/download` | Pobiera wynik. |
 | `POST`, `GET`, `PATCH` | `/extensions/{id}/operation-schedules`, `/extension-operation-schedules[/{id}]` | Harmonogramy. |
+| `GET` | `/extensions/{id}/export-status` | Liczby rekordów według połączenia i statusu, strona mapowań eksportu (`?connection=&status=&after=&limit=`, do 100, kontynuuj z `next`) oraz 20 ostatnich odrzuconych lub wyczerpanych dostarczeń zdarzeń (`handler_failures`); liczby i niepowodzenia są zwracane tylko z pierwszą stroną. Wskazuje rekordy z całego obszaru roboczego, więc wymaga też uprawnienia `records.read` w całym obszarze roboczym. |
+| `POST` | `/extensions/{id}/export-status/retry` | `{"connection"?, "record_ids"?, "status"?, "run"?, "idempotency_key"?}`, z identyfikatorami rekordów, statusem lub jednym i drugim: przywraca do `pending` do 1000 pasujących rekordów (rekordy wybrane tylko po identyfikatorze, których nigdy nie eksportowano, zaczynają jako `pending`, gdy ich Schemat i połączenie obejmuje któreś z zadań eksportu rozszerzenia albo rozszerzenie samo obsługuje prośby o ponowienie; usunięte rekordy i wycofane mapowania nigdy nie są wybierane, a `"status": "withdrawn"` jest odrzucany: zamiast tego opublikuj rekord ponownie) i dla każdego wysyła rozszerzeniu `export.retry_requested.v1`. Z `"run": true` uruchamia też ponowną synchronizację tylko tych rekordów w zadaniach eksportu rozszerzenia dla tego połączenia; z `idempotency_key` (1–40 bajtów ASCII) to samo żądanie wysłane ponownie niczego nie ponawia dwa razy: znajduje ponowione rekordy i uruchomione przebiegi, a nowy przebieg uruchamia tylko dla zadania, które wcześniej nie mogło wystartować. Zwraca `202` z `{"record_ids", "run_ids", "job_errors"}`; zadanie, które nie może uruchomić synchronizacji, trafia do `job_errors` i nie przerywa ponowienia. Wymaga też uprawnienia `records.read` w całym obszarze roboczym; rozszerzenie, które nie jest zainstalowane z `exports.mappings`, daje `404`, a wyłączone `422`. |
+| `POST` | `/extensions/{id}/exports/{export_id}/preview` | `{"record_id", "connection"?}`: ładunek, który polecenie podglądu miejsca docelowego buduje dla jednego rekordu, zgodnie z konwencją `{"payload", "issues"}`. Nic nie jest wysyłane. Wymaga `records.write`, jak inne polecenia rozszerzeń, oraz `records.read` w całej przestrzeni roboczej; `connection` musi być połączeniem rodzaju obsługiwanego przez eksport. |
+| `GET`, `POST` | `/extensions/{id}/connections` | Lista połączeń albo utworzenie połączenia: `{"connection", "kind", "display_name", "grant_type", "token_url", "device_authorization_url"?, "client_id", "scope"?, "parameters"?, "client_secret"?, "refresh_token"?}`. Odpowiedzi nigdy nie zawierają sekretów ani tokenów, tylko informację, czy są zapisane. |
+| `PATCH`, `DELETE` | `/extensions/{id}/connections/{connection}` | Zmiana `display_name`, `token_url`, `device_authorization_url`, `scope` (pusty ciąg go usuwa) lub `parameters` albo zastąpienie `client_secret` lub `refresh_token`; albo usunięcie połączenia razem z jego danymi uwierzytelniającymi. Przeniesienie `token_url` lub `device_authorization_url` na inny host wymaga ponownego podania `client_secret` i usuwa zapisane tokeny, więc połączenie czeka na autoryzację, chyba że wysłano też `refresh_token`. Mapowania eksportu zostają, więc połączenie utworzone ponownie pod tą samą nazwą zachowuje zewnętrzne identyfikatory w miejscu docelowym. |
+| `POST` | `/extensions/{id}/connections/{connection}/device-authorization`, `…/device-authorization/poll` | Rozpoczęcie przepływu autoryzacji urządzenia (odpowiedź zawiera kod użytkownika i adres weryfikacji), a potem jego dokończenie, gdy użytkownik zatwierdzi dostęp. Aktywne połączenie działa dalej, dopóki nowa autoryzacja czeka na zatwierdzenie. |
+| `POST` | `/extensions/{id}/connections/{connection}/authorization-code` | Wymiana kodu autoryzacji: `{"code", "redirect_uri", "code_verifier"?}`. |
+| `POST` | `/extensions/{id}/connections/{connection}/test` | Pobranie tokenu dostępu w celu sprawdzenia połączenia. |
+| `GET` | `/extensions/{id}/host-permission-budgets` | Zadeklarowany i obniżony limit żądań każdego uprawnienia hosta. |
+| `PUT`, `DELETE` | `/extensions/{id}/host-permission-budgets/{host_permission_id}` | Obniżenie zadeklarowanego limitu przez `{"requests", "per_seconds"}`, nigdy powyżej zadeklarowanej wartości, albo przywrócenie go. |
+| `GET` | `/public/extension-files/{token}` | Plik udostępniony publicznym linkiem wydanym przez rozszerzenie. Bez danych uwierzytelniających; działa, dopóki link nie wygasł, a rozszerzenie jest włączone i ma `attricat.files.public_links` oraz `attricat.files.read`. |
 
 ### Pakiety rozwiązań
 
@@ -392,6 +407,7 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 | `GET` | `/health/live`, `/health/ready` | Sondy. |
 | `GET` | `/system/health` | Uruchomiona wersja API, gałąź i commit źródła (`data_health.read`). |
 | `GET` | `/metrics` | Metryki Prometheus. |
+| `GET` | `/export-status` | Liczby rekordów według rozszerzenia, połączenia i stanu eksportu oraz włączone miejsca docelowe eksportu (`data_health.read`). |
 | `GET` | `/data-health/summary`, `/blueprints`, `/freshness`, `/completeness`, `/contexts`, `/relationships`, `/storage`, `/background-processing` | Stan danych. |
 | `POST` | `/data-health/refresh` | Czyści bufor stanu danych. |
 | `GET` | `/event-deliveries/dead-letters` | Nieudane dostarczenia zdarzeń. |

@@ -1,0 +1,258 @@
+{
+  "manifest_version": 1,
+  "name": "Marketplace export test",
+  "version": "0.1.0",
+  "description": "Host-platform test exporter for Shopify, Amazon and Allegro mocks. Not a production integration.",
+  "icons": {
+    "48": "icon.svg"
+  },
+  "attricat": {
+    "id": "attricat.marketplace-export-test",
+    "host_api": "^1.1"
+  },
+  "permissions": [
+    "attricat.read",
+    "storage.extension",
+    "exports.mappings",
+    "connections.use",
+    "network.request",
+    "artifacts.read",
+    "artifacts.write",
+    "attricat.files.read",
+    "attricat.files.public_links",
+    "client.commands",
+    "logging.write"
+  ],
+  "host_permissions": [
+    {
+      "id": "shopify-token",
+      "matches": [
+        "https://shop.mock.test/admin/oauth/*"
+      ],
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "id": "shopify-admin",
+      "matches": [
+        "https://shop.mock.test/admin/api/*"
+      ],
+      "methods": [
+        "POST"
+      ],
+      "response_headers": [
+        "x-request-id"
+      ],
+      "rate_limit": {
+        "requests": 2,
+        "per_seconds": 1,
+        "burst": 40
+      },
+      "timeout_ms": 4000
+    },
+    {
+      "id": "shopify-staged",
+      "matches": [
+        "https://storage.mock.test/*"
+      ],
+      "methods": [
+        "POST"
+      ],
+      "max_transfer_bytes": 20971520,
+      "idempotent_delivery": true
+    },
+    {
+      "id": "amazon-lwa",
+      "matches": [
+        "https://lwa.mock.test/auth/*"
+      ],
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "id": "amazon-sp",
+      "matches": [
+        "https://sellingpartnerapi.mock.test/*"
+      ],
+      "methods": [
+        "GET",
+        "PUT",
+        "POST",
+        "DELETE"
+      ],
+      "allow_query": true,
+      "response_headers": [
+        "x-amzn-ratelimit-limit",
+        "x-amzn-requestid"
+      ],
+      "rate_limit": {
+        "requests": 5,
+        "per_seconds": 1,
+        "burst": 10
+      },
+      "timeout_ms": 4000
+    },
+    {
+      "id": "amazon-s3",
+      "matches": [
+        "https://s3.mock.test/*"
+      ],
+      "methods": [
+        "GET",
+        "PUT"
+      ],
+      "allow_query": true,
+      "max_transfer_bytes": 10485760
+    },
+    {
+      "id": "allegro-auth",
+      "matches": [
+        "https://allegro.mock.test/auth/*"
+      ],
+      "methods": [
+        "POST"
+      ]
+    },
+    {
+      "id": "allegro-api",
+      "matches": [
+        "https://allegro.mock.test/sale/*"
+      ],
+      "methods": [
+        "GET",
+        "POST",
+        "PATCH"
+      ],
+      "allow_query": true,
+      "response_headers": [
+        "location"
+      ],
+      "rate_limit": {
+        "requests": 150,
+        "per_seconds": 60
+      },
+      "timeout_ms": 4000
+    }
+  ],
+  "configuration": {
+    "version": 1,
+    "schema": {
+      "type": "object"
+    }
+  },
+  "artifacts": [
+    {
+      "id": "server",
+      "kind": "server_wasm",
+      "path": "server.wasm"
+    }
+  ],
+  "server": {
+    "commands": [
+      {
+        "id": "preview",
+        "handler": "preview",
+        "request_schema": {
+          "type": "object"
+        },
+        "response_schema": {
+          "type": "object"
+        }
+      }
+    ],
+    "operations": [
+      {
+        "id": "export",
+        "handler": "export",
+        "request_schema": {
+          "type": "object",
+          "properties": {
+            "feed": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "max_checkpoint_bytes": 65536
+      }
+    ],
+    "connections": [
+      {
+        "id": "shopify",
+        "title": "Shopify store",
+        "grant_types": [
+          "client_credentials"
+        ],
+        "host_permission": "shopify-token",
+        "api_host_permissions": [
+          "shopify-admin"
+        ],
+        "token_header": {
+          "name": "X-Shopify-Access-Token"
+        },
+        "parameters_schema": {
+          "type": "object"
+        }
+      },
+      {
+        "id": "amazon",
+        "title": "Amazon seller account",
+        "grant_types": [
+          "refresh_token"
+        ],
+        "host_permission": "amazon-lwa",
+        "api_host_permissions": [
+          "amazon-sp"
+        ],
+        "token_header": {
+          "name": "x-amz-access-token"
+        },
+        "parameters_schema": {
+          "type": "object",
+          "required": [
+            "seller_id",
+            "marketplace_id"
+          ]
+        }
+      },
+      {
+        "id": "allegro",
+        "title": "Allegro seller account",
+        "grant_types": [
+          "device_code",
+          "refresh_token"
+        ],
+        "host_permission": "allegro-auth",
+        "api_host_permissions": [
+          "allegro-api"
+        ],
+        "client_authentication": "basic"
+      }
+    ],
+    "exports": [
+      {
+        "id": "shopify",
+        "title": "Shopify",
+        "connection": "shopify",
+        "preview_command": "preview",
+        "resync_operation": "export"
+      },
+      {
+        "id": "amazon",
+        "title": "Amazon",
+        "connection": "amazon",
+        "preview_command": "preview",
+        "resync_operation": "export"
+      },
+      {
+        "id": "allegro",
+        "title": "Allegro",
+        "connection": "allegro",
+        "preview_command": "preview",
+        "resync_operation": "export"
+      }
+    ]
+  }
+}

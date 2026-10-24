@@ -18,8 +18,10 @@ attricat-workers = { path = "../workers" }
 chrono.workspace = true
 metrics.workspace = true
 reqwest.workspace = true
+ring.workspace = true
 url.workspace = true
 base64.workspace = true
+bytes.workspace = true
 futures-util.workspace = true
 semver.workspace = true
 serde.workspace = true

@@ -22,6 +22,10 @@ import { ExtensionLifecycleSection } from './ExtensionLifecycleSection';
 import { ExtensionPermissionsSection } from './ExtensionPermissionsSection';
 import { ExtensionUpgradeSection } from './ExtensionUpgradeSection';
 import { ExtensionIcon } from '../../components/systemIcons';
+import { ExtensionBudgetsSection } from '../extension-exports/ExtensionBudgetsSection';
+import { ExtensionConnectionsSection } from '../extension-exports/ExtensionConnectionsSection';
+import { ExtensionExportStatusSection } from '../extension-exports/ExtensionExportStatusSection';
+import { manifestExportsSchema } from '../extension-exports/schemas';
 
 type InstallationAction =
   | { action: ExtensionLifecycleAction }
@@ -60,6 +64,9 @@ export const InstalledExtensionPage = ({
     onSuccess: () => invalidateExtensions(client, extensionId),
   });
   const installation = detail.data?.installation;
+  const exportManifest = manifestExportsSchema.safeParse(
+    installation?.manifest,
+  );
   return (
     <PageContainer>
       <PageHeader
@@ -108,6 +115,24 @@ export const InstalledExtensionPage = ({
             grants={detail.data.grants}
             manifest={installation.manifest}
             onChanged={() => invalidateExtensions(client, extensionId)}
+          />
+          {exportManifest.success && (
+            <>
+              <ExtensionExportStatusSection
+                canManage={canManage}
+                extensionId={extensionId}
+                manifest={exportManifest.data}
+              />
+              <ExtensionConnectionsSection
+                canManage={canManage}
+                extensionId={extensionId}
+                manifest={exportManifest.data}
+              />
+            </>
+          )}
+          <ExtensionBudgetsSection
+            canManage={canManage}
+            extensionId={extensionId}
           />
           <ExtensionLifecycleSection lifecycle={detail.data.lifecycle} />
         </Stack>

@@ -2148,6 +2148,7 @@ pub async fn execute_read(
                     matching.as_deref(),
                     &input.system_tags,
                     input.outdated,
+                    None,
                     current.blueprint.version,
                     input
                         .page
@@ -2215,6 +2216,7 @@ pub async fn execute_read(
                             matching.as_deref(),
                             &input.system_tags,
                             input.outdated,
+                            None,
                             current.blueprint.version,
                             sort,
                         )
@@ -2231,6 +2233,7 @@ pub async fn execute_read(
                             matching.as_deref(),
                             &input.system_tags,
                             input.outdated,
+                            None,
                             current.blueprint.version,
                         )
                         .await?
@@ -2265,6 +2268,7 @@ pub async fn execute_read(
                                 None,
                                 &[],
                                 true,
+                                None,
                                 current.blueprint.version,
                                 SEARCH_TOTAL_COUNT_CAP + 1,
                             )

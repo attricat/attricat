@@ -115,6 +115,21 @@ Gdy schemat ma nowszą opublikowaną wersję, ikona ostrzeżenia obok odnośnika
 
 Jeśli obszar roboczy korzysta z kanałów publikacji, strona rekordu pokazuje jego stan w każdym kanale oraz działania **Opublikuj** / **Cofnij publikację**. Zobacz [Publikowanie](/pl/guides/publishing/).
 
+## Eksporty
+
+Jeśli rozszerzenie eksportuje rekordy do marketplace'u lub sklepu internetowego, karta **Eksporty** rekordu pokazuje dla każdego miejsca docelowego stan eksportu, identyfikator rekordu w miejscu docelowym, komunikat błędu z miejsca docelowego i czas ostatniej synchronizacji. Gdy eksport został odrzucony, jest niepewny lub jest ponawiany, w nagłówku rekordu pojawia się ostrzeżenie, które otwiera tę kartę.
+
+| Stan | Znaczenie |
+| --- | --- |
+| Oczekuje | Rekord czeka na eksport. |
+| Zsynchronizowany | Miejsce docelowe ma bieżącą treść rekordu. |
+| Odrzucony | Miejsce docelowe odrzuciło rekord. Przyczynę podaje błąd. Gdy poprawisz rekord, następny eksport spróbuje ponownie. |
+| Ponawianie | Wystąpił przejściowy błąd; rozszerzenie spróbuje jeszcze raz. |
+| Niepewny | Nie wiadomo, czy miejsce docelowe otrzymało ostatnie wysłanie. Rozszerzenie sprawdzi to przed ponownym wysłaniem. |
+| Wycofany | Rekord został usunięty z miejsca docelowego po cofnięciu publikacji lub usunięciu. |
+
+**Podgląd** pokazuje ładunek, który rozszerzenie wysłałoby dla rekordu, i to, co odrzuciłoby miejsce docelowe, niczego nie wysyłając. **Ponów** prosi rozszerzenie o ponowny eksport rekordu; wymaga uprawnienia `extensions.manage`.
+
 ## Pytanie do agenta
 
 **Zapytaj o ten rekord** rozpoczyna [rozmowę z agentem](/pl/guides/agents/) o rekordzie, który właśnie przeglądasz.

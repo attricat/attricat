@@ -21,7 +21,7 @@ pub const MANIFEST_VERSION: u32 = 1;
 /// The host ABI accepted by manifests: the `attricat:host` WIT package version.
 /// It evolves additively, so a manifest whose `attricat.host_api` range accepts
 /// it may use every server and client feature.
-pub const SUPPORTED_HOST_API: &str = "1.0.0";
+pub const SUPPORTED_HOST_API: &str = "1.1.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
@@ -175,6 +175,12 @@ pub const CAPABILITIES: &[&str] = &[
     "attricat.annotations.write",
     "network.request",
     "webhooks.receive",
+    // 1.1 export platform (#424).
+    "exports.mappings",
+    "connections.use",
+    "attricat.files.read",
+    "attricat.files.public_links",
+    "client.export_mapping",
 ];
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -262,6 +268,71 @@ pub struct HostPermission {
     /// the stable Idempotency-Key header for bulk deliveries.
     #[serde(default)]
     pub idempotent_delivery: bool,
+    /// 1.1: `network.request.v2` and transfer v2 may send query strings (for
+    /// example presigned URLs) to this rule's destinations. Query values are
+    /// never logged, traced or audited.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub allow_query: bool,
+    /// 1.1: response headers, beyond `content-type`, `etag` and
+    /// `retry-after`, that `network.request.v2` returns from this rule.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub response_headers: Vec<String>,
+    /// 1.1: this rule's request budget. Without one, the extension shares the
+    /// default budget of 60 requests per minute across its rules.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rate_limit: Option<RateLimit>,
+}
+
+/// A token bucket: `requests` tokens refill every `per_seconds`, and up to
+/// `burst` (default `requests`) may be spent at once. Operators may lower it.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RateLimit {
+    pub requests: u32,
+    pub per_seconds: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub burst: Option<u32>,
+}
+
+/// The default budget of a release across its rules without a `rate_limit`.
+pub const DEFAULT_RATE_LIMIT: RateLimit = RateLimit {
+    requests: 60,
+    per_seconds: 60,
+    burst: None,
+};
+pub const MAX_RATE_LIMIT_REQUESTS: u32 = 100_000;
+pub const MAX_RATE_LIMIT_SECONDS: u32 = 86_400;
+pub const MAX_RESPONSE_HEADERS: usize = 16;
+/// Response headers a rule may never expose to a component.
+const FORBIDDEN_RESPONSE_HEADERS: &[&str] = &[
+    "set-cookie",
+    "set-cookie2",
+    "authorization",
+    "proxy-authorization",
+    "proxy-authenticate",
+    "www-authenticate",
+];
+
+impl RateLimit {
+    pub fn burst(&self) -> u32 {
+        self.burst.unwrap_or(self.requests)
+    }
+
+    fn validate(&self, rule: &str) -> Result<(), ManifestError> {
+        if self.requests == 0
+            || self.requests > MAX_RATE_LIMIT_REQUESTS
+            || self.per_seconds == 0
+            || self.per_seconds > MAX_RATE_LIMIT_SECONDS
+            || self
+                .burst
+                .is_some_and(|burst| burst == 0 || burst > MAX_RATE_LIMIT_REQUESTS)
+        {
+            return Err(ManifestError::Invalid(format!(
+                "host permission '{rule}' has an invalid rate limit"
+            )));
+        }
+        Ok(())
+    }
 }
 fn default_request_limit() -> u64 {
     DEFAULT_HOST_REQUEST_BYTES
@@ -347,6 +418,100 @@ pub struct Server {
     /// released 1.2/1.3 worlds remain immutable; 1.4 adds connector imports.
     #[serde(default)]
     pub operations: Vec<ServerOperation>,
+    /// 1.1: kinds of host-managed credential connections. Operators create
+    /// named connections of these kinds; tokens never enter the component.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub connections: Vec<ConnectionKind>,
+    /// 1.1: export destinations, which give the host's export status, retry,
+    /// preview and resync surfaces their names and entry points.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exports: Vec<ExportDestination>,
+}
+
+/// OAuth 2.0 grant types the host can run for a connection.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum GrantType {
+    RefreshToken,
+    ClientCredentials,
+    DeviceCode,
+    AuthorizationCode,
+}
+
+impl GrantType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::RefreshToken => "refresh_token",
+            Self::ClientCredentials => "client_credentials",
+            Self::DeviceCode => "device_code",
+            Self::AuthorizationCode => "authorization_code",
+        }
+    }
+}
+
+/// A kind of destination account an extension connects to.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectionKind {
+    pub id: String,
+    pub title: String,
+    pub grant_types: Vec<GrantType>,
+    /// The host-permission rule token (and device authorization) endpoints
+    /// must match. The host sends token requests through it.
+    pub host_permission: String,
+    /// The rules whose requests may carry this connection's access token.
+    /// The host injects the token only into requests matched by one of them.
+    pub api_host_permissions: Vec<String>,
+    /// How the access token is sent: `Authorization: Bearer <token>` by
+    /// default, or the named header with an optional prefix.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_header: Option<TokenHeader>,
+    /// JSON Schema of the connection's non-secret parameters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameters_schema: Option<Value>,
+    /// How the client authenticates to the token endpoint.
+    #[serde(default)]
+    pub client_authentication: ClientAuthentication,
+}
+
+/// `body` sends `client_id` and `client_secret` as form fields
+/// (`client_secret_post`); `basic` sends them as HTTP Basic credentials.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ClientAuthentication {
+    #[default]
+    Body,
+    Basic,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TokenHeader {
+    pub name: String,
+    #[serde(default)]
+    pub prefix: String,
+}
+
+/// An export destination: names the operations and commands the host's
+/// export surfaces call.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExportDestination {
+    pub id: String,
+    pub title: String,
+    /// The connection kind whose connections this destination targets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection: Option<String>,
+    /// A server command returning the destination payload of one record
+    /// without pushing it, for preview and dry runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_command: Option<String>,
+    /// The operation a full resync or backfill runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resync_operation: Option<String>,
+    /// The operation that compares the destination with Attricat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reconcile_operation: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -371,6 +536,32 @@ pub struct EventHandler {
     pub id: String,
     pub event_types: Vec<String>,
     pub handler: String,
+    /// 1.1: deliver a record's events only after it has been quiet this long,
+    /// so a burst of edits causes one invocation with the latest event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub debounce_ms: Option<u64>,
+    /// 1.1: the longest a debounced event waits while newer ones keep
+    /// arriving. Defaults to ten times `debounce_ms`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_wait_ms: Option<u64>,
+}
+
+pub const MAX_DEBOUNCE_MS: u64 = 60 * 60 * 1000;
+pub const MAX_DEBOUNCE_WAIT_MS: u64 = 24 * 60 * 60 * 1000;
+
+impl EventHandler {
+    /// The debounce window and longest wait, when the handler is debounced.
+    pub fn debounce(&self) -> Option<(std::time::Duration, std::time::Duration)> {
+        let debounce = self.debounce_ms?;
+        let max_wait = self
+            .max_wait_ms
+            .unwrap_or(debounce.saturating_mul(10))
+            .min(MAX_DEBOUNCE_WAIT_MS);
+        Some((
+            std::time::Duration::from_millis(debounce),
+            std::time::Duration::from_millis(max_wait.max(debounce)),
+        ))
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -508,6 +699,10 @@ pub enum UiOutlet {
     AuditEventPanel,
     DataHealthCard,
     ActionDialog,
+    /// 1.1: an editor for an export destination's large mappings (attribute
+    /// and value mappings per destination category), on the extension's
+    /// export page.
+    ExportMapping,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -726,6 +921,7 @@ impl Manifest {
                     )));
                 }
             }
+            self.validate_connections_and_exports(server)?;
             if (!server.event_handlers.is_empty()
                 || !server.commands.is_empty()
                 || !server.operations.is_empty())
@@ -844,6 +1040,7 @@ impl Manifest {
                     UiOutlet::AuditEventPanel => Some("client.audit_event_panel"),
                     UiOutlet::DataHealthCard => Some("client.data_health_card"),
                     UiOutlet::ActionDialog => Some("client.action_dialog"),
+                    UiOutlet::ExportMapping => Some("client.export_mapping"),
                 };
                 if required.is_some_and(|capability| {
                     !self
@@ -897,6 +1094,7 @@ impl Manifest {
                             )
                             | (UiContributionKind::Embedded, UiOutlet::RecordAction)
                             | (UiContributionKind::Dialog, UiOutlet::ActionDialog)
+                            | (UiContributionKind::Panel, UiOutlet::ExportMapping)
                     );
                     if !valid_kind {
                         return Err(ManifestError::Invalid(
@@ -1054,6 +1252,148 @@ impl Artifact {
         Ok(())
     }
 }
+impl Manifest {
+    fn declares(&self, capability: &str) -> bool {
+        self.permissions
+            .iter()
+            .chain(&self.optional_permissions)
+            .any(|item| item == capability)
+    }
+
+    /// Every host-permission rule, required and optional.
+    pub fn host_permission(&self, id: &str) -> Option<&HostPermission> {
+        self.host_permissions
+            .iter()
+            .chain(&self.optional_host_permissions)
+            .find(|rule| rule.id == id)
+    }
+
+    fn validate_connections_and_exports(&self, server: &Server) -> Result<(), ManifestError> {
+        unique(
+            server.connections.iter().map(|kind| &kind.id),
+            "connection kind",
+        )?;
+        if !server.connections.is_empty() && !self.declares("connections.use") {
+            return Err(ManifestError::Invalid(
+                "connection kinds require connections.use".into(),
+            ));
+        }
+        for kind in &server.connections {
+            valid_id(&kind.id, "connection kind id")?;
+            let grant_types = kind.grant_types.iter().collect::<HashSet<_>>();
+            if kind.title.trim().is_empty()
+                || kind.title.len() > 200
+                || kind.grant_types.is_empty()
+                || grant_types.len() != kind.grant_types.len()
+            {
+                return Err(ManifestError::Invalid(format!(
+                    "connection kind '{}' needs a title and unique grant types",
+                    kind.id
+                )));
+            }
+            if !self
+                .host_permission(&kind.host_permission)
+                .is_some_and(|rule| rule.methods.iter().any(|method| method == "POST"))
+            {
+                return Err(ManifestError::Invalid(format!(
+                    "connection kind '{}' must name a host permission that allows POST",
+                    kind.id
+                )));
+            }
+            if kind.api_host_permissions.is_empty()
+                || kind
+                    .api_host_permissions
+                    .iter()
+                    .any(|rule| self.host_permission(rule).is_none())
+            {
+                return Err(ManifestError::Invalid(format!(
+                    "connection kind '{}' must name the declared host permissions its token may be sent to",
+                    kind.id
+                )));
+            }
+            if let Some(header) = &kind.token_header {
+                let name = header.name.to_ascii_lowercase();
+                if name.is_empty()
+                    || name.len() > 128
+                    || !name
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                    || matches!(
+                        name.as_str(),
+                        "host" | "content-length" | "connection" | "transfer-encoding"
+                    )
+                    || header.prefix.len() > 64
+                {
+                    return Err(ManifestError::Invalid(format!(
+                        "connection kind '{}' has an invalid token header",
+                        kind.id
+                    )));
+                }
+            }
+            if kind
+                .parameters_schema
+                .as_ref()
+                .is_some_and(|schema| !schema.is_object())
+            {
+                return Err(ManifestError::Invalid(format!(
+                    "connection kind '{}' parameters_schema must be an object JSON Schema",
+                    kind.id
+                )));
+            }
+        }
+        unique(
+            server.exports.iter().map(|export| &export.id),
+            "export destination",
+        )?;
+        if !server.exports.is_empty() && !self.declares("exports.mappings") {
+            return Err(ManifestError::Invalid(
+                "export destinations require exports.mappings".into(),
+            ));
+        }
+        for export in &server.exports {
+            valid_id(&export.id, "export destination id")?;
+            if export.title.trim().is_empty() || export.title.len() > 200 {
+                return Err(ManifestError::Invalid(format!(
+                    "export destination '{}' needs a title",
+                    export.id
+                )));
+            }
+            if export
+                .connection
+                .as_ref()
+                .is_some_and(|kind| !server.connections.iter().any(|item| &item.id == kind))
+            {
+                return Err(ManifestError::Invalid(format!(
+                    "export destination '{}' names an undeclared connection kind",
+                    export.id
+                )));
+            }
+            if export
+                .preview_command
+                .as_ref()
+                .is_some_and(|command| !server.commands.iter().any(|item| &item.id == command))
+            {
+                return Err(ManifestError::Invalid(format!(
+                    "export destination '{}' names an undeclared preview command",
+                    export.id
+                )));
+            }
+            for operation in [&export.resync_operation, &export.reconcile_operation]
+                .into_iter()
+                .flatten()
+            {
+                if !server.operations.iter().any(|item| &item.id == operation) {
+                    return Err(ManifestError::Invalid(format!(
+                        "export destination '{}' names an undeclared operation '{operation}'",
+                        export.id
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 impl HostPermission {
     /// Matches a concrete outbound HTTPS request against this immutable rule.
     /// Redirects are never followed, so the URL checked here is the only
@@ -1132,7 +1472,47 @@ impl HostPermission {
                 )));
             }
         }
+        if let Some(rate_limit) = &self.rate_limit {
+            rate_limit.validate(&self.id)?;
+        }
+        if self.response_headers.len() > MAX_RESPONSE_HEADERS {
+            return Err(ManifestError::Invalid(format!(
+                "host permission '{}' lists more than {MAX_RESPONSE_HEADERS} response headers",
+                self.id
+            )));
+        }
+        let mut headers = HashSet::new();
+        for header in &self.response_headers {
+            let valid = !header.is_empty()
+                && header.len() <= 128
+                && header
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
+            if !valid
+                || FORBIDDEN_RESPONSE_HEADERS.contains(&header.as_str())
+                || !headers.insert(header)
+            {
+                return Err(ManifestError::Invalid(format!(
+                    "host permission '{}' has an invalid, duplicate or forbidden response header '{header}'",
+                    self.id
+                )));
+            }
+        }
         Ok(())
+    }
+
+    /// Whether `url` matches this rule apart from its query string, for
+    /// rules that allow query strings.
+    pub fn allows_request_with_query(&self, url: &Url, method: &str) -> bool {
+        if url.query().is_none() {
+            return self.allows_request(url, method);
+        }
+        if !self.allow_query {
+            return false;
+        }
+        let mut bare = url.clone();
+        bare.set_query(None);
+        self.allows_request(&bare, method)
     }
 }
 impl EventContractExport {
@@ -1215,6 +1595,19 @@ impl EventHandler {
         {
             return Err(ManifestError::Invalid(format!(
                 "event handler '{}' must declare versioned event types",
+                self.id
+            )));
+        }
+        if self
+            .debounce_ms
+            .is_some_and(|debounce| debounce == 0 || debounce > MAX_DEBOUNCE_MS)
+            || self.max_wait_ms.is_some_and(|wait| {
+                self.debounce_ms.is_none_or(|debounce| wait < debounce)
+                    || wait > MAX_DEBOUNCE_WAIT_MS
+            })
+        {
+            return Err(ManifestError::Invalid(format!(
+                "event handler '{}' needs a debounce of 1 ms to 1 hour and a longest wait of the debounce to 24 hours",
                 self.id
             )));
         }
@@ -1676,11 +2069,11 @@ mod tests {
     #[test]
     fn host_api_ranges_must_accept_the_supported_abi() {
         let mut value = manifest();
-        for range in ["^1.0", ">=1.0.0, <2.0.0", "1.0.0"] {
+        for range in ["^1.0", ">=1.0.0, <2.0.0", "1.0.0", "^1.1"] {
             value.attricat.host_api = range.into();
             assert!(value.validate(SUPPORTED_HOST_API).is_ok(), "{range}");
         }
-        for range in [">=1.1.0, <2.0.0", "^2", "<1.0.0"] {
+        for range in [">=1.2.0, <2.0.0", "^2", "<1.0.0"] {
             value.attricat.host_api = range.into();
             assert!(value.validate(SUPPORTED_HOST_API).is_err(), "{range}");
         }
@@ -1904,6 +2297,8 @@ mod tests {
             id: "on-record".into(),
             event_types: vec!["record.updated.v1".into()],
             handler: "handle-event".into(),
+            debounce_ms: None,
+            max_wait_ms: None,
         }];
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value
@@ -2289,6 +2684,9 @@ mod tests {
             timeout_ms: 1,
             max_transfer_bytes: 0,
             idempotent_delivery: false,
+            allow_query: false,
+            response_headers: Vec::new(),
+            rate_limit: None,
         };
         assert!(rule.validate().is_ok());
         assert!(rule.allows_request(
@@ -2347,5 +2745,113 @@ mod tests {
                 .validate_configuration(&serde_json::json!({"url":1}))
                 .is_err()
         );
+    }
+
+    fn export_manifest() -> Manifest {
+        serde_json::from_value(serde_json::json!({
+            "manifest_version": 1,
+            "name": "Exporter",
+            "version": "1.0.0",
+            "description": "export test",
+            "icons": {"48": "icon.png"},
+            "attricat": {"id": "acme.exporter", "host_api": "^1.1"},
+            "permissions": ["network.request", "connections.use", "exports.mappings", "client.commands"],
+            "host_permissions": [
+                {"id": "token", "matches": ["https://shop.example.com/oauth/*"], "methods": ["POST"]},
+                {"id": "admin", "matches": ["https://shop.example.com/admin/*"], "methods": ["POST"],
+                 "allow_query": true, "response_headers": ["x-request-id"],
+                 "rate_limit": {"requests": 2, "per_seconds": 1, "burst": 40}}
+            ],
+            "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],
+            "server": {
+                "commands": [{"id": "preview", "handler": "preview", "request_schema": {"type": "object"}, "response_schema": {"type": "object"}}],
+                "operations": [{"id": "export", "handler": "export", "request_schema": {"type": "object"}}],
+                "event_handlers": [],
+                "connections": [{"id": "shop", "title": "Shop", "grant_types": ["client_credentials"],
+                                 "host_permission": "token", "api_host_permissions": ["admin"],
+                                 "token_header": {"name": "X-Shop-Access-Token"}}],
+                "exports": [{"id": "shop", "title": "Shop", "connection": "shop",
+                             "preview_command": "preview", "resync_operation": "export"}]
+            }
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn export_destinations_and_connections_reference_declared_items() {
+        let manifest = export_manifest();
+        assert!(manifest.validate(SUPPORTED_HOST_API).is_ok());
+        let mut missing_command = export_manifest();
+        missing_command.server.as_mut().unwrap().exports[0].preview_command = Some("absent".into());
+        assert!(missing_command.validate(SUPPORTED_HOST_API).is_err());
+        let mut unknown_rule = export_manifest();
+        unknown_rule.server.as_mut().unwrap().connections[0].api_host_permissions =
+            vec!["absent".into()];
+        assert!(unknown_rule.validate(SUPPORTED_HOST_API).is_err());
+        let mut no_capability = export_manifest();
+        no_capability
+            .permissions
+            .retain(|item| item != "connections.use");
+        assert!(no_capability.validate(SUPPORTED_HOST_API).is_err());
+        let mut no_mappings = export_manifest();
+        no_mappings
+            .permissions
+            .retain(|item| item != "exports.mappings");
+        assert!(no_mappings.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn host_permission_budgets_headers_and_queries_are_bounded() {
+        let manifest = export_manifest();
+        let rule = manifest.host_permission("admin").unwrap();
+        assert_eq!(rule.rate_limit.unwrap().burst(), 40);
+        let signed =
+            Url::parse("https://shop.example.com/admin/upload?X-Amz-Signature=abc").unwrap();
+        assert!(rule.allows_request_with_query(&signed, "POST"));
+        assert!(!rule.allows_request(&signed, "POST"));
+        let token = manifest.host_permission("token").unwrap();
+        assert!(!token.allows_request_with_query(
+            &Url::parse("https://shop.example.com/oauth/token?x=1").unwrap(),
+            "POST"
+        ));
+        for header in ["set-cookie", "X-Upper", ""] {
+            let mut invalid = export_manifest();
+            invalid.host_permissions[1].response_headers = vec![header.into()];
+            assert!(invalid.validate(SUPPORTED_HOST_API).is_err(), "{header}");
+        }
+        let mut zero = export_manifest();
+        zero.host_permissions[1].rate_limit = Some(RateLimit {
+            requests: 0,
+            per_seconds: 1,
+            burst: None,
+        });
+        assert!(zero.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn debounced_handlers_have_bounded_windows() {
+        let handler = |debounce_ms, max_wait_ms| EventHandler {
+            id: "push".into(),
+            event_types: vec!["record.updated.v1".into()],
+            handler: "handle-event".into(),
+            debounce_ms,
+            max_wait_ms,
+        };
+        let permissions = vec!["events.subscribe".to_owned()];
+        assert!(handler(Some(500), None).validate(&permissions).is_ok());
+        assert_eq!(
+            handler(Some(500), None).debounce(),
+            Some((
+                std::time::Duration::from_millis(500),
+                std::time::Duration::from_millis(5000)
+            ))
+        );
+        assert!(handler(Some(0), None).validate(&permissions).is_err());
+        assert!(
+            handler(Some(1000), Some(10))
+                .validate(&permissions)
+                .is_err()
+        );
+        assert!(handler(None, Some(10)).validate(&permissions).is_err());
     }
 }

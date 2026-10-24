@@ -17,7 +17,7 @@ IDs used in the manifest (`attricat.id`, artifact, dependency, permission-rule, 
 | `description` | Yes | One-line description. |
 | `icons` | Yes | Map of size to icon path, with at least one entry, such as `{ "48": "assets/icon-48.svg" }`. |
 | `attricat.id` | Yes | Extension ID, such as `acme.inventory`. |
-| `attricat.host_api` | Yes | SemVer range of supported host APIs. It must accept the current host API, `1.0.0`, for example `>=1.0.0, <2.0.0`. |
+| `attricat.host_api` | Yes | SemVer range of supported host APIs. It must accept the current host API, `1.1.0`, for example `>=1.0.0, <2.0.0` or `^1.1`. |
 | `artifacts` | Yes | At least one artifact. |
 | `permissions` | | Capabilities that must be granted before the extension can be enabled. |
 | `optional_permissions` | | Capabilities the administrator may grant. |
@@ -27,7 +27,7 @@ IDs used in the manifest (`attricat.id`, artifact, dependency, permission-rule, 
 | `scoped_configuration` | | Settings stored per blueprint or attribute. |
 | `dependencies` | | Other extensions this one needs. |
 | `event_contracts` | | Events this extension publishes or consumes. |
-| `server` | | Event handlers, commands, operations, and webhooks. |
+| `server` | | Event handlers, commands, operations, webhooks, connection kinds, and export destinations. |
 | `ui` | | Client contributions. |
 | `cell_renderers` | | Explorer table cell renderers. |
 | `attribute_types` | | Attribute types for blueprints. |
@@ -63,6 +63,10 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 | `artifacts.read`, `artifacts.write` | Reading operation inputs and writing operation outputs. |
 | `attricat.annotations.write` | Writing this extension's own namespace of record tags and metadata. See [Record annotations](/extensions/operations/#record-annotations). |
 | `network.request` | Making outbound HTTPS requests that match a granted host permission. |
+| `exports.mappings` | Reading and writing the extension's [export mappings](/extensions/server/#export-mappings). Required to declare `server.exports`. |
+| `connections.use` | Reading the extension's [connections](/extensions/server/#connections) and sending requests with their tokens. Required to declare `server.connections`. |
+| `attricat.files.read` | Copying a file a record references into an operation input with `transfer.open-record-file`. |
+| `attricat.files.public_links` | Issuing [public links](/extensions/server/#public-file-links) to files records reference. |
 | `webhooks.receive` | Declaring inbound webhooks (not delivered yet). |
 
 ### Client interaction
@@ -91,7 +95,7 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 
 Each placement capability allows a contribution at one outlet. See [Client contributions](/extensions/client/#outlets).
 
-`client.blueprint_configuration`, `client.record_decoration`, `client.record_action`, `client.record_header_action`, `client.record_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`.
+`client.blueprint_configuration`, `client.record_decoration`, `client.record_action`, `client.record_header_action`, `client.record_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`.
 
 ## Host permissions
 
@@ -118,8 +122,21 @@ A host permission is a rule for outbound requests. `network.request` alone permi
 | `timeout_ms` | 10000 | Request timeout. |
 | `max_transfer_bytes` | 0 | Enables streamed file transfers for operations, up to 1 GiB. `0` disables them. |
 | `idempotent_delivery` | `false` | Allows `POST` for output delivery. Set it only when the destination honors the `Idempotency-Key` header. |
+| `allow_query` | `false` | Lets `network.request.v2` and v2 transfers send query strings, such as presigned URLs, to this rule's destinations. Query values are never logged. |
+| `response_headers` | `[]` | Up to 16 lowercase response header names that `network.request.v2` returns in addition to `content-type`, `etag`, and `retry-after`, such as `location` or a request ID. `set-cookie` and authentication headers are not allowed. |
+| `rate_limit` | Shared budget | The rule's [request budget](#request-budgets). |
 
-A pattern is `http` or `https`, an exact host or a leading `*.` wildcard, an optional port, and a path prefix ending in `/*`. Queries, fragments, credentials, `localhost`, and private, loopback, or link-local addresses are rejected. At request time only HTTPS is allowed, redirects are not followed, and every DNS answer must be a public address.
+A pattern is `http` or `https`, an exact host or a leading `*.` wildcard, an optional port, and a path prefix ending in `/*`. Queries, fragments, credentials, `localhost`, and private, loopback, or link-local addresses are rejected. At request time only HTTPS is allowed, redirects are not followed, and every DNS answer must be a public address. A query string is allowed at request time only on rules with `allow_query`.
+
+### Request budgets
+
+```json
+"rate_limit": { "requests": 5, "per_seconds": 1, "burst": 10 }
+```
+
+A budget is a token bucket: `requests` tokens are added every `per_seconds` (1 to 86,400), and up to `burst` (default `requests`) can be spent at once. `requests` and `burst` are 1 to 100,000. Every request the rule matches, including file transfers, takes a token. Declare the destination's published limit, so your extension slows down instead of being throttled.
+
+Rules without a `rate_limit` share 60 requests per minute per release. Budgets are counted per workspace, extension, and rule, in each API process, or across replicas with `CACHE_BACKEND=redis`. An administrator can [lower a budget](/builders/extensions/#request-budgets) but never raise it; a change applies within 10 seconds.
 
 ## Configuration
 
@@ -187,10 +204,63 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 
 | Section | Fields | Needs |
 | --- | --- | --- |
-| `event_handlers` | `id`, `event_types` (exact versioned types), `handler` | `events.subscribe` and a `server_wasm` artifact |
+| `event_handlers` | `id`, `event_types` (exact versioned types), `handler`, optional `debounce_ms` (1 to 3,600,000) and `max_wait_ms` (at least `debounce_ms`, at most 86,400,000; default ten times `debounce_ms`). See [Debounce](/extensions/server/#debounce). | `events.subscribe` and a `server_wasm` artifact |
 | `commands` | `id`, `handler`, `request_schema`, `response_schema`, `max_request_bytes`, `max_response_bytes` (default 64 KiB) | `client.commands` |
 | `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (default and maximum 64 KiB), optional `interactive: {"version": 1, "max_selection": 1–50}` | `interactive` needs `client.operations.start` |
 | `webhooks` | `id`, `event_type`, `handler`, `methods` (`["POST"]`), `authentication`, `max_body_bytes` | `webhooks.receive`. Declared but not delivered yet. |
+| `connections` | See [Connections](#connections). | `connections.use` |
+| `exports` | See [Export destinations](#export-destinations). | `exports.mappings` |
+
+### Connections
+
+A connection kind describes a type of destination account. Administrators create named connections of each kind, such as one per shop or marketplace region.
+
+```json
+"connections": [{
+  "id": "amazon",
+  "title": "Amazon seller account",
+  "grant_types": ["refresh_token"],
+  "host_permission": "amazon-lwa",
+  "api_host_permissions": ["amazon-sp"],
+  "token_header": { "name": "x-amz-access-token" },
+  "client_authentication": "body",
+  "parameters_schema": { "type": "object", "required": ["seller_id"] }
+}]
+```
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `id` | Required | Stable kind ID. |
+| `title` | Required | Display name, up to 200 bytes. |
+| `grant_types` | Required | OAuth grants an administrator can choose: `client_credentials`, `refresh_token`, `device_code`, `authorization_code`. No duplicates. |
+| `host_permission` | Required | A declared host permission that allows `POST`. The token and device authorization endpoints must match it. |
+| `api_host_permissions` | Required | Declared host permissions whose requests may carry the connection's access token. The token is never added to other requests. |
+| `token_header` | `Authorization: Bearer` | `{ "name", "prefix"? }`: the header that carries the access token, with an optional prefix. |
+| `client_authentication` | `body` | How the client authenticates to the token endpoint: `body` (`client_id` and `client_secret` as form fields) or `basic` (HTTP Basic). |
+| `parameters_schema` | | JSON Schema object for the connection's non-secret parameters. |
+
+### Export destinations
+
+An export destination gives Attricat's export status, preview, retry, and resync screens a name and entry points:
+
+```json
+"exports": [{
+  "id": "amazon",
+  "title": "Amazon",
+  "connection": "amazon",
+  "preview_command": "preview",
+  "resync_operation": "export"
+}]
+```
+
+| Field | Description |
+| --- | --- |
+| `id` | Stable destination ID. |
+| `title` | Display name, up to 200 bytes. |
+| `connection` | Optional. A connection kind declared in `connections`. |
+| `preview_command` | Optional. A declared server command that returns the payload for one record without pushing it. It receives `{export_id, record_id, connection}` and conventionally returns `{payload, issues}`. |
+| `resync_operation` | Optional. The declared operation a full resync runs. |
+| `reconcile_operation` | Optional. A declared operation that compares the destination with Attricat. |
 
 ## UI contributions
 
@@ -209,7 +279,7 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 | `navigation` | `route`, `title` | A sidebar link to one of this extension's routes. |
 | `embedded` | `artifact`, `outlet` | A frame at `navigation`, `record_preview_panel`, `blueprint_attribute_configuration`, `record_attribute_decoration`, `record_action`, or `explorer_table_cell`. |
 | `action` | `artifact`, `outlet` | A host-laid-out action at `explorer_row_action`, `explorer_action`, `explorer_bulk_action`, or `record_header_action`. |
-| `panel` | `artifact`, `outlet` | A read-only host-laid-out panel at `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `record_attribute_panel`, `file_panel`, `audit_event_panel`, or `data_health_card`. |
+| `panel` | `artifact`, `outlet` | A read-only host-laid-out panel at `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `record_attribute_panel`, `file_panel`, `audit_event_panel`, `data_health_card`, or `export_mapping`. |
 | `dialog` | `artifact`, `outlet`, `title` | The host-managed `action_dialog` opened by this extension's selection actions. |
 
 Each extension can use each outlet once. `record_action`, `explorer_row_action`, and `explorer_bulk_action` accept `version` 1 or 2; version 2 receives the [selection context](/extensions/client/#selection-context).

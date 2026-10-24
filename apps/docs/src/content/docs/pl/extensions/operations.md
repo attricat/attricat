@@ -23,6 +23,22 @@ description: Długotrwałe operacje rozszerzeń z punktami kontrolnymi do import
 
 Komponent implementuje `prepare`, `start`, `process-batch`, `checkpoint`, `finish` i `cancel`. Każde wywołanie otrzymuje identyfikator przebiegu, migawkę konfiguracji, zwalidowane dane wejściowe, ostatni punkt kontrolny i **klucz partii**.
 
+## Odraczanie i niepowodzenia partii (1.1)
+
+Komponent zbudowany dla [świata](/pl/extensions/server/#wersja-api-hosta) `outcome-extension` eksportuje `deferrable-operations` zamiast `operations`. Jego `process-batch` zwraca `result<batch-outcome, failure>`.
+
+`batch-outcome` dodaje do wyniku z wersji 1.0 pole `resume-after-ms`. Attricat zapisuje punkt kontrolny, zwalnia przebieg i ponownie umieszcza go w kolejce po tym czasie (najwyżej 24 godziny) zamiast od razu. Używaj tego, aby poczekać, aż miejsce docelowe przetworzy plik zasilający (feed), aby odpytywać długotrwałe zadanie albo aby odczekać po ograniczeniu liczby żądań. Lista przebiegów pokazuje `resume_at`, dopóki przebieg czeka.
+
+`failure` przyjmuje jedną z postaci:
+
+- `rejected { code, message, record-id?, connection? }`: gdy wskazuje rekord, a rozszerzenie ma `exports.mappings`, status eksportu rekordu zmienia się na `rejected`, a partia uruchamia się ponownie po sekundzie. Mapowanie jest już rozstrzygnięte, więc komponent pomija rekord, a reszta przebiegu jest kontynuowana. Każdy nowo odrzucony rekord to postęp, więc partia może odrzucić dowolnie wiele rekordów; powtórzenie odrzucenia albo odrzucenie rekordu, który trzyma inny proces, liczy się jak opóźnienie ponowienia, najwyżej 100 razy z rzędu. Rekord trzymany przez inny proces jest odtwarzany po wygaśnięciu jego dzierżawy. Odrzucenie, którego nie da się zapisać, np. dla nieznanego połączenia lub rekordu spoza przebiegu, oraz każde inne odrzucenie zamieniają przebieg w martwą wiadomość z kodem `rejected`, bez ponowień.
+- `retry { message, after-ms? }`: partia jest wykonywana ponownie z tym samym kluczem partii po podanym czasie. Z `after-ms` czeka bez zużywania budżetu niepowodzeń przebiegu, najwyżej 100 razy z rzędu, zanim jakaś partia się zakończy; potem, a także bez `after-ms`, każde ponowienie liczy się do tego budżetu.
+- `fault(message)`: przebieg kończy się błędem, a instalacja zostaje poddana kwarantannie.
+
+Pułapki (trap), wyczerpanie paliwa lub pamięci, przekroczenie limitu czasu i nieprawidłowy wynik partii również są traktowane jak `fault`. Błąd zwrócony przez `prepare`, `start`, `checkpoint`, `finish` lub `cancel` kończy przebieg błędem bez kwarantanny instalacji.
+
+Przebieg, którego wydanie zostanie wyłączone, poddane kwarantannie lub utraci uprawnienie w trakcie partii, jest wstrzymywany, a nie kończy się błędem.
+
 ## Jak przebiegi zachowują trwałość
 
 - Przebieg jest tworzony raz dla danego obszaru roboczego, wydania, operacji i klucza idempotencji. Ponowne uruchomienie z tym samym kluczem zwraca ten sam przebieg.
@@ -30,7 +46,7 @@ Komponent implementuje `prepare`, `start`, `process-batch`, `checkpoint`, `finis
 - Po każdej partii zapisywany jest punkt kontrolny. Klucz partii zmienia się dopiero po zapisaniu punktu kontrolnego.
 - Jeśli proces roboczy ulegnie awarii przed punktem kontrolnym, partia jest wykonywana ponownie z **tym samym kluczem partii**. Jeśli Twój komponent zapisuje do katalogu lub systemu zewnętrznego, zadbaj, aby te zapisy były idempotentne względem klucza partii.
 - Anulowanie przebiegu oczekującego w kolejce kończy go natychmiast. Anulowanie trwającego prosi komponent o zatrzymanie się przy następnej partii.
-- Przebieg, który stale kończy się błędem, staje się martwą wiadomością (dead letter). Operator może go odtworzyć.
+- Przebieg, który stale kończy się błędem, staje się martwą wiadomością (dead letter), a rekordy, które dzierżawił, ale ich nie rozstrzygnął, przechodzą w stan `retrying` z błędem. Operator może go odtworzyć; odtworzony przebieg zaczyna z nowym budżetem niepowodzeń i 100 nowymi odroczeniami.
 
 ## Uruchamiaj, obserwuj i pobieraj
 
@@ -102,11 +118,35 @@ Z `network.request` i uprawnieniem hosta, które ustawia `max_transfer_bytes`, k
 
 Próba dostarczenia jest zapisywana przed jakimkolwiek ruchem sieciowym. Po przekroczeniu limitu czasu lub awarii wynik to `uncertain` i nigdy nie jest wysyłany ponownie automatycznie. `acli extension-operation deliveries <run-id>` pokazuje historię dostarczeń.
 
+API hosta 1.1 dodaje wersje dopasowane do przesyłania plików do marketplace'ów i magazynów w chmurze:
+
+- `transfer.fetch-input-v2` i `transfer.deliver-output-v2` przyjmują pola v1 oraz `headers` (nagłówki, nad którymi masz kontrolę, np. dokładny `Content-Type`, dla którego podpisano adres URL) i `connection` (dodaje token [połączenia](/pl/extensions/server/#połączenia)). Przyjmują ciągi zapytania, np. podpisane adresy URL S3 lub GCS, gdy reguła ustawia `allow_query`. Gdy pobieranie z `connection` otrzyma 401, token jest odrzucany, a wywołanie odpowiada `{"outcome": "failed", "status": 401}`, więc możesz ponowić je z nowym tokenem. `deliver-output-v2`, którego połączenie lub uzgodnienie TLS się nie powiedzie, odpowiada `{"outcome": "unreachable"}`: nic nie zostało wysłane i to samo dostarczenie z tym samym kluczem można wysłać ponownie.
+- Dostarczenie v2 wysyła `Idempotency-Key` tylko wtedy, gdy przekażesz `idempotency_key`. `PUT` na podpisany adres URL jest idempotentny sam w sobie. `POST` nadal wymaga `idempotent_delivery: true` w regule.
+- `multipart: {"fields": [{"name", "value"}], "file_field", "filename"?}` wysyła formularz `multipart/form-data` z artefaktem jako częścią z plikiem, na potrzeby przesyłania etapowego w postaci formularza.
+- Dostarczenie v2 może przesłać nie tylko dane wyjściowe, ale też ukończony artefakt wejściowy przebiegu.
+- `transfer.open-record-file({"record_id", "file_id", "variant"?})` kopiuje plik, do którego odwołuje się aktywny rekord, do 16 MiB, do artefaktu wejściowego przebiegu i zwraca jego identyfikator, aby można go było przesłać bezpośrednio. `variant` wybiera wariant obrazu zamiast oryginału. Rekordy, które współdzielą plik, dostają ten sam artefakt. Wymaga `attricat.read`, `attricat.files.read` i `artifacts.read`. Przebiegi konektorów mogą otwierać tylko pliki eksportowanych rekordów i aktywnych rekordów, do których one linkują (rekordów powiązanych rozwijanych przez `page-v2`), a przebiegi interaktywne tylko pliki z zaznaczenia.
+
+Każde żądanie wykonane przy przesyłaniu jest wliczane do [limitu żądań](/pl/extensions/manifest/#limity-żądań) jego reguły.
+
 ## Dostęp do katalogu w operacjach
 
 Operacje mogą wywoływać `attricat-data.read` i `attricat-data.batch` (ten sam JSON co `attricat.read.v1` i `attricat.command.v1`) oraz wywołania w kształcie konektora: `schema`, `page` i `upsert-batch`. Strony mieszczą do 100 rekordów, a partie do 100 intencji. Partie muszą zawierać bieżący klucz partii, a klucz każdej intencji jest zapisywany, więc odtworzona partia zwraca `already_applied` zamiast zapisywać dwukrotnie.
 
 Kursory stron rozwiązują wartości według stanu z pierwszej strony, korzystając z historii wartości, i wygasają po 30 dniach. To nie jest migawka bazy danych: rekordy tworzone, usuwane lub migrowane w trakcie długiego eksportu nadal mogą zmienić to, które rekordy się pojawią. Jeśli potrzebujesz dokładnego eksportu, zamroź źródło.
+
+W przebiegu konektora `attricat-data.batch` przyjmuje też partie zawierające wyłącznie adnotacje rekordów Schematu zadania, dzięki czemu eksporter może zapisać w [adnotacjach](#adnotacje-rekordów) zewnętrzne identyfikatory lub stan synchronizacji tam, gdzie widzą je kontrole i przeglądarka rekordów. Przebiegi eksportu nadal nie mogą zapisywać wartości.
+
+### Strony eksportu i wycofania
+
+API hosta 1.1 dodaje wywołania konektora dla eksporterów:
+
+- `attricat.page-v2({"cursor", "limit", "expand"?})` odczytuje od 1 do 16 wierszy Schematu, kontekstu i kanału przebiegu. Każdy wiersz ma `record_id`, `content_revision`, `blueprint_version`, `updated_at` oraz:
+  - `values`: wartości skalarne rozwiązane przez łańcuch kontekstów zastępczych, więc obejmują też wartości odziedziczone z kontekstów nadrzędnych;
+  - `relationships`: cele relacji według kodu atrybutu;
+  - `files`: odwołania do plików (`file_id`, `filename`, `mime_type`, `byte_size`, `sha256`) według kodu atrybutu, do użycia z `open-record-file` i [`files.link.v1`](/pl/extensions/server/#publiczne-linki-do-plików);
+  - `related`: dla maksymalnie czterech kodów relacji wymienionych w `expand` wartości, relacje, pliki i rewizję rekordów docelowych oraz informację, czy każdy z nich jest opublikowany w kanale. Przydaje się przy wariantach i ofertach typu rodzic/dziecko. Z `expand` pole `content_revision` wiersza to najnowsza rewizja rekordu i osadzonych w nim rekordów, więc edycja lub usunięcie wariantu sprawia, że wiersz rodzica jest nowszy niż ostatnio zatwierdzona dla niego rewizja.
+- `attricat.withdrawn(cursor, limit)` zwraca od 1 do 100 rekordów Schematu zadania, które wycofano z publikacji w kanale przebiegu (i nadal są niepublikowane), w kolejności zdarzeń. Przebieg ograniczony do wybranych rekordów dostaje zamiast tego ostatnie wycofanie każdego z nich, strona po stronie z `more`; jego kursor zachowuje pozycję kanału, więc kolejne przebiegi nadal widzą pozostałe wycofania. Usunięcie rekordu wycofuje go z każdego kanału, w którym był opublikowany, więc jest zgłaszany z powodem `deleted`, a rekord nigdy nieopublikowany w kanale nie jest zgłaszany. Elementy mają postać `{record_id, reason, record_revision, occurred_at}`, wraz z `next_cursor` i `more`. Pusty kursor zaczyna od najstarszej zmiany. Zapisz kursor, np. w magazynie rozszerzenia dla każdego zadania i kanału, aby następny przebieg kontynuował od miejsca, w którym skończył ten. Gdy Attricat jest zajęty zapisywaniem zdarzeń, strona może wrócić bez rekordów, ale z `more: true` i tym samym kursorem; wywołaj ją ponownie.
+- `api.call("connector.scope.v1", "{}")` zwraca zadanie, Schemat, wersję, kontekst, kanał, połączenie i tryb przebiegu albo `null` poza przebiegiem konektora.
 
 ## Harmonogramy
 
@@ -150,6 +190,7 @@ input = { profile = { version = 1, business_key = "sku", columns = [
 - Zadanie **importu** tworzy jeden przebieg, który zapisuje do swojego `context`.
 - Późniejsza wersja dopasowuje zadania po `code`. Zadanie pominięte w nowej wersji zostaje wyłączone; jego historia pozostaje.
 - Ustaw `enabled = false`, aby wstrzymać zadanie.
+- Zadanie eksportu może wskazać `connection`, do którego wysyła dane. Bez niego używa domyślnego miejsca docelowego rozszerzenia.
 - W przypadku konektora CSV Attricat uzupełnia identyfikator Schematu, wersję i kontekst w profilu dla każdego przebiegu, więc TOML potrzebuje tylko kolumn (oraz `business_key` przy importach).
 
 Uruchom zadanie ręcznie:
@@ -159,4 +200,34 @@ acli connector-job list <blueprint-id>
 acli connector-job run <job-id> --idempotency-key manual-2026-03-01
 ```
 
-Zarządzanie zadaniami konektorów wymaga `extensions.manage`. Zadań nie można jeszcze wyzwalać zdarzeniami katalogu; uruchamiaj je ręcznie lub cyklicznie.
+Zarządzanie zadaniami konektorów wymaga `extensions.manage`.
+
+### Eksport po zmianach
+
+Zadanie eksportu może też uruchamiać się, gdy jego rekordy się zmieniają:
+
+```toml
+[[connector_jobs]]
+code = "shopify"
+direction = "export"
+extension_id = "acme.shopify"
+operation_id = "export"
+connection = "shop-eu"
+trigger = { events = ["record.updated.v1", "attribute_value.changed.v1"], debounce_seconds = 30 }
+input = {}
+```
+
+Przebieg rusza, gdy od najnowszego pasującego zdarzenia rekordów Schematu minie `debounce_seconds` sekund, więc seria edycji daje jeden przebieg. Ciągłe edycje nie mogą go wstrzymywać w nieskończoność: przebieg rusza także wtedy, gdy najstarsza oczekująca zmiana ma dziesięciokrotność `debounce_seconds`. Jeśli przebieg nie może wystartować, np. gdy rozszerzenie jest wyłączone, zmiany czekają i zostaną wyeksportowane, gdy będzie to możliwe. Pasujące zdarzenie rekordu, do którego rekord Schematu odwołuje się przez relację, liczy się jako zmiana rekordu odwołującego się, bo `page-v2` może go osadzić. Przebieg obejmuje tylko zmienione rekordy, do 10 000; przy większej liczbie zmian wykonuje całe zadanie. Dozwolone zdarzenia wymienia sekcja [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów).
+
+Każdy przebieg zapisuje swój tryb: `incremental`, `triggered` lub `resync`.
+
+### Ponowna synchronizacja
+
+Ponowna synchronizacja (resync) eksportuje jeszcze raz każdy opublikowany rekord zadania eksportu albo tylko część z nich:
+
+```http
+POST /api/blueprint-connector-jobs/{id}/resync
+{"idempotency_key": "resync-2026-03-01", "status": "rejected"}
+```
+
+Przekaż `record_ids` dla wybranych rekordów albo `status` dla rekordów z tym stanem eksportu w połączeniu zadania, ale nie oba naraz. Bez żadnego z nich eksportowany jest każdy opublikowany rekord. Ponowna synchronizacja odczytuje te same wiersze co każdy przebieg, ale `begin` dzierżawi rekordy rozstrzygnięte przed rozpoczęciem przebiegu, więc eksporter powinien pominąć rekordy, których zapisany skrót treści się nie zmienił, i wysłać pozostałe. Klucz idempotencji obejmuje wybór: ten sam klucz z innymi `record_ids` lub innym `status` uruchamia nową synchronizację.
