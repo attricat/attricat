@@ -419,7 +419,13 @@ pub async fn poll_device_authorization(
             .await
             .map_err(|error| TokenError::Invalid(error.to_string()));
     }
-    let kind = connection_kind(installation, &credentials.kind)?.clone();
+    let kind = match connection_kind(installation, &credentials.kind) {
+        Ok(kind) => kind.clone(),
+        Err(error) => {
+            let _ = refresh.release().await;
+            return Err(error);
+        }
+    };
     let form = vec![
         ("grant_type", DEVICE_CODE_GRANT.to_owned()),
         ("device_code", device_code),
@@ -435,7 +441,7 @@ pub async fn poll_device_authorization(
     .await
     {
         Ok(tokens) => refresh
-            .complete(tokens)
+            .complete_device_authorization(tokens)
             .await
             .map_err(|error| TokenError::Temporary(error.to_string()))?,
         Err(TokenError::Pending { slow_down }) => refresh
@@ -477,12 +483,21 @@ pub async fn exchange_authorization_code(
         .map_err(|error| TokenError::Invalid(error.to_string()))?
         .ok_or(TokenError::Busy)?;
     let credentials = refresh.credentials.clone();
+    // Every early return ends the claim at once, so a retry is not refused
+    // as busy.
     if credentials.grant_type != "authorization_code" {
+        let _ = refresh.release().await;
         return Err(TokenError::Invalid(
             "the connection does not use the authorization code grant".into(),
         ));
     }
-    let kind = connection_kind(installation, &credentials.kind)?.clone();
+    let kind = match connection_kind(installation, &credentials.kind) {
+        Ok(kind) => kind.clone(),
+        Err(error) => {
+            let _ = refresh.release().await;
+            return Err(error);
+        }
+    };
     let mut form = vec![
         ("grant_type", "authorization_code".to_owned()),
         ("code", code.to_owned()),

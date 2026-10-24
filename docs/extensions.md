@@ -754,7 +754,9 @@ The `mappings.list.v1` host call still lists every mapping.
 `exports.mappings`, any other is not found, and only while it is enabled) (records selected by ID alone that were
 never exported get a pending mapping when the extension exports their
 blueprint to that connection by a job, or handles `export.retry_requested.v1`
-itself; deleted records are never selected), emits
+itself; deleted records and withdrawn mappings are never selected, and a
+retry by status `withdrawn` is refused: publishing the record again exports
+it), emits
 `export.retry_requested.v1` for each record to that extension only, and is
 audited. With `run: true` it also starts a [resync](#connector-jobs-for-exports)
 of just those records on each of the extension's export jobs that target the

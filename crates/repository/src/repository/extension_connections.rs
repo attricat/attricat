@@ -335,7 +335,26 @@ impl ConnectionRefresh {
     /// not. When only the client secret, the token URL's path or the scope
     /// changed, the rotated refresh token is still kept but the access token
     /// is not, so the next call refreshes under the new settings.
-    pub async fn complete(mut self, tokens: IssuedTokens) -> Result<(), RepositoryError> {
+    pub async fn complete(self, tokens: IssuedTokens) -> Result<(), RepositoryError> {
+        self.store_tokens(tokens, false).await
+    }
+
+    /// Stores the tokens a device authorization's poll obtained, ending that
+    /// authorization; see [`Self::complete`].
+    pub async fn complete_device_authorization(
+        self,
+        tokens: IssuedTokens,
+    ) -> Result<(), RepositoryError> {
+        self.store_tokens(tokens, true).await
+    }
+
+    /// A refresh leaves a device authorization the operator started in
+    /// place; only the poll that completes it ends it.
+    async fn store_tokens(
+        mut self,
+        tokens: IssuedTokens,
+        ends_device_authorization: bool,
+    ) -> Result<(), RepositoryError> {
         let id = self.credentials.id;
         let access = seal(id, "access_token", &tokens.access_token)?;
         let refresh = tokens
@@ -365,9 +384,9 @@ impl ConnectionRefresh {
         .fetch_optional(&mut *transaction)
         .await?;
         let stored = current.as_deref().map(origin) == Some(origin(&basis.token_url))
-            && sqlx::query("UPDATE extension_connections SET access_token_ciphertext=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 THEN $3 END,access_token_expires_at=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 THEN $4 END,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claim END,refresh_claimed_until=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_token_ciphertext IS NOT DISTINCT FROM $8")
+            && sqlx::query("UPDATE extension_connections SET access_token_ciphertext=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 THEN $3 END,access_token_expires_at=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 THEN $4 END,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=CASE WHEN $11 THEN NULL ELSE device_code_ciphertext END,device_user_code=CASE WHEN $11 THEN NULL ELSE device_user_code END,device_verification_uri=CASE WHEN $11 THEN NULL ELSE device_verification_uri END,device_expires_at=CASE WHEN $11 THEN NULL ELSE device_expires_at END,device_interval_seconds=CASE WHEN $11 THEN NULL ELSE device_interval_seconds END,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claim END,refresh_claimed_until=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_token_ciphertext IS NOT DISTINCT FROM $8")
                 .bind(workspace_id).bind(id).bind(access).bind(tokens.expires_at).bind(refresh).bind(claim)
-                .bind(basis.client_secret).bind(basis.refresh_token).bind(&basis.token_url).bind(basis.scope)
+                .bind(basis.client_secret).bind(basis.refresh_token).bind(&basis.token_url).bind(basis.scope).bind(ends_device_authorization)
                 .execute(&mut *transaction).await?.rows_affected() == 1;
         if !stored {
             // The tokens are dropped, but the claim still ends.

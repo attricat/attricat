@@ -949,7 +949,9 @@ impl AttricatRepository {
         code: &str,
         message: &str,
     ) -> Result<u64, RepositoryError> {
-        Ok(sqlx::query("UPDATE extension_export_mappings SET status='retrying',error=jsonb_build_object('code',$4::text,'message',$5::text),attempts=attempts+1,lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND lease_holder=$3")
+        // A deleted record's lease only ends: its mapping accepts nothing
+        // but a withdrawal, so a retrying status would never clear.
+        Ok(sqlx::query("UPDATE extension_export_mappings m SET status=CASE WHEN r.deleted_at IS NULL THEN 'retrying' ELSE m.status END,error=CASE WHEN r.deleted_at IS NULL THEN jsonb_build_object('code',$4::text,'message',$5::text) ELSE m.error END,attempts=CASE WHEN r.deleted_at IS NULL THEN m.attempts+1 ELSE m.attempts END,lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() FROM records r WHERE r.workspace_id=m.workspace_id AND r.id=m.record_id AND m.workspace_id=$1 AND m.extension_id=$2 AND m.lease_holder=$3")
             .bind(self.extension_workspace()).bind(extension_id).bind(holder).bind(code)
             .bind(message.chars().take(1024).collect::<String>())
             .execute(&self.pool).await?.rows_affected())
@@ -973,7 +975,7 @@ impl AttricatRepository {
         &self,
         record_id: Uuid,
     ) -> Result<Vec<ExportConnectionLabel>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT c.extension_id,c.connection,c.kind,c.display_name FROM extension_export_mappings m JOIN extension_connections c ON c.workspace_id=m.workspace_id AND c.extension_id=m.extension_id AND c.connection=m.connection WHERE m.workspace_id=$1 AND m.record_id=$2 ORDER BY c.extension_id,c.connection")
+        Ok(sqlx::query_as(&format!("SELECT c.extension_id,c.connection,c.kind,c.display_name FROM extension_export_mappings m JOIN extension_connections c ON c.workspace_id=m.workspace_id AND c.extension_id=m.extension_id AND c.connection=m.connection WHERE m.workspace_id=$1 AND m.record_id=$2 AND {} ORDER BY c.extension_id,c.connection", current_destination("m")))
             .bind(self.extension_workspace()).bind(record_id)
             .fetch_all(&self.pool).await?)
     }
@@ -1041,6 +1043,12 @@ impl AttricatRepository {
         if selection.record_ids.is_none() && selection.status.is_none() {
             return Err(invalid("a retry needs record IDs or a status"));
         }
+        // A withdrawal is closed out: publishing the record again exports it.
+        if selection.status.as_deref() == Some("withdrawn") {
+            return Err(invalid(
+                "withdrawn records are not retried; publish them again",
+            ));
+        }
         let mut transaction = self.pool.begin().await?;
         // Only an installed extension granted export mappings has mappings
         // to retry; any other would get rows nothing ever settles.
@@ -1106,7 +1114,7 @@ impl AttricatRepository {
                 .bind(self.extension_workspace()).bind(extension_id).bind(&selection.connection).bind(record_ids).bind(handles_retries)
                 .execute(&mut *transaction).await?;
         }
-        let ids: Vec<Uuid> = sqlx::query_scalar(&format!("WITH selected AS (SELECT id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::uuid[] IS NULL OR record_id=ANY($4)) AND ($5::text IS NULL OR status=$5) AND EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=$1 AND r.id=record_id AND r.deleted_at IS NULL) AND {} ORDER BY record_id LIMIT $6 FOR UPDATE) UPDATE extension_export_mappings m SET status='pending',retry_requested_at=clock_timestamp(),attempts=0,updated_at=clock_timestamp() FROM selected s WHERE m.id=s.id RETURNING m.record_id", connection_is("connection", "$3", selection.connection.as_deref()), current_destination("extension_export_mappings")))
+        let ids: Vec<Uuid> = sqlx::query_scalar(&format!("WITH selected AS (SELECT id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::uuid[] IS NULL OR record_id=ANY($4)) AND ($5::text IS NULL OR status=$5) AND status<>'withdrawn' AND EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=$1 AND r.id=record_id AND r.deleted_at IS NULL) AND {} ORDER BY record_id LIMIT $6 FOR UPDATE) UPDATE extension_export_mappings m SET status='pending',retry_requested_at=clock_timestamp(),attempts=0,updated_at=clock_timestamp() FROM selected s WHERE m.id=s.id RETURNING m.record_id", connection_is("connection", "$3", selection.connection.as_deref()), current_destination("extension_export_mappings")))
             .bind(self.extension_workspace()).bind(extension_id).bind(&selection.connection)
             .bind(&selection.record_ids).bind(&selection.status).bind(MAX_EXPORT_RETRY_RECORDS + 1)
             .fetch_all(&mut *transaction).await?;

@@ -885,6 +885,21 @@ async fn a_keyed_retry_sent_again_retries_nothing_twice(pool: sqlx::PgPool) {
     assert_eq!(retry(Some("k")).await, vec![record]);
     assert_eq!(events().await, 1);
     assert_eq!(retry(None).await, Vec::<Uuid>::new());
+    // A withdrawal is closed out, not retried.
+    assert!(
+        repository
+            .request_export_retry(
+                EXTENSION,
+                ExportRetrySelection {
+                    connection: None,
+                    record_ids: None,
+                    status: Some("withdrawn".into()),
+                    request_key: None,
+                },
+            )
+            .await
+            .is_err()
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]
