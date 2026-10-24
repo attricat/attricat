@@ -973,6 +973,14 @@ impl AttricatRepository {
             .execute(&self.pool).await?.rows_affected())
     }
 
+    /// Clears browser authorizations that expired without completing, so a
+    /// stale state digest and verifier do not linger on the connection.
+    pub async fn sweep_extension_authorization_requests(&self) -> Result<u64, RepositoryError> {
+        Ok(sqlx::query("UPDATE extension_connections SET authorization_state_sha256=NULL,authorization_verifier_ciphertext=NULL,authorization_session_sha256=NULL,authorization_expires_at=NULL WHERE workspace_id=$1 AND authorization_expires_at < clock_timestamp()")
+            .bind(self.extension_workspace())
+            .execute(&self.pool).await?.rows_affected())
+    }
+
     /// Revokes every live link an extension issued. Disabling, quarantining
     /// and removing an extension call it in their transaction, so enabling
     /// the extension again never revives a link.

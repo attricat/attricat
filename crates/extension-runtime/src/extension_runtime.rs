@@ -2427,6 +2427,7 @@ async fn coordinate_workspace(
         state.last_retention_sweep = Some(Instant::now());
         scoped.sweep_extension_handler_attempts().await?;
         scoped.sweep_extension_file_links().await?;
+        scoped.sweep_extension_authorization_requests().await?;
         scoped.sweep_export_retry_requests().await?;
     }
     if !state.registered {

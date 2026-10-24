@@ -1317,7 +1317,7 @@ async fn operators_authorize_connections_in_the_browser(pool: sqlx::PgPool) {
     );
     assert!(get_json(&client, &connections).await[0]["last_error"].is_null());
     assert_eq!(
-        callback(refused, Some(cookie)).await,
+        callback(refused, Some(cookie.clone())).await,
         format!(
             "https://attricat.test/manage/extensions/{EXTENSION}?connection=web&authorization=failed"
         )
@@ -1333,5 +1333,35 @@ async fn operators_authorize_connections_in_the_browser(pool: sqlx::PgPool) {
     for secret in ["s3cret", "tok-code", "\"rc\"", declined["state"].as_str()] {
         assert!(!after.to_string().contains(secret), "{secret}");
     }
+
+    // An authorization nobody completed is cleared once it has expired.
+    let abandoned = start().await;
+    assert_eq!(
+        repository
+            .sweep_extension_authorization_requests()
+            .await
+            .unwrap(),
+        0
+    );
+    sqlx::query("UPDATE extension_connections SET authorization_expires_at=clock_timestamp() - interval '1 second' WHERE connection='web'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        repository
+            .sweep_extension_authorization_requests()
+            .await
+            .unwrap(),
+        1
+    );
+    let pending: Option<String> = sqlx::query_scalar(
+        "SELECT authorization_state_sha256 FROM extension_connections WHERE connection='web'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(pending.is_none());
+    let late = query(&[("state", &abandoned["state"]), ("code", "code-1")]);
+    assert_eq!(callback(late, Some(cookie)).await, returned("expired"));
     server.abort();
 }
