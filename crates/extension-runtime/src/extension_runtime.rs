@@ -1676,6 +1676,9 @@ impl ExtensionOperationTaskHandler {
                         .await
                         .map_err(operation_task_error)?;
                     let channel = details.as_ref().and_then(|details| details.channel_id);
+                    let batch_started_at = chrono::Utc::now()
+                        - chrono::TimeDelta::from_std(operation_started.elapsed())
+                            .unwrap_or_default();
                     let revision = repository
                         .record_content_revision_at(record_id, run.created_at, channel)
                         .await
@@ -1722,9 +1725,9 @@ impl ExtensionOperationTaskHandler {
                             .flatten();
                         // With nothing settled since the run started, no
                         // newer result can be overwritten, so the rejection
-                        // concerns the record as it is now, which the batch
-                        // may have read after an edit. Otherwise it settles
-                        // past what was committed before the run started.
+                        // concerns the record as the batch found it when it
+                        // began: an edit since then stays to be pushed.
+                        // Otherwise it keeps to the run's start.
                         let settled_since_start = mapping
                             .as_ref()
                             .and_then(|mapping| mapping.settled_at)
@@ -1733,11 +1736,7 @@ impl ExtensionOperationTaskHandler {
                             revision
                         } else {
                             repository
-                                .record_content_revision_at(
-                                    record_id,
-                                    chrono::Utc::now() + chrono::TimeDelta::days(1),
-                                    channel,
-                                )
+                                .record_content_revision_at(record_id, batch_started_at, channel)
                                 .await
                                 .map_err(operation_task_error)?
                                 .max(

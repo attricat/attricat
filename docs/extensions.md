@@ -706,10 +706,11 @@ one of the default destination sends no connection token.
 `stale` for a revision older than the mapping's, whatever its status, since
 the commit would be refused after the push, and for a deleted record, whose
 mapping accepts only a `withdrawn` commit. At the mapping's own revision it
-answers `stale` when the mapping is settled (`synced`, `withdrawn` or
-`rejected`), unless an operator requested a retry or `force` is set. Otherwise it leases the record for `lease_ms` (default 2 minutes, at most
+answers `stale` when the mapping is settled (`synced` or `rejected`; a
+`withdrawn` record published again unchanged is pushed again), unless an operator requested a retry or `force` is set. Otherwise it leases the record for `lease_ms` (default 2 minutes, at most
 15) so an event handler and a connector job never push the same record at the
-same time. A retried delivery or batch takes its own earlier lease back. A
+same time. A retried delivery or batch takes its own earlier lease back, keeping its
+token, so an earlier attempt still pushing can commit. A
 leased `commit` without `record_revision` is for the leased revision. `commit` records the result and releases the lease; without a lease
 token it fails while another worker holds a live lease, and a result for an
 older revision than the mapping's is refused, so a late push never replaces a

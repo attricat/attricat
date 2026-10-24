@@ -712,7 +712,7 @@ async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool
     assert!(begin("handler:b").await.is_none(), "another holder is busy");
     let lease = begin("run:a")
         .await
-        .inspect(|retaken| assert_ne!(*retaken, lease))
+        .inspect(|retaken| assert_eq!(*retaken, lease, "it keeps its token"))
         .expect("a retried holder takes its lease back");
     reject("handler:b").await;
     assert_eq!(mapping_status(&pool, record).await.unwrap().0, "pending");
@@ -789,6 +789,59 @@ async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool
         begin("run:a").await.is_some(),
         "the retry requested mid-push is still pending"
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn leases_survive_a_retried_begin_and_withdrawals_can_be_undone(pool: sqlx::PgPool) {
+    let repository = workspace_repository(&pool).await;
+    let store = Arc::new(FakeObjectStore::available());
+    install_extension(&repository, store, EXTENSION, &archive(), PERMISSIONS).await;
+    let blueprint = published_blueprint(&repository, VARIANT_BLUEPRINT).await;
+    let record = titled_record(&repository, blueprint, "Lamp").await;
+    let revision = content_revision(&pool, record).await;
+    let begin = |holder: &'static str| {
+        let repository = repository.clone();
+        async move {
+            match repository
+                .export_mapping_begin(
+                    EXTENSION,
+                    None,
+                    record,
+                    revision,
+                    None,
+                    false,
+                    Some(holder),
+                    None,
+                )
+                .await
+                .unwrap()
+            {
+                ExportBegin::Proceed { lease_token, .. } => Some(lease_token),
+                _ => None,
+            }
+        }
+    };
+    // The same invocation beginning again keeps its token, so an earlier
+    // attempt still pushing can commit.
+    let first = begin("run:a").await.unwrap();
+    assert_eq!(begin("run:a").await, Some(first));
+    repository
+        .export_mapping_commit(
+            EXTENSION,
+            None,
+            record,
+            Some(first),
+            ExportMappingUpdate {
+                status: "withdrawn".into(),
+                record_revision: Some(revision),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    // A record published again unchanged comes back at the revision it was
+    // withdrawn at, and is pushed again.
+    assert!(begin("handler:published").await.is_some());
 }
 
 #[sqlx::test(migrations = "./migrations")]

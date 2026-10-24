@@ -473,7 +473,7 @@ impl AttricatRepository {
     /// Decides whether `record_revision` of a record should be pushed and, if
     /// so, leases the record for this destination. A revision older than the
     /// mapping's is always stale. The mapping's own revision is stale once
-    /// settled (synced, withdrawn or rejected) unless `force` is set or an
+    /// settled (synced or rejected) unless `force` is set or an
     /// operator requested a retry. In a resync run started at
     /// `resync_since`, a mapping settled before then is pushed again; one the
     /// run settled itself, for example by rejecting it, stays stale so a
@@ -536,8 +536,10 @@ impl AttricatRepository {
             return Ok(ExportBegin::Busy { lease_until: until });
         }
         // A revision older than the mapping's is stale whatever its status,
-        // because its commit would be refused after the push.
-        let settled = matches!(mapping.status.as_str(), "synced" | "withdrawn" | "rejected");
+        // because its commit would be refused after the push. A withdrawal
+        // does not settle its own revision for a push: a record published
+        // again unchanged comes back at the revision it was withdrawn at.
+        let settled = matches!(mapping.status.as_str(), "synced" | "rejected");
         if mapping.record_revision > record_revision
             || (!force
                 && settled
@@ -561,7 +563,16 @@ impl AttricatRepository {
             transaction.commit().await?;
             return Ok(ExportBegin::Stale { mapping });
         }
-        let token = Uuid::new_v4();
+        // The same invocation taking its live lease back keeps its token, so
+        // an earlier attempt still pushing can commit what it pushed.
+        let token = match (mapping.lease_token, mapping.lease_until) {
+            (Some(token), Some(until))
+                if until > now && holder.is_some() && mapping.lease_holder.as_deref() == holder =>
+            {
+                token
+            }
+            _ => Uuid::new_v4(),
+        };
         let mapping: ExportMapping = sqlx::query_as(&format!("UPDATE extension_export_mappings SET lease_token=$5,lease_until=$6,leased_at=clock_timestamp(),lease_holder=$7,leased_revision=$8,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 RETURNING {MAPPING_FIELDS}", connection_is("connection", "$3", connection)))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id)
             .bind(token).bind(now + lease).bind(holder).bind(record_revision)
@@ -693,8 +704,10 @@ impl AttricatRepository {
                         "export mapping is leased by another worker".into(),
                     ));
                 }
-                // The holder rejects the revision it was pushing.
-                let revision = if own {
+                // The holder rejects the revision it was pushing, even when
+                // its lease has lapsed meanwhile.
+                let mine = holder.is_some() && mapping.lease_holder.as_deref() == holder;
+                let revision = if own || mine {
                     mapping.leased_revision.or(update.record_revision)
                 } else {
                     update.record_revision
