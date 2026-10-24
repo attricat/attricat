@@ -1451,11 +1451,13 @@ dialog frame should call `attricat.dialog.close()` on Escape. Closing it
   `{ "context_version": 1, "export_id" }`. Use it to edit large destination
   mappings (attribute to product-type attribute, value to destination value)
   kept in extension storage. Only the extension's own contribution mounts there.
-  As a `panel` it is denied `attricat.command` (both the broker and
-  `POST /extensions/{id}/{contribution}/command` refuse panel contributions),
-  so editors write through `attricat.storage`, which has no kind check. The
-  marketplace test exporter's `field-map` contribution exercises this path in
-  `examples/marketplace-export/e2e.mjs`.
+  It is the one `panel` allowed `attricat.command`: the broker
+  (`extensionBroker.ts`) and `POST /extensions/{id}/{contribution}/command`
+  refuse commands from every other panel. A command from this outlet
+  additionally requires the caller to hold `extensions.manage`, on top of the
+  route's `records.write`, because the panel only appears on the management
+  page. The marketplace test exporter's `field-map` contribution and command
+  exercise this in `examples/marketplace-export/e2e.mjs`.
 
 - **`data_health_card`** (`panel`, requiring `client.data_health_card`)
   appears as a host-owned card below the Data Health summary cards, only when

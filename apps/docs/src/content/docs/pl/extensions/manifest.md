@@ -275,7 +275,7 @@ Miejsce docelowe eksportu nadaje ekranom stanu eksportu, podglądu, ponawiania i
 | `navigation` | `route`, `title` | Link na pasku bocznym do jednej ze stron tego rozszerzenia. |
 | `embedded` | `artifact`, `outlet` | Ramka w miejscu `navigation`, `record_preview_panel`, `blueprint_attribute_configuration`, `record_attribute_decoration`, `record_action` lub `explorer_table_cell`. |
 | `action` | `artifact`, `outlet` | Akcja rozmieszczana przez host w miejscu `explorer_row_action`, `explorer_action`, `explorer_bulk_action` lub `record_header_action`. |
-| `panel` | `artifact`, `outlet` | Panel tylko do odczytu rozmieszczany przez host w miejscu `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `record_attribute_panel`, `file_panel`, `audit_event_panel`, `data_health_card` lub `export_mapping`. |
+| `panel` | `artifact`, `outlet` | Panel rozmieszczany przez host, tylko do odczytu z wyjątkiem `export_mapping`, w miejscu `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `record_attribute_panel`, `file_panel`, `audit_event_panel`, `data_health_card` lub `export_mapping`. |
 | `dialog` | `artifact`, `outlet`, `title` | Zarządzane przez host okno `action_dialog` otwierane przez akcje zaznaczenia tego rozszerzenia. |
 
 Każde rozszerzenie może użyć każdego miejsca osadzenia jeden raz. `record_action`, `explorer_row_action` i `explorer_bulk_action` przyjmują `version` 1 lub 2; wersja 2 otrzymuje [kontekst zaznaczenia](/pl/extensions/client/#kontekst-zaznaczenia).

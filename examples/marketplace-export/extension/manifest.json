@@ -167,6 +167,29 @@
   "server": {
     "commands": [
       {
+        "id": "field-map",
+        "handler": "field-map",
+        "request_schema": {
+          "type": "object",
+          "required": [
+            "export_id"
+          ],
+          "properties": {
+            "export_id": {
+              "type": "string"
+            },
+            "product_type": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "additionalProperties": false
+        },
+        "response_schema": {
+          "type": "object"
+        }
+      },
+      {
         "id": "preview",
         "handler": "preview",
         "request_schema": {

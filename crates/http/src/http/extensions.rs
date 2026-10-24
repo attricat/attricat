@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use super::{
     AppState,
-    auth::ScopedRepository,
+    auth::{ActiveWorkspace, AuthenticatedPrincipal, ScopedRepository},
     conditional,
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
@@ -877,6 +877,8 @@ pub(super) async fn runtime(
 pub(super) async fn command(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
+    principal: AuthenticatedPrincipal,
+    workspace: ActiveWorkspace,
     ApiPath((extension_id, contribution_id)): ApiPath<(String, String)>,
     ApiJson(input): ApiJson<CommandRequest>,
 ) -> Result<Json<Value>, ApiError> {
@@ -904,8 +906,25 @@ pub(super) async fn command(
         .iter()
         .find(|contribution| contribution.id == contribution_id)
         .ok_or(RepositoryError::NotFound("enabled extension contribution"))?;
-    if contribution.kind == UiContributionKind::Panel
+    // Panels are read-only, except the export mapping editor: it exists to
+    // edit destination mappings, and only operators reach it.
+    let mapping_editor = contribution.outlet == Some(UiOutlet::ExportMapping);
+    if (contribution.kind == UiContributionKind::Panel && !mapping_editor)
         || !installation.capability_grants.contains("client.commands")
+    {
+        return Err(ApiError::forbidden());
+    }
+    if mapping_editor
+        && !state
+            .repository
+            .principal_may(
+                principal.actor(),
+                workspace.0,
+                "extensions.manage",
+                None,
+                None,
+            )
+            .await?
     {
         return Err(ApiError::forbidden());
     }

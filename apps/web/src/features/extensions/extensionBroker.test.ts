@@ -1,5 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
+import { requestText } from '../../api/request';
 import * as runs from '../extension-runs/api';
 import type { ExtensionContribution } from './api';
 import {
@@ -106,6 +107,21 @@ describe('extension broker', () => {
         dependencies(['client.commands']),
       ),
     ).rejects.toThrow('Request denied');
+  });
+
+  it('lets the export mapping panel call commands', async () => {
+    vi.mocked(requestText).mockResolvedValueOnce('{"saved":true}');
+    const deps = dependencies(['client.commands']);
+    deps.contribution = { ...deps.contribution, outlet: 'export_mapping' };
+    await expect(
+      handleBrokerRequest(
+        { method: 'command', payload: { command_id: 'save', payload: {} } },
+        deps,
+      ),
+    ).resolves.toEqual({ saved: true });
+    expect(vi.mocked(requestText).mock.calls[0]?.[0]).toBe(
+      '/api/extensions/example.extension/panel/command',
+    );
   });
 
   it('denies blueprint reads outside the outlet revision', async () => {

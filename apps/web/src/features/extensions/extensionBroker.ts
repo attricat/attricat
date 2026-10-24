@@ -44,6 +44,7 @@ import {
   operationIdempotencyKeyPattern,
   operationMethodPrefix,
 } from './constants';
+import { exportMappingExtensionOutlet } from '../extension-exports/constants';
 import { refreshCurrentRecord } from './refreshRecord';
 import { jsonByteLength, utf8ByteLength } from './utf8';
 
@@ -331,7 +332,9 @@ export const handleBrokerRequest = async (
     );
   if (
     method === extensionBrokerMethods.command &&
-    contribution.kind !== 'panel' &&
+    // Panels are read-only, except the operator-only export mapping editor.
+    (contribution.kind !== 'panel' ||
+      contribution.outlet === exportMappingExtensionOutlet) &&
     can(extensionCapabilities.commands)
   )
     return handleCommand(payload, dependencies);

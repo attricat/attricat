@@ -275,7 +275,7 @@ An export destination gives Attricat's export status, preview, retry, and resync
 | `navigation` | `route`, `title` | A sidebar link to one of this extension's routes. |
 | `embedded` | `artifact`, `outlet` | A frame at `navigation`, `record_preview_panel`, `blueprint_attribute_configuration`, `record_attribute_decoration`, `record_action`, or `explorer_table_cell`. |
 | `action` | `artifact`, `outlet` | A host-laid-out action at `explorer_row_action`, `explorer_action`, `explorer_bulk_action`, or `record_header_action`. |
-| `panel` | `artifact`, `outlet` | A read-only host-laid-out panel at `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `record_attribute_panel`, `file_panel`, `audit_event_panel`, `data_health_card`, or `export_mapping`. |
+| `panel` | `artifact`, `outlet` | A host-laid-out panel, read-only except `export_mapping`, at `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `record_attribute_panel`, `file_panel`, `audit_event_panel`, `data_health_card`, or `export_mapping`. |
 | `dialog` | `artifact`, `outlet`, `title` | The host-managed `action_dialog` opened by this extension's selection actions. |
 
 Each extension can use each outlet once. `record_action`, `explorer_row_action`, and `explorer_bulk_action` accept `version` 1 or 2; version 2 receives the [selection context](/extensions/client/#selection-context).

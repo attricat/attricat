@@ -284,12 +284,12 @@ const mappingFrame = (await api('GET', '/extensions/runtime')).find(
 assert.equal(mappingFrame?.kind, 'panel', 'export_mapping contribution is offered to the host');
 const frameSource = await api('GET', `/extensions/${extensionId}/${mappingFrame.id}/artifact`);
 assert(String(frameSource).includes('export const mount'), 'export_mapping artifact is served');
-// Panels are read-only towards the server: the editor saves to storage, never through commands.
-await api('POST', `/extensions/${extensionId}/${mappingFrame.id}/command`,
-  { release_id: mappingFrame.release_id, command_id: 'preview', payload: {} }, { expect: [403] });
-await api('POST', `/extensions/${extensionId}/${mappingFrame.id}/storage/${mappingFrame.release_id}`, {
-  operation: 'set', key: 'field-map:amazon', value: { version: 1, product_type: 'SHIRT' }, expected_revision: null,
-});
+// Unlike other panels, the mapping editor may call the extension's commands.
+const fieldMap = (payload) => api('POST', `/extensions/${extensionId}/${mappingFrame.id}/command`,
+  { release_id: mappingFrame.release_id, command_id: 'field-map', payload: { export_id: 'amazon', ...payload } });
+assert.match((await fieldMap({ product_type: 'not valid' })).error, /capital letters/);
+assert.equal((await fieldMap({ product_type: 'SHIRT' })).saved, true);
+assert.equal((await fieldMap({})).product_type, 'SHIRT');
 
 step('preview a payload without pushing');
 const preview = await api('POST', `/extensions/${extensionId}/exports/amazon/preview`, { record_id: broken, connection: 'amazon-de' });

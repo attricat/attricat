@@ -216,7 +216,7 @@ Przekaż `record_ids` dla wybranych rekordów albo `status` dla rekordów z tym 
 ## Podgląd i edytory mapowań
 
 - `preview_command` miejsca docelowego wskazuje [polecenie serwerowe](/pl/extensions/server/#polecenia-dla-twojego-interfejsu), które buduje ładunek dla jednego rekordu bez wysyłania go. Otrzymuje `{export_id, record_id, connection}` i zwyczajowo zwraca `{payload, issues}`, gdzie `issues` wymienia, co miejsce docelowe by odrzuciło, np. brakujące atrybuty typu produktu. Karta **Eksporty** rekordu pokazuje go jako **Podgląd**.
-- Panel [`export_mapping`](/pl/extensions/client/#inne-miejsca) pojawia się na stronie zarządzania Twoim rozszerzeniem raz dla każdego miejsca docelowego eksportu. Używaj go do edycji mapowań zbyt dużych na konfigurację, np. atrybutów na atrybuty typu produktu marketplace'u, Panele nie mogą wywoływać poleceń serwerowych, więc edytor zapisuje mapowanie przez `attricat.storage`, a eksporter odczytuje te same klucze magazynu. Waliduj odczytane wartości: serwer widzi wartość dopiero po zapisaniu jej przez panel.
+- Panel [`export_mapping`](/pl/extensions/client/#inne-miejsca) pojawia się na stronie zarządzania Twoim rozszerzeniem raz dla każdego miejsca docelowego eksportu. Używaj go do edycji mapowań zbyt dużych na konfigurację, np. atrybutów na atrybuty typu produktu marketplace'u. W przeciwieństwie do innych paneli może wywoływać Twoje polecenia serwerowe, więc polecenie waliduje mapowanie i zapisuje je w magazynie rozszerzenia, skąd odczytuje je eksporter. Nieprawidłowe dane zgłaszaj w odpowiedzi polecenia: błąd polecenia dociera do panelu tylko jako ogólne niepowodzenie.
 
 ## Uwagi projektowe
 

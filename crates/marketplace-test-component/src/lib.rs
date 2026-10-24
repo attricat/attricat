@@ -1583,11 +1583,48 @@ fn read_listing(record_id: &str) -> Result<Listing, String> {
     ))
 }
 
+/// Reads or saves the mapping the `export_mapping` panel edits. The panel
+/// sends `{export_id}` to read, or `{export_id, product_type}` to save; an
+/// invalid product type is reported in the response, not as an error, so the
+/// panel can show it.
+fn field_map_command(payload: &Value) -> Result<CommandResponse, String> {
+    let export_id = payload["export_id"].as_str().unwrap_or_default();
+    if !matches!(export_id, "shopify" | "amazon" | "allegro") {
+        return Err("unknown export destination".into());
+    }
+    let key = format!("field-map:{export_id}");
+    let response = match payload.get("product_type").and_then(Value::as_str) {
+        Some(product_type)
+            if product_type.is_empty()
+                || (product_type.len() <= 64
+                    && product_type.bytes().all(|byte| {
+                        byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_'
+                    })) =>
+        {
+            call(
+                "storage.set.v1",
+                json!({"key": key, "value": {"version": 1, "product_type": product_type}}),
+            )?;
+            json!({"product_type": product_type, "saved": true})
+        }
+        Some(_) => json!({"error": "Use 1 to 64 capital letters, digits or underscores."}),
+        None => {
+            let stored = call("storage.get.v1", json!({"key": key}))?;
+            json!({"product_type": stored["value"]["product_type"].as_str().unwrap_or_default()})
+        }
+    };
+    Ok(CommandResponse {
+        payload: response.to_string(),
+    })
+}
+
 impl command_handler::Guest for Component {
     fn handle_command(request: CommandRequest) -> Result<CommandResponse, String> {
         let payload = parse(&request.payload)?;
-        if request.handler != "preview" {
-            return Err("unknown command".into());
+        match request.handler.as_str() {
+            "preview" => {}
+            "field-map" => return field_map_command(&payload),
+            _ => return Err("unknown command".into()),
         }
         let listing = read_listing(payload["record_id"].as_str().unwrap_or_default())?;
         let marketplace = match payload["export_id"].as_str() {
