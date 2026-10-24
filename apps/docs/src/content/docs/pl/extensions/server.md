@@ -20,9 +20,41 @@ Zbuduj komponent dla jednego z tych światów:
 
 `outcome-extension` eksportuje interfejsy z wersji 1.1, które zgłaszają [typowane wyniki](#typowane-wyniki) zamiast zwykłego błędu. Gdy komponent eksportuje interfejs z 1.1, host wywołuje go zamiast jego poprzednika z 1.0. Komponent, który potrzebuje tylko części z tych trzech eksportów, zwraca z pozostałych błąd `fault`.
 
-Wszystkie importy są zawsze dostępne, ale część działa tylko we właściwym miejscu. Interfejsy operacji (`artifacts`, `attricat-data`, `catalog`, `transfer`, `selection`) zwracają błąd poza przebiegiem operacji. W przebiegu błąd zwracają typowane funkcje `read` i `write` oraz wywołania `attricat.read.v1` i `attricat.command.v1`; używaj wtedy interfejsów katalogu przypisanych do przebiegu.
+Wszystkie importy są zawsze dostępne, ale część działa tylko we właściwym miejscu. Interfejsy operacji (`artifacts`, `attricat-data`, `attricat`, `transfer`, `selection`) zwracają błąd poza przebiegiem operacji. W przebiegu błąd zwracają typowane funkcje `read` i `write` oraz wywołania `attricat.read.v1` i `attricat.command.v1`; używaj wtedy interfejsów katalogu przypisanych do przebiegu.
 
-Kolejne wersje 1.x tylko rozszerzają 1.0. Komponent zbudowany dla wcześniejszej wersji 1.x działa na nowszych hostach bez przebudowy.
+Kolejne wersje 1.x tylko rozszerzają 1.0. Komponent zbudowany dla wcześniejszej wersji 1.x działa na nowszych hostach bez przebudowy. Jak zbudować komponent, opisuje sekcja [Zbuduj komponent serwerowy](/pl/extensions/build/#zbuduj-komponent-serwerowy).
+
+## Wywoływanie hosta
+
+Interfejs `api` ma funkcje typowane (`read`, `write`, `scoped-configuration-get`, `scoped-configuration-set`, `log`) i jedną funkcję ogólną, `call(operation, request)`. `call` przyjmuje nazwę operacji i żądanie jako tekst JSON, a zwraca odpowiedź jako tekst JSON albo komunikat błędu:
+
+```rust
+let response = api::call("storage.get.v1", r#"{"key":"last-sync"}"#)?;
+```
+
+| Operacja | Wymaga | Opis |
+| --- | --- | --- |
+| `configuration.get.v1` | `configuration.read` | [Konfiguracja](#konfiguracja) |
+| `storage.get.v1`, `storage.set.v1`, `storage.delete.v1`, `storage.list.v1` | `storage.extension` | [Magazyn](#magazyn) |
+| `secrets.get.v1` | `secrets.read` | [Sekrety](#sekrety) |
+| `attricat.read.v1` | `attricat.read` | [Odczytuj i zapisuj katalog](#odczytuj-i-zapisuj-katalog) |
+| `attricat.command.v1` | `attricat.write` albo `attricat.annotations.write` dla partii zawierających tylko adnotacje | [Odczytuj i zapisuj katalog](#odczytuj-i-zapisuj-katalog) |
+| `events.emit.v1` | `events.emit` | [Publikuj zdarzenia](#publikuj-zdarzenia-dla-innych-rozszerzeń) |
+| `network.request.v1`, `network.request.v2` | `network.request` | [Wywołuj usługi zewnętrzne](#wywołuj-usługi-zewnętrzne) |
+| `connections.list.v1`, `connections.get.v1` | `connections.use` | [Konektory eksportu](/pl/extensions/exports/#połączenia) |
+| `mappings.*.v1` | `exports.mappings` | [Konektory eksportu](/pl/extensions/exports/#mapowania-eksportu) |
+| `files.link.v1` | `attricat.files.public_links` | [Konektory eksportu](/pl/extensions/exports/#publiczne-linki-do-plików) |
+| `connector.scope.v1` | | [Konektory eksportu](/pl/extensions/exports/#zakres-przebiegu) |
+
+Host sprawdza uprawnienie przy każdym wywołaniu, więc uprawnienie cofnięte w trakcie działania Twojego kodu obowiązuje od jego następnego wywołania. Odrzucone wywołanie zwraca błąd, np. `missing capability 'storage.extension'`, a nieznana nazwa zwraca `unknown host operation`. Żądania i odpowiedzi są ograniczone do 64 KiB JSON.
+
+### Która procedura obsługi została wywołana
+
+Manifest podaje `handler` dla każdej procedury obsługi zdarzeń, polecenia i operacji, ale komponent ma jeden eksport dla każdego rodzaju wywołania:
+
+- **Polecenia** otrzymują `handler` polecenia jako `request.handler`. Rozdzielaj wywołania na jego podstawie.
+- **Operacje** otrzymują `handler` operacji jako `request.operation-id`.
+- **Procedury obsługi zdarzeń** otrzymują tylko zdarzenie. Rozdzielaj wywołania na podstawie `event.event-type`. Jeśli dwie procedury obsługi subskrybują ten sam typ, komponent zostanie wywołany dla każdej z nich z tym samym zdarzeniem.
 
 ## Obsługuj zdarzenia katalogu
 
@@ -68,7 +100,7 @@ Zdarzenie czeka, aż jego rekord przez `debounce_ms` (do godziny) nie będzie si
 
 | Przypadek | Co się dzieje |
 | --- | --- |
-| `rejected { code, message, record-id?, connection? }` | Niepowodzenie jest zapisywane i nigdy nie jest ponawiane; dostarczenie się kończy. Z `record-id` [stan eksportu](#mapowania-eksportu) rekordu zmienia się na `rejected` z tym kodem i komunikatem. |
+| `rejected { code, message, record-id?, connection? }` | Niepowodzenie jest zapisywane i nigdy nie jest ponawiane; dostarczenie się kończy. Z `record-id` [stan eksportu](/pl/extensions/exports/#mapowania-eksportu) rekordu zmienia się na `rejected` z tym kodem i komunikatem. |
 | `retry { message, after-ms? }` | Ponawiana jest tylko ta procedura obsługi, po `after-ms` albo z rosnącym odstępem od 5 sekund do godziny, najwyżej 10 razy. Potem dostarczenie jest zapisywane jako `exhausted`, a rekordy, które procedura nadal dzierżawi, przechodzą w stan `retrying` z błędem `retries_exhausted`. |
 | `fault(message)` | Instalacja zostaje poddana kwarantannie, a rekordy dzierżawione przez procedurę przechodzą w stan `retrying` z błędem `handler_fault`. |
 
@@ -82,19 +114,56 @@ Pułapki, wyczerpanie paliwa lub pamięci i przekroczenie limitu czasu są trakt
 
 ## Odczytuj i zapisuj katalog
 
-Z `attricat.read` komponent może odczytać rekord, jego bezpośrednie wartości albo wartości rozwiązane w kontekście. Odpowiedzi zawierają przypiętą wersję Schematu rekordu.
+Z `attricat.read` typowana funkcja `api.read` odczytuje rekord (`record`), jego bezpośrednie wartości (`values`) albo wartości rozwiązane w kontekście przez łańcuch kontekstów zastępczych (`resolved`). Odpowiedzi zawierają przypiętą wersję Schematu rekordu, więc możesz przełożyć identyfikatory atrybutów na kody.
 
-Z `attricat.write` może zapisywać wartości skalarne w jawnie wskazanym kontekście. Zapisy przechodzą zwykłą ścieżką: kontrole typów, schematy, audyt i nowe zdarzenie domenowe.
+Z `attricat.write` funkcja `api.write` zapisuje wartości skalarne w jawnie wskazanym kontekście, wskazując każdy atrybut przez `attribute-id` lub `attribute-code`. Zapisy przechodzą zwykłą ścieżką: kontrole typów, schematy, audyt i nowe zdarzenie domenowe.
 
-Zapis wykonany podczas obsługi zdarzenia jest przypisywany użytkownikowi lub tokenowi, który stoi za pierwotną zmianą, zachowuje identyfikator korelacji zdarzenia i jest publikowany ze źródłem `extension:<extension-id>`. **Ignoruj zdarzenia z własnego źródła**, inaczej procedura obsługi, która zapisuje, będzie wyzwalać samą siebie.
+Zapis wykonany podczas obsługi zdarzenia jest przypisywany użytkownikowi lub tokenowi, który stoi za pierwotną zmianą, zachowuje identyfikator korelacji zdarzenia i jest publikowany ze źródłem `extension:<extension-id>`. Twoja procedura obsługi otrzyma zdarzenie spowodowane tym zapisem. Zdarzenie nie zawiera swojego źródła, więc porównuj przed zapisem: jeśli wartość jest już taka, jaką chcesz zapisać, pomiń zapis, a pętla się zakończy.
 
-Wywołania JSON `attricat.read.v1` i `attricat.command.v1` dodają odczyty stronicowane, kanały zmian, wyszukiwanie pojedynczego atrybutu oraz partie intencji `create`, `update`, `relationships` i `upsert`. Upsert dopasowuje rekord po zadeklarowanym atrybucie klucza biznesowego, tworzy go tylko wtedy, gdy żaden rekord nie pasuje, i kończy się błędem, jeśli pasuje więcej niż jeden. Zbiory relacji z upsertu są stosowane zarówno wtedy, gdy aktualizuje on dopasowany rekord, jak i wtedy, gdy go tworzy.
+`attricat.read.v1` dodaje odczyty stronicowane, kanały zmian i wyszukiwanie. Żądanie wskazuje `operation`:
+
+```json
+{ "operation": "page", "blueprint_id": "…", "blueprint_version": 3, "context_id": "…", "cursor": null, "limit": 100 }
+{ "operation": "changes", "blueprint_id": "…", "blueprint_version": 3, "cursor": null, "limit": 100 }
+{ "operation": "lookup", "blueprint_id": "…", "blueprint_version": 3, "attribute_id": "…", "value": "ABC-1" }
+```
+
+`page` zwraca `{records, next_cursor}`, do 100 rekordów. Przekazuj `next_cursor` z powrotem, dopóki nie będzie `null`. `changes` przegląda zmiany rekordów Schematu w kolejności zdarzeń; zapisz jego kursor, aby wznowić później. `lookup` zwraca jeden rekord albo `null`.
+
+`attricat.command.v1` stosuje partię intencji:
+
+```json
+{
+  "operation": "batch",
+  "batch": {
+    "batch_key": "sync-2026-03-01",
+    "dry_run": false,
+    "intents": [
+      { "kind": "update", "intent_key": "price-ABC-1", "record_id": "…",
+        "values": [{ "kind": "scalar", "attribute_code": "price", "context_id": "…", "value": 19.99 }] }
+    ]
+  }
+}
+```
+
+Rodzaje intencji to `create`, `update`, `relationships`, `upsert` i [`annotate`](/pl/extensions/operations/#adnotacje-rekordów). Partia mieści do 100 intencji. Odpowiedź zawiera po jednym wyniku na intencję, `{intent_key, status, record_id, error}`, gdzie `status` to `applied`, `already_applied`, `validated` (przy `dry_run: true`) lub `rejected`. Zachowuj te same klucze intencji przy ponowieniach: już zastosowany klucz intencji jest zgłaszany jako `already_applied` i nie jest zapisywany drugi raz.
+
+Upsert dopasowuje rekord po zadeklarowanym atrybucie klucza biznesowego (`lookup_attribute_id` i `lookup_value`), tworzy go tylko wtedy, gdy żaden rekord nie pasuje, i kończy się błędem, jeśli pasuje więcej niż jeden. Zbiory relacji z upsertu są stosowane zarówno wtedy, gdy aktualizuje on dopasowany rekord, jak i wtedy, gdy go tworzy.
 
 Wyszukiwanie działa dokładnie tak samo jak dopasowanie w upsercie. Jeśli sam atrybut tekstowy jest zadeklarowanym kluczem unikalnym, wyszukiwanie korzysta ze znormalizowanych wartości tego klucza we wszystkich wersjach Schematu; w przeciwnym razie dopasowuje dokładny tekst wśród rekordów żądanej wersji. Wartość pasująca do więcej niż jednego rekordu kończy się błędem `lookup matched multiple records`, zamiast zwracać jedną z nich.
 
 ## Magazyn
 
-Z `storage.extension` wywołania `storage.get.v1`, `storage.set.v1`, `storage.delete.v1` i `storage.list.v1` dają rozszerzeniu własny magazyn klucz-wartość, ograniczony do obszaru roboczego i wydania. `set` i `delete` przyjmują `expected_revision` na potrzeby optymistycznej współbieżności. Instalacja może przechowywać do 65 536 kluczy i 256 MiB, a pojedyncza wartość może mieć najwyżej 64 KiB.
+Z `storage.extension` rozszerzenie dostaje własny magazyn klucz-wartość w obszarze roboczym. Wartości to dowolny JSON. Dostęp ma tylko zainstalowane wydanie, a wpisy są zachowywane przy uaktualnieniu rozszerzenia.
+
+| Operacja | Żądanie | Odpowiedź |
+| --- | --- | --- |
+| `storage.get.v1` | `{key}` | `{value, revision}` albo `null` |
+| `storage.set.v1` | `{key, value, expected_revision?}` | `{revision}` |
+| `storage.delete.v1` | `{key, expected_revision?}` | `null` |
+| `storage.list.v1` | `{prefix?, cursor?, limit?}` | `{entries: [{key, value, revision}], cursor}` |
+
+`expected_revision` sprawia, że `set` i `delete` kończą się błędem, jeśli klucz zmienił się od Twojego odczytu. Instalacja może przechowywać do 65 536 kluczy i 256 MiB, a pojedyncza wartość może mieć najwyżej 64 KiB.
 
 ## Konfiguracja
 
@@ -102,7 +171,20 @@ Z `storage.extension` wywołania `storage.get.v1`, `storage.set.v1`, `storage.de
 
 ## Polecenia dla Twojego interfejsu
 
-Polecenia serwerowe pozwalają komponentowi klienckiemu rozszerzenia poprosić jego komponent serwerowy o wykonanie działania. Zadeklaruj je w `server.commands` wraz ze schematami żądania i odpowiedzi. Klient wywołuje `attricat.command({ command_id, payload })`. Attricat waliduje ładunek, sprawdza sesję wywołującego, kontrybucję, wydanie i uprawnienia, a następnie wywołuje Twoją procedurę obsługi.
+Polecenia serwerowe pozwalają komponentowi klienckiemu rozszerzenia poprosić jego komponent serwerowy o wykonanie działania. Zadeklaruj je w `server.commands` wraz ze schematami żądania i odpowiedzi i przyznaj `client.commands`:
+
+```json
+"commands": [{
+  "id": "recalculate",
+  "handler": "recalculate",
+  "request_schema": { "type": "object", "required": ["record_id"] },
+  "response_schema": { "type": "object" }
+}]
+```
+
+Klient wywołuje `attricat.command({ command_id: 'recalculate', payload: { record_id } })`. Attricat waliduje ładunek względem `request_schema`, sprawdza sesję wywołującego, kontrybucję, wydanie i uprawnienia, a następnie wywołuje `handle-command` z `handler: "recalculate"` i ładunkiem jako tekstem JSON. Zwróć odpowiedź jako tekst JSON; przed przekazaniem do klienta jest walidowana względem `response_schema`. Zwrócony błąd nie obejmuje rozszerzenia kwarantanną, ale obietnica po stronie klienta jest odrzucana z ogólnym komunikatem `extension command failed`. Treść Twojego błędu nie jest przekazywana, więc problemy, które użytkownik powinien zobaczyć, np. nieprawidłowe dane, zgłaszaj w odpowiedzi.
+
+Polecenie działa z uprawnieniami rozszerzenia, a nie użytkownika. Sprawdź w procedurze obsługi, czy działanie ma sens dla wskazanego rekordu.
 
 ## Sekrety
 
@@ -140,7 +222,7 @@ Broker nigdy nie ponawia żądań. Przekroczenie limitu czasu lub błąd połąc
 - ciąg zapytania w `url`, jeśli pasująca reguła ustawia `allow_query: true`, dla parametrów takich jak `?marketplaceIds=` albo podpisanych adresów URL. Wartości zapytania nigdy nie trafiają do dzienników, śladów, metryk, błędów ani zapisanej historii dostarczeń;
 - `body_base64` dla treści binarnej, zamiast `body`;
 - `secret_body: {"format": "form" | "json", "fields": [{"field", "secret"}]}`, które wstawia sekrety obszaru roboczego do treści formularza lub JSON. `field` w JSON to klucz najwyższego poziomu albo wskaźnik JSON (JSON pointer). Komponent nigdy nie widzi sekretu;
-- `connection`, które dodaje do żądania token dostępu [połączenia](#połączenia);
+- `connection`, które dodaje do żądania token dostępu [połączenia](/pl/extensions/exports/#połączenia);
 - `idempotency_key`, wysyłany jako nagłówek `Idempotency-Key`.
 
 ```json
@@ -164,61 +246,13 @@ Wynik ma pole `outcome`:
 
 `headers` zawiera `content-type`, `etag`, `retry-after` oraz nagłówki wymienione w `response_headers` reguły. Przekierowania nigdy nie są śledzone: odpowiedź 3xx jest zwracana bez zmian, a jej `Location` możesz pobrać przez przyznaną regułę. Odpowiedź 401 usuwa zapamiętany token połączenia, więc następne żądanie otrzyma nowy.
 
-## Połączenia
+## Eksport do marketplace'ów i sklepów
 
-Połączenie to konto w miejscu docelowym, np. sklep Shopify lub konto sprzedawcy Amazon, które operator konfiguruje dla Twojego rozszerzenia. Rodzaje połączeń deklarujesz w [manifeście](/pl/extensions/manifest/#połączenia). Attricat przechowuje dane uwierzytelniające w postaci zaszyfrowanej, przeprowadza przepływy OAuth i odświeża tokeny. Twój komponent nigdy nie widzi sekretu ani tokenu.
+Połączenia, mapowania eksportu, publiczne linki do plików i zadania eksportu uruchamiane zmianami opisuje strona [Konektory eksportu](/pl/extensions/exports/).
 
-Z `connections.use`:
+## Dziennik
 
-- `connections.list.v1` z `{}` zwraca `{"connections": [...]}`.
-- `connections.get.v1` z `{"connection": "shop-eu"}` zwraca jedno połączenie.
-
-Każde połączenie opisują pola `connection` (jego nazwa), `kind`, `display_name`, `parameters` (niesekretne ustawienia, np. domena sklepu lub identyfikator sprzedawcy, walidowane względem `parameters_schema` rodzaju) oraz `status` (`pending_authorization`, `active`, `failed` lub `revoked`).
-
-Aby wywołać miejsce docelowe, przekaż `connection` do `network.request.v2` albo [przesyłania v2](/pl/extensions/operations/#przesyłanie-plików). Host dodaje token dostępu, jako `Authorization: Bearer` albo w nagłówku `token_header` rodzaju, tylko do żądań pasujących do jednej z reguł `api_host_permissions` tego rodzaju.
-
-## Mapowania eksportu
-
-Z `exports.mappings` Attricat przechowuje jedno mapowanie na instalację, połączenie i rekord: zewnętrzny identyfikator, nazwane zewnętrzne identyfikatory, skrót treści i rewizję rekordu z ostatniego wysłania, status, ostatni błąd oraz znaczniki czasu. Mapowania są przygotowane na pełne katalogi i mają indeks na zewnętrznym identyfikatorze. Mapowanie jest usuwane razem ze swoim rekordem lub połączeniem; rekord usunięty miękko zachowuje mapowanie, aby można było wycofać pozycję z miejsca docelowego.
-
-Status mapowania to stan eksportu rekordu, który użytkownicy widzą na stronie rekordu, w przeglądarce rekordów i na stronie Stan danych. Statusy to `pending`, `synced`, `rejected`, `retrying`, `uncertain` i `withdrawn`.
-
-Każdy rekord ma `content_revision`: numer sekwencyjny ostatniego zdarzenia, które zmieniło jego wartości, relacje, publikację lub cykl życia. Ta wartość tylko rośnie. Zmiany adnotacji jej nie zwiększają, więc Twoje własne zapisy pomocnicze nigdy nie sprawiają, że rekord wygląda na zmieniony. Zmiany publikacji liczą się tylko dla odczytywanego kanału: wiersz strony konektora uwzględnia zmiany w kanale przebiegu, a odczyt bez kanału nie uwzględnia żadnych, więc publikacja w innym kanale nigdy nie sprawia, że eksport wygląda na nieaktualny. Zawierają ją odczyty typowane, wiersze [strony konektora v2](/pl/extensions/operations/#strony-eksportu-i-wycofania) i dostarczenia do `event-handler`. Dostarczenie zdarzenia publikacji lub wycofania publikacji zawiera rewizję bez zmian publikacji, tak jak odczyt bez kanału.
-
-Poniższe operacje `api.call` działają tak samo w procedurach obsługi zdarzeń i w przebiegach operacji. `connection` jest wszędzie opcjonalne; bez niego mapowanie należy do domyślnego miejsca docelowego rozszerzenia.
-
-| Operacja | Żądanie | Wynik |
-| --- | --- | --- |
-| `mappings.get.v1` | `{connection?, record_id}` lub `{connection?, external_id}` | `{mapping}` albo `{mapping: null}` |
-| `mappings.list.v1` | `{connection?, status?, after?, limit?}` (od 1 do 100) | `{mappings, next}` |
-| `mappings.begin.v1` | `{connection?, record_id, record_revision, lease_ms?, force?}` | `{outcome: "proceed", lease_token, mapping}`, `{outcome: "stale", mapping}` lub `{outcome: "busy", lease_until}` |
-| `mappings.commit.v1` | `{connection?, record_id, lease_token?, status, record_revision?, external_id?, external_ids?, content_hash?, error?}` | `{mapping}` |
-| `mappings.release.v1` | `{connection?, record_id, lease_token}` | `{released}` |
-| `mappings.delete.v1` | `{connection?, record_id}` | `{deleted}` |
-
-W przebiegu operacji `begin`, `commit`, `release` i `delete` przyjmują tylko rekordy objęte przebiegiem: rekordy schematu przebiegu konektora (także usunięte lub nieopublikowane, które wycofuje) albo rekordy wybrane w przebiegu interaktywnym. Przebieg konektora zapisuje tylko mapowania swojego połączenia, a przebieg ograniczony do wybranych rekordów tylko ich mapowania. Przebieg konektora z połączeniem wysyła też tylko token tego połączenia, a przebieg domyślnego miejsca docelowego nie wysyła żadnego.
-
-Wywołaj `begin` przed wysłaniem rekordu. Chroni ono przed pracą wykonaną w złej kolejności lub dwukrotnie:
-
-- Odpowiada `stale` dla rewizji starszej niż rewizja mapowania, niezależnie od jego statusu, ponieważ zatwierdzenie zostałoby odrzucone po wysłaniu, a także dla usuniętego rekordu: jego mapowanie przyjmuje tylko zatwierdzenie `withdrawn`.
-- Dla rewizji samego mapowania odpowiada `stale`, gdy mapowanie ma już status `synced` lub `rejected`, chyba że operator poprosił o ponowienie albo przekazujesz `force`. Rekord `withdrawn` opublikowany ponownie bez zmian wraca z tą samą rewizją i jest wysyłany ponownie.
-- W przeciwnym razie dzierżawi rekord na `lease_ms` (domyślnie dwie minuty, najwyżej 15), aby procedura obsługi zdarzeń i przebieg konektora nigdy nie wysyłały tego samego rekordu jednocześnie. Odpowiada `busy`, dopóki dzierżawę trzyma ktoś inny.
-
-`commit` zapisuje wynik i zwalnia dzierżawę. Bez tokenu dzierżawy kończy się błędem, gdy inny proces trzyma ważną dzierżawę, a wynik `synced` nigdy nie zastępuje nowszej zsynchronizowanej rewizji. Jeśli partia się nie powiedzie, zwolnij dzierżawy, które trzyma.
-
-Po wyniku `uncertain` w miejscu docelowym bez kluczy idempotencji zapisz mapowanie jako `uncertain`. Zanim ponownie wyślesz ten rekord, wyszukaj go w miejscu docelowym, np. po SKU, i zapisz, co znalazłeś. `mappings.get.v1` z `external_id` znajduje rekord dla pozycji widocznej w miejscu docelowym.
-
-Duże dane referencyjne miejsca docelowego, takie jak drzewa kategorii czy definicje typów produktów, przechowuj w magazynie rozszerzenia.
-
-## Publiczne linki do plików
-
-Niektóre miejsca docelowe same pobierają obrazy, czasem kilka godzin po zgłoszeniu oferty. Z `attricat.files.public_links`, `attricat.files.read` i `attricat.read` wywołanie `files.link.v1` wydaje publiczny, trudny do odgadnięcia link do pliku, do którego odwołuje się rekord:
-
-```json
-{ "file_id": "…", "record_id": "…", "expires_in_seconds": 86400 }
-```
-
-Zwraca `{"url": "…", "expires_at": "…"}`. Link jest ważny od 60 sekund do 7 dni. W przebiegu operacji można linkować tylko rekordy objęte przebiegiem: wybór przebiegu konektora (a w eksporcie do kanału opublikowane rekordy) i aktywne rekordy, do których one linkują, albo rekordy wybrane w przebiegu interaktywnym. Każdy, kto ma link, może pobrać plik, dopóki link nie wygasł, a rozszerzenie jest włączone i ma wszystkie trzy uprawnienia. Przechowywany jest tylko skrót tokenu. Wdrożenie musi ustawić [`EXTENSION_PUBLIC_FILE_BASE_URL`](/pl/reference/configuration/#rozszerzenia); w przeciwnym razie wywołanie kończy się błędem.
+Z `logging.write` funkcja `api.log(level, message)` zapisuje wpis w dzienniku serwera Attricat, oznaczony identyfikatorem rozszerzenia. `level` to `trace`, `debug`, `info`, `warn` lub `error`, a wpisy są ograniczone do 16 KiB. Bez tego uprawnienia albo z innym poziomem wywołanie zwraca błąd. Nigdy nie zapisuj w dzienniku sekretów, tokenów ani danych osobowych.
 
 ## Publikuj zdarzenia dla innych rozszerzeń
 

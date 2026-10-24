@@ -1,10 +1,30 @@
-# Extension manifest and lifecycle (v1)
+# Extensions: host contracts
+
+This document is the implementation contract for Attricat's extension host:
+what the host guarantees, where it enforces each rule, and which behavior is
+deliberately deferred. It is written for people changing Core. Extension
+authors should read the public guides instead (`apps/docs/src/content/docs/extensions/`,
+published under **Extensions**), which describe the same contracts from the
+author's side; keep both in step when a contract changes.
 
 Extension v1 separates a package's **manifest syntax** (`manifest_version: 1`),
 its SemVer **release** (`version`), and the SemVer range for callable Attricat
 host functions (`attricat.host_api`). Event, capability, configuration, and UI
 contribution versions are independent contracts. A host never coerces or
 downgrades any of these contracts.
+
+| Area | Code |
+|---|---|
+| Manifest parsing, capability catalogue, `SUPPORTED_HOST_API` | `crates/extension-manifest` |
+| Host ABI (WIT) and released snapshots | `crates/extension-runtime/wit-host/`, `crates/extension-runtime/wit-released/` |
+| Wasmtime host, `api.call` dispatch, event and operation invocation | `crates/extension-runtime/src/extension_runtime.rs`, `crates/extension-runtime/src/extension_runtime/` |
+| Persistence (installations, storage, operations, mappings, connections, annotations) | `crates/repository/src/repository/extension_*.rs`, `crates/repository/src/repository/extensions.rs` |
+| HTTP management and broker routes | `crates/http/src/http/extensions.rs`, `extension_exports.rs`, `extension_runs.rs`, `extension_registries.rs` |
+| Web host: frames, broker, outlets, management pages | `apps/web/src/features/extensions/` (frame bootstrap in `frameDocument.ts`, broker in `extensionBroker.ts`) |
+| Test components packaged by the Rust suites | `crates/*-test-component` |
+| Integration suites | `apps/api/tests/extension*.rs` |
+
+## Distribution: registries and side-loading
 
 Extension registries and extension repositories are separate external inputs.
 Every workspace has the built-in Attricat GitHub registry plus zero or more
@@ -50,48 +70,6 @@ audit events as registry installs. Their recorded source is `sideload`; the raw
 archive is never retained. Users must review configuration and explicitly grant
 required permissions before enabling a side-loaded extension.
 
-### Local extension integration testing
-
-The sibling [`attricat-extension-example`](../../attricat-extension-example)
-checkout is the host's end-to-end test extension. From an Attricat worktree,
-it is available two levels above the repository root:
-
-```sh
-example_extension="$(cd ../../attricat-extension-example && pwd)"
-(cd "$example_extension" && just check && just pack)
-```
-
-With this worktree's local stack running, upload the resulting
-`$example_extension/dist/*.tar.zst` archive through **Manage → Extensions →
-Upload archive**. Grant every requested permission and enable the extension.
-Each side-loaded replacement is a new release and must be granted and enabled
-again. Exercise an extension UI contribution and a server event (for example,
-update a formula dependency in the example's blueprint TOML) to verify both the
-browser and WASM runtime paths. Use this workflow when changing extension
-installation, permissions, artifact storage, runtime, or event dispatch; unit
-tests alone do not prove host integration.
-
-For a CLI-driven local verification, authenticate with the workspace **login
-identifier**, not its slug, name, or UUID. Discover it first and retain the
-browser-session file for every subsequent command; the bootstrap workspace is
-normally `default.local`:
-
-```sh
-cargo run -p acli -- --session-file .acli-session auth discover default.local
-cat .secrets/bootstrap_owner_password | \
-  cargo run -p acli -- --session-file .acli-session auth login default.local \
-    --email "$ATTRICAT_BOOTSTRAP_OWNER_EMAIL" --password-stdin
-```
-
-When verifying an inter-extension event, use two packaged server components:
-the producer should emit a manifest-declared export while handling a real
-Attricat event, and the enabled consumer should make an observable, idempotent
-host-mediated change (for example an extension-storage write). Confirm the
-producer event and completed consumer delivery through the API/CLI first; use
-`just sql` only if the CLI has no read endpoint for the resulting host state.
-This distinguishes session/workspace routing failures from event
-materialization or runtime failures.
-
 Registry installs validate the selected `.tar.zst` archive with bounded
 decompression and entry-path checks, then read and validate `manifest.json`
 before uploading declared extracted artifacts to Attricat S3 storage. Artifact
@@ -99,6 +77,16 @@ integrity verification is deliberately deferred: selected release archives are
 trusted registry inputs in v1. Attricat retains only that installed release's
 immutable manifest and source identity alongside its workspace-owned
 installation; raw archives are not retained.
+
+Registry source APIs expose `GET/POST /extension-registries`,
+`DELETE /extension-registries/{id}`, `GET /extension-registries/discover`, and
+`GET /extension-registries/extensions/{owner}/{repository}`. The final endpoint
+rejects a repository unless the current trusted index lists it, then returns its
+README and release assets. `extensions.read` authorizes discovery while
+`extensions.manage` authorizes source changes and `POST /extensions/sideload`;
+the built-in official source cannot be removed. The deployment may set
+`EXTENSION_OFFICIAL_REGISTRY` to a validated GitHub owner/repository instead of
+the default `attricat/attricat-extensions`.
 
 ## Manifest
 
@@ -158,21 +146,6 @@ budget; see [Export platform](#export-platform-attricathost-11).
 WASM components receive no ambient sockets. The mediated HTTPS API described
 below enforces the host policy at each call.
 
-## Webhooks
-
-`webhooks.receive` is server-only and is not an outbound host permission. A
-v1 webhook declares a stable ID, a versioned `.vN` internal event type, named
-handler, exactly `POST`, bounded body size, and `hmac-sha256` authentication.
-The auth declaration supplies signature and timestamp headers, a positive
-replay window, and a *name* for a host-managed secret; manifest snapshots and
-audit records never contain the secret.
-
-The future ingress runtime owns public routes and validates method, body,
-signature, timestamp, replay/deduplication, rate limits, and diagnostics before
-durably queuing an at-least-once delivery. Disabled or quarantined installations
-must never invoke a handler. Binding routes, delivery execution, retries, and
-observability are deliberately deferred to #145.
-
 ## Lifecycle and persistence
 
 Discovery and validation are operations, not states. Installation persists a
@@ -215,7 +188,8 @@ interactive operations, artifacts, transfer, connector jobs, every UI outlet,
 and version 2 selection actions. There are no per-feature `host_api` gates.
 
 The package defines the interfaces `api`, `handler`, `artifacts`,
-`attricat-data`, `catalog`, `transfer`, `selection` and `operations`, and since
+`attricat-data`, `attricat` (connector calls), `transfer`, `selection` and
+`operations`, and since
 1.1 `clock`, `outcomes`, `event-handler`, `command-handler` and
 `deferrable-operations`. The `imports` world imports every host interface. A
 component targets the combined `attricat-extension` world (exports `handler`
@@ -225,7 +199,7 @@ world, or the 1.1 `outcome-extension` world (exports `event-handler`,
 [Export platform](#export-platform-attricathost-11)). When a component exports
 a 1.1 interface the host calls it instead of its 1.0 predecessor. The host
 links every import for every invocation and loads only the export it needs. Run-bound
-interfaces (`artifacts`, `attricat-data`, `catalog`, `transfer`, `selection`)
+interfaces (`artifacts`, `attricat-data`, `attricat`, `transfer`, `selection`)
 return an error outside an operation run. Direct catalog access through `api`
 (`read`, `write`, and the `attricat.read.v1`/`attricat.command.v1` calls) returns
 an error inside one, so operations, including interactive runs confined to
@@ -268,8 +242,9 @@ package.
 
 A `server_wasm` artifact is a WebAssembly **component** using the checked-in
 `attricat:host` WIT package at `crates/extension-runtime/wit-host/attricat-extension.wit`.
-Components receive no WASI context, filesystem, environment, clock, socket, or
-pre-opened descriptor. Their only imports are the host interfaces described in
+Components receive no WASI context, filesystem, environment, socket, or
+pre-opened descriptor; wall-clock time is available only through the 1.1
+`clock` interface. Their only imports are the host interfaces described in
 [Host ABI versions and evolution](#host-abi-versions-and-evolution); event
 handlers use `api.call` and `api.log` for JSON requests.
 
@@ -286,6 +261,19 @@ are traced, metered, and quarantine the installation before the delivery is
 retried/dead-lettered. A 1.1 `event-handler` distinguishes record rejections,
 temporary failures and faults instead; see
 [Handler outcomes](#handler-and-batch-outcomes).
+
+The manifest's `handler` selector reaches the component only for commands
+(`command-request.handler`) and operations (`operation-request.operation-id`).
+The WIT `event` carries no selector, so every declared event handler
+subscribed to a type invokes `handle-event` with the same event; outcomes and
+export leases are nevertheless tracked per handler ID.
+
+`api.log` requires `logging.write`, accepts the levels `trace`, `debug`,
+`info`, `warn` and `error`, and emits one `tracing` record tagged with the
+extension ID; nothing is persisted for operators. Command failures do not
+quarantine: the broker answers `503 extension command failed` without the
+component's message, and validates successful responses against
+`response_schema`.
 
 The component host ABI uses bounded JSON strings (64 KiB) and bounded log
 messages (16 KiB). Every operation is capability checked at the point of call.
@@ -351,15 +339,56 @@ destination extension must map that stable key to its destination idempotency
 key when it performs side effects. `network.request.v1` never grants ambient
 sockets.
 
-Registry source APIs expose `GET/POST /extension-registries`,
-`DELETE /extension-registries/{id}`, `GET /extension-registries/discover`, and
-`GET /extension-registries/extensions/{owner}/{repository}`. The final endpoint
-rejects a repository unless the current trusted index lists it, then returns its
-README and release assets. `extensions.read` authorizes discovery while
-`extensions.manage` authorizes source changes and `POST /extensions/sideload`;
-the built-in official source cannot be removed. The deployment may set
-`EXTENSION_OFFICIAL_REGISTRY` to a validated GitHub owner/repository instead of
-the default `attricat/attricat-extensions`.
+### Typed catalog access, scoped configuration and commands
+
+The `api` interface in `crates/extension-runtime/wit-host/attricat-extension.wit`
+has typed `read`, `write`, `scoped-configuration-get`, and
+`scoped-configuration-set` functions. Dynamic attribute and configuration
+values are JSON strings bounded to 64 KiB; identifiers, scope kinds, response
+shapes, and write selectors are typed WIT records and variants. Components have
+no WASI, network, filesystem, database, browser credential, or ambient host
+access.
+
+Server components granted `attricat.read` can request a record, direct current
+values, or resolved values for a supplied record/context pair. Every typed read
+response includes the workspace-owned record, its pinned `BlueprintWithAttributes`
+metadata, direct values, and resolved values when requested. Resolved reads use
+Attricat's existing context/fallback path rather than a copy in the extension.
+`attricat.write` permits only validated scalar writes with an explicit context
+ID; ordinary attribute/type/schema validation, audit records, and the domain-event
+outbox remain in force. A write made while handling an event inherits the
+triggering write's user and token audit attribution, keeps that event's
+correlation ID, uses its ID as causation, and is published with `source_kind:
+plugin` and `source_name: extension:<extension-id>`. The handler then receives
+the event its own write caused.
+
+The WIT `event` record carries no `source_kind` or `source_name`, so a
+handler cannot recognize events caused by its own writes. Handlers must
+converge instead: compare the current value and skip a write that would not
+change it (the reference example does this). Exposing the source to
+components needs a new type and export under the additive ABI rules.
+
+This mediation is required: an extension host API must never issue attricat-table
+SQL or implement its own validation, projection, audit, or event logic. Every
+extension-initiated catalog mutation must use `AttricatMutationService` and its
+repository-backed transaction so validation, audit evidence, initiating-actor propagation, and
+the transactional outbox cannot be bypassed.
+
+A manifest may declare `scoped_configuration` with an object schema, positive
+version, and `blueprint` and/or `attribute` scopes. It requires
+`configuration.write`. Attricat persists these values separately from blueprint
+schemas and verifies the workspace-owned blueprint revision and attribute on
+every get/set. Both attribute-scoped and blueprint-scoped values are
+operational. Values are release-bound and
+inaccessible after disable,
+quarantine, grant changes, or upgrade.
+
+A server manifest may declare bounded `server.commands` (stable ID, handler,
+object request/response schemas, and byte limits). They require
+`client.commands`. The only browser path is the opaque-frame MessageChannel
+`attricat.command`; Attricat validates the command and caller session, then
+rechecks contribution, enabled state, exact release, configuration, and grants.
+No extension receives browser cookies, routes, or arbitrary fetch access.
 
 ## Inter-extension events
 
@@ -411,8 +440,10 @@ cannot forge them. Events use the existing transactional outbox and
 at-least-once dispatcher. They can be reordered or retried, so handlers must
 be idempotent. Failed components are quarantined and deliveries retry or dead
 letter under dispatcher policy. Consumers only receive declared provider
-contracts; core Attricat event subscriptions are unchanged. Handlers should
-ignore events whose source is their own extension ID to prevent feedback loops.
+contracts; core Attricat event subscriptions are unchanged. A handler that
+writes in response to an event must converge, because components cannot see
+an event's source (see
+[Typed catalog access](#typed-catalog-access-scoped-configuration-and-commands)).
 
 Request/response calls, cancellation, and shared state are deliberately out of
 scope for this contract and require a separately versioned design.
@@ -474,7 +505,7 @@ Batch requests must carry the current operation request's `batch-key`; that
 key is scoped to the run ID and batch number. Intent keys and input hashes are
 persisted transactionally with Attricat mutation, audit and outbox, so a replay
 of an already applied intent returns `already_applied` without duplicating it.
-Callers must keep intent keys stable across retries. The `catalog` interface
+Callers must keep intent keys stable across retries. The `attricat` interface
 also provides connector-shaped `schema`, `page` (1–16 rows), and `upsert-batch`
 operations. The upsert body carries `run_id`, the current `batch_key`, blueprint
 and context IDs, and up to 100 keyed rows with scalar attribute-code values.
@@ -598,11 +629,171 @@ excluded from subsequent pages; data already delivered externally cannot be
 recalled. Retried manual keys return the same run IDs. Run status and artifacts
 remain available via `/extension-operation-runs`.
 
-The host enforces page filters from run metadata; the `catalog` interface
+The host enforces page filters from run metadata; the `attricat` interface
 signature carries no filter. Existing unscoped operations
 and schedules remain available separately. An export job may also declare a
 change `trigger` and a destination `connection`, and can be resynced; see
 [Connector jobs for exports](#connector-jobs-for-exports).
+
+## Selection-aware actions and interactive operations
+
+An extension can let a signed-in user process one record from its preview or
+Explorer row, or up to 50 selected Explorer records, as a durable background
+run. Core provides the action surfaces, authorization, the run, its artifacts,
+and annotations; templates, rendering, result reports and document history stay
+in the extension.
+
+### Selection context
+
+Contributions to `record_action`, `explorer_row_action`, and
+`explorer_bulk_action` may declare `"version": 2`. Version 1 contributions
+keep their released contexts. A version 2 contribution receives:
+
+```json
+{
+  "context_version": 2,
+  "selection_source": "explorer_selection",
+  "blueprint_id": "<uuid>",
+  "blueprint_version": 3,
+  "context_id": "<uuid or null>",
+  "record_ids": ["<uuid>", "<uuid>"]
+}
+```
+
+Preview and row actions use a one-item `record_ids`. `context_id` is the
+effective value-resolution context of the surface (the preview's selected
+context or the Explorer context), or `null` for the workspace default.
+Selections contain only saved records from one blueprint revision in display
+order; the host never widens them to hidden rows or to all matching results.
+Generation reads saved data only: when a selected record has unsaved editor
+changes in the tab, the host-owned dialog says so and offers the editor.
+
+### Interactive operations
+
+A `server.operations` entry exposes itself to these actions with:
+
+```json
+{"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
+```
+
+`max_selection` is 1–50. The release needs `client.operations.start`. The run
+reads its selection through the `selection` interface of
+`crates/extension-runtime/wit-host/attricat-extension.wit` and can write
+annotations with the `annotate` catalog intent.
+
+Starting a run (through `attricat.operations.start` or
+`POST /extensions/{extension_id}/{contribution_id}/operations`) checks the
+enabled exact release, the contribution's capability, the declared operation,
+its request schema and byte limit, and that the caller can read every selected
+record. One unreadable or mismatched record rejects the whole selection. The
+host then freezes, in one transaction, the initiating user (and token, if any),
+release, operation, validated input, configuration snapshot, effective context,
+contribution, and ordered membership. A context cannot be deleted while a
+pending or running run reads from it. Idempotency keys are scoped to the user;
+an identical retry returns the same run and a changed request with the same key
+is rejected.
+
+Inside the run:
+
+- `selection.describe()` returns the count, blueprint revision, and context.
+- `selection.page(cursor, limit)` returns 1–10 members with saved values
+  resolved in the run's context, the caller's own annotations
+  (`{tags, metadata, revision}`), `blueprint_id`, `blueprint_version`,
+  `updated_at`, and the page's `read_at`. Pages stay under the 64 KiB host
+  bound; a member that alone would exceed it is returned as `too_large`.
+  Members the initiator can no longer read are `unavailable`; deleted members
+  are `deleted`. Membership and access are separate: frozen membership never
+  grants access.
+- Generic `attricat-data.read` and the connector `attricat` interface calls are rejected.
+  `attricat-data.batch` accepts only `update`, `relationships`, and `annotate`
+  intents for members of the selection, and checks the initiator's current
+  grants for each intent (`records.write` for values, `records.read` for
+  annotations, and `records.read` on every record a relationship links to,
+  selected or not). Writes are audited as `attricat.extensions.operations.write`
+  with the initiator as actor and the extension as event source.
+- Before every batch the host checks that the initiator is still an active
+  workspace member (and that a token-started run's token is still live). If
+  not, the run fails closed with `initiator_access_revoked` instead of
+  continuing under the installer's grants. An operator can replay the
+  dead-lettered run after access is restored, unless its selection context
+  has since been deleted (`409`); start a new run instead. A cancellation requested
+  before access was lost is still delivered to the extension's `cancel`
+  export, whose host calls are checked against the initiator's current
+  access; the run then ends `cancelled`, or fails closed if `cancel` fails.
+
+Disable, quarantine, grant loss, and upgrade pause interactive runs exactly as
+they pause other release-pinned runs. Existing administrative operations,
+schedules, and connector jobs keep their separate contracts.
+
+### Runs, results, and retention
+
+Users follow their runs under **Profile → Extension runs**
+(`/profile/extension-runs`) and through `GET /extension-runs`. Execution
+status (`queued`, `running`, `cancelling`, `cancelled`, `completed`, `failed`)
+is separate from the extension's domain outcome: a completed run can report
+per-record failures. Extensions report progress as a bounded object; the host
+displays the optional fields `completed`, `total`, and
+`outcome: {succeeded, failed, skipped}`. A fatal runtime failure still fails
+the run.
+
+Runs started in a tab are polled only while active and announced with a
+notification that links to the run, so users can close the dialog or leave the
+page. Only the initiator and `extensions.manage` operators can see a run.
+Operators can read, cancel, or download any run, except with `?scope=own` on
+`GET /extension-runs/{run_id}`, its `cancel` and artifact `download` routes,
+which limits every caller to runs they started. Run responses include
+`initiated_by_me`. The initiator can always
+cancel their own run (cancelling reveals nothing about the selection), but can
+read or download it only while they can still read every selected record:
+because a combined artifact may contain any member, losing access to one
+member denies every download of that run. Outputs are downloadable only after the run
+completes and for 30 days; history keeps the run but marks outputs expired.
+Finalized outputs carry the extension's output name as the download filename.
+
+## Extension-owned record annotations
+
+With the `attricat.annotations.write` capability an extension can patch its own
+annotation namespace on a record: tags named `<extension-id>:<tag>` and the
+object at `system_metadata[<extension-id>]`. Callers supply only local names; the
+host derives the namespace from the extension's provenance, so one extension can
+never write another's. The intent is available from operation batches and
+from any `attricat.command.v1` batch (for example a client command) when the
+capability is granted; an annotation-only batch does not need `attricat.write`.
+
+```json
+{"kind": "annotate", "intent_key": "doc-<run>-<record>", "record_id": "<uuid>",
+ "add_tags": ["document-generated"], "remove_tags": [],
+ "set_metadata": {"last_document": {"template_version": 2}}, "remove_metadata": [],
+ "expected_revision": null}
+```
+
+Patches are bounded (1–32 operations, local names of 1–64 ASCII letters,
+digits, `.`, `_`, `-`), unambiguous (a tag or key appears once), and applied
+under the record row lock against current state, so concurrent writers of
+other namespaces never lose changes. Setting a key replaces its whole value.
+`expected_revision` makes a write conditional; a retried intent key is
+recognized as `already_applied` before the revision is compared. Applied
+outcomes include `annotation_revision`. Each change is audited and emits
+`record.annotations_changed.v1`; it does not change the record's `updated_at`,
+so an extension's own bookkeeping never makes its output look stale. A tag
+change runs the record's checks and on-save enforcing rules when any of them
+uses `has_tag` or `missing_tag` on the record, and is rejected like any other
+write that would violate them. Do not
+store signed URLs or secret inputs in annotations, and do not treat a tag as
+proof that a download is available: resolve that through the run and artifact
+APIs.
+
+A namespace is claimed on the extension's first annotation write. If records
+already carry data under that name, the write is rejected until an operator
+adopts it with `POST /extensions/{extension_id}/annotation-namespace`
+(inventory with `GET`); adoption never renames or deletes existing values. The
+names `attricat`, `attricat.sample`, `catalog`, `core`, and `system` cannot be
+claimed. Claims are kept across disable, upgrade, and removal, and annotations
+are preserved. Generic writes (record create and `PUT`, duplicate, workflow
+annotation actions, and legacy extension `create`/`upsert` fields) cannot
+change a claimed namespace. Operators repair or clean up a namespace on one
+record with `POST
+/extensions/{extension_id}/annotation-namespace/records/{record_id}`.
 
 ## Export platform (attricat:host 1.1)
 
@@ -1072,43 +1263,6 @@ mappings pointing at missing items.
 - **Webhook ingress** (OAuth callbacks, inbound order and stock events) is
   tracked in #279 and is not needed for pure export.
 
-### Testing exports locally
-
-`examples/marketplace-export/mock-server/server.mjs` serves Shopify, Amazon
-(LWA, SP-API, S3 feed documents) and Allegro stand-ins over HTTPS for
-`*.mock.test`, with the test CA in `apps/api/tests/fixtures/mock-tls`, plus an
-inspection API on `http://127.0.0.1:9080` (`/state`, `/requests`, `/fail` to
-inject 429, 5xx or a response that never arrives, `/allegro/approve`). It never
-contacts the real services. Point the broker at it in development only
-(`ATTRICAT_DEVTOOLS=true`):
-
-```sh
-EXTENSION_DEV_EGRESS_RESOLVE=*.mock.test=127.0.0.1:9443
-EXTENSION_DEV_EGRESS_CA_FILE=$PWD/apps/api/tests/fixtures/mock-tls/ca.pem
-EXTENSION_PUBLIC_FILE_BASE_URL=http://127.0.0.1:$API_PORT/api/public/extension-files/
-```
-
-Then build the test exporter, start the mock and run the scenario against the
-worktree stack:
-
-```sh
-node examples/marketplace-export/pack.mjs
-node examples/marketplace-export/mock-server/server.mjs &
-source .worktree && API_LOG=<api log file> node examples/marketplace-export/e2e.mjs
-```
-
-The scenario side-loads the exporter, creates Shopify (client credentials),
-Amazon (refresh token) and Allegro (device code) connections, publishes
-listings with variants and an image, and checks variants, staged image
-uploads, single-item and feed listings polled to completion, Allegro offer
-commands polled through deferral, rejections, throttling, a 5xx, an uncertain
-push reconciled by SKU, a single-record retry, withdrawal after unpublishing,
-and that no credential reaches the API log or the mock's query strings.
-
-The Rust suites `extension_export_platform`, `extension_brokered_egress` and
-`extension_export_scale` (in `apps/api/tests`) cover the same contracts against
-a local TLS mock without the dev stack.
-
 ## Client extension runtime (v1)
 
 Enabled `client_component` artifacts can expose a strict `ui` contribution:
@@ -1172,8 +1326,8 @@ loading/error treatment, and navigation outside it.
 Today, such an application can use the granted mediated client APIs described
 below: read the limited Attricat resources through `attricat.request`, invoke its
 declared server commands through `attricat.command`, persist its own
-release-scoped state through `attricat.storage`, show host notifications, and
-navigate the user to a Attricat record. It still has no generic browser fetch,
+extension-owned state through `attricat.storage`, show host notifications, and
+navigate the user to an Attricat record. It still has no generic browser fetch,
 host DOM access, browser credentials, arbitrary URL navigation, or
 inter-extension RPC. Required capabilities and the corresponding server command
 or artifact declarations remain necessary for each operation.
@@ -1231,6 +1385,12 @@ contextual actions—not an application-wide navigation tree.
   values. A version 2 contribution receives the
   [selection context](#selection-aware-actions-and-interactive-operations)
   instead.
+- **`record_header_action`** (`action`, requiring
+  `client.record_header_action`) mounts compact extension actions immediately
+  before the record's host-owned toolbar. Its strict v1 context is
+  `{ "context_version": 1, "record_id", "blueprint_id", "blueprint_version" }`;
+  the host shows one primary and three secondary actions before overflow.
+  Commands still need `client.commands`.
 - **`explorer_table_cell`** (`embedded`, requiring
   `client.explorer_table_cell`) mounts a sandboxed renderer for a configured
   scalar Explorer table column when the enabled release declares a matching
@@ -1321,13 +1481,13 @@ dialog frame should call `attricat.dialog.close()` on Escape. Closing it
   not render in custom file-value renderers that do not forward the optional
   file-panel callback. No separate file-detail page is implied.
 
-Every manifest-declared outlet now has a host-owned client mount path;
+Every manifest-declared outlet has a host-owned client mount path;
 `explorer_table_cell` uses the Explorer table renderer rather than
 `ExtensionOutlet`. The browser schema tests compare the declared Rust outlets
 with the client enum and check each outlet's mount path. A placement is still
 shown only when its page, scope, contribution kind, and required grants match.
 
-All mounted frames use the same mediated `catalog` API and capability checks
+All mounted frames use the same mediated broker API and capability checks
 as route contributions. The host re-authorizes every broker call and unmounts
 contributions when their runtime access is removed.
 
@@ -1402,13 +1562,14 @@ passes that same object to `mount`. It may use only granted operations:
   `initiated_by_me` flag. Downloads are started by the host; the frame never
   receives a URL.
 - `attricat.storage.get/set/delete/list(...)` requires `storage.extension` and
-  provides release-scoped extension storage. Storage requests and values are
+  provides the extension's storage (keyed by workspace and extension, so it
+  survives upgrades; only the installed release may access it). Storage requests and values are
   bounded; `set` and `delete` support an optional optimistic
   `expected_revision`.
 - `attricat.context` contains only the documented outlet identifiers (the
   record preview outlet supplies `record_id` and optional `context_id`).
   `attricat.configuration` is supplied only when `configuration.read` is
-  granted. `client.events` dispatches a `attricat:context-changed.v1` event on
+  granted. `client.events` dispatches an `attricat:context-changed.v1` event on
   the `root` passed to `mount` at startup and after every host context update.
   The event detail and `attricat.context` are replaced together through the
   versioned private `MessageChannel`; no browser event, route state, or host
@@ -1418,7 +1579,7 @@ passes that same object to `mount`. It may use only granted operations:
   rendering (the user's explicit choice, otherwise the system preference). The
   frame document's `color-scheme` is set to match before `mount` runs, so
   native controls and system colors such as `Canvas` and `CanvasText` follow
-  it. A `attricat:theme-changed.v1` event with the same detail is dispatched on
+  it. An `attricat:theme-changed.v1` event with the same detail is dispatched on
   `root` after `mount` and whenever the user switches modes; the frame stays
   mounted, so extensions should restyle rather than reload. For example:
 
@@ -1441,16 +1602,24 @@ accessibility UI.
 
 `client.refresh` currently supports only `current_record` in record outlets;
 other targets such as Explorer results require separate host implementations.
-`client.confirmation` has bounded title, message, and severity. `client.download` accepts bounded data or a host artifact
-reference with a validated filename and media type. `client.external_navigation`
-opens only allowlisted HTTPS URLs in a new tab. `client.files.read` and
-`client.files.upload` are restricted to file-detail context; upload selection
-and progress are host UI. `client.search` is a bounded authorized Attricat
-search, `client.live_updates` is limited to typed current-context events, and
-`client.clipboard` writes bounded user-initiated text. The color mode is
-available to every contribution as `attricat.theme`; `client.theme.read` is
-still accepted in manifests for compatibility but is no longer required. Locale
-reads return only the locale.
+The color mode is available to every contribution as `attricat.theme`;
+`client.theme.read` is still accepted in manifests for compatibility but is no
+longer required.
+
+`client.confirmation`, `client.download`, `client.external_navigation`,
+`client.files.read`, `client.files.upload`, `client.search`,
+`client.live_updates`, `client.clipboard` and `client.locale.read` are in the
+capability catalogue and grantable, but **no frame API implements them yet**:
+`frameDocument.ts` exposes no member for them and `extensionBroker.ts` has no
+method. The public docs list them as reserved. Their intended contracts are:
+confirmation with bounded title, message and severity; download of bounded
+data or a host artifact reference with a validated filename and media type;
+external navigation to allowlisted HTTPS URLs in a new tab; file read and
+upload restricted to file-detail context with host-owned selection and
+progress; bounded authorized search; typed current-context live updates;
+bounded user-initiated clipboard writes; and locale reads that return only the
+locale. Implementing one means adding the frame member, the broker method and
+its capability check, and updating both documents.
 
 Placement capabilities authorize only their matching fixed outlet; they do not
 imply `client.commands`. Disabling, quarantining, removing, upgrading, or
@@ -1470,234 +1639,103 @@ runtime descriptor. Extension UI must provide its own localized
 text and accessible labels; the host owns the surrounding landmarks, focus,
 loading state, and failure announcements.
 
-## Selection-aware actions and interactive operations
+## Webhooks
 
-An extension can let a signed-in user process one record from its preview or
-Explorer row, or up to 50 selected Explorer records, as a durable background
-run. Core provides the action surfaces, authorization, the run, its artifacts,
-and annotations; templates, rendering, result reports and document history stay
-in the extension.
+`webhooks.receive` is server-only and is not an outbound host permission. A
+v1 webhook declares a stable ID, a versioned `.vN` internal event type, named
+handler, exactly `POST`, bounded body size, and `hmac-sha256` authentication.
+The auth declaration supplies signature and timestamp headers, a positive
+replay window, and a *name* for a host-managed secret; manifest snapshots and
+audit records never contain the secret.
 
-### Selection context
+The future ingress runtime owns public routes and validates method, body,
+signature, timestamp, replay/deduplication, rate limits, and diagnostics before
+durably queuing an at-least-once delivery. Disabled or quarantined installations
+must never invoke a handler. Binding routes, delivery execution, retries, and
+observability are deliberately deferred to #145.
 
-Contributions to `record_action`, `explorer_row_action`, and
-`explorer_bulk_action` may declare `"version": 2`. Version 1 contributions
-keep their released contexts. A version 2 contribution receives:
+## Testing
 
-```json
-{
-  "context_version": 2,
-  "selection_source": "explorer_selection",
-  "blueprint_id": "<uuid>",
-  "blueprint_version": 3,
-  "context_id": "<uuid or null>",
-  "record_ids": ["<uuid>", "<uuid>"]
-}
+### Local extension integration testing
+
+The sibling [`attricat-extension-example`](../../attricat-extension-example)
+checkout is the host's end-to-end test extension. From an Attricat worktree,
+it is available two levels above the repository root:
+
+```sh
+example_extension="$(cd ../../attricat-extension-example && pwd)"
+(cd "$example_extension" && just check && just pack)
 ```
 
-Preview and row actions use a one-item `record_ids`. `context_id` is the
-effective value-resolution context of the surface (the preview's selected
-context or the Explorer context), or `null` for the workspace default.
-Selections contain only saved records from one blueprint revision in display
-order; the host never widens them to hidden rows or to all matching results.
-Generation reads saved data only: when a selected record has unsaved editor
-changes in the tab, the host-owned dialog says so and offers the editor.
+With this worktree's local stack running, upload the resulting
+`$example_extension/dist/*.tar.zst` archive through **Manage → Extensions →
+Upload archive**. Grant every requested permission and enable the extension.
+Each side-loaded replacement is a new release and must be granted and enabled
+again. Exercise an extension UI contribution and a server event (for example,
+update a formula dependency in the example's blueprint TOML) to verify both the
+browser and WASM runtime paths. Use this workflow when changing extension
+installation, permissions, artifact storage, runtime, or event dispatch; unit
+tests alone do not prove host integration.
 
-### Interactive operations
+For a CLI-driven local verification, authenticate with the workspace **login
+identifier**, not its slug, name, or UUID. Discover it first and retain the
+browser-session file for every subsequent command; the bootstrap workspace is
+normally `default.local`:
 
-A `server.operations` entry exposes itself to these actions with:
-
-```json
-{"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
+```sh
+cargo run -p acli -- --session-file .acli-session auth discover default.local
+cat .secrets/bootstrap_owner_password | \
+  cargo run -p acli -- --session-file .acli-session auth login default.local \
+    --email "$ATTRICAT_BOOTSTRAP_OWNER_EMAIL" --password-stdin
 ```
 
-`max_selection` is 1–50. The release needs `client.operations.start`. The run
-reads its selection through the `selection` interface of
-`crates/extension-runtime/wit-host/attricat-extension.wit` and can write
-annotations with the `annotate` catalog intent.
+When verifying an inter-extension event, use two packaged server components:
+the producer should emit a manifest-declared export while handling a real
+Attricat event, and the enabled consumer should make an observable, idempotent
+host-mediated change (for example an extension-storage write). Confirm the
+producer event and completed consumer delivery through the API/CLI first; use
+`just sql` only if the CLI has no read endpoint for the resulting host state.
+This distinguishes session/workspace routing failures from event
+materialization or runtime failures.
 
-Starting a run (through `attricat.operations.start` or
-`POST /extensions/{extension_id}/{contribution_id}/operations`) checks the
-enabled exact release, the contribution's capability, the declared operation,
-its request schema and byte limit, and that the caller can read every selected
-record. One unreadable or mismatched record rejects the whole selection. The
-host then freezes, in one transaction, the initiating user (and token, if any),
-release, operation, validated input, configuration snapshot, effective context,
-contribution, and ordered membership. A context cannot be deleted while a
-pending or running run reads from it. Idempotency keys are scoped to the user;
-an identical retry returns the same run and a changed request with the same key
-is rejected.
+### Testing exports locally
 
-Inside the run:
+`examples/marketplace-export/mock-server/server.mjs` serves Shopify, Amazon
+(LWA, SP-API, S3 feed documents) and Allegro stand-ins over HTTPS for
+`*.mock.test`, with the test CA in `apps/api/tests/fixtures/mock-tls`, plus an
+inspection API on `http://127.0.0.1:9080` (`/state`, `/requests`, `/fail` to
+inject 429, 5xx or a response that never arrives, `/allegro/approve`). It never
+contacts the real services. Point the broker at it in development only
+(`ATTRICAT_DEVTOOLS=true`):
 
-- `selection.describe()` returns the count, blueprint revision, and context.
-- `selection.page(cursor, limit)` returns 1–10 members with saved values
-  resolved in the run's context, the caller's own annotations
-  (`{tags, metadata, revision}`), `blueprint_id`, `blueprint_version`,
-  `updated_at`, and the page's `read_at`. Pages stay under the 64 KiB host
-  bound; a member that alone would exceed it is returned as `too_large`.
-  Members the initiator can no longer read are `unavailable`; deleted members
-  are `deleted`. Membership and access are separate: frozen membership never
-  grants access.
-- Generic `attricat-data.read` and the connector `catalog` calls are rejected.
-  `attricat-data.batch` accepts only `update`, `relationships`, and `annotate`
-  intents for members of the selection, and checks the initiator's current
-  grants for each intent (`records.write` for values, `records.read` for
-  annotations, and `records.read` on every record a relationship links to,
-  selected or not). Writes are audited as `attricat.extensions.operations.write`
-  with the initiator as actor and the extension as event source.
-- Before every batch the host checks that the initiator is still an active
-  workspace member (and that a token-started run's token is still live). If
-  not, the run fails closed with `initiator_access_revoked` instead of
-  continuing under the installer's grants. An operator can replay the
-  dead-lettered run after access is restored, unless its selection context
-  has since been deleted (`409`); start a new run instead. A cancellation requested
-  before access was lost is still delivered to the extension's `cancel`
-  export, whose host calls are checked against the initiator's current
-  access; the run then ends `cancelled`, or fails closed if `cancel` fails.
-
-Disable, quarantine, grant loss, and upgrade pause interactive runs exactly as
-they pause other release-pinned runs. Existing administrative operations,
-schedules, and connector jobs keep their separate contracts.
-
-### Runs, results, and retention
-
-Users follow their runs under **Profile → Extension runs**
-(`/profile/extension-runs`) and through `GET /extension-runs`. Execution
-status (`queued`, `running`, `cancelling`, `cancelled`, `completed`, `failed`)
-is separate from the extension's domain outcome: a completed run can report
-per-record failures. Extensions report progress as a bounded object; the host
-displays the optional fields `completed`, `total`, and
-`outcome: {succeeded, failed, skipped}`. A fatal runtime failure still fails
-the run.
-
-Runs started in a tab are polled only while active and announced with a
-notification that links to the run, so users can close the dialog or leave the
-page. Only the initiator and `extensions.manage` operators can see a run.
-Operators can read, cancel, or download any run, except with `?scope=own` on
-`GET /extension-runs/{run_id}`, its `cancel` and artifact `download` routes,
-which limits every caller to runs they started. Run responses include
-`initiated_by_me`. The initiator can always
-cancel their own run (cancelling reveals nothing about the selection), but can
-read or download it only while they can still read every selected record:
-because a combined artifact may contain any member, losing access to one
-member denies every download of that run. Outputs are downloadable only after the run
-completes and for 30 days; history keeps the run but marks outputs expired.
-Finalized outputs carry the extension's output name as the download filename.
-
-## Extension-owned record annotations
-
-With the `attricat.annotations.write` capability an extension can patch its own
-annotation namespace on a record: tags named `<extension-id>:<tag>` and the
-object at `system_metadata[<extension-id>]`. Callers supply only local names; the
-host derives the namespace from the extension's provenance, so one extension can
-never write another's. The intent is available from operation batches and
-from any `attricat.command.v1` batch (for example a client command) when the
-capability is granted; an annotation-only batch does not need `attricat.write`.
-
-```json
-{"kind": "annotate", "intent_key": "doc-<run>-<record>", "record_id": "<uuid>",
- "add_tags": ["document-generated"], "remove_tags": [],
- "set_metadata": {"last_document": {"template_version": 2}}, "remove_metadata": [],
- "expected_revision": null}
+```sh
+EXTENSION_DEV_EGRESS_RESOLVE=*.mock.test=127.0.0.1:9443
+EXTENSION_DEV_EGRESS_CA_FILE=$PWD/apps/api/tests/fixtures/mock-tls/ca.pem
+EXTENSION_PUBLIC_FILE_BASE_URL=http://127.0.0.1:$API_PORT/api/public/extension-files/
 ```
 
-Patches are bounded (1–32 operations, local names of 1–64 ASCII letters,
-digits, `.`, `_`, `-`), unambiguous (a tag or key appears once), and applied
-under the record row lock against current state, so concurrent writers of
-other namespaces never lose changes. Setting a key replaces its whole value.
-`expected_revision` makes a write conditional; a retried intent key is
-recognized as `already_applied` before the revision is compared. Applied
-outcomes include `annotation_revision`. Each change is audited and emits
-`record.annotations_changed.v1`; it does not change the record's `updated_at`,
-so an extension's own bookkeeping never makes its output look stale. A tag
-change runs the record's checks and on-save enforcing rules when any of them
-uses `has_tag` or `missing_tag` on the record, and is rejected like any other
-write that would violate them. Do not
-store signed URLs or secret inputs in annotations, and do not treat a tag as
-proof that a download is available: resolve that through the run and artifact
-APIs.
+Then build the test exporter, start the mock and run the scenario against the
+worktree stack:
 
-A namespace is claimed on the extension's first annotation write. If records
-already carry data under that name, the write is rejected until an operator
-adopts it with `POST /extensions/{extension_id}/annotation-namespace`
-(inventory with `GET`); adoption never renames or deletes existing values. The
-names `attricat`, `attricat.sample`, `catalog`, `core`, and `system` cannot be
-claimed. Claims are kept across disable, upgrade, and removal, and annotations
-are preserved. Generic writes (record create and `PUT`, duplicate, workflow
-annotation actions, and legacy extension `create`/`upsert` fields) cannot
-change a claimed namespace. Operators repair or clean up a namespace on one
-record with `POST
-/extensions/{extension_id}/annotation-namespace/records/{record_id}`.
+```sh
+node examples/marketplace-export/pack.mjs
+node examples/marketplace-export/mock-server/server.mjs &
+source .worktree && API_LOG=<api log file> node examples/marketplace-export/e2e.mjs
+```
 
-## Context-aware catalog APIs
+The scenario side-loads the exporter, creates Shopify (client credentials),
+Amazon (refresh token) and Allegro (device code) connections, publishes
+listings with variants and an image, and checks variants, staged image
+uploads, single-item and feed listings polled to completion, Allegro offer
+commands polled through deferral, rejections, throttling, a 5xx, an uncertain
+push reconciled by SKU, a single-record retry, withdrawal after unpublishing,
+and that no credential reaches the API log or the mock's query strings.
 
-The `api` interface in `crates/extension-runtime/wit-host/attricat-extension.wit`
-has typed `read`, `write`, `scoped-configuration-get`, and
-`scoped-configuration-set` functions. Dynamic attribute and configuration
-values are JSON strings bounded to 64 KiB; identifiers, scope kinds, response
-shapes, and write selectors are typed WIT records and variants. Components have
-no WASI, network, filesystem, database, browser credential, or ambient host
-access.
+The Rust suites `extension_export_platform`, `extension_brokered_egress` and
+`extension_export_scale` (in `apps/api/tests`) cover the same contracts against
+a local TLS mock without the dev stack.
 
-Server components granted `attricat.read` can request a record, direct current
-values, or resolved values for a supplied record/context pair. Every typed read
-response includes the workspace-owned record, its pinned `BlueprintWithAttributes`
-metadata, direct values, and resolved values when requested. Resolved reads use
-Attricat's existing context/fallback path rather than a copy in the extension.
-`attricat.write` permits only validated scalar writes with an explicit context
-ID; ordinary attribute/type/schema validation, audit records, and the domain-event
-outbox remain in force. A write made while handling an event inherits the
-triggering write's user and token audit attribution, keeps that event's
-correlation ID, uses its ID as causation, and is published with `source_kind:
-plugin` and `source_name: extension:<extension-id>`. Handlers should ignore their own
-extension source name to prevent feedback loops.
-
-This mediation is required: an extension host API must never issue attricat-table
-SQL or implement its own validation, projection, audit, or event logic. Every
-extension-initiated catalog mutation must use `AttricatMutationService` and its
-repository-backed transaction so validation, audit evidence, initiating-actor propagation, and
-the transactional outbox cannot be bypassed.
-
-A manifest may declare `scoped_configuration` with an object schema, positive
-version, and `blueprint` and/or `attribute` scopes. It requires
-`configuration.write`. Attricat persists these values separately from blueprint
-schemas and verifies the workspace-owned blueprint revision and attribute on
-every get/set. Both attribute-scoped and blueprint-scoped values are
-operational. Values are release-bound and
-inaccessible after disable,
-quarantine, grant changes, or upgrade.
-
-A server manifest may declare bounded `server.commands` (stable ID, handler,
-object request/response schemas, and byte limits). They require
-`client.commands`. The only browser path is the opaque-frame MessageChannel
-`attricat.command`; Attricat validates the command and caller session, then
-rechecks contribution, enabled state, exact release, configuration, and grants.
-No extension receives browser cookies, routes, or arbitrary fetch access.
-
-The additional fixed embedded outlets are
-`blueprint_attribute_configuration` (requires `client.blueprint_configuration`),
-`record_attribute_decoration` (requires `client.record_decoration`), and
-`record_action` (requires `client.record_action`). Their contexts contain only
-the relevant catalog IDs: blueprint/revision/attribute, or
-record/attribute/context. Extensions cannot provide DOM selectors, arbitrary
-host routes, React state, or inter-extension RPC.
-
-The `record_header_action` outlet mounts compact extension actions immediately
-before the record's host-owned toolbar. Its strict v1 context is
-`{ "context_version": 1, "record_id", "blueprint_id", "blueprint_version" }`;
-the host shows one primary and three secondary actions before overflow. It
-requires `client.record_header_action`; commands still need `client.commands`.
-The `explorer_row_action` outlet is host-controlled overflow UI for one record;
-its strict v1 context is `{ "context_version": 1, "record_id", "blueprint_id",
-"blueprint_version" }`. The `blueprint_detail_panel` outlet is a host-owned,
-read-only detail-page region with strict v1 context `{ "context_version": 1,
-"blueprint_id", "blueprint_version" }`. These contexts deliberately exclude
-search state, arbitrary record values, and browser page state. Commands from an
-action still require `client.commands` and use the existing validated,
-authorized command broker.
-
-## Reference extension and connector compatibility suites
+### Reference extension and connector compatibility suites
 
 When the sibling `../../attricat-connector-csv` checkout is available, the
 packaged CSV connector can be exercised against this host from the repository

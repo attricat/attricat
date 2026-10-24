@@ -63,10 +63,10 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 | `artifacts.read`, `artifacts.write` | Odczyt danych wejściowych operacji i zapis danych wyjściowych operacji. |
 | `attricat.annotations.write` | Zapis własnej przestrzeni nazw tagów i metadanych rekordów. Zobacz [Adnotacje rekordów](/pl/extensions/operations/#adnotacje-rekordów). |
 | `network.request` | Wykonywanie wychodzących żądań HTTPS pasujących do przyznanego uprawnienia hosta. |
-| `exports.mappings` | Odczyt i zapis [mapowań eksportu](/pl/extensions/server/#mapowania-eksportu) rozszerzenia. Wymagane do zadeklarowania `server.exports`. |
-| `connections.use` | Odczyt [połączeń](/pl/extensions/server/#połączenia) rozszerzenia i wysyłanie żądań z ich tokenami. Wymagane do zadeklarowania `server.connections`. |
+| `exports.mappings` | Odczyt i zapis [mapowań eksportu](/pl/extensions/exports/#mapowania-eksportu) rozszerzenia. Wymagane do zadeklarowania `server.exports`. |
+| `connections.use` | Odczyt [połączeń](/pl/extensions/exports/#połączenia) rozszerzenia i wysyłanie żądań z ich tokenami. Wymagane do zadeklarowania `server.connections`. |
 | `attricat.files.read` | Kopiowanie pliku, do którego odwołuje się rekord, do danych wejściowych operacji przez `transfer.open-record-file`. |
-| `attricat.files.public_links` | Wydawanie [publicznych linków](/pl/extensions/server/#publiczne-linki-do-plików) do plików, do których odwołują się rekordy. |
+| `attricat.files.public_links` | Wydawanie [publicznych linków](/pl/extensions/exports/#publiczne-linki-do-plików) do plików, do których odwołują się rekordy. |
 | `webhooks.receive` | Deklarowanie przychodzących webhooków (jeszcze nie są dostarczane). |
 
 ### Interakcja z klientem
@@ -78,18 +78,12 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 | `client.notification` | Wyświetlenie powiadomienia. |
 | `client.refresh` | Odświeżenie bieżącego rekordu po zmianie. |
 | `client.events` | Odbieranie w ramce zdarzeń zmiany kontekstu. |
-| `client.confirmation` | Poproszenie użytkownika o potwierdzenie akcji. |
-| `client.download` | Udostępnienie pliku do pobrania. |
-| `client.external_navigation` | Otwieranie dozwolonych adresów HTTPS w nowej karcie. |
-| `client.files.read`, `client.files.upload` | Odczyt i przesyłanie plików w kontekście pliku. |
-| `client.search` | Wyszukiwanie w katalogu. |
-| `client.live_updates` | Odbieranie aktualizacji dotyczących bieżącego kontekstu. |
-| `client.clipboard` | Zapis tekstu do schowka po akcji użytkownika. |
-| `client.locale.read` | Odczyt ustawień regionalnych użytkownika. |
 | `client.theme.read` | Akceptowane dla zgodności. Motyw jest zawsze dostępny. |
 | `client.operations.start` | Uruchamianie operacji interaktywnych rozszerzenia dla zaznaczenia ramki. |
 | `client.operations.read` | Wyświetlanie, odczyt i pobieranie wyników uruchomień tego rozszerzenia należących do użytkownika. |
 | `client.operations.cancel` | Anulowanie uruchomień tego rozszerzenia należących do użytkownika. |
+
+Manifest przyjmuje też `client.confirmation`, `client.download`, `client.external_navigation`, `client.files.read`, `client.files.upload`, `client.search`, `client.live_updates`, `client.clipboard` i `client.locale.read`. Są one zarezerwowane dla API ramki, które jeszcze nie istnieją: ich przyznanie nic ramce nie daje, więc nie proś o nie.
 
 ### Umiejscowienie w kliencie
 
@@ -210,6 +204,8 @@ Eksportowane typy zdarzeń muszą zaczynać się od `plugin.<extension-id>.` i k
 | `webhooks` | `id`, `event_type`, `handler`, `methods` (`["POST"]`), `authentication`, `max_body_bytes` | `webhooks.receive`. Zadeklarowane, ale jeszcze niedostarczane. |
 | `connections` | Zobacz [Połączenia](#połączenia). | `connections.use` |
 | `exports` | Zobacz [Miejsca docelowe eksportu](#miejsca-docelowe-eksportu). | `exports.mappings` |
+
+`handler` to nazwa, którą widzi Twój komponent: polecenia otrzymują ją jako `request.handler`, a operacje jako `operation-id`. Procedury obsługi zdarzeń jej nie otrzymują; zobacz [Która procedura obsługi została wywołana](/pl/extensions/server/#która-procedura-obsługi-została-wywołana).
 
 ### Połączenia
 

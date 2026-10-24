@@ -179,6 +179,11 @@ export default defineConfig({
               slug: 'extensions/operations',
               translations: polish('Operacje i konektory'),
             },
+            {
+              label: 'Export connectors',
+              slug: 'extensions/exports',
+              translations: polish('Konektory eksportu'),
+            },
           ],
         },
         {

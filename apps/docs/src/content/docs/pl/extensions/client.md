@@ -53,7 +53,9 @@ Ramka pozostaje zamontowana, gdy użytkownik przełącza kontekst lub motyw. Nas
 | `attricat:context-changed.v1` | `client.events` | Na starcie i przy każdej zmianie kontekstu miejsca osadzenia. |
 | `attricat:theme-changed.v1` | | Za każdym razem, gdy użytkownik przełącza tryb jasny i ciemny. |
 
-Kolejne pośredniczone operacje, każda z własnym uprawnieniem, obejmują okna potwierdzenia, pobieranie plików, otwieranie dozwolonych adresów HTTPS, odczyt i przesyłanie plików w kontekście pliku, wyszukiwanie w katalogu, aktualizacje na żywo, zapis do schowka i odczyt ustawień regionalnych. Okna dialogowe i postęp tych operacji rysuje host.
+Ramka nie ma innych składowych. W szczególności nie ma `fetch` do API, dostępu do adresu URL przeglądarki ani możliwości wywołania innego rozszerzenia. Manifest przyjmuje niektóre uprawnienia [zarezerwowane](/pl/extensions/manifest/#interakcja-z-klientem) dla przyszłych API ramki; ich przyznanie na razie niczego nie daje.
+
+Wywołania zwracają obietnice. Wywołanie, na które nie pozwalają Twoje uprawnienia albo które host odrzuci, kończy się odrzuceniem z obiektem `Error`, którego komunikat podaje przyczynę.
 
 Twój interfejs musi dostarczać własne przetłumaczone teksty i dostępne etykiety.
 

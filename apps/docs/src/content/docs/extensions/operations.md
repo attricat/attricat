@@ -21,7 +21,16 @@ An **operation** is long-running server work, such as exporting 200,000 products
 }
 ```
 
-The component implements `prepare`, `start`, `process-batch`, `checkpoint`, `finish`, and `cancel`. Each call receives the run ID, the configuration snapshot, the validated input, the last checkpoint, and a **batch key**.
+The component implements `prepare`, `start`, `process-batch`, `checkpoint`, `finish`, and `cancel`. Each call receives an `operation-request` with the run ID, the operation's `handler` as `operation-id`, the configuration snapshot, the validated input, the last checkpoint, and a **batch key**. The configuration, input, and checkpoint are JSON strings.
+
+Attricat runs one batch at a time:
+
+1. On the first batch, it calls `prepare`, then `start`. If the worker stops before the first batch completes, they are called again, so keep them free of side effects you cannot repeat.
+2. It calls `process-batch`. Do a bounded amount of work and return `{checkpoint, progress, done}`. `checkpoint` and `progress` must be JSON objects; the checkpoint is at most 64 KiB, so store cursors and counters in it, not data.
+3. It saves the checkpoint and calls `checkpoint` with it.
+4. When `done` is true, it calls `finish`. Otherwise the next batch gets the saved checkpoint and a new batch key.
+
+The checkpoint starts as `{}`. When someone cancels a running operation, the next batch calls `cancel` instead of `process-batch`, and the run ends.
 
 ## Defer and fail batches (1.1)
 
@@ -120,7 +129,7 @@ A delivery attempt is recorded before any network traffic. After a timeout or cr
 
 Host API 1.1 adds versions that fit marketplace and cloud storage uploads:
 
-- `transfer.fetch-input-v2` and `transfer.deliver-output-v2` take the v1 fields plus `headers` (headers you control, such as the exact `Content-Type` a presigned URL was signed for) and `connection` (adds the [connection's](/extensions/server/#connections) token). They accept query strings, such as presigned S3 or GCS URLs, when the rule sets `allow_query`. When a fetch with a `connection` gets a 401, the token is discarded and the call answers `{"outcome": "failed", "status": 401}`, so you can retry with a fresh token. A `deliver-output-v2` whose connection or TLS handshake fails answers `{"outcome": "unreachable"}`: nothing was sent, and the same delivery key may be sent again.
+- `transfer.fetch-input-v2` and `transfer.deliver-output-v2` take the v1 fields plus `headers` (headers you control, such as the exact `Content-Type` a presigned URL was signed for) and `connection` (adds the [connection's](/extensions/exports/#connections) token). They accept query strings, such as presigned S3 or GCS URLs, when the rule sets `allow_query`. When a fetch with a `connection` gets a 401, the token is discarded and the call answers `{"outcome": "failed", "status": 401}`, so you can retry with a fresh token. A `deliver-output-v2` whose connection or TLS handshake fails answers `{"outcome": "unreachable"}`: nothing was sent, and the same delivery key may be sent again.
 - A v2 delivery sends `Idempotency-Key` only when you pass `idempotency_key`. A `PUT` to a presigned URL is idempotent by itself. A `POST` still needs `idempotent_delivery: true` on its rule.
 - `multipart: {"fields": [{"name", "value"}], "file_field", "filename"?}` sends a `multipart/form-data` form with the artifact as its file part, for form-style staged uploads.
 - A v2 delivery can upload a completed input artifact of the run as well as an output.
@@ -136,17 +145,7 @@ Page cursors resolve values as of the first page, using value history, and expir
 
 In a connector run, `attricat-data.batch` also accepts annotation-only batches on records of the job's blueprint, so an exporter can [annotate](#record-annotations) records with external IDs or sync state where checks and the Explorer can see them. Export runs still cannot write values.
 
-### Export pages and withdrawals
-
-Host API 1.1 adds connector calls for exporters:
-
-- `attricat.page-v2({"cursor", "limit", "expand"?})` reads 1 to 16 rows of the run's blueprint, context, and channel. Each row has `record_id`, `content_revision`, `blueprint_version`, `updated_at`, and:
-  - `values`: scalar values resolved through the context's fallback chain, so values inherited from parent contexts are included;
-  - `relationships`: relationship targets by attribute code;
-  - `files`: file references (`file_id`, `filename`, `mime_type`, `byte_size`, `sha256`) by attribute code, for `open-record-file` and [`files.link.v1`](/extensions/server/#public-file-links);
-  - `related`: for up to four relationship codes named in `expand`, the targets' values, relationships, files, revision, and whether each is published in the channel. Use it for variants and parent/child listings. With `expand`, the row's `content_revision` is the newest revision of the record and the records it embeds, so editing or deleting a variant makes its parent's row newer than the revision last committed for it.
-- `attricat.withdrawn(cursor, limit)` lists 1 to 100 records of the job's blueprint that were unpublished from the run's channel (and are still unpublished), in event order. A run limited to selected records gets each selected record's latest withdrawal instead, page by page with `more`; its cursor keeps the channel's position, so later runs still see every other withdrawal. Deleting a record unpublishes it from every channel it was live in, so it is reported with reason `deleted`, while a record never published in the channel is never reported. Items come as `{record_id, reason, record_revision, occurred_at}`, with `next_cursor` and `more`. An empty cursor starts at the oldest change. Save the cursor, for example in extension storage per job and channel, so the next run continues where this one stopped. While Attricat is busy writing events, a page can come back with no records but `more: true` and the same cursor; call again.
-- `api.call("connector.scope.v1", "{}")` returns the run's job, blueprint, revision, context, channel, connection, and mode, or `null` outside a connector run.
+Export runs read records with the 1.1 `attricat.page-v2` and `attricat.withdrawn` calls instead. See [Export connectors](/extensions/exports/#read-records-to-export).
 
 ## Schedules
 
@@ -186,7 +185,7 @@ input = { profile = { version = 1, business_key = "sku", columns = [
 ```
 
 - Jobs are validated against the enabled extension when the blueprint revision is published. An invalid job blocks publication.
-- An **export** job creates one run per enabled [publication channel](/guides/publishing/). Each run reads values in that channel's context and includes only records published to it.
+- An **export** job creates one run per enabled [publication channel](/guides/publishing/), or only for the channel it names as `context`. Each run reads values in that channel's context and includes only records published to it.
 - An **import** job creates one run that writes to its `context`.
 - A later revision matches jobs by `code`. A job left out of the new revision is disabled; its history stays.
 - Set `enabled = false` to pause a job.
@@ -202,32 +201,4 @@ acli connector-job run <job-id> --idempotency-key manual-2026-03-01
 
 Managing connector jobs needs `extensions.manage`.
 
-### Run exports on change
-
-An export job can also run when its records change:
-
-```toml
-[[connector_jobs]]
-code = "shopify"
-direction = "export"
-extension_id = "acme.shopify"
-operation_id = "export"
-connection = "shop-eu"
-trigger = { events = ["record.updated.v1", "attribute_value.changed.v1"], debounce_seconds = 30 }
-input = {}
-```
-
-A run starts once the newest matching event of the blueprint's records is `debounce_seconds` old, so a burst of edits causes one run. Steady edits cannot hold it back forever: a run also starts once the oldest pending change is ten times `debounce_seconds` old. If the run cannot start, for example while the extension is disabled, the changes stay pending and are exported once it can. A matching event of a record that one of the blueprint's records links to through a relationship counts as a change of the linking record, because `page-v2` can embed it. The run only covers the changed records, up to 10,000; with more changes it runs the whole job. See [Connector jobs](/reference/blueprint/#connector-jobs) for the allowed events.
-
-Each run records its mode: `incremental`, `triggered`, or `resync`.
-
-### Resync
-
-A resync exports again every published record of an export job, or only some of them:
-
-```http
-POST /api/blueprint-connector-jobs/{id}/resync
-{"idempotency_key": "resync-2026-03-01", "status": "rejected"}
-```
-
-Pass `record_ids` for given records, or `status` for the records with that export status on the job's connection, but not both. Without either, every published record is exported. A resync reads the same rows as any run, but `begin` leases records settled before the run started, so an exporter should skip records whose stored content hash is unchanged and push the rest. The idempotency key covers the selection: the same key with other `record_ids` or another `status` starts a new resync.
+Export jobs can also run when records change, push to a named connection, and be resynced. See [Export connectors](/extensions/exports/).

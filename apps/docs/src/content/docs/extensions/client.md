@@ -53,7 +53,9 @@ The frame stays mounted when the user switches context or theme. Listen for the 
 | `attricat:context-changed.v1` | `client.events` | At start and whenever the outlet's context changes. |
 | `attricat:theme-changed.v1` | | Whenever the user switches between light and dark. |
 
-Further mediated operations, each with its own capability, cover confirmation dialogs, downloads, opening allowed HTTPS URLs, reading and uploading files in a file context, catalog search, live updates, clipboard writes, and reading the locale. The host draws the dialogs and progress for these.
+The frame has no other members. In particular it has no `fetch` to the API, no access to the browser URL, and no way to call another extension. The manifest accepts some capabilities that are [reserved](/extensions/manifest/#client-interaction) for future frame APIs; granting them adds nothing yet.
+
+Calls return promises. A call your grants don't allow, or that the host refuses, rejects with an `Error` whose message says why.
 
 Your UI must supply its own translated text and accessible labels.
 

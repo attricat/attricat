@@ -63,10 +63,10 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 | `artifacts.read`, `artifacts.write` | Reading operation inputs and writing operation outputs. |
 | `attricat.annotations.write` | Writing this extension's own namespace of record tags and metadata. See [Record annotations](/extensions/operations/#record-annotations). |
 | `network.request` | Making outbound HTTPS requests that match a granted host permission. |
-| `exports.mappings` | Reading and writing the extension's [export mappings](/extensions/server/#export-mappings). Required to declare `server.exports`. |
-| `connections.use` | Reading the extension's [connections](/extensions/server/#connections) and sending requests with their tokens. Required to declare `server.connections`. |
+| `exports.mappings` | Reading and writing the extension's [export mappings](/extensions/exports/#export-mappings). Required to declare `server.exports`. |
+| `connections.use` | Reading the extension's [connections](/extensions/exports/#connections) and sending requests with their tokens. Required to declare `server.connections`. |
 | `attricat.files.read` | Copying a file a record references into an operation input with `transfer.open-record-file`. |
-| `attricat.files.public_links` | Issuing [public links](/extensions/server/#public-file-links) to files records reference. |
+| `attricat.files.public_links` | Issuing [public links](/extensions/exports/#public-file-links) to files records reference. |
 | `webhooks.receive` | Declaring inbound webhooks (not delivered yet). |
 
 ### Client interaction
@@ -78,18 +78,12 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 | `client.notification` | Showing a notification. |
 | `client.refresh` | Refreshing the current record after a change. |
 | `client.events` | Receiving context-change events in the frame. |
-| `client.confirmation` | Asking the user to confirm an action. |
-| `client.download` | Offering a file download. |
-| `client.external_navigation` | Opening allowed HTTPS URLs in a new tab. |
-| `client.files.read`, `client.files.upload` | Reading and uploading files in a file context. |
-| `client.search` | Running a catalog search. |
-| `client.live_updates` | Receiving updates about the current context. |
-| `client.clipboard` | Writing text to the clipboard after a user action. |
-| `client.locale.read` | Reading the user's locale. |
 | `client.theme.read` | Accepted for compatibility. The theme is always available. |
 | `client.operations.start` | Starting the extension's interactive operations for the frame's selection. |
 | `client.operations.read` | Listing the user's runs of this extension, reading them, and downloading their outputs. |
 | `client.operations.cancel` | Cancelling the user's runs of this extension. |
+
+The manifest also accepts `client.confirmation`, `client.download`, `client.external_navigation`, `client.files.read`, `client.files.upload`, `client.search`, `client.live_updates`, `client.clipboard`, and `client.locale.read`. These are reserved for frame APIs that don't exist yet: granting them gives a frame nothing, so don't request them.
 
 ### Client placement
 
@@ -210,6 +204,8 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 | `webhooks` | `id`, `event_type`, `handler`, `methods` (`["POST"]`), `authentication`, `max_body_bytes` | `webhooks.receive`. Declared but not delivered yet. |
 | `connections` | See [Connections](#connections). | `connections.use` |
 | `exports` | See [Export destinations](#export-destinations). | `exports.mappings` |
+
+`handler` is a name your component sees: commands receive it as `request.handler`, operations as `operation-id`. Event handlers don't receive it; see [Which handler was called](/extensions/server/#which-handler-was-called).
 
 ### Connections
 

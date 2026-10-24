@@ -20,9 +20,41 @@ Build your component against one of these worlds:
 
 `outcome-extension` exports the 1.1 interfaces, which report [typed outcomes](#typed-outcomes) instead of a plain error. When a component exports a 1.1 interface, the host calls it instead of its 1.0 predecessor. A component that needs only some of the three exports returns a fault from the others.
 
-Every import is always available, but some only work in the right place. The operation interfaces (`artifacts`, `attricat-data`, `catalog`, `transfer`, `selection`) return an error outside an operation run. Inside a run, the typed `read` and `write` functions and the `attricat.read.v1` and `attricat.command.v1` calls return an error; use the run's own catalog interfaces instead.
+Every import is always available, but some only work in the right place. The operation interfaces (`artifacts`, `attricat-data`, `attricat`, `transfer`, `selection`) return an error outside an operation run. Inside a run, the typed `read` and `write` functions and the `attricat.read.v1` and `attricat.command.v1` calls return an error; use the run's own catalog interfaces instead.
 
-Later 1.x versions only add to 1.0. A component built for an earlier 1.x keeps working on newer hosts without a rebuild.
+Later 1.x versions only add to 1.0. A component built for an earlier 1.x keeps working on newer hosts without a rebuild. To build a component, see [Build a server component](/extensions/build/#build-a-server-component).
+
+## Calling the host
+
+The `api` interface has typed functions (`read`, `write`, `scoped-configuration-get`, `scoped-configuration-set`, `log`) and one generic function, `call(operation, request)`. `call` takes an operation name and a JSON request string, and returns a JSON response string or an error message:
+
+```rust
+let response = api::call("storage.get.v1", r#"{"key":"last-sync"}"#)?;
+```
+
+| Operation | Needs | Described in |
+| --- | --- | --- |
+| `configuration.get.v1` | `configuration.read` | [Configuration](#configuration) |
+| `storage.get.v1`, `storage.set.v1`, `storage.delete.v1`, `storage.list.v1` | `storage.extension` | [Storage](#storage) |
+| `secrets.get.v1` | `secrets.read` | [Secrets](#secrets) |
+| `attricat.read.v1` | `attricat.read` | [Read and write the catalog](#read-and-write-the-catalog) |
+| `attricat.command.v1` | `attricat.write`, or `attricat.annotations.write` for annotation-only batches | [Read and write the catalog](#read-and-write-the-catalog) |
+| `events.emit.v1` | `events.emit` | [Publish events](#publish-events-for-other-extensions) |
+| `network.request.v1`, `network.request.v2` | `network.request` | [Call external services](#call-external-services) |
+| `connections.list.v1`, `connections.get.v1` | `connections.use` | [Export connectors](/extensions/exports/#connections) |
+| `mappings.*.v1` | `exports.mappings` | [Export connectors](/extensions/exports/#export-mappings) |
+| `files.link.v1` | `attricat.files.public_links` | [Export connectors](/extensions/exports/#public-file-links) |
+| `connector.scope.v1` | | [Export connectors](/extensions/exports/#run-scope) |
+
+The host checks the grant on every call, so a grant revoked while your code runs takes effect at its next call. A refused call returns an error such as `missing capability 'storage.extension'`, and an unknown name returns `unknown host operation`. Requests and responses are limited to 64 KiB of JSON.
+
+### Which handler was called
+
+A manifest names a `handler` for each event handler, command, and operation, but a component has one export for each kind of call:
+
+- **Commands** receive the command's `handler` as `request.handler`. Dispatch on it.
+- **Operations** receive the operation's `handler` as `request.operation-id`.
+- **Event handlers** receive only the event. Dispatch on `event.event-type`. If two event handlers subscribe to the same type, your component is called once for each with the same event.
 
 ## Handle catalog events
 
@@ -68,7 +100,7 @@ A 1.1 `event-handler` exports `handle-event(event, delivery)`, which returns `re
 
 | Case | What happens |
 | --- | --- |
-| `rejected { code, message, record-id?, connection? }` | The failure is recorded and never retried; the delivery completes. With a `record-id`, the record's [export status](#export-mappings) becomes `rejected` with the code and message. |
+| `rejected { code, message, record-id?, connection? }` | The failure is recorded and never retried; the delivery completes. With a `record-id`, the record's [export status](/extensions/exports/#export-mappings) becomes `rejected` with the code and message. |
 | `retry { message, after-ms? }` | Only this handler is retried, after `after-ms` or a backoff from 5 seconds doubling to one hour, up to 10 attempts. After that the delivery is recorded as `exhausted`, and records the handler still leases become `retrying` with error `retries_exhausted`. |
 | `fault(message)` | The installation is quarantined, and records the handler leased become `retrying` with error `handler_fault`. |
 
@@ -82,19 +114,56 @@ Traps, running out of fuel or memory, and timeouts count as faults. Outcomes are
 
 ## Read and write the catalog
 
-With `attricat.read`, a component can read a record, its direct values, or its values resolved in a context. Responses include the record's pinned blueprint revision.
+With `attricat.read`, the typed `api.read` function reads a record (`record`), its direct values (`values`), or its values resolved in a context through the fallback chain (`resolved`). Responses include the record's pinned blueprint revision, so you can map attribute IDs to codes.
 
-With `attricat.write`, it can write scalar values in an explicit context. Writes go through the normal path: type checks, schemas, audit, and a new domain event.
+With `attricat.write`, `api.write` writes scalar values in an explicit context, naming each attribute by `attribute-id` or `attribute-code`. Writes go through the normal path: type checks, schemas, audit, and a new domain event.
 
-A write made while handling an event is attributed to the user or token behind the original change, keeps the event's correlation ID, and is published with source `extension:<extension-id>`. **Ignore events from your own source**, or a handler that writes will trigger itself.
+A write made while handling an event is attributed to the user or token behind the original change, keeps the event's correlation ID, and is published with source `extension:<extension-id>`. Your handler receives the event that write causes. The event does not carry its source, so compare before you write: if the value is already what you would write, skip the write, and the loop ends.
 
-The JSON `attricat.read.v1` and `attricat.command.v1` calls add paged reads, change feeds, single-attribute lookups, and batches of `create`, `update`, `relationships`, and `upsert` intents. An upsert matches on a declared business key attribute, creates only when no record matches, and fails if more than one does. Its relationship sets apply whether it updates a match or creates the record.
+`attricat.read.v1` adds paged reads, change feeds, and lookups. The request names an `operation`:
+
+```json
+{ "operation": "page", "blueprint_id": "…", "blueprint_version": 3, "context_id": "…", "cursor": null, "limit": 100 }
+{ "operation": "changes", "blueprint_id": "…", "blueprint_version": 3, "cursor": null, "limit": 100 }
+{ "operation": "lookup", "blueprint_id": "…", "blueprint_version": 3, "attribute_id": "…", "value": "ABC-1" }
+```
+
+`page` returns `{records, next_cursor}`, with up to 100 records. Pass `next_cursor` back until it is `null`. `changes` pages through record changes of the blueprint in event order; save its cursor to resume later. `lookup` returns one record or `null`.
+
+`attricat.command.v1` applies a batch of intents:
+
+```json
+{
+  "operation": "batch",
+  "batch": {
+    "batch_key": "sync-2026-03-01",
+    "dry_run": false,
+    "intents": [
+      { "kind": "update", "intent_key": "price-ABC-1", "record_id": "…",
+        "values": [{ "kind": "scalar", "attribute_code": "price", "context_id": "…", "value": 19.99 }] }
+    ]
+  }
+}
+```
+
+Intent kinds are `create`, `update`, `relationships`, `upsert`, and [`annotate`](/extensions/operations/#record-annotations). A batch holds up to 100 intents. The response lists one outcome per intent, `{intent_key, status, record_id, error}`, where `status` is `applied`, `already_applied`, `validated` (with `dry_run: true`), or `rejected`. Keep intent keys stable across retries: an intent key that was already applied is reported as `already_applied` and not written twice.
+
+An upsert matches on a declared business key attribute (`lookup_attribute_id` and `lookup_value`), creates only when no record matches, and fails if more than one does. Its relationship sets apply whether it updates a match or creates the record.
 
 A lookup resolves exactly like an upsert. If the attribute alone is a declared unique key on a string attribute, the lookup uses that key's normalized values across every revision of the blueprint family; otherwise it matches the exact text among records of the requested revision. A value that matches more than one record fails with `lookup matched multiple records` instead of returning one of them.
 
 ## Storage
 
-With `storage.extension`, `storage.get.v1`, `storage.set.v1`, `storage.delete.v1`, and `storage.list.v1` give the extension its own key-value store, scoped to the workspace and release. `set` and `delete` accept an `expected_revision` for optimistic concurrency. An installation can store up to 65,536 keys and 256 MiB, with values of at most 64 KiB.
+With `storage.extension`, the extension gets its own key-value store in the workspace. Values are any JSON. Only the installed release can reach it, and entries carry over when the extension is upgraded.
+
+| Operation | Request | Response |
+| --- | --- | --- |
+| `storage.get.v1` | `{key}` | `{value, revision}`, or `null` |
+| `storage.set.v1` | `{key, value, expected_revision?}` | `{revision}` |
+| `storage.delete.v1` | `{key, expected_revision?}` | `null` |
+| `storage.list.v1` | `{prefix?, cursor?, limit?}` | `{entries: [{key, value, revision}], cursor}` |
+
+`expected_revision` makes `set` and `delete` fail if the key changed since you read it. An installation can store up to 65,536 keys and 256 MiB, with values of at most 64 KiB.
 
 ## Configuration
 
@@ -102,7 +171,20 @@ With `storage.extension`, `storage.get.v1`, `storage.set.v1`, `storage.delete.v1
 
 ## Commands for your UI
 
-Server commands let an extension's client component ask its server component to do something. Declare them in `server.commands` with request and response schemas. The client calls `attricat.command({ command_id, payload })`. Attricat validates the payload, checks the caller's session, the contribution, the release, and the grants, then invokes your handler.
+Server commands let an extension's client component ask its server component to do something. Declare them in `server.commands` with request and response schemas, and grant `client.commands`:
+
+```json
+"commands": [{
+  "id": "recalculate",
+  "handler": "recalculate",
+  "request_schema": { "type": "object", "required": ["record_id"] },
+  "response_schema": { "type": "object" }
+}]
+```
+
+The client calls `attricat.command({ command_id: 'recalculate', payload: { record_id } })`. Attricat validates the payload against `request_schema`, checks the caller's session, the contribution, the release, and the grants, then calls `handle-command` with `handler: "recalculate"` and the payload as a JSON string. Return the response as a JSON string; it is validated against `response_schema` before the client receives it. An error you return does not quarantine the extension, but the client's promise rejects with a generic `extension command failed` message. Your error text is not passed on, so report problems the user should see, such as invalid input, inside the response.
+
+A command runs with the extension's grants, not the user's permissions. Check in your handler that the action makes sense for the record it names.
 
 ## Secrets
 
@@ -140,7 +222,7 @@ The broker never retries. A timeout or connection failure is an **uncertain outc
 - a query string in `url`, if the matching rule sets `allow_query: true`, for parameters such as `?marketplaceIds=` or presigned URLs. Query values never appear in logs, traces, metrics, errors, or the stored delivery history;
 - `body_base64` for a binary body, instead of `body`;
 - `secret_body: {"format": "form" | "json", "fields": [{"field", "secret"}]}`, which puts workspace secrets into a form or JSON body. A JSON `field` is a top-level key or a JSON pointer. The component never sees the secret;
-- `connection`, which adds the [connection's](#connections) access token to the request;
+- `connection`, which adds the [connection's](/extensions/exports/#connections) access token to the request;
 - `idempotency_key`, sent as the `Idempotency-Key` header.
 
 ```json
@@ -164,61 +246,13 @@ The result has an `outcome`:
 
 `headers` holds `content-type`, `etag`, `retry-after`, and the headers the rule lists in `response_headers`. Redirects are never followed: a 3xx response is returned as it is, and you can request its `Location` through a granted rule. A 401 response discards the connection's cached token, so the next request gets a new one.
 
-## Connections
+## Export to marketplaces and storefronts
 
-A connection is a destination account, such as a Shopify shop or an Amazon seller account, that an operator sets up for your extension. You declare connection kinds in the [manifest](/extensions/manifest/#connections). Attricat stores the credentials encrypted, runs the OAuth grants, and refreshes tokens. Your component never sees a secret or a token.
+Connections, export mappings, public file links, and change-triggered export jobs are described in [Export connectors](/extensions/exports/).
 
-With `connections.use`:
+## Logging
 
-- `connections.list.v1` with `{}` returns `{"connections": [...]}`.
-- `connections.get.v1` with `{"connection": "shop-eu"}` returns one connection.
-
-Each connection is described by `connection` (its name), `kind`, `display_name`, `parameters` (non-secret settings, such as a shop domain or seller ID, validated against the kind's `parameters_schema`), and `status` (`pending_authorization`, `active`, `failed`, or `revoked`).
-
-To call the destination, pass `connection` to `network.request.v2` or a [v2 transfer](/extensions/operations/#file-transfers). The host adds the access token, as `Authorization: Bearer` or the kind's `token_header`, only to requests matched by one of the kind's `api_host_permissions`.
-
-## Export mappings
-
-With `exports.mappings`, Attricat keeps one mapping per installation, connection, and record: the external ID, named external IDs, the content hash and record revision last pushed, a status, the last error, and timestamps. It is built for full catalogs and has an index on the external ID. A mapping is deleted with its record or connection; a soft-deleted record keeps its mapping so you can withdraw the item.
-
-The mapping status is the record's export status that people see on the record page, in the Explorer, and on Data health. Statuses are `pending`, `synced`, `rejected`, `retrying`, `uncertain`, and `withdrawn`.
-
-Every record has a `content_revision`: the sequence of the latest event that changed its values, relationships, publication, or lifecycle. It only grows. Annotation changes do not advance it, so your own bookkeeping never makes a record look changed. Publication changes count only for the channel being read: a connector page row counts those of the run's channel, and a read without a channel counts none, so publishing to another channel never makes your export look stale. Typed reads, [connector page v2](/extensions/operations/#export-pages-and-withdrawals) rows, and `event-handler` deliveries carry it. A delivery of a publish or unpublish event carries the revision without publication changes, like a read without a channel.
-
-These `api.call` operations work in event handlers and operation runs alike. `connection` is optional everywhere; without it the mapping belongs to the extension's default destination.
-
-| Operation | Request | Result |
-| --- | --- | --- |
-| `mappings.get.v1` | `{connection?, record_id}` or `{connection?, external_id}` | `{mapping}`, or `{mapping: null}` |
-| `mappings.list.v1` | `{connection?, status?, after?, limit?}` (1 to 100) | `{mappings, next}` |
-| `mappings.begin.v1` | `{connection?, record_id, record_revision, lease_ms?, force?}` | `{outcome: "proceed", lease_token, mapping}`, `{outcome: "stale", mapping}`, or `{outcome: "busy", lease_until}` |
-| `mappings.commit.v1` | `{connection?, record_id, lease_token?, status, record_revision?, external_id?, external_ids?, content_hash?, error?}` | `{mapping}` |
-| `mappings.release.v1` | `{connection?, record_id, lease_token}` | `{released}` |
-| `mappings.delete.v1` | `{connection?, record_id}` | `{deleted}` |
-
-Inside an operation run, `begin`, `commit`, `release`, and `delete` accept only records the run covers: records of a connector run's blueprint (including deleted or unpublished ones it withdraws), or an interactive run's selected records. A connector run writes only its own connection's mappings, and a run limited to selected records only theirs. A connector run of a connection also sends only that connection's token, and a run of the default destination sends none.
-
-Call `begin` before pushing a record. It protects against reordered and duplicate work:
-
-- It answers `stale` for a revision older than the mapping's, whatever its status, because the commit would be refused after the push, and for a deleted record: its mapping only accepts a `withdrawn` commit.
-- At the mapping's own revision, it answers `stale` when the mapping is already `synced` or `rejected`, unless an operator asked for a retry or you pass `force`. A `withdrawn` record published again unchanged comes back at the same revision and is pushed again.
-- Otherwise it leases the record for `lease_ms` (default two minutes, at most 15), so an event handler and a connector run never push the same record at the same time. It answers `busy` while someone else holds the lease.
-
-`commit` stores the result and releases the lease. Without a lease token it fails while another worker holds a live lease, and a `synced` result never replaces a newer synced revision. If a batch fails, release the leases it holds.
-
-After an `uncertain` push to a destination without idempotency keys, commit the mapping as `uncertain`. Before pushing that record again, look it up on the destination, for example by SKU, and record what you found. `mappings.get.v1` by `external_id` finds the record for an item you see on the destination.
-
-Keep large destination reference data, such as category trees or product-type definitions, in extension storage.
-
-## Public file links
-
-Some destinations fetch images themselves, sometimes hours after a listing is submitted. With `attricat.files.public_links`, `attricat.files.read` and `attricat.read`, `files.link.v1` issues a public, unguessable link to a file a record references:
-
-```json
-{ "file_id": "…", "record_id": "…", "expires_in_seconds": 86400 }
-```
-
-It returns `{"url": "…", "expires_at": "…"}`. A link lives from 60 seconds to 7 days. Inside an operation run, only records the run covers can be linked: a connector run's selection (and, for a channel export, published records) and the live records those link to, or an interactive run's selected records. Anyone with the link can download the file while it is unexpired and the extension is enabled with all three capabilities. Only a hash of the token is stored. The deployment must set [`EXTENSION_PUBLIC_FILE_BASE_URL`](/reference/configuration/#extensions); otherwise the call fails.
+With `logging.write`, `api.log(level, message)` writes a message to the Attricat server log, tagged with your extension ID. `level` is `trace`, `debug`, `info`, `warn`, or `error`, and messages are limited to 16 KiB. Without the grant, or with another level, the call returns an error. Never log secrets, tokens, or personal data.
 
 ## Publish events for other extensions
 
