@@ -1329,13 +1329,7 @@ impl AttricatRepository {
             .bind(current.id).bind(grant_kind).bind(grant_id).execute(&mut *transaction).await?;
         // Links need every grant they were issued under; once one is
         // revoked they end, so granting it again never revives them.
-        if grant_kind == GRANT_KIND_CAPABILITY
-            && [
-                "attricat.read",
-                "attricat.files.read",
-                "attricat.files.public_links",
-            ]
-            .contains(&grant_id)
+        if grant_kind == GRANT_KIND_CAPABILITY && super::PUBLIC_FILE_LINK_GRANTS.contains(&grant_id)
         {
             self.revoke_extension_file_links(&mut transaction, &current.extension_id)
                 .await?;
@@ -1533,13 +1527,14 @@ impl AttricatRepository {
             .await?;
         self.revoke_extension_file_links(&mut transaction, &current.extension_id)
             .await?;
-        // Credentials, operator budgets and handler outcomes go with the
-        // installation, so a later install of the same ID starts without
-        // them. Export mappings stay: they only name destination IDs.
+        // Credentials, operator budgets, handler outcomes and retry keys go
+        // with the installation, so a later install of the same ID starts
+        // without them. Export mappings stay: they only name destination IDs.
         for table in [
             "extension_connections",
             "extension_host_permission_budgets",
             "extension_handler_attempts",
+            "extension_export_retry_requests",
         ] {
             sqlx::query(&format!(
                 "DELETE FROM {table} WHERE workspace_id = $1 AND extension_id = $2"

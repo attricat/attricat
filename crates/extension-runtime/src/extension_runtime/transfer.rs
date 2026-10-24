@@ -588,6 +588,8 @@ impl OperationState {
             input.etag.as_deref(),
         )?;
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
+        host.run_id = Some(self.run_id);
+        host.run_facts = self.run_facts.clone();
         host.require_active("network.request").await?;
         let url = transfer_url(&input.url)?;
         let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
@@ -631,6 +633,8 @@ impl OperationState {
             input.etag.as_deref(),
         )?;
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
+        host.run_id = Some(self.run_id);
+        host.run_facts = self.run_facts.clone();
         host.require_active("network.request").await?;
         let url = https_url(&input.url)?;
         let caller = checked_caller_headers(
@@ -786,6 +790,8 @@ impl OperationState {
             return Err("invalid multipart form".into());
         }
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
+        host.run_id = Some(self.run_id);
+        host.run_facts = self.run_facts.clone();
         host.require_active("network.request").await?;
         // A replay of a recorded delivery returns its outcome before it
         // spends a request budget, resolves DNS or refreshes a token.
@@ -960,6 +966,8 @@ impl OperationState {
     ) -> Result<String, String> {
         let input: OpenRecordFile = parse_host_request(&request, "record file request")?;
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
+        host.run_id = Some(self.run_id);
+        host.run_facts = self.run_facts.clone();
         host.require_all_active(["attricat.read", "attricat.files.read", "artifacts.read"])
             .await?;
         let targets = self
@@ -1126,6 +1134,17 @@ impl RunFacts {
         match &self.connection {
             Some(own) if own.as_deref() != connection => {
                 Err("a connector run writes only its own connection's mappings".into())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Refuses a token of another connection than a connector run's own;
+    /// a run of the default destination may use any.
+    pub(super) fn ensure_token_connection(&self, connection: &str) -> Result<(), String> {
+        match &self.connection {
+            Some(Some(own)) if own != connection => {
+                Err("a connector run uses only its own connection's token".into())
             }
             _ => Ok(()),
         }

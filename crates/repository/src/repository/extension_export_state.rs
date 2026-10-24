@@ -706,9 +706,8 @@ impl AttricatRepository {
             // A refused result still ends the lease of the worker that sent
             // it, so the record is not held until the lease expires.
             if holds_lease {
-                sqlx::query(&format!("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4", connection_is("connection", "$3", connection)))
-                    .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id)
-                    .execute(&mut *transaction).await?;
+                self.end_own_lease(&mut transaction, extension_id, connection, record_id)
+                    .await?;
                 transaction.commit().await?;
             }
             return Err(RepositoryError::ExportMappingConflict(

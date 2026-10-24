@@ -1669,19 +1669,15 @@ impl ExtensionOperationTaskHandler {
                 {
                     // A run's rejection names no revision. When the run holds
                     // the record's lease, the revision it leased is settled;
-                    // otherwise the revision at the run's start is the oldest
-                    // it can have read, so a newer result committed meanwhile
-                    // is not overwritten.
+                    // otherwise it is chosen below so that a newer result
+                    // committed meanwhile is not overwritten.
                     let details = repository
                         .connector_run_details(run.id)
                         .await
                         .map_err(operation_task_error)?;
+                    let channel = details.as_ref().and_then(|details| details.channel_id);
                     let revision = repository
-                        .record_content_revision_at(
-                            record_id,
-                            run.created_at,
-                            details.as_ref().and_then(|details| details.channel_id),
-                        )
+                        .record_content_revision_at(record_id, run.created_at, channel)
                         .await
                         .map_err(operation_task_error)?;
                     // A connector run's rejection belongs to the run's
@@ -1715,7 +1711,7 @@ impl ExtensionOperationTaskHandler {
                         // the run saw, even when its revision counts more
                         // than the record's own (an expanded related record),
                         // so the rejection settles past it.
-                        let committed_before = repository
+                        let mapping = repository
                             .export_mapping_get(
                                 &run.extension_id,
                                 connection.as_deref(),
@@ -1723,18 +1719,40 @@ impl ExtensionOperationTaskHandler {
                             )
                             .await
                             .ok()
-                            .flatten()
-                            .filter(|mapping| {
-                                mapping.settled_at.is_some_and(|at| at <= run.created_at)
-                            })
-                            .map_or(0, |mapping| mapping.record_revision);
+                            .flatten();
+                        // With nothing settled since the run started, no
+                        // newer result can be overwritten, so the rejection
+                        // concerns the record as it is now, which the batch
+                        // may have read after an edit. Otherwise it settles
+                        // past what was committed before the run started.
+                        let settled_since_start = mapping
+                            .as_ref()
+                            .and_then(|mapping| mapping.settled_at)
+                            .is_some_and(|at| at > run.created_at);
+                        let revision = if settled_since_start {
+                            revision
+                        } else {
+                            repository
+                                .record_content_revision_at(
+                                    record_id,
+                                    chrono::Utc::now() + chrono::TimeDelta::days(1),
+                                    channel,
+                                )
+                                .await
+                                .map_err(operation_task_error)?
+                                .max(
+                                    mapping
+                                        .as_ref()
+                                        .map_or(0, |mapping| mapping.record_revision),
+                                )
+                        };
                         recorded = Some(
                             repository
                                 .record_export_rejection(
                                     &run.extension_id,
                                     connection.as_deref(),
                                     record_id,
-                                    Some(revision.max(committed_before)),
+                                    Some(revision),
                                     Some(&run_lease_holder(run.id)),
                                     &rejection.code,
                                     &rejection.message,

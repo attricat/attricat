@@ -234,17 +234,11 @@ pub(super) async fn retry_export(
     // first one retried instead of retrying anything twice, and resyncs
     // them under the same run keys, which start each job's run only once.
     let request_selection = input.idempotency_key.as_ref().map(|_| {
-        let mut ids = input.record_ids.clone().unwrap_or_default();
-        ids.sort_unstable();
-        ids.dedup();
         format!(
             "retry:{}:{}:{}",
             input.connection.as_deref().unwrap_or(""),
             input.status.as_deref().unwrap_or(""),
-            ids.iter()
-                .map(Uuid::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
+            record_ids_key(input.record_ids.as_deref().unwrap_or_default()).1
         )
     });
     let request_key = input
@@ -312,6 +306,20 @@ pub(super) async fn retry_export(
         StatusCode::ACCEPTED,
         Json(json!({"record_ids": record_ids, "run_ids": run_ids, "job_errors": job_errors})),
     ))
+}
+
+/// Record IDs in one order without repeats, and how an idempotency key names
+/// them, so a request sent again maps to the same run key.
+fn record_ids_key(ids: &[Uuid]) -> (Vec<Uuid>, String) {
+    let mut ids = ids.to_vec();
+    ids.sort_unstable();
+    ids.dedup();
+    let key = ids
+        .iter()
+        .map(Uuid::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    (ids, key)
 }
 
 /// What a client is told about a job whose retry resync could not start.
@@ -809,18 +817,7 @@ pub(super) async fn resync_connector_job(
     // The idempotency key covers the request's selection, not the records
     // a status resolves to now, so a retried request finds its run.
     let selection = match (&input.record_ids, &input.status) {
-        (Some(ids), None) => {
-            let mut ids = ids.clone();
-            ids.sort_unstable();
-            ids.dedup();
-            Some(format!(
-                "records:{}",
-                ids.iter()
-                    .map(Uuid::to_string)
-                    .collect::<Vec<_>>()
-                    .join(",")
-            ))
-        }
+        (Some(ids), None) => Some(format!("records:{}", record_ids_key(ids).1)),
         (None, Some(status)) => Some(format!("status:{status}")),
         _ => None,
     };
@@ -831,11 +828,7 @@ pub(super) async fn resync_connector_job(
             ));
         }
         // The run selects each record once, as its idempotency key does.
-        (Some(mut ids), None) => {
-            ids.sort_unstable();
-            ids.dedup();
-            Some(ids)
-        }
+        (Some(ids), None) => Some(record_ids_key(&ids).0),
         (None, Some(status)) => {
             if !EXPORT_STATUSES.contains(&status.as_str()) {
                 return Err(ApiError::invalid_input("unknown export status".into()));
@@ -1005,13 +998,9 @@ pub(super) async fn public_file(
         .await?
         // A link keeps needing every grant it was issued under.
         .is_some_and(|installation| {
-            [
-                "attricat.read",
-                "attricat.files.read",
-                "attricat.files.public_links",
-            ]
-            .iter()
-            .all(|grant| installation.capability_grants.contains(*grant))
+            crate::repository::PUBLIC_FILE_LINK_GRANTS
+                .iter()
+                .all(|grant| installation.capability_grants.contains(*grant))
         });
     if !allowed
         || !repository

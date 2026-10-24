@@ -698,7 +698,8 @@ Inside an operation run, `begin`, `commit`, `release` and `delete` accept only
 records in the run's scope: records of a connector run's blueprint (including
 deleted, unpublished and older-version records it withdraws), or an
 interactive run's selected records. A connector run writes only its own
-connection's mappings, and a run confined to selected records only theirs.
+connection's mappings, and a run confined to selected records only theirs;
+a connector run of a connection also sends only that connection's token.
 
 `begin` is the guard against reordered and duplicated work. It answers
 `stale` for a revision older than the mapping's, whatever its status, since
@@ -956,7 +957,9 @@ database connection, so a rotating refresh token (Allegro) is never used
 twice. A rejected grant marks the connection `failed` for an
 operator; temporary failures keep it usable. Changing the token URL, scope or
 credentials discards the cached access token, and gives a `failed` connection
-another try. Moving the token or device endpoint to another origin needs the
+another try. A refresh under way keeps its claim through such a change, and
+a refresh token it receives is kept unless the operator replaced the refresh
+token meanwhile. Moving the token or device endpoint to another origin needs the
 client secret entered again and drops the stored tokens, so the connection
 waits for a new authorization unless a refresh token comes with the change. `POST .../test` obtains a token.
 Deleting a connection deletes its credentials but keeps its mappings, so a

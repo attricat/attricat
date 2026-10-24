@@ -196,7 +196,7 @@ These `api.call` operations work in event handlers and operation runs alike. `co
 | `mappings.release.v1` | `{connection?, record_id, lease_token}` | `{released}` |
 | `mappings.delete.v1` | `{connection?, record_id}` | `{deleted}` |
 
-Inside an operation run, `begin`, `commit`, `release`, and `delete` accept only records the run covers: records of a connector run's blueprint (including deleted or unpublished ones it withdraws), or an interactive run's selected records. A connector run writes only its own connection's mappings, and a run limited to selected records only theirs.
+Inside an operation run, `begin`, `commit`, `release`, and `delete` accept only records the run covers: records of a connector run's blueprint (including deleted or unpublished ones it withdraws), or an interactive run's selected records. A connector run writes only its own connection's mappings, and a run limited to selected records only theirs. A connector run of a connection also sends only that connection's token.
 
 Call `begin` before pushing a record. It protects against reordered and duplicate work:
 

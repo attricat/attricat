@@ -246,7 +246,10 @@ impl HostState {
     }
 
     /// The scope of this invocation's run, loaded once.
-    async fn run_facts(&self, run_id: Uuid) -> Result<&super::transfer::RunFacts, String> {
+    pub(super) async fn run_facts(
+        &self,
+        run_id: Uuid,
+    ) -> Result<&super::transfer::RunFacts, String> {
         self.run_facts
             .get_or_try_init(|| super::transfer::RunFacts::load(&self.repository, run_id))
             .await
@@ -318,11 +321,12 @@ impl HostState {
     /// Issues a short-lived public link to a file a live record references,
     /// so a marketplace can fetch it. A run links only records in its scope.
     pub(super) async fn file_link_call(&self, request: &str) -> Result<String, String> {
-        // A link exposes the file's bytes, so it needs the same grant as
-        // reading them directly.
-        self.require("attricat.read")
-            .and_then(|()| self.require("attricat.files.read"))
-            .map_err(|error| error.to_string())?;
+        // A link exposes the file's bytes, so it needs the same grants as
+        // reading them directly, and the public link one; the link is served
+        // only while all of them stay granted.
+        for grant in crate::repository::PUBLIC_FILE_LINK_GRANTS {
+            self.require(grant).map_err(|error| error.to_string())?;
+        }
         let input: FileLink = parse_host_request(request, "file link request")?;
         let base = PUBLIC_FILE_LINK_BASE
             .get()

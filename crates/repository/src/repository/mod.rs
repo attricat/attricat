@@ -192,7 +192,7 @@ pub use extension_attricat_data::{
 pub use extension_connections::{
     ConnectionAccessToken, ConnectionCredentials, ConnectionRefresh, DeviceAuthorization,
     ExtensionConnection, ExtensionConnectionPatch, IssuedTokens, NewExtensionConnection,
-    use_extension_credential_key,
+    PUBLIC_FILE_LINK_GRANTS, use_extension_credential_key,
 };
 pub use extension_connector_pages::{
     ConnectorPageV2Request, MAX_EXPANDED_RELATIONSHIPS, MAX_WITHDRAWN_PAGE,

@@ -104,6 +104,14 @@ pub(super) async fn insert_access_token(
 ) -> Result<String, TokenError> {
     host.require("connections.use")
         .map_err(|error| TokenError::Invalid(error.to_string()))?;
+    // A connector run sends only its own connection's token.
+    if let Some(run_id) = host.run_id {
+        host.run_facts(run_id)
+            .await
+            .map_err(TokenError::Invalid)?
+            .ensure_token_connection(connection)
+            .map_err(TokenError::Invalid)?;
+    }
     // The rule is checked before the token is read, so a misrouted request
     // never causes a refresh (which spends a rotating refresh token).
     let described = host
