@@ -164,7 +164,11 @@ const device = await api('POST', `/extensions/${extensionId}/connections/allegro
 console.log(`  Allegro asks the operator to enter ${device.device_user_code} at ${device.device_verification_uri}`);
 assert.equal((await api('POST', `/extensions/${extensionId}/connections/allegro-pl/device-authorization/poll`)).status, 'pending_authorization');
 await mock('/allegro/approve', { user_code: device.device_user_code });
-assert.equal((await api('POST', `/extensions/${extensionId}/connections/allegro-pl/device-authorization/poll`)).status, 'active');
+// The host polls the token endpoint no faster than the device interval (5 s).
+await waitFor('Allegro device authorization', async () => {
+  const polled = await api('POST', `/extensions/${extensionId}/connections/allegro-pl/device-authorization/poll`);
+  return polled.status === 'active' ? polled : undefined;
+}, 30_000);
 for (const name of ['shopify-eu', 'amazon-de']) {
   await api('POST', `/extensions/${extensionId}/connections/${name}/test`);
 }
@@ -273,10 +277,25 @@ for (const id of [variantS, variantM, shirt, mug, broken]) {
   await publish(id);
 }
 
+step('the export_mapping frame sets the Amazon product type');
+const mappingFrame = (await api('GET', '/extensions/runtime')).find(
+  (item) => item.extension_id === extensionId && item.outlet === 'export_mapping',
+);
+assert.equal(mappingFrame?.kind, 'panel', 'export_mapping contribution is offered to the host');
+const frameSource = await api('GET', `/extensions/${extensionId}/${mappingFrame.id}/artifact`);
+assert(String(frameSource).includes('export const mount'), 'export_mapping artifact is served');
+// Panels are read-only towards the server: the editor saves to storage, never through commands.
+await api('POST', `/extensions/${extensionId}/${mappingFrame.id}/command`,
+  { release_id: mappingFrame.release_id, command_id: 'preview', payload: {} }, { expect: [403] });
+await api('POST', `/extensions/${extensionId}/${mappingFrame.id}/storage/${mappingFrame.release_id}`, {
+  operation: 'set', key: 'field-map:amazon', value: { version: 1, product_type: 'SHIRT' }, expected_revision: null,
+});
+
 step('preview a payload without pushing');
 const preview = await api('POST', `/extensions/${extensionId}/exports/amazon/preview`, { record_id: broken, connection: 'amazon-de' });
 console.log(`  preview issues: ${preview.issues.join('; ')}`);
 assert(preview.issues.includes('title is required'));
+assert.equal(preview.payload.productType, 'SHIRT', 'preview uses the mapped product type');
 
 step('run every export job');
 const firstRuns = await runJobs(jobs, `first-${suffix}`);
@@ -288,6 +307,7 @@ assert.equal(product.variants.length, 2, 'Shopify variants');
 assert.equal(product.media[0]?.status, 'READY', 'Shopify media staged and uploaded');
 assert(state.amazon.listings[`SHIRT-${suffix}-M`]?.attributes.child_parent_sku_relationship, 'Amazon child listing');
 assert.equal(Object.values(state.amazon.feeds)[0]?.status, 'DONE', 'Amazon feed processed');
+assert.equal(state.amazon.listings[`SHIRT-${suffix}-M`]?.productType, 'SHIRT', 'Amazon listing uses the mapped product type');
 const offer = Object.values(state.allegro.offers).find((item) => item.external?.id === `SHIRT-${suffix}`);
 assert.equal(offer?.publication.status, 'ACTIVE', 'Allegro offer active after polling');
 await waitFor('marketplaces to fetch the public image link', async () => {

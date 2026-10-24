@@ -216,7 +216,7 @@ Pass `record_ids` for given records, or `status` for the records with that expor
 ## Preview and mapping editors
 
 - A destination's `preview_command` names a [server command](/extensions/server/#commands-for-your-ui) that builds the payload for one record without pushing it. It receives `{export_id, record_id, connection}` and conventionally returns `{payload, issues}`, where `issues` lists what the destination would reject, such as missing product-type attributes. The record's **Exports** tab shows it as **Preview**.
-- An [`export_mapping`](/extensions/client/#elsewhere) panel appears on your extension's management page once per export destination. Use it to edit mappings that are too large for configuration, such as attributes to a marketplace's product-type attributes, kept in extension storage and saved through your server commands.
+- An [`export_mapping`](/extensions/client/#elsewhere) panel appears on your extension's management page once per export destination. Use it to edit mappings that are too large for configuration, such as attributes to a marketplace's product-type attributes, Panels cannot call server commands, so the editor saves the mapping with `attricat.storage` and your exporter reads the same storage keys. Validate what you read: the server sees the value only after the panel has saved it.
 
 ## Design notes
 

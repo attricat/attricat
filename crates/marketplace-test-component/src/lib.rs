@@ -597,6 +597,16 @@ fn amazon_listing_url(target: &Target, sku: &str) -> String {
     )
 }
 
+/// The Amazon product type an operator chose in the `export_mapping` panel,
+/// which keeps it in extension storage under `field-map:amazon`.
+fn amazon_product_type() -> String {
+    call("storage.get.v1", json!({"key": "field-map:amazon"}))
+        .ok()
+        .and_then(|entry| entry["value"]["product_type"].as_str().map(str::to_owned))
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "PRODUCT".into())
+}
+
 fn amazon_push(target: &Target, listing: &Listing) -> Result<Pushed, Failure> {
     let image = image_link(listing);
     let mut skus = Vec::new();
@@ -607,7 +617,7 @@ fn amazon_push(target: &Target, listing: &Listing) -> Result<Pushed, Failure> {
             &amazon_listing_url(target, &sku),
             target.connection(),
             json!({"content-type": "application/json"}),
-            Some(json!({"productType": "PRODUCT", "requirements": "LISTING", "attributes": attributes}).to_string()),
+            Some(json!({"productType": amazon_product_type(), "requirements": "LISTING", "attributes": attributes}).to_string()),
         ))?;
         let (status, headers, body) = match response {
             Ok(response) => response,
@@ -1074,7 +1084,7 @@ fn feed_row(
         let id = checkpoint["feed_messages"].as_u64().unwrap_or(0) + 1;
         checkpoint["feed_messages"] = json!(id);
         ids.push(id);
-        messages.push(json!({"messageId": id, "sku": sku, "operationType": "UPDATE", "productType": "PRODUCT", "requirements": "LISTING", "attributes": attributes}));
+        messages.push(json!({"messageId": id, "sku": sku, "operationType": "UPDATE", "productType": amazon_product_type(), "requirements": "LISTING", "attributes": attributes}));
     }
     checkpoint["feed_batch"] = Value::Array(messages);
     call(
@@ -1599,7 +1609,7 @@ impl command_handler::Guest for Component {
                                            "variants": [{"sku": listing.sku, "price": price_text(listing.price)}]})
             }
             Marketplace::Amazon => {
-                json!({"sku": listing.sku, "productType": "PRODUCT", "attributes": amazon_attributes(&target, &listing, None, None)})
+                json!({"sku": listing.sku, "productType": amazon_product_type(), "attributes": amazon_attributes(&target, &listing, None, None)})
             }
             Marketplace::Allegro => allegro_offer(&target, &listing),
         };

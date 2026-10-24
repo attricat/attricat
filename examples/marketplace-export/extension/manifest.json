@@ -21,6 +21,7 @@
     "attricat.files.read",
     "attricat.files.public_links",
     "client.commands",
+    "client.export_mapping",
     "logging.write"
   ],
   "host_permissions": [
@@ -147,6 +148,20 @@
       "id": "server",
       "kind": "server_wasm",
       "path": "server.wasm"
+    },
+    {
+      "id": "mapping",
+      "kind": "client_component",
+      "path": "mapping.js"
+    }
+  ],
+  "ui": [
+    {
+      "id": "field-map",
+      "version": 1,
+      "kind": "panel",
+      "artifact": "mapping",
+      "outlet": "export_mapping"
     }
   ],
   "server": {

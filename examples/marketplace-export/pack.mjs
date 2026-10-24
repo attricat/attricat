@@ -47,6 +47,7 @@ writeFileSync(
       ['manifest.json', readFileSync(`${here}extension/manifest.json`)],
       ['icon.svg', readFileSync(`${here}extension/icon.svg`)],
       ['server.wasm', readFileSync(component)],
+      ['mapping.js', readFileSync(`${here}extension/mapping.js`)],
     ]),
   ),
 );
