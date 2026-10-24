@@ -212,6 +212,10 @@ Invalid values stop startup. Day counts must be positive integers.
 | `USER_ACTION_TOKEN_RETENTION_DAYS` | `7` | Verification, password-setup and password-reset tokens consumed, revoked or expired this long ago. |
 | `WORKSPACE_INVITATION_RETENTION_DAYS` | `30` | Unaccepted invitations that expired or were revoked this long ago, with their onboarding rows. Accepted invitations stay. |
 | (none) | | Login, password-reset and workspace-discovery rate-limit rows whose 15-minute window has ended. |
+| (none) | | Extension handler outcomes (`extension_handler_outcomes`) last updated 30 days ago: rejected and exhausted ones, and those of a dead-lettered delivery. Outcomes of an open delivery stay, so a late retry never runs a completed handler again. An event's outcomes also go when the event is purged. |
+| (none) | | Public extension file links (`extension_file_links`) that expired more than a day ago. |
+| (none) | | Browser authorizations of extension connections (`extension_authorization_requests`) that expired without completing; the connection stays. |
+| (none) | | Keyed extension export retry requests (`extension_export_retry_requests`) after 7 days. |
 | `AUDIT_EVENT_RETENTION_DAYS` | Unset | Audit events and their value changes. Unset keeps them forever. |
 | `READ_NOTIFICATION_RETENTION_DAYS` | Unset | Read notifications. Unread ones are never deleted. Unset keeps them forever. |
 

@@ -104,7 +104,7 @@ A 1.1 `event-handler` exports `handle-event(event, delivery)`, which returns `re
 | `retry { message, after-ms? }` | Only this handler is retried, after `after-ms` or a backoff from 5 seconds doubling to one hour, up to 10 attempts. After that the delivery is recorded as `exhausted`, and records the handler still leases become `retrying` with error `retries_exhausted`. |
 | `fault(message)` | The installation is quarantined, and records the handler leased become `retrying` with error `handler_fault`. |
 
-Traps, running out of fuel or memory, and timeouts count as faults. Outcomes are kept per event and handler, so when one handler of an event is retried, handlers that already completed are not called again. Rejected and exhausted deliveries stay visible for 30 days on the extension's management page.
+Traps, running out of fuel or memory, and timeouts count as faults. Outcomes are kept per event and handler, so when one handler of an event is retried, handlers that already completed are not called again. Rejected and exhausted deliveries stay visible for 30 days on the extension's management page, or until their event expires under `DOMAIN_EVENT_RETENTION_DAYS` if that is sooner.
 
 `command-handler` exports `handle-command` for [commands](#commands-for-your-ui), separately from event handling.
 

@@ -52,8 +52,6 @@ const MAX_EXTERNAL_ID_BYTES: usize = 512;
 const MAX_EXTERNAL_IDS_BYTES: usize = 8 * 1024;
 const MAX_CONTENT_HASH_BYTES: usize = 128;
 const MAX_EXPORT_ERROR_BYTES: usize = 8 * 1024;
-/// How long rejected and exhausted handler outcomes stay visible.
-const HANDLER_OUTCOME_RETENTION: Duration = Duration::days(30);
 
 fn invalid(message: impl Into<String>) -> RepositoryError {
     RepositoryError::InvalidExtension(message.into())
@@ -303,26 +301,6 @@ impl AttricatRepository {
         sqlx::query("DELETE FROM extension_handler_attempts WHERE workspace_id=$1 AND event_id=$2 AND status NOT IN ('rejected','exhausted')")
             .bind(self.extension_workspace()).bind(event_id).execute(&self.pool).await?;
         Ok(())
-    }
-
-    /// Drops rejected and exhausted outcomes past their retention. Other
-    /// outcomes belong to a delivery still in progress and go when it
-    /// settles, so a late retry never runs a completed handler again; those
-    /// of a delivery that ended without settling (dead-lettered) are dropped
-    /// after the same retention once no delivery of the event is open.
-    pub async fn sweep_extension_handler_attempts(&self) -> Result<u64, RepositoryError> {
-        Ok(sqlx::query("DELETE FROM extension_handler_attempts a WHERE a.workspace_id=$1 AND a.updated_at < clock_timestamp() - make_interval(secs => $2) AND (a.status IN ('rejected','exhausted') OR NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.event_id=a.event_id AND d.status IN ('pending','leased')))")
-            .bind(self.extension_workspace())
-            .bind(HANDLER_OUTCOME_RETENTION.num_seconds() as f64)
-            .execute(&self.pool).await?.rows_affected())
-    }
-
-    /// Forgets keyed retry requests after a week: a client resends a timed
-    /// out request within minutes, not days.
-    pub async fn sweep_export_retry_requests(&self) -> Result<u64, RepositoryError> {
-        Ok(sqlx::query("DELETE FROM extension_export_retry_requests WHERE workspace_id=$1 AND created_at < now() - interval '7 days'")
-            .bind(self.extension_workspace())
-            .execute(&self.pool).await?.rows_affected())
     }
 
     /// Recent rejected and exhausted deliveries of an extension's handlers.

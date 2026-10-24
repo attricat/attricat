@@ -162,7 +162,7 @@ Co minutę API usuwa w małych partiach stare dane operacyjne: zakończoną prac
 | `AUDIT_EVENT_RETENTION_DAYS` | Nieustawione | Wpisy dziennika audytu. Bez ustawienia dziennik audytu jest przechowywany bezterminowo. |
 | `READ_NOTIFICATION_RETENTION_DAYS` | Nieustawione | Przeczytane powiadomienia. Nieprzeczytane nigdy nie są usuwane. Bez ustawienia są przechowywane bezterminowo. |
 
-Usuwane są też zakończone okna limitów logowania i resetowania hasła; nie wymagają ustawienia. Rozmowy z agentami, historia statusów i zatwierdzeń rekordów, historia migracji oraz definicje konektorów nigdy nie są usuwane przez czyszczenie.
+Usuwane są też zakończone okna limitów logowania i resetowania hasła; nie wymagają ustawienia. To samo dotyczy stanu rozszerzeń: odrzucone i nieudane dostarczenia do rozszerzeń są usuwane po 30 dniach, publiczne linki do plików dzień po wygaśnięciu, niedokończone autoryzacje połączeń rozszerzeń w przeglądarce po wygaśnięciu, a żądania ponowienia eksportu po 7 dniach. Rozmowy z agentami, historia statusów i zatwierdzeń rekordów, historia migracji oraz definicje konektorów nigdy nie są usuwane przez czyszczenie.
 
 Liczby dni muszą być dodatnimi liczbami całkowitymi. Nieprawidłowa wartość przerywa start.
 

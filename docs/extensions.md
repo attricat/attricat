@@ -836,7 +836,9 @@ event and handler in `extension_handler_attempts`: handlers that already
 completed are not invoked again when another handler of the same event is
 retried. Rejected and exhausted outcomes stay visible for 30 days
 (`GET /extensions/{extension_id}/export-status` lists them as
-`handler_failures`). `delivery` carries the event's `sequence`, the record's
+`handler_failures`); the domain-event retention sweep deletes an event's
+outcomes with the event, so a `DOMAIN_EVENT_RETENTION_DAYS` below 30 shortens
+that. `delivery` carries the event's `sequence`, the record's
 `record-revision` for record content events, the `attempt` number, and the
 event's `source-kind` and `source-name`.
 
@@ -1182,8 +1184,8 @@ ten-minute expiry, and returns the provider URL with `response_type=code`,
 `client_id`, `redirect_uri`, `state`, the S256 `code_challenge` and `scope`.
 Starting again replaces the pending request; an active connection keeps its
 tokens meanwhile. Any credential, endpoint or scope change discards it.
-The hourly extension retention sweep
-(`sweep_extension_authorization_requests`) clears requests that expired
+The maintenance worker's retention sweep
+(`purge_extension_authorization_requests_batch`) clears requests that expired
 without completing.
 
 `GET /api/public/extension-oauth/callback` is a public route

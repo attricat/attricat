@@ -11,4 +11,4 @@ CREATE TABLE extension_export_retry_requests (
     PRIMARY KEY (workspace_id, extension_id, request_key)
 );
 CREATE INDEX extension_export_retry_requests_created_idx
-    ON extension_export_retry_requests (workspace_id, created_at);
+    ON extension_export_retry_requests (created_at);

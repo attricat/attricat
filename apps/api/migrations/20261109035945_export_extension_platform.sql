@@ -23,6 +23,8 @@ CREATE TABLE extension_handler_attempts (
 );
 CREATE INDEX extension_handler_attempts_outcome_idx
     ON extension_handler_attempts (workspace_id, extension_id, status, updated_at DESC);
+-- Bounds the retention sweep's scan to outcomes old enough to delete.
+CREATE INDEX extension_handler_attempts_retention_idx ON extension_handler_attempts (updated_at);
 
 -- Host-managed destination credentials. Secret material is stored only as
 -- AES-256-GCM ciphertext; it never leaves the host. A connection is named by

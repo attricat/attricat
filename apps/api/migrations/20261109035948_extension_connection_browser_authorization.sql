@@ -17,3 +17,6 @@ ALTER TABLE extension_connections
         AND (authorization_state_sha256 IS NULL) = (authorization_session_sha256 IS NULL)
         AND (authorization_state_sha256 IS NULL) = (authorization_expires_at IS NULL)
     );
+-- The retention sweep's scan for requests that expired without completing.
+CREATE INDEX extension_connections_authorization_expiry_idx
+    ON extension_connections (authorization_expires_at) WHERE authorization_expires_at IS NOT NULL;

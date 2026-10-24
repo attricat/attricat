@@ -2333,9 +2333,6 @@ impl TaskHandler for WasmExtensionTaskHandler {
 /// How often the coordinator runs its operation storage, schedule and
 /// connector sweeps per workspace.
 const COORDINATOR_SWEEP_INTERVAL: Duration = Duration::from_secs(5);
-/// How often expired handler attempts and file links are deleted per
-/// workspace; they are kept for a day or more, so hourly is plenty.
-const RETENTION_SWEEP_INTERVAL: Duration = Duration::from_secs(3600);
 
 /// What the coordinator remembers about one workspace between ticks.
 #[derive(Default)]
@@ -2348,7 +2345,6 @@ struct CoordinatedWorkspace {
     /// A historical batch was enqueued and more may remain.
     history_pending: bool,
     last_sweep: Option<Instant>,
-    last_retention_sweep: Option<Instant>,
 }
 
 /// Intake is only a producer/coordinator. It registers at the high-water mark
@@ -2419,16 +2415,6 @@ async fn coordinate_workspace(
         }
         scoped.produce_due_extension_operation_schedules().await?;
         scoped.produce_due_blueprint_connector_jobs().await?;
-    }
-    if state
-        .last_retention_sweep
-        .is_none_or(|last| last.elapsed() >= RETENTION_SWEEP_INTERVAL)
-    {
-        state.last_retention_sweep = Some(Instant::now());
-        scoped.sweep_extension_handler_attempts().await?;
-        scoped.sweep_extension_file_links().await?;
-        scoped.sweep_extension_authorization_requests().await?;
-        scoped.sweep_export_retry_requests().await?;
     }
     if !state.registered {
         scoped

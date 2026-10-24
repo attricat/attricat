@@ -354,6 +354,23 @@ async fn event_retention_never_removes_undelivered_or_unconsumed_events(pool: Pg
         .await
         .unwrap();
 
+    // An extension handler gave up on the delivered event; its outcome goes
+    // with the event.
+    let release = Uuid::new_v4();
+    sqlx::query("INSERT INTO installed_extension_releases (id, workspace_id, extension_id, version, manifest, manifest_sha256, source) VALUES ($1, $2, 'acme.retention', '1.0.0', '{}'::jsonb, repeat('0', 64), 'side_load')")
+        .bind(release)
+        .bind(workspace())
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO extension_handler_attempts (workspace_id, event_id, extension_id, handler_id, installed_release_id, status, attempts, error_code) VALUES ($1, $2, 'acme.retention', 'export', $3, 'exhausted', 5, 'timeout')")
+        .bind(workspace())
+        .bind(delivered.0)
+        .bind(release)
+        .execute(&pool)
+        .await
+        .unwrap();
+
     let repository = AttricatRepository::system(pool.clone());
     // The completed envelope is not purged while its delivery exists.
     assert_eq!(
@@ -411,6 +428,11 @@ async fn event_retention_never_removes_undelivered_or_unconsumed_events(pool: Pg
         .await
         .unwrap();
     assert_eq!(deliveries, 2);
+    let attempts: i64 = sqlx::query_scalar("SELECT count(*) FROM extension_handler_attempts")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(attempts, 0);
     server.abort();
 }
 
@@ -560,6 +582,93 @@ async fn auth_ephemera_retention_keeps_live_sessions_windows_and_accepted_invita
             .unwrap();
     assert_eq!(invitations, vec![accepted_invitation]);
     server.abort();
+}
+
+#[sqlx::test]
+async fn extension_retention_keeps_open_deliveries_and_recent_requests(pool: PgPool) {
+    let release = Uuid::new_v4();
+    sqlx::query("INSERT INTO installed_extension_releases (id, workspace_id, extension_id, version, manifest, manifest_sha256, source) VALUES ($1, $2, 'acme.retention', '1.0.0', '{}'::jsonb, repeat('0', 64), 'side_load')")
+        .bind(release)
+        .bind(workspace())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let consumer: Uuid = sqlx::query_scalar("INSERT INTO event_consumers (id, workspace_id, name, watermark) VALUES (gen_random_uuid(), $1, 'retention.test', 0) RETURNING id")
+        .bind(workspace())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    // One handler outcome per event: (status, age in days, delivery status).
+    let outcome = |status: &'static str, age: i32, delivery: Option<&'static str>| {
+        let pool = pool.clone();
+        async move {
+            let event: Uuid = sqlx::query_scalar("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES (gen_random_uuid(), $1, 'record.updated.v1', 'record', gen_random_uuid(), gen_random_uuid(), 'system', 'retention-test', '{}') RETURNING id")
+                .bind(workspace())
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            if let Some(delivery) = delivery {
+                sqlx::query("INSERT INTO event_deliveries (consumer_id, event_id, status) VALUES ($1, $2, $3)")
+                    .bind(consumer)
+                    .bind(event)
+                    .bind(delivery)
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            }
+            sqlx::query("INSERT INTO extension_handler_attempts (workspace_id, event_id, extension_id, handler_id, installed_release_id, status, attempts, next_attempt_at, updated_at) VALUES ($1, $2, 'acme.retention', 'export', $3, $4, 1, CASE WHEN $4 IN ('retrying', 'debouncing') THEN now() END, now() - make_interval(days => $5))")
+                .bind(workspace())
+                .bind(event)
+                .bind(release)
+                .bind(status)
+                .bind(age)
+                .execute(&pool)
+                .await
+                .unwrap();
+            event
+        }
+    };
+    let exhausted = outcome("exhausted", 31, Some("pending")).await;
+    let recent = outcome("rejected", 29, None).await;
+    let retrying = outcome("retrying", 31, Some("pending")).await;
+    let dead_lettered = outcome("completed", 31, Some("dead_letter")).await;
+    for (key, age) in [("old", 8), ("new", 6)] {
+        sqlx::query("INSERT INTO extension_export_retry_requests (workspace_id, extension_id, request_key, created_at) VALUES ($1, 'acme.retention', $2, now() - make_interval(days => $3))")
+            .bind(workspace())
+            .bind(key)
+            .bind(age)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    let repository = AttricatRepository::system(pool.clone());
+    assert_eq!(
+        repository
+            .purge_extension_handler_outcomes_batch(1000)
+            .await
+            .unwrap(),
+        2
+    );
+    let kept: Vec<Uuid> = sqlx::query_scalar("SELECT event_id FROM extension_handler_attempts")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert!(!kept.contains(&exhausted) && !kept.contains(&dead_lettered));
+    assert!(kept.contains(&recent) && kept.contains(&retrying));
+    assert_eq!(
+        repository
+            .purge_extension_export_retry_requests_batch(1000)
+            .await
+            .unwrap(),
+        1
+    );
+    let keys: Vec<String> =
+        sqlx::query_scalar("SELECT request_key FROM extension_export_retry_requests")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(keys, ["new"]);
 }
 
 #[sqlx::test]

@@ -162,7 +162,7 @@ Every minute the API deletes old operational data in small batches: finished bac
 | `AUDIT_EVENT_RETENTION_DAYS` | Unset | Audit log entries. Unset keeps the audit log forever. |
 | `READ_NOTIFICATION_RETENTION_DAYS` | Unset | Read notifications. Unread notifications are never deleted. Unset keeps them forever. |
 
-Ended sign-in and password-reset rate-limit windows are also deleted; they need no setting. Agent conversations, record status history and approvals, migration history and connector definitions are never deleted by cleanup.
+Ended sign-in and password-reset rate-limit windows are also deleted; they need no setting. The same goes for extension state: rejected and failed extension deliveries after 30 days, public file links a day after they expire, unfinished browser authorizations of extension connections once they expire, and export retry requests after 7 days. Agent conversations, record status history and approvals, migration history and connector definitions are never deleted by cleanup.
 
 Day counts must be positive integers. An invalid value stops startup.
 

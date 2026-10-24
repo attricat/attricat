@@ -1004,6 +1004,29 @@ max_bytes = 1024
         .error_for_status()
         .unwrap();
     assert_eq!(public_status(token).await, StatusCode::NOT_FOUND);
+
+    // Links are deleted a day after they expire.
+    let links: i64 = sqlx::query_scalar("SELECT count(*) FROM extension_file_links")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE extension_file_links SET expires_at = clock_timestamp() - interval '2 days'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE extension_file_links SET expires_at = clock_timestamp() - interval '12 hours' WHERE id = (SELECT id FROM extension_file_links ORDER BY created_at LIMIT 1)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        AttricatRepository::system(pool.clone())
+            .purge_extension_file_links_batch(100)
+            .await
+            .unwrap(),
+        links.unsigned_abs() - 1
+    );
     server.abort();
 }
 
@@ -1337,8 +1360,8 @@ async fn operators_authorize_connections_in_the_browser(pool: sqlx::PgPool) {
     // An authorization nobody completed is cleared once it has expired.
     let abandoned = start().await;
     assert_eq!(
-        repository
-            .sweep_extension_authorization_requests()
+        AttricatRepository::system(pool.clone())
+            .purge_extension_authorization_requests_batch(100)
             .await
             .unwrap(),
         0
@@ -1348,8 +1371,8 @@ async fn operators_authorize_connections_in_the_browser(pool: sqlx::PgPool) {
         .await
         .unwrap();
     assert_eq!(
-        repository
-            .sweep_extension_authorization_requests()
+        AttricatRepository::system(pool.clone())
+            .purge_extension_authorization_requests_batch(100)
             .await
             .unwrap(),
         1

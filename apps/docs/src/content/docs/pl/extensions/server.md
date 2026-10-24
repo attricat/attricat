@@ -104,7 +104,7 @@ Zdarzenie czeka, aż jego rekord przez `debounce_ms` (do godziny) nie będzie si
 | `retry { message, after-ms? }` | Ponawiana jest tylko ta procedura obsługi, po `after-ms` albo z rosnącym odstępem od 5 sekund do godziny, najwyżej 10 razy. Potem dostarczenie jest zapisywane jako `exhausted`, a rekordy, które procedura nadal dzierżawi, przechodzą w stan `retrying` z błędem `retries_exhausted`. |
 | `fault(message)` | Instalacja zostaje poddana kwarantannie, a rekordy dzierżawione przez procedurę przechodzą w stan `retrying` z błędem `handler_fault`. |
 
-Pułapki, wyczerpanie paliwa lub pamięci i przekroczenie limitu czasu są traktowane jak `fault`. Wyniki są zapisywane osobno dla każdego zdarzenia i procedury obsługi, więc gdy ponawiana jest jedna procedura obsługi zdarzenia, te, które już się zakończyły, nie są wywoływane ponownie. Odrzucone i wyczerpane dostarczenia są widoczne przez 30 dni na stronie zarządzania rozszerzeniem.
+Pułapki, wyczerpanie paliwa lub pamięci i przekroczenie limitu czasu są traktowane jak `fault`. Wyniki są zapisywane osobno dla każdego zdarzenia i procedury obsługi, więc gdy ponawiana jest jedna procedura obsługi zdarzenia, te, które już się zakończyły, nie są wywoływane ponownie. Odrzucone i wyczerpane dostarczenia są widoczne na stronie zarządzania rozszerzeniem przez 30 dni albo do wygaśnięcia ich zdarzenia zgodnie z `DOMAIN_EVENT_RETENTION_DAYS`, jeśli nastąpi to wcześniej.
 
 `command-handler` eksportuje `handle-command` dla [poleceń](#polecenia-dla-twojego-interfejsu), oddzielnie od obsługi zdarzeń.
 
