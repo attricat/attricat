@@ -582,7 +582,14 @@ impl AttricatRepository {
                     filter,
                 )
                 .await
-            {
+                .and_then(|runs| {
+                    // No enabled channel starts no run; the changes wait.
+                    if runs.is_empty() {
+                        Err(invalid("no enabled publication channel to export"))
+                    } else {
+                        Ok(runs)
+                    }
+                }) {
                 Ok(_) => started += 1,
                 Err(error) => {
                     // Keep the watermark, like an interval occurrence keeps

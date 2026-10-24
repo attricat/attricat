@@ -127,6 +127,8 @@ impl HostState {
         match operation {
             "mappings.get.v1" => {
                 let input: MappingGet = parse_host_request(request, "mapping request")?;
+                self.ensure_run_connection(input.connection.as_deref())
+                    .await?;
                 let key = match (input.record_id, input.external_id.as_deref()) {
                     (Some(record_id), None) => MappingKey::Record(record_id),
                     (None, Some(external_id)) => MappingKey::ExternalId(external_id),
@@ -140,6 +142,8 @@ impl HostState {
             }
             "mappings.list.v1" => {
                 let input: MappingList = parse_host_request(request, "mapping request")?;
+                self.ensure_run_connection(input.connection.as_deref())
+                    .await?;
                 let (mappings, next) = repository
                     .export_mapping_list(
                         extension_id,
@@ -254,6 +258,15 @@ impl HostState {
         self.run_facts
             .get_or_try_init(|| super::transfer::RunFacts::load(&self.repository, run_id))
             .await
+    }
+
+    /// Inside a connector run, refuses mapping reads of another connection
+    /// than the run's, as its writes and tokens are.
+    async fn ensure_run_connection(&self, connection: Option<&str>) -> Result<(), String> {
+        match self.run_id {
+            Some(run_id) => self.run_facts(run_id).await?.ensure_connection(connection),
+            None => Ok(()),
+        }
     }
 
     /// Inside an operation run, refuses a mapping write for a record outside

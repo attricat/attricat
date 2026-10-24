@@ -338,8 +338,9 @@ impl AttricatRepository {
 
     /// Whether a later event of `event_types` for `event`'s record exists
     /// that supersedes `event`'s debounced delivery to `extension_id`. A retry
-    /// request concerns one connection only, so it supersedes only an earlier
-    /// retry request of the same extension and connection.
+    /// request concerns one connection only, so only a later retry request of
+    /// the same extension and connection supersedes it, and no retry request
+    /// supersedes any other event.
     pub async fn newer_record_event_exists(
         &self,
         extension_id: &str,
@@ -348,7 +349,7 @@ impl AttricatRepository {
     ) -> Result<bool, RepositoryError> {
         let retry = event.event_type == crate::domain_events::EXPORT_RETRY_REQUESTED_V1;
         let retry_connection = event.payload.get("connection").and_then(Value::as_str);
-        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM domain_events WHERE workspace_id=$1 AND aggregate_kind='record' AND aggregate_id=$2 AND sequence>$3 AND event_type=ANY($4) AND (event_type<>$6 OR ($7 AND payload->>'extension_id'=$5 AND payload->>'connection' IS NOT DISTINCT FROM $8)))")
+        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM domain_events WHERE workspace_id=$1 AND aggregate_kind='record' AND aggregate_id=$2 AND sequence>$3 AND event_type=ANY($4) AND CASE WHEN $7 THEN event_type=$6 AND payload->>'extension_id'=$5 AND payload->>'connection' IS NOT DISTINCT FROM $8 ELSE event_type<>$6 END)")
             .bind(self.extension_workspace()).bind(event.aggregate_id).bind(event.sequence).bind(event_types)
             .bind(extension_id).bind(crate::domain_events::EXPORT_RETRY_REQUESTED_V1)
             .bind(retry).bind(retry_connection)

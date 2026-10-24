@@ -74,13 +74,17 @@ const exportRows = (
       mapping,
     };
   });
+  // Mappings are per extension and connection, so exports of one kind share
+  // a mapping: an export is unused only when no mapping of its kind exists.
   const unused = destinations
     .filter(
       (destination) =>
         !rows.some(
           (row) =>
-            row.destination?.extension_id === destination.extension_id &&
-            row.destination.export_id === destination.export_id,
+            row.extensionId === destination.extension_id &&
+            (row.mapping.connection === null
+              ? destination.connection_kind === null
+              : row.connection?.kind === destination.connection_kind),
         ),
     )
     .map((destination) => ({

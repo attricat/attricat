@@ -294,73 +294,79 @@ pub async fn start_device_authorization(
         .await
         .map_err(|error| TokenError::Invalid(error.to_string()))?
         .ok_or(TokenError::Busy)?;
-    let credentials = refresh.credentials.clone();
-    if credentials.grant_type != "device_code" {
-        let _ = refresh.release().await;
-        return Err(TokenError::Invalid(
-            "the connection does not use the device authorization grant".into(),
-        ));
-    }
-    let url = credentials
-        .device_authorization_url
-        .clone()
-        .ok_or_else(|| {
-            TokenError::Invalid("the connection has no device authorization URL".into())
-        })?;
-    let kind = connection_kind(installation, &credentials.kind)?.clone();
-    let mut form = Vec::new();
-    if let Some(scope) = &credentials.scope {
-        form.push(("scope", scope.clone()));
-    }
-    let body =
-        token_endpoint_call(repository, installation, &kind, &credentials, &url, form).await?;
-    let text = |name: &str| {
-        body.get(name)
-            .and_then(Value::as_str)
-            .map(str::to_owned)
-            .ok_or_else(|| TokenError::Temporary(format!("device authorization lacks {name}")))
-    };
-    let expires_in = body
-        .get("expires_in")
-        .and_then(Value::as_i64)
-        .unwrap_or(600)
-        .clamp(1, 86_400);
-    // The operator is shown the code and follows the link, so both must be
-    // short and the link plain http(s).
-    let link = |name: &str| {
-        text(name).ok().filter(|uri| {
-            uri.len() <= 2048
-                && url::Url::parse(uri).is_ok_and(|url| matches!(url.scheme(), "https" | "http"))
-        })
-    };
-    let invalid = || TokenError::Rejected("the provider's device authorization is invalid".into());
-    let user_code = text("user_code")?;
-    if user_code.is_empty() || user_code.len() > 128 {
-        return Err(invalid());
-    }
-    let authorization = DeviceAuthorization {
-        device_code: text("device_code")?,
-        user_code,
-        verification_uri: link("verification_uri_complete")
-            .or_else(|| link("verification_uri"))
-            .ok_or_else(invalid)?,
-        expires_at: Utc::now() + TimeDelta::seconds(expires_in),
-        interval_seconds: body
-            .get("interval")
+    // Every outcome ends the claim before returning, so starting again
+    // right away is not refused as busy.
+    let result = async {
+        let credentials = refresh.credentials.clone();
+        if credentials.grant_type != "device_code" {
+            return Err(TokenError::Invalid(
+                "the connection does not use the device authorization grant".into(),
+            ));
+        }
+        let url = credentials
+            .device_authorization_url
+            .clone()
+            .ok_or_else(|| {
+                TokenError::Invalid("the connection has no device authorization URL".into())
+            })?;
+        let kind = connection_kind(installation, &credentials.kind)?.clone();
+        let mut form = Vec::new();
+        if let Some(scope) = &credentials.scope {
+            form.push(("scope", scope.clone()));
+        }
+        let body =
+            token_endpoint_call(repository, installation, &kind, &credentials, &url, form).await?;
+        let text = |name: &str| {
+            body.get(name)
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .ok_or_else(|| TokenError::Temporary(format!("device authorization lacks {name}")))
+        };
+        let expires_in = body
+            .get("expires_in")
             .and_then(Value::as_i64)
-            .unwrap_or(5)
-            .clamp(1, 3600) as i32,
-    };
-    let recorded = repository
-        .record_extension_device_authorization(
-            &installation.extension_id,
-            connection,
-            &authorization,
-        )
-        .await
-        .map_err(|error| TokenError::Temporary(error.to_string()));
+            .unwrap_or(600)
+            .clamp(1, 86_400);
+        // The operator is shown the code and follows the link, so both must be
+        // short and the link plain http(s).
+        let link = |name: &str| {
+            text(name).ok().filter(|uri| {
+                uri.len() <= 2048
+                    && url::Url::parse(uri)
+                        .is_ok_and(|url| matches!(url.scheme(), "https" | "http"))
+            })
+        };
+        let invalid =
+            || TokenError::Rejected("the provider's device authorization is invalid".into());
+        let user_code = text("user_code")?;
+        if user_code.is_empty() || user_code.len() > 128 {
+            return Err(invalid());
+        }
+        let authorization = DeviceAuthorization {
+            device_code: text("device_code")?,
+            user_code,
+            verification_uri: link("verification_uri_complete")
+                .or_else(|| link("verification_uri"))
+                .ok_or_else(invalid)?,
+            expires_at: Utc::now() + TimeDelta::seconds(expires_in),
+            interval_seconds: body
+                .get("interval")
+                .and_then(Value::as_i64)
+                .unwrap_or(5)
+                .clamp(1, 3600) as i32,
+        };
+        repository
+            .record_extension_device_authorization(
+                &installation.extension_id,
+                connection,
+                &authorization,
+            )
+            .await
+            .map_err(|error| TokenError::Temporary(error.to_string()))
+    }
+    .await;
     let _ = refresh.release().await;
-    recorded
+    result
 }
 
 /// Polls a pending device authorization once. Returns the connection, now

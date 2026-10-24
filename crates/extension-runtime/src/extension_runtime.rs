@@ -1707,10 +1707,6 @@ impl ExtensionOperationTaskHandler {
                         .await
                         .is_ok()
                     {
-                        // A result committed before the run started is one
-                        // the run saw, even when its revision counts more
-                        // than the record's own (an expanded related record),
-                        // so the rejection settles past it.
                         let mapping = repository
                             .export_mapping_get(
                                 &run.extension_id,
