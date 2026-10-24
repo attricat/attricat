@@ -250,6 +250,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if let Some(base) = extensions.public_file_base_url.clone() {
         extension_runtime::use_public_file_link_base(base);
     }
+    if let Some(redirect_uri) = extensions.oauth_callback_url.clone() {
+        let return_base = extensions.oauth_return_url.clone().unwrap_or_else(|| {
+            let mut base = redirect_uri.clone();
+            base.set_path("/manage/extensions/");
+            base
+        });
+        extension_runtime::connections::use_oauth_callback(
+            extension_runtime::connections::OAuthCallback {
+                redirect_uri,
+                return_base,
+            },
+        );
+    }
     if let Some(egress) = &extensions.development_egress {
         let extra_root_certificates_pem = match &egress.ca_file {
             Some(path) => std::fs::read(path)

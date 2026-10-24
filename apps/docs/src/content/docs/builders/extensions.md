@@ -69,7 +69,7 @@ To add one, choose **Add connection** and fill in:
   - **Client credentials** needs the client secret. The connection works at once.
   - **Refresh token** needs a refresh token you obtained from the destination.
   - **Device code** needs the destination's device authorization URL. After creating the connection, choose **Authorize**, enter the code shown at the destination's page and approve, then choose **Check authorization**.
-  - **Authorization code**: after creating the connection, approve the app at the destination, copy the code from its redirect, enter the code and the redirect URI, and choose **Connect**.
+  - **Authorization code**: enter the destination's **Authorization URL**, and register the redirect URI the connection shows with your app at the destination. Then choose **Authorize in browser**, approve the app at the destination, and you are sent back to the extension's page with the connection active. The authorization must be completed within ten minutes. If the deployment has no [`EXTENSION_OAUTH_CALLBACK_URL`](/reference/configuration/#extensions), copy the code from the destination's redirect instead, enter it with the redirect URI, and choose **Connect**.
 - **Token URL** and any **Scope** the destination requires. The token and device authorization URLs must match a host permission the extension declares for this kind.
 - **Parameters**: a JSON object of non-secret settings the extension reads, such as a shop domain or marketplace ID.
 

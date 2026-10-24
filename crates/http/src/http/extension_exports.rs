@@ -360,7 +360,9 @@ pub(super) async fn list_connections(
             connection.device_verification_uri = None;
         }
     }
-    Ok(Json(connections))
+    Ok(Json(
+        connections.into_iter().map(with_redirect_uri).collect(),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -373,6 +375,10 @@ pub(super) struct CreateConnectionRequest {
     token_url: String,
     #[serde(default)]
     device_authorization_url: Option<String>,
+    /// An authorization-code connection's provider authorization endpoint,
+    /// for browser authorization.
+    #[serde(default)]
+    authorization_url: Option<String>,
     client_id: String,
     #[serde(default)]
     scope: Option<String>,
@@ -406,6 +412,44 @@ fn bounded_secret(value: Option<&String>, label: &str) -> Result<(), ApiError> {
         )));
     }
     Ok(())
+}
+
+/// Checks a provider authorization endpoint. Only the operator's browser
+/// visits it, so it needs no host permission, but it must be a plain HTTPS
+/// URL: Attricat appends the request's query itself.
+fn check_authorization_url(grant_type: &str, url: &str) -> Result<(), ApiError> {
+    if grant_type != "authorization_code" {
+        return Err(ApiError::invalid_input(
+            "authorization_url applies only to the authorization code grant".into(),
+        ));
+    }
+    bounded_chars(url, "authorization_url", MAX_CONNECTION_URL_CHARS)?;
+    url::Url::parse(url)
+        .ok()
+        .filter(|url| {
+            url.scheme() == "https"
+                && url.host().is_some()
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.query().is_none()
+                && url.fragment().is_none()
+        })
+        .map(drop)
+        .ok_or_else(|| {
+            ApiError::invalid_input(
+                "authorization_url must be an HTTPS URL without query or fragment".into(),
+            )
+        })
+}
+
+/// Adds the redirect URI an operator registers with the provider to an
+/// authorization-code connection, when browser authorization is configured.
+fn with_redirect_uri(mut connection: ExtensionConnection) -> ExtensionConnection {
+    if connection.grant_type == "authorization_code" {
+        connection.redirect_uri =
+            connections::oauth_callback().map(|callback| callback.redirect_uri.to_string());
+    }
+    connection
 }
 
 /// Checks a token or device endpoint against the kind's host permission.
@@ -476,6 +520,9 @@ pub(super) async fn create_connection(
         }
         (None, _) => {}
     }
+    if let Some(url) = &input.authorization_url {
+        check_authorization_url(&input.grant_type, url)?;
+    }
     if input.grant_type == "client_credentials" && input.client_secret.is_none() {
         return Err(ApiError::invalid_input(
             "the client credentials grant needs client_secret".into(),
@@ -497,6 +544,7 @@ pub(super) async fn create_connection(
             host_permission_id: kind.host_permission.clone(),
             token_url: input.token_url,
             device_authorization_url: input.device_authorization_url,
+            authorization_url: input.authorization_url,
             client_id: input.client_id,
             scope: input.scope,
             parameters,
@@ -504,7 +552,7 @@ pub(super) async fn create_connection(
             refresh_token: input.refresh_token,
         })
         .await?;
-    Ok((StatusCode::CREATED, Json(created)))
+    Ok((StatusCode::CREATED, Json(with_redirect_uri(created))))
 }
 
 #[derive(Deserialize)]
@@ -517,6 +565,10 @@ pub(super) struct UpdateConnectionRequest {
     /// A device-code connection's authorization endpoint.
     #[serde(default)]
     device_authorization_url: Option<String>,
+    /// An authorization-code connection's browser authorization endpoint;
+    /// an empty string clears it.
+    #[serde(default)]
+    authorization_url: Option<String>,
     /// The requested scope; an empty string clears it.
     #[serde(default)]
     scope: Option<String>,
@@ -569,6 +621,13 @@ pub(super) async fn update_connection(
         }
         check_endpoint(&manifest, &current.host_permission_id, url)?;
     }
+    if let Some(url) = input
+        .authorization_url
+        .as_ref()
+        .filter(|url| !url.is_empty())
+    {
+        check_authorization_url(&current.grant_type, url)?;
+    }
     bounded_secret(input.client_secret.as_ref(), "client_secret")?;
     bounded_secret(input.refresh_token.as_ref(), "refresh_token")?;
     if let Some(parameters) = &input.parameters {
@@ -593,6 +652,9 @@ pub(super) async fn update_connection(
                     display_name: input.display_name.map(|name| name.trim().to_owned()),
                     token_url: input.token_url,
                     device_authorization_url: input.device_authorization_url.map(Some),
+                    authorization_url: input
+                        .authorization_url
+                        .map(|url| (!url.is_empty()).then_some(url)),
                     scope: input
                         .scope
                         .map(|scope| (!scope.is_empty()).then_some(scope)),
@@ -675,6 +737,137 @@ pub(super) async fn exchange_authorization_code(
         .await
         .map_err(token_error)?,
     ))
+}
+
+#[derive(Serialize)]
+pub(super) struct BrowserAuthorization {
+    /// Where to send the operator to approve the app at the provider.
+    authorization_url: String,
+}
+
+/// Starts a browser authorization of an authorization-code connection. The
+/// provider sends the operator back to the public OAuth callback, which
+/// completes it.
+pub(super) async fn start_browser_authorization(
+    ScopedRepository(repository): ScopedRepository,
+    ApiPath((extension_id, connection)): ApiPath<(String, String)>,
+) -> Result<Json<BrowserAuthorization>, ApiError> {
+    let installation = runtime_installation(&repository, &extension_id).await?;
+    let url = connections::start_browser_authorization(&repository, &installation, &connection)
+        .await
+        .map_err(token_error)?;
+    Ok(Json(BrowserAuthorization {
+        authorization_url: url.into(),
+    }))
+}
+
+/// The provider's redirect after an operator approved or declined an app.
+/// Providers may add parameters of their own, such as `iss` or `scope`.
+#[derive(Deserialize)]
+pub(super) struct OAuthCallbackQuery {
+    #[serde(default)]
+    state: Option<String>,
+    #[serde(default)]
+    code: Option<String>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+/// `GET /public/extension-oauth/callback`, reached without a session. The
+/// single-use `state` names the pending authorization and its workspace;
+/// the code is exchanged with that request's PKCE verifier. The browser is
+/// then sent back to the extension's management page with
+/// `authorization=connected` or `failed` (or to the extension list with
+/// `expired` when the state is unknown). Failure details are stored as the
+/// connection's last error, never put in the URL.
+pub(super) async fn oauth_callback(
+    State(state): State<AppState>,
+    ApiQuery(query): ApiQuery<OAuthCallbackQuery>,
+) -> Result<Response, ApiError> {
+    let callback =
+        connections::oauth_callback().ok_or_else(|| ApiError::not_found("OAuth callback"))?;
+    let redirect = |extension_id: Option<&str>, connection: Option<&str>, outcome: &str| {
+        let mut url = callback.return_base.clone();
+        if let Some(extension_id) = extension_id {
+            // Extension IDs are URL-safe: letters, digits, '.', '_' and '-'.
+            url = url.join(extension_id).unwrap_or(url);
+        }
+        {
+            let mut pairs = url.query_pairs_mut();
+            if let Some(connection) = connection {
+                pairs.append_pair("connection", connection);
+            }
+            pairs.append_pair("authorization", outcome);
+        }
+        Response::builder()
+            .status(StatusCode::SEE_OTHER)
+            .header(axum::http::header::LOCATION, url.as_str())
+            .header(axum::http::header::CACHE_CONTROL, "no-store")
+            .header("referrer-policy", "no-referrer")
+            .body(axum::body::Body::empty())
+            .map_err(|_| ApiError::internal("OAuth callback redirect"))
+    };
+    let Some(oauth_state) = query
+        .state
+        .as_deref()
+        .filter(|value| !value.is_empty() && value.len() <= 128)
+    else {
+        return redirect(None, None, "expired");
+    };
+    let digest = connections::authorization_state_digest(oauth_state);
+    let Some((workspace_id, extension_id, connection)) = state
+        .repository
+        .resolve_extension_authorization_state(&digest)
+        .await?
+    else {
+        return redirect(None, None, "expired");
+    };
+    let repository = state.repository.for_workspace(workspace_id).await?;
+    let code = query
+        .code
+        .as_deref()
+        .filter(|code| !code.is_empty() && code.len() <= MAX_CONNECTION_TEXT_BYTES);
+    let outcome = match (code, query.error.as_deref()) {
+        (Some(code), None) => match runtime_installation(&repository, &extension_id).await {
+            Ok(installation) => connections::complete_browser_authorization(
+                &repository,
+                &installation,
+                &connection,
+                oauth_state,
+                code,
+            )
+            .await
+            .map(drop)
+            .map_err(|error| error.to_string()),
+            Err(_) => Err("the extension must be enabled and fully granted".to_owned()),
+        },
+        (_, error) => {
+            // The request is used up either way, so a replayed redirect
+            // cannot complete it later.
+            repository
+                .take_extension_authorization_request(&extension_id, &connection, &digest)
+                .await?;
+            // Only a short, plain error code from the provider is kept.
+            let reason = error
+                .filter(|error| {
+                    error.len() <= 64
+                        && error
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                })
+                .unwrap_or("invalid_response");
+            Err(format!("the provider did not authorize the app ({reason})"))
+        }
+    };
+    match outcome {
+        Ok(()) => redirect(Some(&extension_id), Some(&connection), "connected"),
+        Err(message) => {
+            repository
+                .fail_extension_authorization(&extension_id, &connection, &message)
+                .await?;
+            redirect(Some(&extension_id), Some(&connection), "failed")
+        }
+    }
 }
 
 /// Obtains (or reuses) an access token, to check a connection.

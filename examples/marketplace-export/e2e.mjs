@@ -2,14 +2,16 @@
 // End-to-end check of the export platform (#424) against this worktree's
 // running stack and the local marketplace mock. It side-loads the test
 // exporter, creates host-managed connections (client credentials, a refresh
-// token and the device-code grant), publishes listings with variants and an
-// image, runs connector jobs and checks what the mock received. It needs:
+// token, the device-code grant and a browser-authorized authorization code),
+// publishes listings with variants and an image, runs connector jobs and
+// checks what the mock received. It needs:
 //
 //   node examples/marketplace-export/mock-server/server.mjs   # separately
 //   source .worktree && node examples/marketplace-export/e2e.mjs
 //
-// The API must run with EXTENSION_DEV_EGRESS_RESOLVE, EXTENSION_DEV_EGRESS_CA_FILE
-// and EXTENSION_PUBLIC_FILE_BASE_URL set; see the README next to this file.
+// The API must run with EXTENSION_DEV_EGRESS_RESOLVE, EXTENSION_DEV_EGRESS_CA_FILE,
+// EXTENSION_PUBLIC_FILE_BASE_URL and EXTENSION_OAUTH_CALLBACK_URL set; see
+// "Testing exports locally" in docs/extensions.md.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -169,7 +171,36 @@ await waitFor('Allegro device authorization', async () => {
   const polled = await api('POST', `/extensions/${extensionId}/connections/allegro-pl/device-authorization/poll`);
   return polled.status === 'active' ? polled : undefined;
 }, 30_000);
-for (const name of ['shopify-eu', 'amazon-de']) {
+
+step('authorize an Allegro account in the browser');
+const webAllegro = await connection({
+  connection: 'allegro-web', kind: 'allegro', display_name: 'Allegro (browser)', grant_type: 'authorization_code',
+  token_url: 'https://allegro.mock.test/auth/oauth/token', authorization_url: 'https://allegro.mock.test/auth/oauth/authorize',
+  client_id: 'allegro-client', client_secret: 'allegro-secret', parameters: { currency: 'PLN' },
+});
+assert(webAllegro.redirect_uri, 'set EXTENSION_OAUTH_CALLBACK_URL to the API callback route');
+// The browser follows the provider's redirect to the public callback, which
+// answers with a redirect back to the management page.
+const browserAuthorization = async (approve) => {
+  const { authorization_url: authorizationUrl } = await api('POST', `/extensions/${extensionId}/connections/allegro-web/authorization`);
+  const { location } = await mock('/allegro/authorize', { authorization_url: authorizationUrl, approve });
+  const back = await fetch(location, { redirect: 'manual' });
+  assert.equal(back.status, 303);
+  return { location, returnedTo: new URL(back.headers.get('location')) };
+};
+const declined = await browserAuthorization(false);
+assert.equal(declined.returnedTo.searchParams.get('authorization'), 'failed');
+const approved = await browserAuthorization(true);
+assert.equal(approved.returnedTo.searchParams.get('authorization'), 'connected');
+assert(approved.returnedTo.pathname.endsWith(`/manage/extensions/${extensionId}`));
+const replayed = await fetch(approved.location, { redirect: 'manual' });
+assert.equal(new URL(replayed.headers.get('location')).searchParams.get('authorization'), 'expired');
+const authorizedWeb = (await api('GET', `/extensions/${extensionId}/connections`)).find((item) => item.connection === 'allegro-web');
+assert.equal(authorizedWeb.status, 'active');
+assert(authorizedWeb.has_refresh_token);
+console.log(`  allegro-web: ${authorizedWeb.status}, operator returned to ${approved.returnedTo.pathname}`);
+
+for (const name of ['shopify-eu', 'amazon-de', 'allegro-web']) {
   await api('POST', `/extensions/${extensionId}/connections/${name}/test`);
 }
 const listed = JSON.stringify(await api('GET', `/extensions/${extensionId}/connections`));

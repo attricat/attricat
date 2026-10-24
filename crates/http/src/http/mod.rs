@@ -631,6 +631,10 @@ pub fn router(state: AppState) -> Router {
             post(extension_exports::poll_device_authorization),
         )
         .route(
+            "/extensions/{extension_id}/connections/{connection}/authorization",
+            post(extension_exports::start_browser_authorization),
+        )
+        .route(
             "/extensions/{extension_id}/connections/{connection}/authorization-code",
             post(extension_exports::exchange_authorization_code),
         )
@@ -657,6 +661,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/public/extension-files/{token}",
             get(extension_exports::public_file),
+        )
+        .route(
+            "/public/extension-oauth/callback",
+            get(extension_exports::oauth_callback),
         )
         .route(
             "/extensions/{extension_id}/annotation-namespace",

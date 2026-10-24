@@ -41,6 +41,7 @@ const PERMISSIONS: &[&str] = &[
     "client.commands",
 ];
 const HOST_PERMISSIONS: &[&str] = &["token", "admin", "lwa", "bucket"];
+const OAUTH_CALLBACK: &str = "https://attricat.test/api/public/extension-oauth/callback";
 
 /// What the mock received.
 #[derive(Default)]
@@ -49,6 +50,8 @@ struct Seen {
     refreshes: usize,
     /// Refresh tokens already exchanged; reusing one fails like Allegro.
     used_refresh_tokens: Vec<String>,
+    /// The PKCE challenge of the browser authorization the test approved.
+    code_challenge: Option<String>,
 }
 
 type Shared = Arc<Mutex<Seen>>;
@@ -96,6 +99,27 @@ async fn token(State(seen): State<Shared>, body: String) -> Response {
                     .into_response()
             } else {
                 Json(json!({"access_token": "tok-device", "refresh_token": "rd", "expires_in": 3600})).into_response()
+            }
+        }
+        Some("authorization_code") => {
+            use base64::Engine as _;
+            use sha2::Digest as _;
+            let verified = form.get("code").map(String::as_str) == Some("code-1")
+                && form.get("redirect_uri").map(String::as_str) == Some(OAUTH_CALLBACK)
+                && form.get("code_verifier").is_some_and(|verifier| {
+                    let challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD
+                        .encode(sha2::Sha256::digest(verifier.as_bytes()));
+                    seen.code_challenge.as_deref() == Some(challenge.as_str())
+                });
+            if verified {
+                Json(json!({"access_token": "tok-code", "refresh_token": "rc", "expires_in": 3600}))
+                    .into_response()
+            } else {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "invalid_grant"})),
+                )
+                    .into_response()
             }
         }
         Some("client_credentials")
@@ -216,7 +240,7 @@ fn manifest() -> Value {
             "operations": [{"id": "transfer", "handler": "transfer", "request_schema": {"type": "object"}, "max_request_bytes": 65536, "max_checkpoint_bytes": 65536}],
             "connections": [{
                 "id": "shop", "title": "Shop",
-                "grant_types": ["client_credentials", "refresh_token", "device_code"],
+                "grant_types": ["client_credentials", "refresh_token", "device_code", "authorization_code"],
                 "host_permission": "token",
                 "api_host_permissions": ["admin"],
                 "token_header": {"name": "X-Shop-Access-Token"}
@@ -244,6 +268,7 @@ fn connection(name: &str, grant_type: &str) -> NewExtensionConnection {
         host_permission_id: "token".into(),
         token_url: "https://shop.mock.test/oauth/token".into(),
         device_authorization_url: None,
+        authorization_url: None,
         client_id: "client".into(),
         scope: None,
         parameters: json!({"shop": "acme"}),
@@ -1004,6 +1029,7 @@ async fn moving_the_token_endpoint_to_another_host_needs_the_secret_and_drops_to
         display_name: None,
         token_url: Some("https://other.mock.test/oauth/token".into()),
         device_authorization_url: None,
+        authorization_url: None,
         scope: None,
         parameters: None,
         client_secret: client_secret.map(str::to_owned),
@@ -1018,6 +1044,7 @@ async fn moving_the_token_endpoint_to_another_host_needs_the_secret_and_drops_to
                 display_name: None,
                 token_url: None,
                 device_authorization_url: Some(Some("https://shop.mock.test/oauth/device".into())),
+                authorization_url: None,
                 scope: None,
                 parameters: None,
                 client_secret: None,
@@ -1050,4 +1077,174 @@ fn base64_decode(value: &str) -> Vec<u8> {
     base64::engine::general_purpose::STANDARD
         .decode(value)
         .unwrap()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn operators_authorize_connections_in_the_browser(pool: sqlx::PgPool) {
+    let (_, seen) = shared_mock();
+    connections::use_oauth_callback(connections::OAuthCallback {
+        redirect_uri: OAUTH_CALLBACK.parse().unwrap(),
+        return_base: "https://attricat.test/manage/extensions/".parse().unwrap(),
+    });
+    let repository = AttricatRepository::system(pool.clone())
+        .for_workspace(bootstrap_workspace_id())
+        .await
+        .unwrap();
+    let store = Arc::new(FakeObjectStore::available());
+    api::extension_installer::ExtensionInstaller::new(repository.clone(), store.clone())
+        .install("test", &archive())
+        .await
+        .unwrap();
+    for capability in PERMISSIONS {
+        repository
+            .grant_extension(EXTENSION, "capability", capability)
+            .await
+            .unwrap();
+    }
+    for rule in HOST_PERMISSIONS {
+        repository
+            .grant_extension(EXTENSION, "host_permission", rule)
+            .await
+            .unwrap();
+    }
+    repository.enable_extension(EXTENSION).await.unwrap();
+    let (base_url, server) = start_server_with_object_store(pool.clone(), store).await;
+    let client = authenticated_client();
+    let connections = format!("{base_url}/extensions/{EXTENSION}/connections");
+    // The provider's redirect arrives without a session, and its answer is a
+    // redirect the test inspects rather than follows.
+    let browser = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let callback = |query: String| {
+        let browser = browser.clone();
+        let url = format!("{base_url}/public/extension-oauth/callback?{query}");
+        async move {
+            let response = browser.get(url).send().await.unwrap();
+            assert_eq!(response.status(), StatusCode::SEE_OTHER);
+            assert_eq!(response.headers()["cache-control"], "no-store");
+            response.headers()["location"].to_str().unwrap().to_owned()
+        }
+    };
+
+    // The authorization URL must be plain HTTPS; Attricat adds the query.
+    expect_status(
+        client
+            .post(&connections)
+            .json(&json!({"connection": "bad", "kind": "shop", "display_name": "Bad",
+                          "grant_type": "authorization_code", "token_url": "https://shop.mock.test/oauth/token",
+                          "authorization_url": "https://shop.mock.test/oauth/authorize?x=1",
+                          "client_id": "client", "client_secret": "s3cret"}))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+    )
+    .await;
+    let created = expect_status(
+        client
+            .post(&connections)
+            .json(&json!({"connection": "web", "kind": "shop", "display_name": "Web shop",
+                          "grant_type": "authorization_code", "token_url": "https://shop.mock.test/oauth/token",
+                          "authorization_url": "https://shop.mock.test/oauth/authorize",
+                          "client_id": "client", "client_secret": "s3cret", "scope": "listings"}))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::CREATED,
+    )
+    .await;
+    assert_eq!(created["status"], "pending_authorization");
+    assert_eq!(created["redirect_uri"], OAUTH_CALLBACK);
+    assert_eq!(
+        get_json(&client, &connections).await[0]["redirect_uri"],
+        OAUTH_CALLBACK
+    );
+
+    let start = || {
+        let client = client.clone();
+        let url = format!("{connections}/web/authorization");
+        async move {
+            let started =
+                expect_status(client.post(url).send().await.unwrap(), StatusCode::OK).await;
+            let url = url::Url::parse(started["authorization_url"].as_str().unwrap()).unwrap();
+            assert_eq!(url.path(), "/oauth/authorize");
+            url.query_pairs()
+                .into_owned()
+                .collect::<std::collections::HashMap<_, _>>()
+        }
+    };
+    let request = start().await;
+    assert_eq!(request["response_type"], "code");
+    assert_eq!(request["client_id"], "client");
+    assert_eq!(request["redirect_uri"], OAUTH_CALLBACK);
+    assert_eq!(request["scope"], "listings");
+    assert_eq!(request["code_challenge_method"], "S256");
+    assert_eq!(request["state"].len(), 43);
+    // The state and verifier are stored only as a digest and ciphertext.
+    let stored: String = sqlx::query_scalar(
+        "SELECT authorization_state_sha256 FROM extension_connections WHERE connection='web'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_ne!(stored, request["state"]);
+    // The operator approves at the provider, which redirects back.
+    seen.lock().unwrap().code_challenge = Some(request["code_challenge"].clone());
+    let query = |pairs: &[(&str, &str)]| {
+        url::form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(pairs)
+            .finish()
+    };
+    let approved = query(&[
+        ("state", &request["state"]),
+        ("code", "code-1"),
+        ("iss", "https://shop.mock.test"),
+    ]);
+    assert_eq!(
+        callback(approved.clone()).await,
+        format!(
+            "https://attricat.test/manage/extensions/{EXTENSION}?connection=web&authorization=connected"
+        )
+    );
+    let active = get_json(&client, &connections).await;
+    assert_eq!(active[0]["status"], "active");
+    assert_eq!(active[0]["has_refresh_token"], true);
+    assert!(active[0]["authorization_expires_at"].is_null());
+    // A state works once: replaying the redirect changes nothing.
+    assert_eq!(
+        callback(approved).await,
+        "https://attricat.test/manage/extensions/?authorization=expired"
+    );
+    assert_eq!(
+        callback(query(&[("state", "unknown"), ("code", "code-1")])).await,
+        "https://attricat.test/manage/extensions/?authorization=expired"
+    );
+
+    // Declining at the provider fails the authorization, not the connection
+    // that is already active.
+    let declined = start().await;
+    assert_eq!(
+        callback(query(&[
+            ("state", &declined["state"]),
+            ("error", "access_denied")
+        ]))
+        .await,
+        format!(
+            "https://attricat.test/manage/extensions/{EXTENSION}?connection=web&authorization=failed"
+        )
+    );
+    let after = get_json(&client, &connections).await;
+    assert_eq!(after[0]["status"], "active");
+    assert!(
+        after[0]["last_error"]
+            .as_str()
+            .unwrap()
+            .contains("access_denied")
+    );
+    for secret in ["s3cret", "tok-code", "\"rc\"", declined["state"].as_str()] {
+        assert!(!after.to_string().contains(secret), "{secret}");
+    }
+    server.abort();
 }

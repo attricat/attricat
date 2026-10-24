@@ -260,7 +260,8 @@
         "title": "Allegro seller account",
         "grant_types": [
           "device_code",
-          "refresh_token"
+          "refresh_token",
+          "authorization_code"
         ],
         "host_permission": "allegro-auth",
         "api_host_permissions": [

@@ -115,6 +115,17 @@ pub struct ExtensionConnection {
     pub device_user_code: Option<String>,
     pub device_verification_uri: Option<String>,
     pub device_expires_at: Option<DateTime<Utc>>,
+    /// The provider's authorization endpoint, for browser authorization of
+    /// an authorization-code connection.
+    pub authorization_url: Option<String>,
+    /// When the pending browser authorization expires, if one was started.
+    pub authorization_expires_at: Option<DateTime<Utc>>,
+    /// The redirect URI to register with the provider, filled in by the API
+    /// for authorization-code connections when browser authorization is
+    /// configured.
+    #[sqlx(skip)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redirect_uri: Option<String>,
     pub has_client_secret: bool,
     pub has_refresh_token: bool,
     pub has_access_token: bool,
@@ -122,7 +133,7 @@ pub struct ExtensionConnection {
     pub updated_at: DateTime<Utc>,
 }
 
-const CONNECTION_FIELDS: &str = "id,extension_id,connection,kind,display_name,grant_type,host_permission_id,token_url,device_authorization_url,client_id,scope,parameters,status,last_error,last_refreshed_at,access_token_expires_at,device_user_code,device_verification_uri,device_expires_at,client_secret_ciphertext IS NOT NULL AS has_client_secret,refresh_token_ciphertext IS NOT NULL AS has_refresh_token,access_token_ciphertext IS NOT NULL AS has_access_token,created_at,updated_at";
+const CONNECTION_FIELDS: &str = "id,extension_id,connection,kind,display_name,grant_type,host_permission_id,token_url,device_authorization_url,client_id,scope,parameters,status,last_error,last_refreshed_at,access_token_expires_at,device_user_code,device_verification_uri,device_expires_at,authorization_url,authorization_expires_at,client_secret_ciphertext IS NOT NULL AS has_client_secret,refresh_token_ciphertext IS NOT NULL AS has_refresh_token,access_token_ciphertext IS NOT NULL AS has_access_token,created_at,updated_at";
 
 /// A connection to create. Secret fields are encrypted before they are stored.
 #[derive(Clone)]
@@ -135,6 +146,7 @@ pub struct NewExtensionConnection {
     pub host_permission_id: String,
     pub token_url: String,
     pub device_authorization_url: Option<String>,
+    pub authorization_url: Option<String>,
     pub client_id: String,
     pub scope: Option<String>,
     pub parameters: Value,
@@ -148,6 +160,7 @@ pub struct ExtensionConnectionPatch {
     pub display_name: Option<String>,
     pub token_url: Option<String>,
     pub device_authorization_url: Option<Option<String>>,
+    pub authorization_url: Option<Option<String>>,
     pub scope: Option<Option<String>>,
     pub parameters: Option<Value>,
     pub client_secret: Option<String>,
@@ -532,11 +545,12 @@ impl AttricatRepository {
             _ => "pending_authorization",
         };
         let mut transaction = self.pool.begin().await?;
-        let created = sqlx::query_as(&format!("INSERT INTO extension_connections(id,workspace_id,extension_id,connection,kind,display_name,grant_type,host_permission_id,token_url,device_authorization_url,client_id,scope,parameters,client_secret_ciphertext,refresh_token_ciphertext,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING {CONNECTION_FIELDS}"))
+        let created = sqlx::query_as(&format!("INSERT INTO extension_connections(id,workspace_id,extension_id,connection,kind,display_name,grant_type,host_permission_id,token_url,device_authorization_url,client_id,scope,parameters,client_secret_ciphertext,refresh_token_ciphertext,status,authorization_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING {CONNECTION_FIELDS}"))
             .bind(id).bind(self.extension_workspace()).bind(&input.extension_id).bind(&input.connection)
             .bind(&input.kind).bind(&input.display_name).bind(&input.grant_type).bind(&input.host_permission_id)
             .bind(&input.token_url).bind(&input.device_authorization_url).bind(&input.client_id)
             .bind(&input.scope).bind(&input.parameters).bind(client_secret).bind(refresh_token).bind(status)
+            .bind(&input.authorization_url)
             .fetch_one(&mut *transaction).await
             .map_err(|error| match error {
                 sqlx::Error::Database(database) if database.is_unique_violation() => {
@@ -591,7 +605,11 @@ impl AttricatRepository {
             || patch
                 .scope
                 .as_ref()
-                .is_some_and(|scope| *scope != current.scope);
+                .is_some_and(|scope| *scope != current.scope)
+            || patch
+                .authorization_url
+                .as_ref()
+                .is_some_and(|url| *url != current.authorization_url);
         // A token endpoint moved to another origin is another provider: the
         // stored secret must be entered again and the stored tokens are not
         // sent there, so the connection waits for a new authorization unless
@@ -628,6 +646,10 @@ impl AttricatRepository {
              device_expires_at=CASE WHEN $13 THEN NULL ELSE device_expires_at END,\
              device_interval_seconds=CASE WHEN $13 THEN NULL ELSE device_interval_seconds END,\
              device_polled_at=CASE WHEN $13 THEN NULL ELSE device_polled_at END,\
+             authorization_url=CASE WHEN $14 THEN $15 ELSE authorization_url END,\
+             authorization_state_sha256=CASE WHEN $12 THEN NULL ELSE authorization_state_sha256 END,\
+             authorization_verifier_ciphertext=CASE WHEN $12 THEN NULL ELSE authorization_verifier_ciphertext END,\
+             authorization_expires_at=CASE WHEN $12 THEN NULL ELSE authorization_expires_at END,\
              access_token_expires_at=CASE WHEN $12 THEN NULL ELSE access_token_expires_at END,\
              status=CASE WHEN $11::bytea IS NOT NULL OR (grant_type='client_credentials' AND $10::bytea IS NOT NULL) THEN 'active' \
                WHEN $13 THEN 'pending_authorization' \
@@ -649,6 +671,8 @@ impl AttricatRepository {
         .bind(refresh_token)
         .bind(changed || moved)
         .bind(moved)
+        .bind(patch.authorization_url.is_some())
+        .bind(patch.authorization_url.clone().flatten())
         .fetch_one(&mut *transaction)
         .await?;
         self.write_audit_event(&mut transaction).await?;
@@ -809,6 +833,64 @@ impl AttricatRepository {
         Ok(updated)
     }
 
+    /// Stores a started browser authorization: the SHA-256 of its `state` and
+    /// its PKCE code verifier, which the public OAuth callback takes back
+    /// once. A new request replaces an earlier one. A connection that is
+    /// already active keeps working on its current tokens until the new
+    /// authorization completes.
+    pub async fn record_extension_authorization_request(
+        &self,
+        extension_id: &str,
+        connection: &str,
+        state_sha256: &str,
+        code_verifier: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<ExtensionConnection, RepositoryError> {
+        let current = self.extension_connection(extension_id, connection).await?;
+        let verifier = seal(current.id, "authorization_verifier", code_verifier)?;
+        let mut transaction = self.pool.begin().await?;
+        let updated = sqlx::query_as(&format!("UPDATE extension_connections SET authorization_state_sha256=$3,authorization_verifier_ciphertext=$4,authorization_expires_at=$5,status=CASE WHEN status='active' AND (access_token_ciphertext IS NOT NULL OR refresh_token_ciphertext IS NOT NULL) THEN 'active' ELSE 'pending_authorization' END,last_error=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}"))
+            .bind(self.extension_workspace()).bind(current.id).bind(state_sha256).bind(verifier).bind(expires_at)
+            .fetch_one(&mut *transaction).await?;
+        self.write_audit_event(&mut transaction).await?;
+        transaction.commit().await?;
+        Ok(updated)
+    }
+
+    /// Takes the pending browser authorization whose `state` hashes to
+    /// `state_sha256`, so a callback can complete it at most once. Returns
+    /// its PKCE code verifier, or `None` when it is unknown, used or expired.
+    pub async fn take_extension_authorization_request(
+        &self,
+        extension_id: &str,
+        connection: &str,
+        state_sha256: &str,
+    ) -> Result<Option<String>, RepositoryError> {
+        let taken: Option<(Uuid, Vec<u8>, bool)> = sqlx::query_as("UPDATE extension_connections c SET authorization_state_sha256=NULL,authorization_verifier_ciphertext=NULL,authorization_expires_at=NULL FROM (SELECT id,authorization_verifier_ciphertext AS verifier,authorization_expires_at>clock_timestamp() AS live FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3 AND authorization_state_sha256=$4 FOR UPDATE) p WHERE c.id=p.id RETURNING c.id,p.verifier,p.live")
+            .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(state_sha256)
+            .fetch_optional(&self.pool).await?;
+        match taken {
+            Some((id, verifier, true)) => Ok(Some(open(id, "authorization_verifier", &verifier)?)),
+            _ => Ok(None),
+        }
+    }
+
+    /// Records why a browser authorization did not complete, such as the
+    /// operator declining at the provider. An active connection keeps its
+    /// tokens and status; one that was waiting for this authorization fails.
+    pub async fn fail_extension_authorization(
+        &self,
+        extension_id: &str,
+        connection: &str,
+        message: &str,
+    ) -> Result<(), RepositoryError> {
+        let message: String = message.chars().take(1024).collect();
+        sqlx::query("UPDATE extension_connections SET status=CASE WHEN status IN ('active','revoked') THEN status ELSE 'failed' END,last_error=$4,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3")
+            .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(message)
+            .execute(&self.pool).await?;
+        Ok(())
+    }
+
     /// The operator-lowered budget of a host-permission rule, if any.
     pub async fn extension_host_permission_budget(
         &self,
@@ -897,6 +979,19 @@ impl AttricatRepository {
 }
 
 impl AttricatRepository<super::SystemScope> {
+    /// Resolves a pending browser authorization by the SHA-256 of its
+    /// `state`, across workspaces, for the public OAuth callback. Returns
+    /// the workspace, extension and connection; expired requests are not
+    /// resolved.
+    pub async fn resolve_extension_authorization_state(
+        &self,
+        state_sha256: &str,
+    ) -> Result<Option<(Uuid, String, String)>, RepositoryError> {
+        Ok(sqlx::query_as("SELECT workspace_id,extension_id,connection FROM extension_connections WHERE authorization_state_sha256=$1 AND authorization_expires_at>clock_timestamp()")
+            .bind(state_sha256)
+            .fetch_optional(&self.pool).await?)
+    }
+
     /// Resolves a public file link token (by its SHA-256) across workspaces.
     /// Returns the workspace, file, issuing extension and record of a live
     /// link; the caller checks the grant and that the record still references

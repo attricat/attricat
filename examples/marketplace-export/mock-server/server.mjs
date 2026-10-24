@@ -10,7 +10,9 @@
 //
 // MOCK_HTTPS_PORT (default 9443) and MOCK_INSPECT_PORT (default 9080) choose
 // the ports. The inspection API serves `/` (an HTML overview), `/state`,
-// `/requests`, `POST /reset`, `POST /fail` and `POST /allegro/approve`.
+// `/requests`, `POST /reset`, `POST /fail`, `POST /allegro/approve` (a device
+// code) and `POST /allegro/authorize` (an operator approving an authorization
+// URL in the browser; it answers with the redirect the browser would follow).
 
 import { randomUUID, createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -49,6 +51,8 @@ const freshState = () => ({
     tokens: new Set(),
     refreshTokens: new Map(),
     devices: {},
+    // Authorization codes issued to the browser, by code.
+    codes: {},
     offers: {},
     operations: {},
   },
@@ -475,6 +479,16 @@ const allegro = async (request, response, url, body) => {
       delete state.allegro.devices[input.device_code];
       return json(response, 200, allegroTokens());
     }
+    if (input.grant_type === 'authorization_code') {
+      // A code works once, for the redirect URI and PKCE challenge it was issued for.
+      const issued = state.allegro.codes[input.code];
+      delete state.allegro.codes[input.code];
+      const challenge = createHash('sha256').update(input.code_verifier ?? '').digest('base64url');
+      if (!issued || issued.redirectUri !== input.redirect_uri || issued.challenge !== challenge) {
+        return json(response, 400, { error: 'invalid_grant' });
+      }
+      return json(response, 200, allegroTokens());
+    }
     if (input.grant_type === 'refresh_token') {
       // Rotating refresh tokens: each can be exchanged once.
       if (state.allegro.refreshTokens.get(input.refresh_token) !== false) {
@@ -670,6 +684,23 @@ const inspector = http.createServer(async (request, response) => {
     if (!device) return json(response, 404, { error: 'unknown user code' });
     device.approved = true;
     return json(response, 200, { approved: true });
+  }
+  if (url.pathname === '/allegro/authorize' && request.method === 'POST') {
+    const { authorization_url: authorizationUrl, approve = true } = JSON.parse(body.toString());
+    const query = new URL(authorizationUrl).searchParams;
+    if (query.get('client_id') !== credentials.allegro.clientId || query.get('response_type') !== 'code' || query.get('code_challenge_method') !== 'S256') {
+      return json(response, 400, { error: 'invalid_request' });
+    }
+    const redirect = new URL(query.get('redirect_uri'));
+    redirect.searchParams.set('state', query.get('state'));
+    if (approve) {
+      const code = issue('code');
+      state.allegro.codes[code] = { redirectUri: query.get('redirect_uri'), challenge: query.get('code_challenge') };
+      redirect.searchParams.set('code', code);
+    } else {
+      redirect.searchParams.set('error', 'access_denied');
+    }
+    return json(response, 200, { location: redirect.toString() });
   }
   if (url.pathname === '/secrets-check') {
     // Requests never carried an operator's client secret where it does not belong.

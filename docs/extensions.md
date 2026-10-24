@@ -1140,10 +1140,9 @@ connection's non-secret description (`connections.get.v1`,
 The host runs the grants itself: `client_credentials` (Shopify), `refresh_token`
 (Amazon LWA, Allegro), the device authorization grant (Allegro;
 `POST .../connections/{connection}/device-authorization` starts it and shows
-the user code, `.../device-authorization/poll` completes it) and an
-operator's authorization-code exchange (`POST .../authorization-code`
-`{code, redirect_uri, code_verifier?}`, for apps whose redirect URI is not an
-Attricat route; callback ingress is tracked in #279). Token and device
+the user code, `.../device-authorization/poll` completes it) and the
+authorization-code grant, by browser or by hand (see
+[Browser authorization](#browser-authorization)). Token and device
 endpoint requests count against the kind's host-permission budget. A device
 authorization whose user code or verification link is unusable (too long, or
 not http(s)) is refused. Starting device
@@ -1167,6 +1166,40 @@ client secret entered again and drops the stored tokens, so the connection
 waits for a new authorization unless a refresh token comes with the change. `POST .../test` obtains a token.
 Deleting a connection deletes its credentials but keeps its mappings, so a
 connection re-created under the same name keeps the destination's external IDs.
+
+#### Browser authorization
+
+An authorization-code connection may store the provider's
+`authorization_url` (plain HTTPS; only the operator's browser visits it, so
+it needs no host permission). With `EXTENSION_OAUTH_CALLBACK_URL` configured,
+`POST .../connections/{connection}/authorization` (`extensions.manage`)
+creates a 256-bit `state` and an RFC 7636 code verifier, stores the state's
+SHA-256 (unique) and the verifier as ciphertext bound to the row, with a
+ten-minute expiry, and returns the provider URL with `response_type=code`,
+`client_id`, `redirect_uri`, `state`, the S256 `code_challenge` and `scope`.
+Starting again replaces the pending request; an active connection keeps its
+tokens meanwhile. Any credential, endpoint or scope change discards it.
+
+`GET /api/public/extension-oauth/callback` is a public route
+(`is_public_route`). It resolves the state digest across workspaces in system
+scope (`resolve_extension_authorization_state`), takes the request at most
+once (`take_extension_authorization_request` clears it in the same
+statement, so a replayed redirect finds nothing), and exchanges the code
+through the same claimed token request as a pasted code, with the verifier
+and the configured redirect URI. Provider errors, an exchange failure or a
+disabled extension are stored as the connection's `last_error` (provider
+error codes only when short and plain); an active connection stays active.
+The callback always answers `303` with `Cache-Control: no-store` and
+`Referrer-Policy: no-referrer`, to
+`EXTENSION_OAUTH_RETURN_URL` + `<extension-id>?connection=…&authorization=connected|failed`,
+or `?authorization=expired` when the state is unknown, used or expired. No
+detail goes in the URL. The state is not bound to the operator's browser
+session: its secrecy, single use, expiry and PKCE are what protect the
+exchange. Connection responses carry `redirect_uri` for authorization-code
+connections so operators can register it.
+
+Without the callback configured, operators still exchange a code by hand with
+`POST .../authorization-code` `{code, redirect_uri, code_verifier?}`.
 
 ### Connector jobs for exports
 
@@ -1262,8 +1295,9 @@ mappings pointing at missing items.
   extension's management page mounts once per export destination with
   `{context_version: 1, export_id}` (requires `client.export_mapping`).
   Scoped configuration remains for small per-blueprint settings.
-- **Webhook ingress** (OAuth callbacks, inbound order and stock events) is
-  tracked in #279 and is not needed for pure export.
+- **Webhook ingress** (inbound order and stock events) is tracked in #279
+  and is not needed for pure export. OAuth callbacks are implemented; see
+  [Browser authorization](#browser-authorization).
 
 ## Client extension runtime (v1)
 
@@ -1721,6 +1755,8 @@ contacts the real services. Point the broker at it in development only
 EXTENSION_DEV_EGRESS_RESOLVE=*.mock.test=127.0.0.1:9443
 EXTENSION_DEV_EGRESS_CA_FILE=$PWD/apps/api/tests/fixtures/mock-tls/ca.pem
 EXTENSION_PUBLIC_FILE_BASE_URL=http://127.0.0.1:$API_PORT/api/public/extension-files/
+EXTENSION_OAUTH_CALLBACK_URL=http://127.0.0.1:$API_PORT/api/public/extension-oauth/callback
+EXTENSION_OAUTH_RETURN_URL=http://127.0.0.1:$WEB_PORT/manage/extensions/
 ```
 
 Then build the test exporter, start the mock and run the scenario against the
@@ -1733,7 +1769,8 @@ source .worktree && API_LOG=<api log file> node examples/marketplace-export/e2e.
 ```
 
 The scenario side-loads the exporter, creates Shopify (client credentials),
-Amazon (refresh token) and Allegro (device code) connections, publishes
+Amazon (refresh token) and Allegro (device code, and an authorization code
+authorized through the OAuth callback) connections, publishes
 listings with variants and an image, and checks variants, staged image
 uploads, single-item and feed listings polled to completion, Allegro offer
 commands polled through deferral, rejections, throttling, a 5xx, an uncertain

@@ -32,6 +32,15 @@ export const connectionGrantTypes = [
 ] as const;
 export type ConnectionGrantType = (typeof connectionGrantTypes)[number];
 
+/** How the public OAuth callback reports a browser authorization. */
+export const browserAuthorizationOutcomes = [
+  'connected',
+  'failed',
+  'expired',
+] as const;
+export type BrowserAuthorizationOutcome =
+  (typeof browserAuthorizationOutcomes)[number];
+
 export const exportStatusPath = '/api/export-status';
 export const recordExportStatusPath = (recordId: string) =>
   `/api/v1/records/${encodeURIComponent(recordId)}/export-status`;

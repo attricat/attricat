@@ -196,6 +196,15 @@ pub struct ExtensionsConfig {
     /// (`EXTENSION_PUBLIC_FILE_BASE_URL`, ending in
     /// `/api/public/extension-files/`); without it links are unavailable.
     pub public_file_base_url: Option<url::Url>,
+    /// Externally reachable URL of the public OAuth callback
+    /// (`EXTENSION_OAUTH_CALLBACK_URL`, the `/api/public/extension-oauth/callback`
+    /// route), which operators register as their apps' redirect URI. Without
+    /// it, authorization-code connections are authorized by pasting codes.
+    pub oauth_callback_url: Option<url::Url>,
+    /// Where the callback sends the browser afterwards
+    /// (`EXTENSION_OAUTH_RETURN_URL`, the web app's `/manage/extensions/`,
+    /// ending in '/'). Defaults to that path on the callback URL's origin.
+    pub oauth_return_url: Option<url::Url>,
     /// Development only: egress overrides that let the extension broker
     /// reach local marketplace mocks. Requires `ATTRICAT_DEVTOOLS`.
     pub development_egress: Option<DevelopmentEgressConfig>,
@@ -401,6 +410,8 @@ impl Config {
                             })
                     })
                     .transpose()?,
+                oauth_callback_url: oauth_callback_url(source)?,
+                oauth_return_url: oauth_return_url(source)?,
                 development_egress: development_egress(source, devtools_enabled)?,
             },
             value_history_retention_days: source
@@ -474,6 +485,47 @@ fn bootstrap(source: &Source, demo_mode: bool) -> Result<BootstrapConfig, Config
         sample_accounts,
         e2e_fixture,
     })
+}
+
+/// An absolute HTTP(S) URL without credentials, query or fragment.
+fn plain_http_url(value: &str) -> Option<url::Url> {
+    url::Url::parse(value).ok().filter(|url| {
+        matches!(url.scheme(), "https" | "http")
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.query().is_none()
+            && url.fragment().is_none()
+    })
+}
+
+fn oauth_callback_url(source: &Source) -> Result<Option<url::Url>, ConfigError> {
+    source
+        .var("EXTENSION_OAUTH_CALLBACK_URL")
+        .map(|value| {
+            plain_http_url(value)
+                .filter(|url| url.path().ends_with("/public/extension-oauth/callback"))
+                .ok_or_else(|| {
+                    ConfigError::from(
+                        "EXTENSION_OAUTH_CALLBACK_URL must be an HTTP(S) URL ending in /api/public/extension-oauth/callback",
+                    )
+                })
+        })
+        .transpose()
+}
+
+fn oauth_return_url(source: &Source) -> Result<Option<url::Url>, ConfigError> {
+    source
+        .var("EXTENSION_OAUTH_RETURN_URL")
+        .map(|value| {
+            plain_http_url(value)
+                .filter(|url| url.path().ends_with('/'))
+                .ok_or_else(|| {
+                    ConfigError::from(
+                        "EXTENSION_OAUTH_RETURN_URL must be an HTTP(S) URL ending in '/'",
+                    )
+                })
+        })
+        .transpose()
 }
 
 fn credential_key(source: &Source) -> Result<Option<[u8; 32]>, ConfigError> {
@@ -829,6 +881,26 @@ mod tests {
             )
             .is_err()
         );
+        assert!(
+            load(
+                &secrets,
+                &[(
+                    "EXTENSION_OAUTH_CALLBACK_URL",
+                    "https://attricat.test/callback"
+                )]
+            )
+            .is_err()
+        );
+        assert!(
+            load(
+                &secrets,
+                &[(
+                    "EXTENSION_OAUTH_RETURN_URL",
+                    "https://attricat.test/manage/extensions?x=1"
+                )]
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -853,9 +925,15 @@ mod tests {
                     "EXTENSION_PUBLIC_FILE_BASE_URL",
                     "https://attricat.test/api/public/extension-files/",
                 ),
+                (
+                    "EXTENSION_OAUTH_CALLBACK_URL",
+                    "https://attricat.test/api/public/extension-oauth/callback",
+                ),
             ],
         )
         .unwrap();
+        assert!(config.extensions.oauth_callback_url.is_some());
+        assert!(config.extensions.oauth_return_url.is_none());
         assert_eq!(config.extensions.credential_key, Some([1; 32]));
         let egress = config.extensions.development_egress.unwrap();
         assert_eq!(egress.resolve.len(), 2);

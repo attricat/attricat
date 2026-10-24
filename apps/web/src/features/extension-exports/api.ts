@@ -101,6 +101,7 @@ export type NewConnection = {
   grant_type: ConnectionGrantType;
   token_url: string;
   device_authorization_url?: string;
+  authorization_url?: string;
   client_id: string;
   scope?: string;
   parameters?: Record<string, unknown>;
@@ -146,6 +147,17 @@ export const connectionAction = (
   request(
     `${connectionPath(extensionId, connection)}/${action}`,
     extensionConnectionSchema,
+    { method: 'POST' },
+  );
+
+/** Starts a browser authorization and returns the provider URL to open. */
+export const startBrowserAuthorization = (
+  extensionId: string,
+  connection: string,
+) =>
+  request(
+    `${connectionPath(extensionId, connection)}/authorization`,
+    z.object({ authorization_url: z.url() }),
     { method: 'POST' },
   );
 

@@ -2082,6 +2082,15 @@
     "authorizationCode": "Authorization code",
     "redirectUri": "Redirect URI",
     "exchangeCode": "Connect",
+    "authorizationUrl": "Authorization URL",
+    "authorizationUrlHelp": "The provider's page where you approve the app. Leave it empty to paste authorization codes by hand.",
+    "authorizeInBrowser": "Authorize in browser",
+    "registerRedirectUri": "Register this redirect URI with the provider:",
+    "authorizationOutcome": {
+      "connected": "{{connection}} is connected.",
+      "failed": "{{connection}} could not be authorized. See the connection for details.",
+      "expired": "That authorization link has expired or was already used. Start the authorization again."
+    },
     "replaceSecret": "New client secret",
     "replaceRefreshToken": "New refresh token",
     "replace": "Replace",

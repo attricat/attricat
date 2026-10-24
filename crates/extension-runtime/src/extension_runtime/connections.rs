@@ -13,8 +13,12 @@
 //! rule with the same DNS pinning, TLS and no-redirect policy as every other
 //! mediated request. Tokens never reach a component, a log or an error.
 
+use std::sync::OnceLock;
+
 use attricat_extension_manifest::extensions::{ClientAuthentication, ConnectionKind};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, TimeDelta, Utc};
+use ring::rand::{SecureRandom, SystemRandom};
 
 use super::*;
 use crate::repository::{
@@ -37,6 +41,35 @@ const REFRESH_WAIT_LIMIT: std::time::Duration = std::time::Duration::from_secs(5
 const DEVICE_CODE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
 /// The largest token endpoint response read.
 const MAX_TOKEN_RESPONSE_BYTES: usize = 64 * 1024;
+/// How long an operator has to approve a browser authorization.
+const BROWSER_AUTHORIZATION_LIFETIME: TimeDelta = TimeDelta::minutes(10);
+
+/// Where the provider sends the browser back after an operator approves an
+/// authorization-code connection, and where Attricat then sends it.
+#[derive(Clone, Debug)]
+pub struct OAuthCallback {
+    /// The externally reachable URL of `GET /api/public/extension-oauth/callback`,
+    /// registered with the provider as the app's redirect URI.
+    pub redirect_uri: Url,
+    /// The web app's extension management base, such as
+    /// `https://attricat.example.com/manage/extensions/`. The callback sends
+    /// the browser to `<base><extension-id>`.
+    pub return_base: Url,
+}
+
+static OAUTH_CALLBACK: OnceLock<OAuthCallback> = OnceLock::new();
+
+/// Installs the OAuth callback configuration. Without it, browser
+/// authorization is unavailable and operators exchange codes by hand. Later
+/// calls are ignored.
+pub fn use_oauth_callback(callback: OAuthCallback) {
+    let _ = OAUTH_CALLBACK.set(callback);
+}
+
+/// The configured OAuth callback, if any.
+pub fn oauth_callback() -> Option<&'static OAuthCallback> {
+    OAUTH_CALLBACK.get()
+}
 
 /// Why a token request failed.
 #[derive(Debug)]
@@ -679,6 +712,112 @@ async fn token_endpoint_call(
         }
         _ => TokenError::Temporary(format!("token endpoint returned HTTP {}", status.as_u16())),
     })
+}
+
+/// A 256-bit random value, base64url-encoded without padding (43 characters),
+/// as `state` and as an RFC 7636 code verifier.
+fn random_token() -> Result<String, TokenError> {
+    let mut bytes = [0u8; 32];
+    SystemRandom::new()
+        .fill(&mut bytes)
+        .map_err(|_| TokenError::Temporary("random source unavailable".into()))?;
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+/// The SHA-256 under which a browser authorization's `state` is stored.
+pub fn authorization_state_digest(state: &str) -> String {
+    format!("{:x}", Sha256::digest(state.as_bytes()))
+}
+
+/// Starts a browser authorization of an authorization-code connection and
+/// returns the provider URL to send the operator to. The request carries a
+/// single-use `state` and an S256 PKCE challenge; the public callback
+/// completes it within ten minutes.
+pub async fn start_browser_authorization(
+    repository: &AttricatRepository,
+    installation: &ExtensionRuntimeInstallation,
+    connection: &str,
+) -> Result<Url, TokenError> {
+    let callback = oauth_callback().ok_or_else(|| {
+        TokenError::Invalid("browser authorization is not configured on this deployment".into())
+    })?;
+    let current = repository
+        .extension_connection(&installation.extension_id, connection)
+        .await
+        .map_err(|error| TokenError::Invalid(error.to_string()))?;
+    if current.grant_type != "authorization_code" {
+        return Err(TokenError::Invalid(
+            "the connection does not use the authorization code grant".into(),
+        ));
+    }
+    connection_kind(installation, &current.kind)?;
+    let mut url = current
+        .authorization_url
+        .as_deref()
+        .and_then(|url| Url::parse(url).ok())
+        .ok_or_else(|| TokenError::Invalid("the connection has no authorization URL".into()))?;
+    let state = random_token()?;
+    let verifier = random_token()?;
+    let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
+    {
+        let mut query = url.query_pairs_mut();
+        query
+            .append_pair("response_type", "code")
+            .append_pair("client_id", &current.client_id)
+            .append_pair("redirect_uri", callback.redirect_uri.as_str())
+            .append_pair("state", &state)
+            .append_pair("code_challenge", &challenge)
+            .append_pair("code_challenge_method", "S256");
+        if let Some(scope) = &current.scope {
+            query.append_pair("scope", scope);
+        }
+    }
+    repository
+        .record_extension_authorization_request(
+            &installation.extension_id,
+            connection,
+            &authorization_state_digest(&state),
+            &verifier,
+            Utc::now() + BROWSER_AUTHORIZATION_LIFETIME,
+        )
+        .await
+        .map_err(|error| TokenError::Invalid(error.to_string()))?;
+    Ok(url)
+}
+
+/// Completes a browser authorization from the provider's redirect: takes the
+/// pending request `state` names (at most once) and exchanges `code` with
+/// its PKCE verifier and the configured redirect URI.
+pub async fn complete_browser_authorization(
+    repository: &AttricatRepository,
+    installation: &ExtensionRuntimeInstallation,
+    connection: &str,
+    state: &str,
+    code: &str,
+) -> Result<ExtensionConnection, TokenError> {
+    let callback = oauth_callback().ok_or_else(|| {
+        TokenError::Invalid("browser authorization is not configured on this deployment".into())
+    })?;
+    let verifier = repository
+        .take_extension_authorization_request(
+            &installation.extension_id,
+            connection,
+            &authorization_state_digest(state),
+        )
+        .await
+        .map_err(|error| TokenError::Invalid(error.to_string()))?
+        .ok_or_else(|| {
+            TokenError::Invalid("the authorization request expired or was used".into())
+        })?;
+    exchange_authorization_code(
+        repository,
+        installation,
+        connection,
+        code,
+        callback.redirect_uri.as_str(),
+        Some(&verifier),
+    )
+    .await
 }
 
 #[cfg(test)]

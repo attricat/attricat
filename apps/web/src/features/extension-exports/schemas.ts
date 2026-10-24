@@ -104,6 +104,10 @@ export const extensionConnectionSchema = z.object({
   device_user_code: z.string().nullable(),
   device_verification_uri: z.string().nullable(),
   device_expires_at: z.string().nullable(),
+  authorization_url: z.string().nullable(),
+  authorization_expires_at: z.string().nullable(),
+  /** Set for authorization-code connections when browser authorization is configured. */
+  redirect_uri: z.string().optional(),
   has_client_secret: z.boolean(),
   has_refresh_token: z.boolean(),
   has_access_token: z.boolean(),

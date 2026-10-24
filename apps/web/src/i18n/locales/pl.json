@@ -2176,6 +2176,15 @@
     "authorizationCode": "Kod autoryzacji",
     "redirectUri": "Adres URI przekierowania",
     "exchangeCode": "Połącz",
+    "authorizationUrl": "Adres URL autoryzacji",
+    "authorizationUrlHelp": "Strona dostawcy, na której zatwierdzasz aplikację. Zostaw puste, aby wklejać kody autoryzacji ręcznie.",
+    "authorizeInBrowser": "Autoryzuj w przeglądarce",
+    "registerRedirectUri": "Zarejestruj u dostawcy ten adres URI przekierowania:",
+    "authorizationOutcome": {
+      "connected": "Połączenie {{connection}} jest aktywne.",
+      "failed": "Nie udało się autoryzować połączenia {{connection}}. Szczegóły znajdziesz przy połączeniu.",
+      "expired": "Ten link autoryzacji wygasł lub został już użyty. Rozpocznij autoryzację ponownie."
+    },
     "replaceSecret": "Nowy sekret klienta",
     "replaceRefreshToken": "Nowy token odświeżania",
     "replace": "Zastąp",

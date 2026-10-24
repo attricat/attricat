@@ -69,7 +69,7 @@ Aby dodać połączenie, wybierz **Dodaj połączenie** i wypełnij:
   - **Dane klienta** wymagają sekretu klienta. Połączenie działa od razu.
   - **Token odświeżania** wymaga tokenu odświeżania uzyskanego z miejsca docelowego.
   - **Kod urządzenia** wymaga adresu URL autoryzacji urządzenia. Po utworzeniu połączenia wybierz **Autoryzuj**, wpisz wyświetlony kod na stronie miejsca docelowego i zatwierdź dostęp, a następnie wybierz **Sprawdź autoryzację**.
-  - **Kod autoryzacji**: po utworzeniu połączenia zatwierdź aplikację w miejscu docelowym, skopiuj kod z przekierowania, wpisz kod i adres URI przekierowania, a potem wybierz **Połącz**.
+  - **Kod autoryzacji**: wpisz **Adres URL autoryzacji** miejsca docelowego i zarejestruj w swojej aplikacji w miejscu docelowym adres URI przekierowania pokazany przy połączeniu. Potem wybierz **Autoryzuj w przeglądarce** i zatwierdź aplikację w miejscu docelowym; wrócisz na stronę rozszerzenia z aktywnym połączeniem. Autoryzację trzeba dokończyć w ciągu dziesięciu minut. Jeśli wdrożenie nie ma ustawionego [`EXTENSION_OAUTH_CALLBACK_URL`](/pl/reference/configuration/#rozszerzenia), skopiuj zamiast tego kod z przekierowania miejsca docelowego, wpisz go wraz z adresem URI przekierowania i wybierz **Połącz**.
 - **Adres URL tokenu** i **Zakres**, jeśli miejsce docelowe go wymaga. Adresy tokenu i autoryzacji urządzenia muszą pasować do uprawnienia hosta, które rozszerzenie deklaruje dla tego rodzaju.
 - **Parametry**: obiekt JSON z niesekretnymi ustawieniami odczytywanymi przez rozszerzenie, np. domeną sklepu lub identyfikatorem marketplace'u.
 

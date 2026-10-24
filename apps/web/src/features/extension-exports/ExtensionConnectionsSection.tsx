@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  ExternalLinkIcon,
   KeyRoundIcon,
   PlayIcon,
   PlusIcon,
@@ -27,6 +28,7 @@ import {
   deleteConnection,
   exchangeAuthorizationCode,
   listConnections,
+  startBrowserAuthorization,
   updateConnection,
 } from './api';
 import { ConnectionDialog } from './ConnectionDialog';
@@ -75,6 +77,14 @@ const ConnectionRow = ({
       return refresh();
     },
   });
+  // The provider sends the operator back to this page after approving.
+  const authorize = useMutation({
+    mutationFn: () =>
+      startBrowserAuthorization(extensionId, connection.connection),
+    onSuccess: ({ authorization_url }) => {
+      window.location.assign(authorization_url);
+    },
+  });
   const rotate = useMutation({
     mutationFn: () =>
       updateConnection(
@@ -93,9 +103,15 @@ const ConnectionRow = ({
     mutationFn: () => deleteConnection(extensionId, connection.connection),
     onSuccess: refresh,
   });
-  const error = action.error ?? exchange.error ?? rotate.error ?? remove.error;
+  const error =
+    action.error ??
+    authorize.error ??
+    exchange.error ??
+    rotate.error ??
+    remove.error;
   const busy =
     action.isPending ||
+    authorize.isPending ||
     exchange.isPending ||
     rotate.isPending ||
     remove.isPending;
@@ -160,6 +176,16 @@ const ConnectionRow = ({
           </Link>
         </Alert>
       )}
+      {canManage && connection.redirect_uri && (
+        <Typography
+          color="text.secondary"
+          sx={{ mt: 1, overflowWrap: 'anywhere' }}
+          variant="body2"
+        >
+          {t('extensionExports.registerRedirectUri')}{' '}
+          <Box component="code">{connection.redirect_uri}</Box>
+        </Typography>
+      )}
       {canManage && (
         <Stack
           direction="row"
@@ -167,6 +193,16 @@ const ConnectionRow = ({
           sx={{ flexWrap: 'wrap', mt: 1 }}
           useFlexGap
         >
+          {connection.redirect_uri && connection.authorization_url && (
+            <Button
+              disabled={busy}
+              size="small"
+              startIcon={<ExternalLinkIcon />}
+              onClick={() => authorize.mutate()}
+            >
+              {t('extensionExports.authorizeInBrowser')}
+            </Button>
+          )}
           {connection.grant_type === 'device_code' && (
             <>
               <Button

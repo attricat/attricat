@@ -349,7 +349,9 @@ fn is_public_route(path: &str) -> bool {
     }
     matches!(
         path,
-        "/health"
+        // The OAuth callback carries a single-use, unguessable state.
+        "/public/extension-oauth/callback"
+            | "/health"
             | "/health/live"
             | "/health/ready"
             | "/auth/login"
@@ -380,6 +382,7 @@ mod route_tests {
             "/auth/sample-logins",
             "/health/ready",
             "/onboarding/complete",
+            "/public/extension-oauth/callback",
         ] {
             assert!(is_public_route(super::super::canonical_route(route)));
             assert!(is_public_route(super::super::canonical_route(&format!(

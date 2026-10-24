@@ -55,6 +55,7 @@ export const ConnectionDialog = ({
     display_name: '',
     token_url: '',
     device_authorization_url: '',
+    authorization_url: '',
     client_id: '',
     client_secret: '',
     refresh_token: '',
@@ -89,6 +90,10 @@ export const ConnectionDialog = ({
       device_authorization_url:
         grantType === 'device_code'
           ? optional(fields.device_authorization_url)
+          : undefined,
+      authorization_url:
+        grantType === 'authorization_code'
+          ? optional(fields.authorization_url.trim())
           : undefined,
       client_id: fields.client_id.trim(),
       client_secret: optional(fields.client_secret),
@@ -173,6 +178,15 @@ export const ConnectionDialog = ({
               type="url"
               value={fields.device_authorization_url}
               onChange={set('device_authorization_url')}
+            />
+          )}
+          {grantType === 'authorization_code' && (
+            <TextField
+              helperText={t('extensionExports.authorizationUrlHelp')}
+              label={t('extensionExports.authorizationUrl')}
+              type="url"
+              value={fields.authorization_url}
+              onChange={set('authorization_url')}
             />
           )}
           <TextField
