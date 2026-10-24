@@ -3557,6 +3557,28 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
             .unwrap();
     }
     assert!(store.get(&key).await.is_err());
+
+    // Retention then removes the expired run's rows; the unexpired export stays.
+    sqlx::query("UPDATE extension_operation_runs SET created_at=clock_timestamp()-interval '31 days' WHERE id=$1")
+        .bind(run).execute(&pool).await.unwrap();
+    assert_eq!(
+        AttricatRepository::system(pool.clone())
+            .purge_extension_operation_runs_batch("30".parse().unwrap(), 1000)
+            .await
+            .unwrap(),
+        1
+    );
+    let (runs, artifacts, tasks): (i64, i64, i64) = sqlx::query_as("SELECT (SELECT count(*) FROM extension_operation_runs WHERE id=$1), (SELECT count(*) FROM extension_operation_artifacts WHERE operation_run_id=$1), (SELECT count(*) FROM tasks WHERE subject_id=$1)")
+        .bind(run).fetch_one(&pool).await.unwrap();
+    assert_eq!((runs, artifacts, tasks), (0, 0, 0));
+    let exported: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM extension_operation_runs WHERE id=$1")
+            .bind(paged_export)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(exported, 1);
+    assert!(store.get(&paged_key).await.is_ok());
 }
 
 #[sqlx::test(migrations = "./migrations")]

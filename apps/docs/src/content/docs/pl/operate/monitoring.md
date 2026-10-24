@@ -54,7 +54,7 @@ Przydatne serie:
 | `attricat_event_deliveries_total{outcome}` | Wzrosty `dead_letter`. |
 | `attricat_extension_operation_runs`, `attricat_extension_operation_oldest_age_seconds` | Zablokowane operacje rozszerzeń. |
 | `attricat_file_uploads_total`, `attricat_file_downloads_total`, `attricat_object_store_operations_total` | Wyniki z błędem. |
-| `attricat_value_history_cleanup_total{outcome}` | `failed`. Powtarzające się `budget_exhausted` oznacza, że każdy 10-sekundowy przebieg kończy się, zanim usunie całą starą historię. |
+| `attricat_retention_cleanup_total{family,outcome}` | `failed`. Powtarzające się `budget_exhausted` dla danej rodziny (`family`) oznacza, że każdy przebieg czyszczenia kończy się, zanim usunie wszystkie stare dane tego rodzaju; zwiększ `RETENTION_SWEEP_BUDGET_SECONDS`. Zaległość `domain_events`, która nie maleje, zwykle oznacza martwą wiadomość (dead letter) w dostarczeniach lub zatrzymanego odbiorcę. `attricat_retention_rows_purged_total{family}` zlicza usunięte wiersze. |
 | `attricat_upload_cleanup_total{outcome}` | `failed`. Nieudane usunięcia porzuconych przesłanych plików są ponawiane. |
 | `attricat_query_cache_requests_total{namespace,outcome}` | Malejący udział `hit` i `remote_hit` względem `miss`. |
 | `attricat_query_cache_redis_connected` | `0` na którejkolwiek replice: utraciła połączenie z Redis i do jego odnowienia buforuje tylko w pamięci. |

@@ -307,9 +307,10 @@ prior state.
 
 Current reads query this compact table directly. Historical rows live in
 monthly `attribute_value_history` range partitions keyed by `archived_at`.
-The API drops whole expired monthly partitions on startup; set
-`ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` (default `90`) to configure the
-retention window.
+The maintenance worker's retention sweep deletes expired history rows in
+bounded batches; set `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` (default `90`)
+to configure the retention window. See
+[Data retention](configuration.md#data-retention) for every swept table.
 `GET /records/{record_id}/values/history` lists restorable states, and
 `POST /records/{record_id}/values/history/{history_id}/restore` applies one as
 a new mutation, which archives the value it replaces.
