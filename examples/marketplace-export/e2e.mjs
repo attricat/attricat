@@ -38,9 +38,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // ---- HTTP helpers -------------------------------------------------------------
 
 const cookies = {};
+const cookieHeader = () => Object.entries(cookies).map(([name, value]) => `${name}=${value}`).join('; ');
 const api = async (method, path, body, { expect = [200, 201, 202, 204], raw } = {}) => {
   const headers = {
-    cookie: Object.entries(cookies).map(([name, value]) => `${name}=${value}`).join('; '),
+    cookie: cookieHeader(),
   };
   if (cookies.attricat_csrf) headers['x-attricat-csrf'] = cookies.attricat_csrf;
   let payload;
@@ -184,16 +185,21 @@ assert(webAllegro.redirect_uri, 'set EXTENSION_OAUTH_CALLBACK_URL to the API cal
 const browserAuthorization = async (approve) => {
   const { authorization_url: authorizationUrl } = await api('POST', `/extensions/${extensionId}/connections/allegro-web/authorization`);
   const { location } = await mock('/allegro/authorize', { authorization_url: authorizationUrl, approve });
-  const back = await fetch(location, { redirect: 'manual' });
+  const back = await fetch(location, { redirect: 'manual', headers: { cookie: cookieHeader() } });
   assert.equal(back.status, 303);
   return { location, returnedTo: new URL(back.headers.get('location')) };
 };
+// Only the browser session that started an authorization can complete it.
+const { authorization_url: pendingUrl } = await api('POST', `/extensions/${extensionId}/connections/allegro-web/authorization`);
+const { location: pendingReturn } = await mock('/allegro/authorize', { authorization_url: pendingUrl, approve: true });
+const signedOut = await fetch(pendingReturn, { redirect: 'manual' });
+assert.equal(new URL(signedOut.headers.get('location')).searchParams.get('authorization'), 'signed_out');
 const declined = await browserAuthorization(false);
 assert.equal(declined.returnedTo.searchParams.get('authorization'), 'failed');
 const approved = await browserAuthorization(true);
 assert.equal(approved.returnedTo.searchParams.get('authorization'), 'connected');
 assert(approved.returnedTo.pathname.endsWith(`/manage/extensions/${extensionId}`));
-const replayed = await fetch(approved.location, { redirect: 'manual' });
+const replayed = await fetch(approved.location, { redirect: 'manual', headers: { cookie: cookieHeader() } });
 assert.equal(new URL(replayed.headers.get('location')).searchParams.get('authorization'), 'expired');
 const authorizedWeb = (await api('GET', `/extensions/${extensionId}/connections`)).find((item) => item.connection === 'allegro-web');
 assert.equal(authorizedWeb.status, 'active');

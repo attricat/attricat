@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use super::{
     AppState,
-    auth::{ActiveWorkspace, AuthenticatedPrincipal, ScopedRepository},
+    auth::{self, ActiveWorkspace, AuthenticatedPrincipal, AuthenticatedSession, ScopedRepository},
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
@@ -25,11 +25,11 @@ use crate::{
         MAX_RATE_LIMIT_REQUESTS, MAX_RATE_LIMIT_SECONDS, Manifest, RateLimit, validate_schema,
     },
     repository::{
-        AttricatRepository, EXPORT_STATUSES, ExportConnectionLabel, ExportDestinationDescriptor,
-        ExportMapping, ExportRetrySelection, ExportStatusCount, ExtensionConnection,
-        ExtensionConnectionPatch, ExtensionRuntimeInstallation, HandlerFailure,
-        MAX_CONNECTOR_RECORD_FILTER, MAX_EXPORT_MAPPING_PAGE, NewExtensionConnection,
-        RepositoryError, valid_connection_key,
+        AttricatRepository, AuthorizationActor, EXPORT_STATUSES, ExportConnectionLabel,
+        ExportDestinationDescriptor, ExportMapping, ExportRetrySelection, ExportStatusCount,
+        ExtensionConnection, ExtensionConnectionPatch, ExtensionRuntimeInstallation,
+        HandlerFailure, MAX_CONNECTOR_RECORD_FILTER, MAX_EXPORT_MAPPING_PAGE,
+        NewExtensionConnection, RepositoryError, valid_connection_key,
     },
 };
 
@@ -747,15 +747,25 @@ pub(super) struct BrowserAuthorization {
 
 /// Starts a browser authorization of an authorization-code connection. The
 /// provider sends the operator back to the public OAuth callback, which
-/// completes it.
+/// completes it only in this same signed-in browser session, so it cannot be
+/// started with an API token.
 pub(super) async fn start_browser_authorization(
     ScopedRepository(repository): ScopedRepository,
+    session: Result<AuthenticatedSession, ApiError>,
     ApiPath((extension_id, connection)): ApiPath<(String, String)>,
 ) -> Result<Json<BrowserAuthorization>, ApiError> {
+    let AuthenticatedSession(session) = session.map_err(|_| {
+        ApiError::invalid_input("start browser authorization from a signed-in browser".into())
+    })?;
     let installation = runtime_installation(&repository, &extension_id).await?;
-    let url = connections::start_browser_authorization(&repository, &installation, &connection)
-        .await
-        .map_err(token_error)?;
+    let url = connections::start_browser_authorization(
+        &repository,
+        &installation,
+        &connection,
+        &connections::authorization_session_binding(session.as_bytes()),
+    )
+    .await
+    .map_err(token_error)?;
     Ok(Json(BrowserAuthorization {
         authorization_url: url.into(),
     }))
@@ -773,16 +783,19 @@ pub(super) struct OAuthCallbackQuery {
     error: Option<String>,
 }
 
-/// `GET /public/extension-oauth/callback`, reached without a session. The
-/// single-use `state` names the pending authorization and its workspace;
-/// the code is exchanged with that request's PKCE verifier. The browser is
-/// then sent back to the extension's management page with
-/// `authorization=connected` or `failed` (or to the extension list with
-/// `expired` when the state is unknown). Failure details are stored as the
-/// connection's last error, never put in the URL.
+/// `GET /public/extension-oauth/callback`, a public route. The single-use
+/// `state` names the pending authorization and its workspace. The browser
+/// must still carry the session that started it, valid for that workspace
+/// and allowed to manage extensions; only then is the request taken and
+/// the code exchanged with its PKCE verifier. The browser is sent back to
+/// the extension's management page with `authorization=connected` or
+/// `failed`, or to the extension list with `expired` (unknown, used, expired
+/// or another session's state) or `signed_out` (no valid session). Failure
+/// details are stored as the connection's last error, never put in the URL.
 pub(super) async fn oauth_callback(
     State(state): State<AppState>,
     ApiQuery(query): ApiQuery<OAuthCallbackQuery>,
+    headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let callback =
         connections::oauth_callback().ok_or_else(|| ApiError::not_found("OAuth callback"))?;
@@ -822,31 +835,69 @@ pub(super) async fn oauth_callback(
     else {
         return redirect(None, None, "expired");
     };
+    // The callback is public, so the session is checked here as the
+    // authorization layer would: live, for this workspace, and still allowed
+    // to manage extensions. Nothing is changed for a browser without one.
+    let Some(session) = auth::session_cookie_digest(&headers) else {
+        return redirect(None, None, "signed_out");
+    };
+    let operator = match state.repository.validate_browser_session(&session).await? {
+        Some(operator) if operator.workspace_id == workspace_id => operator,
+        _ => return redirect(None, None, "signed_out"),
+    };
+    if !state
+        .repository
+        .principal_may(
+            AuthorizationActor {
+                user_id: operator.user_id,
+                token_id: None,
+            },
+            workspace_id,
+            "extensions.manage",
+            None,
+            None,
+        )
+        .await?
+    {
+        return redirect(None, None, "signed_out");
+    }
+    let binding = connections::authorization_session_binding(session.as_bytes());
     let repository = state.repository.for_workspace(workspace_id).await?;
     let code = query
         .code
         .as_deref()
         .filter(|code| !code.is_empty() && code.len() <= MAX_CONNECTION_TEXT_BYTES);
-    let outcome = match (code, query.error.as_deref()) {
+    let failure = match (code, query.error.as_deref()) {
         (Some(code), None) => match runtime_installation(&repository, &extension_id).await {
-            Ok(installation) => connections::complete_browser_authorization(
+            Ok(installation) => match connections::complete_browser_authorization(
                 &repository,
                 &installation,
                 &connection,
                 oauth_state,
+                &binding,
                 code,
             )
             .await
-            .map(drop)
-            .map_err(|error| error.to_string()),
-            Err(_) => Err("the extension must be enabled and fully granted".to_owned()),
+            {
+                Ok(Some(_)) => {
+                    return redirect(Some(&extension_id), Some(&connection), "connected");
+                }
+                // Not pending for this session: change nothing.
+                Ok(None) => return redirect(None, None, "expired"),
+                Err(error) => error.to_string(),
+            },
+            Err(_) => "the extension must be enabled and fully granted".to_owned(),
         },
         (_, error) => {
             // The request is used up either way, so a replayed redirect
-            // cannot complete it later.
-            repository
-                .take_extension_authorization_request(&extension_id, &connection, &digest)
-                .await?;
+            // cannot complete it later. Another session's request stays.
+            if repository
+                .take_extension_authorization_request(&extension_id, &connection, &digest, &binding)
+                .await?
+                .is_none()
+            {
+                return redirect(None, None, "expired");
+            }
             // Only a short, plain error code from the provider is kept.
             let reason = error
                 .filter(|error| {
@@ -856,18 +907,13 @@ pub(super) async fn oauth_callback(
                             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
                 })
                 .unwrap_or("invalid_response");
-            Err(format!("the provider did not authorize the app ({reason})"))
+            format!("the provider did not authorize the app ({reason})")
         }
     };
-    match outcome {
-        Ok(()) => redirect(Some(&extension_id), Some(&connection), "connected"),
-        Err(message) => {
-            repository
-                .fail_extension_authorization(&extension_id, &connection, &message)
-                .await?;
-            redirect(Some(&extension_id), Some(&connection), "failed")
-        }
-    }
+    repository
+        .fail_extension_authorization(&extension_id, &connection, &failure)
+        .await?;
+    redirect(Some(&extension_id), Some(&connection), "failed")
 }
 
 /// Obtains (or reuses) an access token, to check a connection.

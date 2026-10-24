@@ -37,6 +37,7 @@ export const browserAuthorizationOutcomes = [
   'connected',
   'failed',
   'expired',
+  'signed_out',
 ] as const;
 export type BrowserAuthorizationOutcome =
   (typeof browserAuthorizationOutcomes)[number];

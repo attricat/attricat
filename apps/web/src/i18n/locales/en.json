@@ -2089,7 +2089,8 @@
     "authorizationOutcome": {
       "connected": "{{connection}} is connected.",
       "failed": "{{connection}} could not be authorized. See the connection for details.",
-      "expired": "That authorization link has expired or was already used. Start the authorization again."
+      "expired": "That authorization link has expired or was already used. Start the authorization again.",
+      "signed_out": "Sign in to Attricat in the browser where you started the authorization, then start it again."
     },
     "replaceSecret": "New client secret",
     "replaceRefreshToken": "New refresh token",

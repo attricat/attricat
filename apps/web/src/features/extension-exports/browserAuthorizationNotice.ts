@@ -19,6 +19,7 @@ const severities = {
   connected: 'success',
   failed: 'error',
   expired: 'warning',
+  signed_out: 'warning',
 } as const satisfies Record<BrowserAuthorizationOutcome, string>;
 
 /** Tells the operator how a browser authorization ended. */

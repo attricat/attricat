@@ -650,6 +650,7 @@ impl AttricatRepository {
              authorization_state_sha256=CASE WHEN $12 THEN NULL ELSE authorization_state_sha256 END,\
              authorization_verifier_ciphertext=CASE WHEN $12 THEN NULL ELSE authorization_verifier_ciphertext END,\
              authorization_expires_at=CASE WHEN $12 THEN NULL ELSE authorization_expires_at END,\
+             authorization_session_sha256=CASE WHEN $12 THEN NULL ELSE authorization_session_sha256 END,\
              access_token_expires_at=CASE WHEN $12 THEN NULL ELSE access_token_expires_at END,\
              status=CASE WHEN $11::bytea IS NOT NULL OR (grant_type='client_credentials' AND $10::bytea IS NOT NULL) THEN 'active' \
                WHEN $13 THEN 'pending_authorization' \
@@ -833,9 +834,10 @@ impl AttricatRepository {
         Ok(updated)
     }
 
-    /// Stores a started browser authorization: the SHA-256 of its `state` and
-    /// its PKCE code verifier, which the public OAuth callback takes back
-    /// once. A new request replaces an earlier one. A connection that is
+    /// Stores a started browser authorization: the SHA-256 of its `state`,
+    /// its PKCE code verifier and the binding of the browser session that
+    /// started it, which the public OAuth callback takes back once, from that
+    /// session. A new request replaces an earlier one. A connection that is
     /// already active keeps working on its current tokens until the new
     /// authorization completes.
     pub async fn record_extension_authorization_request(
@@ -844,13 +846,15 @@ impl AttricatRepository {
         connection: &str,
         state_sha256: &str,
         code_verifier: &str,
+        session_sha256: &[u8; 32],
         expires_at: DateTime<Utc>,
     ) -> Result<ExtensionConnection, RepositoryError> {
         let current = self.extension_connection(extension_id, connection).await?;
         let verifier = seal(current.id, "authorization_verifier", code_verifier)?;
         let mut transaction = self.pool.begin().await?;
-        let updated = sqlx::query_as(&format!("UPDATE extension_connections SET authorization_state_sha256=$3,authorization_verifier_ciphertext=$4,authorization_expires_at=$5,status=CASE WHEN status='active' AND (access_token_ciphertext IS NOT NULL OR refresh_token_ciphertext IS NOT NULL) THEN 'active' ELSE 'pending_authorization' END,last_error=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}"))
+        let updated = sqlx::query_as(&format!("UPDATE extension_connections SET authorization_state_sha256=$3,authorization_verifier_ciphertext=$4,authorization_expires_at=$5,authorization_session_sha256=$6,status=CASE WHEN status='active' AND (access_token_ciphertext IS NOT NULL OR refresh_token_ciphertext IS NOT NULL) THEN 'active' ELSE 'pending_authorization' END,last_error=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}"))
             .bind(self.extension_workspace()).bind(current.id).bind(state_sha256).bind(verifier).bind(expires_at)
+            .bind(session_sha256.as_slice())
             .fetch_one(&mut *transaction).await?;
         self.write_audit_event(&mut transaction).await?;
         transaction.commit().await?;
@@ -858,16 +862,21 @@ impl AttricatRepository {
     }
 
     /// Takes the pending browser authorization whose `state` hashes to
-    /// `state_sha256`, so a callback can complete it at most once. Returns
-    /// its PKCE code verifier, or `None` when it is unknown, used or expired.
+    /// `state_sha256`, so a callback can complete it at most once, and only
+    /// from the browser session that started it: a request bound to another
+    /// session is left in place, so a leaked `state` cannot use it up.
+    /// Returns its PKCE code verifier, or `None` when it is unknown, used,
+    /// expired or bound to another session.
     pub async fn take_extension_authorization_request(
         &self,
         extension_id: &str,
         connection: &str,
         state_sha256: &str,
+        session_sha256: &[u8; 32],
     ) -> Result<Option<String>, RepositoryError> {
-        let taken: Option<(Uuid, Vec<u8>, bool)> = sqlx::query_as("UPDATE extension_connections c SET authorization_state_sha256=NULL,authorization_verifier_ciphertext=NULL,authorization_expires_at=NULL FROM (SELECT id,authorization_verifier_ciphertext AS verifier,authorization_expires_at>clock_timestamp() AS live FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3 AND authorization_state_sha256=$4 FOR UPDATE) p WHERE c.id=p.id RETURNING c.id,p.verifier,p.live")
+        let taken: Option<(Uuid, Vec<u8>, bool)> = sqlx::query_as("UPDATE extension_connections c SET authorization_state_sha256=NULL,authorization_verifier_ciphertext=NULL,authorization_expires_at=NULL,authorization_session_sha256=NULL FROM (SELECT id,authorization_verifier_ciphertext AS verifier,authorization_expires_at>clock_timestamp() AS live FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3 AND authorization_state_sha256=$4 AND authorization_session_sha256=$5 FOR UPDATE) p WHERE c.id=p.id RETURNING c.id,p.verifier,p.live")
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(state_sha256)
+            .bind(session_sha256.as_slice())
             .fetch_optional(&self.pool).await?;
         match taken {
             Some((id, verifier, true)) => Ok(Some(open(id, "authorization_verifier", &verifier)?)),

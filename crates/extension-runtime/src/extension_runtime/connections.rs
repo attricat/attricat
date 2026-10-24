@@ -729,14 +729,27 @@ pub fn authorization_state_digest(state: &str) -> String {
     format!("{:x}", Sha256::digest(state.as_bytes()))
 }
 
+/// What a browser authorization stores of the session that started it:
+/// a SHA-256 over the session digest, so the stored value is not itself a
+/// session lookup key.
+pub fn authorization_session_binding(session_digest: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"attricat.extension-oauth-session:");
+    hasher.update(session_digest);
+    hasher.finalize().into()
+}
+
 /// Starts a browser authorization of an authorization-code connection and
 /// returns the provider URL to send the operator to. The request carries a
-/// single-use `state` and an S256 PKCE challenge; the public callback
-/// completes it within ten minutes.
+/// single-use `state` and an S256 PKCE challenge, and is bound to the
+/// operator's browser session (`session_binding`, from
+/// [`authorization_session_binding`]); the public callback completes it
+/// within ten minutes, from that session only.
 pub async fn start_browser_authorization(
     repository: &AttricatRepository,
     installation: &ExtensionRuntimeInstallation,
     connection: &str,
+    session_binding: &[u8; 32],
 ) -> Result<Url, TokenError> {
     let callback = oauth_callback().ok_or_else(|| {
         TokenError::Invalid("browser authorization is not configured on this deployment".into())
@@ -778,6 +791,7 @@ pub async fn start_browser_authorization(
             connection,
             &authorization_state_digest(&state),
             &verifier,
+            session_binding,
             Utc::now() + BROWSER_AUTHORIZATION_LIFETIME,
         )
         .await
@@ -786,29 +800,33 @@ pub async fn start_browser_authorization(
 }
 
 /// Completes a browser authorization from the provider's redirect: takes the
-/// pending request `state` names (at most once) and exchanges `code` with
-/// its PKCE verifier and the configured redirect URI.
+/// pending request `state` names (at most once, and only for the session it
+/// is bound to) and exchanges `code` with its PKCE verifier and the
+/// configured redirect URI. Returns `None`, changing nothing, when no such
+/// request is pending for this session.
 pub async fn complete_browser_authorization(
     repository: &AttricatRepository,
     installation: &ExtensionRuntimeInstallation,
     connection: &str,
     state: &str,
+    session_binding: &[u8; 32],
     code: &str,
-) -> Result<ExtensionConnection, TokenError> {
+) -> Result<Option<ExtensionConnection>, TokenError> {
     let callback = oauth_callback().ok_or_else(|| {
         TokenError::Invalid("browser authorization is not configured on this deployment".into())
     })?;
-    let verifier = repository
+    let Some(verifier) = repository
         .take_extension_authorization_request(
             &installation.extension_id,
             connection,
             &authorization_state_digest(state),
+            session_binding,
         )
         .await
         .map_err(|error| TokenError::Invalid(error.to_string()))?
-        .ok_or_else(|| {
-            TokenError::Invalid("the authorization request expired or was used".into())
-        })?;
+    else {
+        return Ok(None);
+    };
     exchange_authorization_code(
         repository,
         installation,
@@ -818,6 +836,7 @@ pub async fn complete_browser_authorization(
         Some(&verifier),
     )
     .await
+    .map(Some)
 }
 
 #[cfg(test)]

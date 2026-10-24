@@ -2183,7 +2183,8 @@
     "authorizationOutcome": {
       "connected": "Połączenie {{connection}} jest aktywne.",
       "failed": "Nie udało się autoryzować połączenia {{connection}}. Szczegóły znajdziesz przy połączeniu.",
-      "expired": "Ten link autoryzacji wygasł lub został już użyty. Rozpocznij autoryzację ponownie."
+      "expired": "Ten link autoryzacji wygasł lub został już użyty. Rozpocznij autoryzację ponownie.",
+      "signed_out": "Zaloguj się do Attricat w przeglądarce, w której rozpoczęto autoryzację, i rozpocznij ją ponownie."
     },
     "replaceSecret": "Nowy sekret klienta",
     "replaceRefreshToken": "Nowy token odświeżania",

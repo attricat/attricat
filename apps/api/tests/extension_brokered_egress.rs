@@ -1079,6 +1079,52 @@ fn base64_decode(value: &str) -> Vec<u8> {
         .unwrap()
 }
 
+/// Signs the bootstrap owner in with a password and returns a client that
+/// carries the browser session and CSRF cookies, and the cookie header alone.
+async fn browser_session(base_url: &str) -> (reqwest::Client, String) {
+    let login = reqwest::Client::new()
+        .post(format!("{base_url}/auth/login"))
+        .json(&json!({
+            "login_identifier": "default.local",
+            "email": "api-test-owner@example.test",
+            "password": "correct horse battery staple"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(login.status(), StatusCode::OK);
+    let pairs: Vec<String> = login
+        .headers()
+        .get_all(reqwest::header::SET_COOKIE)
+        .iter()
+        .map(|value| {
+            value
+                .to_str()
+                .unwrap()
+                .split(';')
+                .next()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    let cookie = pairs.join("; ");
+    let csrf = pairs
+        .iter()
+        .find_map(|pair| pair.strip_prefix("attricat_csrf="))
+        .unwrap()
+        .to_owned();
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("cookie", cookie.parse().unwrap());
+    headers.insert("x-attricat-csrf", csrf.parse().unwrap());
+    (
+        reqwest::Client::builder()
+            .default_headers(headers)
+            .build()
+            .unwrap(),
+        cookie,
+    )
+}
+
 #[sqlx::test(migrations = "./migrations")]
 async fn operators_authorize_connections_in_the_browser(pool: sqlx::PgPool) {
     let (_, seen) = shared_mock();
@@ -1108,25 +1154,42 @@ async fn operators_authorize_connections_in_the_browser(pool: sqlx::PgPool) {
             .unwrap();
     }
     repository.enable_extension(EXTENSION).await.unwrap();
-    let (base_url, server) = start_server_with_object_store(pool.clone(), store).await;
-    let client = authenticated_client();
+    // Browser authorization is bound to a signed-in browser session.
+    let (base_url, server) = start_session_server(pool.clone()).await;
+    let hash =
+        api::account::hash_password(&api::account::Password::new("correct horse battery staple"))
+            .unwrap();
+    sqlx::query("INSERT INTO local_password_credentials (user_id, password_hash) VALUES ($1, $2)")
+        .bind(BOOTSTRAP_OWNER_ID.parse::<uuid::Uuid>().unwrap())
+        .bind(hash.as_phc())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (client, cookie) = browser_session(&base_url).await;
+    let (_, other_cookie) = browser_session(&base_url).await;
     let connections = format!("{base_url}/extensions/{EXTENSION}/connections");
-    // The provider's redirect arrives without a session, and its answer is a
-    // redirect the test inspects rather than follows.
+    // The provider's redirect arrives as a top-level navigation; its answer
+    // is a redirect the test inspects rather than follows.
     let browser = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap();
-    let callback = |query: String| {
+    let callback = |query: String, cookie: Option<String>| {
         let browser = browser.clone();
         let url = format!("{base_url}/public/extension-oauth/callback?{query}");
         async move {
-            let response = browser.get(url).send().await.unwrap();
+            let mut request = browser.get(url);
+            if let Some(cookie) = cookie {
+                request = request.header("cookie", cookie);
+            }
+            let response = request.send().await.unwrap();
             assert_eq!(response.status(), StatusCode::SEE_OTHER);
             assert_eq!(response.headers()["cache-control"], "no-store");
             response.headers()["location"].to_str().unwrap().to_owned()
         }
     };
+    let returned =
+        |outcome: &str| format!("https://attricat.test/manage/extensions/?authorization={outcome}");
 
     // The authorization URL must be plain HTTPS; Attricat adds the query.
     expect_status(
@@ -1190,7 +1253,6 @@ async fn operators_authorize_connections_in_the_browser(pool: sqlx::PgPool) {
     .await
     .unwrap();
     assert_ne!(stored, request["state"]);
-    // The operator approves at the provider, which redirects back.
     seen.lock().unwrap().code_challenge = Some(request["code_challenge"].clone());
     let query = |pairs: &[(&str, &str)]| {
         url::form_urlencoded::Serializer::new(String::new())
@@ -1202,8 +1264,27 @@ async fn operators_authorize_connections_in_the_browser(pool: sqlx::PgPool) {
         ("code", "code-1"),
         ("iss", "https://shop.mock.test"),
     ]);
+    // A browser without a session, or with someone else's session, cannot
+    // complete the authorization, nor use it up.
     assert_eq!(
-        callback(approved.clone()).await,
+        callback(approved.clone(), None).await,
+        returned("signed_out")
+    );
+    assert_eq!(
+        callback(approved.clone(), Some("attricat_session=forged".into())).await,
+        returned("signed_out")
+    );
+    assert_eq!(
+        callback(approved.clone(), Some(other_cookie.clone())).await,
+        returned("expired")
+    );
+    assert_eq!(
+        get_json(&client, &connections).await[0]["status"],
+        "pending_authorization"
+    );
+    // The operator's own browser completes it.
+    assert_eq!(
+        callback(approved.clone(), Some(cookie.clone())).await,
         format!(
             "https://attricat.test/manage/extensions/{EXTENSION}?connection=web&authorization=connected"
         )
@@ -1214,23 +1295,29 @@ async fn operators_authorize_connections_in_the_browser(pool: sqlx::PgPool) {
     assert!(active[0]["authorization_expires_at"].is_null());
     // A state works once: replaying the redirect changes nothing.
     assert_eq!(
-        callback(approved).await,
-        "https://attricat.test/manage/extensions/?authorization=expired"
+        callback(approved, Some(cookie.clone())).await,
+        returned("expired")
     );
     assert_eq!(
-        callback(query(&[("state", "unknown"), ("code", "code-1")])).await,
-        "https://attricat.test/manage/extensions/?authorization=expired"
+        callback(
+            query(&[("state", "unknown"), ("code", "code-1")]),
+            Some(cookie.clone())
+        )
+        .await,
+        returned("expired")
     );
 
     // Declining at the provider fails the authorization, not the connection
-    // that is already active.
+    // that is already active; another session's decline changes nothing.
     let declined = start().await;
+    let refused = query(&[("state", &declined["state"]), ("error", "access_denied")]);
     assert_eq!(
-        callback(query(&[
-            ("state", &declined["state"]),
-            ("error", "access_denied")
-        ]))
-        .await,
+        callback(refused.clone(), Some(other_cookie)).await,
+        returned("expired")
+    );
+    assert!(get_json(&client, &connections).await[0]["last_error"].is_null());
+    assert_eq!(
+        callback(refused, Some(cookie)).await,
         format!(
             "https://attricat.test/manage/extensions/{EXTENSION}?connection=web&authorization=failed"
         )

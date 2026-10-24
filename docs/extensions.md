@@ -1172,19 +1172,30 @@ connection re-created under the same name keeps the destination's external IDs.
 An authorization-code connection may store the provider's
 `authorization_url` (plain HTTPS; only the operator's browser visits it, so
 it needs no host permission). With `EXTENSION_OAUTH_CALLBACK_URL` configured,
-`POST .../connections/{connection}/authorization` (`extensions.manage`)
-creates a 256-bit `state` and an RFC 7636 code verifier, stores the state's
-SHA-256 (unique) and the verifier as ciphertext bound to the row, with a
+`POST .../connections/{connection}/authorization` (`extensions.manage`, from
+a browser session only; a token-authenticated call is refused) creates a
+256-bit `state` and an RFC 7636 code verifier, stores the state's SHA-256
+(unique), the verifier as ciphertext bound to the row and the session
+binding (`authorization_session_binding`: SHA-256 over a domain prefix and
+the session digest, so the stored value is not a session lookup key), with a
 ten-minute expiry, and returns the provider URL with `response_type=code`,
 `client_id`, `redirect_uri`, `state`, the S256 `code_challenge` and `scope`.
 Starting again replaces the pending request; an active connection keeps its
 tokens meanwhile. Any credential, endpoint or scope change discards it.
 
 `GET /api/public/extension-oauth/callback` is a public route
-(`is_public_route`). It resolves the state digest across workspaces in system
-scope (`resolve_extension_authorization_state`), takes the request at most
-once (`take_extension_authorization_request` clears it in the same
-statement, so a replayed redirect finds nothing), and exchanges the code
+(`is_public_route`), so it authenticates the browser itself. It resolves the
+state digest across workspaces in system scope
+(`resolve_extension_authorization_state`), then reads the session cookie
+(`session_cookie_digest`) and requires `validate_browser_session` to accept
+it for that workspace and the session's user to still hold
+`extensions.manage`; otherwise it changes nothing. The provider's top-level
+redirect carries the cookie because it is `SameSite=Lax`. It then takes the
+request at most once and only for the matching session binding
+(`take_extension_authorization_request` matches both and clears it in the
+same statement, so a replayed redirect finds nothing and a leaked `state`
+used from another browser neither completes nor uses up the operator's
+request), and exchanges the code
 through the same claimed token request as a pasted code, with the verifier
 and the configured redirect URI. Provider errors, an exchange failure or a
 disabled extension are stored as the connection's `last_error` (provider
@@ -1192,10 +1203,10 @@ error codes only when short and plain); an active connection stays active.
 The callback always answers `303` with `Cache-Control: no-store` and
 `Referrer-Policy: no-referrer`, to
 `EXTENSION_OAUTH_RETURN_URL` + `<extension-id>?connection=…&authorization=connected|failed`,
-or `?authorization=expired` when the state is unknown, used or expired. No
-detail goes in the URL. The state is not bound to the operator's browser
-session: its secrecy, single use, expiry and PKCE are what protect the
-exchange. Connection responses carry `redirect_uri` for authorization-code
+or `?authorization=expired` (state unknown, used, expired or another
+session's) or `?authorization=signed_out` (no valid session for the
+workspace, or no longer allowed to manage extensions). No detail goes in the
+URL. Connection responses carry `redirect_uri` for authorization-code
 connections so operators can register it.
 
 Without the callback configured, operators still exchange a code by hand with
