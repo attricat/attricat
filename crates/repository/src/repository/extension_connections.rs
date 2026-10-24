@@ -349,28 +349,35 @@ impl ConnectionRefresh {
         // belong to the old provider and are dropped. Origins are compared
         // as the connection update compares them.
         let origin = |url: &str| url::Url::parse(url).ok().map(|url| url.origin());
+        // The row is locked while it is checked and changed, so an update
+        // moving the endpoint cannot slip in between.
+        let changed = || {
+            RepositoryError::InvalidExtension(
+                "the connection changed during the token refresh".into(),
+            )
+        };
+        let mut transaction = self.pool.begin().await?;
         let current: Option<String> = sqlx::query_scalar(
-            "SELECT token_url FROM extension_connections WHERE workspace_id=$1 AND id=$2",
+            "SELECT token_url FROM extension_connections WHERE workspace_id=$1 AND id=$2 FOR UPDATE",
         )
         .bind(workspace_id)
         .bind(id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
-        if current.as_deref().map(origin) != Some(origin(&basis.token_url)) {
-            let _ = self.settle(release_claim(workspace_id, id, claim)).await;
-            return Err(RepositoryError::InvalidExtension(
-                "the connection changed during the token refresh".into(),
-            ));
+        let stored = current.as_deref().map(origin) == Some(origin(&basis.token_url))
+            && sqlx::query("UPDATE extension_connections SET access_token_ciphertext=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 THEN $3 END,access_token_expires_at=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 THEN $4 END,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claim END,refresh_claimed_until=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_token_ciphertext IS NOT DISTINCT FROM $8")
+                .bind(workspace_id).bind(id).bind(access).bind(tokens.expires_at).bind(refresh).bind(claim)
+                .bind(basis.client_secret).bind(basis.refresh_token).bind(&basis.token_url).bind(basis.scope)
+                .execute(&mut *transaction).await?.rows_affected() == 1;
+        if !stored {
+            // The tokens are dropped, but the claim still ends.
+            release_claim(workspace_id, id, claim)
+                .execute(&mut *transaction)
+                .await?;
         }
-        self.settle(sqlx::query("UPDATE extension_connections SET access_token_ciphertext=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 THEN $3 END,access_token_expires_at=CASE WHEN token_url=$9 AND scope IS NOT DISTINCT FROM $10 AND client_secret_ciphertext IS NOT DISTINCT FROM $7 THEN $4 END,refresh_token_ciphertext=COALESCE($5,refresh_token_ciphertext),device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,status='active',last_error=NULL,last_refreshed_at=clock_timestamp(),refresh_claim=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claim END,refresh_claimed_until=CASE WHEN refresh_claim=$6 THEN NULL ELSE refresh_claimed_until END,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_token_ciphertext IS NOT DISTINCT FROM $8")
-            .bind(workspace_id).bind(id).bind(access).bind(tokens.expires_at).bind(refresh).bind(claim)
-            .bind(basis.client_secret).bind(basis.refresh_token).bind(basis.token_url).bind(basis.scope))
-            .await
-            .map_err(|_| {
-                RepositoryError::InvalidExtension(
-                    "the connection changed during the token refresh".into(),
-                )
-            })
+        transaction.commit().await?;
+        self.settled = true;
+        if stored { Ok(()) } else { Err(changed()) }
     }
 
     /// Records a device-code poll the provider answered with "pending" and

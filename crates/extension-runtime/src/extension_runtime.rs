@@ -1676,9 +1676,6 @@ impl ExtensionOperationTaskHandler {
                         .await
                         .map_err(operation_task_error)?;
                     let channel = details.as_ref().and_then(|details| details.channel_id);
-                    let batch_started_at = chrono::Utc::now()
-                        - chrono::TimeDelta::from_std(operation_started.elapsed())
-                            .unwrap_or_default();
                     let revision = repository
                         .record_content_revision_at(record_id, run.created_at, channel)
                         .await
@@ -1723,28 +1720,20 @@ impl ExtensionOperationTaskHandler {
                             .await
                             .ok()
                             .flatten();
-                        // With nothing settled since the run started, no
-                        // newer result can be overwritten, so the rejection
-                        // concerns the record as the batch found it when it
-                        // began: an edit since then stays to be pushed.
-                        // Otherwise it keeps to the run's start.
-                        let settled_since_start = mapping
+                        // The revision at the run's start is the oldest the
+                        // batch can have read, so an edit made since is never
+                        // taken for rejected and stays to be pushed. A result
+                        // committed before the run started is one the run
+                        // saw, even when its revision counts more than the
+                        // record's own (an expanded related record), so the
+                        // rejection settles past it.
+                        let committed_before = mapping
                             .as_ref()
-                            .and_then(|mapping| mapping.settled_at)
-                            .is_some_and(|at| at > run.created_at);
-                        let revision = if settled_since_start {
-                            revision
-                        } else {
-                            repository
-                                .record_content_revision_at(record_id, batch_started_at, channel)
-                                .await
-                                .map_err(operation_task_error)?
-                                .max(
-                                    mapping
-                                        .as_ref()
-                                        .map_or(0, |mapping| mapping.record_revision),
-                                )
-                        };
+                            .filter(|mapping| {
+                                mapping.settled_at.is_some_and(|at| at <= run.created_at)
+                            })
+                            .map_or(0, |mapping| mapping.record_revision);
+                        let revision = revision.max(committed_before);
                         recorded = Some(
                             repository
                                 .record_export_rejection(

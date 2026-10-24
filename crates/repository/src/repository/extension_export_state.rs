@@ -564,18 +564,24 @@ impl AttricatRepository {
             return Ok(ExportBegin::Stale { mapping });
         }
         // The same invocation taking its live lease back keeps its token, so
-        // an earlier attempt still pushing can commit what it pushed.
-        let token = match (mapping.lease_token, mapping.lease_until) {
+        // an earlier attempt still pushing can commit what it pushed, and the
+        // lower leased revision, so that commit never claims a newer one.
+        let (token, leased_revision) = match (mapping.lease_token, mapping.lease_until) {
             (Some(token), Some(until))
                 if until > now && holder.is_some() && mapping.lease_holder.as_deref() == holder =>
             {
-                token
+                (
+                    token,
+                    mapping
+                        .leased_revision
+                        .map_or(record_revision, |leased| leased.min(record_revision)),
+                )
             }
-            _ => Uuid::new_v4(),
+            _ => (Uuid::new_v4(), record_revision),
         };
         let mapping: ExportMapping = sqlx::query_as(&format!("UPDATE extension_export_mappings SET lease_token=$5,lease_until=$6,leased_at=clock_timestamp(),lease_holder=$7,leased_revision=$8,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 RETURNING {MAPPING_FIELDS}", connection_is("connection", "$3", connection)))
             .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id)
-            .bind(token).bind(now + lease).bind(holder).bind(record_revision)
+            .bind(token).bind(now + lease).bind(holder).bind(leased_revision)
             .fetch_one(&mut *transaction).await?;
         transaction.commit().await?;
         Ok(ExportBegin::Proceed {
@@ -773,9 +779,10 @@ impl AttricatRepository {
         .bind(if update.status == "synced" { None } else { update.error.clone() })
         .bind(failed)
         .bind(settled)
-        // An unleased rejection may concern an attempt begun before an
-        // operator's retry, so it leaves that retry standing.
-        .bind(settled && (holds_lease || !rejection))
+        // Only a leased result tells when its attempt began; an unleased
+        // one may concern an attempt from before an operator's retry, so it
+        // leaves that retry standing.
+        .bind(settled && holds_lease)
         .fetch_one(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -798,16 +805,31 @@ impl AttricatRepository {
             .execute(&self.pool).await?.rows_affected() == 1)
     }
 
+    /// Deletes a mapping. While another worker holds a live lease on it
+    /// (one `lease_token` does not name), it is refused: that push's commit
+    /// would otherwise lose the destination ID it creates.
     pub async fn export_mapping_delete(
         &self,
         extension_id: &str,
         connection: Option<&str>,
         record_id: Uuid,
+        lease_token: Option<Uuid>,
     ) -> Result<bool, RepositoryError> {
         check_connection(connection)?;
-        Ok(sqlx::query(&format!("DELETE FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4", connection_is("connection", "$3", connection)))
-            .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id)
-            .execute(&self.pool).await?.rows_affected() == 1)
+        let deleted = sqlx::query(&format!("DELETE FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 AND (lease_until IS NULL OR lease_until<=clock_timestamp() OR lease_token=$5)", connection_is("connection", "$3", connection)))
+            .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id).bind(lease_token)
+            .execute(&self.pool).await?.rows_affected() == 1;
+        if !deleted {
+            let leased: bool = sqlx::query_scalar(&format!("SELECT EXISTS(SELECT 1 FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4)", connection_is("connection", "$3", connection)))
+                .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id)
+                .fetch_one(&self.pool).await?;
+            if leased {
+                return Err(RepositoryError::ExportMappingConflict(
+                    "export mapping is leased by another worker".into(),
+                ));
+            }
+        }
+        Ok(deleted)
     }
 
     /// The content revision `record_id` had at `at`: the oldest revision a

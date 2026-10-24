@@ -236,6 +236,7 @@ impl HostState {
                         extension_id,
                         input.connection.as_deref(),
                         input.record_id,
+                        input.lease_token,
                     )
                     .await
                     .map_err(error)?;

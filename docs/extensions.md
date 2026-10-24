@@ -714,9 +714,10 @@ token, so an earlier attempt still pushing can commit. A
 leased `commit` without `record_revision` is for the leased revision. `commit` records the result and releases the lease; without a lease
 token it fails while another worker holds a live lease, and a result for an
 older revision than the mapping's is refused, so a late push never replaces a
-newer outcome. A rejection recorded without a lease leaves an operator's
-pending retry standing, since its attempt may have begun before the retry, and
-one the mapping already records changes nothing. A refused commit still ends its own lease. A component that
+newer outcome. A result recorded without a lease leaves an operator's pending
+retry standing, since its attempt may have begun before the retry, and a
+rejection the mapping already records changes nothing. `delete` is refused
+while another worker holds a live lease (pass `lease_token` for your own). A refused commit still ends its own lease. A component that
 fails a batch should
 release the leases it holds. Statuses are `pending`, `synced`, `rejected`,
 `retrying`, `uncertain` and `withdrawn`.
@@ -951,6 +952,8 @@ Attricat route; callback ingress is tracked in #279). Token and device
 endpoint requests count against the kind's host-permission budget. A device
 authorization whose user code or verification link is unusable (too long, or
 not http(s)) is refused. Starting device
+authorization while a refresh or poll of the connection is under way is
+refused with `409`. Starting device
 authorization again on an active connection keeps it working on its current
 tokens until the new code is approved; an expired or refused code then only
 ends that authorization. `client_authentication`

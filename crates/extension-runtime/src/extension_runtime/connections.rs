@@ -287,11 +287,16 @@ pub async fn start_device_authorization(
     installation: &ExtensionRuntimeInstallation,
     connection: &str,
 ) -> Result<ExtensionConnection, TokenError> {
-    let credentials = repository
-        .extension_connection_credentials(&installation.extension_id, connection)
+    // A poll or refresh under way holds the claim; starting over meanwhile
+    // would let it clear the new code when it completes.
+    let refresh = repository
+        .claim_extension_connection_refresh(&installation.extension_id, connection)
         .await
-        .map_err(|error| TokenError::Invalid(error.to_string()))?;
+        .map_err(|error| TokenError::Invalid(error.to_string()))?
+        .ok_or(TokenError::Busy)?;
+    let credentials = refresh.credentials.clone();
     if credentials.grant_type != "device_code" {
+        let _ = refresh.release().await;
         return Err(TokenError::Invalid(
             "the connection does not use the device authorization grant".into(),
         ));
@@ -346,14 +351,16 @@ pub async fn start_device_authorization(
             .unwrap_or(5)
             .clamp(1, 3600) as i32,
     };
-    repository
+    let recorded = repository
         .record_extension_device_authorization(
             &installation.extension_id,
             connection,
             &authorization,
         )
         .await
-        .map_err(|error| TokenError::Temporary(error.to_string()))
+        .map_err(|error| TokenError::Temporary(error.to_string()));
+    let _ = refresh.release().await;
+    recorded
 }
 
 /// Polls a pending device authorization once. Returns the connection, now
