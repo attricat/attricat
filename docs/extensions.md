@@ -1190,7 +1190,9 @@ state digest across workspaces in system scope
 (`session_cookie_digest`) and requires `validate_browser_session` to accept
 it for that workspace and the session's user to still hold
 `extensions.manage`; otherwise it changes nothing. The provider's top-level
-redirect carries the cookie because it is `SameSite=Lax`. It then takes the
+redirect carries the cookie because it is `SameSite=Lax`, but only to the
+cookie's host, so `EXTENSION_OAUTH_CALLBACK_URL` must be on the host
+browsers sign in through; elsewhere every callback is `signed_out`. It then takes the
 request at most once and only for the matching session binding
 (`take_extension_authorization_request` matches both and clears it in the
 same statement, so a replayed redirect finds nothing and a leaked `state`

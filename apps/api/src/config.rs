@@ -487,8 +487,16 @@ fn bootstrap(source: &Source, demo_mode: bool) -> Result<BootstrapConfig, Config
     })
 }
 
-/// An absolute HTTP(S) URL without credentials, query or fragment.
+/// An absolute HTTP(S) URL without credentials, query or fragment. A
+/// trailing ':' without a port is refused: URL parsing would silently use the
+/// scheme's default port, as when `$API_PORT` was unset in `host:$API_PORT`.
 fn plain_http_url(value: &str) -> Option<url::Url> {
+    let authority = value.split_once("://").map_or(value, |(_, rest)| {
+        rest.split(['/', '?', '#']).next().unwrap_or(rest)
+    });
+    if authority.ends_with(':') {
+        return None;
+    }
     url::Url::parse(value).ok().filter(|url| {
         matches!(url.scheme(), "https" | "http")
             && url.username().is_empty()
@@ -887,6 +895,26 @@ mod tests {
                 &[(
                     "EXTENSION_OAUTH_CALLBACK_URL",
                     "https://attricat.test/callback"
+                )]
+            )
+            .is_err()
+        );
+        assert!(
+            load(
+                &secrets,
+                &[(
+                    "EXTENSION_OAUTH_CALLBACK_URL",
+                    "http://127.0.0.1:/api/public/extension-oauth/callback"
+                )]
+            )
+            .is_err()
+        );
+        assert!(
+            load(
+                &secrets,
+                &[(
+                    "EXTENSION_OAUTH_RETURN_URL",
+                    "http://127.0.0.1:/manage/extensions/"
                 )]
             )
             .is_err()
