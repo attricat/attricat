@@ -196,7 +196,7 @@ Poniższe operacje `api.call` działają tak samo w procedurach obsługi zdarze�
 | `mappings.release.v1` | `{connection?, record_id, lease_token}` | `{released}` |
 | `mappings.delete.v1` | `{connection?, record_id}` | `{deleted}` |
 
-W przebiegu operacji `begin`, `commit`, `release` i `delete` przyjmują tylko rekordy objęte przebiegiem: rekordy schematu przebiegu konektora (także usunięte lub nieopublikowane, które wycofuje) albo rekordy wybrane w przebiegu interaktywnym. Przebieg konektora zapisuje tylko mapowania swojego połączenia, a przebieg ograniczony do wybranych rekordów tylko ich mapowania. Przebieg konektora z połączeniem wysyła też tylko token tego połączenia.
+W przebiegu operacji `begin`, `commit`, `release` i `delete` przyjmują tylko rekordy objęte przebiegiem: rekordy schematu przebiegu konektora (także usunięte lub nieopublikowane, które wycofuje) albo rekordy wybrane w przebiegu interaktywnym. Przebieg konektora zapisuje tylko mapowania swojego połączenia, a przebieg ograniczony do wybranych rekordów tylko ich mapowania. Przebieg konektora z połączeniem wysyła też tylko token tego połączenia, a przebieg domyślnego miejsca docelowego nie wysyła żadnego.
 
 Wywołaj `begin` przed wysłaniem rekordu. Chroni ono przed pracą wykonaną w złej kolejności lub dwukrotnie:
 

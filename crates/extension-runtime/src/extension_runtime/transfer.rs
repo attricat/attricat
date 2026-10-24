@@ -1139,11 +1139,12 @@ impl RunFacts {
         }
     }
 
-    /// Refuses a token of another connection than a connector run's own;
-    /// a run of the default destination may use any.
+    /// Refuses a token of another connection than a connector run's own,
+    /// as its mapping writes are; a run of the default destination sends
+    /// none.
     pub(super) fn ensure_token_connection(&self, connection: &str) -> Result<(), String> {
         match &self.connection {
-            Some(Some(own)) if own != connection => {
+            Some(own) if own.as_deref() != Some(connection) => {
                 Err("a connector run uses only its own connection's token".into())
             }
             _ => Ok(()),

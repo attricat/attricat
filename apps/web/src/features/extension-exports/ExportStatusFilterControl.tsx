@@ -66,10 +66,14 @@ export const ExportStatusFilterControl = ({
   const targets = [
     ...new Map(
       [
-        ...destinations.map((destination) => ({
-          extension: destination.extension_id,
-          connection: undefined as string | undefined,
-        })),
+        // The default destination only for exports without connections;
+        // one of a connection kind records every status per connection.
+        ...destinations
+          .filter((destination) => !destination.connection_kind)
+          .map((destination) => ({
+            extension: destination.extension_id,
+            connection: undefined as string | undefined,
+          })),
         ...(overview.data?.counts ?? []).map((count) => ({
           extension: count.extension_id,
           connection: count.connection ?? undefined,

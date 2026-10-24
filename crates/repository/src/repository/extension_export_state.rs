@@ -1050,17 +1050,20 @@ impl AttricatRepository {
             // Only records something will push get one: those of a
             // blueprint the extension exports to this connection by a job,
             // or any record when the extension handles retry requests itself.
-            let handles_retries = self
+            let release = self
                 .installed_extension(extension_id)
                 .await?
-                .manifest
-                .pointer("/server/event_handlers")
-                .and_then(Value::as_array)
-                .is_some_and(|handlers| {
-                    handlers.iter().any(|handler| {
-                        handler["event_types"].as_array().is_some_and(|types| {
-                            types.iter().any(|t| t == EXPORT_RETRY_REQUESTED_V1)
-                        })
+                .installed_release_id;
+            let handles_retries = self
+                .installed_release_manifest(&mut transaction, release)
+                .await?
+                .server
+                .is_some_and(|server| {
+                    server.event_handlers.iter().any(|handler| {
+                        handler
+                            .event_types
+                            .iter()
+                            .any(|event_type| event_type == EXPORT_RETRY_REQUESTED_V1)
                     })
                 });
             sqlx::query("INSERT INTO extension_export_mappings(id,workspace_id,extension_id,connection,record_id,status) SELECT gen_random_uuid(),$1,$2,$3,r.id,'pending' FROM records r WHERE r.workspace_id=$1 AND r.id=ANY($4) AND r.deleted_at IS NULL AND ($5 OR EXISTS(SELECT 1 FROM blueprint_connector_jobs j WHERE j.workspace_id=$1 AND j.extension_id=$2 AND j.direction='export' AND j.connection IS NOT DISTINCT FROM $3 AND j.blueprint_id=r.blueprint_id AND j.code IS NOT NULL AND j.enabled)) ON CONFLICT DO NOTHING")

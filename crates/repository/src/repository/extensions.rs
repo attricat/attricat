@@ -1777,7 +1777,7 @@ impl AttricatRepository {
         sqlx::query_as("SELECT id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2 FOR UPDATE")
             .bind(self.extension_workspace()).bind(extension_id).fetch_optional(&mut **transaction).await?.ok_or(RepositoryError::NotFound("extension installation"))
     }
-    async fn installed_release_manifest(
+    pub(crate) async fn installed_release_manifest(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         installed_release_id: Uuid,

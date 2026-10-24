@@ -32,7 +32,7 @@ import { ExportIcon } from '../../components/systemIcons';
 import { Timestamp } from '../../time/Timestamp';
 import { useCan } from '../auth/useCan';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
-import { extensionExportStatus, retryExports } from './api';
+import { extensionExportStatus, listConnections, retryExports } from './api';
 import {
   exportMappingExtensionOutlet,
   exportStatuses,
@@ -96,6 +96,12 @@ export const ExtensionExportStatusSection = ({
         status: null,
         limit: 1,
       }),
+    enabled: exports.length > 0,
+  });
+  // A connection without exports yet can be picked too.
+  const connections = useQuery({
+    queryKey: extensionExportQueryKeys.connections(extensionId),
+    queryFn: () => listConnections(extensionId),
     enabled: exports.length > 0,
   });
   const connection =
@@ -218,13 +224,18 @@ export const ExtensionExportStatusSection = ({
             <MenuItem value={allConnections}>
               {t('extensionExports.defaultConnection')}
             </MenuItem>
-            {rows
-              .flatMap((row) => (row.connection ? [row.connection] : []))
-              .map((name) => (
-                <MenuItem key={name} value={name}>
-                  {name}
-                </MenuItem>
-              ))}
+            {[
+              ...new Set([
+                ...rows.flatMap((row) =>
+                  row.connection ? [row.connection] : [],
+                ),
+                ...(connections.data ?? []).map((item) => item.connection),
+              ]),
+            ].map((name) => (
+              <MenuItem key={name} value={name}>
+                {name}
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
         <FormControl size="small" sx={{ minWidth: 200 }}>

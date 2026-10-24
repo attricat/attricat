@@ -251,6 +251,7 @@ pub async fn access_token(
         form.push(("scope", scope.clone()));
     }
     let result = token_request(
+        repository,
         installation,
         &kind,
         &credentials,
@@ -306,7 +307,8 @@ pub async fn start_device_authorization(
     if let Some(scope) = &credentials.scope {
         form.push(("scope", scope.clone()));
     }
-    let body = token_endpoint_call(installation, &kind, &credentials, &url, form).await?;
+    let body =
+        token_endpoint_call(repository, installation, &kind, &credentials, &url, form).await?;
     let text = |name: &str| {
         body.get(name)
             .and_then(Value::as_str)
@@ -318,11 +320,25 @@ pub async fn start_device_authorization(
         .and_then(Value::as_i64)
         .unwrap_or(600)
         .clamp(1, 86_400);
+    // The operator is shown the code and follows the link, so both must be
+    // short and the link plain http(s).
+    let link = |name: &str| {
+        text(name).ok().filter(|uri| {
+            uri.len() <= 2048
+                && url::Url::parse(uri).is_ok_and(|url| matches!(url.scheme(), "https" | "http"))
+        })
+    };
+    let invalid = || TokenError::Rejected("the provider's device authorization is invalid".into());
+    let user_code = text("user_code")?;
+    if user_code.is_empty() || user_code.len() > 128 {
+        return Err(invalid());
+    }
     let authorization = DeviceAuthorization {
         device_code: text("device_code")?,
-        user_code: text("user_code")?,
-        verification_uri: text("verification_uri_complete")
-            .or_else(|_| text("verification_uri"))?,
+        user_code,
+        verification_uri: link("verification_uri_complete")
+            .or_else(|| link("verification_uri"))
+            .ok_or_else(invalid)?,
         expires_at: Utc::now() + TimeDelta::seconds(expires_in),
         interval_seconds: body
             .get("interval")
@@ -396,6 +412,7 @@ pub async fn poll_device_authorization(
         ("device_code", device_code),
     ];
     match token_request(
+        repository,
         installation,
         &kind,
         &credentials,
@@ -462,6 +479,7 @@ pub async fn exchange_authorization_code(
         form.push(("code_verifier", verifier.to_owned()));
     }
     match token_request(
+        repository,
         installation,
         &kind,
         &credentials,
@@ -487,13 +505,14 @@ pub async fn exchange_authorization_code(
 
 /// Posts a token request and parses the issued tokens.
 async fn token_request(
+    repository: &AttricatRepository,
     installation: &ExtensionRuntimeInstallation,
     kind: &ConnectionKind,
     credentials: &ConnectionCredentials,
     url: &str,
     form: Vec<(&str, String)>,
 ) -> Result<IssuedTokens, TokenError> {
-    let body = token_endpoint_call(installation, kind, credentials, url, form).await?;
+    let body = token_endpoint_call(repository, installation, kind, credentials, url, form).await?;
     let access_token = body
         .get("access_token")
         .and_then(Value::as_str)
@@ -526,6 +545,7 @@ async fn token_request(
 /// returns its JSON object. Error responses are classified by their OAuth
 /// error code; their bodies are never echoed.
 async fn token_endpoint_call(
+    repository: &AttricatRepository,
     installation: &ExtensionRuntimeInstallation,
     kind: &ConnectionKind,
     credentials: &ConnectionCredentials,
@@ -544,6 +564,14 @@ async fn token_endpoint_call(
         .ok_or_else(|| {
             TokenError::Invalid("the token endpoint is not granted to the connection kind".into())
         })?;
+    // Token requests count against the rule's budget like any request to
+    // its host, so a lowered budget caps them too.
+    if let Err(wait) = super::network_v2::admit_request(repository, installation, rule).await {
+        return Err(TokenError::Temporary(format!(
+            "the token endpoint's request budget is spent; try again in {} s",
+            wait.as_secs().max(1)
+        )));
+    }
     let host = url
         .host_str()
         .ok_or_else(|| TokenError::Invalid("token URL needs a host".into()))?

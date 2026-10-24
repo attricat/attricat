@@ -699,7 +699,8 @@ records in the run's scope: records of a connector run's blueprint (including
 deleted, unpublished and older-version records it withdraws), or an
 interactive run's selected records. A connector run writes only its own
 connection's mappings, and a run confined to selected records only theirs;
-a connector run of a connection also sends only that connection's token.
+a connector run of a connection also sends only that connection's token, and
+one of the default destination sends no connection token.
 
 `begin` is the guard against reordered and duplicated work. It answers
 `stale` for a revision older than the mapping's, whatever its status, since
@@ -945,7 +946,10 @@ The host runs the grants itself: `client_credentials` (Shopify), `refresh_token`
 the user code, `.../device-authorization/poll` completes it) and an
 operator's authorization-code exchange (`POST .../authorization-code`
 `{code, redirect_uri, code_verifier?}`, for apps whose redirect URI is not an
-Attricat route; callback ingress is tracked in #279). Starting device
+Attricat route; callback ingress is tracked in #279). Token and device
+endpoint requests count against the kind's host-permission budget. A device
+authorization whose user code or verification link is unusable (too long, or
+not http(s)) is refused. Starting device
 authorization again on an active connection keeps it working on its current
 tokens until the new code is approved; an expired or refused code then only
 ends that authorization. `client_authentication`
