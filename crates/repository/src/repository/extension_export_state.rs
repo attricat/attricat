@@ -30,7 +30,7 @@ enum Lease<'a> {
 /// The mappings an operator can still act on: of an installed extension,
 /// and of the default destination or a connection that still exists.
 /// Mappings outlive both, so a re-created connection keeps its IDs.
-fn current_destination(mapping: &str) -> String {
+pub(crate) fn current_destination(mapping: &str) -> String {
     format!(
         "EXISTS(SELECT 1 FROM extension_installations i WHERE i.workspace_id={mapping}.workspace_id AND i.extension_id={mapping}.extension_id) \
          AND ({mapping}.connection IS NULL OR EXISTS(SELECT 1 FROM extension_connections c WHERE c.workspace_id={mapping}.workspace_id AND c.extension_id={mapping}.extension_id AND c.connection={mapping}.connection))"
@@ -190,6 +190,14 @@ pub struct ExportStatusCount {
     pub count: i64,
 }
 
+/// A mapping locked for a change: whether its record is deleted, and
+/// whether the lock created it.
+struct LockedMapping {
+    mapping: ExportMapping,
+    deleted: bool,
+    created: bool,
+}
+
 /// What [`AttricatRepository::record_export_rejection`] made of a rejection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RejectionRecord {
@@ -211,6 +219,9 @@ pub struct ExportRetrySelection {
     pub connection: Option<String>,
     pub record_ids: Option<Vec<Uuid>>,
     pub status: Option<String>,
+    /// Names the request: one already recorded under it is not retried
+    /// again, and its records are returned.
+    pub request_key: Option<String>,
 }
 
 /// Matches a mapping's `column` to the connection bound at `param`: equal
@@ -404,7 +415,7 @@ impl AttricatRepository {
         extension_id: &str,
         connection: Option<&str>,
         record_id: Uuid,
-    ) -> Result<(ExportMapping, bool), RepositoryError> {
+    ) -> Result<LockedMapping, RepositoryError> {
         let ws = self.extension_workspace();
         // Whether the record is deleted: only its withdrawal is recorded then.
         let deleted: bool = sqlx::query_scalar(
@@ -423,13 +434,32 @@ impl AttricatRepository {
                 return Err(RepositoryError::NotFound("extension connection"));
             }
         }
-        sqlx::query("INSERT INTO extension_export_mappings(id,workspace_id,extension_id,connection,record_id,status) VALUES($1,$2,$3,$4,$5,'pending') ON CONFLICT DO NOTHING")
+        let created = sqlx::query("INSERT INTO extension_export_mappings(id,workspace_id,extension_id,connection,record_id,status) VALUES($1,$2,$3,$4,$5,'pending') ON CONFLICT DO NOTHING")
             .bind(Uuid::new_v4()).bind(ws).bind(extension_id).bind(connection).bind(record_id)
-            .execute(&mut **transaction).await?;
+            .execute(&mut **transaction).await?.rows_affected() == 1;
         let mapping = sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 FOR UPDATE", connection_is("connection", "$3", connection)))
             .bind(ws).bind(extension_id).bind(connection).bind(record_id)
             .fetch_one(&mut **transaction).await?;
-        Ok((mapping, deleted))
+        Ok(LockedMapping {
+            mapping,
+            deleted,
+            created,
+        })
+    }
+
+    /// Ends `holder`'s or `token`'s live lease of a locked mapping, for a
+    /// call that records nothing else.
+    async fn end_own_lease(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        extension_id: &str,
+        connection: Option<&str>,
+        record_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(&format!("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4", connection_is("connection", "$3", connection)))
+            .bind(self.extension_workspace()).bind(extension_id).bind(connection).bind(record_id)
+            .execute(&mut **transaction).await?;
+        Ok(())
     }
 
     /// Decides whether `record_revision` of a record should be pushed and, if
@@ -462,12 +492,26 @@ impl AttricatRepository {
             return Err(invalid("lease must be 1 ms to 15 minutes"));
         }
         let mut transaction = self.pool.begin().await?;
-        let (mapping, deleted) = self
+        let LockedMapping {
+            mapping,
+            deleted,
+            created,
+        } = self
             .locked_mapping(&mut transaction, extension_id, connection, record_id)
             .await?;
         // A deleted record is never pushed again; its withdrawal is
-        // committed without a lease.
+        // committed without a lease. A mapping this call would have created
+        // is not kept, and the caller's own earlier lease ends.
         if deleted {
+            if created {
+                transaction.rollback().await?;
+                return Ok(ExportBegin::Stale { mapping });
+            }
+            let own = holder.is_some() && mapping.lease_holder.as_deref() == holder;
+            if own {
+                self.end_own_lease(&mut transaction, extension_id, connection, record_id)
+                    .await?;
+            }
             transaction.commit().await?;
             return Ok(ExportBegin::Stale { mapping });
         }
@@ -582,10 +626,27 @@ impl AttricatRepository {
             return Err(invalid("record revision must not be negative"));
         }
         let mut transaction = self.pool.begin().await?;
-        let (mapping, deleted) = self
+        let LockedMapping {
+            mapping,
+            deleted,
+            created,
+        } = self
             .locked_mapping(&mut transaction, extension_id, connection, record_id)
             .await?;
         if deleted && update.status != "withdrawn" {
+            // A refused commit still ends the caller's own lease; a mapping
+            // the lock created is not kept.
+            let own = match lease {
+                Lease::Token(token) => token.is_some() && mapping.lease_token == token,
+                Lease::Rejection(holder) => {
+                    holder.is_some() && mapping.lease_holder.as_deref() == holder
+                }
+            };
+            if own && !created {
+                self.end_own_lease(&mut transaction, extension_id, connection, record_id)
+                    .await?;
+                transaction.commit().await?;
+            }
             return Err(RepositoryError::ExportMappingConflict(
                 "the record is deleted; only its withdrawal can be recorded".into(),
             ));
@@ -910,6 +971,16 @@ impl AttricatRepository {
         if selection.record_ids.is_none() && selection.status.is_none() {
             return Err(invalid("a retry needs record IDs or a status"));
         }
+        // A request recorded before returns its records unchanged; they are
+        // the records its retry events name.
+        if let Some(key) = &selection.request_key {
+            let recorded: Vec<Uuid> = sqlx::query_scalar("SELECT DISTINCT aggregate_id FROM domain_events WHERE workspace_id=$1 AND event_type=$2 AND payload->>'extension_id'=$3 AND payload->>'request_key'=$4 ORDER BY aggregate_id")
+                .bind(self.extension_workspace()).bind(EXPORT_RETRY_REQUESTED_V1).bind(extension_id).bind(key)
+                .fetch_all(&self.pool).await?;
+            if !recorded.is_empty() {
+                return Ok(recorded);
+            }
+        }
         let mut transaction = self.pool.begin().await?;
         // Only an installed extension granted export mappings has mappings
         // to retry; any other would get rows nothing ever settles.
@@ -979,6 +1050,7 @@ impl AttricatRepository {
                         "record_id": record_id,
                         "extension_id": extension_id,
                         "connection": selection.connection,
+                        "request_key": selection.request_key,
                     }),
                 )
             })

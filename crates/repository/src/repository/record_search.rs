@@ -3746,8 +3746,9 @@ fn export_status_clause(parameter: usize, filter: Option<&ExportStatusFilter>) -
         "AND (${parameter}::jsonb IS NULL OR EXISTS (SELECT 1 FROM extension_export_mappings export_mapping \
          WHERE export_mapping.workspace_id = e.workspace_id AND export_mapping.record_id = e.id \
            AND export_mapping.extension_id = ${parameter}->>'extension_id' \
-           AND {connection} \
-           AND export_mapping.status = ${parameter}->>'status'))"
+           AND {connection} AND {current} \
+           AND export_mapping.status = ${parameter}->>'status'))",
+        current = super::extension_export_state::current_destination("export_mapping")
     )
 }
 

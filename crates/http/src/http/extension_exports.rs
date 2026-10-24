@@ -195,8 +195,8 @@ pub(super) struct RetryRequest {
     /// extension that targets the connection.
     #[serde(default)]
     run: bool,
-    /// Makes the resync idempotent: a request sent again with the same key
-    /// and records finds the runs it started instead of starting more.
+    /// Makes the request idempotent: sent again as it was, it retries
+    /// nothing twice and finds the runs it started.
     #[serde(default)]
     idempotency_key: Option<String>,
 }
@@ -230,8 +230,9 @@ pub(super) async fn retry_export(
         ));
     }
     // With a key, the request as sent (not the records a status resolves
-    // to now) names the retry, and a request sent again returns the runs
-    // the first one started without retrying anything twice.
+    // to now) names the retry. A request sent again finds the records the
+    // first one retried instead of retrying anything twice, and resyncs
+    // them under the same run keys, which start each job's run only once.
     let request_selection = input.idempotency_key.as_ref().map(|_| {
         let mut ids = input.record_ids.clone().unwrap_or_default();
         ids.sort_unstable();
@@ -246,73 +247,16 @@ pub(super) async fn retry_export(
                 .join(",")
         )
     });
-    if let (true, Some(key), Some(selection)) =
-        (input.run, &input.idempotency_key, &request_selection)
-    {
-        let jobs: Vec<_> = repository
-            .extension_export_connector_jobs(&extension_id)
-            .await?
-            .into_iter()
-            .filter(|job| job.connection == input.connection)
-            .collect();
-        let mut run_ids = Vec::new();
-        let mut record_ids = Vec::new();
-        let mut missing = Vec::new();
-        for job in jobs {
-            let runs = repository
-                .resync_runs_with_key(job.id, key, Some(selection))
-                .await?;
-            if runs.is_empty() {
-                missing.push(job);
-            }
-            for (run, records) in runs {
-                run_ids.push(run);
-                record_ids.extend(records.unwrap_or_default());
-            }
-        }
-        if !run_ids.is_empty() {
-            // The retry was recorded the first time. A job that did not start
-            // then is resynced now when the request named its records; a
-            // status names records the first request has since changed, so
-            // such a job is reported instead.
-            let mut job_errors = Vec::new();
-            for job in missing {
-                let ids = match &input.record_ids {
-                    Some(ids) => {
-                        repository
-                            .records_of_blueprint(job.blueprint_id, ids)
-                            .await?
-                    }
-                    None => {
-                        job_errors.push(json!({"job_id": job.id, "message": "this job did not start a resync for the first request; resync it directly"}));
-                        continue;
-                    }
-                };
-                if ids.is_empty() {
-                    continue;
-                }
-                match repository
-                    .resync_blueprint_connector_job(job.id, key, Some(selection), Some(ids.clone()))
-                    .await
-                {
-                    Ok(runs) => {
-                        run_ids.extend(runs);
-                        record_ids.extend(ids);
-                    }
-                    Err(error) => job_errors
-                        .push(json!({"job_id": job.id, "message": resync_error_message(&error)})),
-                }
-            }
-            record_ids.sort_unstable();
-            record_ids.dedup();
-            return Ok((
-                StatusCode::ACCEPTED,
-                Json(
-                    json!({"record_ids": record_ids, "run_ids": run_ids, "job_errors": job_errors}),
-                ),
-            ));
-        }
-    }
+    let request_key = input
+        .idempotency_key
+        .as_ref()
+        .zip(request_selection.as_ref())
+        .map(|(key, selection)| {
+            format!(
+                "{:x}",
+                Sha256::digest(format!("{extension_id}\0{key}\0{selection}").as_bytes())
+            )
+        });
     let record_ids = repository
         .request_export_retry(
             &extension_id,
@@ -320,6 +264,7 @@ pub(super) async fn retry_export(
                 connection: input.connection.clone(),
                 record_ids: input.record_ids,
                 status: input.status,
+                request_key,
             },
         )
         .await?;

@@ -298,6 +298,7 @@ async fn handler_outcomes_reject_and_retry_records_without_quarantine(pool: sqlx
                 connection: None,
                 record_ids: None,
                 status: Some("rejected".into()),
+                request_key: None,
             },
         )
         .await
@@ -620,6 +621,7 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
                 connection: None,
                 record_ids: None,
                 status: Some("retrying".into()),
+                request_key: None,
             },
         )
         .await
@@ -751,6 +753,7 @@ async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool
                 connection: None,
                 record_ids: Some(vec![record]),
                 status: None,
+                request_key: None,
             },
         )
         .await
@@ -763,6 +766,7 @@ async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool
                 connection: None,
                 record_ids: Some(vec![record]),
                 status: None,
+                request_key: None,
             },
         )
         .await
@@ -785,6 +789,49 @@ async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool
         begin("run:a").await.is_some(),
         "the retry requested mid-push is still pending"
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn a_keyed_retry_sent_again_retries_nothing_twice(pool: sqlx::PgPool) {
+    let repository = workspace_repository(&pool).await;
+    let store = Arc::new(FakeObjectStore::available());
+    install_extension(&repository, store, EXTENSION, &archive(), PERMISSIONS).await;
+    let blueprint = published_blueprint(&repository, VARIANT_BLUEPRINT).await;
+    let record = titled_record(&repository, blueprint, "Lamp").await;
+    repository
+        .record_export_rejection(EXTENSION, None, record, None, None, "gtin", "GTIN missing")
+        .await
+        .unwrap();
+    let retry = |request_key: Option<&'static str>| {
+        let repository = repository.clone();
+        async move {
+            repository
+                .request_export_retry(
+                    EXTENSION,
+                    ExportRetrySelection {
+                        connection: None,
+                        record_ids: None,
+                        status: Some("rejected".into()),
+                        request_key: request_key.map(str::to_owned),
+                    },
+                )
+                .await
+                .unwrap()
+        }
+    };
+    let events = || {
+        count(
+            &pool,
+            "SELECT count(*) FROM domain_events WHERE event_type='export.retry_requested.v1'",
+        )
+    };
+    assert_eq!(retry(Some("k")).await, vec![record]);
+    assert_eq!(events().await, 1);
+    // The record is pending now, so the status selects nothing; the request
+    // sent again still finds what it retried, and emits nothing new.
+    assert_eq!(retry(Some("k")).await, vec![record]);
+    assert_eq!(events().await, 1);
+    assert_eq!(retry(None).await, Vec::<Uuid>::new());
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -1365,6 +1412,7 @@ async fn export_status_preview_and_retry_are_served_over_http(pool: sqlx::PgPool
                     connection: None,
                     record_ids: Some(vec![record]),
                     status: None,
+                    request_key: None,
                 },
             )
             .await,

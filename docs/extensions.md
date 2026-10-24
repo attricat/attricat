@@ -754,9 +754,10 @@ audited. With `run: true` it also starts a [resync](#connector-jobs-for-exports)
 of just those records on each of the extension's export jobs that target the
 connection, so a record is retried without rerunning a whole job. An optional
 `idempotency_key` (1-40 ASCII bytes) makes the request idempotent: sent again
-as it was, it returns the runs it started without retrying anything again;
-a job that did not start then is resynced now when the request named its
-records, or listed in `job_errors`. The status
+as it was, it finds the records it retried (named by its retry events)
+without retrying them again, and resyncs them under the same run keys, so a
+job that already started returns its run and one that could not start then
+starts now. The status
 page and the retry name records across the workspace, so besides
 `extensions.read` or `extensions.manage` they need a workspace-wide
 `records.read` grant.
