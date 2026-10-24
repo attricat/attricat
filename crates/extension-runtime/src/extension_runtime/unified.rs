@@ -476,21 +476,26 @@ impl ExtensionRuntime {
             |pre, store, instance| v16_handler::GuestIndices::new(pre)?.load(store, instance),
             "attricat:host/event-handler or attricat:host/handler",
         )?;
-        let event = to_wit_v16_event(event);
+        let wit_event = to_wit_v16_event(event);
         Ok(match export {
             Export::V11(guest) => {
                 let delivery = v11_event_handler::Delivery {
                     sequence: delivery.sequence,
                     record_revision: delivery.record_revision,
                     attempt: delivery.attempt,
+                    source_kind: event.source_kind.clone(),
+                    source_name: event.source_name.clone(),
                 };
-                match guest.call_handle_event(&mut store, &event, delivery).await {
+                match guest
+                    .call_handle_event(&mut store, &wit_event, &delivery)
+                    .await
+                {
                     Ok(Ok(())) => Ok(()),
                     Ok(Err(failure)) => Err(failure.into()),
                     Err(error) => Err(InvocationFailure::Fault(error.to_string())),
                 }
             }
-            Export::V10(guest) => match guest.call_handle_event(&mut store, &event).await {
+            Export::V10(guest) => match guest.call_handle_event(&mut store, &wit_event).await {
                 Ok(Ok(())) => Ok(()),
                 Ok(Err(message)) => Err(InvocationFailure::Fault(format!(
                     "handler '{}' failed: {message}",

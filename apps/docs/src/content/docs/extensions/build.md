@@ -158,7 +158,7 @@ Every upload is a new release, so grants and enablement must be repeated after e
 Check that your code handles:
 
 - **Duplicate and out-of-order events.** Delivery is at least once. Use the event ID as an idempotency key.
-- **Its own events.** A write from your event handler produces a new event, which your handler receives too. The event your component gets does not say who caused it, so make writes converge: read the current value and write only when it differs. Otherwise the handler triggers itself forever.
+- **Its own events.** A write from your event handler produces a new event, which your handler receives too. With a 1.1 `event-handler`, skip deliveries whose `source-name` is `extension:<your-extension-id>`. A 1.0 `handler` cannot see the source, so make its writes converge: read the current value and write only when it differs. Otherwise the handler triggers itself forever.
 - **Errors that quarantine.** With the 1.0 `handler` export, any error returned from `handle-event` quarantines the installation. Return `Ok` for bad data that a retry cannot fix, and record the problem in storage or a log. With host API 1.1, report it as a [typed outcome](/extensions/server/#typed-outcomes) instead.
 - **Missing permissions.** Optional permissions may not be granted; degrade gracefully.
 - **Light and dark mode.** Read `attricat.theme` in client components.

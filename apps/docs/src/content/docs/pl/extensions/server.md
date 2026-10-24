@@ -94,7 +94,7 @@ Zdarzenie czeka, aż jego rekord przez `debounce_ms` (do godziny) nie będzie si
 
 ### Typowane wyniki
 
-`event-handler` z wersji 1.1 eksportuje `handle-event(event, delivery)`, które zwraca `result<_, failure>`. `delivery` zawiera `sequence` zdarzenia, `record-revision` rekordu dla zdarzeń zmieniających treść rekordu oraz numer próby `attempt`, zaczynający się od 1.
+`event-handler` z wersji 1.1 eksportuje `handle-event(event, delivery)`, które zwraca `result<_, failure>`. `delivery` zawiera `sequence` zdarzenia, `record-revision` rekordu dla zdarzeń zmieniających treść rekordu numer próby `attempt`, zaczynający się od 1, oraz `source-kind` zdarzenia (`api`, `worker`, `plugin` lub `system`) i `source-name`, np. `extension:acme.inventory` lub `workflow:<id>`.
 
 `failure` z interfejsu `outcomes` przyjmuje jedną z postaci:
 
@@ -118,7 +118,7 @@ Z `attricat.read` typowana funkcja `api.read` odczytuje rekord (`record`), jego 
 
 Z `attricat.write` funkcja `api.write` zapisuje wartości skalarne w jawnie wskazanym kontekście, wskazując każdy atrybut przez `attribute-id` lub `attribute-code`. Zapisy przechodzą zwykłą ścieżką: kontrole typów, schematy, audyt i nowe zdarzenie domenowe.
 
-Zapis wykonany podczas obsługi zdarzenia jest przypisywany użytkownikowi lub tokenowi, który stoi za pierwotną zmianą, zachowuje identyfikator korelacji zdarzenia i jest publikowany ze źródłem `extension:<extension-id>`. Twoja procedura obsługi otrzyma zdarzenie spowodowane tym zapisem. Zdarzenie nie zawiera swojego źródła, więc porównuj przed zapisem: jeśli wartość jest już taka, jaką chcesz zapisać, pomiń zapis, a pętla się zakończy.
+Zapis wykonany podczas obsługi zdarzenia jest przypisywany użytkownikowi lub tokenowi, który stoi za pierwotną zmianą, zachowuje identyfikator korelacji zdarzenia i jest publikowany ze źródłem `extension:<extension-id>`. Twoja procedura obsługi otrzyma zdarzenie spowodowane tym zapisem. `event-handler` z wersji 1.1 może zakończyć obsługę od razu, gdy `delivery.source-name` to `extension:<identyfikator-twojego-rozszerzenia>`. Eksport `handler` z wersji 1.0 nie otrzymuje źródła, więc tam porównuj przed zapisem: jeśli wartość jest już taka, jaką chcesz zapisać, pomiń zapis, a pętla się zakończy.
 
 `attricat.read.v1` dodaje odczyty stronicowane, kanały zmian i wyszukiwanie. Żądanie wskazuje `operation`:
 

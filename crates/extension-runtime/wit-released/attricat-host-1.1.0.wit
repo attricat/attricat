@@ -207,6 +207,12 @@ interface event-handler {
     record-revision: option<s64>,
     /// 1 on the first attempt of this handler for this event.
     attempt: u32,
+    /// What produced the event: `api`, `worker`, `plugin` or `system`.
+    source-kind: string,
+    /// Which producer, such as `extension:<extension-id>` for a write made by
+    /// an extension (compare it with your own ID to skip your own writes) or
+    /// `workflow:<id>`.
+    source-name: string,
   }
   handle-event: func(event: event, delivery: delivery) -> result<_, failure>;
 }

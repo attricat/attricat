@@ -94,7 +94,7 @@ A debounced event waits until its record has been quiet for `debounce_ms` (up to
 
 ### Typed outcomes
 
-A 1.1 `event-handler` exports `handle-event(event, delivery)`, which returns `result<_, failure>`. `delivery` carries the event's `sequence`, the record's `record-revision` for record content events, and the `attempt` number, starting at 1.
+A 1.1 `event-handler` exports `handle-event(event, delivery)`, which returns `result<_, failure>`. `delivery` carries the event's `sequence`, the record's `record-revision` for record content events, the `attempt` number, starting at 1, and the event's `source-kind` (`api`, `worker`, `plugin`, or `system`) and `source-name`, such as `extension:acme.inventory` or `workflow:<id>`.
 
 `failure`, from the `outcomes` interface, is one of:
 
@@ -118,7 +118,7 @@ With `attricat.read`, the typed `api.read` function reads a record (`record`), i
 
 With `attricat.write`, `api.write` writes scalar values in an explicit context, naming each attribute by `attribute-id` or `attribute-code`. Writes go through the normal path: type checks, schemas, audit, and a new domain event.
 
-A write made while handling an event is attributed to the user or token behind the original change, keeps the event's correlation ID, and is published with source `extension:<extension-id>`. Your handler receives the event that write causes. The event does not carry its source, so compare before you write: if the value is already what you would write, skip the write, and the loop ends.
+A write made while handling an event is attributed to the user or token behind the original change, keeps the event's correlation ID, and is published with source `extension:<extension-id>`. Your handler receives the event that write causes. A 1.1 `event-handler` can return early when `delivery.source-name` is `extension:<your-extension-id>`. The 1.0 `handler` export gets no source, so compare before you write there: if the value is already what you would write, skip the write, and the loop ends.
 
 `attricat.read.v1` adds paged reads, change feeds, and lookups. The request names an `operation`:
 

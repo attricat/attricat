@@ -216,6 +216,8 @@ impl event_handler::Guest for Component {
                 "attempt": delivery.attempt,
                 "sequence": delivery.sequence,
                 "record_revision": delivery.record_revision,
+                "source_kind": delivery.source_kind,
+                "source_name": delivery.source_name,
             }})
             .to_string(),
         )

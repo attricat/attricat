@@ -158,7 +158,7 @@ Każde przesłanie to nowe wydanie, więc po każdym trzeba ponownie przyznać u
 Sprawdź, czy Twój kod obsługuje:
 
 - **Zduplikowane zdarzenia i zdarzenia w innej kolejności.** Dostarczanie odbywa się co najmniej raz. Używaj identyfikatora zdarzenia jako klucza idempotencji.
-- **Własne zdarzenia.** Zapis wykonany przez Twoją obsługę zdarzeń tworzy nowe zdarzenie, które ta obsługa również otrzyma. Zdarzenie przekazane komponentowi nie mówi, kto je spowodował, więc niech zapisy prowadzą do stanu stałego: odczytaj bieżącą wartość i zapisuj tylko wtedy, gdy jest inna. W przeciwnym razie procedura obsługi będzie wyzwalać samą siebie bez końca.
+- **Własne zdarzenia.** Zapis wykonany przez Twoją obsługę zdarzeń tworzy nowe zdarzenie, które ta obsługa również otrzyma. W `event-handler` z wersji 1.1 pomijaj dostarczenia, których `source-name` to `extension:<identyfikator-twojego-rozszerzenia>`. `handler` z wersji 1.0 nie widzi źródła, więc niech jego zapisy prowadzą do stanu stałego: odczytaj bieżącą wartość i zapisuj tylko wtedy, gdy jest inna. W przeciwnym razie procedura obsługi będzie wyzwalać samą siebie bez końca.
 - **Błędy powodujące kwarantannę.** W eksporcie `handler` z wersji 1.0 każdy błąd zwrócony z `handle-event` obejmuje instalację kwarantanną. Dla błędnych danych, których ponowienie nie naprawi, zwracaj `Ok` i zapisz problem w magazynie lub dzienniku. W API hosta 1.1 zgłoś go jako [typowany wynik](/pl/extensions/server/#typowane-wyniki).
 - **Brakujące uprawnienia.** Uprawnienia opcjonalne mogą nie zostać przyznane; zadbaj o łagodną degradację.
 - **Tryb jasny i ciemny.** W komponentach klienckich odczytuj `attricat.theme`.

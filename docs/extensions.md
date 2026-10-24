@@ -362,11 +362,12 @@ correlation ID, uses its ID as causation, and is published with `source_kind:
 plugin` and `source_name: extension:<extension-id>`. The handler then receives
 the event its own write caused.
 
-The WIT `event` record carries no `source_kind` or `source_name`, so a
-handler cannot recognize events caused by its own writes. Handlers must
+The 1.0 WIT `event` record carries no source and cannot gain fields. The 1.1
+`event-handler` `delivery` record carries the event's `source-kind` and
+`source-name`, so a 1.1 handler skips deliveries named
+`extension:<its-id>`. A 1.0 `handler` cannot recognize its own writes and must
 converge instead: compare the current value and skip a write that would not
-change it (the reference example does this). Exposing the source to
-components needs a new type and export under the additive ABI rules.
+change it (the reference example does this).
 
 This mediation is required: an extension host API must never issue attricat-table
 SQL or implement its own validation, projection, audit, or event logic. Every
@@ -441,9 +442,9 @@ at-least-once dispatcher. They can be reordered or retried, so handlers must
 be idempotent. Failed components are quarantined and deliveries retry or dead
 letter under dispatcher policy. Consumers only receive declared provider
 contracts; core Attricat event subscriptions are unchanged. A handler that
-writes in response to an event must converge, because components cannot see
-an event's source (see
-[Typed catalog access](#typed-catalog-access-scoped-configuration-and-commands)).
+writes in response to an event should skip its own source (1.1) or converge
+(1.0); see
+[Typed catalog access](#typed-catalog-access-scoped-configuration-and-commands).
 
 Request/response calls, cancellation, and shared state are deliberately out of
 scope for this contract and require a separately versioned design.
@@ -836,7 +837,8 @@ completed are not invoked again when another handler of the same event is
 retried. Rejected and exhausted outcomes stay visible for 30 days
 (`GET /extensions/{extension_id}/export-status` lists them as
 `handler_failures`). `delivery` carries the event's `sequence`, the record's
-`record-revision` for record content events, and the `attempt` number.
+`record-revision` for record content events, the `attempt` number, and the
+event's `source-kind` and `source-name`.
 
 A 1.0 component keeps its released behavior: any `handle-event` error
 quarantines it. A run whose release loses its authorization during a batch

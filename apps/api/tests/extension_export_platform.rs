@@ -1656,6 +1656,15 @@ async fn debounced_handlers_push_a_burst_of_edits_once(pool: sqlx::PgPool) {
     .await
     .unwrap();
     assert_eq!(deliveries[1]["sequence"], latest);
+    // The delivery names the event's producer, so a handler can skip its own writes.
+    let (source_kind, source_name): (String, String) =
+        sqlx::query_as("SELECT source_kind, source_name FROM domain_events WHERE sequence=$1")
+            .bind(latest)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(deliveries[1]["source_kind"], source_kind.as_str());
+    assert_eq!(deliveries[1]["source_name"], source_name.as_str());
     let (revision,): (i64,) =
         sqlx::query_as("SELECT record_revision FROM extension_export_mappings WHERE record_id=$1")
             .bind(record)
