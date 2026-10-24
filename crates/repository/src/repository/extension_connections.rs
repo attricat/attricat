@@ -314,6 +314,12 @@ impl ConnectionRefresh {
         if settled {
             Ok(())
         } else {
+            // The guarded change matched nothing (the connection changed or
+            // the claim lapsed); the claim is still ended, so others are not
+            // held off until it expires.
+            let _ = release_claim(self.workspace_id, self.credentials.id, self.claim)
+                .execute(&self.pool)
+                .await;
             Err(RepositoryError::InvalidExtension(
                 "the connection refresh claim expired".into(),
             ))

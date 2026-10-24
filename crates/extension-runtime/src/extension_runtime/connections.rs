@@ -49,6 +49,8 @@ pub enum TokenError {
     Temporary(String),
     /// The connection or its kind cannot be used as configured.
     Invalid(String),
+    /// Another worker holds the connection's refresh claim; nothing was sent.
+    Busy,
 }
 
 impl std::fmt::Display for TokenError {
@@ -58,6 +60,7 @@ impl std::fmt::Display for TokenError {
                 formatter.write_str(message)
             }
             Self::Pending { .. } => formatter.write_str("authorization is still pending"),
+            Self::Busy => formatter.write_str("the connection is being refreshed; try again"),
         }
     }
 }
@@ -442,9 +445,7 @@ pub async fn exchange_authorization_code(
         .claim_extension_connection_refresh(&installation.extension_id, connection)
         .await
         .map_err(|error| TokenError::Invalid(error.to_string()))?
-        .ok_or_else(|| {
-            TokenError::Temporary("the connection is being refreshed; try again".into())
-        })?;
+        .ok_or(TokenError::Busy)?;
     let credentials = refresh.credentials.clone();
     if credentials.grant_type != "authorization_code" {
         return Err(TokenError::Invalid(

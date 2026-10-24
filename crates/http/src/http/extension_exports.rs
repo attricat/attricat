@@ -67,6 +67,7 @@ fn token_error(error: TokenError) -> ApiError {
             ApiError::invalid_input(message)
         }
         TokenError::Temporary(_) => ApiError::bad_gateway("the token endpoint is unavailable"),
+        TokenError::Busy => ApiError::conflict("the connection is being refreshed; try again"),
     }
 }
 

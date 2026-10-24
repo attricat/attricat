@@ -116,10 +116,18 @@ export const ExtensionExportStatusSection = ({
     enabled: exports.length > 0 && overview.isSuccess,
   });
   const retry = useMutation({
-    mutationFn: (recordIds: string[] | undefined) =>
+    mutationFn: ({
+      recordIds,
+      key,
+    }: {
+      recordIds: string[] | undefined;
+      key: string;
+    }) =>
       retryExports(
         extensionId,
-        recordIds ? { connection, recordIds } : { connection, status },
+        recordIds
+          ? { connection, recordIds, idempotencyKey: key }
+          : { connection, status, idempotencyKey: key },
       ),
     onSuccess: () => {
       setSelected([]);
@@ -244,14 +252,18 @@ export const ExtensionExportStatusSection = ({
             <Button
               disabled={!selected.length || retry.isPending}
               startIcon={<RotateCcwIcon />}
-              onClick={() => retry.mutate(selected)}
+              onClick={() =>
+                retry.mutate({ recordIds: selected, key: crypto.randomUUID() })
+              }
             >
               {t('extensionExports.retrySelected', { count: selected.length })}
             </Button>
             <Button
               disabled={!mappings.length || retry.isPending}
               startIcon={<RotateCcwIcon />}
-              onClick={() => retry.mutate(undefined)}
+              onClick={() =>
+                retry.mutate({ recordIds: undefined, key: crypto.randomUUID() })
+              }
             >
               {t('extensionExports.retryAll', {
                 status: t(`extensionExports.status.${status}`),

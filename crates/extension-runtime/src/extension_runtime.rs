@@ -2059,6 +2059,16 @@ impl WasmExtensionTaskHandler {
                     )
                     .await?
             {
+                // The newer event's delivery pushes the record, so leases an
+                // earlier attempt took end rather than hold it off.
+                if exports_mappings(installation) {
+                    repository
+                        .release_export_leases(
+                            &installation.extension_id,
+                            &handler_lease_holder(event.id, &handler.id),
+                        )
+                        .await?;
+                }
                 repository
                     .record_extension_handler_attempt(record("superseded", attempts, None))
                     .await?;

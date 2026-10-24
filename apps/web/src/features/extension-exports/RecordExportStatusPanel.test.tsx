@@ -105,6 +105,7 @@ describe('RecordExportStatusPanel', () => {
     expect(api.retryExports).toHaveBeenCalledWith('acme.shop', {
       connection: 'shop-eu',
       recordIds: [recordId],
+      idempotencyKey: expect.any(String),
     });
 
     await user.click(within(rows[1]).getByRole('button', { name: 'Preview' }));

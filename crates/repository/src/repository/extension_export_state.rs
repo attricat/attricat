@@ -860,17 +860,16 @@ impl AttricatRepository {
         match result {
             // A rejection the mapping already recorded unleased is a repeat;
             // `before` is the mapping as the commit found it under its lock.
-            Ok(before) => Ok(match Some(before) {
-                Some(before)
-                    if before.status == "rejected"
-                        && before.lease_token.is_none()
-                        && record_revision
-                            .is_none_or(|revision| before.record_revision >= revision) =>
+            Ok(before) => Ok(
+                if before.status == "rejected"
+                    && before.lease_token.is_none()
+                    && record_revision.is_none_or(|revision| before.record_revision >= revision)
                 {
                     RejectionRecord::Unchanged
-                }
-                _ => RejectionRecord::Settled,
-            }),
+                } else {
+                    RejectionRecord::Settled
+                },
+            ),
             Err(RepositoryError::NotFound("record")) => Ok(RejectionRecord::Unchanged),
             // A refused rejection is busy when another worker's lease is
             // live now, by the database's clock, and outdated otherwise.
@@ -888,6 +887,18 @@ impl AttricatRepository {
             }
             Err(error) => Err(error),
         }
+    }
+
+    /// Ends the leases `holder` took without changing their mappings, for
+    /// an invocation whose work a newer one takes over.
+    pub async fn release_export_leases(
+        &self,
+        extension_id: &str,
+        holder: &str,
+    ) -> Result<u64, RepositoryError> {
+        Ok(sqlx::query("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND lease_holder=$3")
+            .bind(self.extension_workspace()).bind(extension_id).bind(holder)
+            .execute(&self.pool).await?.rows_affected())
     }
 
     /// Marks the mappings `holder` leased as `retrying` with an error and

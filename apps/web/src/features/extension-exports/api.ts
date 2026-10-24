@@ -58,6 +58,8 @@ export const retryExports = (
     connection: string | null;
     recordIds?: string[];
     status?: ExportStatus;
+    /** One per user action, so a request sent again retries nothing twice. */
+    idempotencyKey: string;
   },
 ) =>
   request(
@@ -68,6 +70,7 @@ export const retryExports = (
     json({
       connection: selection.connection,
       run: true,
+      idempotency_key: selection.idempotencyKey,
       ...(selection.recordIds ? { record_ids: selection.recordIds } : {}),
       ...(selection.status ? { status: selection.status } : {}),
     }),

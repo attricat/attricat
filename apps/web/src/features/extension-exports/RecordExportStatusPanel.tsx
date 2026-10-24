@@ -118,10 +118,11 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
     queryFn: () => recordExportStatus(recordId),
   });
   const retry = useMutation({
-    mutationFn: (mapping: ExportMapping) =>
+    mutationFn: ({ mapping, key }: { mapping: ExportMapping; key: string }) =>
       retryExports(mapping.extension_id, {
         connection: mapping.connection,
         recordIds: [recordId],
+        idempotencyKey: key,
       }),
     onSuccess: () =>
       client.invalidateQueries({ queryKey: extensionExportQueryKeys.all }),
@@ -246,7 +247,9 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
                           disabled={retry.isPending}
                           size="small"
                           startIcon={<RotateCcwIcon />}
-                          onClick={() => retry.mutate(mapping)}
+                          onClick={() =>
+                            retry.mutate({ mapping, key: crypto.randomUUID() })
+                          }
                         >
                           {t('extensionExports.retry')}
                         </Button>
