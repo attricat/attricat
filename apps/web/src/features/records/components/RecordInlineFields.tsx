@@ -20,7 +20,6 @@ import {
 } from '../../views/components/EditableRecordLayout';
 import { FieldRevealContext, useFieldReveal } from '../../views/fieldReveal';
 import { attributeLabel } from '../recordDisplay';
-import { invalidateRecord } from '../invalidateRecord';
 import { ConflictingChange } from './ConflictingChange';
 import { FieldSaveStatus } from './FieldSaveStatus';
 import { RecordView } from '../../views/components/RecordView';
@@ -68,6 +67,7 @@ import { FieldValueAtRest } from './FieldValueAtRest';
 import { InlineFieldEditor } from './InlineFieldEditor';
 import { ReusableAttributeAttachControl } from './ReusableAttributeAttachControl';
 import { UnsavedFieldChangesGuard } from './UnsavedFieldChangesGuard';
+import { useLatestCallback } from '../../../components/useLatestCallback';
 
 type Props = {
   recordId: string;
@@ -161,11 +161,16 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
       contextId === defaultContextId
         ? recordSchemaRequiredAttributes(form.blueprint.blueprint.record_schema)
         : [];
+    const latestFields = valuesForForm(
+      allAttributes,
+      existingValues,
+      contextId,
+    );
     const saves = useRecordFieldSaves({
       recordId,
       contextId,
       attributes: changeable,
-      savedFields: valuesForForm(allAttributes, existingValues, contextId),
+      savedFields: latestFields,
       updatedAt: form.record.updated_at,
       fieldRules,
       onPendingChange,
@@ -179,15 +184,6 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
     // Leads from the save status to a field whose change was not saved.
     const { request: revealRequest, reveal: revealField } =
       useFieldReveal(fieldsRef);
-    // Another editor's values are shown beside this editor's changes.
-    useEffect(() => {
-      if (saves.conflict) void invalidateRecord(client, recordId);
-    }, [client, recordId, saves.conflict]);
-    const latestFields = valuesForForm(
-      allAttributes,
-      existingValues,
-      contextId,
-    );
     // Pending changes left after a failed or conflicting save; leaving the
     // record drops them. Changes still being saved finish on their own.
     const unsaved = hasPending && !saves.saving;
@@ -202,11 +198,10 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
     useBeforeUnloadWarning(hasPending || saves.saving);
     // Changes dropped with these fields, for example on opening another
     // record, no longer wait to be saved.
-    const reportPending = useRef(onPendingChange);
-    useEffect(() => {
-      reportPending.current = onPendingChange;
-    });
-    useEffect(() => () => reportPending.current?.(false), []);
+    const reportPending = useLatestCallback((pending: boolean) =>
+      onPendingChange?.(pending),
+    );
+    useEffect(() => () => reportPending(false), [reportPending]);
 
     const violations = checkViolationError(saves.error);
     const placedViolations = violations

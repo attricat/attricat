@@ -6,6 +6,7 @@ import { RECENT_SAVE_DURATION_MS, STALE_RECORD_ERROR_CODE } from './constants';
 import type { FieldEditRules } from './recordForm';
 import { fieldSaveRequest } from './recordFieldSaves';
 import { invalidateRecord } from './invalidateRecord';
+import { useLatestCallback } from '../../components/useLatestCallback';
 
 type Options = {
   recordId: string;
@@ -82,13 +83,17 @@ export const useRecordFieldSaves = ({
   const inFlight = useRef<Readonly<Record<string, string>> | null>(null);
   // What the latest commit knew about the editable attributes.
   const request = useRef({ attributes, fieldRules });
+  // The save loop outlives the render that started it.
+  const reportPending = useLatestCallback((pending: boolean) =>
+    onPendingChange?.(pending),
+  );
 
   const publish = (next: Partial<State>) => {
     const wasPending = Object.keys(current.current.pending).length > 0;
     current.current = { ...current.current, ...next };
     setState(current.current);
     const isPending = Object.keys(current.current.pending).length > 0;
-    if (wasPending !== isPending) onPendingChange?.(isPending);
+    if (wasPending !== isPending) reportPending(isPending);
   };
 
   // While idle, a newer server version (another editor, an attachment, a file
@@ -168,12 +173,15 @@ export const useRecordFieldSaves = ({
         publish({ saving: false, sending: [] });
         return flush();
       }
+      const conflict = isStaleRecord(error);
       publish({
         saving: false,
         sending: [],
         error: error instanceof Error ? error : new Error(String(error)),
-        conflict: isStaleRecord(error),
+        conflict,
       });
+      // Another editor's values are shown beside this editor's changes.
+      if (conflict) void invalidateRecord(client, recordId);
     }
   };
 

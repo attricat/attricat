@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLatestCallback } from '../../../components/useLatestCallback';
 
 const previewHighlightDuration = 5_000;
 let pickerTokenSequence = 0;
@@ -49,15 +50,11 @@ export const useRecentlyPreviewedRecords = (
 ) => {
   const [previewedIds, setPreviewedIds] = useState<Set<string>>(new Set());
   const [pickerToken] = useState(createPickerToken);
-  const selectCallback = useRef(onSelect);
+  const select = useLatestCallback((id: string) => onSelect?.(id));
   const leftPicker = useRef(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
-
-  useEffect(() => {
-    selectCallback.current = onSelect;
-  }, [onSelect]);
 
   useEffect(() => {
     const handleBlur = () => {
@@ -79,7 +76,7 @@ export const useRecentlyPreviewedRecords = (
         event.data.token !== pickerToken
       )
         return;
-      selectCallback.current?.(event.data.recordId);
+      select(event.data.recordId);
     };
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', handleFocus);
@@ -90,7 +87,7 @@ export const useRecentlyPreviewedRecords = (
       window.removeEventListener('message', handleMessage);
       clearTimeout(resetTimer.current);
     };
-  }, [pickerToken]);
+  }, [pickerToken, select]);
 
   const markPreviewed = useCallback((id: string) => {
     setPreviewedIds((current) => new Set(current).add(id));
