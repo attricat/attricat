@@ -13,8 +13,6 @@ import { useResourcePageTitle } from '../../app/useResourcePageTitle';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { useCan } from '../auth/useCan';
 import {
   disableWorkflow,
@@ -38,6 +36,7 @@ import { WorkflowRunTable } from './WorkflowRunTable';
 import { WorkflowSourcePanel } from './WorkflowSourcePanel';
 import { WorkflowIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
+import { sessionOptions } from '../auth/queryOptions';
 
 export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const { t } = useTranslation();
@@ -47,10 +46,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   );
   const [leftVersion, setLeftVersion] = useState<number>();
   const tabId = useTabAccessibility();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const canRead = useCan(workflowCapabilities.read);
   const canManage = useCan(workflowCapabilities.manage);
   const revisions = useQuery({

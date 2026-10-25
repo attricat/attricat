@@ -6,8 +6,6 @@ import {
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo } from 'react';
 import { ApiRequestError } from '../../api/request';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { listBlueprintRevisions } from '../blueprints/api';
 import { listContexts } from '../contexts/api';
 import { defaultContextCode } from '../contexts/constants';
@@ -38,6 +36,7 @@ import {
 import { isRelationshipPath } from './explorerTableColumns';
 import { isRelationshipFilterAttribute } from './relationshipFilterTypes';
 import type { ExplorerSearch } from './search';
+import { sessionOptions } from '../auth/queryOptions';
 
 /**
  * Loads everything the Explorer page needs for the current search and keeps
@@ -83,10 +82,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
       ),
     enabled: Boolean(currentBlueprint?.id),
   });
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const channels = useQuery({
     queryKey: exportQueryKeys.channels(),
     queryFn: listPublicationChannels,

@@ -16,7 +16,7 @@ import { Fragment, useEffect, useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { pageTitle } from '../app/pageTitle';
 import { returnToStorageKey } from '../app/storageKeys';
-import { currentSession, logout } from '../features/auth/api';
+import { logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
 import { ExtensionRunWatcher } from '../features/extension-runs/ExtensionRunWatcher';
 import { ExtensionActionDialogHost } from '../features/extensions/ExtensionActionDialogHost';
@@ -27,6 +27,7 @@ import { MobileNavigation } from './MobileNavigation';
 import { navigationRoutes, publicRoutes } from './navigation';
 import { SessionErrorState, SignOutErrorState } from './SessionErrorStates';
 import { isWithinRoute } from './sideNavigationLayout';
+import { sessionOptions } from '../features/auth/queryOptions';
 
 const signOutErrorMaxWidth = 480;
 
@@ -57,8 +58,7 @@ export const AppLayout = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
+    ...sessionOptions(),
     retry: false,
   });
   useWorkspaceLexicon(session.data?.workspace_id);

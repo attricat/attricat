@@ -8,8 +8,6 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { RuleIcon } from '../../components/systemIcons';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { useCan } from '../auth/useCan';
 import { getBlueprintRevision } from '../blueprints/api';
 import { blueprintQueryKeys } from '../blueprints/queryKeys';
@@ -17,6 +15,7 @@ import { lexiconText } from '../lexicon/lexicon';
 import { SHORT_RECORD_ID_LENGTH } from './constants';
 import { ruleDefinitionsOptions } from './queryOptions';
 import { RuleLifecycleChip } from './RuleCells';
+import { sessionOptions } from '../auth/queryOptions';
 
 /** One rule revision with the definition its findings were checked against. */
 export const RuleRevisionPage = ({
@@ -28,10 +27,7 @@ export const RuleRevisionPage = ({
   version: number | undefined;
 }) => {
   const { t } = useTranslation();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const canRead = useCan('rules_read');
   const rules = useQuery({ ...ruleDefinitionsOptions(), enabled: canRead });
   const rule = rules.data?.find(

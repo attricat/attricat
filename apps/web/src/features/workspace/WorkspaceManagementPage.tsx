@@ -5,8 +5,6 @@ import { SettingsPage } from '../../components/CenteredPage';
 import { PageHeader } from '../../components/PageHeader';
 import { WorkspaceIcon } from '../../components/systemIcons';
 import { useTranslation } from 'react-i18next';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { WorkspaceAgentSection } from './WorkspaceAgentSection';
 import { WorkspaceInvitationsSection } from './WorkspaceInvitationsSection';
 import { WorkspaceMembersSection } from './WorkspaceMembersSection';
@@ -14,6 +12,7 @@ import { WorkspaceNavigationSection } from './WorkspaceNavigationSection';
 import { WorkspaceRolesSection } from './WorkspaceRolesSection';
 import { WorkspaceTeamsSection } from './WorkspaceTeamsSection';
 import { errorMessage } from '../../api/errors';
+import { sessionOptions } from '../auth/queryOptions';
 
 type WorkspaceManagementSection =
   'members' | 'teams' | 'roles' | 'invitations' | 'navigation' | 'agent';
@@ -61,10 +60,7 @@ export const WorkspaceManagementPage = ({
   section: WorkspaceManagementSection;
 }) => {
   const { t } = useTranslation();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const capabilities = session.data?.capabilities;
 
   return (

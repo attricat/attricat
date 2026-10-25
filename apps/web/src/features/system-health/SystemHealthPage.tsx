@@ -16,12 +16,11 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { SystemHealthIcon } from '../../components/systemIcons';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { useCan } from '../auth/useCan';
 import { getSystemHealth } from './api';
 import { systemHealthQueryKeys } from './queryKeys';
 import type { SystemHealth } from './schemas';
+import { sessionOptions } from '../auth/queryOptions';
 
 const BuildDetails = ({ build }: { build: SystemHealth['build'] }) => {
   const { t } = useTranslation();
@@ -79,10 +78,7 @@ const BuildDetails = ({ build }: { build: SystemHealth['build'] }) => {
 
 export const SystemHealthPage = () => {
   const { t } = useTranslation();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const canRead = useCan('data_health_read');
   const health = useQuery({
     queryKey: systemHealthQueryKeys.health(),

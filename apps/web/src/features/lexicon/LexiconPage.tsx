@@ -15,8 +15,6 @@ import { DownloadIcon, PlusIcon, UploadIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { LexiconIcon } from '../../components/systemIcons';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { useCan } from '../auth/useCan';
 import { supportedLanguages } from '../../i18n';
 import {
@@ -43,6 +41,7 @@ import { downloadLexiconFile } from './lexiconFile';
 import { lexiconQueryKeys } from './queryKeys';
 import type { StoredLexiconEntry } from './schemas';
 import { errorMessage } from '../../api/errors';
+import { sessionOptions } from '../auth/queryOptions';
 
 type DialogState =
   | { kind: 'add'; draft: LexiconEntryDraft }
@@ -61,10 +60,7 @@ export const LexiconPage = ({
   const { i18n, t } = useTranslation(LEXICON_MANAGEMENT_NAMESPACES);
   const [filter, setFilter] = useState('');
   const [dialog, setDialog] = useState<DialogState>();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const canEdit = useCan('blueprints_write');
   const entries = useQuery({
     queryKey: lexiconQueryKeys.entries(),

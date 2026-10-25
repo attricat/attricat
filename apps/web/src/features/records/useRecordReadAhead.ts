@@ -1,7 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { useCan } from '../auth/useCan';
 import { recordCommentsOptions } from '../record-comments/queryOptions';
 import {
@@ -15,6 +13,7 @@ import {
 } from './queryOptions';
 import { getBlueprintByCode } from './api';
 import { recordQueryKeys } from './queryKeys';
+import { sessionOptions } from '../auth/queryOptions';
 
 /**
  * Starts loading what a record's side panels show as soon as the record
@@ -30,10 +29,7 @@ export const useRecordReadAhead = (
 ) => {
   const client = useQueryClient();
   const canReadRules = useCan('rules_read');
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   useEffect(() => {
     void client.prefetchInfiniteQuery(recordApprovalsOptions(recordId));
     void client.prefetchInfiniteQuery(recordRetentionHoldsOptions(recordId));

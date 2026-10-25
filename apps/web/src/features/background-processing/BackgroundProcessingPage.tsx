@@ -12,8 +12,6 @@ import { RefreshCwIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { Timestamp } from '../../time/Timestamp';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { useCan } from '../auth/useCan';
 import { getBackgroundProcessingStatus } from './api';
 import { BackgroundProcessingTable } from './BackgroundProcessingTable';
@@ -24,13 +22,11 @@ import {
 import { backgroundProcessingQueryKeys } from './queryKeys';
 import { EmptyState } from '../../components/EmptyState';
 import { BackgroundProcessingIcon } from '../../components/systemIcons';
+import { sessionOptions } from '../auth/queryOptions';
 
 export const BackgroundProcessingPage = () => {
   const { t } = useTranslation();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const canRead = useCan('data_health_read');
   const status = useQuery({
     queryKey: backgroundProcessingQueryKeys.status(session.data?.workspace_id),

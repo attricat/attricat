@@ -1,13 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
+import { sessionOptions } from '../auth/queryOptions';
 
 /** The workspace and user whose inbox the current session shows. */
 export const useInboxIdentity = () => {
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   return {
     session,
     workspaceId: session.data?.workspace_id,

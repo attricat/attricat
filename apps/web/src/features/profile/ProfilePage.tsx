@@ -16,8 +16,6 @@ import { monoFontFamily } from '../../app/theme';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { ProfileIcon } from '../../components/systemIcons';
 import { UserAvatar } from '../../components/UserAvatar';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { fileStatuses, THUMBNAIL_POLLING_STATUSES } from '../files/constants';
 import { AvatarControls } from './AvatarControls';
 import { ChangeDisplayNameDialog } from './ChangeDisplayNameDialog';
@@ -30,6 +28,7 @@ import {
   profileValueSkeletonWidth,
 } from './constants';
 import { errorMessage } from '../../api/errors';
+import { sessionOptions } from '../auth/queryOptions';
 
 const AccountDetail = ({
   label,
@@ -55,8 +54,7 @@ const AccountDetail = ({
 export const ProfilePage = () => {
   const { t } = useTranslation();
   const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
+    ...sessionOptions(),
     // Follow an uploaded avatar until the file worker has processed it.
     refetchInterval: (query) =>
       THUMBNAIL_POLLING_STATUSES.has(query.state.data?.avatar?.status ?? '')

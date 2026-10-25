@@ -2,12 +2,12 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import {
   checkAccess,
-  currentSession,
   maxAccessTargets,
   type AccessTargetKind,
   type Session,
 } from './api';
 import { authQueryKeys } from './queryKeys';
+import { sessionOptions } from './queryOptions';
 
 export type Capability = keyof NonNullable<Session['capabilities']>;
 
@@ -17,8 +17,7 @@ const permissionCode = (capability: Capability) =>
 
 const useWorkspaceCapability = (capability: Capability) =>
   useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
+    ...sessionOptions(),
     select: (session) =>
       session ? session.capabilities?.[capability] === true : null,
   });

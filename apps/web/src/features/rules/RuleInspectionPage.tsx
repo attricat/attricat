@@ -6,8 +6,6 @@ import { ApiRequestError } from '../../api/request';
 import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { useCan } from '../auth/useCan';
 import {
   acknowledgeFinding,
@@ -38,6 +36,7 @@ import { RulesSection } from './RulesSection';
 import { RunsSection } from './RunsSection';
 import { RuleIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
+import { sessionOptions } from '../auth/queryOptions';
 
 const RouterTab = createLink(Tab);
 
@@ -48,10 +47,7 @@ export const RuleInspectionPage = ({
 }) => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const canRead = useCan('rules_read');
   const canManage = useCan('rules_manage');
   // Findings and runs name their rule revision from the definitions.

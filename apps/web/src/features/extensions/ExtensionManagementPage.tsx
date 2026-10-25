@@ -13,11 +13,10 @@ import {
 import { compactIconSize } from '../../components/iconSizes';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { useCan } from '../auth/useCan';
 import { extensionManagementTabIds } from './constants';
 import { ExtensionIcon } from '../../components/systemIcons';
+import { sessionOptions } from '../auth/queryOptions';
 
 const extensionTabs = [
   {
@@ -51,10 +50,7 @@ export const ExtensionManagementPage = ({
   tab,
 }: ExtensionManagementPageProps) => {
   const { t } = useTranslation();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const canRead = useCan('extensions_read');
   const canManage = useCan('extensions_manage');
 

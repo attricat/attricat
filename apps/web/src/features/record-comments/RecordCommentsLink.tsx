@@ -4,19 +4,15 @@ import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
 import { compactIconSize } from '../../components/iconSizes';
 import { CommentIcon } from '../../components/systemIcons';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { getCommentCount } from './api';
 import { commentsSectionId } from './constants';
 import { commentQueryKeys } from './queryKeys';
+import { sessionOptions } from '../auth/queryOptions';
 
 /** Comment count linking to the comments on the record page; the label is in its tooltip. */
 export const RecordCommentsLink = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const count = useQuery({
     queryKey: commentQueryKeys.count(
       session.data?.workspace_id,

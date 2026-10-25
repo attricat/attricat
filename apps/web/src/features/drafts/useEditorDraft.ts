@@ -1,8 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { z } from 'zod';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { draftWriteDelayMs, type DraftEditor } from './constants';
 import {
   draftStorageKey,
@@ -12,6 +10,7 @@ import {
   type StoredDraft,
 } from './draftStorage';
 import { useBeforeUnloadWarning } from './useBeforeUnloadWarning';
+import { sessionOptions } from '../auth/queryOptions';
 
 export type PendingDraft<T> = StoredDraft<T> & {
   /** Whether the loaded source differs from the one the draft was edited from. */
@@ -50,10 +49,7 @@ export const useEditorDraft = <T>({
   source,
   schema,
 }: EditorDraftOptions<T>) => {
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const workspaceId = session.data?.workspace_id;
   const userId = session.data?.user_id;
   const resourceKey = JSON.stringify(resource);

@@ -3,8 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Paper, TextField, Typography } from '@mui/material';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { useCan } from '../auth/useCan';
 import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
@@ -14,14 +12,12 @@ import {
 } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { workspaceExtensionLayoutSchema } from './schemas';
+import { sessionOptions } from '../auth/queryOptions';
 
 export const ExtensionsLayoutPage = () => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const canManage = useCan('extensions_manage');
   const layout = useQuery({
     queryKey: extensionManagementQueryKeys.layout(),

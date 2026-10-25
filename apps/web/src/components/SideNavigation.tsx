@@ -3,8 +3,6 @@ import { useRouterState } from '@tanstack/react-router';
 import { ArrowLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useDocumentationUrl } from '../app/documentation';
-import { currentSession } from '../features/auth/api';
-import { authQueryKeys } from '../features/auth/queryKeys';
 import { useCan } from '../features/auth/useCan';
 import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
 import { InboxNavigationIcon } from '../features/notifications/InboxNavigationIcon';
@@ -40,6 +38,7 @@ import {
   useMobileNavigationSection,
 } from './useMobileNavigationSection';
 import { Box, Divider, IconButton, List, Typography } from '@mui/material';
+import { sessionOptions } from '../features/auth/queryOptions';
 
 type SideNavigationProps = {
   compact?: boolean;
@@ -93,10 +92,7 @@ export const SideNavigation = ({
       open: compactManageOpen,
     },
   });
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const pinnedExplore = useQuery({
     queryKey: workspaceQueryKeys.sidebarExploreNavigation(),
     queryFn: listSidebarExploreNavigation,

@@ -2,10 +2,9 @@ import { CircularProgress } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { listBlueprints } from '../blueprints/api';
 import { blueprintQueryKeys } from '../blueprints/queryKeys';
+import { sessionOptions } from '../auth/queryOptions';
 
 // Most sessions never render onboarding, so keep it out of the startup bundle.
 const WorkspaceOnboardingPage = lazy(() =>
@@ -26,8 +25,7 @@ export const WorkspaceOnboardingGate = ({
 }) => {
   const { t } = useTranslation();
   const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
+    ...sessionOptions(),
     enabled: !disabled,
   });
   const blueprints = useQuery({

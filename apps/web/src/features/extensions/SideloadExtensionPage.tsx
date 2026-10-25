@@ -6,22 +6,18 @@ import { useTranslation } from 'react-i18next';
 import { UploadIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { useCan } from '../auth/useCan';
 import { sideloadExtension } from './managementApi';
 import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
 import { extensionArchiveAccept } from './constants';
 import { ExtensionIcon } from '../../components/systemIcons';
+import { sessionOptions } from '../auth/queryOptions';
 
 export const SideloadExtensionPage = () => {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const sideload = useMutation({
     mutationFn: sideloadExtension,
     onSuccess: () => invalidateExtensions(client),

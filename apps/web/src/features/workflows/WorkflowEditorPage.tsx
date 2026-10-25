@@ -3,8 +3,6 @@ import { Alert, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { useCan } from '../auth/useCan';
 import { getWorkflowRevision } from './api';
 import { workflowCapabilities } from './constants';
@@ -12,6 +10,7 @@ import { workflowQueryKeys } from './queryKeys';
 import { WorkflowDefinitionForm } from './WorkflowDefinitionForm';
 import { WorkflowIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
+import { sessionOptions } from '../auth/queryOptions';
 
 export const WorkflowEditorPage = ({
   workflowId,
@@ -21,10 +20,7 @@ export const WorkflowEditorPage = ({
   sourceVersion?: number;
 }) => {
   const { t } = useTranslation();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const canManage = useCan(workflowCapabilities.manage);
   const source = useQuery({
     queryKey: workflowQueryKeys.revision(workflowId ?? '', sourceVersion ?? 0),

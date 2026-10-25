@@ -1,15 +1,13 @@
 import { Box, Link, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { personalApiTokensHref } from './constants';
+import { sessionOptions } from '../auth/queryOptions';
 
 export const InspectorSessionPane = () => {
   const { t } = useTranslation();
   const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
+    ...sessionOptions(),
     retry: false,
   });
   return (

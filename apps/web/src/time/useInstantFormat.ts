@@ -1,8 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { currentSession } from '../features/auth/api';
-import { authQueryKeys } from '../features/auth/queryKeys';
 import {
   formatInstant,
   formatUtcInstant,
@@ -11,6 +9,7 @@ import {
   isBrowserTimeZone,
   resolveTimeZone,
 } from './instantFormat';
+import { sessionOptions } from '../features/auth/queryOptions';
 
 /**
  * The stored preference from the session the app shell already loads, or
@@ -19,8 +18,7 @@ import {
  */
 export const usePreferredTimeZone = () =>
   useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
+    ...sessionOptions(),
     enabled: false,
     select: (session) => session?.time_zone ?? null,
   }).data ?? null;

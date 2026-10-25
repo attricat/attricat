@@ -6,17 +6,13 @@ import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { getVisibleManagementNavigationItems } from '../../components/navigation';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { ManagementIcon } from '../../components/systemIcons';
+import { sessionOptions } from '../auth/queryOptions';
 
 export const ManagementDashboardPage = () => {
   const { t } = useTranslation();
   const theme = useTheme();
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const dashboardItems = getVisibleManagementNavigationItems(
     session.data?.capabilities,
   );

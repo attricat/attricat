@@ -22,11 +22,10 @@ import { RouterButton } from '../../components/RouterLink';
 import { ProfileIcon, TeamIcon } from '../../components/systemIcons';
 import { UserAvatar } from '../../components/UserAvatar';
 import { Timestamp } from '../../time/Timestamp';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { getUserProfile } from './api';
 import { userProfileAvatarSize, userProfileSkeletonWidth } from './constants';
 import { userQueryKeys } from './queryKeys';
+import { sessionOptions } from '../auth/queryOptions';
 
 const NOT_FOUND = 404;
 
@@ -57,10 +56,7 @@ export const UserProfilePage = ({ userId }: { userId: string }) => {
       !(error instanceof ApiRequestError && error.status === NOT_FOUND) &&
       count < 3,
   });
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const user = profile.data;
   const name = user ? user.display_name?.trim() || user.email : undefined;
   const isSelf = session.data?.user_id === userId;

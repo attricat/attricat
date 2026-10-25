@@ -1,9 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { currentSession } from '../features/auth/api';
-import { authQueryKeys } from '../features/auth/queryKeys';
 import { fileStatuses } from '../features/files/constants';
 import { UserAvatar } from './UserAvatar';
+import { sessionOptions } from '../features/auth/queryOptions';
 
 /**
  * The signed-in user's avatar photo, or `fallback` until they have a
@@ -16,10 +15,7 @@ export const CurrentUserAvatar = ({
   fallback: ReactNode;
   size: number;
 }) => {
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const account = session.data;
   if (account?.avatar?.status !== fileStatuses.ready) return fallback;
   return (

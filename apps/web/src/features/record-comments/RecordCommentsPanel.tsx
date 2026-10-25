@@ -18,8 +18,6 @@ import { BrandIcon } from '../../components/BrandIcon';
 import { UserAvatar } from '../../components/UserAvatar';
 import { UserProfileLink } from '../../components/UserProfileLink';
 import { Timestamp } from '../../time/Timestamp';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { commentsSectionId, systemAuthorKind } from './constants';
 import { CommentComposer } from './CommentComposer';
 import { MarkdownContent } from '../markdown/MarkdownContent';
@@ -27,6 +25,7 @@ import { recordCommentsOptions } from './queryOptions';
 import type { RecordComment } from './schemas';
 import { EmptyState } from '../../components/EmptyState';
 import { CommentIcon } from '../../components/systemIcons';
+import { sessionOptions } from '../auth/queryOptions';
 
 const CommentItem = ({
   recordId,
@@ -135,10 +134,7 @@ export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
   const client = useQueryClient();
   const [composerVersion, setComposerVersion] = useState(0);
   const [notice, setNotice] = useState('');
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-  });
+  const session = useQuery(sessionOptions());
   const commentsOptions = recordCommentsOptions(
     session.data ?? undefined,
     recordId,
