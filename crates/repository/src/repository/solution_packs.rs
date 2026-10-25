@@ -1255,6 +1255,103 @@ impl AttricatRepository {
         Ok(true)
     }
 
+    /// Uploads a plan's created presentation assets after its transaction
+    /// commits, reading each back before trusting it. Any failure cleans up
+    /// every upload; once all are verified the assets are staged and the plan
+    /// takes its `ready` state and final evidence digest.
+    async fn stage_plan_assets(
+        &self,
+        object_store: &dyn ObjectStore,
+        pack: &ValidatedSolutionPack,
+        plan_id: Uuid,
+        asset_creates: &[&PlannedMapping],
+        ready: bool,
+    ) -> Result<(), RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        for mapping in asset_creates {
+            let asset = pack
+                .presentation_asset(&mapping.logical_key)
+                .expect("create asset was validated");
+            let key = presentation_asset_object_key(workspace_id, plan_id, mapping.target_id);
+            let object = StoredObject {
+                bytes: bytes::Bytes::from(asset.stored_bytes.clone()),
+                content_type: Some(asset.media_type.clone()),
+            };
+            let preexisting = match get_object_for_integrity(
+                object_store,
+                &key,
+                asset.stored_bytes.len(),
+            )
+            .await
+            {
+                Ok(stored) => Some(object_matches(
+                    &stored,
+                    asset.stored_bytes.len(),
+                    &asset.stored_sha256,
+                )),
+                Err(
+                    ObjectStoreError::Unavailable
+                    | ObjectStoreError::TimedOut(_)
+                    | ObjectStoreError::Operation(_),
+                ) => Some(false),
+                Err(ObjectStoreError::NotFound) => None,
+            };
+            let uploaded = match preexisting {
+                Some(exact) => exact,
+                None => {
+                    // A successful PUT acknowledgment does not prove that the
+                    // stored bytes are complete. Read back after either outcome
+                    // before marking the plan asset staged.
+                    let _ = object_store.put(&key, object).await;
+                    get_object_for_integrity(object_store, &key, asset.stored_bytes.len())
+                        .await
+                        .is_ok_and(|stored| {
+                            object_matches(&stored, asset.stored_bytes.len(), &asset.stored_sha256)
+                        })
+                }
+            };
+            if !uploaded {
+                sqlx::query("UPDATE solution_pack_plan_asset_objects SET state='cleanup_pending',updated_at=now() WHERE workspace_id=$1 AND plan_id=$2 AND state IN ('uploading','staged')")
+                    .bind(workspace_id)
+                    .bind(plan_id)
+                    .execute(&self.pool)
+                    .await?;
+                for cleanup_mapping in asset_creates {
+                    let cleanup_key = presentation_asset_object_key(
+                        workspace_id,
+                        plan_id,
+                        cleanup_mapping.target_id,
+                    );
+                    let _ = object_store.delete(&cleanup_key).await;
+                }
+                return Err(RepositoryError::SolutionPackAssetStorageUnavailable);
+            }
+        }
+        // Every upload was verified above; a failed one cleans them all up,
+        // so the assets are marked staged together.
+        sqlx::query("UPDATE solution_pack_plan_asset_objects SET state='staged',updated_at=now() WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=ANY($3) AND state='uploading'")
+            .bind(workspace_id)
+            .bind(plan_id)
+            .bind(
+                asset_creates
+                    .iter()
+                    .map(|mapping| mapping.logical_key.as_str())
+                    .collect::<Vec<_>>(),
+            )
+            .execute(&self.pool)
+            .await?;
+        let mut finalize = self.pool.begin().await?;
+        sqlx::query("UPDATE solution_pack_plans SET ready=$3 WHERE workspace_id=$1 AND id=$2")
+            .bind(workspace_id)
+            .bind(plan_id)
+            .bind(ready)
+            .execute(&mut *finalize)
+            .await?;
+        seal_plan_resource_evidence(&mut finalize, workspace_id, plan_id).await?;
+        finalize.commit().await?;
+        Ok(())
+    }
+
     pub async fn create_solution_pack_plan(
         &self,
         pack: &ValidatedSolutionPack,
@@ -1572,85 +1669,9 @@ impl AttricatRepository {
         audit_repository.write_audit_event(&mut tx).await?;
         tx.commit().await?;
 
-        for mapping in &asset_creates {
-            let asset = pack
-                .presentation_asset(&mapping.logical_key)
-                .expect("create asset was validated");
-            let key = presentation_asset_object_key(workspace_id, id, mapping.target_id);
-            let object = StoredObject {
-                bytes: bytes::Bytes::from(asset.stored_bytes.clone()),
-                content_type: Some(asset.media_type.clone()),
-            };
-            let preexisting = match get_object_for_integrity(
-                object_store,
-                &key,
-                asset.stored_bytes.len(),
-            )
-            .await
-            {
-                Ok(stored) => Some(object_matches(
-                    &stored,
-                    asset.stored_bytes.len(),
-                    &asset.stored_sha256,
-                )),
-                Err(
-                    ObjectStoreError::Unavailable
-                    | ObjectStoreError::TimedOut(_)
-                    | ObjectStoreError::Operation(_),
-                ) => Some(false),
-                Err(ObjectStoreError::NotFound) => None,
-            };
-            let uploaded = match preexisting {
-                Some(exact) => exact,
-                None => {
-                    // A successful PUT acknowledgment does not prove that the
-                    // stored bytes are complete. Read back after either outcome
-                    // before marking the plan asset staged.
-                    let _ = object_store.put(&key, object).await;
-                    get_object_for_integrity(object_store, &key, asset.stored_bytes.len())
-                        .await
-                        .is_ok_and(|stored| {
-                            object_matches(&stored, asset.stored_bytes.len(), &asset.stored_sha256)
-                        })
-                }
-            };
-            if !uploaded {
-                sqlx::query("UPDATE solution_pack_plan_asset_objects SET state='cleanup_pending',updated_at=now() WHERE workspace_id=$1 AND plan_id=$2 AND state IN ('uploading','staged')")
-                    .bind(workspace_id)
-                    .bind(id)
-                    .execute(&self.pool)
-                    .await?;
-                for cleanup_mapping in &asset_creates {
-                    let cleanup_key =
-                        presentation_asset_object_key(workspace_id, id, cleanup_mapping.target_id);
-                    let _ = object_store.delete(&cleanup_key).await;
-                }
-                return Err(RepositoryError::SolutionPackAssetStorageUnavailable);
-            }
-        }
         if !asset_creates.is_empty() {
-            // Every upload was verified above; a failed one cleans them all up,
-            // so the assets are marked staged together.
-            sqlx::query("UPDATE solution_pack_plan_asset_objects SET state='staged',updated_at=now() WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=ANY($3) AND state='uploading'")
-                .bind(workspace_id)
-                .bind(id)
-                .bind(
-                    asset_creates
-                        .iter()
-                        .map(|mapping| mapping.logical_key.as_str())
-                        .collect::<Vec<_>>(),
-                )
-                .execute(&self.pool)
+            self.stage_plan_assets(object_store, pack, id, &asset_creates, draft.ready)
                 .await?;
-            let mut finalize = self.pool.begin().await?;
-            sqlx::query("UPDATE solution_pack_plans SET ready=$3 WHERE workspace_id=$1 AND id=$2")
-                .bind(workspace_id)
-                .bind(id)
-                .bind(draft.ready)
-                .execute(&mut *finalize)
-                .await?;
-            seal_plan_resource_evidence(&mut finalize, workspace_id, id).await?;
-            finalize.commit().await?;
         }
         self.get_solution_pack_plan(id)
             .await?
