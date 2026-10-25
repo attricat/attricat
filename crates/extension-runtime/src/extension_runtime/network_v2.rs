@@ -130,7 +130,7 @@ pub(super) async fn admit_request(
         .take(
             &format!(
                 "network:{}:{}:{}",
-                repository.extension_workspace(),
+                repository.workspace_id(),
                 installation.extension_id,
                 rule.id
             ),
@@ -163,7 +163,7 @@ async fn lowered_budget(
     rule: &HostPermission,
 ) -> Option<(i32, i32)> {
     let key = (
-        repository.extension_workspace(),
+        repository.workspace_id(),
         installation.extension_id.clone(),
         rule.id.clone(),
     );

@@ -41,7 +41,7 @@ impl AttricatRepository {
         let rows = sqlx::query_as(
             "SELECT c.id,c.author_user_id,u.display_name AS author_display_name,u.email AS author_email,u.kind AS author_kind,c.body,c.revision,c.created_at,c.updated_at FROM record_comments c JOIN users u ON u.id=c.author_user_id WHERE c.workspace_id=$1 AND c.record_id=$2 AND ($3::timestamptz IS NULL OR (c.created_at,c.id)<($3,$4::uuid)) ORDER BY c.created_at DESC,c.id DESC LIMIT $5",
         )
-        .bind(self.workspace_id_for_runtime()).bind(record).bind(time).bind(id)
+        .bind(self.workspace_id()).bind(record).bind(time).bind(id)
         .bind(COMMENT_PAGE_SIZE + 1).fetch_all(&mut *transaction).await?;
         transaction.commit().await?;
         Ok(rows)
@@ -53,7 +53,7 @@ impl AttricatRepository {
         let count = sqlx::query_scalar(
             "SELECT count(*) FROM record_comments WHERE workspace_id=$1 AND record_id=$2",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(record)
         .fetch_one(&mut *transaction)
         .await?;
@@ -76,7 +76,7 @@ impl AttricatRepository {
         self.notify_comment_on(&mut transaction, record, comment, actor, body)
             .await?;
         sqlx::query("INSERT INTO record_comments (id,workspace_id,record_id,author_user_id,body) VALUES ($1,$2,$3,$4,$5)")
-            .bind(comment).bind(self.workspace_id_for_runtime()).bind(record).bind(actor).bind(body)
+            .bind(comment).bind(self.workspace_id()).bind(record).bind(actor).bind(body)
             .execute(&mut *transaction).await?;
         self.commit_mutation(transaction).await?;
         Ok(())
@@ -94,7 +94,7 @@ impl AttricatRepository {
         let mut transaction = self.pool.begin().await?;
         self.lock_record(&mut transaction, record).await?;
         let current: Option<i64> = sqlx::query_scalar("SELECT revision FROM record_comments WHERE workspace_id=$1 AND record_id=$2 AND id=$3 AND author_user_id=$4 FOR UPDATE")
-            .bind(self.workspace_id_for_runtime()).bind(record).bind(comment).bind(actor)
+            .bind(self.workspace_id()).bind(record).bind(comment).bind(actor)
             .fetch_optional(&mut *transaction).await?;
         let current = current.ok_or(RepositoryError::NotFound("comment"))?;
         if current != revision {

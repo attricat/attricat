@@ -92,7 +92,7 @@ impl AttricatRepository {
         Ok(sqlx::query_as(&format!(
             "SELECT {FIELDS} FROM lexicon_entries WHERE workspace_id = $1 AND ($2::text IS NULL OR language = $2) {ORDER}"
         ))
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(language)
         .fetch_all(&self.pool)
         .await?)
@@ -114,7 +114,7 @@ impl AttricatRepository {
              RETURNING {FIELDS}"
         ))
         .bind(Uuid::new_v4())
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(&entry.key)
         .bind(entry.context.as_deref().unwrap_or_default())
         .bind(&entry.language)
@@ -134,7 +134,7 @@ impl AttricatRepository {
         let deleted = sqlx::query(
             "DELETE FROM lexicon_entries WHERE workspace_id = $1 AND key = $2 AND context = $3 AND language = $4 AND plural_category = $5",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(&identity.key)
         .bind(identity.context.as_deref().unwrap_or_default())
         .bind(&identity.language)
@@ -157,7 +157,7 @@ impl AttricatRepository {
         mode: LexiconImportMode,
     ) -> Result<LexiconImportSummary, RepositoryError> {
         debug_assert!(entries.iter().all(|entry| entry.language == language));
-        let workspace_id = self.workspace_id_for_runtime();
+        let workspace_id = self.workspace_id();
         let columns = EntryColumns::new(entries);
         let mut transaction = self.pool.begin().await?;
         let mut summary = LexiconImportSummary::default();
@@ -243,7 +243,7 @@ impl AttricatRepository {
     /// stay pinned to older ones), reusable attribute name, and status option
     /// label of a reusable attribute revision.
     pub async fn lexicon_references(&self) -> Result<Vec<UsedReference>, RepositoryError> {
-        let workspace_id = self.workspace_id_for_runtime();
+        let workspace_id = self.workspace_id();
         let definitions: Vec<String> = sqlx::query_scalar(
             "SELECT definition FROM blueprints WHERE workspace_id = $1 AND deleted_at IS NULL",
         )

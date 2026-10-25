@@ -180,7 +180,7 @@ async fn evaluate_page(
     let candidates: Vec<Uuid> = sqlx::query_scalar(
         "SELECT id FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL AND ($4::uuid IS NULL OR id>$4) AND ($5::uuid IS NULL OR id=$5) ORDER BY id LIMIT $6",
     )
-    .bind(repo.workspace_id_for_runtime())
+    .bind(repo.workspace_id())
     .bind(run.blueprint_id)
     .bind(run.blueprint_version)
     .bind(run.candidate_cursor)
@@ -215,7 +215,7 @@ async fn candidates_remain(
     Ok(sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL AND ($4::uuid IS NULL OR id>$4))",
     )
-    .bind(repo.workspace_id_for_runtime())
+    .bind(repo.workspace_id())
     .bind(run.blueprint_id)
     .bind(run.blueprint_version)
     .bind(cursor)

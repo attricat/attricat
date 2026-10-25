@@ -27,7 +27,7 @@ impl AttricatRepository {
         Ok(sqlx::query_scalar(
             "SELECT configuration FROM extension_scoped_configuration WHERE workspace_id = $1 AND extension_id = $2 AND installed_release_id = $3 AND scope_kind = $4 AND blueprint_id = $5 AND blueprint_version = $6 AND attribute_id IS NOT DISTINCT FROM $7",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(extension_id)
         .bind(expected_release_id)
         .bind(scope_kind(&scope.kind))
@@ -66,7 +66,7 @@ impl AttricatRepository {
         let installation_id: Option<Uuid> = sqlx::query_scalar(
             "SELECT i.id FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.extension_id = $2 AND i.installed_release_id = $3 AND i.state = 'enabled' AND w.extensions_enabled FOR UPDATE OF i FOR SHARE OF w",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(extension_id)
         .bind(expected_release_id)
         .fetch_optional(&mut *transaction)
@@ -88,7 +88,7 @@ impl AttricatRepository {
         sqlx::query(
             "INSERT INTO extension_scoped_configuration (workspace_id, extension_id, installed_release_id, scope_kind, blueprint_id, blueprint_version, attribute_id, configuration, configuration_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (workspace_id, extension_id, scope_kind, blueprint_id, blueprint_version, attribute_id) DO UPDATE SET installed_release_id = EXCLUDED.installed_release_id, configuration = EXCLUDED.configuration, configuration_version = EXCLUDED.configuration_version, updated_at = clock_timestamp()",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(extension_id)
         .bind(expected_release_id)
         .bind(scope_kind(&scope.kind))
@@ -147,7 +147,7 @@ impl AttricatRepository {
         )
         .bind(scope.blueprint_id)
         .bind(scope.blueprint_version)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .fetch_one(&self.pool)
         .await?;
         if !blueprint_exists {
@@ -160,7 +160,7 @@ impl AttricatRepository {
             .bind(attribute_id)
             .bind(scope.blueprint_id)
             .bind(scope.blueprint_version)
-            .bind(self.extension_workspace())
+            .bind(self.workspace_id())
             .fetch_one(&self.pool)
             .await?;
             if !owns_attribute {

@@ -112,7 +112,7 @@ impl AttricatRepository {
         definition: &str,
     ) -> Result<(), RepositoryError> {
         let blueprint = parse(definition).map_err(RepositoryError::invalid_blueprint_definition)?;
-        let ws = self.extension_workspace();
+        let ws = self.workspace_id();
         let mut prepared = Vec::new();
         for job in blueprint.connector_jobs {
             let input = serde_json::to_value(&job.input)
@@ -246,7 +246,7 @@ impl AttricatRepository {
         blueprint_id: Uuid,
     ) -> Result<Vec<BlueprintConnectorJob>, RepositoryError> {
         sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND blueprint_id=$2 AND code IS NOT NULL ORDER BY id"))
-            .bind(self.extension_workspace()).bind(blueprint_id).fetch_all(&self.pool).await.map_err(Into::into)
+            .bind(self.workspace_id()).bind(blueprint_id).fetch_all(&self.pool).await.map_err(Into::into)
     }
 
     /// The enabled export jobs of an extension.
@@ -255,7 +255,7 @@ impl AttricatRepository {
         extension_id: &str,
     ) -> Result<Vec<BlueprintConnectorJob>, RepositoryError> {
         Ok(sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND extension_id=$2 AND direction='export' AND enabled AND code IS NOT NULL ORDER BY id"))
-            .bind(self.extension_workspace()).bind(extension_id).fetch_all(&self.pool).await?)
+            .bind(self.workspace_id()).bind(extension_id).fetch_all(&self.pool).await?)
     }
 
     pub async fn blueprint_connector_job(
@@ -263,7 +263,7 @@ impl AttricatRepository {
         id: Uuid,
     ) -> Result<Option<BlueprintConnectorJob>, RepositoryError> {
         Ok(sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND id=$2 AND code IS NOT NULL"))
-            .bind(self.extension_workspace()).bind(id).fetch_optional(&self.pool).await?)
+            .bind(self.workspace_id()).bind(id).fetch_optional(&self.pool).await?)
     }
 
     pub async fn blueprint_connector_jobs_page(
@@ -273,7 +273,7 @@ impl AttricatRepository {
         offset: i64,
     ) -> Result<(Vec<BlueprintConnectorJob>, bool), RepositoryError> {
         let mut rows = sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND blueprint_id=$2 AND code IS NOT NULL ORDER BY id LIMIT $3 OFFSET $4"))
-            .bind(self.extension_workspace()).bind(blueprint_id).bind(limit + 1).bind(offset)
+            .bind(self.workspace_id()).bind(blueprint_id).bind(limit + 1).bind(offset)
             .fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
@@ -324,7 +324,7 @@ impl AttricatRepository {
             return Err(invalid("a run selects 1-10000 records"));
         }
         let job: BlueprintConnectorJob = sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND id=$2 AND enabled AND code IS NOT NULL"))
-            .bind(self.extension_workspace()).bind(id).fetch_optional(&self.pool).await?
+            .bind(self.workspace_id()).bind(id).fetch_optional(&self.pool).await?
             .ok_or_else(|| RepositoryError::NotFound("blueprint connector job"))?;
         if mode != ConnectorRunMode::Incremental && job.direction != "export" {
             return Err(invalid("only export jobs can resync or be triggered"));
@@ -357,11 +357,11 @@ impl AttricatRepository {
             }
         }
         let version: i64 = sqlx::query_scalar("SELECT max(version) FROM blueprints WHERE workspace_id=$1 AND id=$2 AND kind='record' AND status='published' AND deleted_at IS NULL")
-            .bind(self.extension_workspace()).bind(job.blueprint_id).fetch_optional(&self.pool).await?
+            .bind(self.workspace_id()).bind(job.blueprint_id).fetch_optional(&self.pool).await?
             .flatten().ok_or_else(|| invalid("blueprint is no longer published"))?;
         let channels: Vec<Uuid> = if job.direction == "export" {
             let enabled: Vec<Uuid> = sqlx::query_scalar("SELECT context_id FROM publication_channels WHERE workspace_id=$1 AND enabled ORDER BY context_id")
-                .bind(self.extension_workspace()).fetch_all(&self.pool).await?;
+                .bind(self.workspace_id()).fetch_all(&self.pool).await?;
             match job.context_id {
                 Some(channel) if enabled.contains(&channel) => vec![channel],
                 Some(_) => {
@@ -435,13 +435,13 @@ impl AttricatRepository {
     /// The existing extension-operation coordinator invokes this producer.
     pub async fn produce_due_blueprint_connector_jobs(&self) -> Result<usize, RepositoryError> {
         let due: Vec<(Uuid, DateTime<Utc>, i32)> = sqlx::query_as("SELECT id,next_at,interval_seconds FROM blueprint_connector_jobs WHERE workspace_id=$1 AND enabled AND code IS NOT NULL AND next_at<=clock_timestamp() ORDER BY next_at,id LIMIT 16")
-            .bind(self.extension_workspace()).fetch_all(&self.pool).await?;
+            .bind(self.workspace_id()).fetch_all(&self.pool).await?;
         for (id, tick, interval) in &due {
             // The run key is deterministic on retry. An interrupted producer
             // can enqueue missing channels without duplicating existing runs.
             let occurrence = tick.timestamp_micros().to_string();
             let other_active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_operation_runs WHERE workspace_id=$1 AND connector_job_id=$2 AND status IN ('pending','leased') AND idempotency_key NOT LIKE $3)")
-                .bind(self.extension_workspace()).bind(id)
+                .bind(self.workspace_id()).bind(id)
                 .bind(format!("job:{id}:{occurrence}:%"))
                 .fetch_one(&self.pool).await?;
             if !other_active
@@ -452,7 +452,7 @@ impl AttricatRepository {
             }
             let next = Utc::now() + Duration::seconds(i64::from(*interval));
             sqlx::query("UPDATE blueprint_connector_jobs SET next_at=$3,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND next_at=$4")
-                .bind(id).bind(self.extension_workspace()).bind(next).bind(tick).execute(&self.pool).await?;
+                .bind(id).bind(self.workspace_id()).bind(next).bind(tick).execute(&self.pool).await?;
         }
         let triggered = self.produce_triggered_blueprint_connector_jobs().await?;
         Ok(due.len() + triggered)
@@ -472,7 +472,7 @@ impl AttricatRepository {
         let any_triggered: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM blueprint_connector_jobs WHERE workspace_id=$1 AND enabled AND code IS NOT NULL AND trigger_events IS NOT NULL AND trigger_watermark IS NOT NULL)",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .fetch_one(&self.pool)
         .await?;
         if !any_triggered {
@@ -499,7 +499,7 @@ impl AttricatRepository {
                 "j.blueprint_id"
             )
         ))
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(high_water)
         .execute(&self.pool)
         .await?;
@@ -533,7 +533,7 @@ impl AttricatRepository {
             pending_change(false),
             pending_change(true)
         ))
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(TRIGGERED_JOBS_PER_TICK)
         .bind(high_water)
         .bind(TRIGGER_MAX_WAIT_FACTOR)
@@ -548,7 +548,7 @@ impl AttricatRepository {
         );
         for (id, blueprint_id, events, watermark) in jobs {
             let mut changes: Vec<(i64, Uuid)> = sqlx::query_as(&window_sql)
-                .bind(self.extension_workspace())
+                .bind(self.workspace_id())
                 .bind(watermark)
                 .bind(&events)
                 .bind(blueprint_id)
@@ -598,13 +598,13 @@ impl AttricatRepository {
                     // leaves this tick's slots to others meanwhile.
                     tracing::warn!(job=%id, %error, "triggered connector run could not be queued");
                     sqlx::query("UPDATE blueprint_connector_jobs SET trigger_blocked_until=clock_timestamp()+make_interval(secs => $3) WHERE id=$1 AND workspace_id=$2")
-                        .bind(id).bind(self.extension_workspace()).bind(TRIGGER_FAILURE_BACKOFF_SECONDS as f64)
+                        .bind(id).bind(self.workspace_id()).bind(TRIGGER_FAILURE_BACKOFF_SECONDS as f64)
                         .execute(&self.pool).await?;
                     continue;
                 }
             }
             sqlx::query("UPDATE blueprint_connector_jobs SET trigger_watermark=$3,trigger_blocked_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND trigger_watermark=$4")
-                .bind(id).bind(self.extension_workspace()).bind(covered).bind(watermark)
+                .bind(id).bind(self.workspace_id()).bind(covered).bind(watermark)
                 .execute(&self.pool).await?;
         }
         Ok(started)
@@ -672,7 +672,7 @@ impl AttricatRepository {
         run_id: Uuid,
     ) -> Result<Option<ConnectorRunDetails>, RepositoryError> {
         Ok(sqlx::query_as("SELECT j.id AS job_id,j.code AS job_code,j.direction,r.connector_blueprint_id AS blueprint_id,r.connector_blueprint_version AS blueprint_version,r.connector_context_id AS context_id,r.connector_channel_id AS channel_id,r.connector_connection AS connection,COALESCE(r.connector_mode,'incremental') AS mode,cardinality(r.connector_record_ids)::bigint AS record_count,r.connector_record_ids AS record_ids FROM extension_operation_runs r JOIN blueprint_connector_jobs j ON j.id=r.connector_job_id AND j.workspace_id=r.workspace_id WHERE r.id=$1 AND r.workspace_id=$2")
-            .bind(run_id).bind(self.extension_workspace()).fetch_optional(&self.pool).await?)
+            .bind(run_id).bind(self.workspace_id()).fetch_optional(&self.pool).await?)
     }
 
     /// When a resync run started, or `None` for any other run.
@@ -681,7 +681,7 @@ impl AttricatRepository {
         run_id: Uuid,
     ) -> Result<Option<DateTime<Utc>>, RepositoryError> {
         Ok(sqlx::query_scalar("SELECT created_at FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 AND connector_mode='resync'")
-            .bind(run_id).bind(self.extension_workspace()).fetch_optional(&self.pool).await?)
+            .bind(run_id).bind(self.workspace_id()).fetch_optional(&self.pool).await?)
     }
 
     /// The live records among `record_ids` of `blueprint_id`.
@@ -691,7 +691,7 @@ impl AttricatRepository {
         record_ids: &[Uuid],
     ) -> Result<Vec<Uuid>, RepositoryError> {
         Ok(sqlx::query_scalar("SELECT id FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND id=ANY($3) AND deleted_at IS NULL ORDER BY id")
-            .bind(self.extension_workspace()).bind(blueprint_id).bind(record_ids)
+            .bind(self.workspace_id()).bind(blueprint_id).bind(record_ids)
             .fetch_all(&self.pool).await?)
     }
 
@@ -723,7 +723,7 @@ impl AttricatRepository {
              WHERE av.workspace_id=$2 AND av.relationship_target_record_id=$3 AND av.active AND {served})"
         ))
         .bind(run_id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(record_id)
         .fetch_one(&self.pool)
         .await?)
@@ -746,7 +746,7 @@ impl AttricatRepository {
                AND (r.connector_record_ids IS NULL OR $3=ANY(r.connector_record_ids)))",
         )
         .bind(run_id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(record_id)
         .fetch_one(&self.pool)
         .await?)
@@ -757,7 +757,7 @@ impl AttricatRepository {
         run_id: Uuid,
     ) -> Result<Option<(Uuid, Uuid, i64, Option<Uuid>, String)>, RepositoryError> {
         let scoped: Option<(Uuid, Uuid, i64, Option<Uuid>, String, bool)> = sqlx::query_as("SELECT r.connector_blueprint_id,r.connector_context_id,r.connector_blueprint_version,r.connector_channel_id,j.direction,j.enabled FROM extension_operation_runs r JOIN blueprint_connector_jobs j ON j.id=r.connector_job_id AND j.workspace_id=r.workspace_id WHERE r.id=$1 AND r.workspace_id=$2")
-            .bind(run_id).bind(self.extension_workspace()).fetch_optional(&self.pool).await?;
+            .bind(run_id).bind(self.workspace_id()).fetch_optional(&self.pool).await?;
         match scoped {
             Some((blueprint, context, version, channel, direction, true)) => {
                 Ok(Some((blueprint, context, version, channel, direction)))

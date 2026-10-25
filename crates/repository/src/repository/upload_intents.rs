@@ -19,7 +19,7 @@ impl AttricatRepository {
         cleanup_after: DateTime<Utc>,
     ) -> Result<(), RepositoryError> {
         sqlx::query("INSERT INTO file_upload_intents (object_key, workspace_id, cleanup_after) SELECT key, $2, $3 FROM unnest($1::text[]) key")
-            .bind(keys).bind(self.workspace_id_for_runtime()).bind(cleanup_after)
+            .bind(keys).bind(self.workspace_id()).bind(cleanup_after)
             .execute(&self.pool).await?;
         Ok(())
     }
@@ -32,7 +32,7 @@ impl AttricatRepository {
         key: &str,
     ) -> Result<(), RepositoryError> {
         let finished = sqlx::query("DELETE FROM file_upload_intents WHERE object_key = $1 AND workspace_id = $2 AND state = 'pending' AND cleanup_after > clock_timestamp()")
-            .bind(key).bind(self.workspace_id_for_runtime()).execute(&mut **tx).await?;
+            .bind(key).bind(self.workspace_id()).execute(&mut **tx).await?;
         if finished.rows_affected() != 1 {
             return Err(RepositoryError::NotFound("active file upload"));
         }

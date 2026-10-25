@@ -60,7 +60,7 @@ impl AttricatRepository {
         Ok(sqlx::query_as::<_, (Value, i64)>(
             "SELECT value, revision FROM extension_storage_entries WHERE workspace_id = $1 AND extension_id = $2 AND key = $3",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(extension_id)
         .bind(key)
         .fetch_optional(&self.pool)
@@ -84,7 +84,7 @@ impl AttricatRepository {
         let existing: Option<(i64, i32)> = sqlx::query_as(
             "SELECT revision, byte_size FROM extension_storage_entries WHERE workspace_id = $1 AND extension_id = $2 AND key = $3 FOR UPDATE",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(extension_id)
         .bind(key)
         .fetch_optional(&mut *transaction)
@@ -99,7 +99,7 @@ impl AttricatRepository {
         let (key_count, total_bytes): (i64, i64) = sqlx::query_as(
             "SELECT count(*), COALESCE(sum(byte_size), 0) FROM extension_storage_entries WHERE workspace_id = $1 AND extension_id = $2",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(extension_id)
         .fetch_one(&mut *transaction)
         .await?;
@@ -109,7 +109,7 @@ impl AttricatRepository {
             return Err(ExtensionStorageError::QuotaExceeded);
         }
         sqlx::query("INSERT INTO extension_storage_entries (workspace_id, extension_id, key, value, revision, byte_size) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (workspace_id, extension_id, key) DO UPDATE SET value = EXCLUDED.value, revision = EXCLUDED.revision, byte_size = EXCLUDED.byte_size, updated_at = clock_timestamp()")
-            .bind(self.extension_workspace()).bind(extension_id).bind(key).bind(value).bind(revision).bind(byte_size as i32).execute(&mut *transaction).await?;
+            .bind(self.workspace_id()).bind(extension_id).bind(key).bind(value).bind(revision).bind(byte_size as i32).execute(&mut *transaction).await?;
         self.commit_storage_mutation(transaction, "set", extension_id, key)
             .await?;
         Ok(revision)
@@ -129,13 +129,13 @@ impl AttricatRepository {
         let revision: Option<i64> = sqlx::query_scalar(
             "SELECT revision FROM extension_storage_entries WHERE workspace_id = $1 AND extension_id = $2 AND key = $3 FOR UPDATE",
         )
-        .bind(self.extension_workspace()).bind(extension_id).bind(key)
+        .bind(self.workspace_id()).bind(extension_id).bind(key)
         .fetch_optional(&mut *transaction).await?;
         if expected_revision.is_some_and(|item| revision != Some(item)) {
             return Err(ExtensionStorageError::Conflict);
         }
         sqlx::query("DELETE FROM extension_storage_entries WHERE workspace_id = $1 AND extension_id = $2 AND key = $3")
-            .bind(self.extension_workspace()).bind(extension_id).bind(key).execute(&mut *transaction).await?;
+            .bind(self.workspace_id()).bind(extension_id).bind(key).execute(&mut *transaction).await?;
         self.commit_storage_mutation(transaction, "delete", extension_id, key)
             .await?;
         Ok(())
@@ -162,7 +162,7 @@ impl AttricatRepository {
         let rows: Vec<(String, Value, i64)> = sqlx::query_as(
             "SELECT key, value, revision FROM extension_storage_entries WHERE workspace_id = $1 AND extension_id = $2 AND ($3::text IS NULL OR key LIKE $3 || '%' ESCAPE '\\') AND ($4::text IS NULL OR key > $4) ORDER BY key LIMIT $5",
         )
-        .bind(self.extension_workspace()).bind(extension_id).bind(prefix).bind(cursor).bind(i64::from(limit) + 1)
+        .bind(self.workspace_id()).bind(extension_id).bind(prefix).bind(cursor).bind(i64::from(limit) + 1)
         .fetch_all(&self.pool).await?;
         let has_more = rows.len() > limit as usize;
         let entries: Vec<_> = rows
@@ -187,7 +187,7 @@ impl AttricatRepository {
             return Err(ExtensionStorageError::Denied);
         }
         let allowed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_installations i JOIN extension_grants g ON g.installation_id = i.id JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.extension_id = $2 AND i.installed_release_id = $3 AND i.state = 'enabled' AND w.extensions_enabled AND g.grant_kind = 'capability' AND g.grant_id = 'storage.extension')")
-            .bind(self.extension_workspace()).bind(extension_id).bind(expected_release_id).fetch_one(&self.pool).await?;
+            .bind(self.workspace_id()).bind(extension_id).bind(expected_release_id).fetch_one(&self.pool).await?;
         allowed.then_some(()).ok_or(ExtensionStorageError::Denied)
     }
 
@@ -201,7 +201,7 @@ impl AttricatRepository {
             return Err(ExtensionStorageError::Denied);
         }
         let installation_id: Option<Uuid> = sqlx::query_scalar("SELECT i.id FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.extension_id = $2 AND i.installed_release_id = $3 AND i.state = 'enabled' AND w.extensions_enabled FOR UPDATE OF i")
-            .bind(self.extension_workspace()).bind(extension_id).bind(expected_release_id).fetch_optional(&mut **transaction).await?;
+            .bind(self.workspace_id()).bind(extension_id).bind(expected_release_id).fetch_optional(&mut **transaction).await?;
         let Some(installation_id) = installation_id else {
             return Err(ExtensionStorageError::Denied);
         };

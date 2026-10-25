@@ -163,7 +163,7 @@ impl AttricatRepository {
             .await?;
         }
         let schedule = sqlx::query_as(&format!("INSERT INTO extension_operation_schedules(id,workspace_id,extension_id,installed_release_id,operation_id,input,configuration_snapshot,source_reference,destination_reference,interval_seconds,next_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,clock_timestamp()+($10*interval '1 second')) RETURNING {PROJECTION}"))
-            .bind(id).bind(self.extension_workspace()).bind(&input.extension_id).bind(input.release_id)
+            .bind(id).bind(self.workspace_id()).bind(&input.extension_id).bind(input.release_id)
             .bind(&input.operation_id).bind(input.input).bind(installation.configuration).bind(input.source_reference).bind(input.destination_reference)
             .bind(input.interval_seconds).fetch_one(&mut *transaction).await?;
         transaction.commit().await?;
@@ -181,7 +181,7 @@ impl AttricatRepository {
             .parse()
             .map_err(|_| invalid("invalid input file"))?;
         let exists: Option<Uuid> = sqlx::query_scalar("SELECT id FROM files WHERE id=$1 AND workspace_id=$2 AND status='ready' AND deleted_at IS NULL FOR UPDATE")
-            .bind(file).bind(self.extension_workspace()).fetch_optional(&mut **transaction).await?;
+            .bind(file).bind(self.workspace_id()).fetch_optional(&mut **transaction).await?;
         if exists.is_none() {
             return Err(invalid("input file is not ready in this workspace"));
         }
@@ -192,7 +192,7 @@ impl AttricatRepository {
         &self,
     ) -> Result<Vec<ExtensionOperationSchedule>, RepositoryError> {
         sqlx::query_as(&format!("SELECT {PROJECTION} FROM extension_operation_schedules WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 500"))
-            .bind(self.extension_workspace()).fetch_all(&self.pool).await.map_err(Into::into)
+            .bind(self.workspace_id()).fetch_all(&self.pool).await.map_err(Into::into)
     }
 
     pub async fn update_extension_operation_schedule(
@@ -203,7 +203,7 @@ impl AttricatRepository {
     ) -> Result<Option<ExtensionOperationSchedule>, RepositoryError> {
         validate_interval(interval_seconds)?;
         sqlx::query_as(&format!("UPDATE extension_operation_schedules SET enabled=$3,interval_seconds=$4,next_at=CASE WHEN $3 AND NOT enabled THEN clock_timestamp()+($4*interval '1 second') ELSE next_at END,paused_reason=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 RETURNING {PROJECTION}"))
-            .bind(id).bind(self.extension_workspace()).bind(enabled).bind(interval_seconds)
+            .bind(id).bind(self.workspace_id()).bind(enabled).bind(interval_seconds)
             .fetch_optional(&self.pool).await.map_err(Into::into)
     }
 
@@ -230,7 +230,7 @@ impl AttricatRepository {
             );
             let row: Option<DueSchedule> = sqlx::query_as(
                 "SELECT id,extension_id,installed_release_id,operation_id,input,configuration_snapshot,source_reference,destination_reference,interval_seconds,next_at FROM extension_operation_schedules WHERE workspace_id=$1 AND enabled AND next_at<=clock_timestamp() ORDER BY next_at,id LIMIT 1 FOR NO KEY UPDATE SKIP LOCKED"
-            ).bind(self.extension_workspace()).fetch_optional(&mut *tx).await?;
+            ).bind(self.workspace_id()).fetch_optional(&mut *tx).await?;
             let Some((
                 id,
                 extension_id,
@@ -247,7 +247,7 @@ impl AttricatRepository {
                 break;
             };
             let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_operation_runs WHERE workspace_id=$1 AND schedule_id=$2 AND status IN ('pending','leased'))")
-                .bind(self.extension_workspace()).bind(id).fetch_one(&mut *tx).await?;
+                .bind(self.workspace_id()).bind(id).fetch_one(&mut *tx).await?;
             let result = if active {
                 Ok(None)
             } else if self
@@ -285,7 +285,7 @@ impl AttricatRepository {
                 .await?;
             let next = now + Duration::seconds(i64::from(interval));
             sqlx::query("UPDATE extension_operation_schedules SET next_at=$3,paused_reason=$4,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2")
-                .bind(id).bind(self.extension_workspace()).bind(next).bind(reason).execute(&mut *tx).await?;
+                .bind(id).bind(self.workspace_id()).bind(next).bind(reason).execute(&mut *tx).await?;
             tx.commit().await?;
             count += 1;
         }

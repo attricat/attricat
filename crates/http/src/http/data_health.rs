@@ -210,7 +210,7 @@ fn to_json(value: impl Serialize) -> Result<Value, ApiError> {
 pub(super) fn invalidate_data_health(state: &AppState, repository: &AttricatRepository) {
     state
         .data_health_cache
-        .invalidate(repository.workspace_id_for_runtime());
+        .invalidate(repository.workspace_id());
 }
 pub(super) async fn data_health_summary(
     State(state): State<AppState>,

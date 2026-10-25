@@ -1011,7 +1011,7 @@ pub(super) async fn set_budget(
         )
         .await?;
     crate::extension_runtime::forget_lowered_budget(
-        repository.extension_workspace(),
+        repository.workspace_id(),
         &extension_id,
         &host_permission_id,
     );
@@ -1026,7 +1026,7 @@ pub(super) async fn clear_budget(
         .set_extension_host_permission_budget(&extension_id, &host_permission_id, None)
         .await?;
     crate::extension_runtime::forget_lowered_budget(
-        repository.extension_workspace(),
+        repository.workspace_id(),
         &extension_id,
         &host_permission_id,
     );

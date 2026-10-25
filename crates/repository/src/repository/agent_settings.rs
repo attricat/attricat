@@ -125,7 +125,7 @@ impl AttricatRepository {
         let stored: Option<serde_json::Value> = sqlx::query_scalar(
             "SELECT settings->'agent' FROM workspaces WHERE id = $1 AND deleted_at IS NULL",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .fetch_optional(&self.pool)
         .await?
         .flatten();

@@ -8,10 +8,6 @@ use sqlx::{Postgres, Transaction};
 use std::collections::HashSet;
 use uuid::Uuid;
 
-fn workspace(repository: &AttricatRepository) -> Uuid {
-    repository.workspace_id.0
-}
-
 fn default_context_fallback() -> String {
     "default".to_owned()
 }
@@ -289,7 +285,7 @@ impl AttricatRepository {
         let definition = parse_definition(input)?;
         let definition_id = Uuid::new_v4();
         let revision_id = Uuid::new_v4();
-        let ws = workspace(self);
+        let ws = self.workspace_id();
         let namespace: String =
             sqlx::query_scalar("SELECT slug FROM workspaces WHERE id = $1 AND deleted_at IS NULL")
                 .bind(ws)
@@ -317,7 +313,7 @@ impl AttricatRepository {
         input: &CreateReusableAttribute,
     ) -> Result<Uuid, RepositoryError> {
         let definition = parse_definition(input)?;
-        let ws = workspace(self);
+        let ws = self.workspace_id();
         let existing: Option<(String, String)> = sqlx::query_as("SELECT namespace, code FROM reusable_attribute_definitions WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE")
             .bind(definition_id).bind(ws).fetch_optional(&mut **transaction).await?;
         let Some((_namespace, code)) = existing else {
@@ -354,7 +350,7 @@ impl AttricatRepository {
     ) -> Result<(), RepositoryError> {
         sqlx::query(r#"INSERT INTO reusable_attribute_revisions (id, workspace_id, definition_id, version, value_type, value_schema, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, searchable, facetable, status, definition)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'draft',$18)"#)
-            .bind(revision_id).bind(workspace(self)).bind(definition_id).bind(version)
+            .bind(revision_id).bind(self.workspace_id()).bind(definition_id).bind(version)
             .bind(definition.value_type).bind(toml_value_to_json(definition.value_schema)?).bind(toml_value_to_json(definition.default_value)?).bind(toml_value_to_json(definition.file_policy)?)
             .bind(definition.target_blueprint_code).bind(definition.cardinality).bind(definition.target_cardinality)
             .bind(serde_json::json!(definition.tags)).bind(definition.context_fallback).bind(definition.context_editable).bind(definition.readonly)
@@ -367,7 +363,7 @@ impl AttricatRepository {
         revision_id: Uuid,
     ) -> Result<ReusableAttribute, RepositoryError> {
         let result = sqlx::query("UPDATE reusable_attribute_revisions SET status = 'published', published_at = COALESCE(published_at, now()), updated_at = now() WHERE id = $1 AND workspace_id = $2 AND status = 'draft'")
-            .bind(revision_id).bind(workspace(self)).execute(&self.pool).await?;
+            .bind(revision_id).bind(self.workspace_id()).execute(&self.pool).await?;
         if result.rows_affected() == 0 {
             return Err(RepositoryError::NotFound(
                 "draft reusable attribute revision",
@@ -391,7 +387,7 @@ impl AttricatRepository {
             FROM reusable_attribute_revisions r JOIN reusable_attribute_definitions d ON d.id = r.definition_id
             WHERE r.workspace_id = $1 AND d.deleted_at IS NULL AND ($2::text IS NULL OR r.status = $2)
             ORDER BY d.namespace, d.code, r.version DESC"#)
-            .bind(workspace(self)).bind(status).fetch_all(&self.pool).await?
+            .bind(self.workspace_id()).bind(status).fetch_all(&self.pool).await?
         .into_domain())
     }
 
@@ -411,7 +407,7 @@ impl AttricatRepository {
             WHERE e.workspace_id = $1 AND e.blueprint_id = $2 AND e.blueprint_version = $3
               AND e.deleted_at IS NULL AND a.code = $4 AND r.searchable
             ORDER BY r.version DESC LIMIT 1"#)
-            .bind(workspace(self)).bind(blueprint_id).bind(blueprint_version).bind(qualified_code)
+            .bind(self.workspace_id()).bind(blueprint_id).bind(blueprint_version).bind(qualified_code)
             .fetch_optional(&self.pool).await?
         .into_domain())
     }
@@ -423,7 +419,7 @@ impl AttricatRepository {
         Ok(sqlx::query_as::<_, Db<ReusableAttribute>>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at, r.definition
             FROM reusable_attribute_revisions r JOIN reusable_attribute_definitions d ON d.id = r.definition_id
             WHERE r.id = $1 AND r.workspace_id = $2 AND d.deleted_at IS NULL"#)
-            .bind(revision_id).bind(workspace(self)).fetch_optional(&self.pool).await?
+            .bind(revision_id).bind(self.workspace_id()).fetch_optional(&self.pool).await?
         .into_domain())
     }
 
@@ -437,7 +433,7 @@ impl AttricatRepository {
             ));
         }
         let mut transaction = self.pool.begin().await?;
-        let ws = workspace(self);
+        let ws = self.workspace_id();
         let mut definitions = HashSet::new();
         for revision_id in &input.reusable_attribute_revision_ids {
             let definition_id: Option<Uuid> = sqlx::query_scalar("SELECT definition_id FROM reusable_attribute_revisions WHERE id = $1 AND workspace_id = $2 AND status = 'published' FOR UPDATE")
@@ -465,7 +461,7 @@ impl AttricatRepository {
         &self,
     ) -> Result<Vec<ReusableAttributeGroup>, RepositoryError> {
         let groups = sqlx::query_as::<_, (Uuid, String, String, i64)>("SELECT id, code, name, position FROM reusable_attribute_groups WHERE workspace_id = $1 ORDER BY position, code")
-            .bind(workspace(self)).fetch_all(&self.pool).await?;
+            .bind(self.workspace_id()).fetch_all(&self.pool).await?;
         let mut result = Vec::with_capacity(groups.len());
         for (id, code, name, position) in groups {
             result.push(self.group_with_members(id, code, name, position).await?);
@@ -478,7 +474,7 @@ impl AttricatRepository {
         id: Uuid,
     ) -> Result<Option<ReusableAttributeGroup>, RepositoryError> {
         let group = sqlx::query_as::<_, (Uuid, String, String, i64)>("SELECT id, code, name, position FROM reusable_attribute_groups WHERE id = $1 AND workspace_id = $2")
-            .bind(id).bind(workspace(self)).fetch_optional(&self.pool).await?;
+            .bind(id).bind(self.workspace_id()).fetch_optional(&self.pool).await?;
         match group {
             Some((id, code, name, position)) => Ok(Some(
                 self.group_with_members(id, code, name, position).await?,
@@ -601,7 +597,7 @@ impl AttricatRepository {
         record: &Record,
         revision_id: Uuid,
     ) -> Result<Uuid, RepositoryError> {
-        let ws = workspace(self);
+        let ws = self.workspace_id();
         let revision = self
             .reusable_attribute_revision_in_transaction(transaction, revision_id)
             .await?
@@ -652,7 +648,7 @@ impl AttricatRepository {
           JOIN reusable_attribute_definitions d ON d.id = r.definition_id
           JOIN attributes a ON a.record_id = aat.record_id AND a.reusable_attribute_revision_id = r.id AND a.workspace_id = aat.workspace_id
           WHERE aat.workspace_id = $1 AND aat.record_id = $2 AND a.deleted_at IS NULL
-          ORDER BY aat.position"#).bind(workspace(self)).bind(record_id).fetch_all(&self.pool).await?
+          ORDER BY aat.position"#).bind(self.workspace_id()).bind(record_id).fetch_all(&self.pool).await?
         .into_domain())
     }
 
@@ -662,7 +658,7 @@ impl AttricatRepository {
         revision_id: Uuid,
     ) -> Result<Option<ReusableAttribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Db<ReusableAttribute>>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at, r.definition FROM reusable_attribute_revisions r JOIN reusable_attribute_definitions d ON d.id = r.definition_id WHERE r.id = $1 AND r.workspace_id = $2 FOR UPDATE"#)
-            .bind(revision_id).bind(workspace(self)).fetch_optional(&mut **transaction).await?
+            .bind(revision_id).bind(self.workspace_id()).fetch_optional(&mut **transaction).await?
         .into_domain())
     }
 }

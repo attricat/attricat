@@ -154,7 +154,7 @@ impl AttricatRepository {
         self.enqueue_task(
             transaction,
             TaskInsert {
-                workspace_id: self.extension_workspace(),
+                workspace_id: self.workspace_id(),
                 kind: TaskKind::ExtensionOperationRunV1,
                 subject_id: run_id,
                 generation: 0,
@@ -201,7 +201,7 @@ impl AttricatRepository {
         let row: Option<(Uuid, Value, Value)> = sqlx::query_as(
             "SELECT i.installed_release_id, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id=i.installed_release_id JOIN workspaces w ON w.id=i.workspace_id WHERE i.workspace_id=$1 AND i.extension_id=$2 AND i.state='enabled' AND w.extensions_enabled FOR UPDATE OF i",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(&input.extension_id)
         .fetch_optional(&mut *transaction)
         .await?;
@@ -246,7 +246,7 @@ impl AttricatRepository {
             "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,source_reference,destination_reference,idempotency_key,schedule_id,connector_job_id,connector_blueprint_id,connector_context_id,connector_blueprint_version,connector_channel_id,connector_connection,connector_mode,connector_record_ids) VALUES($1,$2,$3,$4,$13,$5,$6,$7,$8,$9,$10,$11,$12,$14,$15,$16,$17,$18,$19,$20,$21,$22) ON CONFLICT(workspace_id,extension_id,installed_release_id,operation_id,idempotency_key) DO NOTHING RETURNING id",
         )
         .bind(id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(&input.extension_id)
         .bind(release)
         .bind(&input.operation_id)
@@ -286,7 +286,7 @@ impl AttricatRepository {
             let existing = sqlx::query_scalar(
                 "SELECT id FROM extension_operation_runs WHERE workspace_id=$1 AND extension_id=$2 AND installed_release_id=$3 AND operation_id=$4 AND idempotency_key=$5",
             )
-            .bind(self.extension_workspace())
+            .bind(self.workspace_id())
             .bind(&input.extension_id)
             .bind(release)
             .bind(&input.operation_id)
@@ -305,7 +305,7 @@ impl AttricatRepository {
         task: &ClaimedTask,
     ) -> Result<Option<ClaimedExtensionOperationRun>, RepositoryError> {
         if task.kind != TaskKind::ExtensionOperationRunV1
-            || task.workspace_id != self.extension_workspace()
+            || task.workspace_id != self.workspace_id()
         {
             return Err(RepositoryError::InvalidExtension(
                 "operation task mismatch".into(),
@@ -319,7 +319,7 @@ impl AttricatRepository {
             "SELECT status,cancellation_requested,lifecycle_started,extension_id,installed_release_id,operation_id,configuration_snapshot,input,checkpoint,batch_number,abi_version,created_at FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
         )
         .bind(task.subject_id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .fetch_optional(&mut *transaction)
         .await?;
         let Some((
@@ -367,7 +367,7 @@ impl AttricatRepository {
             "UPDATE extension_operation_runs SET status='leased',attempts=attempts+1,lease_token=$3,lease_owner=$4,lease_until=$5,started_at=COALESCE(started_at,clock_timestamp()),updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status IN ('pending','leased')",
         )
         .bind(task.subject_id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(task.lease_token)
         .bind(&task.lease_owner)
         .bind(task.lease_until)
@@ -413,7 +413,7 @@ impl AttricatRepository {
             "UPDATE extension_operation_runs SET status='pending',lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3",
         )
         .bind(task.subject_id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(task.lease_token)
         .execute(&mut *transaction)
         .await?
@@ -462,7 +462,7 @@ impl AttricatRepository {
             "UPDATE extension_operation_runs SET checkpoint=$3,progress=$4,lifecycle_started=true,batch_number=batch_number+1,deferrals=0,status=CASE WHEN cancellation_requested AND cancellation_delivered THEN 'cancelled' WHEN cancellation_requested THEN 'pending' WHEN $5 THEN 'completed' ELSE 'pending' END,completed_at=CASE WHEN $5 AND NOT cancellation_requested THEN clock_timestamp() ELSE completed_at END,cancelled_at=CASE WHEN cancellation_requested AND cancellation_delivered THEN clock_timestamp() ELSE cancelled_at END,resume_at=$7,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$6 RETURNING status",
         )
         .bind(run.id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         // Checkpoints are execution state and must round-trip unchanged; they
         // are never returned by management projections. Progress is operator
         // visible, so redact it before persisting it.
@@ -497,7 +497,7 @@ impl AttricatRepository {
             "UPDATE extension_operation_runs SET cancellation_delivered=true,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3 AND cancellation_requested",
         )
         .bind(task.subject_id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(task.lease_token)
         .execute(&mut *transaction)
         .await?
@@ -525,7 +525,7 @@ impl AttricatRepository {
             "SELECT cancellation_requested FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3 FOR UPDATE",
         )
         .bind(task.subject_id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(task.lease_token)
         .fetch_optional(&mut *transaction)
         .await?;
@@ -575,7 +575,7 @@ impl AttricatRepository {
             "UPDATE extension_operation_runs SET status=CASE WHEN $3 THEN 'dead_letter' ELSE 'pending' END,last_error_code='operation',last_error_message=$4,resume_at=CASE WHEN $3 THEN NULL ELSE $6 END,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$5",
         )
         .bind(task.subject_id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(terminal)
         .bind(&error)
         .bind(task.lease_token)
@@ -613,7 +613,7 @@ impl AttricatRepository {
             .ensure_task_fence(&mut transaction)
             .await?;
         let deferrals: Option<i32> = sqlx::query_scalar("SELECT deferrals FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3 FOR UPDATE")
-            .bind(task.subject_id).bind(self.extension_workspace()).bind(task.lease_token)
+            .bind(task.subject_id).bind(self.workspace_id()).bind(task.lease_token)
             .fetch_optional(&mut *transaction).await?;
         let Some(deferrals) = deferrals else {
             return Err(RepositoryError::InvalidExtension(
@@ -627,7 +627,7 @@ impl AttricatRepository {
             .bind(task.id).bind(&task.lease_owner).bind(task.lease_token).bind(at)
             .execute(&mut *transaction).await?.rows_affected();
         let run_changed = sqlx::query("UPDATE extension_operation_runs SET status='pending',deferrals=CASE WHEN $6 THEN deferrals+1 ELSE 0 END,last_error_code='retry',last_error_message=$4,resume_at=$5,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3")
-            .bind(task.subject_id).bind(self.extension_workspace()).bind(task.lease_token)
+            .bind(task.subject_id).bind(self.workspace_id()).bind(task.lease_token)
             .bind(&message).bind(at).bind(limit.is_some())
             .execute(&mut *transaction).await?.rows_affected();
         if task_changed != 1 || run_changed != 1 {
@@ -655,7 +655,7 @@ impl AttricatRepository {
             "UPDATE extension_operation_runs SET status='dead_letter',last_error_code='rejected',last_error_message=$3,resume_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$4",
         )
         .bind(task.subject_id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(&error)
         .bind(task.lease_token)
         .execute(&mut *transaction)
@@ -678,7 +678,7 @@ impl AttricatRepository {
             "SELECT status FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
         )
         .bind(id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .fetch_optional(&mut *transaction)
         .await?;
         let Some(status) = status else {
@@ -690,7 +690,7 @@ impl AttricatRepository {
                 let changed = sqlx::query("UPDATE extension_operation_runs SET status='cancelled',cancelled_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1")
                     .bind(id).execute(&mut *transaction).await?.rows_affected();
                 let task_id: Uuid = sqlx::query_scalar("SELECT id FROM tasks WHERE workspace_id=$1 AND kind='extension_operation_run.v1' AND subject_id=$2 AND status='queued' ORDER BY generation DESC LIMIT 1 FOR UPDATE")
-                    .bind(self.extension_workspace()).bind(id).fetch_one(&mut *transaction).await?;
+                    .bind(self.workspace_id()).bind(id).fetch_one(&mut *transaction).await?;
                 self.cancel_queued_task(&mut transaction, task_id).await?;
                 changed
             }
@@ -712,7 +712,7 @@ impl AttricatRepository {
             "SELECT selection_context_id FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 AND status='dead_letter' FOR UPDATE",
         )
         .bind(id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .fetch_optional(&mut *transaction)
         .await?;
         if let Some(Some(context_id)) = context_id {
@@ -720,7 +720,7 @@ impl AttricatRepository {
                 "SELECT id FROM attribute_contexts WHERE id=$1 AND workspace_id=$2 FOR SHARE",
             )
             .bind(context_id)
-            .bind(self.extension_workspace())
+            .bind(self.workspace_id())
             .fetch_optional(&mut *transaction)
             .await?;
             if exists.is_none() {
@@ -731,7 +731,7 @@ impl AttricatRepository {
             "UPDATE extension_operation_runs SET status='pending',cancellation_requested=false,cancellation_delivered=false,attempts=0,deferrals=0,resume_at=NULL,last_error_code=NULL,last_error_message=NULL,completed_at=NULL,cancelled_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter' AND NOT outputs_expired",
         )
         .bind(id)
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .execute(&mut *transaction)
         .await?
         .rows_affected();
@@ -740,7 +740,7 @@ impl AttricatRepository {
             return Ok(false);
         }
         let task_id: Uuid = sqlx::query_scalar("SELECT id FROM tasks WHERE workspace_id=$1 AND kind='extension_operation_run.v1' AND subject_id=$2 AND status='dead_letter' ORDER BY generation DESC LIMIT 1 FOR UPDATE")
-            .bind(self.extension_workspace()).bind(id).fetch_one(&mut *transaction).await?;
+            .bind(self.workspace_id()).bind(id).fetch_one(&mut *transaction).await?;
         self.replay_task(&mut transaction, task_id).await?;
         transaction.commit().await?;
         Ok(true)
@@ -752,7 +752,7 @@ impl AttricatRepository {
         Ok(sqlx::query_as(
             "SELECT id,schedule_id,connector_job_id,connector_channel_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE workspace_id=$1 ORDER BY created_at DESC,id DESC LIMIT 200",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .fetch_all(&self.pool)
         .await?)
     }
@@ -765,7 +765,7 @@ impl AttricatRepository {
         offset: i64,
     ) -> Result<(Vec<ExtensionOperationRun>, bool), RepositoryError> {
         let mut rows = sqlx::query_as("SELECT id,schedule_id,connector_job_id,connector_channel_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE workspace_id=$1 AND ($2::text IS NULL OR extension_id=$2) AND ($3::uuid IS NULL OR connector_job_id=$3) ORDER BY created_at DESC,id DESC LIMIT $4 OFFSET $5")
-            .bind(self.extension_workspace()).bind(extension_id).bind(connector_job_id)
+            .bind(self.workspace_id()).bind(extension_id).bind(connector_job_id)
             .bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
@@ -777,7 +777,7 @@ impl AttricatRepository {
         id: Uuid,
     ) -> Result<Option<ExtensionOperationRun>, RepositoryError> {
         sqlx::query_as("SELECT id,schedule_id,connector_job_id,connector_channel_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2")
-            .bind(id).bind(self.extension_workspace()).fetch_optional(&self.pool).await.map_err(Into::into)
+            .bind(id).bind(self.workspace_id()).fetch_optional(&self.pool).await.map_err(Into::into)
     }
 }
 

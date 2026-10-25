@@ -363,13 +363,13 @@ impl AttricatRepository {
     ) -> Result<(), RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         sqlx::query("UPDATE workspaces SET extensions_enabled = $2, extensions_generation = extensions_generation + 1, updated_at = clock_timestamp() WHERE id = $1")
-            .bind(self.extension_workspace())
+            .bind(self.workspace_id())
             .bind(enabled)
             .execute(&mut *transaction)
             .await?;
         self.with_workspace_audit_action(
             "workspace.extensions_mode.set",
-            json!({"type": "workspace", "id": self.extension_workspace()}),
+            json!({"type": "workspace", "id": self.workspace_id()}),
             json!({"extensions_enabled": enabled}),
         )
         .write_audit_event(&mut transaction)
@@ -383,7 +383,7 @@ impl AttricatRepository {
         &self,
     ) -> Result<Vec<WorkspaceExtensionSecret>, RepositoryError> {
         Ok(sqlx::query_as("SELECT name, created_at, updated_at FROM workspace_extension_secrets WHERE workspace_id = $1 ORDER BY name")
-            .bind(self.extension_workspace()).fetch_all(&self.pool).await?)
+            .bind(self.workspace_id()).fetch_all(&self.pool).await?)
     }
 
     /// Creates or rotates a workspace-owned secret. Its value is deliberately
@@ -402,7 +402,7 @@ impl AttricatRepository {
         }
         let mut transaction = self.pool.begin().await?;
         sqlx::query("INSERT INTO workspace_extension_secrets (id, workspace_id, name, value) VALUES ($1, $2, $3, $4) ON CONFLICT (workspace_id, name) DO UPDATE SET value = EXCLUDED.value, updated_at = clock_timestamp()")
-            .bind(Uuid::new_v4()).bind(self.extension_workspace()).bind(name).bind(value).execute(&mut *transaction).await?;
+            .bind(Uuid::new_v4()).bind(self.workspace_id()).bind(name).bind(value).execute(&mut *transaction).await?;
         self.with_workspace_audit_action(
             "workspace.extension_secret.put",
             json!({"type":"workspace_secret","name":name}),
@@ -422,7 +422,7 @@ impl AttricatRepository {
         let deleted = sqlx::query(
             "DELETE FROM workspace_extension_secrets WHERE workspace_id = $1 AND name = $2",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(name)
         .execute(&mut *transaction)
         .await?
@@ -450,7 +450,7 @@ impl AttricatRepository {
         Ok(sqlx::query_scalar(
             "SELECT value FROM workspace_extension_secrets WHERE workspace_id = $1 AND name = $2",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(name)
         .fetch_optional(&self.pool)
         .await?)
@@ -458,7 +458,7 @@ impl AttricatRepository {
 
     pub async fn installed_extensions(&self) -> Result<Vec<InstalledExtension>, RepositoryError> {
         Ok(sqlx::query_as("SELECT i.id, i.extension_id, i.installed_release_id, i.state, i.configuration, i.configuration_version, i.created_at, i.updated_at, r.version, r.manifest, r.manifest_sha256, r.source FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 ORDER BY i.extension_id")
-            .bind(self.extension_workspace()).fetch_all(&self.pool).await?)
+            .bind(self.workspace_id()).fetch_all(&self.pool).await?)
     }
 
     pub async fn installed_extension(
@@ -466,7 +466,7 @@ impl AttricatRepository {
         extension_id: &str,
     ) -> Result<InstalledExtension, RepositoryError> {
         sqlx::query_as("SELECT i.id, i.extension_id, i.installed_release_id, i.state, i.configuration, i.configuration_version, i.created_at, i.updated_at, r.version, r.manifest, r.manifest_sha256, r.source FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.extension_id = $2")
-            .bind(self.extension_workspace()).bind(extension_id).fetch_optional(&self.pool).await?
+            .bind(self.workspace_id()).bind(extension_id).fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("extension installation"))
     }
 
@@ -572,10 +572,7 @@ impl AttricatRepository {
                 .fetch(
                     CacheKey::new(
                         "client_contributions",
-                        &[
-                            &self.extension_workspace(),
-                            &generations.extensions_generation,
-                        ],
+                        &[&self.workspace_id(), &generations.extensions_generation],
                     ),
                     &[],
                     Policy::Generation,
@@ -605,7 +602,7 @@ impl AttricatRepository {
         let rows: Vec<(String, Uuid, Value, Vec<String>)> = sqlx::query_as(
             "SELECT i.extension_id, i.installed_release_id, i.configuration, ARRAY(SELECT g.grant_id FROM extension_grants g WHERE g.installation_id = i.id AND g.grant_kind = 'capability' ORDER BY g.grant_id) FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled AND ($2::text IS NULL OR i.extension_id = $2) ORDER BY i.extension_id",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(extension_id)
         .fetch_all(&self.pool)
         .await?;
@@ -674,7 +671,7 @@ impl AttricatRepository {
                 sqlx::query_scalar(
                     "SELECT COALESCE(settings->'extension_layout', '{}'::jsonb) FROM workspaces WHERE id = $1",
                 )
-                .bind(self.extension_workspace())
+                .bind(self.workspace_id())
                 .fetch_optional(&self.pool)
                 .await?
                 .unwrap_or_else(|| json!({})),
@@ -687,10 +684,7 @@ impl AttricatRepository {
                 .fetch(
                     CacheKey::new(
                         "extension_layout",
-                        &[
-                            &self.extension_workspace(),
-                            &generations.extensions_generation,
-                        ],
+                        &[&self.workspace_id(), &generations.extensions_generation],
                     ),
                     &[],
                     Policy::Generation,
@@ -715,7 +709,7 @@ impl AttricatRepository {
             )
             .bind(blueprint_id)
             .bind(blueprint_version)
-            .bind(self.extension_workspace())
+            .bind(self.workspace_id())
             .fetch_optional(&self.pool)
             .await?
             .flatten();
@@ -804,7 +798,7 @@ impl AttricatRepository {
         Ok(sqlx::query_scalar(
             "SELECT COALESCE(settings->'extension_layout', '{\"version\":1,\"outlets\":{}}'::jsonb) FROM workspaces WHERE id = $1",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .fetch_optional(&self.pool)
         .await?
         .unwrap_or_else(empty_workspace_extension_layout))
@@ -867,11 +861,11 @@ impl AttricatRepository {
     ) -> Result<(), RepositoryError> {
         validate_workspace_extension_layout(&layout)?;
         let mut transaction = self.pool.begin().await?;
-        self.lock_workspace_settings_in_transaction(&mut transaction, self.extension_workspace())
+        self.lock_workspace_settings_in_transaction(&mut transaction, self.workspace_id())
             .await?;
         self.write_workspace_extension_layout_in_transaction(
             &mut transaction,
-            self.extension_workspace(),
+            self.workspace_id(),
             &layout,
         )
         .await?;
@@ -879,7 +873,7 @@ impl AttricatRepository {
         // re-contextualized copy to produce exactly one event.
         self.with_workspace_audit_action(
             "workspace.extension_layout.set",
-            json!({"type":"workspace", "id": self.extension_workspace()}),
+            json!({"type":"workspace", "id": self.workspace_id()}),
             json!({"extension_layout": layout}),
         )
         .commit_mutation(transaction)
@@ -914,7 +908,7 @@ impl AttricatRepository {
     ) -> Result<ExtensionInstallation, RepositoryError> {
         self.validate_extension(manifest)?;
         self.validate_extension_source(source)?;
-        let workspace_id = self.extension_workspace();
+        let workspace_id = self.workspace_id();
         let mut transaction = self.pool.begin().await?;
         let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2 FOR UPDATE)")
             .bind(workspace_id).bind(&manifest.attricat.id).fetch_one(&mut *transaction).await?;
@@ -1073,7 +1067,7 @@ impl AttricatRepository {
         Ok(sqlx::query_as::<_, RuntimeInstallationRow>(
             "SELECT i.extension_id, i.installed_release_id, i.configuration, ARRAY(SELECT g.grant_kind FROM extension_grants g WHERE g.installation_id = i.id ORDER BY g.grant_kind, g.grant_id) AS grant_kinds, ARRAY(SELECT g.grant_id FROM extension_grants g WHERE g.installation_id = i.id ORDER BY g.grant_kind, g.grant_id) AS grant_ids FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled AND ($2::text IS NULL OR i.extension_id = $2) AND ($3::uuid IS NULL OR i.installed_release_id = $3) ORDER BY i.extension_id",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .bind(only.map(|(extension_id, _)| extension_id))
         .bind(only.map(|(_, release_id)| release_id))
         .fetch_all(&self.pool)
@@ -1314,7 +1308,7 @@ impl AttricatRepository {
         &self,
         extension_id: &str,
     ) -> Result<ExtensionInstallation, RepositoryError> {
-        let workspace_id = self.extension_workspace();
+        let workspace_id = self.workspace_id();
         self.dependencies_enabled(workspace_id, extension_id, &mut HashSet::new())
             .await?;
         let mut transaction = self.pool.begin().await?;
@@ -1515,7 +1509,7 @@ impl AttricatRepository {
         extension_id: &str,
     ) -> Result<Vec<ExtensionLifecycleRecord>, RepositoryError> {
         Ok(sqlx::query_as("SELECT r.id, r.workspace_id, r.installation_id, r.extension_id, r.installed_release_id, r.operation, r.prior_state, r.new_state, r.outcome, r.actor_user_id, u.display_name AS actor_display_name, u.email AS actor_email, r.actor_token_id, r.source, r.diagnostics, r.created_at FROM extension_lifecycle_records r LEFT JOIN users u ON u.id = r.actor_user_id WHERE r.workspace_id = $1 AND r.extension_id = $2 ORDER BY r.created_at, r.id")
-            .bind(self.extension_workspace()).bind(extension_id).fetch_all(&self.pool).await?)
+            .bind(self.workspace_id()).bind(extension_id).fetch_all(&self.pool).await?)
     }
 
     async fn transition_extension(
@@ -1579,7 +1573,7 @@ impl AttricatRepository {
         // commits through here.
         advance_generation(
             &mut transaction,
-            self.extension_workspace(),
+            self.workspace_id(),
             Generation::Extensions,
         )
         .await?;
@@ -1608,11 +1602,6 @@ impl AttricatRepository {
         Ok(())
     }
 
-    /// The workspace this repository is scoped to.
-    pub fn extension_workspace(&self) -> Uuid {
-        self.workspace_id.0
-    }
-
     /// Every export destination of the enabled, authorized installations.
     pub async fn enabled_export_destinations(
         &self,
@@ -1625,10 +1614,7 @@ impl AttricatRepository {
                 .fetch(
                     CacheKey::new(
                         "export_destinations",
-                        &[
-                            &self.extension_workspace(),
-                            &generations.extensions_generation,
-                        ],
+                        &[&self.workspace_id(), &generations.extensions_generation],
                     ),
                     &[],
                     Policy::Generation,
@@ -1694,7 +1680,7 @@ impl AttricatRepository {
         let rows: Vec<(String, Value)> = sqlx::query_as(
             "SELECT i.extension_id, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.state = 'enabled' FOR UPDATE OF i",
         )
-        .bind(self.extension_workspace())
+        .bind(self.workspace_id())
         .fetch_all(&mut **transaction)
         .await?;
         for (_extension_id, raw_manifest) in rows {
@@ -1725,7 +1711,7 @@ impl AttricatRepository {
         extension_id: &str,
     ) -> Result<ExtensionInstallation, RepositoryError> {
         sqlx::query_as("SELECT id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2 FOR UPDATE")
-            .bind(self.extension_workspace()).bind(extension_id).fetch_optional(&mut **transaction).await?.ok_or(RepositoryError::NotFound("extension installation"))
+            .bind(self.workspace_id()).bind(extension_id).fetch_optional(&mut **transaction).await?.ok_or(RepositoryError::NotFound("extension installation"))
     }
     pub(crate) async fn installed_release_manifest(
         &self,
@@ -1751,7 +1737,7 @@ impl AttricatRepository {
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
         let digest = extension_manifest_sha256(manifest)?;
         sqlx::query("INSERT INTO installed_extension_releases (id, workspace_id, extension_id, version, manifest, manifest_sha256, source) VALUES ($1, $2, $3, $4, $5, $6, $7)")
-            .bind(installed_release_id).bind(self.extension_workspace()).bind(&manifest.attricat.id).bind(&manifest.version).bind(serialized).bind(digest).bind(source).execute(&mut **transaction).await?;
+            .bind(installed_release_id).bind(self.workspace_id()).bind(&manifest.attricat.id).bind(&manifest.version).bind(serialized).bind(digest).bind(source).execute(&mut **transaction).await?;
         Ok(())
     }
     async fn update_extension_state(

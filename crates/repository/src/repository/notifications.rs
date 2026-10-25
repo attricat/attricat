@@ -156,7 +156,7 @@ impl AttricatRepository {
                 && !Self::authorized_record_ids_on(
                     transaction,
                     *recipient,
-                    self.workspace_id_for_runtime(),
+                    self.workspace_id(),
                     "records.read",
                     &[id],
                 )
@@ -189,7 +189,7 @@ impl AttricatRepository {
                    AND d.created_at=now() AND d.kind=$3
                    AND d.subject_id IS NOT DISTINCT FROM $8 AND d.data=$9)",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(&allowed)
         .bind(notification.kind)
         .bind(&title)
@@ -235,7 +235,7 @@ impl AttricatRepository {
                AND ($4::timestamptz IS NULL OR (n.created_at,n.id)<($4,$5::uuid))
              ORDER BY n.created_at DESC,n.id DESC LIMIT $6",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(recipient)
         .bind(unread_only)
         .bind(time)
@@ -256,7 +256,7 @@ impl AttricatRepository {
              FROM user_notifications n LEFT JOIN users a ON a.id=n.actor_user_id
              WHERE n.workspace_id=$1 AND n.recipient_user_id=$2 AND n.id=$3",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(recipient)
         .bind(notification)
         .fetch_optional(&self.pool)
@@ -272,7 +272,7 @@ impl AttricatRepository {
         Ok(sqlx::query_scalar(
             "SELECT count(*) FROM user_notifications WHERE workspace_id=$1 AND recipient_user_id=$2 AND read_at IS NULL",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(recipient)
         .fetch_one(&self.pool)
         .await?)
@@ -290,7 +290,7 @@ impl AttricatRepository {
             "UPDATE user_notifications SET read_at=CASE WHEN $4 THEN COALESCE(read_at,now()) ELSE NULL END
              WHERE workspace_id=$1 AND recipient_user_id=$2 AND id=$3 RETURNING id",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(recipient)
         .bind(notification)
         .bind(read)
@@ -314,7 +314,7 @@ impl AttricatRepository {
              WHERE workspace_id=$1 AND recipient_user_id=$2 AND read_at IS NULL
                AND ($3::timestamptz IS NULL OR created_at<=$3)",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(recipient)
         .bind(up_to)
         .execute(&self.pool)
@@ -334,7 +334,7 @@ impl AttricatRepository {
             "UPDATE user_notifications SET read_at=CASE WHEN $4 THEN COALESCE(read_at,now()) ELSE NULL END
              WHERE workspace_id=$1 AND recipient_user_id=$2 AND id=ANY($3)",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(recipient)
         .bind(notifications)
         .bind(read)
@@ -353,7 +353,7 @@ impl AttricatRepository {
         let result = sqlx::query(
             "DELETE FROM user_notifications WHERE workspace_id=$1 AND recipient_user_id=$2 AND id=ANY($3)",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(recipient)
         .bind(notifications)
         .execute(&self.pool)
@@ -370,7 +370,7 @@ impl AttricatRepository {
         let result = sqlx::query(
             "DELETE FROM user_notifications WHERE workspace_id=$1 AND recipient_user_id=$2 AND id=$3",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(recipient)
         .bind(notification)
         .execute(&self.pool)
@@ -445,7 +445,7 @@ impl AttricatRepository {
             "SELECT b.code,b.name FROM records e JOIN blueprints b ON b.id=e.blueprint_id AND b.version=e.blueprint_version
              WHERE e.workspace_id=$1 AND e.id=$2 AND e.deleted_at IS NULL",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(record)
         .fetch_optional(&mut **transaction)
         .await?)
@@ -485,7 +485,7 @@ impl AttricatRepository {
                     let Some(team) = sqlx::query_scalar::<_, String>(
                         "SELECT name FROM teams WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL",
                     )
-                    .bind(self.workspace_id_for_runtime())
+                    .bind(self.workspace_id())
                     .bind(reference.id)
                     .fetch_optional(&mut **transaction)
                     .await?
@@ -496,7 +496,7 @@ impl AttricatRepository {
                         "SELECT m.user_id FROM team_members tm JOIN workspace_memberships m ON m.id=tm.membership_id
                          WHERE tm.workspace_id=$1 AND tm.team_id=$2",
                     )
-                    .bind(self.workspace_id_for_runtime())
+                    .bind(self.workspace_id())
                     .bind(reference.id)
                     .fetch_all(&mut **transaction)
                     .await?;
@@ -557,7 +557,7 @@ impl AttricatRepository {
              CROSS JOIN LATERAL jsonb_each(COALESCE(e.projections -> 'preview', '{}'::jsonb)) AS preview(context_code, values)
              WHERE e.workspace_id=$1 AND e.id=$2 AND jsonb_typeof(preview.values -> a.code) = 'string'",
         )
-        .bind(self.workspace_id_for_runtime())
+        .bind(self.workspace_id())
         .bind(record)
         .fetch_all(&mut **transaction)
         .await?;
@@ -581,7 +581,7 @@ impl AttricatRepository {
                  UNION SELECT c.author_user_id FROM record_comments c JOIN users u ON u.id=c.author_user_id
                  WHERE c.workspace_id=$1 AND c.record_id=$3 AND u.kind='person'",
             )
-            .bind(self.workspace_id_for_runtime())
+            .bind(self.workspace_id())
             .bind(ids(PrincipalKind::Team))
             .bind(record)
             .fetch_all(&mut **transaction)
@@ -689,7 +689,7 @@ impl AttricatRepository {
                 "SELECT r.initiated_by_user_id,r.conversation_id,c.title,r.origin FROM agent_runs r
                  JOIN conversations c ON c.id=r.conversation_id WHERE r.workspace_id=$1 AND r.id=$2",
             )
-            .bind(self.workspace_id_for_runtime())
+            .bind(self.workspace_id())
             .bind(run)
             .fetch_optional(&mut **transaction)
             .await?

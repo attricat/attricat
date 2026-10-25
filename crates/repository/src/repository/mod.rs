@@ -769,9 +769,8 @@ impl AttricatRepository {
     #[cfg(test)]
     const DEFAULT_WORKSPACE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000002);
 
-    /// Returns the workspace carried by a task/runtime repository.
-    /// Runtime catalog work must never fall back to the bootstrap workspace.
-    pub fn workspace_id_for_runtime(&self) -> Uuid {
+    /// The workspace this repository is scoped to.
+    pub fn workspace_id(&self) -> Uuid {
         self.workspace_id.0
     }
 
