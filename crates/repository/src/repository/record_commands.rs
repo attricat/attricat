@@ -943,18 +943,7 @@ impl AttricatRepository {
     /// Replaces (`replace`) or removes relationship targets, failing with
     /// [`RepositoryError::StaleRecord`] when `expected_updated_at` is set and
     /// no longer current.
-    pub async fn mutate_relationships_checked(
-        &self,
-        record_id: Uuid,
-        input: RelationshipMutation,
-        replace: bool,
-        expected_updated_at: Option<DateTime<Utc>>,
-    ) -> Result<Vec<AttributeValue>, RepositoryError> {
-        self.mutate_relationships(record_id, input, replace, expected_updated_at)
-            .await
-    }
-
-    async fn mutate_relationships(
+    pub async fn mutate_relationships(
         &self,
         record_id: Uuid,
         input: RelationshipMutation,
@@ -1322,19 +1311,10 @@ impl AttricatRepository {
         .bind(attribute_id)
         .bind(context_id)
         .bind(target_record_id);
-        let query = match native {
-            Some(native) => native.bind(query),
-            None => query
-                .bind(Option::<String>::None)
-                .bind(Option::<Decimal>::None)
-                .bind(Option::<i64>::None)
-                .bind(Option::<bool>::None)
-                .bind(Option::<NaiveDate>::None)
-                .bind(Option::<DateTime<Utc>>::None)
-                .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None)
-                .bind(Option::<Value>::None),
-        };
+        let query = native
+            .map(NativeValue::into_columns)
+            .unwrap_or_default()
+            .bind(query);
         Ok(query.fetch_one(&mut **transaction).await?.into_domain())
     }
 

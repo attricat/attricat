@@ -1078,7 +1078,7 @@ impl AttricatRepository {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub async fn search_result_versions(
+    async fn search_result_versions(
         &self,
         blueprint_id: Uuid,
         blueprint_version: Option<i64>,
@@ -1261,7 +1261,7 @@ impl AttricatRepository {
                 )
                 .await;
         }
-        let column = native_sort_column(&sort.value_type)?;
+        let (column, column_type) = native_sort_column(&sort.value_type)?;
         let comparison = if sort.descending { "<" } else { ">" };
         let direction = if sort.descending { "DESC" } else { "ASC" };
         let null_order = if sort.descending { "LAST" } else { "FIRST" };
@@ -1314,7 +1314,7 @@ impl AttricatRepository {
                 ORDER BY sort_value.{column} {direction} NULLS {null_order}, e.id ASC
                 LIMIT $12"#,
             column = column,
-            column_type = native_sort_cast(&sort.value_type)?,
+            column_type = column_type,
             nulls_first = nulls_first,
             null_order = null_order,
         );
@@ -1469,8 +1469,7 @@ impl AttricatRepository {
         cursor_target_id: Option<Uuid>,
         cursor_id: Option<Uuid>,
     ) -> Result<(Vec<RecordPreview>, Option<String>), RepositoryError> {
-        let column = native_sort_column(&sort.value_type)?;
-        let column_type = native_sort_cast(&sort.value_type)?;
+        let (column, column_type) = native_sort_column(&sort.value_type)?;
         let comparison = if sort.descending { "<" } else { ">" };
         let direction = if sort.descending { "DESC" } else { "ASC" };
         let workspace_id = self.workspace_id.0;
@@ -3604,31 +3603,20 @@ fn relationship_sort_forward_joins(depth: usize) -> Result<String, RepositoryErr
     Ok(sql)
 }
 
-fn native_sort_column(value_type: &str) -> Result<&'static str, RepositoryError> {
+/// The `attribute_values` column a sortable value type is stored in, and the
+/// SQL type its cursor value is cast to.
+fn native_sort_column(value_type: &str) -> Result<(&'static str, &'static str), RepositoryError> {
     match value_type {
-        "string" => Ok("value_text"),
-        "number" => Ok("value_number"),
-        "integer" => Ok("value_integer"),
-        "boolean" => Ok("value_boolean"),
-        "date" => Ok("value_date"),
-        "datetime" => Ok("value_datetime"),
-        "time" => Ok("value_time"),
+        "string" => Ok(("value_text", "text")),
+        "number" => Ok(("value_number", "numeric")),
+        "integer" => Ok(("value_integer", "bigint")),
+        "boolean" => Ok(("value_boolean", "boolean")),
+        "date" => Ok(("value_date", "date")),
+        "datetime" => Ok(("value_datetime", "timestamptz")),
+        "time" => Ok(("value_time", "time")),
         _ => Err(RepositoryError::InvalidBlueprintDefinition(format!(
             "{value_type} is not sortable"
         ))),
-    }
-}
-
-fn native_sort_cast(value_type: &str) -> Result<&'static str, RepositoryError> {
-    match value_type {
-        "string" => Ok("text"),
-        "number" => Ok("numeric"),
-        "integer" => Ok("bigint"),
-        "boolean" => Ok("boolean"),
-        "date" => Ok("date"),
-        "datetime" => Ok("timestamptz"),
-        "time" => Ok("time"),
-        _ => native_sort_column(value_type).map(|_| unreachable!()),
     }
 }
 

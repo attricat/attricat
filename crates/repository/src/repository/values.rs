@@ -145,6 +145,28 @@ pub(super) struct NativeColumns {
     pub json: Option<Value>,
 }
 
+impl NativeColumns {
+    /// Binds the nine native value columns, in table order.
+    pub(super) fn bind<'q, O>(
+        self,
+        query: sqlx::query::QueryAs<'q, Postgres, O, sqlx::postgres::PgArguments>,
+    ) -> sqlx::query::QueryAs<'q, Postgres, O, sqlx::postgres::PgArguments>
+    where
+        O: Send + Unpin,
+    {
+        query
+            .bind(self.text)
+            .bind(self.number)
+            .bind(self.integer)
+            .bind(self.boolean)
+            .bind(self.date)
+            .bind(self.datetime)
+            .bind(self.time)
+            .bind(self.time_zone)
+            .bind(self.json)
+    }
+}
+
 impl NativeValue {
     pub(super) fn into_columns(self) -> NativeColumns {
         let mut columns = NativeColumns::default();
@@ -220,97 +242,6 @@ impl NativeValue {
                 serde_json::json!({ "time": time.to_string(), "time_zone": time_zone })
             }
             Self::Json(value) => value.clone(),
-        }
-    }
-
-    pub(super) fn bind<'q, O>(
-        self,
-        query: sqlx::query::QueryAs<'q, Postgres, O, sqlx::postgres::PgArguments>,
-    ) -> sqlx::query::QueryAs<'q, Postgres, O, sqlx::postgres::PgArguments>
-    where
-        O: Send + Unpin,
-    {
-        match self {
-            Self::Text(value) => query
-                .bind(Some(value))
-                .bind(Option::<Decimal>::None)
-                .bind(Option::<i64>::None)
-                .bind(Option::<bool>::None)
-                .bind(Option::<NaiveDate>::None)
-                .bind(Option::<DateTime<Utc>>::None)
-                .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None)
-                .bind(Option::<Value>::None),
-            Self::Number(value) => query
-                .bind(Option::<String>::None)
-                .bind(Some(value))
-                .bind(Option::<i64>::None)
-                .bind(Option::<bool>::None)
-                .bind(Option::<NaiveDate>::None)
-                .bind(Option::<DateTime<Utc>>::None)
-                .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None)
-                .bind(Option::<Value>::None),
-            Self::Integer(value) => query
-                .bind(Option::<String>::None)
-                .bind(Option::<Decimal>::None)
-                .bind(Some(value))
-                .bind(Option::<bool>::None)
-                .bind(Option::<NaiveDate>::None)
-                .bind(Option::<DateTime<Utc>>::None)
-                .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None)
-                .bind(Option::<Value>::None),
-            Self::Boolean(value) => query
-                .bind(Option::<String>::None)
-                .bind(Option::<Decimal>::None)
-                .bind(Option::<i64>::None)
-                .bind(Some(value))
-                .bind(Option::<NaiveDate>::None)
-                .bind(Option::<DateTime<Utc>>::None)
-                .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None)
-                .bind(Option::<Value>::None),
-            Self::Date(value) => query
-                .bind(Option::<String>::None)
-                .bind(Option::<Decimal>::None)
-                .bind(Option::<i64>::None)
-                .bind(Option::<bool>::None)
-                .bind(Some(value))
-                .bind(Option::<DateTime<Utc>>::None)
-                .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None)
-                .bind(Option::<Value>::None),
-            Self::Datetime(value) => query
-                .bind(Option::<String>::None)
-                .bind(Option::<Decimal>::None)
-                .bind(Option::<i64>::None)
-                .bind(Option::<bool>::None)
-                .bind(Option::<NaiveDate>::None)
-                .bind(Some(value))
-                .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None)
-                .bind(Option::<Value>::None),
-            Self::Time(time, time_zone) => query
-                .bind(Option::<String>::None)
-                .bind(Option::<Decimal>::None)
-                .bind(Option::<i64>::None)
-                .bind(Option::<bool>::None)
-                .bind(Option::<NaiveDate>::None)
-                .bind(Option::<DateTime<Utc>>::None)
-                .bind(Some(time))
-                .bind(Some(time_zone))
-                .bind(Option::<Value>::None),
-            Self::Json(value) => query
-                .bind(Option::<String>::None)
-                .bind(Option::<Decimal>::None)
-                .bind(Option::<i64>::None)
-                .bind(Option::<bool>::None)
-                .bind(Option::<NaiveDate>::None)
-                .bind(Option::<DateTime<Utc>>::None)
-                .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None)
-                .bind(Some(value)),
         }
     }
 }

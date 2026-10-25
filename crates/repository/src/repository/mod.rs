@@ -38,8 +38,7 @@ use std::{collections::HashSet, sync::Arc};
 use attricat_cache::{CacheKey, Policy};
 
 use attricat_validation::is_valid_code;
-use chrono::{DateTime, NaiveDate, NaiveTime};
-use rust_decimal::Decimal;
+use chrono::DateTime;
 use serde_json::{Map, Value};
 use sqlx::{PgPool, Postgres, Transaction};
 use thiserror::Error;

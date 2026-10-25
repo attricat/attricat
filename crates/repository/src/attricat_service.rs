@@ -300,7 +300,7 @@ impl<'a> AttricatMutationService<'a> {
         expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         self.repository
-            .mutate_relationships_checked(record_id, input, replace, expected_updated_at)
+            .mutate_relationships(record_id, input, replace, expected_updated_at)
             .await
     }
 
