@@ -1,9 +1,5 @@
 use std::str::FromStr;
 
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use rand::{RngCore, rngs::OsRng};
-use secrecy::{ExposeSecret, SecretString};
-use sha2::{Digest as _, Sha256};
 use thiserror::Error;
 
 /// A stable, persisted reason for a one-time account lifecycle action.
@@ -43,61 +39,6 @@ pub enum LifecycleActionPurposeError {
     UnknownPurpose,
 }
 
-/// Random bytes in an action-token secret, before encoding.
-const ACTION_TOKEN_SECRET_BYTES: usize = 32;
-
-/// A randomly generated, opaque 32-byte action-token secret.
-///
-/// The value is encoded only for delivery to the action recipient. It does not
-/// implement `Debug`, `Display`, or serialization traits.
-pub struct ActionTokenSecret(SecretString);
-
-impl ActionTokenSecret {
-    pub fn generate() -> Self {
-        let mut bytes = [0_u8; ACTION_TOKEN_SECRET_BYTES];
-        OsRng.fill_bytes(&mut bytes);
-        Self(SecretString::from(URL_SAFE_NO_PAD.encode(bytes)))
-    }
-
-    /// Reconstitutes a delivered token after validating its exact opaque form.
-    pub fn from_delivery_value(value: impl Into<String>) -> Result<Self, ActionTokenSecretError> {
-        let value = value.into();
-        let decoded = URL_SAFE_NO_PAD
-            .decode(&value)
-            .map_err(|_| ActionTokenSecretError::InvalidToken)?;
-        if decoded.len() != ACTION_TOKEN_SECRET_BYTES || URL_SAFE_NO_PAD.encode(&decoded) != value {
-            return Err(ActionTokenSecretError::InvalidToken);
-        }
-        Ok(Self(SecretString::from(value)))
-    }
-
-    /// Explicitly exposes the token for the delivery link.
-    pub fn expose_for_delivery(&self) -> &str {
-        self.0.expose_secret()
-    }
-
-    pub fn digest(&self) -> ActionTokenDigest {
-        ActionTokenDigest(Sha256::digest(self.0.expose_secret().as_bytes()).into())
-    }
-}
-
-#[derive(Debug, Error, Eq, PartialEq)]
-pub enum ActionTokenSecretError {
-    #[error("action token is invalid")]
-    InvalidToken,
-}
-
-/// The SHA-256 digest that is safe to persist instead of an action-token
-/// secret. This type also intentionally has no formatting implementation.
-#[derive(Clone, Eq, PartialEq)]
-pub struct ActionTokenDigest([u8; 32]);
-
-impl AsRef<[u8]> for ActionTokenDigest {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,22 +73,5 @@ mod tests {
             "unknown".parse::<LifecycleActionPurpose>(),
             Err(LifecycleActionPurposeError::UnknownPurpose)
         );
-    }
-
-    #[test]
-    fn action_token_persists_a_digest_not_the_delivery_secret() {
-        let secret = ActionTokenSecret::generate();
-
-        assert_ne!(
-            secret.expose_for_delivery().as_bytes(),
-            secret.digest().as_ref()
-        );
-        assert!(
-            ActionTokenSecret::from_delivery_value(secret.expose_for_delivery())
-                .unwrap()
-                .digest()
-                == secret.digest()
-        );
-        assert!(ActionTokenSecret::from_delivery_value("not-a-token").is_err());
     }
 }
