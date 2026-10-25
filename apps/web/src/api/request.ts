@@ -2,7 +2,7 @@ import { z } from 'zod';
 import i18n from 'i18next';
 import { apiFetch, csrfToken } from './fetch';
 
-export const apiErrorSchema = z.object({
+const apiErrorSchema = z.object({
   error: z.object({
     code: z.string(),
     message: z.string(),
@@ -30,7 +30,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-export const apiRequestError = (
+const apiRequestError = (
   status: number,
   body: unknown,
   fallbackMessage = i18n.t('errors.requestFailed', { status }),
@@ -46,7 +46,7 @@ export const apiRequestError = (
   );
 };
 
-export const responseError = async (response: Response) => {
+const responseError = async (response: Response) => {
   const body =
     typeof response.json === 'function'
       ? await response.json().catch(() => undefined)

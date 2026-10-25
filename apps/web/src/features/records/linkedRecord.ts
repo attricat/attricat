@@ -3,7 +3,7 @@ import type { Attribute } from './api';
 import { attributeCardinalities } from './constants';
 import { attributeValueTypes } from './valueTypes';
 
-export type LinkedRecord = { id: string; display?: string };
+type LinkedRecord = { id: string; display?: string };
 
 /**
  * The one record a single relationship links to, or nothing for a list, an

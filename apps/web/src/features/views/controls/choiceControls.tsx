@@ -19,7 +19,7 @@ import type { ValueEditorProps } from '../components/componentTypes';
 import { FieldHint } from '../../../components/FieldHint';
 
 /** Choices at most this many are radio buttons; longer lists are searched. */
-export const RADIO_CHOICE_LIMIT = 5;
+const RADIO_CHOICE_LIMIT = 5;
 
 /**
  * Names a group of choice controls the way a text field names its input, with

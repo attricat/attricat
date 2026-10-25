@@ -8,7 +8,7 @@ import {
   refreshRecordDetailSchema,
 } from './attricatEvents';
 
-export type AttricatEventBridgeOptions = {
+type AttricatEventBridgeOptions = {
   host: EventTarget;
   onRefreshRecord: (detail: RefreshRecordDetail) => void;
   onNavigate: (detail: NavigateDetail) => void;

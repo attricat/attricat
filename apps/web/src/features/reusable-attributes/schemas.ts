@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const reusableAttributeValueTypeSchema = z.enum([
+const reusableAttributeValueTypeSchema = z.enum([
   'string',
   'number',
   'integer',

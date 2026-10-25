@@ -378,7 +378,7 @@ export const recordPublicationReadinessSchema = z.object({
   ready: z.boolean(),
   violations: z.array(checkViolationSchema),
 });
-export const recordIdentitySchema = z.object({
+const recordIdentitySchema = z.object({
   id: uuidSchema,
   blueprint_id: uuidSchema,
   blueprint_version: z.number().int().positive(),
@@ -561,7 +561,7 @@ export const recordMigrationPreviewSchema = z.object({
   status: z.enum(['ready', 'needs_input', 'blocked']),
   issues: z.array(migrationIssueSchema),
 });
-export const attributeFilterOperatorSchema = z.enum([
+const attributeFilterOperatorSchema = z.enum([
   'eq',
   'contains',
   'starts_with',
@@ -749,7 +749,6 @@ export type RecordAuditChange = z.infer<typeof recordAuditChangeSchema>;
 export type RecordItem = z.infer<typeof recordItemSchema>;
 export type RecordSearchFilter = z.infer<typeof recordSearchFilterSchema>;
 export type RecordSearchResponse = z.infer<typeof recordSearchResponseSchema>;
-export type RecordSearchPage = z.infer<typeof recordSearchPageSchema>;
 export type RecordFormResponse = z.infer<typeof recordFormResponseSchema>;
 export type ResolvedRecordPreview = z.infer<typeof resolvedRecordPreviewSchema>;
 export type RecordMigrationPreview = z.infer<

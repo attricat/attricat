@@ -94,7 +94,7 @@ export type RecordFormHandle = {
 };
 
 /** Identifies where unsaved field values are kept across refreshes. */
-export type RecordFormDraft = {
+type RecordFormDraft = {
   editor: DraftEditor;
   resource: readonly (string | number)[];
   /** Marker for the loaded source beyond the initial field values. */

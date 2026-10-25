@@ -26,7 +26,7 @@ type OnboardingStep = {
     | '/manage/extensions';
 };
 
-export const onboardingSteps: readonly OnboardingStep[] = [
+const onboardingSteps: readonly OnboardingStep[] = [
   {
     actionKey: 'onboarding.steps.blueprint.action',
     capability: 'blueprints_write',
@@ -64,7 +64,7 @@ export const onboardingSteps: readonly OnboardingStep[] = [
   },
 ];
 
-export const canCreateBlueprints = (capabilities?: OnboardingCapabilities) =>
+const canCreateBlueprints = (capabilities?: OnboardingCapabilities) =>
   capabilities?.blueprints_write === true;
 
 export const getVisibleOnboardingSteps = (

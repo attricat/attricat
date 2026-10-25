@@ -17,7 +17,7 @@ type ManifestPermissions = {
 export const grantKey = (kind: GrantKind, id: string) => `${kind}:${id}`;
 
 /** Lists every distinct grant the manifest requests, required and optional alike. */
-export const requestedGrants = (manifest: unknown): RequestedGrant[] => {
+const requestedGrants = (manifest: unknown): RequestedGrant[] => {
   const value = manifest as ManifestPermissions;
   const requested: RequestedGrant[] = [
     ...[

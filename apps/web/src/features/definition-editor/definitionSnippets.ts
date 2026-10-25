@@ -1,7 +1,7 @@
 import { definitionKinds, type DefinitionKind } from './constants';
 import { scanToml, type TomlPath } from './tomlOutline';
 
-export const snippetPlacements = {
+const snippetPlacements = {
   /** A top-level key, inserted before the first table header. */
   key: 'key',
   /** A table or array-of-tables, appended to the end of the definition. */

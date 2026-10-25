@@ -5,7 +5,7 @@ import { isEmailAddress } from '../views/controls/email';
 import type { JsonSchema } from './schemas';
 
 /** Describes a value schema's `pattern` in words, for hints and errors. */
-export const PATTERN_HINT_SCHEMA_KEY = 'x-attricat-pattern-hint';
+const PATTERN_HINT_SCHEMA_KEY = 'x-attricat-pattern-hint';
 
 // Verbose errors carry the subschema that failed, so a pattern's hint is
 // found even inside `anyOf` or `allOf`.
@@ -33,7 +33,7 @@ export const jsonSchemaValidationErrors = (
   }
 };
 
-export const jsonSchemaValidationMessage = (
+const jsonSchemaValidationMessage = (
   value: unknown,
   schema: JsonSchema | null | undefined,
 ): string | undefined => {

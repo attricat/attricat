@@ -3,7 +3,7 @@ import { navigationRoutes } from './navigation';
 import { isWithinRoute } from './sideNavigationLayout';
 
 const compactNavigationPanels = ['explore', 'extensions', 'manage'] as const;
-export type CompactNavigationPanel = (typeof compactNavigationPanels)[number];
+type CompactNavigationPanel = (typeof compactNavigationPanels)[number];
 
 // The panel presenting the section a route belongs to, if it has one.
 export const compactNavigationPanelForRoute = (

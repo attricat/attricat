@@ -41,8 +41,6 @@ import { errorMessage } from '../../api/errors';
 
 const RouterTab = createLink(Tab);
 
-export type { RuleInspectionSection } from './constants';
-
 export const RuleInspectionPage = ({
   section,
 }: {

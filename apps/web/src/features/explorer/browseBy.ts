@@ -34,9 +34,7 @@ export type BrowseByField = {
 };
 
 /** Looks up a loaded blueprint by code. */
-export type BlueprintLookup = (
-  code: string,
-) => BlueprintWithAttributes | undefined;
+type BlueprintLookup = (code: string) => BlueprintWithAttributes | undefined;
 
 const hierarchyPreference = { tree: 0, acyclic: 1 } as const;
 

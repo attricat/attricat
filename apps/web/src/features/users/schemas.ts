@@ -11,4 +11,3 @@ export const userProfileSchema = z.object({
     z.object({ id: z.uuid(), code: z.string(), name: z.string() }),
   ),
 });
-export type UserProfile = z.infer<typeof userProfileSchema>;

@@ -16,7 +16,7 @@ export type InstantStyle = keyof typeof instantStyles;
 
 export type InstantValue = string | number | Date;
 
-export type InstantFormatOptions = {
+type InstantFormatOptions = {
   locale: string;
   timeZone: string;
   style?: InstantStyle;
@@ -71,7 +71,7 @@ export const isValidTimeZone = (timeZone: string) => {
 };
 
 /** Canonical spelling so aliases such as `Etc/UTC` and `UTC` compare equal. */
-export const canonicalTimeZone = (timeZone: string) =>
+const canonicalTimeZone = (timeZone: string) =>
   formatter('en', timeZone, 'canonical', {}).resolvedOptions().timeZone;
 
 export const browserTimeZone = () =>

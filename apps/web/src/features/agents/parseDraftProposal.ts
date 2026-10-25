@@ -1,4 +1,4 @@
-export type ParsedDraftProposal = {
+type ParsedDraftProposal = {
   fields: Record<string, string>;
   explanation: string;
   baseValues?: Record<string, string | null>;

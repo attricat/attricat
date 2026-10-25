@@ -30,14 +30,13 @@ export const extensionRunSchema = z.object({
 });
 export type ExtensionRun = z.infer<typeof extensionRunSchema>;
 
-export const extensionRunArtifactSchema = z.object({
+const extensionRunArtifactSchema = z.object({
   id: z.uuid(),
   name: z.string().nullable(),
   media_type: z.string(),
   content_length: z.number().int().nonnegative(),
   completed_at: z.string().nullable(),
 });
-export type ExtensionRunArtifact = z.infer<typeof extensionRunArtifactSchema>;
 
 export const extensionRunDetailSchema = extensionRunSchema.extend({
   artifacts: z.array(extensionRunArtifactSchema),

@@ -10,7 +10,7 @@ import { MessageInputBox } from './MessageInputBox';
 import { useMessageAttachments } from './useMessageAttachments';
 import { errorMessage } from '../../api/errors';
 
-export type ConversationComposerProps = {
+type ConversationComposerProps = {
   conversationId: string;
   onSendingChange: (isSending: boolean) => void;
   onSent: () => void;

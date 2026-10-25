@@ -165,7 +165,7 @@ export const typeLabel = (root: SchemaNode, node: SchemaNode): string => {
   return type ?? 'value';
 };
 
-export type ResolvedSchema = {
+type ResolvedSchema = {
   node: SchemaNode;
   /** Candidate variants when a tagged union has no (valid) `type` yet. */
   variants?: SchemaNode[];

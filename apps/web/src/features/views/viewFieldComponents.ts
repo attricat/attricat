@@ -24,7 +24,7 @@ const viewNodes = (view?: ViewDefinition | ViewNode) => {
 };
 
 /** Retain configured field editors even when the form shows all attributes. */
-export const viewFieldComponents = (view?: ViewDefinition) => {
+const viewFieldComponents = (view?: ViewDefinition) => {
   const result = new Map<string, ComponentReference>();
   for (const node of viewNodes(view))
     if (node.type === 'field' && node.component)

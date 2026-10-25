@@ -53,7 +53,7 @@ const sessionSchema = z.object({
 
 export type Session = z.infer<typeof sessionSchema>;
 
-export type UserPreferences = Pick<Session, 'time_zone'>;
+type UserPreferences = Pick<Session, 'time_zone'>;
 
 const discoverySchema = z.object({
   login_identifier: z.string(),

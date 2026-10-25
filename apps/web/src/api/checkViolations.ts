@@ -18,7 +18,7 @@ export const checkViolationSchema = z.object({
     .optional(),
   evidence: z.unknown().optional(),
 });
-export const checkViolationDetailsSchema = z.object({
+const checkViolationDetailsSchema = z.object({
   violations: z.array(checkViolationSchema),
   context: z.string().optional(),
 });
@@ -34,7 +34,7 @@ export const checkViolationErrorCodes = {
 
 const violationCodes = new Set<string>(Object.values(checkViolationErrorCodes));
 
-export type CheckViolationError = {
+type CheckViolationError = {
   message: string;
   violations: CheckViolation[];
   /** Publication channel code for `publication_checks_failed`. */

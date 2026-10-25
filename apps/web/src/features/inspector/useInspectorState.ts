@@ -6,7 +6,7 @@ import {
   type InspectorPaneId,
 } from './constants';
 
-export type InspectorState = {
+type InspectorState = {
   activePane: InspectorPaneId;
   expanded: boolean;
 };

@@ -16,8 +16,6 @@ export const FILE_STATUS_VALUES = [
   fileStatuses.deleted,
 ] as const;
 
-export type FileStatus = (typeof FILE_STATUS_VALUES)[number];
-
 /** Statuses after which a file's thumbnail may still become available. */
 export const THUMBNAIL_POLLING_STATUSES: ReadonlySet<string> = new Set([
   fileStatuses.uploading,

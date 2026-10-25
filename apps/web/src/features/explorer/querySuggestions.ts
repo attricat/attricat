@@ -15,7 +15,7 @@ import {
 } from './queryLanguage';
 
 /** Keeps the dropdown scannable; typing narrows longer lists. */
-export const maximumQuerySuggestions = 50;
+const maximumQuerySuggestions = 50;
 
 const booleanValues = ['true', 'false'];
 
@@ -46,7 +46,7 @@ export type QuerySuggestion =
   | { kind: 'ids'; code: string; insert: string }
   | { kind: 'value'; code: string; insert: string };
 
-export type QuerySuggestionResult = {
+type QuerySuggestionResult = {
   context: QueryCursorContext;
   suggestions: QuerySuggestion[];
   /** Relationship targets are still loading for this context. */

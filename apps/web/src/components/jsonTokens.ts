@@ -17,7 +17,7 @@ export const jsonBrackets = (value: JsonContainer) =>
   Array.isArray(value) ? (['[', ']'] as const) : (['{', '}'] as const);
 
 /** JSON text of a scalar; values JSON cannot hold fall back to `String`. */
-export const jsonScalarText = (value: unknown) =>
+const jsonScalarText = (value: unknown) =>
   JSON.stringify(value) ?? String(value);
 
 /** Ends a truncated token list. */

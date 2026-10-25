@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const notificationSubjectSchema = z.object({
+const notificationSubjectSchema = z.object({
   kind: z.enum(['record', 'agent_conversation']),
   id: z.uuid(),
 });
@@ -35,5 +35,4 @@ export const markAllReadResultSchema = z.object({
 });
 
 export type Notification = z.infer<typeof notificationSchema>;
-export type NotificationPage = z.infer<typeof notificationPageSchema>;
 export type NotificationCursor = { before_time: string; before_id: string };

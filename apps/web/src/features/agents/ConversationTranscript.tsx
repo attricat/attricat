@@ -9,7 +9,7 @@ import type { AgentRun, AgentToolCall, ConversationMessage } from './schemas';
 import { ThinkingIndicator } from './ThinkingIndicator';
 import { TranscriptMessage } from './TranscriptMessage';
 
-export type ConversationTranscriptProps = {
+type ConversationTranscriptProps = {
   approvals: AgentToolCall[] | undefined;
   bulkProgress?: BulkProgress[];
   isDecidingApproval: boolean;

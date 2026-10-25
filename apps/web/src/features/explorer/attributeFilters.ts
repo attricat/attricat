@@ -25,7 +25,7 @@ export const filterableValueTypes = [
 ] as const;
 
 /** File values can only be filtered by whether any file is attached. */
-export const presenceOnlyValueTypes = ['file'] as const;
+const presenceOnlyValueTypes = ['file'] as const;
 
 export const isFilterableAttribute = (attribute: Attribute) =>
   [...filterableValueTypes, ...presenceOnlyValueTypes].some(

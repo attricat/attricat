@@ -82,7 +82,7 @@ export const relationshipFiltersFromSearch = (
       : [],
   );
 
-export type RelationshipTreeSelection = {
+type RelationshipTreeSelection = {
   field: string;
   hierarchyField: string;
   ownTree?: true;

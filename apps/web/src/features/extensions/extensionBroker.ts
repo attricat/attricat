@@ -110,9 +110,9 @@ export const validateStorageRequest = (payload: unknown) => {
   return request;
 };
 
-export type BrokerRequest = { method: unknown; payload: unknown };
+type BrokerRequest = { method: unknown; payload: unknown };
 
-export type BrokerDependencies = {
+type BrokerDependencies = {
   contribution: ExtensionContribution;
   /** The context the frame was started with; it scopes blueprint reads. */
   initialContext: FrameContext;

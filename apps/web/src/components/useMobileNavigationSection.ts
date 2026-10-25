@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { navigationRoutes } from './navigation';
 import { isWithinRoute } from './sideNavigationLayout';
 
-export type MobileNavigationSection =
-  'primary' | 'explore' | 'extensions' | 'manage';
+type MobileNavigationSection = 'primary' | 'explore' | 'extensions' | 'manage';
 
 export const mobileSectionTitleKeys = {
   explore: 'navigation.recordExplorer',

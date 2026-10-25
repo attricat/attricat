@@ -1,6 +1,5 @@
 import { Chip } from '@mui/material';
 import {
-  CircleAlertIcon,
   CircleCheckIcon,
   CircleHelpIcon,
   CircleXIcon,
@@ -40,6 +39,3 @@ export const ExportStatusChip = ({
     />
   );
 };
-
-/** Shown where a status chip would be when the status is unknown. */
-export const ExportStatusUnknownIcon = CircleAlertIcon;

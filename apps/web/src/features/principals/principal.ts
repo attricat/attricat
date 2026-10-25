@@ -39,7 +39,7 @@ export const principalConfiguration = (
   return configuration;
 };
 
-export type PrincipalReference = { kind: PrincipalKind; id: string };
+type PrincipalReference = { kind: PrincipalKind; id: string };
 
 /** Parses the stored form, `user:<uuid>` or `team:<uuid>`. */
 export const parsePrincipalReference = (
@@ -52,13 +52,12 @@ export const parsePrincipalReference = (
     : undefined;
 };
 
-export const principalReference = (kind: PrincipalKind, id: string) =>
-  `${kind}:${id}`;
+const principalReference = (kind: PrincipalKind, id: string) => `${kind}:${id}`;
 
 export const userLabel = (user: DirectoryUser) =>
   user.display_name?.trim() || user.email;
 
-export type ResolvedPrincipal =
+type ResolvedPrincipal =
   | { kind: 'user'; user: DirectoryUser; label: string }
   | { kind: 'team'; team: DirectoryTeam; label: string };
 
@@ -81,7 +80,7 @@ export const resolvePrincipal = (
 export const isAssignable = (principal: ResolvedPrincipal) =>
   principal.kind === 'user' ? principal.user.active : !principal.team.deleted;
 
-export type PrincipalOption = { value: string; principal: ResolvedPrincipal };
+type PrincipalOption = { value: string; principal: ResolvedPrincipal };
 
 /**
  * Every directory entry of the configured kinds, including former members and

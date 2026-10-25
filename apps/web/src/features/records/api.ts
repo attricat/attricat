@@ -44,7 +44,6 @@ export type {
   Attribute,
   Blueprint,
   BlueprintWithAttributes,
-  CheckViolation,
   ComponentReference,
   AttricatRecord,
   RecordApproval,
@@ -56,9 +55,7 @@ export type {
   RecordPublicationStatus,
   FormAttributeValue,
   RecordItem,
-  RecordSearchFilter,
   RecordSearchResponse,
-  RecordSearchPage,
   JsonSchema,
   NewAttributeValue,
   NewFileAttributeValue,
@@ -78,7 +75,7 @@ export { ApiRequestError } from '../../api/request';
 const recordPath = (id: string) =>
   `/api/v1/records/${encodeURIComponent(uuidSchema.parse(id))}`;
 
-export type SearchRecordsOptions = {
+type SearchRecordsOptions = {
   blueprint: string;
   /** Context whose values filters, sorting and table values resolve. */
   contextCode?: string;

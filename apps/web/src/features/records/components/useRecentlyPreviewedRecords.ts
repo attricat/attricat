@@ -17,7 +17,7 @@ const createPickerToken = () => {
   return `picker-${Date.now()}-${pickerTokenSequence}`;
 };
 
-export const relationshipPickerSearchParameter = 'relationshipPicker';
+const relationshipPickerSearchParameter = 'relationshipPicker';
 export const relationshipPickerMessageType =
   'attricat.relationship-picker.select';
 

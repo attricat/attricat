@@ -16,7 +16,7 @@ const changeHintsSchema = z
   .max(recordChangeHints.length);
 
 /** Host-to-component details. They deliberately exclude outbox envelopes and payloads. */
-export const recordUpdatedDetailSchema = z
+const recordUpdatedDetailSchema = z
   .object({
     record_id: z.uuid(),
     change_hints: changeHintsSchema,
@@ -25,7 +25,7 @@ export const recordUpdatedDetailSchema = z
   .strict();
 
 /** Host-to-component details. Components re-fetch any authorized context data. */
-export const contextChangedDetailSchema = z
+const contextChangedDetailSchema = z
   .object({
     context_id: z.uuid(),
     correlation_id: correlationIdSchema,
@@ -60,8 +60,8 @@ export const notifyDetailSchema = z
   })
   .strict();
 
-export type RecordUpdatedDetail = z.infer<typeof recordUpdatedDetailSchema>;
-export type ContextChangedDetail = z.infer<typeof contextChangedDetailSchema>;
+type RecordUpdatedDetail = z.infer<typeof recordUpdatedDetailSchema>;
+type ContextChangedDetail = z.infer<typeof contextChangedDetailSchema>;
 export type RefreshRecordDetail = z.infer<typeof refreshRecordDetailSchema>;
 export type NavigateDetail = z.infer<typeof navigateDetailSchema>;
 export type NotifyDetail = z.infer<typeof notifyDetailSchema>;

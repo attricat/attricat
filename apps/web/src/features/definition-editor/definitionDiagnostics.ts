@@ -13,7 +13,7 @@ import {
 } from './definitionSchema';
 import { scanToml, type TextRange, type TomlPath } from './tomlOutline';
 
-export type DefinitionDiagnostic = {
+type DefinitionDiagnostic = {
   message: string;
   range: TextRange;
 };

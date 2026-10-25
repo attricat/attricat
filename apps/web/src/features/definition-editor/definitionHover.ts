@@ -8,7 +8,7 @@ import {
 } from './definitionSchema';
 import { scanToml, type TextRange } from './tomlOutline';
 
-export type DefinitionHover = { contents: string[]; range: TextRange };
+type DefinitionHover = { contents: string[]; range: TextRange };
 
 const contains = (range: TextRange, offset: number) =>
   offset >= range.start && offset <= range.end;

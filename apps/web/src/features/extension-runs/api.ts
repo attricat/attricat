@@ -7,7 +7,7 @@ import {
   startedExtensionRunSchema,
 } from './schemas';
 
-export type StartExtensionRunInput = {
+type StartExtensionRunInput = {
   release_id: string;
   operation_id: string;
   input: Record<string, unknown>;
@@ -24,7 +24,7 @@ export type StartExtensionRunInput = {
  * `own` limits a request to runs the signed-in user started, even for an
  * operator who may see every run. Extension frames always use it.
  */
-export type ExtensionRunScope = 'visible' | 'own';
+type ExtensionRunScope = 'visible' | 'own';
 
 const runPath = (runId: string) =>
   `${extensionRunsPath}/${encodeURIComponent(z.uuid().parse(runId))}`;

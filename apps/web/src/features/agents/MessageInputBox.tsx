@@ -16,7 +16,7 @@ import {
   progressSize,
 } from './constants';
 
-export type MessageInputBoxProps = {
+type MessageInputBoxProps = {
   content: string;
   files: File[];
   isPending: boolean;

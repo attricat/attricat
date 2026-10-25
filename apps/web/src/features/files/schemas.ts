@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { FILE_STATUS_VALUES } from './constants';
 
-export const fileVariantSchema = z.object({
+const fileVariantSchema = z.object({
   kind: z.string(),
   mime_type: z.string(),
   width: z.number().int().nullable(),
@@ -54,5 +54,3 @@ export const fileReferencesUpdateResultSchema = z.object({
 });
 
 export type FileMetadata = z.infer<typeof fileMetadataSchema>;
-export type FileUploadResult = z.infer<typeof fileUploadResultSchema>;
-export type StagedUploadResult = z.infer<typeof stagedUploadResultSchema>;

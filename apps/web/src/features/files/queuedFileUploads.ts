@@ -14,7 +14,7 @@ import { errorMessage } from '../../api/errors';
 /** Files chosen before their record exists, keyed by attribute code. */
 export type QueuedFiles = Readonly<Record<string, readonly PendingFile[]>>;
 
-export type QueuedFileUploads = {
+type QueuedFileUploads = {
   pending: QueuedFiles;
   update: (
     attributeCode: string,

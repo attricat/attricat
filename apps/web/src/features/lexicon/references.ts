@@ -2,10 +2,10 @@
 // shared cases in `contracts/lexicon-references.json`.
 
 export type LexiconReference = { key: string; context?: string };
-export type LexiconSegment = { literal: string } | LexiconReference;
-export type LexiconReferenceError =
+type LexiconSegment = { literal: string } | LexiconReference;
+type LexiconReferenceError =
   'unclosed' | 'empty_key' | 'empty_context' | 'multiple_contexts' | 'brace';
-export type LexiconParseResult =
+type LexiconParseResult =
   { segments: LexiconSegment[] } | { error: LexiconReferenceError };
 
 const open = '{{';

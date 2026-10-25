@@ -91,7 +91,7 @@ const panelOutlets = new Set<OutletName>([
   'export_mapping',
 ]);
 
-export const supportsOutlet = (
+const supportsOutlet = (
   contribution: ExtensionContribution,
   outlet: OutletName,
 ) =>
@@ -103,7 +103,7 @@ export const supportsOutlet = (
       contribution.kind === 'navigation' &&
       contribution.route !== null));
 
-export const hasValidContext = (
+const hasValidContext = (
   outlet: OutletName,
   context: OutletContext | undefined,
 ) => {

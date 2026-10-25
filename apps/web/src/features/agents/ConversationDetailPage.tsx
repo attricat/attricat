@@ -14,7 +14,7 @@ import { RenameConversationDialog } from './RenameConversationDialog';
 import { AgentIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 
-export type ConversationDetailPageProps = { conversationId: string };
+type ConversationDetailPageProps = { conversationId: string };
 
 export const ConversationDetailPage = ({
   conversationId,

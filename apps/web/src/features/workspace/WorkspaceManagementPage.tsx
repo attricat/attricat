@@ -15,7 +15,7 @@ import { WorkspaceRolesSection } from './WorkspaceRolesSection';
 import { WorkspaceTeamsSection } from './WorkspaceTeamsSection';
 import { errorMessage } from '../../api/errors';
 
-export type WorkspaceManagementSection =
+type WorkspaceManagementSection =
   'members' | 'teams' | 'roles' | 'invitations' | 'navigation' | 'agent';
 
 const sections: {

@@ -85,16 +85,13 @@ const roleInputSchema = z.object({
   permissions: permissionCodesSchema,
 });
 
-export type WorkspaceMember = z.infer<typeof memberSchema>;
 export type WorkspaceRole = z.infer<typeof roleSchema>;
-export type Permission = z.infer<typeof permissionSchema>;
-export type GrantTarget = z.infer<typeof grantTargetSchema>;
+type GrantTarget = z.infer<typeof grantTargetSchema>;
 export type ScopeType = z.infer<typeof scopeTypeSchema>;
-export type GrantInput = z.infer<typeof grantInputSchema>;
+type GrantInput = z.infer<typeof grantInputSchema>;
 export type ExploreNavigationEntry = z.infer<
   typeof exploreNavigationEntrySchema
 >;
-export type ExploreNavigationItem = z.infer<typeof exploreNavigationItemSchema>;
 
 export const selectedScopeTarget = (
   scopeType: ScopeType,
@@ -128,11 +125,6 @@ const json = (method: string, value: unknown): RequestInit => ({
 
 export const listMembers = () =>
   request('/api/workspace/members', z.array(memberSchema));
-export const setMemberState = (id: string, state: 'active' | 'inactive') =>
-  requestNoContent(
-    `/api/workspace/members/${uuid.parse(id)}`,
-    json('PUT', { state }),
-  );
 export const grantMemberRole = (memberId: string, input: GrantInput) =>
   request(
     `/api/workspace/members/${uuid.parse(memberId)}/grants`,
@@ -237,8 +229,6 @@ export const listAssignableRoles = () =>
   request('/api/workspace/assignable-roles', z.array(roleSchema));
 export const listPermissions = () =>
   request('/api/workspace/permissions', z.array(permissionSchema));
-export const listTokenPermissions = () =>
-  request('/api/workspace/token-permissions', z.array(permissionSchema));
 export const listGrantTargets = (scope: ScopeType) =>
   request(
     `/api/workspace/grant-targets/${scopeTypeSchema.parse(scope)}`,

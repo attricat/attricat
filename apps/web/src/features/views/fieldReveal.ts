@@ -10,7 +10,7 @@ import {
 import { focusControlIn } from '../../components/initialFocus';
 
 /** A request to show a field; each request has a new `sequence`. */
-export type FieldRevealRequest = { code: string; sequence: number };
+type FieldRevealRequest = { code: string; sequence: number };
 
 /** The field the user asked to see, so the tab or accordion holding it opens. */
 export const FieldRevealContext = createContext<FieldRevealRequest | null>(

@@ -12,7 +12,7 @@ import {
   type BlueprintWithAttributes,
 } from './schemas';
 
-export type { Attribute, Blueprint, BlueprintWithAttributes } from './schemas';
+export type { Blueprint, BlueprintWithAttributes } from './schemas';
 
 export const listBlueprints = (): Promise<Blueprint[]> =>
   request('/api/blueprints/catalogue', z.array(blueprintSchema));

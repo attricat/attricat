@@ -6,7 +6,7 @@ export type TimingPhase = {
   queryCount?: number;
 };
 
-export type TimingEntry = {
+type TimingEntry = {
   /** Unique per session, so entries recorded in the same millisecond differ. */
   id: number;
   phases: TimingPhase[];

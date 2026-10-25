@@ -265,5 +265,3 @@ export const registryDetailsSchema = z.object({
 export { detailSchema };
 export type ExtensionInstallation = z.infer<typeof installationSchema>;
 export type ExtensionDetail = z.infer<typeof detailSchema>;
-export type DiscoveredExtension = z.infer<typeof discoveredSchema>;
-export type RegistryDetails = z.infer<typeof registryDetailsSchema>;

@@ -10,14 +10,7 @@ import {
   type WorkspaceExtensionLayout,
 } from './schemas';
 
-export {
-  installationSchema,
-  type DiscoveredExtension,
-  type ExtensionDetail,
-  type ExtensionInstallation,
-  type RegistryDetails,
-  type WorkspaceExtensionLayout,
-} from './schemas';
+export type { ExtensionDetail, ExtensionInstallation } from './schemas';
 
 const body = (value: unknown, method = 'POST'): RequestInit => ({
   method,

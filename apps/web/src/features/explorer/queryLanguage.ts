@@ -9,13 +9,13 @@ export const queryWildcard = '*';
 export const maximumQueryRelationshipHops = 3;
 /** Path leaf matching records by ID: `@id:id-1,id-2` or `rel.@id:id-1`. */
 export const queryIdSelector = '@id';
-export const queryIdSeparator = ',';
+const queryIdSeparator = ',';
 /** Mirrors `MAX_SEARCH_IDS` in the API's record search repository. */
-export const maximumQueryIds = 100;
+const maximumQueryIds = 100;
 const recordIdPattern =
   /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
 
-export type QueryToken = { text: string; start: number; end: number };
+type QueryToken = { text: string; start: number; end: number };
 
 export type QuerySegmentKind =
   'field' | 'global' | 'punctuation' | 'value' | 'wildcard' | 'whitespace';
@@ -71,17 +71,17 @@ export const findAttribute = (
     (attribute) => sameCode(attribute.code, code) && predicate(attribute),
   );
 
-export const isBlueprintAlias = (schema: QuerySchema, name: string) =>
+const isBlueprintAlias = (schema: QuerySchema, name: string) =>
   sameCode(name, schema.blueprint.code) ||
   sameCode(name, schema.blueprint.name);
 
-export const isIdSelector = (selector: string) =>
+const isIdSelector = (selector: string) =>
   sameCode(
     selector.split(relationshipPathSeparator).at(-1) ?? '',
     queryIdSelector,
   );
 
-export const tokenizeQuery = (query: string): QueryToken[] =>
+const tokenizeQuery = (query: string): QueryToken[] =>
   [...query.matchAll(/\S+/g)].map((match) => ({
     text: match[0],
     start: match.index,
@@ -121,10 +121,7 @@ export const resolveRelationshipPath = (
 };
 
 /** Mirrors `compile_search_term` in the API's record search repository. */
-export const resolveSelector = (
-  schema: QuerySchema,
-  parts: string[],
-): Resolution => {
+const resolveSelector = (schema: QuerySchema, parts: string[]): Resolution => {
   if (parts.length === 1 && parts[0] === queryWildcard) return { status: 'ok' };
   if (parts.length > maximumQueryRelationshipHops + 1) {
     return {

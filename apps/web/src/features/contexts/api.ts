@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request, requestNoContent } from '../../api/request';
+import { request } from '../../api/request';
 import i18n from '../../i18n';
 import { contextCodePattern } from './constants';
 
@@ -46,24 +46,3 @@ export const createContext = (
     body: JSON.stringify(payload),
   });
 };
-
-export const updateContext = (
-  id: string,
-  data: Record<string, unknown>,
-  parentId: string,
-): Promise<AttributeContext> =>
-  request(
-    `/api/contexts/id/${encodeURIComponent(z.uuid().parse(id))}`,
-    attributeContextSchema,
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data, parent_id: z.uuid().parse(parentId) }),
-    },
-  );
-
-export const deleteContext = async (id: string): Promise<void> =>
-  requestNoContent(
-    `/api/contexts/id/${encodeURIComponent(z.uuid().parse(id))}`,
-    { method: 'DELETE' },
-  );

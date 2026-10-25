@@ -109,7 +109,7 @@ const explorerRouteSearchSchema = explorerSearchSchema.extend({
   record: z.uuid().optional().catch(undefined),
 });
 
-export type ExplorerRouteSearch = z.infer<typeof explorerRouteSearchSchema>;
+type ExplorerRouteSearch = z.infer<typeof explorerRouteSearchSchema>;
 
 export const parseExplorerRouteSearch = (
   input: Record<string, unknown>,

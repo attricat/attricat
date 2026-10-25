@@ -7,7 +7,7 @@ export type Toast = ToastOptions & {
   severity: AlertColor;
 };
 
-export type ToastAction =
+type ToastAction =
   | { toast: Omit<Toast, 'count'>; type: 'show' }
   | { id: number; type: 'dismiss' };
 

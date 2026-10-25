@@ -14,7 +14,7 @@ type Props = {
 };
 
 /** Revealed over its table cell while hovered or focused. */
-export const CellFilterButton = ({ fieldLabel, filter, onFilter }: Props) => {
+const CellFilterButton = ({ fieldLabel, filter, onFilter }: Props) => {
   const { t } = useTranslation();
   const label = t('explorer.filterByCellValue', {
     field: fieldLabel,

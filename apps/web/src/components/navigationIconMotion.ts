@@ -20,7 +20,7 @@ const gestureMs =
   motionTokens.duration.gesture + maxStaggerSteps * motionTokens.stagger;
 
 /** Element that triggers the gestures of the navigation icons inside it. */
-export const navigationIconTriggerSelector =
+const navigationIconTriggerSelector =
   '.MuiListItemButton-root, [data-navigation-icon-trigger]';
 
 /**

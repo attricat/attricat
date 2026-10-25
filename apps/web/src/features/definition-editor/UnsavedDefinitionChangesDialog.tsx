@@ -9,7 +9,7 @@ import {
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 
-export type UnsavedChangesAction = 'replace' | 'discard';
+type UnsavedChangesAction = 'replace' | 'discard';
 
 /** Confirms replacing or discarding unsaved definition edits. */
 export const UnsavedDefinitionChangesDialog = ({

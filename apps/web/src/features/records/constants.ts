@@ -118,8 +118,6 @@ export const statusTransitionDenialCodes = {
   /** Also the API error code whose details list the unmet conditions. */
   conditionsUnmet: checkViolationErrorCodes.transitionConditionsUnmet,
 } as const;
-export type StatusTransitionDenialCode =
-  (typeof statusTransitionDenialCodes)[keyof typeof statusTransitionDenialCodes];
 /** API error code for a write based on an outdated record version. */
 export const STALE_RECORD_ERROR_CODE = 'stale_record';
 /** API error code for a write that leaves the record outside its JSON Schema. */

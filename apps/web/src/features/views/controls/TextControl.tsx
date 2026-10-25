@@ -13,7 +13,7 @@ import { EachValue } from './EachValue';
 import { FieldHint } from '../../../components/FieldHint';
 
 /** Opens a field's value, such as a website, mail client or phone call. */
-export type TextControlLink = {
+type TextControlLink = {
   href: (value: string) => string | undefined;
   label: (value: string) => string;
   icon: ReactNode;

@@ -1,4 +1,4 @@
-export type ContextMetadataResult =
+type ContextMetadataResult =
   | { data: Record<string, unknown>; errorKey?: never }
   | { data?: never; errorKey: string };
 

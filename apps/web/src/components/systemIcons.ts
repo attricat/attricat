@@ -1,6 +1,5 @@
 // Canonical icons for Attricat concepts. Use these exports whenever a system
 // concept needs an icon; keep generic action and status icons local.
-export { BrandIcon } from './BrandIcon';
 export { ClipboardClockIcon as BackgroundProcessingIcon } from 'lucide-react';
 export { BotIcon as AgentIcon } from 'lucide-react';
 export { LayoutGridIcon as AppsIcon } from 'lucide-react';

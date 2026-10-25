@@ -9,7 +9,7 @@ import {
 import { RECORD_SCHEMA_MISMATCH_ERROR_CODE } from './constants';
 import { attributeValueTypes } from './valueTypes';
 
-export type FieldSaveRequest = Omit<
+type FieldSaveRequest = Omit<
   Parameters<typeof updateRecord>[1],
   'expected_updated_at'
 >;

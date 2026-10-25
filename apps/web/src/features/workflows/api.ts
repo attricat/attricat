@@ -9,7 +9,7 @@ import {
   type WorkflowRun,
 } from './schemas';
 
-export type { CompiledWorkflow, Workflow, WorkflowRun } from './schemas';
+export type { Workflow } from './schemas';
 
 const workflowPath = (id: string) => encodeURIComponent(z.uuid().parse(id));
 const versionPath = (version: number) =>
@@ -22,9 +22,6 @@ const definitionRequest = (definition: string) => ({
 
 export const listWorkflows = (): Promise<Workflow[]> =>
   request('/api/workflows', z.array(workflowSchema));
-
-export const getWorkflow = (id: string): Promise<Workflow> =>
-  request(`/api/workflows/${workflowPath(id)}`, workflowSchema);
 
 export const listWorkflowRevisions = (id: string): Promise<Workflow[]> =>
   request(

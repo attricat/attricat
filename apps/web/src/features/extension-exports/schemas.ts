@@ -48,7 +48,6 @@ export const recordExportStatusSchema = z.object({
   destinations: z.array(exportDestinationSchema),
   connections: z.array(connectionLabelSchema).default([]),
 });
-export type RecordExportStatus = z.infer<typeof recordExportStatusSchema>;
 
 export const exportStatusCountSchema = z.object({
   extension_id: z.string(),
@@ -63,7 +62,7 @@ export const workspaceExportStatusSchema = z.object({
   destinations: z.array(exportDestinationSchema),
 });
 
-export const handlerFailureSchema = z.object({
+const handlerFailureSchema = z.object({
   event_id: z.uuid(),
   event_type: z.string(),
   handler_id: z.string(),
@@ -74,7 +73,6 @@ export const handlerFailureSchema = z.object({
   record_id: z.uuid().nullable(),
   updated_at: z.string(),
 });
-export type HandlerFailure = z.infer<typeof handlerFailureSchema>;
 
 export const extensionExportStatusSchema = z.object({
   counts: z.array(exportStatusCountSchema),
@@ -82,7 +80,6 @@ export const extensionExportStatusSchema = z.object({
   next: z.uuid().nullable(),
   handler_failures: z.array(handlerFailureSchema),
 });
-export type ExtensionExportStatus = z.infer<typeof extensionExportStatusSchema>;
 
 export const extensionConnectionSchema = z.object({
   id: z.uuid(),
@@ -143,7 +140,6 @@ export const previewResponseSchema = z.looseObject({
   payload: z.unknown().optional(),
   issues: z.array(z.string()).optional(),
 });
-export type ExportPreview = z.infer<typeof previewResponseSchema>;
 
 /** The manifest declarations the extension page reads. */
 export const manifestExportsSchema = z.looseObject({

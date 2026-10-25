@@ -16,7 +16,7 @@ type Props = {
 };
 
 /** Lists failed checks, conditions or rules reported by the API. */
-export const CheckViolationsAlert = ({ title, violations, sx }: Props) => {
+const CheckViolationsAlert = ({ title, violations, sx }: Props) => {
   const violationText = useViolationText();
   return (
     <Alert severity="error" sx={sx}>

@@ -52,7 +52,6 @@ export const userMessageMaxWidth = { xs: '100%', sm: '80%' } as const;
 export const transcriptEndScrollMargin = { md: '8rem', xs: '10rem' } as const;
 export const conversationMinHeight = { md: 'calc(100dvh - 48px)' } as const;
 
-export const thinkingDotCount = 3;
 export const thinkingDotDelaysSeconds = [0, 0.16, 0.32] as const;
 export const thinkingAnimationName = 'agent-thinking';
 export const thinkingAnimationDuration = '1.4s';

@@ -60,7 +60,7 @@ export const publicRoutes = {
   passwordReset: '/password-reset',
 } as const;
 
-export const primaryNavigationItems = [
+const primaryNavigationItems = [
   {
     icon: ExplorerIcon,
     labelKey: 'navigation.recordExplorer',
@@ -81,7 +81,7 @@ export const inboxNavigationItem = {
 } as const;
 
 // Items are listed by purpose; navigation labels each group.
-export const managementNavigationItems = [
+const managementNavigationItems = [
   {
     descriptionKey: 'management.blueprintsDescription',
     group: 'dataModel',

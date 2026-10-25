@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { SupportedLanguage } from '../i18n';
 
-export const documentationSiteUrl = 'https://docs.attricat.com';
+const documentationSiteUrl = 'https://docs.attricat.com';
 
 // Paths of public documentation pages, relative to a locale root.
 export const documentationPages = {

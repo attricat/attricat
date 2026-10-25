@@ -33,7 +33,7 @@ export const blueprintSchema = z.object({
   definition_hash: z.string(),
 });
 
-export const attributeSchema = recordAttributeSchema.extend({
+const attributeSchema = recordAttributeSchema.extend({
   id: z.uuid(),
   blueprint_id: z.uuid(),
   blueprint_version: z.number().int().positive(),
@@ -52,7 +52,6 @@ export const blueprintWithAttributesSchema = z.object({
 });
 
 export type Blueprint = z.infer<typeof blueprintSchema>;
-export type Attribute = z.infer<typeof attributeSchema>;
 export type BlueprintWithAttributes = z.infer<
   typeof blueprintWithAttributesSchema
 >;
@@ -80,10 +79,6 @@ export const blueprintMigrationBatchSchema = z.object({
   started_at: z.string().nullable(),
   completed_at: z.string().nullable(),
 });
-
-export type BlueprintMigrationBatch = z.infer<
-  typeof blueprintMigrationBatchSchema
->;
 
 export const blueprintMigrationBatchStatusSchema =
   blueprintMigrationBatchSchema.extend({

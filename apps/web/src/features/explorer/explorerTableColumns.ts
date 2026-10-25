@@ -30,7 +30,7 @@ export const usesExtensionRenderer = (column: ExplorerTableColumn) =>
     column.renderer && !column.renderer.id.startsWith(attricatRendererPrefix),
   );
 
-export const humanizeField = (field: string) => field.replaceAll('_', ' ');
+const humanizeField = (field: string) => field.replaceAll('_', ' ');
 
 export const configuredColumnLabel = (column: ExplorerTableColumn) =>
   column.label ?? humanizeField(column.field);

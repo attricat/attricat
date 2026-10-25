@@ -26,8 +26,6 @@ const referenceSchema = z.object({
   context: z.string().nullable(),
 });
 
-export type LexiconReportReference = z.infer<typeof referenceSchema>;
-
 export const lexiconReportSchema = z.object({
   reference_count: z.number(),
   languages: z.array(

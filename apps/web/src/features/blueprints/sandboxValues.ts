@@ -18,7 +18,7 @@ export const sandboxValuesForFields = (
     }),
   );
 
-export type SandboxValidation = {
+type SandboxValidation = {
   fieldErrors: Record<string, string>;
   formError?: string;
 };

@@ -3,7 +3,7 @@ import { useId, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RecordPreviewTabKey } from '../constants';
 
-export type RecordPreviewTab = {
+type RecordPreviewTab = {
   key: RecordPreviewTabKey;
   label: string;
   content: ReactNode;

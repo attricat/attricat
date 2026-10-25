@@ -12,7 +12,7 @@ type RecordRuleChecksStore = {
  * events, after the save returns, so the record page keeps checking for them
  * for a short while.
  */
-export const useRecordRuleChecks = create<RecordRuleChecksStore>((set) => ({
+const useRecordRuleChecks = create<RecordRuleChecksStore>((set) => ({
   watchUntil: {},
   watch: (recordId) =>
     set((state) => ({

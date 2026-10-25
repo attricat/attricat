@@ -19,7 +19,7 @@ import {
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 import { RELATIONSHIP_ID_JOINER, RELATIONSHIP_ID_SEPARATOR } from './constants';
 
-export type RecordFormValidation = {
+type RecordFormValidation = {
   fieldErrors: Record<string, string>;
   formError?: string;
 };
@@ -101,7 +101,7 @@ export const hasInvalidScalarField = (
       !scalarValueForField(attribute, fields[attribute.code]),
   );
 
-export type RecordFormValidationMessages = {
+type RecordFormValidationMessages = {
   invalidRelationship: string;
   invalidValue: string;
   required: string;
@@ -122,7 +122,7 @@ export const recordFormValidationMessages =
  * submits files with its values (such as files queued while creating a
  * record). Without it, file attributes save apart and are not checked.
  */
-export type FormFileCounts = Readonly<Record<string, number>>;
+type FormFileCounts = Readonly<Record<string, number>>;
 
 /** Required editable attributes that have no value yet. */
 export const missingRequiredAttributes = (

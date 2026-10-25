@@ -12,8 +12,6 @@ export {
   extensionCommandRequestSchema,
   extensionStorageRequestSchema,
   type ExtensionContribution,
-  type ExtensionStorageRequest,
-  runtimeSchema,
 } from './schemas';
 
 export type ExtensionRuntimeScope = {

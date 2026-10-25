@@ -18,7 +18,7 @@ export const conversationSchema = z.object({
 export const conversationDetailSchema = conversationSchema.extend({
   read_only: z.boolean(),
 });
-export const messageAttachmentSchema = z.object({
+const messageAttachmentSchema = z.object({
   id,
   filename: z.string(),
   mime_type: z.string(),
@@ -76,8 +76,5 @@ export const runResponseSchema = z.object({ id, status: z.string() });
 
 export type Conversation = z.infer<typeof conversationSchema>;
 export type ConversationMessage = z.infer<typeof messageSchema>;
-export type ConversationMessageAttachment = z.infer<
-  typeof messageAttachmentSchema
->;
 export type AgentRun = z.infer<typeof runSchema>;
 export type AgentToolCall = z.infer<typeof toolCallSchema>;

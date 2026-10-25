@@ -10,11 +10,7 @@ import {
   type ReusableAttributeGroup,
 } from './schemas';
 
-export type {
-  CreateReusableAttribute,
-  ReusableAttribute,
-  ReusableAttributeGroup,
-} from './schemas';
+export type { ReusableAttribute, ReusableAttributeGroup } from './schemas';
 
 export const listReusableAttributes = (
   includeDrafts = false,

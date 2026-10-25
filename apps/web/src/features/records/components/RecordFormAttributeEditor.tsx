@@ -37,7 +37,7 @@ const protectedValueSx: SxProps<Theme> = {
   '& .MuiChip-root.Mui-disabled': { opacity: 1 },
 };
 
-export type RecordFormAttributeEditorContext = {
+type RecordFormAttributeEditorContext = {
   contextId: string | null;
   statusParentContextIds?: readonly string[];
   disabled?: boolean;

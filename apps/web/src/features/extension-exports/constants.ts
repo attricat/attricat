@@ -50,8 +50,6 @@ export const extensionPath = (extensionId: string) =>
 
 /** Rows of one problem list page on the extension page. */
 export const exportStatusPageSize = 25;
-/** Device authorizations are polled no faster than the provider allows. */
-export const minimumDevicePollMilliseconds = 5_000;
 
 /** The host outlet where an export extension edits its destination mappings. */
 export const exportMappingExtensionOutlet = 'export_mapping';

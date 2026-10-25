@@ -26,7 +26,6 @@ export const extensionRunFailures = [
 export const extensionRunPollMilliseconds = 2_000;
 /** Bound tracking to recently started runs in this tab. */
 export const maximumWatchedExtensionRuns = 20;
-export const extensionRunIdempotencyPrefix = 'run-';
 
 export const runSkeletonCount = 2;
 export const runSkeletonHeight = 136;

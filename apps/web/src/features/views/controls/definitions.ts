@@ -62,29 +62,29 @@ const stringEdit = (
   ...behavior,
 });
 
-export const colorDisplayComponent = stringDisplay(
+const colorDisplayComponent = stringDisplay(
   VIEW_COMPONENT_IDS.colorDisplay,
   VIEW_COMPONENT_IDS.colorEdit,
   ColorValue,
 );
-export const colorEditComponent = stringEdit(
+const colorEditComponent = stringEdit(
   VIEW_COMPONENT_IDS.colorEdit,
   ColorEditor,
   { validateValue: validateColor },
 );
 
-export const emailDisplayComponent = stringDisplay(
+const emailDisplayComponent = stringDisplay(
   VIEW_COMPONENT_IDS.emailDisplay,
   VIEW_COMPONENT_IDS.emailEdit,
   EmailValue,
 );
-export const emailEditComponent = stringEdit(
+const emailEditComponent = stringEdit(
   VIEW_COMPONENT_IDS.emailEdit,
   EmailEditor,
   { validateValue: validateEmail },
 );
 
-export const urlDisplayComponent = stringDisplay(
+const urlDisplayComponent = stringDisplay(
   VIEW_COMPONENT_IDS.urlDisplay,
   VIEW_COMPONENT_IDS.urlEdit,
   UrlValue,
@@ -95,23 +95,23 @@ export const urlEditComponent = stringEdit(
   { validateValue: validateUrl },
 );
 
-export const phoneDisplayComponent = stringDisplay(
+const phoneDisplayComponent = stringDisplay(
   VIEW_COMPONENT_IDS.phoneDisplay,
   VIEW_COMPONENT_IDS.phoneEdit,
   PhoneValue,
 );
-export const phoneEditComponent = stringEdit(
+const phoneEditComponent = stringEdit(
   VIEW_COMPONENT_IDS.phoneEdit,
   PhoneEditor,
 );
 
-export const markdownDisplayComponent = stringDisplay(
+const markdownDisplayComponent = stringDisplay(
   VIEW_COMPONENT_IDS.markdownDisplay,
   VIEW_COMPONENT_IDS.markdownEdit,
   MarkdownValue,
   ['field'],
 );
-export const markdownEditComponent = stringEdit(
+const markdownEditComponent = stringEdit(
   VIEW_COMPONENT_IDS.markdownEdit,
   MarkdownFieldEditor,
   { preservesWhitespace: true, editsOnRequest: true },

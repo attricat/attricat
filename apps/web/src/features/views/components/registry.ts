@@ -31,7 +31,7 @@ export const viewComponents: readonly ViewComponentDefinition[] = [
   relationshipHierarchyComponent,
 ] satisfies readonly ViewComponentDefinition[];
 
-export type RegisteredViewComponent = (typeof viewComponents)[number];
+type RegisteredViewComponent = (typeof viewComponents)[number];
 
 const componentKey = (id: string, version: number) => `${id}@${version}`;
 
@@ -39,7 +39,7 @@ const componentKey = (id: string, version: number) => `${id}@${version}`;
 type ComponentSelector =
   Pick<ComponentReference, 'id' | 'version'> | null | undefined;
 
-export const viewComponentRegistry = new Map<string, RegisteredViewComponent>(
+const viewComponentRegistry = new Map<string, RegisteredViewComponent>(
   viewComponents.map((component) => [
     componentKey(component.id, component.version),
     component,
