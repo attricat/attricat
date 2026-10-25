@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ApiRequestError } from './request';
+import type { ApiErrorCode } from './errors';
 
 /** One failed declarative check, condition or rule (`error.details.violations`). */
 export const checkViolationSchema = z.object({
@@ -30,7 +31,7 @@ export const checkViolationErrorCodes = {
   transitionConditionsUnmet: 'transition_conditions_unmet',
   ruleViolation: 'rule_violation',
   publicationChecksFailed: 'publication_checks_failed',
-} as const;
+} as const satisfies Record<string, ApiErrorCode>;
 
 const violationCodes = new Set<string>(Object.values(checkViolationErrorCodes));
 

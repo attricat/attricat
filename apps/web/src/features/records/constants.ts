@@ -1,4 +1,5 @@
 import { checkViolationErrorCodes } from '../../api/checkViolations';
+import type { ApiErrorCode } from '../../api/errors';
 
 /** Largest integer the API accepts for component protocol versions (Rust u32). */
 export const MAX_COMPONENT_PROTOCOL_VERSION = 4_294_967_295;
@@ -117,11 +118,12 @@ export const statusTransitionDenialCodes = {
   separationOfDuties: 'status_separation_of_duties',
   /** Also the API error code whose details list the unmet conditions. */
   conditionsUnmet: checkViolationErrorCodes.transitionConditionsUnmet,
-} as const;
+} as const satisfies Record<string, ApiErrorCode>;
 /** API error code for a write based on an outdated record version. */
-export const STALE_RECORD_ERROR_CODE = 'stale_record';
+export const STALE_RECORD_ERROR_CODE = 'stale_record' satisfies ApiErrorCode;
 /** API error code for a write that leaves the record outside its JSON Schema. */
-export const RECORD_SCHEMA_MISMATCH_ERROR_CODE = 'record_schema_mismatch';
+export const RECORD_SCHEMA_MISMATCH_ERROR_CODE =
+  'record_schema_mismatch' satisfies ApiErrorCode;
 
 /** Matches editors of fields a migration asks the user to review. */
 export const migrationReviewSelector = '[data-migration-review]';

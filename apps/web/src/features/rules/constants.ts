@@ -1,3 +1,5 @@
+import type { ApiErrorCode } from '../../api/errors';
+
 export const RULE_SECTION_RULES = 'rules';
 export const RULE_SECTION_FINDINGS = 'findings';
 export const RULE_SECTION_RUNS = 'runs';
@@ -34,7 +36,8 @@ export const RECORD_RULE_RUN_POLL_MS = 1000;
  */
 export const RECORD_RULE_CHECK_WATCH_MS = 15_000;
 export const RULE_STATUS_PUBLISHED = 'published';
-export const RULE_HAS_EXISTING_VIOLATIONS = 'rule_has_existing_violations';
+export const RULE_HAS_EXISTING_VIOLATIONS =
+  'rule_has_existing_violations' satisfies ApiErrorCode;
 /** Characters of a record ID shown where no display label is loaded. */
 export const SHORT_RECORD_ID_LENGTH = 8;
 /** Unresolved findings the record page lists at a time. */

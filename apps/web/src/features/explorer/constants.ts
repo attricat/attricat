@@ -1,3 +1,5 @@
+import type { ApiErrorCode } from '../../api/errors';
+
 // Search and filter limits.
 export const maximumAttributeFilters = 20;
 export const maximumAgentSelection = 50;
@@ -50,9 +52,9 @@ export const publicationStatuses = {
 export const publishedRevisionStatus = 'published';
 
 export const relationshipPathSortErrorCode =
-  'relationship_path_sort_requires_single_result_version';
+  'relationship_path_sort_requires_single_result_version' satisfies ApiErrorCode;
 /** Returned when a query names fields the searched blueprint lacks. */
-export const invalidInputErrorCode = 'invalid_input';
+export const invalidInputErrorCode = 'invalid_input' satisfies ApiErrorCode;
 
 export const explorerColumnIds = {
   actions: 'actions',

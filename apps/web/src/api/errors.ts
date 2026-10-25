@@ -1,6 +1,14 @@
 import i18n from 'i18next';
 import { ApiRequestError } from './request';
 
+/**
+ * A code from `contracts/api-error-codes.json`. Both locales translate every
+ * contract code under `apiErrors` (checked in `errors.test.ts`), so the
+ * English keys name exactly the contract's codes.
+ */
+export type ApiErrorCode =
+  keyof (typeof import('../i18n/locales/en.json'))['apiErrors'];
+
 /** Translation key prefix of API error codes (`apiErrors.<code>`). */
 const API_ERROR_KEY_PREFIX = 'apiErrors';
 
