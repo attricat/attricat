@@ -12,7 +12,7 @@ pub const MAX_EXTENSION_STORAGE_KEYS: i64 = 65_536;
 pub const MAX_EXTENSION_STORAGE_BYTES: i64 = 256 * 1024 * 1024;
 pub const MAX_EXTENSION_STORAGE_LIST_LIMIT: u32 = 100;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ExtensionStorageEntry {
     pub key: String,
     pub value: Value,

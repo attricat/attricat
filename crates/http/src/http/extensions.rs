@@ -126,21 +126,6 @@ impl From<ExtensionInstallation> for InstallationResponse {
     }
 }
 #[derive(Serialize)]
-struct GrantResponse {
-    grant_kind: String,
-    grant_id: String,
-    granted_at: chrono::DateTime<chrono::Utc>,
-}
-impl From<ExtensionGrant> for GrantResponse {
-    fn from(value: ExtensionGrant) -> Self {
-        Self {
-            grant_kind: value.grant_kind,
-            grant_id: value.grant_id,
-            granted_at: value.granted_at,
-        }
-    }
-}
-#[derive(Serialize)]
 struct LifecycleResponse {
     id: Uuid,
     operation: String,
@@ -176,7 +161,7 @@ impl From<ExtensionLifecycleRecord> for LifecycleResponse {
 #[derive(Serialize)]
 pub(super) struct ExtensionDetailResponse {
     installation: InstallationResponse,
-    grants: Vec<GrantResponse>,
+    grants: Vec<ExtensionGrant>,
     lifecycle: Vec<LifecycleResponse>,
 }
 
@@ -326,30 +311,15 @@ pub(super) enum StorageRequest {
 }
 
 #[derive(Serialize)]
-pub(super) struct StorageEntryResponse {
-    key: String,
-    value: Value,
-    revision: i64,
-}
-impl From<ExtensionStorageEntry> for StorageEntryResponse {
-    fn from(entry: ExtensionStorageEntry) -> Self {
-        Self {
-            key: entry.key,
-            value: entry.value,
-            revision: entry.revision,
-        }
-    }
-}
-#[derive(Serialize)]
 pub(super) struct StoragePageResponse {
-    entries: Vec<StorageEntryResponse>,
+    entries: Vec<ExtensionStorageEntry>,
     cursor: Option<String>,
 }
 /// One response shape per storage operation; `Deleted` serializes as `null`.
 #[derive(Serialize)]
 #[serde(untagged)]
 pub(super) enum StorageResponse {
-    Entry(Option<StorageEntryResponse>),
+    Entry(Option<ExtensionStorageEntry>),
     Revision { revision: i64 },
     Deleted(()),
     Page(StoragePageResponse),
@@ -469,7 +439,7 @@ pub(super) async fn detail(
         .await?;
     Ok(Json(ExtensionDetailResponse {
         installation: installation.into(),
-        grants: grants.into_iter().map(Into::into).collect(),
+        grants,
         lifecycle: lifecycle.into_iter().map(Into::into).collect(),
     }))
 }
@@ -990,8 +960,7 @@ pub(super) async fn storage(
             repository
                 .extension_storage_get(&extension_id, release_id, &key)
                 .await
-                .map_err(storage_error)?
-                .map(StorageEntryResponse::from),
+                .map_err(storage_error)?,
         ),
         StorageRequest::Set {
             key,
@@ -1030,11 +999,7 @@ pub(super) async fn storage(
                 .await
                 .map_err(storage_error)?;
             StorageResponse::Page(StoragePageResponse {
-                entries: page
-                    .entries
-                    .into_iter()
-                    .map(StorageEntryResponse::from)
-                    .collect(),
+                entries: page.entries,
                 cursor: page.cursor,
             })
         }

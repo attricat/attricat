@@ -276,7 +276,7 @@ pub struct InstalledExtension {
     pub source: String,
 }
 
-#[derive(Clone, Debug, FromRow)]
+#[derive(Clone, Debug, FromRow, serde::Serialize)]
 pub struct ExtensionGrant {
     pub grant_kind: String,
     pub grant_id: String,
