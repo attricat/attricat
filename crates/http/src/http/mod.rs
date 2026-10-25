@@ -1193,7 +1193,6 @@ pub fn router(state: AppState) -> Router {
             "/records/{record_id}/values/current",
             get(records::get_current_values),
         )
-        .layer(middleware::from_fn_with_state(state.clone(), audit::record))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::authorize,

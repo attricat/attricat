@@ -1,13 +1,8 @@
-use axum::{
-    extract::{Request, State},
-    http::Method,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, http::Method};
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
-use super::{AppState, auth::AuthenticatedPrincipal};
+use super::auth::AuthenticatedPrincipal;
 use crate::repository::AuditContext;
 
 const REQUEST_ID_HEADER: &str = "x-request-id";
@@ -56,17 +51,6 @@ pub(super) fn request_context(
         metadata: redact_metadata(json!({ "method": method.as_str(), "route": route })),
         agent: None,
     }
-}
-
-/// Success audits are transaction-owned by repositories. This layer is kept as
-/// a pass-through so routes retain their middleware composition without a
-/// second, post-commit best-effort audit write.
-pub(super) async fn record(
-    State(_state): State<AppState>,
-    request: Request,
-    next: Next,
-) -> Response {
-    next.run(request).await
 }
 
 fn parse_or_generate_id(value: Option<&str>) -> Uuid {
