@@ -11,9 +11,9 @@ use crate::{
         ResolvedRecordPreviewResponse, SearchRecordsRequest, SearchResultVersionScope,
     },
     repository::{
-        EXPORT_STATUSES, MAX_SEARCH_FILTERS, RecordSearchSort, RelationshipFacetHop,
-        RepositoryError, SearchContext, SearchScope, SearchScopeError, SearchScopeRequest,
-        decode_search_cursor, intersect_record_ids, valid_connection_key,
+        EXPORT_STATUSES, MAX_SEARCH_FILTERS, RecordSearchScope, RecordSearchSort,
+        RelationshipFacetHop, RepositoryError, SearchContext, SearchScope, SearchScopeError,
+        SearchScopeRequest, decode_search_cursor, intersect_record_ids, valid_connection_key,
     },
 };
 use attricat_validation::saved_search;
@@ -267,15 +267,18 @@ pub(super) async fn search_record_previews(
     // Totals are intentionally limited and only calculated for a first page.
     // Cursor pages retain the first response's total in the client cache.
     let include_total = input.include_total && input.page.cursor.is_none();
+    let scope = RecordSearchScope {
+        blueprint_id: current.blueprint.id,
+        blueprint_version: selected,
+        matching_record_ids: matching.as_deref(),
+        system_tags: &input.system_tags,
+        outdated: input.outdated,
+        export_status: input.export_status.as_ref(),
+        current_blueprint_version: current.blueprint.version,
+    };
     let (matching_versions, total_count) = repository
         .search_result_versions_and_count(
-            current.blueprint.id,
-            selected,
-            matching.as_deref(),
-            &input.system_tags,
-            input.outdated,
-            input.export_status.as_ref(),
-            current.blueprint.version,
+            scope,
             include_total.then_some(SEARCH_TOTAL_COUNT_CAP + 1),
         )
         .instrument(tracing::info_span!(
@@ -345,15 +348,12 @@ pub(super) async fn search_record_previews(
             Some(sort) => {
                 repository
                     .search_record_previews_sorted(
-                        current.blueprint.id,
-                        page_blueprint_version,
+                        RecordSearchScope {
+                            blueprint_version: page_blueprint_version,
+                            ..scope
+                        },
                         limit.into(),
                         input.page.cursor.as_deref(),
-                        matching.as_deref(),
-                        &input.system_tags,
-                        input.outdated,
-                        input.export_status.as_ref(),
-                        current.blueprint.version,
                         sort,
                     )
                     .instrument(tracing::info_span!("sql.operation", label = "records-page"))
@@ -361,17 +361,7 @@ pub(super) async fn search_record_previews(
             }
             None => {
                 repository
-                    .search_record_previews(
-                        current.blueprint.id,
-                        selected,
-                        limit.into(),
-                        cursor,
-                        matching.as_deref(),
-                        &input.system_tags,
-                        input.outdated,
-                        input.export_status.as_ref(),
-                        current.blueprint.version,
-                    )
+                    .search_record_previews(scope, limit.into(), cursor)
                     .instrument(tracing::info_span!("sql.operation", label = "records-page"))
                     .await
             }
@@ -383,13 +373,14 @@ pub(super) async fn search_record_previews(
         }
         repository
             .count_record_previews(
-                current.blueprint.id,
-                None,
-                None,
-                &[],
-                true,
-                None,
-                current.blueprint.version,
+                RecordSearchScope {
+                    blueprint_version: None,
+                    matching_record_ids: None,
+                    system_tags: &[],
+                    outdated: true,
+                    export_status: None,
+                    ..scope
+                },
                 SEARCH_TOTAL_COUNT_CAP + 1,
             )
             .await

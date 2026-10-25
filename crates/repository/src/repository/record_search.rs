@@ -169,6 +169,22 @@ fn facet_path_key(source_path: &[RelationshipFacetHop]) -> String {
 /// clients cannot send it.
 pub const SEARCH_FILTER_EQ_ANY: &str = "eq_any";
 
+/// Which records of a blueprint a search page, count or version scope covers.
+#[derive(Clone, Copy)]
+pub struct RecordSearchScope<'a> {
+    pub blueprint_id: Uuid,
+    /// `None` covers every version.
+    pub blueprint_version: Option<i64>,
+    /// `None` when no query or filter narrowed the blueprint.
+    pub matching_record_ids: Option<&'a [Uuid]>,
+    /// Records must carry every one of these system tags.
+    pub system_tags: &'a [String],
+    /// Only records on an older version than `current_blueprint_version`.
+    pub outdated: bool,
+    pub export_status: Option<&'a ExportStatusFilter>,
+    pub current_blueprint_version: i64,
+}
+
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct RecordSearchFilter {
     pub field: String,
@@ -965,19 +981,21 @@ impl AttricatRepository {
             .collect())
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub async fn search_record_previews(
         &self,
-        blueprint_id: Uuid,
-        blueprint_version: Option<i64>,
+        scope: RecordSearchScope<'_>,
         limit: i64,
         cursor: Option<(DateTime<Utc>, Uuid)>,
-        matching_record_ids: Option<&[Uuid]>,
-        system_tags: &[String],
-        outdated: bool,
-        export_status: Option<&ExportStatusFilter>,
-        current_blueprint_version: i64,
     ) -> Result<(Vec<RecordPreview>, Option<String>), RepositoryError> {
+        let RecordSearchScope {
+            blueprint_id,
+            blueprint_version,
+            matching_record_ids,
+            system_tags,
+            outdated,
+            export_status,
+            current_blueprint_version,
+        } = scope;
         validate_system_tags(system_tags)?;
         let export_status_sql = export_status_clause(11, export_status);
         let sql = format!(
@@ -1033,18 +1051,20 @@ impl AttricatRepository {
     }
 
     /// Counts matching records up to `limit`, so broad searches never scan the entire catalog.
-    #[allow(clippy::too_many_arguments)]
     pub async fn count_record_previews(
         &self,
-        blueprint_id: Uuid,
-        blueprint_version: Option<i64>,
-        matching_record_ids: Option<&[Uuid]>,
-        system_tags: &[String],
-        outdated: bool,
-        export_status: Option<&ExportStatusFilter>,
-        current_blueprint_version: i64,
+        scope: RecordSearchScope<'_>,
         limit: i64,
     ) -> Result<i64, RepositoryError> {
+        let RecordSearchScope {
+            blueprint_id,
+            blueprint_version,
+            matching_record_ids,
+            system_tags,
+            outdated,
+            export_status,
+            current_blueprint_version,
+        } = scope;
         validate_system_tags(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 3);
         let export_status_sql = export_status_clause(9, export_status);
@@ -1077,17 +1097,19 @@ impl AttricatRepository {
         .await?)
     }
 
-    #[allow(clippy::too_many_arguments)]
     async fn search_result_versions(
         &self,
-        blueprint_id: Uuid,
-        blueprint_version: Option<i64>,
-        matching_record_ids: Option<&[Uuid]>,
-        system_tags: &[String],
-        outdated: bool,
-        export_status: Option<&ExportStatusFilter>,
-        current_blueprint_version: i64,
+        scope: RecordSearchScope<'_>,
     ) -> Result<Vec<i64>, RepositoryError> {
+        let RecordSearchScope {
+            blueprint_id,
+            blueprint_version,
+            matching_record_ids,
+            system_tags,
+            outdated,
+            export_status,
+            current_blueprint_version,
+        } = scope;
         validate_system_tags(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 4);
         let export_status_sql = export_status_clause(8, export_status);
@@ -1120,21 +1142,23 @@ impl AttricatRepository {
 
     /// [`Self::search_result_versions`] and, with `count_limit`,
     /// [`Self::count_record_previews`] over the same matches in one scan.
-    #[allow(clippy::too_many_arguments)]
     pub async fn search_result_versions_and_count(
         &self,
-        blueprint_id: Uuid,
-        blueprint_version: Option<i64>,
-        matching_record_ids: Option<&[Uuid]>,
-        system_tags: &[String],
-        outdated: bool,
-        export_status: Option<&ExportStatusFilter>,
-        current_blueprint_version: i64,
+        scope: RecordSearchScope<'_>,
         count_limit: Option<i64>,
     ) -> Result<(Vec<i64>, Option<i64>), RepositoryError> {
+        let RecordSearchScope {
+            blueprint_id,
+            blueprint_version,
+            matching_record_ids,
+            system_tags,
+            outdated,
+            export_status,
+            current_blueprint_version,
+        } = scope;
         let Some(count_limit) = count_limit else {
             return Ok((
-                self.search_result_versions(
+                self.search_result_versions(RecordSearchScope {
                     blueprint_id,
                     blueprint_version,
                     matching_record_ids,
@@ -1142,7 +1166,7 @@ impl AttricatRepository {
                     outdated,
                     export_status,
                     current_blueprint_version,
-                )
+                })
                 .await?,
                 None,
             ));
@@ -1188,20 +1212,22 @@ impl AttricatRepository {
     /// Selects a page by a configured scalar table column without hydrating projections for
     /// every candidate. NULL values sort first ascending and last descending; record IDs make
     /// the ordering stable.
-    #[allow(clippy::too_many_arguments)]
     pub async fn search_record_previews_sorted(
         &self,
-        blueprint_id: Uuid,
-        blueprint_version: Option<i64>,
+        scope: RecordSearchScope<'_>,
         limit: i64,
         cursor: Option<&str>,
-        matching_record_ids: Option<&[Uuid]>,
-        system_tags: &[String],
-        outdated: bool,
-        export_status: Option<&ExportStatusFilter>,
-        current_blueprint_version: i64,
         sort: &RecordSearchSort,
     ) -> Result<(Vec<RecordPreview>, Option<String>), RepositoryError> {
+        let RecordSearchScope {
+            blueprint_id,
+            blueprint_version,
+            matching_record_ids,
+            system_tags,
+            outdated,
+            export_status,
+            current_blueprint_version,
+        } = scope;
         validate_system_tags(system_tags)?;
         let cursor = cursor.map(decode_sorted_search_cursor).transpose()?;
         if let Some(cursor) = &cursor
@@ -1229,14 +1255,16 @@ impl AttricatRepository {
         ) {
             return self
                 .search_record_previews_sorted_system(
-                    blueprint_id,
-                    blueprint_version,
+                    RecordSearchScope {
+                        blueprint_id,
+                        blueprint_version,
+                        matching_record_ids,
+                        system_tags,
+                        outdated,
+                        export_status,
+                        current_blueprint_version,
+                    },
                     limit,
-                    matching_record_ids,
-                    system_tags,
-                    outdated,
-                    export_status,
-                    current_blueprint_version,
                     sort,
                     cursor.as_ref(),
                 )
@@ -1245,14 +1273,16 @@ impl AttricatRepository {
         if !sort.relationship_path.is_empty() {
             return self
                 .search_record_previews_sorted_relationship(
-                    blueprint_id,
-                    blueprint_version,
+                    RecordSearchScope {
+                        blueprint_id,
+                        blueprint_version,
+                        matching_record_ids,
+                        system_tags,
+                        outdated,
+                        export_status,
+                        current_blueprint_version,
+                    },
                     limit,
-                    matching_record_ids,
-                    system_tags,
-                    outdated,
-                    export_status,
-                    current_blueprint_version,
                     sort,
                     cursor_value,
                     cursor_is_null,
@@ -1352,20 +1382,22 @@ impl AttricatRepository {
 
     /// Sort a built-in record property independently of blueprint table columns.
     /// Record ID breaks ties so pagination cannot omit or duplicate rows.
-    #[allow(clippy::too_many_arguments)]
     async fn search_record_previews_sorted_system(
         &self,
-        blueprint_id: Uuid,
-        blueprint_version: Option<i64>,
+        scope: RecordSearchScope<'_>,
         limit: i64,
-        matching_record_ids: Option<&[Uuid]>,
-        system_tags: &[String],
-        outdated: bool,
-        export_status: Option<&ExportStatusFilter>,
-        current_blueprint_version: i64,
         sort: &RecordSearchSort,
         cursor: Option<&SortedSearchCursor>,
     ) -> Result<(Vec<RecordPreview>, Option<String>), RepositoryError> {
+        let RecordSearchScope {
+            blueprint_id,
+            blueprint_version,
+            matching_record_ids,
+            system_tags,
+            outdated,
+            export_status,
+            current_blueprint_version,
+        } = scope;
         let cursor_version = cursor
             .map(|cursor| {
                 if cursor.is_null {
@@ -1455,20 +1487,23 @@ impl AttricatRepository {
     #[allow(clippy::too_many_arguments)]
     async fn search_record_previews_sorted_relationship(
         &self,
-        blueprint_id: Uuid,
-        blueprint_version: Option<i64>,
+        scope: RecordSearchScope<'_>,
         limit: i64,
-        matching_record_ids: Option<&[Uuid]>,
-        system_tags: &[String],
-        outdated: bool,
-        export_status: Option<&ExportStatusFilter>,
-        current_blueprint_version: i64,
         sort: &RecordSearchSort,
         cursor_value: Option<String>,
         cursor_is_null: bool,
         cursor_target_id: Option<Uuid>,
         cursor_id: Option<Uuid>,
     ) -> Result<(Vec<RecordPreview>, Option<String>), RepositoryError> {
+        let RecordSearchScope {
+            blueprint_id,
+            blueprint_version,
+            matching_record_ids,
+            system_tags,
+            outdated,
+            export_status,
+            current_blueprint_version,
+        } = scope;
         let (column, column_type) = native_sort_column(&sort.value_type)?;
         let comparison = if sort.descending { "<" } else { ">" };
         let direction = if sort.descending { "DESC" } else { "ASC" };

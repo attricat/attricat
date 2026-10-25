@@ -236,8 +236,8 @@ pub use leadership::CoordinatorLeadership;
 pub use members::{WorkspaceInvitation, WorkspaceMember};
 pub use presentation_assets::{MAX_PRESENTATION_ASSET_PAGE_SIZE, PresentationAsset};
 pub use record_search::{
-    RecordRelationshipFilter, RecordSearchFilter, RecordSearchSort, RelationshipFacetHop,
-    SEARCH_FILTER_EQ_ANY, SearchContext, decode_search_cursor,
+    RecordRelationshipFilter, RecordSearchFilter, RecordSearchScope, RecordSearchSort,
+    RelationshipFacetHop, SEARCH_FILTER_EQ_ANY, SearchContext, decode_search_cursor,
 };
 pub use retention::RetentionDays;
 pub use retention_holds::FileRetentionHold;

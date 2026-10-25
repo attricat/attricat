@@ -25,8 +25,9 @@ use crate::{
     },
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
     repository::{
-        AttricatRepository, AuthorizationActor, MAX_SEARCH_FILTERS, RecordSearchSort,
-        RepositoryError, SearchContext, SearchScope, SearchScopeError, SearchScopeRequest,
+        AttricatRepository, AuthorizationActor, MAX_SEARCH_FILTERS, RecordSearchScope,
+        RecordSearchSort, RepositoryError, SearchContext, SearchScope, SearchScopeError,
+        SearchScopeRequest,
     },
     search_filters::{check_selected_ids, resolve_agent_relationship_filter},
 };
@@ -2138,16 +2139,19 @@ pub async fn execute_read(
                 input.context_code.as_deref(),
             )
             .await?;
+            let scope = RecordSearchScope {
+                blueprint_id: current.blueprint.id,
+                blueprint_version: selected,
+                matching_record_ids: matching.as_deref(),
+                system_tags: &input.system_tags,
+                outdated: input.outdated,
+                export_status: None,
+                current_blueprint_version: current.blueprint.version,
+            };
             // Like the Explorer, count only for a first page, and only so far.
             let (versions, total_count) = repository
                 .search_result_versions_and_count(
-                    current.blueprint.id,
-                    selected,
-                    matching.as_deref(),
-                    &input.system_tags,
-                    input.outdated,
-                    None,
-                    current.blueprint.version,
+                    scope,
                     input
                         .page
                         .cursor
@@ -2203,36 +2207,23 @@ pub async fn execute_read(
                 Some(sort) => {
                     repository
                         .search_record_previews_sorted(
-                            current.blueprint.id,
-                            if relationship_sort {
-                                effective_source_version
-                            } else {
-                                selected
+                            RecordSearchScope {
+                                blueprint_version: if relationship_sort {
+                                    effective_source_version
+                                } else {
+                                    selected
+                                },
+                                ..scope
                             },
                             limit.into(),
                             input.page.cursor.as_deref(),
-                            matching.as_deref(),
-                            &input.system_tags,
-                            input.outdated,
-                            None,
-                            current.blueprint.version,
                             sort,
                         )
                         .await?
                 }
                 None => {
                     repository
-                        .search_record_previews(
-                            current.blueprint.id,
-                            selected,
-                            limit.into(),
-                            cursor,
-                            matching.as_deref(),
-                            &input.system_tags,
-                            input.outdated,
-                            None,
-                            current.blueprint.version,
-                        )
+                        .search_record_previews(scope, limit.into(), cursor)
                         .await?
                 }
             };
@@ -2260,13 +2251,13 @@ pub async fn execute_read(
                     Some(
                         repository
                             .count_record_previews(
-                                current.blueprint.id,
-                                None,
-                                None,
-                                &[],
-                                true,
-                                None,
-                                current.blueprint.version,
+                                RecordSearchScope {
+                                    blueprint_version: None,
+                                    matching_record_ids: None,
+                                    system_tags: &[],
+                                    outdated: true,
+                                    ..scope
+                                },
                                 SEARCH_TOTAL_COUNT_CAP + 1,
                             )
                             .await?,
