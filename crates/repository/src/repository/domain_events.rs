@@ -290,7 +290,6 @@ impl AttricatRepository {
     pub async fn ensure_event_consumer(
         &self,
         name: &str,
-        _event_types: &[&str],
     ) -> Result<EventConsumer, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         // Polling existing consumers should not acquire the boundary lock or
@@ -352,32 +351,6 @@ impl AttricatRepository {
         .await?;
         transaction.commit().await?;
         Ok(Some(high_water))
-    }
-
-    pub async fn create_event_consumer(
-        &self,
-        name: &str,
-    ) -> Result<EventConsumer, RepositoryError> {
-        let workspace_id = self.workspace_id.0;
-        let mut transaction = self.pool.begin().await?;
-        lock_outbox_boundary(&mut transaction, workspace_id).await?;
-        let watermark = sqlx::query_scalar::<_, i64>(
-            "SELECT COALESCE(max(sequence), 0) FROM domain_events WHERE workspace_id = $1",
-        )
-        .bind(workspace_id)
-        .fetch_one(&mut *transaction)
-        .await?;
-        let consumer = sqlx::query_as::<_, EventConsumer>(
-            "INSERT INTO event_consumers (id, workspace_id, name, watermark) VALUES ($1, $2, $3, $4) RETURNING id, workspace_id, name, watermark",
-        )
-        .bind(Uuid::new_v4())
-        .bind(workspace_id)
-        .bind(name)
-        .bind(watermark)
-        .fetch_one(&mut *transaction)
-        .await?;
-        transaction.commit().await?;
-        Ok(consumer)
     }
 
     /// Backfills pre-task deliveries and materializes each newly eligible

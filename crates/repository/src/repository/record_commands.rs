@@ -475,27 +475,6 @@ impl AttricatRepository {
         Ok((default_context_id, scopes))
     }
 
-    pub async fn update_record_with_values(
-        &self,
-        record_id: Uuid,
-        values: Vec<NewAttributeValue>,
-        relationships: Vec<RelationshipTargets>,
-        remove_values: Vec<AttributeValueSelector>,
-        system_tags: Option<Vec<String>>,
-        system_metadata: Option<Value>,
-    ) -> Result<Record, RepositoryError> {
-        self.update_record_with_values_checked(
-            record_id,
-            values,
-            relationships,
-            remove_values,
-            system_tags,
-            system_metadata,
-            None,
-        )
-        .await
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub async fn update_record_with_values_checked(
         &self,

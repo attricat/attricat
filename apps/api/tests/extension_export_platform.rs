@@ -217,7 +217,7 @@ async fn content_revision(pool: &sqlx::PgPool, record_id: Uuid) -> i64 {
 async fn handler_outcomes_reject_and_retry_records_without_quarantine(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     repository
-        .ensure_event_consumer(WASM_CONSUMER, &[])
+        .ensure_event_consumer(WASM_CONSUMER)
         .await
         .unwrap();
     let store = Arc::new(FakeObjectStore::available());
@@ -1617,7 +1617,7 @@ async fn set_title(repository: &AttricatRepository, record: Uuid, title: &str) {
 async fn debounced_handlers_push_a_burst_of_edits_once(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     repository
-        .ensure_event_consumer(WASM_CONSUMER, &[])
+        .ensure_event_consumer(WASM_CONSUMER)
         .await
         .unwrap();
     let store = Arc::new(FakeObjectStore::available());

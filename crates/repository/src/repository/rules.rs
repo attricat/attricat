@@ -271,11 +271,6 @@ impl AttricatRepository {
             .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))
     }
 
-    pub async fn enable_rule(&self, id: Uuid, version: i64) -> Result<Rule, RepositoryError> {
-        self.enable_rule_with(id, version, crate::model::EnableRule::default())
-            .await
-    }
-
     /// Enables a published revision. An enforcing rule first needs a
     /// completed full dry run of that revision, unless its blueprint revision
     /// has no live records; existing violations must be accepted explicitly.

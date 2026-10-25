@@ -217,9 +217,7 @@ async fn dispatch_handler(
     for workspace_id in repository.polled_workspace_ids().await?.as_ref().clone() {
         let repository = repository.for_workspace(workspace_id);
         if !state.registered.contains(&workspace_id) {
-            repository
-                .ensure_event_consumer(handler.name(), handler.event_types())
-                .await?;
+            repository.ensure_event_consumer(handler.name()).await?;
             state.registered.insert(workspace_id);
         }
         if publish_health {

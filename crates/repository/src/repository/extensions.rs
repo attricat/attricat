@@ -479,16 +479,6 @@ impl AttricatRepository {
             .bind(installation.id).fetch_all(&self.pool).await?)
     }
 
-    /// Lists only enabled client contributions for the active workspace.
-    /// Deserializing the immutable manifest here keeps runtime selection tied to
-    /// the installed release rather than caller-controlled identifiers.
-    pub async fn client_extension_contributions(
-        &self,
-    ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
-        self.client_extension_contributions_for_blueprint(None)
-            .await
-    }
-
     /// Resolves the layout for one immutable published blueprint revision.
     /// Callers cannot provide a view definition directly.
     pub async fn client_extension_contributions_for_blueprint(

@@ -852,10 +852,14 @@ async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx:
         event_types,
         vec!["plugin.acme.producer.inventory_changed.v1"]
     );
+    let producer_installation = repository
+        .runtime_extension_installation("acme.producer", producer.installed_release_id)
+        .await
+        .unwrap()
+        .expect("the producer is enabled");
     repository
-        .emit_extension_event(
-            "acme.producer",
-            producer.installed_release_id,
+        .emit_extension_event_with(
+            &producer_installation,
             "inventory",
             "inventory_item",
             Uuid::new_v4(),
@@ -864,7 +868,7 @@ async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx:
         .await
         .unwrap();
     repository
-        .ensure_event_consumer("attricat.extensions.wasm", &[])
+        .ensure_event_consumer("attricat.extensions.wasm")
         .await
         .unwrap();
     repository
@@ -942,7 +946,10 @@ async fn navigation_contributions_target_same_release_routes(pool: sqlx::PgPool)
         .await
         .unwrap();
 
-    let contributions = repository.client_extension_contributions().await.unwrap();
+    let contributions = repository
+        .client_extension_contributions_for_blueprint(None)
+        .await
+        .unwrap();
     let navigation = contributions
         .iter()
         .find(|item| item.id == "workbench-nav")
@@ -972,7 +979,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
         .unwrap();
     assert!(
         repository
-            .client_extension_contributions()
+            .client_extension_contributions_for_blueprint(None)
             .await
             .unwrap()
             .is_empty()
@@ -983,7 +990,10 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
         .await
         .unwrap();
     repository.enable_extension("acme.client").await.unwrap();
-    let contributions = repository.client_extension_contributions().await.unwrap();
+    let contributions = repository
+        .client_extension_contributions_for_blueprint(None)
+        .await
+        .unwrap();
     assert_eq!(contributions.len(), 1);
     assert_eq!(contributions[0].id, "panel");
     assert_eq!(
@@ -1012,7 +1022,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
         .unwrap();
     assert!(
         repository
-            .client_extension_contributions()
+            .client_extension_contributions_for_blueprint(None)
             .await
             .unwrap()
             .is_empty()
@@ -1028,7 +1038,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
         .unwrap();
     assert_eq!(
         repository
-            .client_extension_contributions()
+            .client_extension_contributions_for_blueprint(None)
             .await
             .unwrap()
             .len(),
@@ -1038,14 +1048,18 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
     repository.disable_extension("acme.client").await.unwrap();
     assert!(
         repository
-            .client_extension_contributions()
+            .client_extension_contributions_for_blueprint(None)
             .await
             .unwrap()
             .is_empty()
     );
     repository.enable_extension("acme.client").await.unwrap();
     assert_eq!(
-        repository.client_extension_contributions().await.unwrap()[0].contribution_key,
+        repository
+            .client_extension_contributions_for_blueprint(None)
+            .await
+            .unwrap()[0]
+            .contribution_key,
         "acme.client:panel"
     );
     repository
@@ -1054,7 +1068,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
         .unwrap();
     assert!(
         repository
-            .client_extension_contributions()
+            .client_extension_contributions_for_blueprint(None)
             .await
             .unwrap()
             .is_empty()
@@ -1224,7 +1238,7 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
     }
     let keys = || async {
         repository
-            .client_extension_contributions()
+            .client_extension_contributions_for_blueprint(None)
             .await
             .unwrap()
             .into_iter()
@@ -1365,7 +1379,7 @@ async fn blueprint_layout_overlays_owned_outlets_and_preserves_global_workspace_
         .unwrap();
     assert_eq!(
         repository
-            .client_extension_contributions()
+            .client_extension_contributions_for_blueprint(None)
             .await
             .unwrap()
             .into_iter()
@@ -1443,7 +1457,7 @@ value_type = "string"
     );
     assert_eq!(
         repository
-            .client_extension_contributions()
+            .client_extension_contributions_for_blueprint(None)
             .await
             .unwrap()
             .into_iter()
@@ -1845,7 +1859,7 @@ async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(poo
         .unwrap();
     assert!(
         repository
-            .client_extension_contributions()
+            .client_extension_contributions_for_blueprint(None)
             .await
             .unwrap()
             .is_empty()
@@ -1921,7 +1935,7 @@ async fn workspace_safe_mode_blocks_runtime_descriptors_and_storage_without_muta
         .unwrap();
     assert!(
         repository
-            .client_extension_contributions()
+            .client_extension_contributions_for_blueprint(None)
             .await
             .unwrap()
             .is_empty()
@@ -1954,7 +1968,7 @@ async fn workspace_safe_mode_blocks_runtime_descriptors_and_storage_without_muta
         .unwrap();
     assert_eq!(
         repository
-            .client_extension_contributions()
+            .client_extension_contributions_for_blueprint(None)
             .await
             .unwrap()
             .len(),

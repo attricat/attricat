@@ -2403,9 +2403,7 @@ async fn coordinate_workspace(
         scoped.produce_due_blueprint_connector_jobs().await?;
     }
     if !state.registered {
-        scoped
-            .ensure_event_consumer(WASM_EVENT_CONSUMER, &[])
-            .await?;
+        scoped.ensure_event_consumer(WASM_EVENT_CONSUMER).await?;
         state.registered = true;
     }
     let event_types = scoped.enabled_extension_event_types().await?;

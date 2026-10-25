@@ -21,7 +21,7 @@ async fn event_delivery_materialization_is_atomic_filtered_and_deduplicated(pool
         Uuid::from_u128(0x00000000000040008000000000000002),
     );
     repository
-        .ensure_event_consumer("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .ensure_event_consumer("attricat.extensions.wasm")
         .await
         .unwrap();
     let correlation_id = Uuid::new_v4();
@@ -97,7 +97,7 @@ async fn materialization_is_idempotent_across_coordinator_restart(pool: PgPool) 
         Uuid::from_u128(0x00000000000040008000000000000002),
     );
     repository
-        .ensure_event_consumer("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .ensure_event_consumer("attricat.extensions.wasm")
         .await
         .unwrap();
     let event_id = insert_event(&pool, CONTEXT_CREATED_V1, Uuid::new_v4()).await;
@@ -113,7 +113,7 @@ async fn materialization_is_idempotent_across_coordinator_restart(pool: PgPool) 
         Uuid::from_u128(0x00000000000040008000000000000002),
     );
     restarted
-        .ensure_event_consumer("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .ensure_event_consumer("attricat.extensions.wasm")
         .await
         .unwrap();
     restarted
@@ -150,7 +150,7 @@ async fn newly_eligible_plugin_event_is_backfilled_after_watermark_advanced(pool
         Uuid::from_u128(0x00000000000040008000000000000002),
     );
     repository
-        .ensure_event_consumer("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .ensure_event_consumer("attricat.extensions.wasm")
         .await
         .unwrap();
 
@@ -202,7 +202,7 @@ async fn expired_event_task_lease_rejects_stale_receipts_and_redelivers(pool: Pg
         Uuid::from_u128(0x00000000000040008000000000000002),
     );
     repository
-        .ensure_event_consumer("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .ensure_event_consumer("attricat.extensions.wasm")
         .await
         .unwrap();
     let event_id = insert_event(&pool, CONTEXT_CREATED_V1, Uuid::new_v4()).await;

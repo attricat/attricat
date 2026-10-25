@@ -1011,13 +1011,14 @@ async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
     // Writes that do not touch the name are not held up.
     tokio::time::timeout(
         Duration::from_secs(10),
-        repository.update_record_with_values(
+        repository.update_record_with_values_checked(
             record,
             vec![],
             vec![],
             vec![],
             None,
             Some(json!({"plain": true})),
+            None,
         ),
     )
     .await
@@ -1028,13 +1029,14 @@ async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
     let writer = repository.clone();
     let touching = tokio::spawn(async move {
         writer
-            .update_record_with_values(
+            .update_record_with_values_checked(
                 record,
                 vec![],
                 vec![],
                 vec![],
                 None,
                 Some(json!({"plain": true, "acme.race": {"x": 1}})),
+                None,
             )
             .await
     });

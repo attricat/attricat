@@ -838,37 +838,8 @@ impl AttricatRepository {
         Ok(())
     }
 
-    /// Appends a declared extension event through the durable outbox. The
-    /// caller supplies an invocation-time authorized release snapshot.
-    pub async fn emit_extension_event(
-        &self,
-        extension_id: &str,
-        installed_release_id: Uuid,
-        contract_id: &str,
-        aggregate_kind: &str,
-        aggregate_id: Uuid,
-        payload: Value,
-    ) -> Result<(), RepositoryError> {
-        let Some(installation) = self
-            .runtime_extension_installation(extension_id, installed_release_id)
-            .await?
-        else {
-            return Err(RepositoryError::InvalidExtension(
-                "extension invocation is no longer authorized".into(),
-            ));
-        };
-        self.emit_extension_event_with(
-            &installation,
-            contract_id,
-            aggregate_kind,
-            aggregate_id,
-            payload,
-        )
-        .await
-    }
-
-    /// [`Self::emit_extension_event`] for a host call that has just refreshed
-    /// its authorized installation snapshot.
+    /// Appends a declared extension event through the durable outbox, for a
+    /// host call that has just refreshed its authorized installation snapshot.
     pub async fn emit_extension_event_with(
         &self,
         installation: &ExtensionRuntimeInstallation,
