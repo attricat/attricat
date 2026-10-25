@@ -1,0 +1,459 @@
+//! Resolves a record search request into the blueprint, context and matching
+//! records it covers. The records API and the agent's search tools share it so
+//! filters, relationship paths and `@me` mean the same thing in both.
+use std::collections::{HashMap, HashSet};
+
+use attricat_validation::saved_search::{FILTER_OPERATOR_IS_SET, MAX_RELATIONSHIP_HOPS};
+use thiserror::Error;
+use tracing::Instrument;
+use uuid::Uuid;
+
+use super::{
+    AttricatRepository, RecordRelationshipFilter, RecordSearchFilter, RepositoryError,
+    SEARCH_FILTER_EQ_ANY, SearchContext,
+};
+use crate::model::{
+    BlueprintWithAttributes, MatchExplanation, RelationshipFilter, SearchBlueprint, SearchFilter,
+};
+
+/// Attribute filters, and separately relationship filters, a search may apply.
+pub const MAX_SEARCH_FILTERS: usize = 20;
+
+/// Why a search request could not be resolved into a scope.
+#[derive(Debug, Error)]
+pub enum SearchScopeError {
+    /// No blueprint has the requested code.
+    #[error("blueprint was not found")]
+    UnknownBlueprint,
+    /// The request is malformed. `blueprint` is the blueprint a field path
+    /// failed to resolve against, so callers can say which fields it offers.
+    #[error("{message}")]
+    Invalid {
+        message: String,
+        blueprint: Option<Box<BlueprintWithAttributes>>,
+    },
+    /// The text query failed against the searched blueprint.
+    #[error("{error}")]
+    Query {
+        error: RepositoryError,
+        blueprint: Box<BlueprintWithAttributes>,
+    },
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+}
+
+fn invalid(message: impl Into<String>) -> SearchScopeError {
+    SearchScopeError::Invalid {
+        message: message.into(),
+        blueprint: None,
+    }
+}
+
+fn invalid_in(message: impl Into<String>, blueprint: &BlueprintWithAttributes) -> SearchScopeError {
+    SearchScopeError::Invalid {
+        message: message.into(),
+        blueprint: Some(Box::new(blueprint.clone())),
+    }
+}
+
+pub struct SearchScopeRequest<'a> {
+    pub blueprint: &'a SearchBlueprint,
+    pub query: Option<&'a str>,
+    pub filters: &'a [SearchFilter],
+    pub relationship_filters: &'a [RelationshipFilter],
+    pub context_code: &'a str,
+    /// The person `@me` filters on assignment attributes match, with their teams.
+    pub actor: Uuid,
+}
+
+/// A search's blueprint, context and matching records.
+pub struct SearchScope {
+    /// The latest revision of the searched blueprint.
+    pub current: BlueprintWithAttributes,
+    /// The requested version, or `None` to search every version.
+    pub selected: Option<i64>,
+    /// The revision filters and the query resolve against.
+    pub search_blueprint: BlueprintWithAttributes,
+    pub context: SearchContext,
+    pub explanations: HashMap<Uuid, Vec<MatchExplanation>>,
+    /// `None` when neither a query nor a filter narrows the blueprint.
+    pub matching: Option<Vec<Uuid>>,
+}
+
+/// The IDs in both lists, keeping `current`'s order; `None` means unrestricted.
+pub fn intersect_record_ids(current: Option<Vec<Uuid>>, next: Vec<Uuid>) -> Vec<Uuid> {
+    match current {
+        None => next,
+        Some(current) => {
+            let next: HashSet<_> = next.into_iter().collect();
+            current.into_iter().filter(|id| next.contains(id)).collect()
+        }
+    }
+}
+
+impl AttricatRepository {
+    pub async fn resolve_search_scope(
+        &self,
+        request: SearchScopeRequest<'_>,
+    ) -> Result<SearchScope, SearchScopeError> {
+        let code = &request.blueprint.code;
+        if code.is_empty() {
+            return Err(invalid("blueprint.code must not be empty"));
+        }
+        for (field, len) in [
+            ("filters", request.filters.len()),
+            ("relationship_filters", request.relationship_filters.len()),
+        ] {
+            if len > MAX_SEARCH_FILTERS {
+                return Err(invalid(format!(
+                    "{field} must contain at most {MAX_SEARCH_FILTERS} items"
+                )));
+            }
+        }
+        let current = self
+            .get_blueprint_by_code(code)
+            .instrument(tracing::info_span!(
+                "sql.operation",
+                label = "blueprint-load"
+            ))
+            .await?
+            .ok_or(SearchScopeError::UnknownBlueprint)?;
+        let (selected, search_blueprint) = match request.blueprint.version {
+            // The latest published revision is the requested one.
+            Some(version) if version == current.blueprint.version => {
+                (Some(version), current.clone())
+            }
+            Some(version) => {
+                let published = self
+                    .get_published_blueprint_by_code_and_version(code, version)
+                    .instrument(tracing::info_span!(
+                        "sql.operation",
+                        label = "blueprint-load"
+                    ))
+                    .await?
+                    .ok_or(RepositoryError::NotFound("blueprint"))?;
+                (Some(published.blueprint.version), published)
+            }
+            None => (None, current.clone()),
+        };
+        let context = self
+            .search_context(request.context_code)
+            .await?
+            .ok_or_else(|| invalid("context_code is not a context"))?;
+        let mut filters = Vec::with_capacity(request.filters.len());
+        for filter in request.filters {
+            filters.push(
+                self.resolve_search_filter(&search_blueprint, filter, request.actor)
+                    .await?,
+            );
+        }
+        let mut relationship_filters = Vec::with_capacity(request.relationship_filters.len());
+        for filter in request.relationship_filters {
+            relationship_filters.push(
+                self.resolve_relationship_filter(&search_blueprint, filter)
+                    .await?,
+            );
+        }
+        // Without a search term, the page query already scopes the blueprint
+        // and version, so no record IDs are materialized.
+        let query = request
+            .query
+            .map(str::trim)
+            .filter(|query| !query.is_empty());
+        let resolved = match query {
+            Some(query) => Some(
+                self.resolve_search(&search_blueprint, selected, Some(query))
+                    .instrument(tracing::info_span!(
+                        "sql.operation",
+                        label = "search-resolve"
+                    ))
+                    .await
+                    .map_err(|error| SearchScopeError::Query {
+                        error,
+                        blueprint: Box::new(search_blueprint.clone()),
+                    })?,
+            ),
+            None => None,
+        };
+        let mut matching: Option<Vec<Uuid>> = resolved
+            .as_ref()
+            .map(|resolved| resolved.ids.iter().copied().collect());
+        if !filters.is_empty() {
+            let filtered = self
+                .filter_record_ids(current.blueprint.id, selected, &filters, &context)
+                .instrument(tracing::info_span!(
+                    "sql.operation",
+                    label = "attribute-filter"
+                ))
+                .await?;
+            matching = Some(intersect_record_ids(matching, filtered));
+        }
+        if !relationship_filters.is_empty() {
+            let filtered = self
+                .filter_relationship_record_ids(
+                    current.blueprint.id,
+                    selected,
+                    &relationship_filters,
+                    &context,
+                )
+                .instrument(tracing::info_span!(
+                    "sql.operation",
+                    label = "relationship-filter"
+                ))
+                .await?;
+            matching = Some(intersect_record_ids(matching, filtered));
+        }
+        Ok(SearchScope {
+            current,
+            selected,
+            search_blueprint,
+            context,
+            explanations: resolved
+                .map(|resolved| resolved.explanations)
+                .unwrap_or_default(),
+            matching,
+        })
+    }
+
+    /// Resolves an attribute filter's field path, operator and value against
+    /// `blueprint`. `actor` is who `@me` matches, with their teams.
+    pub async fn resolve_search_filter(
+        &self,
+        blueprint: &BlueprintWithAttributes,
+        filter: &SearchFilter,
+        actor: Uuid,
+    ) -> Result<RecordSearchFilter, SearchScopeError> {
+        let parts: Vec<_> = filter.field.split('.').collect();
+        if parts.len() > MAX_RELATIONSHIP_HOPS + 1 || parts.iter().any(|part| part.is_empty()) {
+            return Err(invalid(
+                "filters.field may contain at most three relationship hops and a scalar or file leaf",
+            ));
+        }
+        let mut current = blueprint.clone();
+        let mut relationship_path = Vec::new();
+        for relationship_name in &parts[..parts.len() - 1] {
+            let relationship = current
+                .attributes
+                .iter()
+                .find(|attribute| {
+                    attribute.code == *relationship_name && attribute.value_type == "relationship"
+                })
+                .ok_or_else(|| {
+                    invalid_in(
+                        format!(
+                            "filters.field segment '{relationship_name}' is not a relationship"
+                        ),
+                        &current,
+                    )
+                })?;
+            relationship_path.push(relationship.code.clone());
+            let target = relationship
+                .target_blueprint_code
+                .as_deref()
+                .ok_or_else(|| {
+                    invalid(format!(
+                        "filters.field relationship '{relationship_name}' has no target blueprint"
+                    ))
+                })?;
+            current = self
+                .get_blueprint_by_code(target)
+                .await?
+                .ok_or(RepositoryError::NotFound("target blueprint"))?;
+        }
+        let leaf = parts[parts.len() - 1];
+        let (attribute_code, value_type, reusable, value_schema) = match current
+            .attributes
+            .iter()
+            .find(|attribute| attribute.code == leaf)
+        {
+            Some(attribute) => (
+                attribute.code.clone(),
+                attribute.value_type.clone(),
+                false,
+                attribute.value_schema.clone(),
+            ),
+            None if relationship_path.is_empty() => {
+                let attribute = self
+                    .attached_reusable_attribute_for_blueprint(
+                        blueprint.blueprint.id,
+                        blueprint.blueprint.version,
+                        leaf,
+                    )
+                    .await?
+                    .filter(|attribute| attribute.searchable)
+                    .ok_or_else(|| {
+                        invalid_in(
+                            format!("filters.field leaf '{leaf}' is not a searchable attribute"),
+                            &current,
+                        )
+                    })?;
+                (
+                    format!("{}:{}", attribute.namespace, attribute.code),
+                    attribute.value_type,
+                    true,
+                    attribute.value_schema,
+                )
+            }
+            None => {
+                return Err(invalid_in(
+                    format!("filters.field leaf '{leaf}' is not an attribute"),
+                    &current,
+                ));
+            }
+        };
+        // "Assigned to me" matches the actor and each of the actor's teams.
+        if let Some(value) = self
+            .current_user_filter_value(
+                value_schema.as_ref(),
+                &filter.operator,
+                &filter.value,
+                actor,
+            )
+            .await?
+        {
+            return Ok(RecordSearchFilter {
+                field: filter.field.clone(),
+                relationship_path,
+                leaf_field: attribute_code,
+                reusable,
+                operator: SEARCH_FILTER_EQ_ANY.to_owned(),
+                value_type,
+                value,
+            });
+        }
+        let presence = filter.operator == FILTER_OPERATOR_IS_SET;
+        let valid_operator = match value_type.as_str() {
+            "string" => {
+                presence || matches!(filter.operator.as_str(), "eq" | "contains" | "starts_with")
+            }
+            "number" | "integer" | "date" | "datetime" | "time" => {
+                presence || matches!(filter.operator.as_str(), "eq" | "gt" | "gte" | "lt" | "lte")
+            }
+            "boolean" => presence || filter.operator == "eq",
+            // A file value has no comparable scalar, only attached files.
+            "file" => presence,
+            _ => false,
+        };
+        if !valid_operator {
+            return Err(invalid(format!(
+                "operator '{}' is not supported for {} attribute '{}'",
+                filter.operator, value_type, filter.field
+            )));
+        }
+        let value = if presence {
+            filter.value.as_bool().map(|value| value.to_string())
+        } else {
+            match value_type.as_str() {
+                "string" => filter.value.as_str().map(str::to_owned),
+                "number" => filter.value.as_number().map(ToString::to_string),
+                "integer" => filter.value.as_i64().map(|value| value.to_string()),
+                "boolean" => filter.value.as_bool().map(|value| value.to_string()),
+                "date" => filter.value.as_str().and_then(|value| {
+                    chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
+                        .ok()
+                        .map(|_| value.to_owned())
+                }),
+                "datetime" => filter.value.as_str().and_then(|value| {
+                    chrono::DateTime::parse_from_rfc3339(value)
+                        .ok()
+                        .map(|_| value.to_owned())
+                }),
+                "time" => filter.value.as_str().and_then(|value| {
+                    ["%H:%M", "%H:%M:%S", "%H:%M:%S%.f"]
+                        .iter()
+                        .any(|format| chrono::NaiveTime::parse_from_str(value, format).is_ok())
+                        .then(|| value.to_owned())
+                }),
+                _ => None,
+            }
+        }
+        .ok_or_else(|| {
+            invalid(format!(
+                "filters.value is invalid for {} attribute '{}'",
+                value_type, filter.field
+            ))
+        })?;
+        Ok(RecordSearchFilter {
+            field: filter.field.clone(),
+            relationship_path,
+            leaf_field: attribute_code,
+            reusable,
+            operator: filter.operator.clone(),
+            value_type,
+            value,
+        })
+    }
+
+    /// Resolves a relationship filter's one-to-three hop path against
+    /// `blueprint`.
+    pub async fn resolve_relationship_filter(
+        &self,
+        blueprint: &BlueprintWithAttributes,
+        filter: &RelationshipFilter,
+    ) -> Result<RecordRelationshipFilter, SearchScopeError> {
+        if filter.selected_target_ids.is_empty() {
+            return Err(invalid(
+                "relationship_filters.selected_target_ids must not be empty",
+            ));
+        }
+        let path: Vec<_> = filter.field.split('.').collect();
+        if path.len() > MAX_RELATIONSHIP_HOPS || path.iter().any(|segment| segment.is_empty()) {
+            return Err(invalid(
+                "relationship_filters.field must contain one to three relationship hops",
+            ));
+        }
+        let mut current = blueprint.clone();
+        let mut relationship_path = Vec::with_capacity(path.len());
+        for name in path {
+            let relationship = current
+                .attributes
+                .iter()
+                .find(|attribute| attribute.code == name && attribute.value_type == "relationship")
+                .ok_or_else(|| {
+                    invalid_in(
+                        format!(
+                            "relationship_filters.field segment '{name}' is not a relationship"
+                        ),
+                        &current,
+                    )
+                })?;
+            let target = relationship
+                .target_blueprint_code
+                .as_deref()
+                .ok_or_else(|| {
+                    invalid(format!(
+                        "relationship_filters.field relationship '{name}' has no target blueprint"
+                    ))
+                })?;
+            relationship_path.push(relationship.code.clone());
+            current = self
+                .get_blueprint_by_code(target)
+                .await?
+                .ok_or(RepositoryError::NotFound("target blueprint"))?;
+        }
+        Ok(RecordRelationshipFilter {
+            field: filter.field.clone(),
+            relationship_path,
+            selected_target_ids: filter.selected_target_ids.clone(),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn intersection_keeps_the_current_order_and_treats_none_as_unrestricted() {
+        let [first, second, third] = [Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
+        assert_eq!(
+            intersect_record_ids(None, vec![second, first]),
+            [second, first]
+        );
+        assert_eq!(
+            intersect_record_ids(Some(vec![first, second, third]), vec![third, first]),
+            [first, third]
+        );
+        assert!(intersect_record_ids(Some(vec![first]), vec![second]).is_empty());
+    }
+}

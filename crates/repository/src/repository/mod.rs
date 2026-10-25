@@ -116,6 +116,7 @@ mod roles;
 mod rules;
 mod saved_views;
 mod scope;
+mod search_scope;
 mod sessions;
 mod solution_packs;
 mod status;
@@ -243,6 +244,9 @@ pub use retention::RetentionDays;
 pub use retention_holds::FileRetentionHold;
 pub use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub use rules::{ClaimedRuleRun, RuleCandidateResult};
+pub use search_scope::{
+    MAX_SEARCH_FILTERS, SearchScope, SearchScopeError, SearchScopeRequest, intersect_record_ids,
+};
 pub use solution_packs::SolutionPackCheckResult;
 pub use solution_packs::{
     CreateSolutionPackPlanRequest, PlannedExtensionInstall, SolutionPackApplication,

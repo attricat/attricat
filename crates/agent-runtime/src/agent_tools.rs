@@ -25,11 +25,10 @@ use crate::{
     },
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
     repository::{
-        AttricatRepository, AuthorizationActor, RecordSearchSort, RepositoryError, SearchContext,
+        AttricatRepository, AuthorizationActor, MAX_SEARCH_FILTERS, RecordSearchSort,
+        RepositoryError, SearchContext, SearchScope, SearchScopeError, SearchScopeRequest,
     },
-    search_filters::{
-        intersect_ids, resolve_agent_filter, resolve_agent_relationship_filter, search_fields_hint,
-    },
+    search_filters::{check_selected_ids, resolve_agent_relationship_filter},
 };
 const BLUEPRINT_AUTHORING_GUIDE: &str = include_str!("../../../docs/blueprints.md");
 const VIEW_CONFIGURATION_GUIDE: &str = include_str!("../../../docs/views.md");
@@ -71,7 +70,6 @@ const DATA_HEALTH_SECTIONS: [&str; 5] = [
     "contexts",
     "relationships",
 ];
-const MAX_SEARCH_FILTERS: usize = 20;
 /// Matches the HTTP record label route.
 const MAX_RECORD_LABEL_IDS: usize = 100;
 /// Search totals stop counting here, as the Explorer's do.
@@ -1882,7 +1880,7 @@ pub async fn execute_read(
                     "group_limit must be between 1 and {MAX_COUNT_GROUP_LIMIT}"
                 )));
             }
-            let AgentSearchScope {
+            let SearchScope {
                 current,
                 selected,
                 search_blueprint,
@@ -2123,7 +2121,7 @@ pub async fn execute_read(
                     "page.size must be between 1 and {DEFAULT_RECORD_PAGE_SIZE}"
                 )));
             }
-            let AgentSearchScope {
+            let SearchScope {
                 current,
                 selected,
                 search_blueprint,
@@ -2665,7 +2663,9 @@ pub async fn execute_mutation(
                 current
             };
             for filter in &input.attribute_filters {
-                resolve_agent_filter(repository, &source, filter, actor).await?;
+                repository
+                    .resolve_search_filter(&source, filter, actor)
+                    .await?;
             }
             for facet in &input.relationship_facets {
                 resolve_agent_relationship_filter(
@@ -2835,7 +2835,9 @@ pub async fn execute_mutation(
             };
             if let Some(filters) = input.attribute_filters.as_ref() {
                 for filter in filters {
-                    resolve_agent_filter(repository, &source, filter, actor).await?;
+                    repository
+                        .resolve_search_filter(&source, filter, actor)
+                        .await?;
                 }
             }
             if let Some(facets) = input.relationship_facets.as_ref() {
@@ -3299,18 +3301,8 @@ async fn unknown_blueprint(repository: &AttricatRepository, code: &str) -> ToolE
     ))
 }
 
-/// A search's blueprint, context and matching records, shared by the tools
-/// that search and count.
-pub(crate) struct AgentSearchScope {
-    pub(crate) current: crate::model::BlueprintWithAttributes,
-    pub(crate) selected: Option<i64>,
-    pub(crate) search_blueprint: crate::model::BlueprintWithAttributes,
-    pub(crate) context: SearchContext,
-    pub(crate) explanations: HashMap<Uuid, Vec<crate::model::MatchExplanation>>,
-    /// `None` when neither a query nor a filter narrows the blueprint.
-    pub(crate) matching: Option<Vec<Uuid>>,
-}
-
+/// Resolves a search for the tools that search and count. Relationship filter
+/// selections are bounded as in saved searches.
 pub(crate) async fn agent_search_scope(
     repository: &AttricatRepository,
     actor: Uuid,
@@ -3319,91 +3311,26 @@ pub(crate) async fn agent_search_scope(
     filters: &[crate::model::SearchFilter],
     relationship_filters: &[crate::model::RelationshipFilter],
     context_code: Option<&str>,
-) -> Result<AgentSearchScope, ToolError> {
-    if blueprint.code.is_empty() {
-        return Err(ToolError::InvalidArguments(
-            "blueprint.code must not be empty".to_owned(),
-        ));
-    }
-    if filters.len() > MAX_SEARCH_FILTERS || relationship_filters.len() > MAX_SEARCH_FILTERS {
-        return Err(ToolError::InvalidArguments(format!(
-            "filters and relationship_filters must each contain at most {MAX_SEARCH_FILTERS} items"
-        )));
-    }
-    let Some(current) = repository.get_blueprint_by_code(&blueprint.code).await? else {
-        return Err(unknown_blueprint(repository, &blueprint.code).await);
-    };
-    let (selected, search_blueprint) = match blueprint.version {
-        // The latest published revision is the requested one.
-        Some(version) if version == current.blueprint.version => (Some(version), current.clone()),
-        Some(version) => {
-            let published = repository
-                .get_published_blueprint_by_code_and_version(&blueprint.code, version)
-                .await?
-                .ok_or(RepositoryError::NotFound("blueprint"))?;
-            (Some(published.blueprint.version), published)
-        }
-        None => (None, current.clone()),
-    };
-    let query = query.map(str::trim).filter(|value| !value.is_empty());
-    let context = repository
-        .search_context(context_code.unwrap_or("default"))
-        .await?
-        .ok_or_else(|| ToolError::InvalidArguments("context_code is not a context".to_owned()))?;
-    let resolved = match query {
-        Some(query) => Some(
-            repository
-                .resolve_search(&search_blueprint, selected, Some(query))
-                .await
-                .map_err(|error| {
-                    ToolError::InvalidArguments(format!(
-                        "{error}. {}",
-                        search_fields_hint(&search_blueprint)
-                    ))
-                })?,
-        ),
-        None => None,
-    };
-    let mut matching = resolved
-        .as_ref()
-        .map(|resolved| resolved.ids.iter().copied().collect::<Vec<_>>());
-    let mut resolved_filters = Vec::with_capacity(filters.len());
-    for filter in filters {
-        resolved_filters
-            .push(resolve_agent_filter(repository, &search_blueprint, filter, actor).await?);
-    }
-    if !resolved_filters.is_empty() {
-        let ids = repository
-            .filter_record_ids(current.blueprint.id, selected, &resolved_filters, &context)
-            .await?;
-        matching = Some(intersect_ids(matching, ids));
-    }
-    let mut resolved_relationship_filters = Vec::with_capacity(relationship_filters.len());
+) -> Result<SearchScope, ToolError> {
     for filter in relationship_filters {
-        resolved_relationship_filters
-            .push(resolve_agent_relationship_filter(repository, &search_blueprint, filter).await?);
+        check_selected_ids(filter)?;
     }
-    if !resolved_relationship_filters.is_empty() {
-        let ids = repository
-            .filter_relationship_record_ids(
-                current.blueprint.id,
-                selected,
-                &resolved_relationship_filters,
-                &context,
-            )
-            .await?;
-        matching = Some(intersect_ids(matching, ids));
+    let scope = repository
+        .resolve_search_scope(SearchScopeRequest {
+            blueprint,
+            query,
+            filters,
+            relationship_filters,
+            context_code: context_code.unwrap_or("default"),
+            actor,
+        })
+        .await;
+    match scope {
+        Err(SearchScopeError::UnknownBlueprint) => {
+            Err(unknown_blueprint(repository, &blueprint.code).await)
+        }
+        scope => Ok(scope?),
     }
-    Ok(AgentSearchScope {
-        current,
-        selected,
-        search_blueprint,
-        context,
-        explanations: resolved
-            .map(|resolved| resolved.explanations)
-            .unwrap_or_default(),
-        matching,
-    })
 }
 
 pub(crate) fn tool_actor(repository: &AttricatRepository, user_id: Uuid) -> AuthorizationActor {
@@ -3922,13 +3849,6 @@ mod tests {
         }))
         .unwrap();
         assert!(!super::valid_saved_filter(&invalid));
-        let first = uuid::Uuid::new_v4();
-        let second = uuid::Uuid::new_v4();
-        assert_eq!(
-            crate::search_filters::intersect_ids(Some(vec![first, second]), vec![second]),
-            vec![second]
-        );
-        assert!(crate::search_filters::intersect_ids(Some(vec![first]), vec![second]).is_empty());
     }
 
     #[test]

@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::{
-    agent_tools::{self, AgentSearchScope, ToolError, agent_search_scope, tool_actor},
+    agent_tools::{self, ToolError, agent_search_scope, tool_actor},
     model::{Attribute, RelationshipFilter, SearchBlueprint, SearchFilter},
     repository::{AgentRun, AgentToolCall, AttricatRepository, RepositoryError},
 };
@@ -438,7 +438,7 @@ async fn select_filter(
     {
         return Err(ToolError::Forbidden);
     }
-    let AgentSearchScope {
+    let crate::repository::SearchScope {
         selected,
         search_blueprint,
         matching,
