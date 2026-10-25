@@ -1,3 +1,4 @@
+use attricat_domain::states::AgentRunStatus;
 use std::convert::Infallible;
 
 use async_stream::stream;
@@ -60,7 +61,7 @@ pub(super) struct ConversationResponse {
 #[derive(Serialize)]
 pub(super) struct RunResponse {
     id: Uuid,
-    status: String,
+    status: AgentRunStatus,
 }
 
 const MAX_CONVERSATION_SEARCH_BYTES: usize = 120;
@@ -614,7 +615,7 @@ pub(super) async fn stream_events(
                 Ok(events) if events.is_empty() => {
                     if draining { break; }
                     match repository.get_agent_run(run_id).await {
-                        Ok(run) if matches!(run.status.as_str(), "completed" | "failed" | "cancelled" | "skipped") => {
+                        Ok(run) if run.status.is_terminal() => {
                             // Completion and its terminal event commit atomically.
                             // Re-read after observing completion to close the race
                             // between the preceding event read and status read.

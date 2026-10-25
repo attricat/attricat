@@ -1,5 +1,6 @@
 mod support;
 
+use api::states::AgentToolCallState;
 use std::sync::Arc;
 
 use api::{
@@ -113,7 +114,7 @@ async fn approved_agent_mutation_has_explicit_redacted_provenance(pool: sqlx::Pg
             "create_context",
             support::json!({"code": "agent-audited", "data": {"token": "not-audit-metadata"}}),
             Some("Create context agent-audited"),
-            "pending_approval",
+            AgentToolCallState::PendingApproval,
         )
         .await
         .unwrap();
@@ -188,7 +189,7 @@ async fn approved_agent_mutation_has_explicit_redacted_provenance(pool: sqlx::Pg
             "create_context",
             support::json!({"code": "agent-audit-rollback", "data": {}}),
             Some("Create context agent-audit-rollback"),
-            "pending_approval",
+            AgentToolCallState::PendingApproval,
         )
         .await
         .unwrap();

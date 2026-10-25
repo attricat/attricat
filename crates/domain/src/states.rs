@@ -36,6 +36,41 @@ crate::code_enum! {
 }
 
 crate::code_enum! {
+    /// Where an agent run stands.
+    pub enum AgentRunStatus (UnknownAgentRunStatus: "agent run status") {
+        Queued => "queued",
+        Running => "running",
+        /// Paused until a person decides its pending tool calls.
+        AwaitingApproval => "awaiting_approval",
+        Completed => "completed",
+        Failed => "failed",
+        Cancelled => "cancelled",
+        Skipped => "skipped",
+    }
+}
+
+impl AgentRunStatus {
+    /// Whether the run has finished and its status will not change.
+    pub const fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            Self::Completed | Self::Failed | Self::Cancelled | Self::Skipped
+        )
+    }
+}
+
+crate::code_enum! {
+    /// Where one tool call of an agent run stands.
+    pub enum AgentToolCallState (UnknownAgentToolCallState: "agent tool call state") {
+        PendingApproval => "pending_approval",
+        Approved => "approved",
+        Rejected => "rejected",
+        Completed => "completed",
+        Failed => "failed",
+    }
+}
+
+crate::code_enum! {
     /// Where a record's export to one destination stands, in the order the
     /// UI lists them. Saved Explorer searches filter by them too.
     pub enum ExportStatus (UnknownExportStatus: "export status") {
@@ -104,6 +139,16 @@ mod tests {
             RevisionStatus::parse,
         );
         crate::codes::assert_codes_round_trip(RunStatus::ALL, RunStatus::as_str, RunStatus::parse);
+        crate::codes::assert_codes_round_trip(
+            AgentRunStatus::ALL,
+            AgentRunStatus::as_str,
+            AgentRunStatus::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            AgentToolCallState::ALL,
+            AgentToolCallState::as_str,
+            AgentToolCallState::parse,
+        );
         crate::codes::assert_codes_round_trip(
             ExportStatus::ALL,
             ExportStatus::as_str,

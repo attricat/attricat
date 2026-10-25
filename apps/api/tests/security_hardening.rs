@@ -1,5 +1,7 @@
 mod support;
 
+use api::states::{AgentRunStatus, AgentToolCallState};
+
 use api::{
     agent_tools::{ToolError, execute_read},
     agents::AgentProviderConfig,
@@ -370,7 +372,7 @@ async fn approving_another_users_agent_change_requires_the_mutation_permission(p
         .await
         .unwrap();
     repository
-        .transition_agent_run(run.id, "running", None, None)
+        .transition_agent_run(run.id, AgentRunStatus::Running, None, None)
         .await
         .unwrap();
     let call = repository
@@ -380,12 +382,12 @@ async fn approving_another_users_agent_change_requires_the_mutation_permission(p
             "create_blueprint",
             json!({"definition":"unused"}),
             Some("Create blueprint"),
-            "pending_approval",
+            AgentToolCallState::PendingApproval,
         )
         .await
         .unwrap();
     repository
-        .transition_agent_run(run.id, "awaiting_approval", None, None)
+        .transition_agent_run(run.id, AgentRunStatus::AwaitingApproval, None, None)
         .await
         .unwrap();
     let url = format!("{base}/agent/tool-calls/{}/approve", call.id);
@@ -397,7 +399,7 @@ async fn approving_another_users_agent_change_requires_the_mutation_permission(p
     }
     assert_eq!(
         repository.get_agent_tool_call(call.id).await.unwrap().state,
-        "pending_approval"
+        AgentToolCallState::PendingApproval
     );
     assert_eq!(
         owner.post(&url).send().await.unwrap().status(),

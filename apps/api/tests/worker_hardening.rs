@@ -1,5 +1,6 @@
 mod support;
 
+use api::states::{AgentRunStatus, AgentToolCallState};
 use api::{
     repository::{AttricatRepository, AuditContext, ClaimedTask, RepositoryError, TaskError},
     task_queue::TaskKind,
@@ -207,14 +208,14 @@ async fn sibling_agent_decisions_queue_one_resume_only_after_the_wave_is_resolve
                     "create_context",
                     json!({"code":name}),
                     Some(name),
-                    "pending_approval",
+                    AgentToolCallState::PendingApproval,
                 )
                 .await
                 .unwrap(),
         );
     }
     worker
-        .transition_agent_run(run_id, "awaiting_approval", None, None)
+        .transition_agent_run(run_id, AgentRunStatus::AwaitingApproval, None, None)
         .await
         .unwrap();
     repository
@@ -231,7 +232,7 @@ async fn sibling_agent_decisions_queue_one_resume_only_after_the_wave_is_resolve
         .unwrap();
     assert_eq!(
         repository.get_agent_run(run_id).await.unwrap().status,
-        "awaiting_approval"
+        AgentRunStatus::AwaitingApproval
     );
     let (second, third) = tokio::join!(
         repository.decide_tool_call(
@@ -249,7 +250,7 @@ async fn sibling_agent_decisions_queue_one_resume_only_after_the_wave_is_resolve
     third.unwrap();
     assert_eq!(
         repository.get_agent_run(run_id).await.unwrap().status,
-        "queued"
+        AgentRunStatus::Queued
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
@@ -310,7 +311,7 @@ async fn decisions_during_provider_delivery_are_not_lost_and_terminal_runs_canno
             "create_context",
             json!({"code":"early"}),
             Some("early"),
-            "pending_approval",
+            AgentToolCallState::PendingApproval,
         )
         .await
         .unwrap();
@@ -324,13 +325,13 @@ async fn decisions_during_provider_delivery_are_not_lost_and_terminal_runs_canno
         .unwrap();
     assert_eq!(
         repository.get_agent_run(run_id).await.unwrap().status,
-        "running"
+        AgentRunStatus::Running
     );
     let parked = worker
-        .transition_agent_run(run_id, "awaiting_approval", None, None)
+        .transition_agent_run(run_id, AgentRunStatus::AwaitingApproval, None, None)
         .await
         .unwrap();
-    assert_eq!(parked.status, "queued");
+    assert_eq!(parked.status, AgentRunStatus::Queued);
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM tasks WHERE subject_id=$1 AND status='queued'"
@@ -342,7 +343,7 @@ async fn decisions_during_provider_delivery_are_not_lost_and_terminal_runs_canno
         1
     );
     worker
-        .transition_agent_run(run_id, "running", None, None)
+        .transition_agent_run(run_id, AgentRunStatus::Running, None, None)
         .await
         .unwrap();
     let pending = worker
@@ -352,12 +353,12 @@ async fn decisions_during_provider_delivery_are_not_lost_and_terminal_runs_canno
             "create_context",
             json!({"code":"late"}),
             Some("late"),
-            "pending_approval",
+            AgentToolCallState::PendingApproval,
         )
         .await
         .unwrap();
     worker
-        .transition_agent_run(run_id, "failed", Some("test"), Some("test"))
+        .transition_agent_run(run_id, AgentRunStatus::Failed, Some("test"), Some("test"))
         .await
         .unwrap();
     assert!(
@@ -376,7 +377,7 @@ async fn decisions_during_provider_delivery_are_not_lost_and_terminal_runs_canno
             .await
             .unwrap()
             .state,
-        "pending_approval"
+        AgentToolCallState::PendingApproval
     );
     assert!(
         repository

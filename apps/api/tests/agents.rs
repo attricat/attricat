@@ -1,5 +1,6 @@
 mod support;
 
+use api::states::AgentRunStatus;
 use std::{sync::Arc, time::Duration};
 
 use api::{
@@ -1613,7 +1614,7 @@ async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPo
     let timed_out_run = timeout(Duration::from_secs(5), async {
         loop {
             let run = repository.get_agent_run(run.id).await.unwrap();
-            if run.status == "failed" {
+            if run.status == AgentRunStatus::Failed {
                 break run;
             }
             sleep(Duration::from_millis(25)).await;
@@ -2647,7 +2648,7 @@ async fn read_only_runs_offer_no_mutations_and_refuse_one_named_anyway(pool: PgP
         );
     }
     let run = repository.get_agent_run(run.id).await.unwrap();
-    assert_eq!(run.status, "failed");
+    assert_eq!(run.status, AgentRunStatus::Failed);
     assert_eq!(run.error_code.as_deref(), Some("unknown_tool"));
     assert!(
         repository
@@ -2963,7 +2964,7 @@ async fn runs_stop_after_the_configured_tool_round_limit(pool: PgPool) {
         .unwrap();
 
     let run = repository.get_agent_run(run.id).await.unwrap();
-    assert_eq!(run.status, "failed");
+    assert_eq!(run.status, AgentRunStatus::Failed);
     assert_eq!(run.error_code.as_deref(), Some("tool_limit"));
     assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 2);
     api_server.abort();

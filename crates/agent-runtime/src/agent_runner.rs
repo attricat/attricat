@@ -1,4 +1,5 @@
 //! Durable single-run orchestration.
+use attricat_domain::states::{AgentRunStatus, AgentToolCallState};
 use attricat_domain::value_type::ValueType;
 use std::{
     collections::HashMap,
@@ -117,7 +118,7 @@ pub async fn run(
     conversation_id: Uuid,
 ) -> Result<(), RunError> {
     repository
-        .transition_agent_run(run_id, "running", None, None)
+        .transition_agent_run(run_id, AgentRunStatus::Running, None, None)
         .await?;
     run_claimed(repository, provider, object_store, run_id, conversation_id).await
 }
@@ -454,7 +455,7 @@ async fn drive(
                             &call.function.name,
                             arguments,
                             None,
-                            "pending_approval",
+                            AgentToolCallState::PendingApproval,
                         )
                         .await?;
                     repository
@@ -504,7 +505,7 @@ async fn drive(
                     &call.function.name,
                     arguments,
                     Some(&summary),
-                    "pending_approval",
+                    AgentToolCallState::PendingApproval,
                 )
                 .await?;
             repository.append_run_event(run_id, "tool_call", json!({"tool_call_id":tool.id,"name":tool.tool_name,"state":"pending_approval"})).await?;
@@ -526,7 +527,7 @@ async fn drive(
                 &call.function.name,
                 arguments.clone(),
                 None,
-                "pending_approval",
+                AgentToolCallState::PendingApproval,
             )
             .await?;
         let file_attachments = if matches!(call.function.name.as_str(), "view_image" | "read_file")
@@ -565,7 +566,7 @@ async fn drive(
     }
     if awaiting_approval {
         repository
-            .transition_agent_run(run_id, "awaiting_approval", None, None)
+            .transition_agent_run(run_id, AgentRunStatus::AwaitingApproval, None, None)
             .await?;
         return Ok(());
     }
@@ -582,7 +583,7 @@ async fn drive(
         .await;
     }
     repository
-        .transition_agent_run(run_id, "completed", None, None)
+        .transition_agent_run(run_id, AgentRunStatus::Completed, None, None)
         .await?;
     let title_repository = repository.clone();
     let title_provider = provider.clone();
@@ -751,7 +752,7 @@ pub async fn resume(
     run_id: Uuid,
 ) -> Result<(), RunError> {
     repository
-        .transition_agent_run(run_id, "running", None, None)
+        .transition_agent_run(run_id, AgentRunStatus::Running, None, None)
         .await?;
     resume_claimed(repository, provider, object_store, run_id).await
 }
@@ -770,12 +771,12 @@ pub async fn resume_claimed(
     let agent_run = repository.get_agent_run(run_id).await?;
     let (actor, workspace) = repository.agent_run_initiator(run_id).await?;
     for call in repository.decided_agent_tool_calls(run_id).await? {
-        let result = if call.state == "approved" && provider.read_only() {
+        let result = if call.state == AgentToolCallState::Approved && provider.read_only() {
             // Approved before the deployment became read-only.
             Err(
                 json!({"code":"disabled_in_demo","message":"Agent changes are turned off in this deployment."}),
             )
-        } else if call.state == "approved" {
+        } else if call.state == AgentToolCallState::Approved {
             if !mutation_authorized(
                 repository,
                 actor,
@@ -829,7 +830,7 @@ pub async fn resume_claimed(
     // an incomplete tool-result set.
     if repository.has_pending_agent_tool_calls(run_id).await? {
         repository
-            .transition_agent_run(run_id, "awaiting_approval", None, None)
+            .transition_agent_run(run_id, AgentRunStatus::AwaitingApproval, None, None)
             .await?;
         return Ok(());
     }
@@ -1018,7 +1019,7 @@ fn agent_audit_context(
             conversation_id: run.conversation_id,
             tool_call_id: call.id,
             tool_name: call.tool_name.clone(),
-            approval_decision: Some(call.state.clone()),
+            approval_decision: Some(call.state.as_str().to_owned()),
             approved_by_user_id: call.decided_by_user_id,
         }),
     }
@@ -1034,7 +1035,7 @@ pub(crate) async fn fail_run(
         .append_run_event(run_id, "error", json!({"code":code,"message":message}))
         .await?;
     repository
-        .transition_agent_run(run_id, "failed", Some(code), Some(message))
+        .transition_agent_run(run_id, AgentRunStatus::Failed, Some(code), Some(message))
         .await?;
     Ok(())
 }

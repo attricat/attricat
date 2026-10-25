@@ -1,5 +1,6 @@
 mod support;
 
+use api::states::AgentRunStatus;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -400,7 +401,7 @@ async fn approved_bulk_edits_apply_record_by_record_and_stop_at_a_stale_record(p
     assert_eq!(progress[1]["state"], "failed");
     assert_eq!(progress[1]["total"], 3);
     let run_status = repository.get_agent_run(run.run).await.unwrap().status;
-    assert_eq!(run_status, "completed");
+    assert_eq!(run_status, AgentRunStatus::Completed);
     server.abort();
     provider_server.abort();
 }
@@ -444,7 +445,7 @@ async fn proposals_over_the_workspace_limit_return_to_the_agent(pool: PgPool) {
     assert_eq!(result.content["result"]["code"], "bulk_edit_too_large");
     assert_eq!(
         repository.get_agent_run(run.run).await.unwrap().status,
-        "completed"
+        AgentRunStatus::Completed
     );
     server.abort();
     provider_server.abort();
@@ -637,7 +638,7 @@ async fn per_record_policy_withholds_the_bulk_tool(pool: PgPool) {
     .await;
     let run = start_run(&pool, owner(), &provider).await;
     let run = repository.get_agent_run(run.run).await.unwrap();
-    assert_eq!(run.status, "failed");
+    assert_eq!(run.status, AgentRunStatus::Failed);
     assert_eq!(run.error_code.as_deref(), Some("unknown_tool"));
     assert_eq!(brand(&repository, record).await, "Acme");
     server.abort();

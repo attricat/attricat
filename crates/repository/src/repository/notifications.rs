@@ -7,6 +7,7 @@
 
 use super::{AttricatRepository, RepositoryError};
 use attricat_domain::permissions::Permission;
+use attricat_domain::states::AgentRunStatus;
 use attricat_validation::principal::{PrincipalKind, PrincipalRef};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -682,7 +683,7 @@ impl AttricatRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         run: Uuid,
-        status: &str,
+        status: AgentRunStatus,
         error_code: Option<&str>,
     ) -> Result<(), RepositoryError> {
         let Some((recipient, conversation, title, origin)): Option<(Option<Uuid>, Uuid, String, String)> =
@@ -706,12 +707,12 @@ impl AttricatRepository {
             title.trim().to_owned()
         };
         let (kind, summary) = match status {
-            "awaiting_approval" => (
+            AgentRunStatus::AwaitingApproval => (
                 kinds::AGENT_APPROVAL_REQUIRED,
                 "The agent is waiting for your approval",
             ),
-            "failed" => (kinds::AGENT_RUN_FAILED, "The agent run failed"),
-            "completed" if origin != "interactive" => {
+            AgentRunStatus::Failed => (kinds::AGENT_RUN_FAILED, "The agent run failed"),
+            AgentRunStatus::Completed if origin != "interactive" => {
                 (kinds::AGENT_RUN_COMPLETED, "The agent run completed")
             }
             _ => return Ok(()),

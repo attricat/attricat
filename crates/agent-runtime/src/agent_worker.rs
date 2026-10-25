@@ -1,4 +1,5 @@
 //! Shared-task handler for durable agent runs.
+use attricat_domain::states::AgentRunStatus;
 use std::sync::Arc;
 
 use crate::{
@@ -88,7 +89,7 @@ impl TaskHandler for AgentTaskHandler {
                 repository
                     .transition_agent_run(
                         task.subject_id,
-                        "failed",
+                        AgentRunStatus::Failed,
                         Some("runner_error"),
                         Some(&error.to_string()),
                     )

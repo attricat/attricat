@@ -1,3 +1,4 @@
+use attricat_domain::states::{AgentRunStatus, AgentToolCallState};
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
@@ -5,7 +6,7 @@ use serde_json::Value;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
-use super::{AttricatRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError, stored_code};
 
 #[derive(Clone, Debug, serde::Serialize, sqlx::FromRow)]
 pub struct Conversation {
@@ -95,7 +96,8 @@ pub struct AgentRun {
     pub id: Uuid,
     pub conversation_id: Uuid,
     pub origin: String,
-    pub status: String,
+    #[sqlx(try_from = "String")]
+    pub status: AgentRunStatus,
     pub provider_base_url: String,
     pub model: String,
     pub started_at: Option<DateTime<Utc>>,
@@ -116,7 +118,8 @@ pub struct AgentToolCall {
     pub change_summary: Option<String>,
     pub result: Option<Value>,
     pub error: Option<Value>,
-    pub state: String,
+    #[sqlx(try_from = "String")]
+    pub state: AgentToolCallState,
     pub decided_by_user_id: Option<Uuid>,
     pub decided_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
@@ -402,7 +405,7 @@ impl AttricatRepository {
     pub async fn transition_agent_run(
         &self,
         run_id: Uuid,
-        next_status: &str,
+        next_status: AgentRunStatus,
         error_code: Option<&str>,
         error_message: Option<&str>,
     ) -> Result<AgentRun, RepositoryError> {
@@ -411,13 +414,20 @@ impl AttricatRepository {
         let current: AgentRun = sqlx::query_as("SELECT id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE")
             .bind(run_id).bind(self.workspace_id.0).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("agent run"))?;
         let valid = matches!(
-            (current.status.as_str(), next_status),
-            ("queued", "running" | "cancelled")
-                | (
-                    "running",
-                    "awaiting_approval" | "completed" | "failed" | "cancelled"
-                )
-                | ("awaiting_approval", "queued" | "cancelled")
+            (current.status, next_status),
+            (
+                AgentRunStatus::Queued,
+                AgentRunStatus::Running | AgentRunStatus::Cancelled
+            ) | (
+                AgentRunStatus::Running,
+                AgentRunStatus::AwaitingApproval
+                    | AgentRunStatus::Completed
+                    | AgentRunStatus::Failed
+                    | AgentRunStatus::Cancelled
+            ) | (
+                AgentRunStatus::AwaitingApproval,
+                AgentRunStatus::Queued | AgentRunStatus::Cancelled
+            )
         );
         if !valid {
             return Err(RepositoryError::InvalidAgentState("invalid run transition"));
@@ -425,18 +435,19 @@ impl AttricatRepository {
         // A streamed approval notification can be answered before the runner
         // finishes delivering its tool-call wave. Queue that decision now,
         // under the run lock, rather than leaving it parked indefinitely.
-        let resume_ready = next_status == "awaiting_approval"
+        let resume_ready = next_status == AgentRunStatus::AwaitingApproval
             && Self::agent_decisions_ready(&mut tx, run_id).await?;
-        let next_status = if resume_ready { "queued" } else { next_status };
+        let next_status = if resume_ready {
+            AgentRunStatus::Queued
+        } else {
+            next_status
+        };
         if resume_ready {
             self.enqueue_agent_resume(&mut tx, run_id).await?;
         }
-        let terminal = matches!(
-            next_status,
-            "completed" | "failed" | "cancelled" | "skipped"
-        );
+        let terminal = next_status.is_terminal();
         let run = sqlx::query_as("UPDATE agent_runs SET status = $2, started_at = CASE WHEN $2 = 'running' THEN COALESCE(started_at, now()) ELSE started_at END, finished_at = CASE WHEN $3 THEN now() ELSE NULL END, error_code = $4, error_message = $5 WHERE id = $1 RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
-            .bind(run_id).bind(next_status).bind(terminal).bind(error_code).bind(error_message).fetch_one(&mut *tx).await?;
+            .bind(run_id).bind(next_status.as_str()).bind(terminal).bind(error_code).bind(error_message).fetch_one(&mut *tx).await?;
         let sequence: i64 = sqlx::query_scalar(
             "SELECT COALESCE(MAX(sequence) + 1, 0) FROM agent_run_events WHERE run_id = $1",
         )
@@ -467,7 +478,7 @@ impl AttricatRepository {
         self.ensure_task_fence(&mut tx).await?;
         let current: AgentRun = sqlx::query_as("SELECT id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE")
             .bind(run_id).bind(ws).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("agent run"))?;
-        if current.status == "running" {
+        if current.status == AgentRunStatus::Running {
             let sequence: i64 = sqlx::query_scalar(
                 "SELECT COALESCE(MAX(sequence) + 1, 0) FROM agent_run_events WHERE run_id = $1",
             )
@@ -478,12 +489,12 @@ impl AttricatRepository {
                 .bind(run_id).bind(ws).execute(&mut *tx).await?;
             sqlx::query("INSERT INTO agent_run_events (id,run_id,sequence,event_type,payload) VALUES ($1,$2,$3,'status','{\"status\":\"failed\"}'::jsonb),($4,$2,$3+1,'terminal','{\"status\":\"failed\",\"code\":\"interrupted\"}'::jsonb)")
                 .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(Uuid::new_v4()).execute(&mut *tx).await?;
-            self.notify_agent_run_on(&mut tx, run_id, "failed", Some("interrupted"))
+            self.notify_agent_run_on(&mut tx, run_id, AgentRunStatus::Failed, Some("interrupted"))
                 .await?;
             tx.commit().await?;
             return Ok(None);
         }
-        if current.status != "queued" {
+        if current.status != AgentRunStatus::Queued {
             tx.commit().await?;
             return Ok(None);
         }
@@ -565,16 +576,8 @@ impl AttricatRepository {
         tool_name: &str,
         arguments: Value,
         change_summary: Option<&str>,
-        state: &str,
+        state: AgentToolCallState,
     ) -> Result<AgentToolCall, RepositoryError> {
-        if !matches!(
-            state,
-            "pending_approval" | "approved" | "rejected" | "completed" | "failed"
-        ) {
-            return Err(RepositoryError::InvalidAgentState(
-                "invalid tool call state",
-            ));
-        }
         let mut tx = self.pool.begin().await?;
         self.ensure_task_fence(&mut tx).await?;
         let exists = sqlx::query_scalar::<_, Uuid>(
@@ -596,7 +599,7 @@ impl AttricatRepository {
         // Every newly proposed or automatically executed call starts undecided.
         // Only `decide_tool_call` may set an approval decision and timestamp.
         let call = sqlx::query_as("INSERT INTO agent_tool_calls (id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, state) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at")
-            .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(provider_call_id).bind(tool_name).bind(arguments).bind(change_summary).bind(state).fetch_one(&mut *tx).await?;
+            .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(provider_call_id).bind(tool_name).bind(arguments).bind(change_summary).bind(state.as_str()).fetch_one(&mut *tx).await?;
         tx.commit().await?;
         Ok(call)
     }
@@ -624,11 +627,11 @@ impl AttricatRepository {
         result: Result<Value, Value>,
     ) -> Result<AgentToolCall, RepositoryError> {
         let (result, error, state) = match result {
-            Ok(value) => (Some(value), None, "completed"),
-            Err(value) => (None, Some(value), "failed"),
+            Ok(value) => (Some(value), None, AgentToolCallState::Completed),
+            Err(value) => (None, Some(value), AgentToolCallState::Failed),
         };
         sqlx::query_as("UPDATE agent_tool_calls call SET result = $3, error = $4, state = CASE WHEN call.state = 'rejected' THEN 'rejected' ELSE $5 END, completed_at = now() FROM agent_runs run WHERE call.id = $1 AND call.run_id = run.id AND run.workspace_id = $2 AND call.state IN ('approved', 'pending_approval', 'rejected') RETURNING call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at")
-            .bind(tool_call_id).bind(self.workspace_id.0).bind(result).bind(error).bind(state).fetch_optional(&mut **tx).await?.ok_or(RepositoryError::InvalidAgentState("tool call cannot be completed"))
+            .bind(tool_call_id).bind(self.workspace_id.0).bind(result).bind(error).bind(state.as_str()).fetch_optional(&mut **tx).await?.ok_or(RepositoryError::InvalidAgentState("tool call cannot be completed"))
     }
 
     /// [`Self::complete_agent_tool_call`] and the tool result message, in one
@@ -705,29 +708,27 @@ impl AttricatRepository {
         let mut tx = self.pool.begin().await?;
         // Match the producer's lock order: run first, then its tool call.
         // This also serializes decisions on different sibling calls.
-        let run_status: String = sqlx::query_scalar("SELECT run.status FROM agent_runs run JOIN agent_tool_calls call ON call.run_id=run.id WHERE call.id=$1 AND run.workspace_id=$2 FOR UPDATE OF run")
+        let run_status: AgentRunStatus = sqlx::query_scalar::<_, String>("SELECT run.status FROM agent_runs run JOIN agent_tool_calls call ON call.run_id=run.id WHERE call.id=$1 AND run.workspace_id=$2 FOR UPDATE OF run")
             .bind(tool_call_id).bind(self.workspace_id.0).fetch_optional(&mut *tx).await?
-            .ok_or(RepositoryError::NotFound("agent tool call"))?;
+            .ok_or(RepositoryError::NotFound("agent tool call"))
+            .and_then(stored_code)?;
         let call: AgentToolCall = sqlx::query_as("SELECT id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at FROM agent_tool_calls WHERE id = $1 AND EXISTS (SELECT 1 FROM agent_runs run WHERE run.id = agent_tool_calls.run_id AND run.workspace_id = $2) FOR UPDATE")
             .bind(tool_call_id).bind(self.workspace_id.0).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("agent tool call"))?;
-        if call.state != "pending_approval" {
+        if call.state != AgentToolCallState::PendingApproval {
             return Err(RepositoryError::ApprovalAlreadyDecided);
         }
-        if !matches!(
-            run_status.as_str(),
-            "running" | "awaiting_approval" | "queued"
-        ) {
+        if run_status.is_terminal() {
             return Err(RepositoryError::InvalidAgentState(
                 "cannot decide a terminal run",
             ));
         }
         let state = match decision {
-            ApprovalDecision::Approve => "approved",
-            ApprovalDecision::Reject => "rejected",
+            ApprovalDecision::Approve => AgentToolCallState::Approved,
+            ApprovalDecision::Reject => AgentToolCallState::Rejected,
         };
         let call: AgentToolCall = sqlx::query_as("UPDATE agent_tool_calls SET state = $2, decided_by_user_id = $3, decided_at = now() WHERE id = $1 RETURNING id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at")
-            .bind(tool_call_id).bind(state).bind(actor).fetch_one(&mut *tx).await?;
-        if run_status == "awaiting_approval"
+            .bind(tool_call_id).bind(state.as_str()).bind(actor).fetch_one(&mut *tx).await?;
+        if run_status == AgentRunStatus::AwaitingApproval
             && Self::agent_decisions_ready(&mut tx, call.run_id).await?
         {
             sqlx::query("UPDATE agent_runs SET status='queued' WHERE id=$1")
@@ -941,7 +942,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             sqlx::query("INSERT INTO agent_run_events (id,run_id,sequence,event_type,payload) VALUES ($1,$2,$3,'status','{\"status\":\"failed\"}'::jsonb),($4,$2,$3+1,'terminal','{\"status\":\"failed\",\"code\":\"interrupted\"}'::jsonb)")
                 .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(Uuid::new_v4()).execute(&mut *tx).await?;
             self.for_workspace(workspace_id)
-                .notify_agent_run_on(&mut tx, run_id, "failed", Some("interrupted"))
+                .notify_agent_run_on(&mut tx, run_id, AgentRunStatus::Failed, Some("interrupted"))
                 .await?;
             self.complete_task_in_transaction(&mut tx, task_id, &owner, token)
                 .await?;
