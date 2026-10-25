@@ -51,6 +51,8 @@ pub fn is_valid_connection_key(value: &str) -> bool {
 pub struct JsonSchemaViolation {
     pub instance_path: String,
     pub message: String,
+    /// The property a `required` keyword found missing at `instance_path`.
+    pub missing_property: Option<String>,
 }
 
 pub fn validate_json_schema_definition(schema: &serde_json::Value) -> Result<(), String> {
@@ -142,6 +144,12 @@ pub fn validate_json_schema(
             forbidden_property(schema, &error).unwrap_or_else(|| JsonSchemaViolation {
                 instance_path: error.instance_path().as_str().to_owned(),
                 message: error.masked().to_string(),
+                missing_property: match error.kind() {
+                    jsonschema::error::ValidationErrorKind::Required { property } => {
+                        property.as_str().map(str::to_owned)
+                    }
+                    _ => None,
+                },
             })
         })
         .collect())
@@ -177,6 +185,7 @@ fn forbidden_property(
     Some(JsonSchemaViolation {
         instance_path: format!("{}/{escaped}", error.instance_path().as_str()),
         message,
+        missing_property: None,
     })
 }
 
@@ -275,13 +284,33 @@ mod tests {
                 JsonSchemaViolation {
                     instance_path: "/size".to_owned(),
                     message: "\"size\" is not allowed when \"profile\" is \"drinkware\"".to_owned(),
+                    missing_property: None,
                 },
                 JsonSchemaViolation {
                     instance_path: "/dimensions/a~1b".to_owned(),
                     message: "\"a/b\" is not allowed".to_owned(),
+                    missing_property: None,
                 },
             ]
         );
+    }
+
+    #[test]
+    fn required_violations_name_the_missing_property() {
+        let schema = serde_json::json!({
+            "required": ["title"],
+            "properties": { "price": { "type": "number" } }
+        });
+        let violations =
+            validate_json_schema(&schema, &serde_json::json!({ "price": "title" })).unwrap();
+        let missing: Vec<_> = violations
+            .iter()
+            .filter_map(|violation| violation.missing_property.as_deref())
+            .collect();
+        // The type error quotes "title" in its message but is not a missing
+        // property.
+        assert_eq!(missing, ["title"]);
+        assert_eq!(violations.len(), 2);
     }
 
     #[test]

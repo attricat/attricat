@@ -300,21 +300,25 @@ impl AttricatRepository {
                     FormAttributeValue::File { .. } => {}
                 }
             }
-            let target_codes: HashSet<_> = target_attributes.keys().copied().collect();
             for violation in validate_json_schema(schema, &Value::Object(document))
                 .map_err(RepositoryError::invalid_blueprint_definition)?
             {
-                for field in missing_required_fields(&violation.message, &target_codes) {
-                    if !issues.iter().any(|issue| {
+                // Only a top-level `required` names a target attribute.
+                let missing = violation.missing_property.filter(|property| {
+                    violation.instance_path.is_empty()
+                        && target_attributes.contains_key(property.as_str())
+                });
+                if let Some(field) = missing
+                    && !issues.iter().any(|issue| {
                         issue.kind == "missing_required"
                             && issue.attribute_code.as_deref() == Some(field.as_str())
-                    }) {
-                        issues.push(MigrationIssue {
-                            attribute_code: Some(field),
-                            kind: "missing_required".to_owned(),
-                            message: "A value is required by the target record schema".to_owned(),
-                        });
-                    }
+                    })
+                {
+                    issues.push(MigrationIssue {
+                        attribute_code: Some(field),
+                        kind: "missing_required".to_owned(),
+                        message: "A value is required by the target record schema".to_owned(),
+                    });
                 }
             }
         }

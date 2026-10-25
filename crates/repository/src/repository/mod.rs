@@ -1451,18 +1451,6 @@ pub fn validate_attribute_selector_code(value: &str) -> Result<(), RepositoryErr
     }
 }
 
-pub fn missing_required_fields(message: &str, target_codes: &HashSet<&str>) -> Vec<String> {
-    let mut fields = HashSet::new();
-    for delimiter in ['"', '\''] {
-        for (index, value) in message.split(delimiter).enumerate() {
-            if index % 2 == 1 && target_codes.contains(value) {
-                fields.insert(value.to_owned());
-            }
-        }
-    }
-    fields.into_iter().collect()
-}
-
 impl<S: RepositoryScope> AttricatRepository<S> {
     /// Explicit provisioning/repair boundary, never part of a catalog read.
     pub async fn initialize_workspace(&self, workspace_id: Uuid) -> Result<(), RepositoryError> {

@@ -1013,3 +1013,62 @@ async fn migration_audits_field_changes_and_reconciles_publication(pool: PgPool)
     .unwrap();
     assert_eq!(unpublished, 1);
 }
+
+#[sqlx::test]
+async fn migration_reports_only_properties_the_target_schema_requires(pool: PgPool) {
+    let repository = AttricatRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
+    let source = repository
+        .create_blueprint(CreateBlueprint {
+            definition: SCALAR_DEFINITION.to_owned(),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(source.blueprint.id, 1)
+        .await
+        .unwrap();
+    let record = repository
+        .create_record_with_values(
+            source.blueprint.id,
+            1,
+            vec![NewAttributeValue::Scalar {
+                attribute_id: None,
+                attribute_code: Some("title".to_owned()),
+                context_id: None,
+                value: json!("kept"),
+            }],
+            Vec::new(),
+            json!({}),
+        )
+        .await
+        .unwrap();
+    // The forbidden-property violation's message quotes "title", which is
+    // not a missing value.
+    let target = SCALAR_DEFINITION.replace(
+        "kind = \"record\"\n",
+        "kind = \"record\"\nrecord_schema = '''{\"type\": \"object\", \"required\": [\"sku\"], \"not\": {\"required\": [\"title\"]}}'''\n",
+    ) + "\n[[attributes]]\ncode = \"sku\"\nvalue_type = \"string\"\n";
+    repository
+        .create_blueprint_revision(source.blueprint.id, CreateBlueprint { definition: target })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(source.blueprint.id, 2)
+        .await
+        .unwrap();
+    let preview = repository
+        .preview_record_migration(record.id)
+        .await
+        .unwrap();
+    assert_eq!(preview.status, "needs_input");
+    let missing: Vec<_> = preview
+        .issues
+        .iter()
+        .filter(|issue| issue.kind == "missing_required")
+        .filter_map(|issue| issue.attribute_code.as_deref())
+        .collect();
+    assert_eq!(missing, ["sku"]);
+}
