@@ -26,10 +26,7 @@ async fn agent_blueprint_reads_list_summaries_and_fetch_one_definition(pool: PgP
     let (_base_url, server) = start_server(pool.clone()).await;
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let definition = |attribute: &str| {
         format!(
             "format_version = 1\ncode = \"agent_desk\"\nname = \"Desk\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"{attribute}\"]\n\n[[attributes]]\ncode = \"{attribute}\"\nvalue_type = \"string\""
@@ -157,10 +154,7 @@ async fn approved_record_edits_apply_to_the_proposed_state_and_name_their_target
     let other = create_record(&client, &base_url, &blueprint).await;
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let set_title = |title: &str| {
         json!({"record_id": record_id, "values": [
             {"kind":"scalar","attribute_code":"title","context_id":null,"value":title}
@@ -374,10 +368,7 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
     create("linked_order", "Order 1", vec![("parts", root.clone())]).await;
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let read = |name: &'static str, arguments: Value| {
         execute_read(&repository, actor, workspace, name, arguments)
     };
@@ -510,10 +501,7 @@ async fn agent_duplicates_comments_validates_and_reviews_attricat_health(pool: P
     let record_id = record["id"].as_str().unwrap().to_owned();
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let read = |name: &'static str, arguments: Value| {
         execute_read(&repository, actor, workspace, name, arguments)
     };
@@ -711,10 +699,7 @@ async fn agent_annotation_and_context_edits_use_attricat_validation(pool: PgPool
     let record_id = record["id"].as_str().unwrap();
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let updated = execute_mutation(&repository, actor, "update_record_annotations",
         json!({"record_id":record_id,"system_tags":["reviewed"],"system_metadata":{"source":"agent"}})).await.unwrap();
     assert_eq!(updated["system_tags"], json!(["reviewed"]));
@@ -852,10 +837,7 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
             .error_for_status()
             .unwrap();
     }
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let health = execute_read(
         &repository,
         actor,
@@ -970,10 +952,7 @@ async fn agent_history_reads_and_record_value_edits_use_scoped_attricat_services
     }
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let changes = execute_read(
         &repository,
         actor,
@@ -1129,10 +1108,8 @@ async fn completed_conversation_gets_a_provider_generated_title(pool: PgPool) {
     .unwrap()
     .unwrap();
     let provider = api::agent_provider::OpenAiCompatibleClient::new(&config).unwrap();
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool).for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let conversation = repository
         .create_conversation(
             Some(BOOTSTRAP_OWNER_ID.parse().unwrap()),
@@ -1200,10 +1177,8 @@ async fn completed_conversation_gets_a_provider_generated_title(pool: PgPool) {
 #[sqlx::test]
 async fn conversation_search_paginates_and_manual_titles_win(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool).for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let mut ids = Vec::new();
     for n in 0..32 {
         ids.push(
@@ -1371,10 +1346,7 @@ async fn submitting_a_message_and_enqueuing_its_run_are_atomic(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace_id)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace_id);
     // The run's actor foreign key rejects the insert after the message insert.
     assert!(
         repository
@@ -1528,9 +1500,7 @@ async fn agent_deltas_are_persisted_before_the_provider_finishes(pool: PgPool) {
     .unwrap()
     .unwrap();
     let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-        .await
-        .unwrap();
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let conversation = repository
         .create_conversation(Some(BOOTSTRAP_OWNER_ID.parse().unwrap()), "streamed")
         .await
@@ -1616,10 +1586,7 @@ async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPo
     .unwrap();
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let user_id = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace_id)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace_id);
     let task_repository =
         AttricatRepository::new(pool, support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let handler = agent_worker::AgentTaskHandler::new(
@@ -1747,10 +1714,7 @@ async fn record_conversation_mutations_uploads_and_events_require_record_read(po
     .execute(&pool)
     .await
     .unwrap();
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let role = repository
         .create_workspace_role(
             BOOTSTRAP_OWNER_ID.parse().unwrap(),
@@ -1922,10 +1886,7 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
     .await
     .unwrap();
 
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let agent_only = repository
         .create_workspace_role(
             BOOTSTRAP_OWNER_ID.parse().unwrap(),
@@ -2186,10 +2147,7 @@ async fn reconciliation_first_rejects_deleted_and_cross_tenant_attachments(pool:
     );
     worker.reconcile().await.unwrap();
 
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace_id)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace_id);
     assert!(matches!(
         repository
             .append_conversation_message_with_attachments(
@@ -2202,10 +2160,8 @@ async fn reconciliation_first_rejects_deleted_and_cross_tenant_attachments(pool:
             .await,
         Err(RepositoryError::NotFound("file"))
     ));
-    let other_repository = AttricatRepository::system(pool.clone())
-        .for_workspace(other_workspace_id)
-        .await
-        .unwrap();
+    let other_repository =
+        AttricatRepository::system(pool.clone()).for_workspace(other_workspace_id);
     assert!(matches!(
         other_repository
             .append_conversation_message_with_attachments(
@@ -2298,9 +2254,7 @@ async fn standalone_conversation_upload_survives_reconciliation_until_attached(p
     assert!(deleted_at.is_none());
 
     let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-        .await
-        .unwrap();
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let other_conversation = repository
         .create_conversation(None, "Other conversation")
         .await
@@ -2661,9 +2615,7 @@ async fn read_only_runs_offer_no_mutations_and_refuse_one_named_anyway(pool: PgP
     .unwrap();
     config.read_only = true;
     let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-        .await
-        .unwrap();
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let conversation = repository
         .create_conversation(Some(BOOTSTRAP_OWNER_ID.parse().unwrap()), "demo")
         .await
@@ -2759,10 +2711,7 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
     }
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
 
     // Search syntax in the name is matched as plain words.
     let found = execute_read(
@@ -2993,9 +2942,7 @@ async fn runs_stop_after_the_configured_tool_round_limit(pool: PgPool) {
     .unwrap()
     .unwrap();
     let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-        .await
-        .unwrap();
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let conversation = repository
         .create_conversation(Some(BOOTSTRAP_OWNER_ID.parse().unwrap()), "rounds")
         .await

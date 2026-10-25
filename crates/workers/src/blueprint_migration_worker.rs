@@ -113,8 +113,6 @@ impl TaskHandler for BlueprintMigrationBatchTaskHandler {
         let repository = self
             .repository
             .for_workspace(task.workspace_id)
-            .await
-            .map_err(task_error)?
             .for_blueprint_migration_task(&task);
         match repository
             .run_safe_blueprint_migration_batch_task(

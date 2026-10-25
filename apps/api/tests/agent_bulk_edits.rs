@@ -49,10 +49,7 @@ fn owner() -> Uuid {
 }
 
 async fn scoped(pool: &PgPool) -> AttricatRepository {
-    AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap()
+    AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id())
 }
 
 /// Creates a product titled `title` with the given brand.

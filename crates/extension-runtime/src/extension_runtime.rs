@@ -1457,14 +1457,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
         TaskKind::ExtensionOperationRunV1
     }
     async fn handle(&self, task: ClaimedTask) -> Result<TaskOutcome, TaskHandlerError> {
-        let repository = self
-            .repository
-            .for_workspace(task.workspace_id)
-            .await
-            .map_err(|e| TaskHandlerError {
-                code: "workspace",
-                message: e.to_string(),
-            })?;
+        let repository = self.repository.for_workspace(task.workspace_id);
         let repository = repository.for_extension_operation_task(&task);
         // Abandoned streams are aborted by the workspace coordinator's
         // periodic sweep; a run does not repeat that workspace-wide sweep.
@@ -2273,14 +2266,7 @@ impl TaskHandler for WasmExtensionTaskHandler {
     }
 
     async fn handle(&self, task: ClaimedTask) -> Result<TaskOutcome, TaskHandlerError> {
-        let repository = self
-            .repository
-            .for_workspace(task.workspace_id)
-            .await
-            .map_err(|error| TaskHandlerError {
-                code: "workspace",
-                message: error.to_string(),
-            })?;
+        let repository = self.repository.for_workspace(task.workspace_id);
         let Some(delivery) =
             repository
                 .begin_task_event_delivery(&task)
@@ -2396,7 +2382,7 @@ async fn coordinate_workspace(
     workspace_id: Uuid,
     state: &mut CoordinatedWorkspace,
 ) -> Result<(), RepositoryError> {
-    let scoped = repository.for_workspace(workspace_id).await?;
+    let scoped = repository.for_workspace(workspace_id);
     if state
         .last_sweep
         .is_none_or(|last| last.elapsed() >= COORDINATOR_SWEEP_INTERVAL)

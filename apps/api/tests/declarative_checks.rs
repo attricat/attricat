@@ -1356,8 +1356,6 @@ predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
     assert_eq!(event.event_type, "relationship.changed.v1");
     let created_runs = AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-        .await
-        .unwrap()
         .fan_out_rule_runs(&event)
         .await
         .unwrap();
@@ -1484,8 +1482,6 @@ predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
     );
     let created_runs = AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-        .await
-        .unwrap()
         .fan_out_rule_runs(&event)
         .await
         .unwrap();

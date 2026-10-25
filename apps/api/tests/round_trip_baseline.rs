@@ -429,9 +429,7 @@ async fn database_round_trips(pool: PgPool) {
 
     // Extension event delivery through the real coordinator and task worker.
     let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-        .await
-        .unwrap();
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let (extension_id, grants, archive) = match std::env::var("ROUND_TRIP_EXTENSION_ARCHIVE") {
         Ok(path) => packaged_archive(&path),
         Err(_) => unified_archive(),

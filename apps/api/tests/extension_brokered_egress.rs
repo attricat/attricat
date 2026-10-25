@@ -280,10 +280,8 @@ fn connection(name: &str, grant_type: &str) -> NewExtensionConnection {
 #[sqlx::test(migrations = "./migrations")]
 async fn brokered_requests_carry_host_managed_credentials_only(pool: sqlx::PgPool) {
     let (_, seen) = shared_mock();
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let store = Arc::new(FakeObjectStore::available());
     let installer =
         api::extension_installer::ExtensionInstaller::new(repository.clone(), store.clone());
@@ -555,10 +553,8 @@ async fn brokered_requests_carry_host_managed_credentials_only(pool: sqlx::PgPoo
 #[sqlx::test(migrations = "./migrations")]
 async fn operators_manage_connections_without_seeing_credentials(pool: sqlx::PgPool) {
     shared_mock();
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let store = Arc::new(FakeObjectStore::available());
     api::extension_installer::ExtensionInstaller::new(repository.clone(), store.clone())
         .install("test", &archive())
@@ -751,10 +747,8 @@ async fn record_files_reach_marketplaces_by_public_link_or_as_run_input(pool: sq
             .parse()
             .unwrap(),
     );
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let store = Arc::new(FakeObjectStore::available());
     api::extension_installer::ExtensionInstaller::new(repository.clone(), store.clone())
         .install("test", &archive())
@@ -1035,10 +1029,8 @@ async fn moving_the_token_endpoint_to_another_host_needs_the_secret_and_drops_to
     pool: sqlx::PgPool,
 ) {
     shared_mock();
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let store = Arc::new(FakeObjectStore::available());
     api::extension_installer::ExtensionInstaller::new(repository.clone(), store)
         .install("test", &archive())
@@ -1155,10 +1147,8 @@ async fn operators_authorize_connections_in_the_browser(pool: sqlx::PgPool) {
         redirect_uri: OAUTH_CALLBACK.parse().unwrap(),
         return_base: "https://attricat.test/manage/extensions/".parse().unwrap(),
     });
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let store = Arc::new(FakeObjectStore::available());
     api::extension_installer::ExtensionInstaller::new(repository.clone(), store.clone())
         .install("test", &archive())

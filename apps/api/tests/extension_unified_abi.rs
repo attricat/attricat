@@ -90,10 +90,8 @@ fn archive(server: &[u8]) -> Vec<u8> {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn one_unified_component_serves_commands_and_interactive_operations(pool: sqlx::PgPool) {
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let store = Arc::new(FakeObjectStore::available());
     let release = install_extension(
         &repository,

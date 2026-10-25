@@ -30,10 +30,8 @@ const LOOKUP_BUDGET: Duration = Duration::from_millis(250);
 
 #[sqlx::test(migrations = "./migrations")]
 async fn a_full_catalog_keeps_every_mapping_in_host_storage(pool: sqlx::PgPool) {
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let (blueprint, version) = published_blueprint(&repository, BLUEPRINT).await;
     sqlx::query(
         "INSERT INTO records (id, workspace_id, blueprint_id, blueprint_version) \

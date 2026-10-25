@@ -2140,10 +2140,7 @@ mod tests {
             }),
             payload: serde_json::json!({}),
         };
-        let repository = repository
-            .for_workspace(trigger.workspace_id)
-            .await
-            .unwrap();
+        let repository = repository.for_workspace(trigger.workspace_id);
         let event = repository
             .for_event_handler(&trigger, "attricat.computed_fields")
             .core_event(

@@ -72,11 +72,7 @@ impl TaskHandler for RuleTaskHandler {
         &self,
         task: crate::repository::ClaimedTask,
     ) -> Result<TaskOutcome, TaskHandlerError> {
-        let scoped = self
-            .repository
-            .for_workspace(task.workspace_id)
-            .await
-            .map_err(task_error)?;
+        let scoped = self.repository.for_workspace(task.workspace_id);
         let run = match scoped.begin_rule_run_task(&task).await {
             Ok(run) => run,
             Err(error) => return fail_rule_run(&scoped, &task, error).await,
@@ -259,50 +255,44 @@ pub fn start_schedule_coordinator(
                     }
                 };
                 for workspace in workspaces {
-                    match repository.for_workspace(workspace).await {
-                        Ok(scoped) => {
-                            // Pre-cutover rows get task envelopes once per
-                            // workspace; afterwards an idle tick only checks
-                            // whether any schedule cursor is due.
-                            // A workspace counts as prepared only once its
-                            // backfill and first full pass succeed; a failure
-                            // is retried after a per-workspace backoff.
-                            let first = !prepared.contains_key(&workspace);
-                            if first && !backoff.ready(workspace, Instant::now()) {
-                                continue;
+                    let scoped = repository.for_workspace(workspace);
+                    // Pre-cutover rows get task envelopes once per
+                    // workspace; afterwards an idle tick only checks
+                    // whether any schedule cursor is due.
+                    // A workspace counts as prepared only once its
+                    // backfill and first full pass succeed; a failure
+                    // is retried after a per-workspace backoff.
+                    let first = !prepared.contains_key(&workspace);
+                    if first && !backoff.ready(workspace, Instant::now()) {
+                        continue;
+                    }
+                    let backfilled = !first
+                        || match scoped.backfill_rule_tasks().await {
+                            Ok(_) => true,
+                            Err(error) => {
+                                tracing::error!(%error, "rule task backfill failed");
+                                false
                             }
-                            let backfilled = !first
-                                || match scoped.backfill_rule_tasks().await {
-                                    Ok(_) => true,
-                                    Err(error) => {
-                                        tracing::error!(%error, "rule task backfill failed");
-                                        false
-                                    }
-                                };
-                            let run = if first {
-                                Ok(true)
-                            } else {
-                                scoped.rule_schedules_due().await
-                            };
-                            let result = match run {
-                                Ok(true) => scoped.schedule_rule_runs().await.map(drop),
-                                Ok(false) => Ok(()),
-                                Err(error) => Err(error),
-                            };
-                            if let Err(error) = &result {
-                                tracing::error!(%error, "rule schedule poll failed");
-                            }
-                            if first {
-                                if result.is_ok() && backfilled {
-                                    backoff.succeeded(workspace);
-                                    prepared.insert(workspace, Instant::now());
-                                } else {
-                                    backoff.failed(workspace, Instant::now());
-                                }
-                            }
-                        }
-                        Err(error) => {
-                            tracing::error!(%error, "rule scheduler workspace scope failed")
+                        };
+                    let run = if first {
+                        Ok(true)
+                    } else {
+                        scoped.rule_schedules_due().await
+                    };
+                    let result = match run {
+                        Ok(true) => scoped.schedule_rule_runs().await.map(drop),
+                        Ok(false) => Ok(()),
+                        Err(error) => Err(error),
+                    };
+                    if let Err(error) = &result {
+                        tracing::error!(%error, "rule schedule poll failed");
+                    }
+                    if first {
+                        if result.is_ok() && backfilled {
+                            backoff.succeeded(workspace);
+                            prepared.insert(workspace, Instant::now());
+                        } else {
+                            backoff.failed(workspace, Instant::now());
                         }
                     }
                 }

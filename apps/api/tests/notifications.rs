@@ -469,10 +469,7 @@ async fn agent_tools_act_on_the_initiating_users_inbox(pool: PgPool) {
         .unwrap();
     }
     let workspace = bootstrap_workspace_id();
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
 
     let listed = execute_read(
         &repository,

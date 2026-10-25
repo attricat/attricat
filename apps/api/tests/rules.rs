@@ -240,8 +240,6 @@ async fn checkpoint_failure_on_final_attempt_dead_letters_rule_run_and_replays_g
     assert!(
         repository
             .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-            .await
-            .unwrap()
             .replay_rule_run(run_id)
             .await
             .unwrap()

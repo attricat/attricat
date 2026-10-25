@@ -392,8 +392,6 @@ fn client_release_archive_with_navigation(extension_id: &str) -> Vec<u8> {
 async fn extension_attricat_upsert_create_writes_declared_relationships(pool: sqlx::PgPool) {
     let repository = AttricatRepository::system(pool.clone())
         .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
-        .await
-        .unwrap()
         .for_extension("acme.sync");
     let blueprint = repository
         .create_blueprint(CreateBlueprint {
@@ -482,8 +480,6 @@ target_blueprint = "extension_linked_item"
 async fn extension_attricat_upsert_is_idempotent_and_emits_a_change_feed(pool: sqlx::PgPool) {
     let repository = AttricatRepository::system(pool.clone())
         .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
-        .await
-        .unwrap()
         .for_extension("acme.sync");
     let blueprint = repository
         .create_blueprint(CreateBlueprint {
@@ -689,8 +685,6 @@ value_type = "string"
 async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx::PgPool) {
     let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap()
         .for_extension("acme.sync");
     let blueprint = repository
         .create_blueprint(CreateBlueprint {
@@ -812,10 +806,7 @@ async fn sideload_installs_a_validated_local_archive(pool: sqlx::PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let installer =
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
     installer
@@ -936,10 +927,7 @@ async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx:
 #[sqlx::test(migrations = "./migrations")]
 async fn navigation_contributions_target_same_release_routes(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let installer =
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
     installer
@@ -971,10 +959,7 @@ async fn navigation_contributions_target_same_release_routes(pool: sqlx::PgPool)
 #[sqlx::test(migrations = "./migrations")]
 async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let installer =
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
 
@@ -1223,10 +1208,7 @@ async fn extension_layout_replacement_rejects_non_object_roots_and_repairs_malfo
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let installer =
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
     for extension_id in ["acme.zebra", "acme.alpha"] {
@@ -1339,10 +1321,7 @@ async fn blueprint_layout_overlays_owned_outlets_and_preserves_global_workspace_
     pool: sqlx::PgPool,
 ) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let installer =
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
     for extension_id in ["acme.alpha", "acme.zebra"] {
@@ -1483,10 +1462,7 @@ async fn operation_runs_keep_a_batch_key_across_crash_reclaim_and_fence_stale_ch
     use std::time::Duration;
 
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()))
         .install("test", &operation_release_archive("acme.operations"))
         .await
@@ -1716,10 +1692,7 @@ async fn operation_runs_keep_a_batch_key_across_crash_reclaim_and_fence_stale_ch
 #[sqlx::test(migrations = "./migrations")]
 async fn operation_http_routes_start_list_and_cancel_without_exposing_input(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()))
         .install("test", &operation_release_archive("acme.operation-http"))
         .await
@@ -1772,10 +1745,7 @@ async fn operation_http_routes_start_list_and_cancel_without_exposing_input(pool
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_attribute_types_are_pinned_and_survive_provider_disable(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let installer =
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
     installer
@@ -1849,10 +1819,7 @@ extension_configuration = '{"currency":"USD"}'
 #[sqlx::test(migrations = "./migrations")]
 async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let installer =
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
     installer
@@ -1935,10 +1902,7 @@ async fn workspace_safe_mode_blocks_runtime_descriptors_and_storage_without_muta
     pool: sqlx::PgPool,
 ) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let installer =
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
     let installed = installer
@@ -2001,10 +1965,7 @@ async fn workspace_safe_mode_blocks_runtime_descriptors_and_storage_without_muta
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_storage_enforces_cas_bounds_quota_and_workspace_namespace(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let installer =
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
     let installed = installer
@@ -2149,10 +2110,7 @@ async fn extension_storage_list_treats_like_characters_as_literal_prefixes(pool:
         .execute(&pool)
         .await
         .unwrap();
-    let repository = AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let installer =
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
     let installed = installer
@@ -2199,10 +2157,7 @@ async fn extension_storage_list_treats_like_characters_as_literal_prefixes(pool:
 #[sqlx::test(migrations = "./migrations")]
 async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let store = Arc::new(FakeObjectStore::available());
     let installer = ExtensionInstaller::new(repository.clone(), store.clone());
 
@@ -2397,10 +2352,7 @@ async fn operation_artifacts_are_run_scoped_quota_bound_cleaned_and_downloadable
     use std::time::Duration;
 
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let store = Arc::new(FakeObjectStore::available());
     ExtensionInstaller::new(repository.clone(), store.clone())
         .install(
@@ -2517,10 +2469,7 @@ async fn operation_artifacts_are_run_scoped_quota_bound_cleaned_and_downloadable
         .execute(&pool)
         .await
         .unwrap();
-    let foreign = AttricatRepository::system(pool.clone())
-        .for_workspace(foreign_workspace)
-        .await
-        .unwrap();
+    let foreign = AttricatRepository::system(pool.clone()).for_workspace(foreign_workspace);
     assert!(
         foreign
             .extension_operation_input_artifact(
@@ -2728,10 +2677,7 @@ async fn artifact_wit_component_copies_a_large_approved_input_in_bounded_chunks(
     use std::time::Duration;
 
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let store = Arc::new(FakeObjectStore::available());
     let component = artifact_stream_component();
     ExtensionInstaller::new(repository.clone(), store.clone())
@@ -2856,9 +2802,7 @@ async fn packaged_transfer_import_rejects_ssrf_without_network_io(pool: sqlx::Pg
     use attricat_domain::task_queue::TaskKind;
     use std::time::Duration;
     let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
-        .await
-        .unwrap();
+        .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002));
     let store = Arc::new(FakeObjectStore::available());
     ExtensionInstaller::new(repository.clone(), store.clone())
         .install("test", &transfer_test_archive(&transfer_test_component()))
@@ -2940,9 +2884,7 @@ async fn packaged_public_http_transfer_and_redirect_policy(pool: sqlx::PgPool) {
         return;
     }
     let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
-        .await
-        .unwrap();
+        .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002));
     let store = Arc::new(FakeObjectStore::available());
     ExtensionInstaller::new(repository.clone(), store.clone())
         .install("test", &transfer_test_archive(&transfer_test_component()))
@@ -3029,10 +2971,7 @@ async fn delivery_attempt_is_uncertain_until_confirmed_and_never_auto_resends(po
     use attricat_domain::task_queue::TaskKind;
     use std::time::Duration;
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()))
         .install("test", &operation_release_archive("acme.delivery"))
         .await
@@ -3134,10 +3073,7 @@ async fn delivery_attempt_is_uncertain_until_confirmed_and_never_auto_resends(po
 async fn operation_schedules_are_workspace_scoped_and_occurrences_deduplicated(pool: sqlx::PgPool) {
     use api::repository::CreateExtensionOperationSchedule;
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let store = Arc::new(FakeObjectStore::available());
     ExtensionInstaller::new(repository.clone(), store.clone())
         .install("test", &operation_release_archive("acme.schedule"))
@@ -3246,10 +3182,7 @@ async fn operation_schedules_are_workspace_scoped_and_occurrences_deduplicated(p
         .execute(&pool)
         .await
         .unwrap();
-    let foreign = AttricatRepository::system(pool.clone())
-        .for_workspace(foreign_id)
-        .await
-        .unwrap();
+    let foreign = AttricatRepository::system(pool.clone()).for_workspace(foreign_id);
     assert!(
         foreign
             .list_extension_operation_schedules()
@@ -3324,9 +3257,7 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
     };
     let archive = std::fs::read(path).unwrap();
     let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
-        .await
-        .unwrap();
+        .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002));
     let store = Arc::new(FakeObjectStore::available());
     let blueprint = repository
         .create_blueprint(CreateBlueprint {
@@ -3672,10 +3603,7 @@ async fn artifact_completion_faults_abort_metadata_and_delete_orphans(pool: sqlx
     use std::time::Duration;
 
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let inner = Arc::new(FakeObjectStore::available());
     let store = Arc::new(FaultingArtifactStore::new(
         inner.clone(),
@@ -3781,10 +3709,7 @@ async fn artifact_completion_faults_abort_metadata_and_delete_orphans(pool: sqlx
 #[sqlx::test(migrations = "./migrations")]
 async fn client_artifacts_revalidate_against_the_installed_release(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let store = Arc::new(FakeObjectStore::available());
     ExtensionInstaller::new(repository.clone(), store.clone())
         .install(
@@ -3835,8 +3760,6 @@ async fn extension_lookup_resolves_like_an_upsert(pool: sqlx::PgPool) {
     let workspace_id = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace_id)
-        .await
-        .unwrap()
         .for_extension("acme.sync");
     let blueprint = repository
         .create_blueprint(CreateBlueprint {

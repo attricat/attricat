@@ -96,10 +96,7 @@ async fn approved_agent_mutation_has_explicit_redacted_provenance(pool: sqlx::Pg
     .unwrap();
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let actor = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let run = repository
         .create_agent_run_for_user(
             conversation["id"].as_str().unwrap().parse().unwrap(),

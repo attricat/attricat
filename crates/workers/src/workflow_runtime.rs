@@ -69,11 +69,7 @@ impl TaskHandler for WorkflowTaskHandler {
     }
 
     async fn handle(&self, task: ClaimedTask) -> Result<TaskOutcome, TaskHandlerError> {
-        let scoped = self
-            .repository
-            .for_workspace(task.workspace_id)
-            .await
-            .map_err(task_error)?;
+        let scoped = self.repository.for_workspace(task.workspace_id);
         let run = match scoped.workflow_run_for_task(&task).await {
             Ok(run) => run,
             Err(error) => return fail_workflow_run(&scoped, &task, error.to_string()).await,
@@ -172,59 +168,53 @@ pub fn start_schedule_coordinator(
                     }
                 };
                 for workspace in workspaces {
-                    match repository.for_workspace(workspace).await {
-                        Ok(scoped) => {
-                            // Pre-cutover rows get task envelopes once per
-                            // workspace; afterwards an idle tick only checks
-                            // whether any schedule cursor is due.
-                            // A workspace counts as prepared, and a full pass
-                            // as done, only once they succeed; a failure is
-                            // retried after a per-workspace backoff, during
-                            // which a prepared workspace still runs due
-                            // schedules and an unprepared one is skipped.
-                            let last_full = prepared.get(&workspace).copied();
-                            let retry_ready = backoff.ready(workspace, Instant::now());
-                            if last_full.is_none() && !retry_ready {
-                                continue;
-                            }
-                            let backfilled = last_full.is_some()
-                                || match scoped.backfill_workflow_tasks().await {
-                                    Ok(_) => true,
-                                    Err(error) => {
-                                        tracing::error!(%error, "workflow task backfill failed");
-                                        false
-                                    }
-                                };
-                            // A full pass also creates cursors for schedules
-                            // enabled before cursors were created on enable.
-                            let full = retry_ready
-                                && last_full.is_none_or(|last| last.elapsed() >= FULL_SCHEDULE_PASS);
-                            let run = if full {
-                                Ok(true)
-                            } else {
-                                scoped.workflow_schedules_due().await
-                            };
-                            let result = match run {
-                                Ok(true) => scoped.schedule_workflow_runs().await.map(drop),
-                                Ok(false) => Ok(()),
-                                Err(error) => Err(error),
-                            };
-                            if let Err(error) = &result {
-                                tracing::error!(%error, "workflow schedule poll failed");
-                            }
-                            if full {
-                                if result.is_ok() && backfilled {
-                                    backoff.succeeded(workspace);
-                                    prepared.insert(workspace, Instant::now());
-                                } else {
-                                    backoff.failed(workspace, Instant::now());
+                    let scoped = repository.for_workspace(workspace);
+                        // Pre-cutover rows get task envelopes once per
+                        // workspace; afterwards an idle tick only checks
+                        // whether any schedule cursor is due.
+                        // A workspace counts as prepared, and a full pass
+                        // as done, only once they succeed; a failure is
+                        // retried after a per-workspace backoff, during
+                        // which a prepared workspace still runs due
+                        // schedules and an unprepared one is skipped.
+                        let last_full = prepared.get(&workspace).copied();
+                        let retry_ready = backoff.ready(workspace, Instant::now());
+                        if last_full.is_none() && !retry_ready {
+                            continue;
+                        }
+                        let backfilled = last_full.is_some()
+                            || match scoped.backfill_workflow_tasks().await {
+                                Ok(_) => true,
+                                Err(error) => {
+                                    tracing::error!(%error, "workflow task backfill failed");
+                                    false
                                 }
+                            };
+                        // A full pass also creates cursors for schedules
+                        // enabled before cursors were created on enable.
+                        let full = retry_ready
+                            && last_full.is_none_or(|last| last.elapsed() >= FULL_SCHEDULE_PASS);
+                        let run = if full {
+                            Ok(true)
+                        } else {
+                            scoped.workflow_schedules_due().await
+                        };
+                        let result = match run {
+                            Ok(true) => scoped.schedule_workflow_runs().await.map(drop),
+                            Ok(false) => Ok(()),
+                            Err(error) => Err(error),
+                        };
+                        if let Err(error) = &result {
+                            tracing::error!(%error, "workflow schedule poll failed");
+                        }
+                        if full {
+                            if result.is_ok() && backfilled {
+                                backoff.succeeded(workspace);
+                                prepared.insert(workspace, Instant::now());
+                            } else {
+                                backoff.failed(workspace, Instant::now());
                             }
                         }
-                        Err(error) => {
-                            tracing::error!(%error, "workflow scheduler workspace scope failed")
-                        }
-                    }
                 }
                 delay
             })

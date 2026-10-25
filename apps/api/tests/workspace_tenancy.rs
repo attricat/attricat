@@ -26,10 +26,7 @@ async fn workspace_scoped_repository_hides_other_workspace_attricat_rows(pool: P
     .unwrap();
 
     let repository = AttricatRepository::system(pool);
-    let bootstrap = repository
-        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-        .await
-        .unwrap();
+    let bootstrap = repository.for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     assert!(
         bootstrap
             .get_context_by_code("private")
@@ -43,7 +40,7 @@ async fn workspace_scoped_repository_hides_other_workspace_attricat_rows(pool: P
         .initialize_workspace(other_workspace)
         .await
         .unwrap();
-    let other = repository.for_workspace(other_workspace).await.unwrap();
+    let other = repository.for_workspace(other_workspace);
     assert_eq!(
         other
             .get_context_by_code("private")
@@ -86,12 +83,12 @@ async fn workspace_scoped_blueprints_reject_foreign_ids_codes_versions_and_attri
     sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'tenant-blueprint', 'Tenant blueprint', 'tenant-blueprint.local')")
         .bind(other_workspace).execute(&pool).await.unwrap();
     let repository = AttricatRepository::system(pool);
-    let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
+    let bootstrap = repository.for_workspace(bootstrap_workspace);
     repository
         .initialize_workspace(other_workspace)
         .await
         .unwrap();
-    let other = repository.for_workspace(other_workspace).await.unwrap();
+    let other = repository.for_workspace(other_workspace);
     let definition = "format_version = 1\ncode = 'shared_code'\nname = 'Shared'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'";
     let other_blueprint = other
         .create_blueprint(CreateBlueprint {
@@ -180,7 +177,7 @@ async fn workspace_scoped_record_commands_reject_foreign_record_ids(pool: PgPool
         .bind(record).bind(blueprint).bind(other_workspace).execute(&pool).await.unwrap();
 
     let repository = AttricatRepository::system(pool);
-    let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
+    let bootstrap = repository.for_workspace(bootstrap_workspace);
     assert!(bootstrap.get_record(record).await.unwrap().is_none());
     assert!(bootstrap.delete_record(record).await.is_err());
 
@@ -188,7 +185,7 @@ async fn workspace_scoped_record_commands_reject_foreign_record_ids(pool: PgPool
         .initialize_workspace(other_workspace)
         .await
         .unwrap();
-    let other = repository.for_workspace(other_workspace).await.unwrap();
+    let other = repository.for_workspace(other_workspace);
     assert_eq!(other.get_record(record).await.unwrap().unwrap().id, record);
     other.delete_record(record).await.unwrap();
 }
@@ -205,12 +202,12 @@ async fn current_values_hides_foreign_record_values(pool: PgPool) {
         .await
         .unwrap();
     let repository = AttricatRepository::system(pool);
-    let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
+    let bootstrap = repository.for_workspace(bootstrap_workspace);
     repository
         .initialize_workspace(other_workspace)
         .await
         .unwrap();
-    let other = repository.for_workspace(other_workspace).await.unwrap();
+    let other = repository.for_workspace(other_workspace);
     let blueprint = other
         .create_blueprint(CreateBlueprint {
             definition: "format_version = 1\ncode = 'private_values'\nname = 'Private values'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'".to_owned(),
@@ -259,12 +256,12 @@ async fn reachable_search_never_traverses_another_workspace(pool: PgPool) {
         .await
         .unwrap();
     let repository = AttricatRepository::system(pool);
-    let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
+    let bootstrap = repository.for_workspace(bootstrap_workspace);
     repository
         .initialize_workspace(other_workspace)
         .await
         .unwrap();
-    let other = repository.for_workspace(other_workspace).await.unwrap();
+    let other = repository.for_workspace(other_workspace);
     let target_definition = "format_version = 1\ncode = 'shared_search_target'\nname = 'Shared target'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['name']\n\n[[attributes]]\ncode = 'name'\nvalue_type = 'string'";
     let source_definition = "format_version = 1\ncode = 'shared_search_source'\nname = 'Shared source'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['name']\n\n[[attributes]]\ncode = 'name'\nvalue_type = 'string'\n\n[[attributes]]\ncode = 'target'\nvalue_type = 'relationship'\ntarget_blueprint = 'shared_search_target'";
 

@@ -151,10 +151,8 @@ async fn record_scoped_viewer(pool: &sqlx::PgPool, record_id: Uuid) -> ScopedVie
 async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world(
     pool: sqlx::PgPool,
 ) {
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let store = Arc::new(FakeObjectStore::available());
     let release = install(&repository, store.clone(), &interactive_component()).await;
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
@@ -358,10 +356,8 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
 
 #[sqlx::test(migrations = "./migrations")]
 async fn interactive_runs_are_authorized_per_record_and_fail_closed(pool: sqlx::PgPool) {
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let store = Arc::new(FakeObjectStore::available());
     let release = install(&repository, store.clone(), &interactive_component()).await;
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
@@ -692,10 +688,8 @@ value_type = "string"
 
 #[sqlx::test(migrations = "./migrations")]
 async fn annotation_tag_changes_run_tag_checks(pool: sqlx::PgPool) {
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let extension = repository.for_extension("acme.docs");
     let blueprint = published_blueprint(&repository, TAG_CHECKED_BLUEPRINT).await;
     let item = titled_record(&repository, blueprint, "Item").await;
@@ -734,10 +728,8 @@ async fn annotation_tag_changes_run_tag_checks(pool: sqlx::PgPool) {
 async fn extension_annotation_namespaces_are_patched_and_protected_on_every_write_path(
     pool: sqlx::PgPool,
 ) {
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let extension = repository.for_extension("acme.docs");
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
     let first = titled_record(&repository, blueprint, "First").await;
@@ -886,10 +878,8 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
 
 #[sqlx::test(migrations = "./migrations")]
 async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPool) {
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let store = Arc::new(FakeObjectStore::available());
     install(&repository, store.clone(), b"server").await;
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
@@ -996,10 +986,8 @@ async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPo
 
 #[sqlx::test(migrations = "./migrations")]
 async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
     let record = titled_record(&repository, blueprint, "Race").await;
     // Stand in for a first claim of `acme.race` that is still counting
@@ -1068,10 +1056,8 @@ async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) {
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let store = Arc::new(FakeObjectStore::available());
     let release = install(&repository, store.clone(), &interactive_component()).await;
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
@@ -1135,10 +1121,8 @@ async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) 
 
 #[sqlx::test(migrations = "./migrations")]
 async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
     let first = titled_record(&repository, blueprint, "First").await;
     let second = titled_record(&repository, blueprint, "Second").await;
@@ -1151,10 +1135,8 @@ async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
         .connect_with((*pool.connect_options()).clone())
         .await
         .unwrap();
-    let bounded_repository = AttricatRepository::system(bounded)
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let bounded_repository =
+        AttricatRepository::system(bounded).for_workspace(bootstrap_workspace_id());
     let scope = InteractiveRunScope {
         actor: AuthorizationActor {
             user_id: viewer,
@@ -1198,10 +1180,8 @@ target_cardinality = "many"
 "#;
 #[sqlx::test(migrations = "./migrations")]
 async fn interactive_links_require_read_access_to_every_target(pool: sqlx::PgPool) {
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     let store = Arc::new(FakeObjectStore::available());
     install(&repository, store, b"server").await;
     let targets = published_blueprint(&repository, OTHER_BLUEPRINT).await;

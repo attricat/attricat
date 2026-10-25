@@ -862,7 +862,7 @@ pub(super) async fn oauth_callback(
         return redirect(None, None, "signed_out");
     }
     let binding = connections::authorization_session_binding(session.as_bytes());
-    let repository = state.repository.for_workspace(workspace_id).await?;
+    let repository = state.repository.for_workspace(workspace_id);
     let code = query
         .code
         .as_deref()
@@ -1227,7 +1227,7 @@ pub(super) async fn public_file(
     else {
         return Err(ApiError::not_found("file"));
     };
-    let repository = state.repository.for_workspace(workspace_id).await?;
+    let repository = state.repository.for_workspace(workspace_id);
     let installed = match repository.installed_extension(&extension_id).await {
         Ok(installed) => installed,
         Err(RepositoryError::NotFound(_)) => return Err(ApiError::not_found("file")),

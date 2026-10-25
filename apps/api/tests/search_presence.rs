@@ -123,10 +123,8 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
         .send().await.unwrap(),StatusCode::OK).await;
     let workspace = bootstrap_workspace_id();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = api::repository::AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository =
+        api::repository::AttricatRepository::system(pool.clone()).for_workspace(workspace);
     for field in [
         "text", "amount", "count", "flag", "day", "instant", "clock", "assignee",
     ] {
@@ -349,10 +347,7 @@ async fn file_presence_requires_an_attached_file(pool: PgPool) {
     );
     let workspace = bootstrap_workspace_id();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = api::repository::AttricatRepository::system(pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = api::repository::AttricatRepository::system(pool).for_workspace(workspace);
     let agent_search = |filters: Value| {
         api::agent_tools::execute_read(
             &repository,
@@ -707,7 +702,7 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
         .bind(other_workspace).execute(&pool).await.unwrap();
     let system = api::repository::AttricatRepository::system(pool);
     system.initialize_workspace(other_workspace).await.unwrap();
-    let other = system.for_workspace(other_workspace).await.unwrap();
+    let other = system.for_workspace(other_workspace);
     let context = other.search_context("default").await.unwrap().unwrap();
     for value in ["true", "false"] {
         let filter = api::repository::RecordSearchFilter {

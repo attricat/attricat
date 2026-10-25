@@ -6,12 +6,8 @@ impl<S: RepositoryScope> AttricatRepository<S> {
     }
 
     /// Pure scope derivation: no connection acquisition, provisioning or SQL.
-    /// The async Result signature is retained for existing runtime callers.
-    pub async fn for_workspace(
-        &self,
-        workspace_id: Uuid,
-    ) -> Result<AttricatRepository, RepositoryError> {
-        Ok(AttricatRepository {
+    pub fn for_workspace(&self, workspace_id: Uuid) -> AttricatRepository {
+        AttricatRepository {
             pool: self.pool.clone(),
             workspace_id: WorkspaceScope(workspace_id),
             audit_context: self.audit_context.clone(),
@@ -23,7 +19,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             cache: self.cache.clone(),
             // Generations belong to the workspace they were read for.
             generations: None,
-        })
+        }
     }
 
     /// Explicitly leave tenant scope for process-level coordination. System

@@ -322,7 +322,6 @@ pub(super) async fn authorize(
     let mut repository = state
         .repository
         .for_workspace(workspace)
-        .await?
         .with_generations(generations)
         .with_audit_context(audit_context);
     if user_scoped_agent {

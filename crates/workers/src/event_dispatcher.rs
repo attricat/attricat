@@ -215,7 +215,7 @@ async fn dispatch_handler(
         state.last_health = Some(std::time::Instant::now());
     }
     for workspace_id in repository.polled_workspace_ids().await?.as_ref().clone() {
-        let repository = repository.for_workspace(workspace_id).await?;
+        let repository = repository.for_workspace(workspace_id);
         if !state.registered.contains(&workspace_id) {
             repository
                 .ensure_event_consumer(handler.name(), handler.event_types())

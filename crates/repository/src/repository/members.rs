@@ -201,7 +201,6 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             .bind(user_id).bind(row.try_get::<Uuid,_>("invitation_id")?).fetch_optional(&mut *tx).await?;
         if let Some(inviter) = inviter {
             self.for_workspace(workspace_id)
-                .await?
                 .notify_invitation_accepted_on(&mut tx, inviter, user_id)
                 .await?;
         }
@@ -635,7 +634,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         let inviter: Uuid = sqlx::query_scalar("UPDATE workspace_invitations SET accepted_at = clock_timestamp(), accepted_by_user_id = $1 WHERE id = $2 RETURNING inviter_user_id").bind(user_id).bind(invitation.try_get::<Uuid,_>("id")?).fetch_one(&mut *tx).await?;
         // Invitation acceptance is scoped by the invitation, not the caller's
         // current workspace selection. Audit and notify in the destination tenant.
-        let destination = self.for_workspace(workspace_id).await?;
+        let destination = self.for_workspace(workspace_id);
         destination
             .notify_invitation_accepted_on(&mut tx, inviter, user_id)
             .await?;

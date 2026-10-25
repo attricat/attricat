@@ -128,10 +128,7 @@ fn archive() -> Vec<u8> {
 }
 
 async fn workspace_repository(pool: &sqlx::PgPool) -> AttricatRepository {
-    AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap()
+    AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id())
 }
 
 /// Delivers every pending extension event like the production coordinator

@@ -38,7 +38,7 @@ async fn workspace_scopes_share_one_bounded_pool_under_concurrency_and_close_cle
     for workspace_id in workspace_ids.iter().copied() {
         let session = session.clone();
         requests.spawn(async move {
-            let repository = session.for_workspace(workspace_id).await.unwrap();
+            let repository = session.for_workspace(workspace_id);
             repository.list_contexts().await.unwrap()
         });
     }
@@ -62,10 +62,7 @@ async fn workspace_scopes_share_one_bounded_pool_under_concurrency_and_close_cle
     let held_first = exhausted.acquire().await.unwrap();
     let held_second = exhausted.acquire().await.unwrap();
     // Scope derivation is pure, even with no available database connections.
-    let scoped = exhausted_session
-        .for_workspace(workspace_ids[0])
-        .await
-        .unwrap();
+    let scoped = exhausted_session.for_workspace(workspace_ids[0]);
     assert!(scoped.list_contexts().await.is_err());
     drop(held_first);
     drop(held_second);
@@ -74,6 +71,6 @@ async fn workspace_scopes_share_one_bounded_pool_under_concurrency_and_close_cle
     // Closing the global pool makes every extant workspace scope fail rather
     // than leaving a per-workspace pool alive during shutdown.
     shared_pool.close().await;
-    let scoped = session.for_workspace(Uuid::new_v4()).await.unwrap();
+    let scoped = session.for_workspace(Uuid::new_v4());
     assert!(scoped.list_contexts().await.is_err());
 }

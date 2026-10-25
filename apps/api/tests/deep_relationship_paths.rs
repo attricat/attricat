@@ -174,10 +174,7 @@ cardinality = "one""#,
     }
 
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
-    let repository = AttricatRepository::system(repository_pool)
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(repository_pool).for_workspace(workspace);
     let agent_result = agent_tools::execute_read(
         &repository,
         BOOTSTRAP_OWNER_ID.parse().unwrap(),

@@ -6353,10 +6353,7 @@ async fn interrupted_official_extension_install_resumes_without_reinstalling(poo
     .fetch_one(&pool)
     .await
     .unwrap();
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace_id)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace_id);
     ExtensionInstaller::new(
         repository,
         std::sync::Arc::new(FakeObjectStore::available()),

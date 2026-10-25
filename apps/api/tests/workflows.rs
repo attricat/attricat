@@ -201,8 +201,6 @@ default_value = "untitled"
     assert!(
         repository
             .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-            .await
-            .unwrap()
             .replay_workflow_run(run_id)
             .await
             .unwrap()
@@ -655,8 +653,6 @@ default_value = "untitled"
     assert!(
         AttricatRepository::system(pool.clone())
             .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-            .await
-            .unwrap()
             .replay_workflow_run(run_id)
             .await
             .unwrap()
@@ -681,8 +677,6 @@ default_value = "untitled"
     .unwrap();
     AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-        .await
-        .unwrap()
         .fan_out_workflow_runs(
             &sqlx::query_as::<_, api::domain_events::DomainEvent>(
                 "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload FROM domain_events WHERE id=$1",
@@ -772,8 +766,6 @@ async fn fan_out_latest_event(pool: &PgPool, record_id: &str) -> (String, u64) {
     .unwrap();
     let created = AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-        .await
-        .unwrap()
         .fan_out_workflow_runs(&event)
         .await
         .unwrap();
@@ -1275,10 +1267,8 @@ fixed = "Reworked""#,
     let record_id: Uuid = id.parse().unwrap();
     publish_in_channel(&pool, record_id, channel).await;
     assert_eq!(fan_out_latest_event(&pool, id).await.1, 1);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(bootstrap_workspace_id())
-        .await
-        .unwrap();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
     assert!(handle_workflow_task_once(&repository).await);
     let title: Option<String> = sqlx::query_scalar(
         "SELECT projections->'preview'->'default'->>'title' FROM records WHERE id = $1",

@@ -44,10 +44,7 @@ async fn scoped_export_fans_out_to_channels_via_existing_task_queue(pool: sqlx::
     };
     let archive = std::fs::read(path).unwrap();
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = AttricatRepository::system(pool.clone())
-        .for_workspace(workspace)
-        .await
-        .unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
     let store = Arc::new(FakeObjectStore::available());
     let channels = ["connector_web", "connector_market"];
     let mut channel_ids = Vec::new();

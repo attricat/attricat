@@ -33,13 +33,7 @@ pub(crate) async fn run_once(repository: &SystemRepository) {
         }
     };
     for workspace_id in workspaces {
-        let workspace_repository = match repository.for_workspace(workspace_id).await {
-            Ok(repository) => repository,
-            Err(error) => {
-                tracing::error!(%workspace_id, %error, "could not scope solution-pack housekeeping");
-                continue;
-            }
-        };
+        let workspace_repository = repository.for_workspace(workspace_id);
         if let Err(error) = workspace_repository
             .cleanup_solution_pack_sample_staging()
             .await
