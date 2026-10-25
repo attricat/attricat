@@ -1,19 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, Button, Chip, Stack, Typography } from '@mui/material';
-import { useState } from 'react';
+import { Alert, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { definitionKinds } from '../definition-editor/constants';
-import { DefinitionTemplateDialog } from '../definition-editor/DefinitionTemplateDialog';
 import { DefinitionWorkspace } from '../definition-editor/DefinitionWorkspace';
-import { UnsavedDefinitionChangesDialog } from '../definition-editor/UnsavedDefinitionChangesDialog';
 import { useDefinitionCheck } from '../definition-editor/useDefinitionCheck';
 import { draftEditors } from '../drafts/constants';
-import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
-import { definitionDraftSchema } from '../drafts/schemas';
-import { useEditorDraft } from '../drafts/useEditorDraft';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import {
   createBlueprint,
@@ -27,9 +21,12 @@ import { recordQueryKeys } from '../records/queryKeys';
 import { blueprintQueryKeys } from './queryKeys';
 import { BlueprintIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
-
-type PendingUnsavedAction =
-  { templateIndex: number; type: 'replace' } | { type: 'discard' };
+import { useDefinitionEditor } from '../definition-editor/useDefinitionEditor';
+import {
+  DefinitionEditorActions,
+  DefinitionSaveHint,
+  DefinitionTemplatesButton,
+} from '../definition-editor/DefinitionEditorControls';
 
 export const BlueprintEditorPage = ({
   blueprintId,
@@ -49,28 +46,25 @@ export const BlueprintEditorPage = ({
     queryFn: () => getBlueprintRevision(blueprintId!, sourceVersion!),
     enabled: Boolean(blueprintId && sourceVersion),
   });
-  const [templateIndex, setTemplateIndex] = useState(0);
-  const [templateDialogOpen, setTemplateDialogOpen] = useState(!blueprintId);
-  const [pendingUnsavedAction, setPendingUnsavedAction] =
-    useState<PendingUnsavedAction>();
   const sourceRevision = source.data;
-  const initialDefinition =
-    sourceRevision?.blueprint.definition ??
-    blueprintTemplates[templateIndex].definition;
-  const [editedDefinition, setEditedDefinition] = useState<string | null>(null);
-  const definition = editedDefinition ?? initialDefinition;
-  const isDirty = definition !== initialDefinition;
-  const draft = useEditorDraft({
-    dirty: isDirty,
-    editor: blueprintId
+  const leaveEditor = () => {
+    navigate(
+      blueprintId
+        ? { params: { blueprintId }, to: '/manage/blueprints/$blueprintId' }
+        : { to: '/manage/blueprints' },
+    );
+  };
+  const editor = useDefinitionEditor({
+    draftEditor: blueprintId
       ? draftEditors.blueprintRevision
       : draftEditors.blueprintCreate,
+    draftResource: blueprintId ? [blueprintId, sourceVersion ?? 0] : [],
+    onLeave: leaveEditor,
     ready: !blueprintId || Boolean(sourceRevision),
-    resource: blueprintId ? [blueprintId, sourceVersion ?? 0] : [],
-    schema: definitionDraftSchema,
-    source: sourceRevision?.blueprint.definition ?? null,
-    value: definition,
+    source: sourceRevision?.blueprint.definition,
+    templates: blueprintTemplates,
   });
+  const { definition, isDirty } = editor;
 
   const save = useMutation({
     mutationFn: ({ definition }: { definition: string }) =>
@@ -78,7 +72,7 @@ export const BlueprintEditorPage = ({
         ? createBlueprintRevision(blueprintId, definition)
         : createBlueprint(definition),
     onSuccess: async ({ blueprint }) => {
-      draft.clear();
+      editor.clearDraft();
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: blueprintQueryKeys.catalogue(),
@@ -112,52 +106,6 @@ export const BlueprintEditorPage = ({
     validate: (value, id, signal) => validateBlueprint(value, id, signal),
   });
 
-  const restoreDraft = () => {
-    const restored = draft.restore();
-    if (restored === undefined) return;
-    setEditedDefinition(restored);
-    setTemplateDialogOpen(false);
-  };
-
-  const applyTemplate = (index: number) => {
-    setTemplateIndex(index);
-    setEditedDefinition(null);
-    setTemplateDialogOpen(false);
-  };
-
-  const selectTemplate = (index: number) => {
-    if (isDirty) {
-      setPendingUnsavedAction({ templateIndex: index, type: 'replace' });
-      return;
-    }
-    applyTemplate(index);
-  };
-
-  const leaveEditor = () => {
-    navigate(
-      blueprintId
-        ? { params: { blueprintId }, to: '/manage/blueprints/$blueprintId' }
-        : { to: '/manage/blueprints' },
-    );
-  };
-
-  const cancel = () => {
-    if (isDirty) {
-      setPendingUnsavedAction({ type: 'discard' });
-      return;
-    }
-    leaveEditor();
-  };
-
-  const confirmUnsavedAction = () => {
-    if (pendingUnsavedAction?.type === 'replace') {
-      applyTemplate(pendingUnsavedAction.templateIndex);
-    } else if (pendingUnsavedAction?.type === 'discard') {
-      leaveEditor();
-    }
-    setPendingUnsavedAction(undefined);
-  };
-
   if (blueprintId && source.isPending) {
     return (
       <PageContainer>
@@ -168,44 +116,35 @@ export const BlueprintEditorPage = ({
 
   return (
     <PageContainer>
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        spacing={2}
-        sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}
-      >
-        <PageHeader
-          description={
-            blueprintId
-              ? t('blueprints.newRevisionDescription', {
-                  version: sourceVersion,
-                })
-              : t('blueprints.newBlueprintDescription')
-          }
-          icon={BlueprintIcon}
-          title={
-            blueprintId
-              ? t('blueprints.newBlueprintRevision')
-              : t('blueprints.newBlueprint')
-          }
-        />
-        <Stack direction="row" spacing={1}>
-          {isDirty && (
-            <Chip color="warning" label={t('definitionEditor.unsaved.chip')} />
-          )}
-          <Button disabled={save.isPending} onClick={cancel}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            disabled={!canSave || source.isError}
-            onClick={saveDefinition}
-            variant="contained"
-          >
-            {save.isPending
-              ? t('blueprints.saving')
-              : t('blueprints.saveDraft')}
-          </Button>
-        </Stack>
-      </Stack>
+      <PageHeader
+        actions={
+          <DefinitionEditorActions
+            canSave={canSave && !source.isError}
+            isDirty={isDirty}
+            isSaving={save.isPending}
+            onCancel={editor.cancel}
+            onSave={saveDefinition}
+            saveLabel={
+              save.isPending
+                ? t('blueprints.saving')
+                : t('blueprints.saveDraft')
+            }
+          />
+        }
+        description={
+          blueprintId
+            ? t('blueprints.newRevisionDescription', {
+                version: sourceVersion,
+              })
+            : t('blueprints.newBlueprintDescription')
+        }
+        icon={BlueprintIcon}
+        title={
+          blueprintId
+            ? t('blueprints.newBlueprintRevision')
+            : t('blueprints.newBlueprint')
+        }
+      />
       {sourceRevision?.attributes.map((attribute) => (
         <ExtensionOutlet
           context={{
@@ -229,29 +168,11 @@ export const BlueprintEditorPage = ({
           {t('blueprints.draftNotSaved', { message: errorMessage(save.error) })}
         </Alert>
       )}
-      {!blueprintId && (
-        <DefinitionTemplateDialog
-          onClose={() => setTemplateDialogOpen(false)}
-          onSelect={selectTemplate}
-          open={templateDialogOpen && !draft.pending}
-          selectedIndex={templateIndex}
-          templates={blueprintTemplates}
-        />
-      )}
-      <DraftRestoreDialog
-        draft={draft.pending}
-        onDiscard={draft.discard}
-        onRestore={restoreDraft}
-      />
-      <UnsavedDefinitionChangesDialog
-        action={pendingUnsavedAction?.type}
-        onCancel={() => setPendingUnsavedAction(undefined)}
-        onConfirm={confirmUnsavedAction}
-      />
+      {editor.dialogs}
       <DefinitionWorkspace
         check={check}
         kind={definitionKinds.blueprint}
-        onChange={setEditedDefinition}
+        onChange={editor.setDefinition}
         onSave={saveDefinition}
         preview={
           check.result && (
@@ -264,22 +185,16 @@ export const BlueprintEditorPage = ({
         }
         readOnly={save.isPending}
         toolbar={
-          !blueprintId && (
-            <Button
+          editor.creating && (
+            <DefinitionTemplatesButton
               disabled={save.isPending}
-              onClick={() => setTemplateDialogOpen(true)}
-            >
-              {t('definitionEditor.templates.button')}
-            </Button>
+              onClick={editor.openTemplates}
+            />
           )
         }
         value={definition}
       />
-      <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">
-        {blueprintId && !isDirty
-          ? t('definitionEditor.makeChangeBeforeSaving')
-          : t('definitionEditor.saveShortcut')}
-      </Typography>
+      <DefinitionSaveHint unchanged={!editor.creating && !isDirty} />
     </PageContainer>
   );
 };
