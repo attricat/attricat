@@ -1,16 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Typography,
-} from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { duplicateRecord, type AttricatRecord } from '../api';
 import { invalidateRecordSearches } from '../invalidateRecord';
-import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
+import { ConfirmDialog } from '../../../components/ConfirmDialog';
 
 /** Confirms copying a record, then reports the copy. */
 export const DuplicateRecordDialog = ({
@@ -33,29 +25,15 @@ export const DuplicateRecordDialog = ({
   });
 
   return (
-    <Dialog
-      open
-      onClose={duplication.isPending ? undefined : onClose}
-      fullWidth
-      maxWidth="xs"
+    <ConfirmDialog
+      confirmLabel={t('records.duplicateRecord')}
+      error={duplication.error}
+      isPending={duplication.isPending}
+      onClose={onClose}
+      onConfirm={() => duplication.mutate()}
+      title={t('records.duplicateRecord')}
     >
-      <DialogTitle>{t('records.duplicateRecord')}</DialogTitle>
-      <DialogContent>
-        <Typography>{t('records.duplicateRecordConfirmation')}</Typography>
-        <ApiErrorAlert error={duplication.error} sx={{ mt: 2 }} />
-      </DialogContent>
-      <DialogActions>
-        <Button disabled={duplication.isPending} onClick={onClose}>
-          {t('common.cancel')}
-        </Button>
-        <Button
-          disabled={duplication.isPending}
-          onClick={() => duplication.mutate()}
-          variant="contained"
-        >
-          {t('records.duplicateRecord')}
-        </Button>
-      </DialogActions>
-    </Dialog>
+      {t('records.duplicateRecordConfirmation')}
+    </ConfirmDialog>
   );
 };

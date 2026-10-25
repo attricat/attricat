@@ -56,7 +56,7 @@ export const SafeMigrationDialog = ({
             {t('blueprints.archiveRemovedValues')}
           </Alert>
         )}
-        {error && <ApiErrorAlert error={error} sx={{ mt: 2 }} />}
+        <ApiErrorAlert error={error} sx={{ mt: 2 }} />
       </DialogContent>
       <DialogActions>
         <Button disabled={isPending} onClick={onClose}>

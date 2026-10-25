@@ -1433,7 +1433,6 @@
     "revokeTokenTitle": "Revoke personal token?",
     "revokeTokenWarning": "Scripts and integrations using <strong>{{label}}</strong> will immediately lose access. This cannot be undone.",
     "revokeToken": "Revoke token",
-    "revokeFailed": "Could not revoke the token: {{message}}",
     "extensionRuns": "Extension runs"
   },
   "files": {

@@ -1,16 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Typography,
-} from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { deleteRecord } from '../api';
 import { removeRecord } from '../invalidateRecord';
-import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
+import { ConfirmDialog } from '../../../components/ConfirmDialog';
 
 export const DeleteRecordDialog = ({
   recordId,
@@ -32,30 +24,16 @@ export const DeleteRecordDialog = ({
   });
 
   return (
-    <Dialog
-      open
-      onClose={deletion.isPending ? undefined : onClose}
-      fullWidth
-      maxWidth="xs"
+    <ConfirmDialog
+      confirmLabel={t('records.deleteRecord')}
+      destructive
+      error={deletion.error}
+      isPending={deletion.isPending}
+      onClose={onClose}
+      onConfirm={() => deletion.mutate()}
+      title={t('records.deleteRecord')}
     >
-      <DialogTitle>{t('records.deleteRecord')}</DialogTitle>
-      <DialogContent>
-        <Typography>{t('records.deleteRecordConfirmation')}</Typography>
-        <ApiErrorAlert error={deletion.error} sx={{ mt: 2 }} />
-      </DialogContent>
-      <DialogActions>
-        <Button disabled={deletion.isPending} onClick={onClose}>
-          {t('common.cancel')}
-        </Button>
-        <Button
-          color="error"
-          disabled={deletion.isPending}
-          onClick={() => deletion.mutate()}
-          variant="contained"
-        >
-          {t('records.deleteRecord')}
-        </Button>
-      </DialogActions>
-    </Dialog>
+      {t('records.deleteRecordConfirmation')}
+    </ConfirmDialog>
   );
 };

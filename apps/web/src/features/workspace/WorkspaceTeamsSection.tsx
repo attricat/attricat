@@ -7,7 +7,6 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  DialogContentText,
   DialogTitle,
   LinearProgress,
   List,
@@ -35,6 +34,7 @@ import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
 import { EmptyState } from '../../components/EmptyState';
 import { TeamIcon } from '../../components/systemIcons';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 type Editing = { team: Team | null } | null;
 /** The team keeps its name in the dialog while it fades out after closing. */
@@ -261,32 +261,19 @@ export const WorkspaceTeamsSection = ({
           users={users}
         />
       )}
-      <Dialog
+      <ConfirmDialog
+        confirmLabel={t('workspace.deleteTeam')}
+        destructive
+        error={remove.error}
+        isPending={remove.isPending}
         onClose={closeDelete}
+        onConfirm={() => deleting?.open && remove.mutate(deleting.team)}
         open={Boolean(deleting?.open)}
         slotProps={{ transition: { onExited: () => setDeleting(null) } }}
+        title={t('workspace.deleteTeam')}
       >
-        <DialogTitle>{t('workspace.deleteTeam')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            {t('workspace.deleteTeamConfirm', { team: deleting?.team.name })}
-          </DialogContentText>
-          <ApiErrorAlert error={remove.error} sx={{ mt: 2 }} />
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={remove.isPending} onClick={closeDelete}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            color="error"
-            disabled={remove.isPending || !deleting?.open}
-            onClick={() => deleting && remove.mutate(deleting.team)}
-            variant="contained"
-          >
-            {t('workspace.deleteTeam')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        {t('workspace.deleteTeamConfirm', { team: deleting?.team.name })}
+      </ConfirmDialog>
     </Stack>
   );
 };

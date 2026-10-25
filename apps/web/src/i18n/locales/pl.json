@@ -1497,7 +1497,6 @@
     "revokeTokenTitle": "Unieważnić osobisty token?",
     "revokeTokenWarning": "Skrypty i integracje korzystające z <strong>{{label}}</strong> natychmiast utracą dostęp. Tej operacji nie można cofnąć.",
     "revokeToken": "Unieważnij token",
-    "revokeFailed": "Nie udało się unieważnić tokenu: {{message}}",
     "extensionRuns": "Uruchomienia rozszerzeń"
   },
   "files": {
