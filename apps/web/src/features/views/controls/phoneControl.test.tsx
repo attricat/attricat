@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Attribute, ComponentReference } from '../../records/api';
 import { RecordAttributeEditor } from '../../records/components/RecordAttributeEditor';
@@ -54,17 +55,19 @@ it.each([
   { ...attribute, context_editable: 'default' as const },
 ])('keeps restricted phone fields disabled', (restrictedAttribute) => {
   render(
-    <RecordFormAttributeEditor
-      attribute={restrictedAttribute}
-      component={component}
-      contextId="translation"
-      defaultContextId="default"
-      existingValues={[]}
-      fieldErrors={{}}
-      resolvedValues={{}}
-      onChange={vi.fn()}
-      value="+48 22 123 45 67"
-    />,
+    <QueryClientProvider client={new QueryClient()}>
+      <RecordFormAttributeEditor
+        attribute={restrictedAttribute}
+        component={component}
+        contextId="translation"
+        defaultContextId="default"
+        existingValues={[]}
+        fieldErrors={{}}
+        resolvedValues={{}}
+        onChange={vi.fn()}
+        value="+48 22 123 45 67"
+      />
+    </QueryClientProvider>,
   );
   expect((screen.getByRole('textbox') as HTMLInputElement).disabled).toBe(true);
 });
