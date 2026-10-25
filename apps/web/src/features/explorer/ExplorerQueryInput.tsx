@@ -10,41 +10,27 @@ import {
   TextField,
   Tooltip,
   Typography,
-  type InputBaseComponentProps,
 } from '@mui/material';
+import { CircleQuestionMarkIcon } from 'lucide-react';
 import {
-  AsteriskIcon,
-  CircleQuestionMarkIcon,
-  CornerDownRightIcon,
-  ListIcon,
-  type LucideIcon,
-} from 'lucide-react';
-import {
-  createContext,
-  useContext,
   useId,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent,
-  type Ref,
   type RefObject,
   type SyntheticEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize, smallIconSize } from '../../components/iconSizes';
-import { RecordIcon, RelationshipIcon } from '../../components/systemIcons';
 import type { Blueprint, BlueprintWithAttributes } from '../records/api';
-import { attributeLabel } from '../records/recordDisplay';
-import { valueTypeIcons, valueTypeLabelKey } from '../records/valueTypeIcons';
 import { querySuggestionListMaxHeight } from './constants';
 import {
   firstQueryError,
   highlightQuery,
   type QueryError,
-  type QuerySegment,
 } from './queryLanguage';
 import {
   applyQuerySuggestion,
@@ -52,117 +38,11 @@ import {
   type QuerySuggestion,
 } from './querySuggestions';
 import { useQuerySchema } from './useQuerySchema';
-
-const suggestionIcon = (suggestion: QuerySuggestion): LucideIcon => {
-  switch (suggestion.kind) {
-    case 'attribute':
-      return valueTypeIcons[suggestion.attribute.value_type];
-    case 'relationship':
-      return RelationshipIcon;
-    case 'allFields':
-      return ListIcon;
-    case 'global':
-      return AsteriskIcon;
-    case 'ids':
-      return RecordIcon;
-    case 'value':
-      return CornerDownRightIcon;
-  }
-};
-
-const QuerySegmentsContext = createContext<QuerySegment[]>([]);
-
-const segmentColor: Record<QuerySegment['kind'], string> = {
-  field: 'primary.main',
-  global: 'secondary.main',
-  punctuation: 'text.secondary',
-  value: 'text.primary',
-  wildcard: 'secondary.main',
-  whitespace: 'text.primary',
-};
-
-/**
- * Renders the native input with transparent text and draws the highlighted
- * query on top of it. Both share one grid cell and the input's class names,
- * so their boxes, padding, and glyphs line up; the overlay ignores pointer
- * events so editing stays native.
- */
-const HighlightedInput = ({
-  className,
-  ref,
-  onScroll,
-  ...props
-}: InputBaseComponentProps & { ref?: Ref<HTMLInputElement> }) => {
-  const segments = useContext(QuerySegmentsContext);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const syncScroll = () => {
-    if (inputRef.current && overlayRef.current) {
-      overlayRef.current.scrollLeft = inputRef.current.scrollLeft;
-    }
-  };
-  // Reading the input's scroll position forces a layout, so it is synced only
-  // when the query text changes; scrolling and selection sync it below.
-  useLayoutEffect(syncScroll, [props.value]);
-  return (
-    <Box
-      sx={{
-        display: 'grid',
-        flex: 1,
-        gridTemplateColumns: 'minmax(0, 1fr)',
-        minWidth: 0,
-      }}
-    >
-      <input
-        {...props}
-        className={className}
-        onScroll={(event) => {
-          syncScroll();
-          onScroll?.(event);
-        }}
-        onSelect={(event) => {
-          syncScroll();
-          props.onSelect?.(event);
-        }}
-        ref={(element) => {
-          inputRef.current = element;
-          if (typeof ref === 'function') ref(element);
-          else if (ref) ref.current = element;
-        }}
-        style={{ ...props.style, color: 'transparent', gridArea: '1 / 1' }}
-      />
-      <Box
-        aria-hidden
-        className={className}
-        ref={overlayRef}
-        sx={{
-          gridArea: '1 / 1',
-          overflow: 'hidden',
-          pointerEvents: 'none',
-          whiteSpace: 'pre',
-        }}
-      >
-        {segments.map((segment) => (
-          <Box
-            component="span"
-            key={segment.start}
-            sx={{
-              color: segment.error ? 'error.main' : segmentColor[segment.kind],
-              ...(segment.error && {
-                textDecorationColor: (theme) => theme.palette.error.main,
-                textDecorationLine: 'underline',
-                textDecorationStyle: 'wavy',
-                textDecorationSkipInk: 'none',
-              }),
-            }}
-          >
-            {segment.text}
-          </Box>
-        ))}
-      </Box>
-    </Box>
-  );
-};
+import {
+  HighlightedInput,
+  QuerySegmentsProvider,
+} from './QueryHighlightedInput';
+import { QuerySuggestionOption } from './QuerySuggestionOption';
 
 type Props = {
   value: string;
@@ -308,51 +188,17 @@ export const ExplorerQueryInput = ({
     }
   };
 
-  const describe = (suggestion: QuerySuggestion) => {
-    switch (suggestion.kind) {
-      case 'attribute': {
-        const valueSchema = suggestion.attribute.value_schema;
-        const schemaDescription =
-          typeof valueSchema === 'object'
-            ? valueSchema?.description
-            : undefined;
-        return typeof schemaDescription === 'string' && schemaDescription.trim()
-          ? schemaDescription
-          : t('explorer.querySuggestions.attribute', {
-              name: attributeLabel(suggestion.attribute),
-            });
-      }
-      case 'relationship':
-        return t('explorer.querySuggestions.relationship', {
-          target: suggestion.target,
-        });
-      case 'allFields':
-        return t('explorer.querySuggestions.allFields', {
-          target: suggestion.target,
-        });
-      case 'global':
-        return t('explorer.querySuggestions.global');
-      case 'ids':
-        return t('explorer.querySuggestions.ids');
-      case 'value':
-        return undefined;
-    }
-  };
-  const typeLabel = (suggestion: QuerySuggestion) =>
-    suggestion.kind === 'attribute'
-      ? t(valueTypeLabelKey(suggestion.attribute.value_type))
-      : suggestion.kind === 'relationship'
-        ? t('explorer.querySuggestions.linksTo', { target: suggestion.target })
-        : undefined;
-  const errorMessage = (queryError: QueryError) =>
+  const queryErrorMessage = (queryError: QueryError) =>
     t(`explorer.queryErrors.${queryError.code}`, { ...queryError });
 
   return (
-    <QuerySegmentsContext.Provider value={segments}>
+    <QuerySegmentsProvider segments={segments}>
       <TextField
         error={Boolean(error)}
         fullWidth
-        helperText={error && !errorContainer ? errorMessage(error) : undefined}
+        helperText={
+          error && !errorContainer ? queryErrorMessage(error) : undefined
+        }
         inputRef={(element: HTMLInputElement | null) => {
           inputRef.current = element;
           if (queryInputRef) queryInputRef.current = element;
@@ -421,7 +267,7 @@ export const ExplorerQueryInput = ({
         errorContainer &&
         createPortal(
           <FormHelperText error id={errorId} sx={{ mx: 3.5 }}>
-            {errorMessage(error)}
+            {queryErrorMessage(error)}
           </FormHelperText>,
           errorContainer,
         )}
@@ -477,88 +323,17 @@ export const ExplorerQueryInput = ({
               }}
             >
               {suggestions.map((suggestion, index) => {
-                const Icon = suggestionIcon(suggestion);
-                const description = describe(suggestion);
-                const type = typeLabel(suggestion);
                 return (
-                  <Box
-                    aria-selected={index === activeIndex}
-                    component="li"
+                  <QuerySuggestionOption
+                    active={index === activeIndex}
                     id={optionId(index)}
                     key={`${suggestion.kind}:${suggestion.code}`}
-                    onClick={() => accept(suggestion)}
-                    onMouseMove={() => {
+                    onHover={() => {
                       if (index !== activeIndex) setActive(index);
                     }}
-                    role="option"
-                    sx={{
-                      alignItems: 'flex-start',
-                      borderRadius: 1,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      gap: 2,
-                      px: 2,
-                      py: 1.5,
-                      ...(index === activeIndex && {
-                        bgcolor: 'action.selected',
-                      }),
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        color:
-                          suggestion.kind === 'global'
-                            ? 'secondary.main'
-                            : 'primary.main',
-                        display: 'flex',
-                        pt: 0.5,
-                      }}
-                    >
-                      <Icon size={compactIconSize} />
-                    </Box>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Stack
-                        direction="row"
-                        spacing={2}
-                        sx={{
-                          alignItems: 'baseline',
-                          justifyContent: 'space-between',
-                        }}
-                      >
-                        <Typography
-                          component="span"
-                          sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}
-                          variant="body2"
-                        >
-                          {suggestion.kind === 'allFields'
-                            ? t('explorer.querySuggestions.allFieldsTitle', {
-                                field: suggestion.code,
-                              })
-                            : suggestion.code}
-                        </Typography>
-                        {type && (
-                          <Typography
-                            color="text.secondary"
-                            component="span"
-                            sx={{ flexShrink: 0 }}
-                            variant="caption"
-                          >
-                            {type}
-                          </Typography>
-                        )}
-                      </Stack>
-                      {description && (
-                        <Typography
-                          color="text.secondary"
-                          component="span"
-                          sx={{ display: 'block' }}
-                          variant="caption"
-                        >
-                          {description}
-                        </Typography>
-                      )}
-                    </Box>
-                  </Box>
+                    onSelect={() => accept(suggestion)}
+                    suggestion={suggestion}
+                  />
                 );
               })}
             </Box>
@@ -581,6 +356,6 @@ export const ExplorerQueryInput = ({
           )}
         </Paper>
       </Popper>
-    </QuerySegmentsContext.Provider>
+    </QuerySegmentsProvider>
   );
 };
