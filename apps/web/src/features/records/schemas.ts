@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { checkViolationSchema } from '../../api/checkViolations';
-import { attributeContextSchema } from '../contexts/api';
+import { attributeContextSchema } from '../contexts/schemas';
 import { fileMetadataSchema } from '../files/schemas';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 import {
@@ -194,17 +194,18 @@ const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
     }),
   ]),
 );
+/** A `dropdown_option` or `page_title` view: field values joined into one label. */
+export const fieldListViewSchema = z.object({
+  fields: z.array(z.string()),
+  separator: z.string().optional(),
+});
 const viewDefinitionSchema: z.ZodType<ViewDefinition> = z.lazy(() =>
   z.union([
-    z.object({
+    fieldListViewSchema.extend({
       type: z.literal(viewBlockTypes.dropdownOption),
-      fields: z.array(z.string()),
-      separator: z.string().optional(),
     }),
-    z.object({
+    fieldListViewSchema.extend({
       type: z.literal(viewBlockTypes.pageTitle),
-      fields: z.array(z.string()),
-      separator: z.string().optional(),
     }),
     z.object({
       type: z.literal(viewBlockTypes.table),

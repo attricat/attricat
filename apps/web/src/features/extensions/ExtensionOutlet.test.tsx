@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-router';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import '../../i18n';
 import type { ExtensionContribution } from './api';
 
 const { frameMounts } = vi.hoisted(() => ({ frameMounts: vi.fn() }));
@@ -527,7 +528,7 @@ describe('ExtensionOutlet', () => {
     expect(await screen.findByText('promoted')).toBeTruthy();
     expect(screen.queryByText('grouped')).toBeNull();
     await user.click(
-      screen.getByRole('button', { name: 'extensions.groupedNavigation' }),
+      screen.getByRole('button', { name: 'Extension navigation' }),
     );
     expect(await screen.findByText('grouped')).toBeTruthy();
   });
@@ -602,10 +603,14 @@ describe('ExtensionOutlet', () => {
           <RouterProvider router={router} />
         </QueryClientProvider>,
       );
-      expect(await screen.findByText('extensions.noApps')).toBeTruthy();
+      expect(
+        await screen.findByText(
+          'No apps here yet. Apps appear when an enabled extension provides them.',
+        ),
+      ).toBeTruthy();
       expect(
         screen
-          .getByRole('link', { name: 'extensions.browseExtensions' })
+          .getByRole('link', { name: 'Browse extensions' })
           .getAttribute('href'),
       ).toBe('/manage/extensions');
     },
@@ -621,8 +626,12 @@ describe('ExtensionOutlet', () => {
         <ExtensionOutlet navigationDisplay="all" outlet="navigation" />
       </QueryClientProvider>,
     );
-    expect(await screen.findByText('extensions.noApps')).toBeTruthy();
-    expect(screen.queryByText('extensions.browseExtensions')).toBeNull();
+    expect(
+      await screen.findByText(
+        'No apps here yet. Apps appear when an enabled extension provides them.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText('Browse extensions')).toBeNull();
   });
 
   it('keeps one primary and three secondary record actions before overflow', async () => {
@@ -647,7 +656,7 @@ describe('ExtensionOutlet', () => {
     await screen.findByText('action-3');
     expect(screen.queryByText('action-4')).toBeNull();
     await user.click(
-      screen.getByRole('button', { name: 'extensions.moreActions' }),
+      screen.getByRole('button', { name: 'More extension actions' }),
     );
     expect(await screen.findByText('action-4')).toBeTruthy();
   });

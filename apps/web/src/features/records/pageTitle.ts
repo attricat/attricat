@@ -1,11 +1,7 @@
-import { z } from 'zod';
 import { formatAttributeValue } from '../views/components/values/formatAttributeValue';
 import type { Attribute } from './api';
-
-const pageTitleSchema = z.object({
-  fields: z.array(z.string()),
-  separator: z.string().optional(),
-});
+import { fieldListViewLabel } from './recordDisplay';
+import { viewBlockTypes } from './schemas';
 
 /**
  * The record page title from the blueprint's `page_title` view and the
@@ -16,18 +12,11 @@ export const pageTitleLabel = (
   views: Record<string, unknown>,
   attributes: readonly Attribute[],
   values: Record<string, { value: unknown }>,
-): string | null => {
-  const definition = pageTitleSchema.safeParse(views.page_title);
-  if (!definition.success) return null;
-  const label = definition.data.fields
-    .flatMap((field) => {
-      const attribute = attributes.find((item) => item.code === field);
-      const value = values[field]?.value;
-      if (!attribute || value === null || value === undefined) return [];
-      const text = formatAttributeValue(attribute, value);
-      // An empty field adds no segment, so a record with none falls back.
-      return text.trim() ? [text] : [];
-    })
-    .join(definition.data.separator ?? ' · ');
-  return label || null;
-};
+): string | null =>
+  fieldListViewLabel(views[viewBlockTypes.pageTitle], (field) => {
+    const attribute = attributes.find((item) => item.code === field);
+    const value = values[field]?.value;
+    return attribute && value !== null && value !== undefined
+      ? formatAttributeValue(attribute, value)
+      : undefined;
+  }) ?? null;

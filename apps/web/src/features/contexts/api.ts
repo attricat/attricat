@@ -5,7 +5,6 @@ import {
   createAttributeContextSchema,
   type AttributeContext,
 } from './schemas';
-export { attributeContextSchema } from './schemas';
 export type { AttributeContext } from './schemas';
 
 export const listContexts = (

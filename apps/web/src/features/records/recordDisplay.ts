@@ -1,3 +1,28 @@
+import { z } from 'zod';
+import { lexiconText } from '../lexicon/lexicon';
+import { fieldListViewSchema, viewBlockTypes } from './schemas';
+
+const previewSchema = z.record(z.string(), z.record(z.string(), z.unknown()));
+const defaultViewFieldSeparator = ' · ';
+
+/**
+ * The label a `dropdown_option` or `page_title` view builds: the text of each
+ * listed field joined by the view's separator, skipping empty fields.
+ * `undefined` when the view is missing or every field is empty.
+ */
+export const fieldListViewLabel = (
+  view: unknown,
+  fieldText: (field: string) => string | undefined,
+) => {
+  const definition = fieldListViewSchema.safeParse(view);
+  if (!definition.success) return undefined;
+  const label = definition.data.fields
+    .map(fieldText)
+    .filter((text): text is string => Boolean(text?.trim()))
+    .join(definition.data.separator ?? defaultViewFieldSeparator);
+  return label || undefined;
+};
+
 export const attributeLabel = (attribute: {
   code: string;
   name?: unknown;
@@ -30,23 +55,10 @@ export const dropdownOptionLabel = (
   preview: Record<string, unknown>,
   views: Record<string, unknown>,
 ): string | undefined => {
-  const definition = dropdownOptionSchema.safeParse(views.dropdown_option);
-  const parsedPreview = previewSchema.safeParse(preview);
-  if (!definition.success || !parsedPreview.success) return undefined;
-  const values = parsedPreview.data.default;
+  const values = previewSchema.safeParse(preview).data?.default;
   if (!values) return undefined;
-  const label = definition.data.fields
-    .map((field) => values[field])
-    .filter((value) => value !== null && value !== undefined)
-    .map((value) => (typeof value === 'string' ? value : String(value)))
-    .join(definition.data.separator ?? ' · ');
-  return label || undefined;
+  return fieldListViewLabel(views[viewBlockTypes.dropdownOption], (field) => {
+    const value = values[field];
+    return value === null || value === undefined ? undefined : String(value);
+  });
 };
-import { z } from 'zod';
-import { lexiconText } from '../lexicon/lexicon';
-
-const dropdownOptionSchema = z.object({
-  fields: z.array(z.string()),
-  separator: z.string().optional(),
-});
-const previewSchema = z.record(z.string(), z.record(z.string(), z.unknown()));
