@@ -358,19 +358,15 @@ impl Config {
             },
             bootstrap: bootstrap(source, demo_mode)?,
             mail: MailConfig {
-                smtp_host: get("SMTP_HOST").unwrap_or_else(|| DEFAULT_SMTP_HOST.to_owned()),
+                smtp_host: source.var("SMTP_HOST").unwrap_or(DEFAULT_SMTP_HOST).to_owned(),
                 smtp_port: source.parsed("SMTP_PORT", DEFAULT_SMTP_PORT)?,
-                smtp_tls_mode: get("SMTP_TLS_MODE")
-                    .unwrap_or_else(|| DEFAULT_SMTP_TLS_MODE.to_owned()),
+                smtp_tls_mode: source.var("SMTP_TLS_MODE").unwrap_or(DEFAULT_SMTP_TLS_MODE).to_owned(),
                 smtp_username: get("SMTP_USERNAME"),
                 smtp_password: source.secret(secret::SMTP_PASSWORD)?,
-                from: get("MAIL_FROM").unwrap_or_else(|| DEFAULT_MAIL_FROM.to_owned()),
-                password_reset_url: get("PASSWORD_RESET_URL")
-                    .unwrap_or_else(|| DEFAULT_PASSWORD_RESET_URL.to_owned()),
-                workspace_invitation_url: get("WORKSPACE_INVITATION_URL")
-                    .unwrap_or_else(|| DEFAULT_WORKSPACE_INVITATION_URL.to_owned()),
-                workspace_onboarding_url: get("WORKSPACE_ONBOARDING_URL")
-                    .unwrap_or_else(|| DEFAULT_WORKSPACE_ONBOARDING_URL.to_owned()),
+                from: source.var("MAIL_FROM").unwrap_or(DEFAULT_MAIL_FROM).to_owned(),
+                password_reset_url: source.var("PASSWORD_RESET_URL").unwrap_or(DEFAULT_PASSWORD_RESET_URL).to_owned(),
+                workspace_invitation_url: source.var("WORKSPACE_INVITATION_URL").unwrap_or(DEFAULT_WORKSPACE_INVITATION_URL).to_owned(),
+                workspace_onboarding_url: source.var("WORKSPACE_ONBOARDING_URL").unwrap_or(DEFAULT_WORKSPACE_ONBOARDING_URL).to_owned(),
             },
             cache: CacheConfig::parse(
                 source.var("CACHE_BACKEND"),
@@ -397,11 +393,8 @@ impl Config {
                 public_file_base_url: source
                     .var("EXTENSION_PUBLIC_FILE_BASE_URL")
                     .map(|value| {
-                        url::Url::parse(value)
-                            .ok()
-                            .filter(|url| {
-                                matches!(url.scheme(), "https" | "http") && url.path().ends_with('/')
-                            })
+                        plain_http_url(value)
+                            .filter(|url| url.path().ends_with('/'))
                             .ok_or_else(|| {
                                 ConfigError::from(
                                     "EXTENSION_PUBLIC_FILE_BASE_URL must be an HTTP(S) URL ending in '/'",
