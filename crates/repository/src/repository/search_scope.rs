@@ -9,8 +9,8 @@ use tracing::Instrument;
 use uuid::Uuid;
 
 use super::{
-    AttricatRepository, RecordRelationshipFilter, RecordSearchFilter, RepositoryError,
-    SEARCH_FILTER_EQ_ANY, SearchContext,
+    AttricatRepository, RecordRelationshipFilter, RecordSearchFilter, RecordSearchSort,
+    RepositoryError, SEARCH_FILTER_EQ_ANY, SearchContext,
 };
 use crate::model::{
     BlueprintWithAttributes, MatchExplanation, RelationshipFilter, SearchBlueprint, SearchFilter,
@@ -437,6 +437,209 @@ impl AttricatRepository {
             selected_target_ids: filter.selected_target_ids.clone(),
         })
     }
+
+    /// Resolves a table sort against `blueprint`: a configured table column
+    /// (through single-valued relationship hops), `blueprint_version`, or
+    /// `publication_status` in an enabled channel.
+    pub async fn resolve_search_sort(
+        &self,
+        blueprint: &crate::model::BlueprintWithAttributes,
+        sort: Option<&crate::model::SearchSort>,
+        effective_source_version: Option<i64>,
+        context: &SearchContext,
+    ) -> Result<Option<RecordSearchSort>, SearchScopeError> {
+        let Some(sort) = sort else { return Ok(None) };
+        let descending = match sort.direction.as_str() {
+            "asc" => false,
+            "desc" => true,
+            _ => {
+                return Err(invalid("sort.direction must be asc or desc".to_owned()));
+            }
+        };
+        if sort.field == "publication_status" {
+            let code = sort.context_code.as_deref().ok_or_else(|| {
+                invalid("sort.context_code is required for publication_status".to_owned())
+            })?;
+            let channel = self
+                .list_publication_channels()
+                .await?
+                .into_iter()
+                .find(|channel| channel.context_code == code && channel.enabled)
+                .ok_or_else(|| {
+                    invalid("sort.context_code must be an enabled publication channel".to_owned())
+                })?;
+            return Ok(Some(RecordSearchSort {
+                field: sort.field.clone(),
+                relationship_path: Vec::new(),
+                leaf_field: sort.field.clone(),
+                leaf_blueprint_id: blueprint.blueprint.id,
+                value_type: "integer".to_owned(),
+                descending,
+                effective_source_version,
+                publication_context_id: Some(channel.context_id),
+                context: context.clone(),
+            }));
+        }
+        if sort.context_code.is_some() {
+            return Err(invalid(
+                "sort.context_code is only valid for publication_status".to_owned(),
+            ));
+        }
+        if sort.field == "blueprint_version" {
+            return Ok(Some(RecordSearchSort {
+                field: sort.field.clone(),
+                relationship_path: Vec::new(),
+                leaf_field: sort.field.clone(),
+                leaf_blueprint_id: blueprint.blueprint.id,
+                value_type: "integer".to_owned(),
+                descending,
+                effective_source_version,
+                publication_context_id: None,
+                context: context.clone(),
+            }));
+        }
+        let columns = blueprint
+            .blueprint
+            .views
+            .get("table")
+            .and_then(|table| table.get("columns"))
+            .and_then(serde_json::Value::as_array)
+            .map(|columns| {
+                columns
+                    .iter()
+                    .filter_map(|column| column.get("field").and_then(serde_json::Value::as_str))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if !columns.contains(&sort.field.as_str()) {
+            return Err(invalid(format!(
+                "sort.field must be a configured table column, blueprint_version or publication_status; {} table columns: {}",
+                blueprint.blueprint.code,
+                if columns.is_empty() {
+                    "none".to_owned()
+                } else {
+                    columns.join(", ")
+                }
+            )));
+        }
+        let parts: Vec<_> = sort.field.split('.').collect();
+        if parts.is_empty() || parts.len() > MAX_RELATIONSHIP_HOPS + 1 {
+            return Err(invalid(
+                "sort.field may contain at most three relationship hops and a scalar leaf"
+                    .to_owned(),
+            ));
+        }
+        let mut current = blueprint.clone();
+        let mut relationship_path = Vec::new();
+        for relationship_name in &parts[..parts.len() - 1] {
+            let relationship = current
+                .attributes
+                .iter()
+                .find(|attribute| {
+                    attribute.code == *relationship_name && attribute.value_type == "relationship"
+                })
+                .ok_or_else(|| invalid("sort.field relationship is invalid".to_owned()))?;
+            if relationship.cardinality.as_deref() != Some("one") {
+                return Err(invalid(
+                    "sort.field relationship path must be single-valued".to_owned(),
+                ));
+            }
+            relationship_path.push(relationship.code.clone());
+            current = self
+                .get_blueprint_by_code(relationship.target_blueprint_code.as_deref().ok_or_else(
+                    || invalid("sort.field relationship has no target blueprint".to_owned()),
+                )?)
+                .await?
+                .ok_or(RepositoryError::NotFound("target blueprint"))?;
+        }
+        let leaf_field = parts[parts.len() - 1];
+        let value_type = current
+            .attributes
+            .iter()
+            .find(|attribute| attribute.code == leaf_field)
+            .map(|attribute| attribute.value_type.clone())
+            .ok_or_else(|| {
+                invalid("sort.field must resolve to a scalar table column".to_owned())
+            })?;
+        if !matches!(
+            value_type.as_str(),
+            "string" | "number" | "integer" | "boolean" | "date" | "datetime" | "time"
+        ) {
+            return Err(invalid(
+                "sort.field must resolve to a scalar table column".to_owned(),
+            ));
+        }
+        Ok(Some(RecordSearchSort {
+            field: sort.field.clone(),
+            relationship_path,
+            leaf_field: leaf_field.to_owned(),
+            leaf_blueprint_id: current.blueprint.id,
+            value_type,
+            descending,
+            effective_source_version,
+            publication_context_id: None,
+            context: context.clone(),
+        }))
+    }
+}
+
+/// The scalar table columns a page hydrates, by attribute code.
+pub fn table_value_paths(blueprint: &BlueprintWithAttributes) -> HashMap<String, String> {
+    let mut paths: HashMap<_, _> = blueprint
+        .table_path_attributes
+        .iter()
+        .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
+        .collect();
+    if let Some(fields) = blueprint
+        .blueprint
+        .views
+        .get("table")
+        .and_then(|table| table.get("fields"))
+        .and_then(serde_json::Value::as_array)
+    {
+        for field in fields.iter().filter_map(serde_json::Value::as_str) {
+            if let Some(attribute) = blueprint
+                .attributes
+                .iter()
+                .find(|attribute| attribute.code == field && attribute.value_type != "relationship")
+            {
+                paths.insert(attribute.code.clone(), attribute.value_type.clone());
+            }
+        }
+    }
+    paths
+}
+
+/// The direct relationships table columns traverse, with their target
+/// blueprint codes.
+pub fn table_relationship_targets(blueprint: &BlueprintWithAttributes) -> HashMap<String, String> {
+    let Some(columns) = blueprint
+        .blueprint
+        .views
+        .get("table")
+        .and_then(|table| table.get("columns"))
+        .and_then(serde_json::Value::as_array)
+    else {
+        return HashMap::new();
+    };
+    columns
+        .iter()
+        .filter_map(|column| column.get("field").and_then(serde_json::Value::as_str))
+        .filter_map(|field| field.split_once('.').map(|(relationship, _)| relationship))
+        .filter_map(|relationship| {
+            blueprint
+                .attributes
+                .iter()
+                .find(|attribute| attribute.code == relationship)
+                .filter(|attribute| attribute.value_type == "relationship")
+                .and_then(|attribute| {
+                    attribute
+                        .target_blueprint_code
+                        .as_ref()
+                        .map(|target| (relationship.to_owned(), target.clone()))
+                })
+        })
+        .collect()
 }
 
 #[cfg(test)]

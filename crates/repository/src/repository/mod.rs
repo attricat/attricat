@@ -246,6 +246,7 @@ pub use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub use rules::{ClaimedRuleRun, RuleCandidateResult};
 pub use search_scope::{
     MAX_SEARCH_FILTERS, SearchScope, SearchScopeError, SearchScopeRequest, intersect_record_ids,
+    table_relationship_targets, table_value_paths,
 };
 pub use solution_packs::SolutionPackCheckResult;
 pub use solution_packs::{

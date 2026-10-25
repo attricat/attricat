@@ -11,9 +11,9 @@ use crate::{
         ResolvedRecordPreviewResponse, SearchRecordsRequest, SearchResultVersionScope,
     },
     repository::{
-        EXPORT_STATUSES, MAX_SEARCH_FILTERS, RecordSearchScope, RecordSearchSort,
-        RelationshipFacetHop, RepositoryError, SearchContext, SearchScope, SearchScopeError,
-        SearchScopeRequest, decode_search_cursor, intersect_record_ids, valid_connection_key,
+        EXPORT_STATUSES, MAX_SEARCH_FILTERS, RecordSearchScope, RelationshipFacetHop,
+        RepositoryError, SearchScope, SearchScopeError, SearchScopeRequest, decode_search_cursor,
+        intersect_record_ids, table_relationship_targets, table_value_paths, valid_connection_key,
     },
 };
 use attricat_validation::saved_search;
@@ -314,20 +314,21 @@ pub(super) async fn search_record_previews(
         }
         _ => search_blueprint.clone(),
     };
-    let sort = resolve_table_sort(
-        &repository,
-        &result_blueprint,
-        input.sort.as_ref(),
-        sort_uses_relationship
-            .then_some(effective_source_version)
-            .flatten(),
-        &context,
-    )
-    .instrument(tracing::info_span!(
-        "sql.operation",
-        label = "table-sort-resolve"
-    ))
-    .await?;
+    let sort = repository
+        .resolve_search_sort(
+            &result_blueprint,
+            input.sort.as_ref(),
+            sort_uses_relationship
+                .then_some(effective_source_version)
+                .flatten(),
+            &context,
+        )
+        .instrument(tracing::info_span!(
+            "sql.operation",
+            label = "table-sort-resolve"
+        ))
+        .await
+        .map_err(search_scope_error)?;
     let cursor = match (sort.is_some(), input.page.cursor.as_deref()) {
         (true, _) => None,
         (false, Some(cursor)) => Some(
@@ -401,10 +402,10 @@ pub(super) async fn search_record_previews(
         item.match_explanations = explanations.get(&item.id).cloned().unwrap_or_default();
     }
     let related_started = Instant::now();
-    let table_paths = table_paths(&result_blueprint);
+    let table_paths = table_value_paths(&result_blueprint);
     let previews = input.include_previews || has_extension_table_renderer(&result_blueprint);
     let relationships = if previews {
-        table_relationships(&result_blueprint)
+        table_relationship_targets(&result_blueprint)
     } else {
         HashMap::new()
     };
@@ -540,32 +541,6 @@ async fn resolve_tree_facet_target(
     Ok((target, source_path))
 }
 
-fn table_paths(blueprint: &crate::model::BlueprintWithAttributes) -> HashMap<String, String> {
-    let mut paths: HashMap<_, _> = blueprint
-        .table_path_attributes
-        .iter()
-        .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
-        .collect();
-    if let Some(fields) = blueprint
-        .blueprint
-        .views
-        .get("table")
-        .and_then(|table| table.get("fields"))
-        .and_then(serde_json::Value::as_array)
-    {
-        for field in fields.iter().filter_map(serde_json::Value::as_str) {
-            if let Some(attribute) = blueprint
-                .attributes
-                .iter()
-                .find(|attribute| attribute.code == field && attribute.value_type != "relationship")
-            {
-                paths.insert(attribute.code.clone(), attribute.value_type.clone());
-            }
-        }
-    }
-    paths
-}
-
 /// Only direct relationship hops used by legacy rich table columns need hydration.
 /// Whether a table column renders through an extension, whose cell context
 /// carries the row's preview and related records.
@@ -585,182 +560,6 @@ fn has_extension_table_renderer(blueprint: &crate::model::BlueprintWithAttribute
                     .is_some_and(|id| !id.starts_with("attricat."))
             })
         })
-}
-
-fn table_relationships(
-    blueprint: &crate::model::BlueprintWithAttributes,
-) -> HashMap<String, String> {
-    let Some(columns) = blueprint
-        .blueprint
-        .views
-        .get("table")
-        .and_then(|table| table.get("columns"))
-        .and_then(serde_json::Value::as_array)
-    else {
-        return HashMap::new();
-    };
-    columns
-        .iter()
-        .filter_map(|column| column.get("field").and_then(serde_json::Value::as_str))
-        .filter_map(|field| field.split_once('.').map(|(relationship, _)| relationship))
-        .filter_map(|relationship| {
-            blueprint
-                .attributes
-                .iter()
-                .find(|attribute| attribute.code == relationship)
-                .filter(|attribute| attribute.value_type == "relationship")
-                .and_then(|attribute| {
-                    attribute
-                        .target_blueprint_code
-                        .as_ref()
-                        .map(|target| (relationship.to_owned(), target.clone()))
-                })
-        })
-        .collect()
-}
-
-async fn resolve_table_sort(
-    repository: &crate::repository::AttricatRepository,
-    blueprint: &crate::model::BlueprintWithAttributes,
-    sort: Option<&crate::model::SearchSort>,
-    effective_source_version: Option<i64>,
-    context: &SearchContext,
-) -> Result<Option<RecordSearchSort>, ApiError> {
-    let Some(sort) = sort else { return Ok(None) };
-    let descending = match sort.direction.as_str() {
-        "asc" => false,
-        "desc" => true,
-        _ => {
-            return Err(ApiError::invalid_input(
-                "sort.direction must be asc or desc".to_owned(),
-            ));
-        }
-    };
-    if sort.field == "publication_status" {
-        let code = sort.context_code.as_deref().ok_or_else(|| {
-            ApiError::invalid_input(
-                "sort.context_code is required for publication_status".to_owned(),
-            )
-        })?;
-        let channel = repository
-            .list_publication_channels()
-            .await?
-            .into_iter()
-            .find(|channel| channel.context_code == code && channel.enabled)
-            .ok_or_else(|| {
-                ApiError::invalid_input(
-                    "sort.context_code must be an enabled publication channel".to_owned(),
-                )
-            })?;
-        return Ok(Some(RecordSearchSort {
-            field: sort.field.clone(),
-            relationship_path: Vec::new(),
-            leaf_field: sort.field.clone(),
-            leaf_blueprint_id: blueprint.blueprint.id,
-            value_type: "integer".to_owned(),
-            descending,
-            effective_source_version,
-            publication_context_id: Some(channel.context_id),
-            context: context.clone(),
-        }));
-    }
-    if sort.context_code.is_some() {
-        return Err(ApiError::invalid_input(
-            "sort.context_code is only valid for publication_status".to_owned(),
-        ));
-    }
-    if sort.field == "blueprint_version" {
-        return Ok(Some(RecordSearchSort {
-            field: sort.field.clone(),
-            relationship_path: Vec::new(),
-            leaf_field: sort.field.clone(),
-            leaf_blueprint_id: blueprint.blueprint.id,
-            value_type: "integer".to_owned(),
-            descending,
-            effective_source_version,
-            publication_context_id: None,
-            context: context.clone(),
-        }));
-    }
-    let configured = blueprint
-        .blueprint
-        .views
-        .get("table")
-        .and_then(|table| table.get("columns"))
-        .and_then(serde_json::Value::as_array)
-        .is_some_and(|columns| {
-            columns.iter().any(|column| {
-                column.get("field").and_then(serde_json::Value::as_str) == Some(&sort.field)
-            })
-        });
-    if !configured {
-        return Err(ApiError::invalid_input(
-            "sort.field must be a configured table column".to_owned(),
-        ));
-    }
-    let parts: Vec<_> = sort.field.split('.').collect();
-    if parts.is_empty() || parts.len() > saved_search::MAX_RELATIONSHIP_HOPS + 1 {
-        return Err(ApiError::invalid_input(
-            "sort.field may contain at most three relationship hops and a scalar leaf".to_owned(),
-        ));
-    }
-    let mut current = blueprint.clone();
-    let mut relationship_path = Vec::new();
-    for relationship_name in &parts[..parts.len() - 1] {
-        let relationship = current
-            .attributes
-            .iter()
-            .find(|attribute| {
-                attribute.code == *relationship_name && attribute.value_type == "relationship"
-            })
-            .ok_or_else(|| {
-                ApiError::invalid_input("sort.field relationship is invalid".to_owned())
-            })?;
-        if relationship.cardinality.as_deref() != Some("one") {
-            return Err(ApiError::invalid_input(
-                "sort.field relationship path must be single-valued".to_owned(),
-            ));
-        }
-        relationship_path.push(relationship.code.clone());
-        current = repository
-            .get_blueprint_by_code(relationship.target_blueprint_code.as_deref().ok_or_else(
-                || {
-                    ApiError::invalid_input(
-                        "sort.field relationship has no target blueprint".to_owned(),
-                    )
-                },
-            )?)
-            .await?
-            .ok_or_else(|| ApiError::not_found("target blueprint"))?;
-    }
-    let leaf_field = parts[parts.len() - 1];
-    let value_type = current
-        .attributes
-        .iter()
-        .find(|attribute| attribute.code == leaf_field)
-        .map(|attribute| attribute.value_type.clone())
-        .ok_or_else(|| {
-            ApiError::invalid_input("sort.field must resolve to a scalar table column".to_owned())
-        })?;
-    if !matches!(
-        value_type.as_str(),
-        "string" | "number" | "integer" | "boolean" | "date" | "datetime" | "time"
-    ) {
-        return Err(ApiError::invalid_input(
-            "sort.field must resolve to a scalar table column".to_owned(),
-        ));
-    }
-    Ok(Some(RecordSearchSort {
-        field: sort.field.clone(),
-        relationship_path,
-        leaf_field: leaf_field.to_owned(),
-        leaf_blueprint_id: current.blueprint.id,
-        value_type,
-        descending,
-        effective_source_version,
-        publication_context_id: None,
-        context: context.clone(),
-    }))
 }
 
 pub(super) async fn relationship_tree_facet_children(
