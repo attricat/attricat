@@ -31,7 +31,6 @@ import {
 } from './api';
 import {
   ACTIVE_RULE_RUN_STATUSES,
-  ERROR_FINDING_SEVERITIES,
   FINDING_STATE_OPEN,
   RECORD_RULE_RUN_POLL_MS,
 } from './constants';
@@ -50,6 +49,7 @@ import {
 } from './ruleRevisions';
 import { findingEvidenceSchema } from './schemas';
 import { capabilities } from '../auth/capabilities';
+import { findingSeverityColor } from './findingSeverity';
 
 const isActive = (run: RuleRun) =>
   ACTIVE_RULE_RUN_STATUSES.includes(run.status);
@@ -63,13 +63,6 @@ const latestCompletion = (runs: readonly RuleRun[] | undefined) =>
         : latest,
     null,
   ) ?? null;
-
-const severityColor = (severity: string) =>
-  ERROR_FINDING_SEVERITIES.includes(severity)
-    ? 'error'
-    : severity === 'info'
-      ? 'info'
-      : 'warning';
 
 /** Names the attribute a finding is about by its label instead of its code. */
 const findingMessage = (
@@ -129,7 +122,7 @@ const FindingItem = ({
       }}
     >
       <Chip
-        color={severityColor(finding.severity)}
+        color={findingSeverityColor(finding.severity)}
         label={t(`rules.severities.${finding.severity}`, {
           defaultValue: finding.severity,
         })}

@@ -15,11 +15,8 @@ import { useTranslation } from 'react-i18next';
 import type { listFindings } from './api';
 import { RecordIdLink, RuleRevisionCell } from './RuleCells';
 import type { RuleRevisions } from './ruleRevisions';
-import {
-  ERROR_FINDING_SEVERITIES,
-  FINDING_STATE_OPEN,
-  FINDING_STATE_RESOLVED,
-} from './constants';
+import { FINDING_STATE_OPEN, FINDING_STATE_RESOLVED } from './constants';
+import { findingSeverityColor } from './findingSeverity';
 
 export const FindingsSection = ({
   acknowledging,
@@ -68,11 +65,7 @@ export const FindingsSection = ({
                 <TableRow key={finding.id}>
                   <TableCell>
                     <Chip
-                      color={
-                        ERROR_FINDING_SEVERITIES.includes(finding.severity)
-                          ? 'error'
-                          : 'warning'
-                      }
+                      color={findingSeverityColor(finding.severity)}
                       label={t(`rules.severities.${finding.severity}`, {
                         defaultValue: finding.severity,
                       })}

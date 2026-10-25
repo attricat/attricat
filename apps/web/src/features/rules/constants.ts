@@ -17,10 +17,12 @@ export const RULE_TABPANEL_ID_PREFIX = 'rule-inspection-tabpanel';
 
 export const FINDING_STATE_OPEN = 'open';
 export const FINDING_STATE_RESOLVED = 'resolved';
-export const ERROR_FINDING_SEVERITIES: readonly string[] = [
-  'error',
-  'critical',
-];
+export const findingSeverities = {
+  info: 'info',
+  warning: 'warning',
+  error: 'error',
+  critical: 'critical',
+} as const;
 /** Run statuses that have not finished evaluating. */
 export const ACTIVE_RULE_RUN_STATUSES: readonly string[] = [
   'pending',
