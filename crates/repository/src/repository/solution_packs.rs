@@ -40,7 +40,7 @@ use crate::{
 use super::{
     AttricatRepository, EventPublisher, ExploreNavigationEntry, RepositoryError, SAMPLE_SYSTEM_TAG,
     blueprints::blueprint_event, extensions::empty_workspace_extension_layout,
-    record_commands::ChosenIdRecordCreate, roles::OWNER_AND_ADMIN_ROLE_IDS,
+    record_commands::ChosenIdRecordCreate,
 };
 
 /// Length of a hex-encoded SHA-256 digest.
@@ -6970,23 +6970,6 @@ fn is_lowercase_sha256_hex(value: &str) -> bool {
 }
 
 impl<S: super::RepositoryScope> AttricatRepository<S> {
-    /// Solution-pack permissions are bootstrapped in application code so the
-    /// database migration history remains declarative.
-    pub async fn ensure_solution_pack_permissions(&self) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO permissions (code, description) VALUES ('solution_packs.manage', 'Inspect and manage solution packs') ON CONFLICT (code) DO NOTHING")
-            .execute(&mut *tx)
-            .await?;
-        for role_id in OWNER_AND_ADMIN_ROLE_IDS {
-            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'solution_packs.manage') ON CONFLICT DO NOTHING")
-                .bind(role_id)
-                .execute(&mut *tx)
-                .await?;
-        }
-        tx.commit().await?;
-        Ok(())
-    }
-
     pub async fn solution_pack_housekeeping_workspaces(
         &self,
     ) -> Result<Vec<Uuid>, RepositoryError> {

@@ -149,22 +149,3 @@ impl AttricatRepository {
         Ok(hold)
     }
 }
-
-impl<S: RepositoryScope> AttricatRepository<S> {
-    /// Registers the permission for explicit file holds and grants it to the
-    /// owner and admin system roles.
-    pub async fn ensure_retention_hold_permissions(&self) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO permissions (code, description) VALUES ('files.hold', 'Place and release retention holds on files') ON CONFLICT (code) DO NOTHING")
-            .execute(&mut *tx)
-            .await?;
-        for role_id in super::roles::OWNER_AND_ADMIN_ROLE_IDS {
-            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'files.hold') ON CONFLICT DO NOTHING")
-                .bind(role_id)
-                .execute(&mut *tx)
-                .await?;
-        }
-        tx.commit().await?;
-        Ok(())
-    }
-}

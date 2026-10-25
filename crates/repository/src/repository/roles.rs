@@ -37,6 +37,68 @@ pub(super) const ADMIN_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000
 pub(super) const OWNER_AND_ADMIN_ROLE_IDS: [Uuid; 2] = [OWNER_ROLE_ID, ADMIN_ROLE_ID];
 const ROLES_MANAGE_PERMISSION: &str = "roles.manage";
 
+/// Permissions installed by application code rather than migrations, so SQL
+/// stays declarative. Owners and administrators hold all of them; editors
+/// deliberately hold none (publication and unlock authority included).
+const BUILTIN_PERMISSIONS: &[(&str, &str)] = &[
+    (
+        "agents.run",
+        "Create, inspect, and decide conversational agent runs",
+    ),
+    (
+        "agents.manage",
+        "Configure how the agent proposes and applies changes",
+    ),
+    ("audit.read", "Read workspace audit events"),
+    (
+        "extensions.read",
+        "Discover extension releases from trusted registries",
+    ),
+    ("extensions.manage", "Manage trusted extension registries"),
+    (
+        "records.publish",
+        "Publish catalog records to channel contexts",
+    ),
+    ("files.hold", "Place and release retention holds on files"),
+    (
+        "records.unlock",
+        "Unlock records whose status locks them, outside the declared transitions",
+    ),
+    ("workflows.read", "Read workspace workflows and revisions"),
+    ("workflows.manage", "Create and manage workspace workflows"),
+    ("solution_packs.manage", "Inspect and manage solution packs"),
+    (
+        "rules.read",
+        "Read workspace data quality rules and findings",
+    ),
+    (
+        "rules.manage",
+        "Create and operate workspace data quality rules",
+    ),
+];
+
+impl<S: super::RepositoryScope> AttricatRepository<S> {
+    /// Idempotently installs [`BUILTIN_PERMISSIONS`] and grants them to the
+    /// owner and admin system roles, in one transaction.
+    pub async fn ensure_builtin_permissions(&self) -> Result<(), RepositoryError> {
+        let (codes, descriptions): (Vec<&str>, Vec<&str>) =
+            BUILTIN_PERMISSIONS.iter().copied().unzip();
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("INSERT INTO permissions (code, description) SELECT * FROM unnest($1::text[], $2::text[]) ON CONFLICT (code) DO NOTHING")
+            .bind(&codes)
+            .bind(&descriptions)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("INSERT INTO role_permissions (role_id, permission_code) SELECT role_id, code FROM unnest($1::uuid[]) role_id CROSS JOIN unnest($2::text[]) code ON CONFLICT DO NOTHING")
+            .bind(&OWNER_AND_ADMIN_ROLE_IDS[..])
+            .bind(&codes)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+}
+
 impl<S: super::RepositoryScope> AttricatRepository<S> {
     async fn require_permission(
         &self,

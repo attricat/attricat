@@ -19,7 +19,7 @@ attribute_code = "summary"
 
 async fn setup_rule(pool: &PgPool) -> (String, tokio::task::JoinHandle<()>, Uuid, Value) {
     AttricatRepository::system(pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let (base_url, server) = start_server(pool.clone()).await;

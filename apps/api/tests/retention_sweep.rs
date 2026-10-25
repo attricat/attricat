@@ -78,7 +78,7 @@ async fn run_rule(client: &Client, base: &str, rule_id: &str, dry_run: bool, key
 #[sqlx::test]
 async fn rule_run_retention_keeps_the_enable_gate_latest_and_live_runs(pool: PgPool) {
     AttricatRepository::system(pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let (base, server) = start_server(pool.clone()).await;

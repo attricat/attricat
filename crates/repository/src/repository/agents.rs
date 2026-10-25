@@ -905,24 +905,6 @@ impl AttricatRepository {
 }
 
 impl<S: super::RepositoryScope> AttricatRepository<S> {
-    /// System permissions are application data, not migration behavior. Keep
-    /// this idempotent bootstrap explicit so SQL migrations remain declarative.
-    pub async fn ensure_agent_permissions(&self) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO permissions (code, description) VALUES ('agents.run', 'Create, inspect, and decide conversational agent runs') ON CONFLICT (code) DO NOTHING")
-            .execute(&mut *tx).await?;
-        sqlx::query("INSERT INTO permissions (code, description) VALUES ('agents.manage', 'Configure how the agent proposes and applies changes') ON CONFLICT (code) DO NOTHING")
-            .execute(&mut *tx).await?;
-        for role_id in super::roles::OWNER_AND_ADMIN_ROLE_IDS {
-            for permission in ["agents.run", "agents.manage"] {
-                sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, $2) ON CONFLICT DO NOTHING")
-                    .bind(role_id).bind(permission).execute(&mut *tx).await?;
-            }
-        }
-        tx.commit().await?;
-        Ok(())
-    }
-
     /// Startup recovery only acquires runs whose latest shared task lease has
     /// expired. The replacement recovery lease fences the lifecycle update and
     /// acknowledgement, so another API replica's healthy handler is untouched.

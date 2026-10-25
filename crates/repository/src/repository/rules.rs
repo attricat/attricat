@@ -1173,18 +1173,6 @@ fn severity_code(severity: &attricat_rules::Severity) -> &'static str {
     }
 }
 
-impl<S: super::RepositoryScope> AttricatRepository<S> {
-    pub async fn ensure_rule_permissions(&self) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO permissions(code,description) VALUES ('rules.read','Read workspace data quality rules and findings'),('rules.manage','Create and operate workspace data quality rules') ON CONFLICT(code) DO NOTHING").execute(&mut *tx).await?;
-        for role_id in super::roles::OWNER_AND_ADMIN_ROLE_IDS {
-            sqlx::query("INSERT INTO role_permissions(role_id,permission_code) SELECT $1,code FROM permissions WHERE code IN ('rules.read','rules.manage') ON CONFLICT DO NOTHING").bind(role_id).execute(&mut *tx).await?;
-        }
-        tx.commit().await?;
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

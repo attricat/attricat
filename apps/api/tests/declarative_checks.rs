@@ -529,7 +529,7 @@ fn rule(code: &str, predicate: &str, extra: &str) -> String {
 #[sqlx::test]
 async fn new_rule_predicates_open_and_resolve_findings(pool: PgPool) {
     AttricatRepository::system(pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let (base, server) = start_server(pool.clone()).await;
@@ -649,7 +649,7 @@ max_bytes = 1048576
 #[sqlx::test]
 async fn predicates_see_file_values_and_explicit_empty_local_values(pool: PgPool) {
     AttricatRepository::system(pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let (base, server) = start_server(pool.clone()).await;
@@ -732,7 +732,7 @@ async fn predicates_see_file_values_and_explicit_empty_local_values(pool: PgPool
 #[sqlx::test]
 async fn enforcing_rules_dry_run_before_enabling_and_reject_writes(pool: PgPool) {
     AttricatRepository::system(pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let (base, server) = start_server(pool.clone()).await;
@@ -868,7 +868,7 @@ async fn enforcing_rules_dry_run_before_enabling_and_reject_writes(pool: PgPool)
 #[sqlx::test]
 async fn channels_require_checks_before_publication(pool: PgPool) {
     AttricatRepository::system(pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let (base, server) = start_server(pool.clone()).await;
@@ -964,7 +964,7 @@ async fn channels_require_checks_before_publication(pool: PgPool) {
 #[sqlx::test]
 async fn retained_edits_withdraw_publications_whose_channel_checks_now_fail(pool: PgPool) {
     AttricatRepository::system(pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let (base, server) = start_server(pool.clone()).await;
@@ -1149,7 +1149,7 @@ cardinality = "one"
 #[sqlx::test]
 async fn rule_pages_resolve_related_records_per_candidate(pool: PgPool) {
     AttricatRepository::system(pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let (base, server) = start_server(pool.clone()).await;
@@ -1277,7 +1277,7 @@ predicates = [
 #[sqlx::test]
 async fn referenced_by_rules_reevaluate_records_that_lose_a_reference(pool: PgPool) {
     AttricatRepository::system(pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let (base, server) = start_server(pool.clone()).await;
@@ -1370,7 +1370,7 @@ predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
 #[sqlx::test]
 async fn referenced_by_rules_reevaluate_records_a_migration_releases(pool: PgPool) {
     AttricatRepository::system(pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let (base, server) = start_server(pool.clone()).await;

@@ -70,7 +70,7 @@ async fn send(request: reqwest::RequestBuilder) -> (StatusCode, Value) {
 #[sqlx::test]
 async fn published_versions_contexts_and_rules_apply_to_the_next_request(pool: PgPool) {
     AttricatRepository::system(pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let (base, server) = start_server(pool.clone()).await;

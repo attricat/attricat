@@ -365,35 +365,7 @@ async fn start_configured_server(
         .await
         .unwrap();
     AttricatRepository::system(pool.clone())
-        .ensure_agent_permissions()
-        .await
-        .unwrap();
-    AttricatRepository::system(pool.clone())
-        .ensure_audit_permissions()
-        .await
-        .unwrap();
-    AttricatRepository::system(pool.clone())
-        .ensure_extension_registry_permissions()
-        .await
-        .unwrap();
-    AttricatRepository::system(pool.clone())
-        .ensure_workflow_permissions()
-        .await
-        .unwrap();
-    AttricatRepository::system(pool.clone())
-        .ensure_record_publication_permissions()
-        .await
-        .unwrap();
-    AttricatRepository::system(pool.clone())
-        .ensure_retention_hold_permissions()
-        .await
-        .unwrap();
-    AttricatRepository::system(pool.clone())
-        .ensure_record_unlock_permissions()
-        .await
-        .unwrap();
-    AttricatRepository::system(pool.clone())
-        .ensure_solution_pack_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();

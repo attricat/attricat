@@ -485,7 +485,7 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
 #[sqlx::test]
 async fn agent_duplicates_comments_validates_and_reviews_attricat_health(pool: PgPool) {
     AttricatRepository::system(pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let (base_url, server) = start_server(pool.clone()).await;
@@ -753,7 +753,7 @@ async fn agent_annotation_and_context_edits_use_attricat_validation(pool: PgPool
 #[sqlx::test]
 async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(pool: PgPool) {
     AttricatRepository::system(pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await
         .unwrap();
     let (base_url, server) = start_server(pool.clone()).await;

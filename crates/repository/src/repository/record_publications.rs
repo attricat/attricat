@@ -960,23 +960,3 @@ impl AttricatRepository {
         )
     }
 }
-
-impl<S: super::RepositoryScope> AttricatRepository<S> {
-    /// Installs publication permissions in application code, preserving the
-    /// declarative-only migration contract. Owners and administrators receive
-    /// publication authority; editors deliberately do not.
-    pub async fn ensure_record_publication_permissions(&self) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO permissions (code, description) VALUES ('records.publish', 'Publish catalog records to channel contexts') ON CONFLICT (code) DO NOTHING")
-            .execute(&mut *tx)
-            .await?;
-        for role_id in super::roles::OWNER_AND_ADMIN_ROLE_IDS {
-            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'records.publish') ON CONFLICT DO NOTHING")
-                .bind(role_id)
-                .execute(&mut *tx)
-                .await?;
-        }
-        tx.commit().await?;
-        Ok(())
-    }
-}

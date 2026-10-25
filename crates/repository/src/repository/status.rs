@@ -124,28 +124,6 @@ pub struct UnlockRecordStatus {
 /// Lets owners and administrators leave any locking status.
 const UNLOCK_PERMISSION: &str = "records.unlock";
 
-impl<S: super::RepositoryScope> AttricatRepository<S> {
-    /// Installs the unlock permission in application code, preserving the
-    /// declarative-only migration contract. Only owners and administrators
-    /// receive it.
-    pub async fn ensure_record_unlock_permissions(&self) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO permissions (code, description) VALUES ($1, 'Unlock records whose status locks them, outside the declared transitions') ON CONFLICT (code) DO NOTHING")
-            .bind(UNLOCK_PERMISSION)
-            .execute(&mut *tx)
-            .await?;
-        for role_id in super::roles::OWNER_AND_ADMIN_ROLE_IDS {
-            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, $2) ON CONFLICT DO NOTHING")
-                .bind(role_id)
-                .bind(UNLOCK_PERMISSION)
-                .execute(&mut *tx)
-                .await?;
-        }
-        tx.commit().await?;
-        Ok(())
-    }
-}
-
 /// A context whose saved effective status locks some of the record.
 struct ActiveLock<'a> {
     context: &'a ContextNode,

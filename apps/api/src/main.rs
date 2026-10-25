@@ -97,31 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         );
     }
     AttricatRepository::system(maintenance_pool.clone())
-        .ensure_agent_permissions()
-        .await?;
-    AttricatRepository::system(maintenance_pool.clone())
-        .ensure_audit_permissions()
-        .await?;
-    AttricatRepository::system(maintenance_pool.clone())
-        .ensure_record_publication_permissions()
-        .await?;
-    AttricatRepository::system(maintenance_pool.clone())
-        .ensure_retention_hold_permissions()
-        .await?;
-    AttricatRepository::system(maintenance_pool.clone())
-        .ensure_record_unlock_permissions()
-        .await?;
-    AttricatRepository::system(maintenance_pool.clone())
-        .ensure_extension_registry_permissions()
-        .await?;
-    AttricatRepository::system(maintenance_pool.clone())
-        .ensure_workflow_permissions()
-        .await?;
-    AttricatRepository::system(maintenance_pool.clone())
-        .ensure_solution_pack_permissions()
-        .await?;
-    AttricatRepository::system(maintenance_pool.clone())
-        .ensure_rule_permissions()
+        .ensure_builtin_permissions()
         .await?;
     let bootstrap_repository = AttricatRepository::system(maintenance_pool.clone());
     // Repair pre-existing workspaces once at startup; scope derivation and
