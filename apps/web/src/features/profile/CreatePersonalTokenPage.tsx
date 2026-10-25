@@ -1,25 +1,12 @@
 import { useForm } from '@tanstack/react-form';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardActionArea,
-  Checkbox,
-  FormControlLabel,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
-import { ArrowLeftIcon, CircleCheckIcon } from 'lucide-react';
-import { useId, useState } from 'react';
+import { Alert, Button, Stack, TextField, Typography } from '@mui/material';
+import { ArrowLeftIcon } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { monoFontFamily } from '../../app/theme';
 import { SettingsPage } from '../../components/CenteredPage';
 import { PageHeader } from '../../components/PageHeader';
-import { compactIconSize } from '../../components/iconSizes';
 import {
   PermissionIcon,
   PersonalTokenIcon,
@@ -28,11 +15,7 @@ import { zonedDateTimeToIso } from '../../time/instantFormat';
 import { useTimeZone } from '../../time/useInstantFormat';
 import { useToast } from '../../components/useToast';
 import { useCan } from '../auth/useCan';
-import {
-  tokenFormMaxWidth,
-  tokenPermissionPresets,
-  tokensPath,
-} from './constants';
+import { tokenFormMaxWidth, tokensPath } from './constants';
 import { ProfileSection } from './ProfileSection';
 import { SecretDialog } from './SecretDialog';
 import { createToken, listTokenPermissions } from './api';
@@ -41,18 +24,8 @@ import { useInitialFocus } from '../../components/initialFocus';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
-
-const permissionGroup = (code: string) => code.split('.')[0] ?? code;
-
-const groupPermissions = <T extends { code: string }>(permissions: T[]) =>
-  permissions.reduce((groups, permission) => {
-    const group = permissionGroup(permission.code);
-    groups.set(group, [...(groups.get(group) ?? []), permission]);
-    return groups;
-  }, new Map<string, T[]>());
-
-const sameCodes = (left: readonly string[], right: readonly string[]) =>
-  left.length === right.length && left.every((code) => right.includes(code));
+import { PermissionChecklist } from './PermissionChecklist';
+import { TokenPresetCards } from './TokenPresetCards';
 
 const BackToTokens = () => {
   const { t } = useTranslation();
@@ -82,7 +55,6 @@ export const CreatePersonalTokenPage = () => {
   });
   const [secret, setSecret] = useState<string>();
   const timeZone = useTimeZone();
-  const permissionIdPrefix = useId();
   const create = useExclusiveMutation({
     mutationFn: async (value: {
       label: string;
@@ -189,9 +161,6 @@ export const CreatePersonalTokenPage = () => {
         </ProfileSection>
         <form.Field name="permissions">
           {(field) => {
-            const availablePermissions = new Set(
-              permissions.data?.map((permission) => permission.code),
-            );
             const selected = field.state.value;
             const toggle = (code: string, checked: boolean) =>
               field.handleChange(
@@ -208,88 +177,16 @@ export const CreatePersonalTokenPage = () => {
                 <Typography component="h3" variant="subtitle1">
                   {t('profile.permissionPresets')}
                 </Typography>
-                <Box
-                  sx={{
-                    display: 'grid',
-                    gap: 3,
-                    gridTemplateColumns: {
-                      xs: '1fr',
-                      sm: 'repeat(3, minmax(0, 1fr))',
-                    },
-                    mt: 3,
-                  }}
-                >
-                  {tokenPermissionPresets.map((preset) => {
-                    const unavailable = permissions.data
-                      ? preset.permissions.some(
-                          (code) => !availablePermissions.has(code),
-                        )
-                      : false;
-                    const active = sameCodes(selected, preset.permissions);
-                    return (
-                      <Card
-                        key={preset.nameKey}
-                        sx={{
-                          borderColor: active ? 'primary.main' : undefined,
-                          bgcolor: active ? 'action.selected' : undefined,
-                        }}
-                      >
-                        <CardActionArea
-                          aria-pressed={active}
-                          disabled={!permissions.data || unavailable}
-                          onClick={() => field.handleChange(preset.permissions)}
-                          sx={{ height: '100%', p: 4 }}
-                        >
-                          <Stack
-                            direction="row"
-                            spacing={2}
-                            sx={{
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                            }}
-                          >
-                            <Typography
-                              color={unavailable ? 'text.disabled' : undefined}
-                              variant="subtitle1"
-                            >
-                              {t(preset.nameKey)}
-                            </Typography>
-                            {active && (
-                              <Box
-                                sx={{ color: 'primary.main', display: 'flex' }}
-                              >
-                                <CircleCheckIcon
-                                  aria-hidden
-                                  size={compactIconSize}
-                                />
-                              </Box>
-                            )}
-                          </Stack>
-                          <Typography
-                            color="text.secondary"
-                            component="p"
-                            sx={{ mt: 1 }}
-                            variant="caption"
-                          >
-                            {unavailable
-                              ? t('profile.unavailable')
-                              : t(preset.descriptionKey)}
-                          </Typography>
-                          <Typography
-                            color="text.secondary"
-                            component="p"
-                            sx={{ mt: 2 }}
-                            variant="caption"
-                          >
-                            {t('profile.permissionCount', {
-                              count: preset.permissions.length,
-                            })}
-                          </Typography>
-                        </CardActionArea>
-                      </Card>
-                    );
-                  })}
-                </Box>
+                <TokenPresetCards
+                  available={
+                    permissions.data &&
+                    new Set(
+                      permissions.data.map((permission) => permission.code),
+                    )
+                  }
+                  onSelect={field.handleChange}
+                  selected={selected}
+                />
                 <Stack
                   direction="row"
                   spacing={2}
@@ -313,90 +210,11 @@ export const CreatePersonalTokenPage = () => {
                     })}
                   </Typography>
                 </Stack>
-                <Box
-                  sx={{
-                    display: 'grid',
-                    gap: 5,
-                    gridTemplateColumns: {
-                      xs: '1fr',
-                      sm: 'repeat(2, minmax(0, 1fr))',
-                    },
-                  }}
-                >
-                  {[...groupPermissions(permissions.data ?? [])].map(
-                    ([group, items]) => (
-                      <Box
-                        component="fieldset"
-                        key={group}
-                        sx={{ border: 0, m: 0, p: 0 }}
-                      >
-                        <Typography
-                          color="text.secondary"
-                          component="legend"
-                          sx={{ fontFamily: monoFontFamily, mb: 1 }}
-                          variant="overline"
-                        >
-                          {group}
-                        </Typography>
-                        {items.map((permission) => {
-                          const idPrefix = `${permissionIdPrefix}-${permission.code}`;
-                          const labelId = `${idPrefix}-label`;
-                          const descriptionId = `${idPrefix}-description`;
-                          return (
-                            <FormControlLabel
-                              control={
-                                <Checkbox
-                                  checked={selected.includes(permission.code)}
-                                  onChange={(event) =>
-                                    toggle(
-                                      permission.code,
-                                      event.target.checked,
-                                    )
-                                  }
-                                  slotProps={{
-                                    input: {
-                                      'aria-describedby': descriptionId,
-                                      'aria-labelledby': labelId,
-                                    },
-                                  }}
-                                />
-                              }
-                              key={permission.code}
-                              label={
-                                <Box sx={{ py: 1 }}>
-                                  <Typography
-                                    component="span"
-                                    id={labelId}
-                                    sx={{
-                                      display: 'block',
-                                      fontFamily: monoFontFamily,
-                                    }}
-                                    variant="body2"
-                                  >
-                                    {permission.code}
-                                  </Typography>
-                                  <Typography
-                                    color="text.secondary"
-                                    id={descriptionId}
-                                    sx={{ display: 'block' }}
-                                    variant="caption"
-                                  >
-                                    {permission.description}
-                                  </Typography>
-                                </Box>
-                              }
-                              sx={{
-                                alignItems: 'flex-start',
-                                display: 'flex',
-                                mr: 0,
-                              }}
-                            />
-                          );
-                        })}
-                      </Box>
-                    ),
-                  )}
-                </Box>
+                <PermissionChecklist
+                  onToggle={toggle}
+                  permissions={permissions.data ?? []}
+                  selected={selected}
+                />
               </ProfileSection>
             );
           }}
