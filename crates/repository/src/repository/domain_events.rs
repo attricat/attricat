@@ -1,3 +1,4 @@
+use crate::persistence_rows::{Db, IntoDomain};
 use async_trait::async_trait;
 use std::time::Duration;
 
@@ -198,7 +199,7 @@ impl EventPublisher for AttricatRepository {
         // not committed yet.
         let workspace_id = self.workspace_id.0;
         lock_outbox_boundary(transaction, workspace_id).await?;
-        Ok(sqlx::query_as::<_, DomainEvent>(
+        Ok(sqlx::query_as::<_, Db<DomainEvent>>(
             r#"INSERT INTO domain_events (
                     id, workspace_id, event_type, aggregate_kind, aggregate_id,
                     correlation_id, causation_id, source_kind, source_name, metadata, payload
@@ -218,7 +219,8 @@ impl EventPublisher for AttricatRepository {
         .bind(event.metadata)
         .bind(event.payload)
         .fetch_one(&mut **transaction)
-        .await?)
+        .await?
+        .into_domain())
     }
 }
 

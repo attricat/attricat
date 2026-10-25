@@ -402,13 +402,14 @@ impl AttricatRepository {
             .await?;
             (high_water_sequence, 0, purged_through)
         };
-        let events = sqlx::query_as::<_, crate::domain_events::DomainEvent>(
+        let events = sqlx::query_as::<_, crate::persistence_rows::Db<crate::domain_events::DomainEvent>>(
             "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload \
              FROM domain_events WHERE workspace_id=$1 AND aggregate_kind='record' AND sequence > $2 AND sequence <= $3 \
                AND payload->>'blueprint_id'=$4 AND (payload->>'blueprint_version')::bigint=$5 \
              ORDER BY sequence LIMIT $6",
         ).bind(workspace_id).bind(after_sequence).bind(high_water_sequence).bind(blueprint_id.to_string()).bind(blueprint_version).bind(i64::from(limit) + 1).fetch_all(&self.pool).await?;
-        let mut events = events;
+        let mut events: Vec<crate::domain_events::DomainEvent> =
+            crate::persistence_rows::IntoDomain::into_domain(events);
         let next_cursor = if events.len() > limit as usize {
             events.pop();
             events.last().map(|event| {

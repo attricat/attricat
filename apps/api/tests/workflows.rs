@@ -677,15 +677,7 @@ default_value = "untitled"
     .unwrap();
     AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
-        .fan_out_workflow_runs(
-            &sqlx::query_as::<_, api::domain_events::DomainEvent>(
-                "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload FROM domain_events WHERE id=$1",
-            )
-            .bind(blocked_event_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap(),
-        )
+        .fan_out_workflow_runs(&support::domain_event(&pool, blocked_event_id).await)
         .await
         .unwrap();
     // Hold the task lease while leaving the run pending. Disable cancels the
@@ -757,13 +749,7 @@ async fn enabled_workflow(client: &Client, base_url: &str, definition: &str) -> 
 
 /// Fans out the record's most recent outbox event and returns the runs created.
 async fn fan_out_latest_event(pool: &PgPool, record_id: &str) -> (String, u64) {
-    let event = sqlx::query_as::<_, api::domain_events::DomainEvent>(
-        "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload FROM domain_events WHERE aggregate_id=$1 ORDER BY sequence DESC LIMIT 1",
-    )
-    .bind(Uuid::parse_str(record_id).unwrap())
-    .fetch_one(pool)
-    .await
-    .unwrap();
+    let event = support::latest_domain_event(pool, Uuid::parse_str(record_id).unwrap(), None).await;
     let created = AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .fan_out_workflow_runs(&event)

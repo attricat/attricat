@@ -83,6 +83,22 @@ macro_rules! domain_row {
     };
 }
 
+domain_row!(attricat_events::DomainEvent {
+    id,
+    sequence,
+    workspace_id,
+    occurred_at,
+    event_type,
+    aggregate_kind,
+    aggregate_id,
+    correlation_id,
+    causation_id,
+    source_kind,
+    source_name,
+    metadata,
+    payload,
+});
+
 domain_row!(Blueprint {
     id,
     code,

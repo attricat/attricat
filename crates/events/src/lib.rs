@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::FromRow;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -60,6 +59,16 @@ pub const RECORD_CONTENT_EVENT_TYPES_V1: &[&str] = &[
     ATTRIBUTE_VALUE_RESTORED_V1,
     RELATIONSHIP_CHANGED_V1,
 ];
+/// Record events a rule or workflow may trigger on: content changes a record
+/// still exists after, and its schema migrations.
+pub const RECORD_TRIGGER_EVENT_TYPES_V1: &[&str] = &[
+    RECORD_CREATED_V1,
+    RECORD_UPDATED_V1,
+    RECORD_MIGRATED_V1,
+    ATTRIBUTE_VALUE_CHANGED_V1,
+    ATTRIBUTE_VALUE_RESTORED_V1,
+    RELATIONSHIP_CHANGED_V1,
+];
 const CORE_EVENT_PREFIXES: &[&str] = &[
     "record.",
     "attribute_value.",
@@ -110,7 +119,7 @@ pub struct NewDomainEvent {
     pub payload: Value,
 }
 
-#[derive(Clone, Debug, Deserialize, FromRow, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DomainEvent {
     pub id: Uuid,
     pub sequence: i64,

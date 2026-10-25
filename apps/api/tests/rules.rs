@@ -383,13 +383,7 @@ async fn record_changes_and_rechecks_run_every_enabled_rule_for_the_record(pool:
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
-    let event = sqlx::query_as::<_, api::domain_events::DomainEvent>(
-        "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload FROM domain_events WHERE aggregate_id=$1 ORDER BY sequence DESC LIMIT 1",
-    )
-    .bind(record_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let event = support::latest_domain_event(&pool, record_id, None).await;
     assert_eq!(repository.fan_out_rule_runs(&event).await.unwrap(), 1);
     // Event delivery is at least once; a redelivered event adds no run.
     assert_eq!(repository.fan_out_rule_runs(&event).await.unwrap(), 0);

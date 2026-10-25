@@ -380,14 +380,7 @@ pub fn is_record_change_event(event_type: &str) -> bool {
     RECORD_EVENTS.contains(&event_type)
 }
 
-const RECORD_EVENTS: &[&str] = &[
-    "record.created.v1",
-    "record.updated.v1",
-    "record.migrated.v1",
-    "attribute_value.changed.v1",
-    "attribute_value.restored.v1",
-    "relationship.changed.v1",
-];
+const RECORD_EVENTS: &[&str] = attricat_events::RECORD_TRIGGER_EVENT_TYPES_V1;
 
 #[cfg(test)]
 mod tests {

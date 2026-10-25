@@ -396,14 +396,7 @@ pub fn compile(source: &str) -> Result<CompiledWorkflow, WorkflowError> {
 pub fn raw_hash(source: &str) -> String {
     format!("{:x}", Sha256::digest(source.as_bytes()))
 }
-const RECORD_TRIGGER_EVENTS: &[&str] = &[
-    "record.created.v1",
-    "record.updated.v1",
-    "record.migrated.v1",
-    "attribute_value.changed.v1",
-    "attribute_value.restored.v1",
-    "relationship.changed.v1",
-];
+const RECORD_TRIGGER_EVENTS: &[&str] = attricat_events::RECORD_TRIGGER_EVENT_TYPES_V1;
 const ENVELOPE_FIELDS: &[&str] = &["event_type", "aggregate_kind", "source_kind", "source_name"];
 fn action(a: RawAction) -> Result<Action, WorkflowError> {
     match a {

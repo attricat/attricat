@@ -1346,13 +1346,7 @@ predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
     )
     .await;
     assert!(status.is_success(), "{body}");
-    let event = sqlx::query_as::<_, api::domain_events::DomainEvent>(
-        "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload FROM domain_events WHERE aggregate_id=$1 ORDER BY sequence DESC LIMIT 1",
-    )
-    .bind(action_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let event = support::latest_domain_event(&pool, action_id, None).await;
     assert_eq!(event.event_type, "relationship.changed.v1");
     let created_runs = AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
@@ -1467,13 +1461,7 @@ predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
     )
     .await;
     assert!(status.is_success(), "{body}");
-    let event = sqlx::query_as::<_, api::domain_events::DomainEvent>(
-        "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload FROM domain_events WHERE aggregate_id=$1 AND event_type='record.migrated.v1'",
-    )
-    .bind(action_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let event = support::latest_domain_event(&pool, action_id, Some("record.migrated.v1")).await;
     assert_eq!(
         event.payload["released_relationships"],
         json!([{"attribute_code": "nonconformance", "target_record_ids": [first["id"]]}]),

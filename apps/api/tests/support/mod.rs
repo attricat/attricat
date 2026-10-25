@@ -486,3 +486,41 @@ pub async fn create_record(client: &Client, base_url: &str, blueprint: &Value) -
         .await
         .unwrap()
 }
+
+/// The latest domain event for `aggregate_id`, optionally of `event_type`.
+pub async fn latest_domain_event(
+    pool: &PgPool,
+    aggregate_id: Uuid,
+    event_type: Option<&str>,
+) -> api::domain_events::DomainEvent {
+    query_domain_event(
+        pool,
+        "aggregate_id=$1 AND ($2::text IS NULL OR event_type=$2) ORDER BY sequence DESC LIMIT 1",
+        aggregate_id,
+        event_type,
+    )
+    .await
+}
+
+pub async fn domain_event(pool: &PgPool, id: Uuid) -> api::domain_events::DomainEvent {
+    query_domain_event(pool, "id=$1 AND $2::text IS NULL", id, None).await
+}
+
+/// Domain events have no SQL row mapping outside the repository, so read the
+/// row as JSON.
+async fn query_domain_event(
+    pool: &PgPool,
+    condition: &str,
+    id: Uuid,
+    text: Option<&str>,
+) -> api::domain_events::DomainEvent {
+    let row: Value = sqlx::query_scalar(&format!(
+        "SELECT to_jsonb(e) FROM (SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload FROM domain_events WHERE {condition}) e"
+    ))
+    .bind(id)
+    .bind(text)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    serde_json::from_value(row).unwrap()
+}
