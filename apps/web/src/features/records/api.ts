@@ -40,12 +40,16 @@ import {
 
 import type { RecordControlCursor } from './schemas';
 import { uuidSegment } from '../../api/pathSegments';
-export { viewBlockTypes } from './schemas';
+export { viewBlockTypes } from '../views/schemas';
+export type {
+  ComponentReference,
+  ViewDefinition,
+  ViewNode,
+} from '../views/schemas';
 export type {
   Attribute,
   Blueprint,
   BlueprintWithAttributes,
-  ComponentReference,
   AttricatRecord,
   RecordApproval,
   RecordAuditChange,
@@ -66,8 +70,6 @@ export type {
   ResolvedRecordPreview,
   RetentionHold,
   StatusTransitionAccess,
-  ViewDefinition,
-  ViewNode,
 } from './schemas';
 
 export { ApiRequestError } from '../../api/request';

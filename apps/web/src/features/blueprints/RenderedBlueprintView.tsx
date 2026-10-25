@@ -14,7 +14,7 @@ import type {
   ViewDefinition,
 } from '../records/api';
 import { attributeLabel } from '../records/recordDisplay';
-import { viewBlockTypes } from '../records/schemas';
+import { viewBlockTypes } from '../views/schemas';
 import { RecordView } from '../views/components/RecordView';
 import {
   recordHeadingComponentId,

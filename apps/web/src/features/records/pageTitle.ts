@@ -1,7 +1,7 @@
 import { formatAttributeValue } from '../views/components/values/formatAttributeValue';
 import type { Attribute } from './api';
 import { fieldListViewLabel } from './recordDisplay';
-import { viewBlockTypes } from './schemas';
+import { viewBlockTypes } from '../views/schemas';
 
 /**
  * The record page title from the blueprint's `page_title` view and the

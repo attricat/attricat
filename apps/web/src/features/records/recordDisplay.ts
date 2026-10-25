@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { lexiconText } from '../lexicon/lexicon';
-import { fieldListViewSchema, viewBlockTypes } from './schemas';
+import { fieldListViewSchema, viewBlockTypes } from '../views/schemas';
 
 const previewSchema = z.record(z.string(), z.record(z.string(), z.unknown()));
 const defaultViewFieldSeparator = ' · ';
