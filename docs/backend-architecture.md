@@ -90,6 +90,27 @@ foreign-key checks.
 - HTTP routes, JSON representations, event contracts, CLI behavior, configuration names, and deployed binary names are compatibility boundaries.
 - Database migrations remain declarative. Authorization, validation, transitions, audit, retention, and retries remain explicit Rust code and transactions.
 
+## Named values
+
+Never write a domain value as a bare literal in more than one place. Give it
+one name and refer to that name everywhere:
+
+- Closed sets (permission codes, attribute value types, run and installation
+  states, resource kinds) are enums in the crate that owns the concept, with
+  `as_str` and `TryFrom<String>`. Decode database rows into them with
+  `#[sqlx(try_from = "String")]` and `match` exhaustively instead of comparing
+  strings.
+- Single values (limits, sizes, durations, default codes, cache-control
+  headers) are `const`s named for what they bound, next to related constants,
+  with a doc comment when the reason is not obvious. Write durations in their
+  unit (`Duration::from_secs`, `TimeDelta::hours`) rather than as computed
+  seconds.
+- HTTP status codes use `StatusCode` constants, not integers.
+
+Literals are fine where they are the wire format itself: JSON keys, JSON
+Schema keywords, SQL text, and a value used exactly once whose meaning is
+plain from its surroundings.
+
 ## Compile-time measurement
 
 Run the isolated benchmark without disturbing ordinary build artifacts:

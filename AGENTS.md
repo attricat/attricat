@@ -28,6 +28,13 @@ or tests to hide the format.
 
 The app's development server is already running through Process Compose.
 
+## Named values
+
+Do not introduce magic values. Permission codes, value types, states, limits,
+durations and status codes get one name (an enum or `const`) that every use
+refers to; see [Named values](docs/backend-architecture.md#named-values) and
+the TypeScript rule in [Frontend Conventions](docs/frontend.md#typescript).
+
 ## Worktree development server
 
 Run `just setup` from the repository root before any other `just` recipe. It

@@ -13,6 +13,9 @@ light and dark modes.
 - Use semicolons and two-space indentation.
 - Keep feature code under `src/features/<feature>`.
 - Prefer relative imports within and between features; no path aliases are configured.
+- Do not repeat magic values. Name a domain string or number once (a `const`
+  object such as `viewBlockTypes`, or a constant next to its feature) and use
+  that name; this includes API codes, statuses, limits and durations.
 - Name non-component TypeScript files in camelCase (for example, `queryKeys.ts` and `latestRevisions.test.ts`); name React component files in PascalCase (for example, `RecordForm.tsx`). Keep file-based route filenames aligned with their URL segments, including kebab-case where appropriate, and retain tooling-required filenames such as `vite-env.d.ts`.
 
 ## Data Fetching
