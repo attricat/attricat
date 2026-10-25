@@ -23,7 +23,6 @@ const CSRF_HEADER: &str = "x-attricat-csrf";
 
 /// Verified request identity. It is inserted only after membership and policy
 /// evaluation, never constructed from an unvalidated handler argument.
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub(super) struct AuthenticatedPrincipal(pub Uuid, pub Option<Uuid>);
 
@@ -39,7 +38,6 @@ impl AuthenticatedPrincipal {
 }
 
 /// The workspace selected by the verified credential or browser session.
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub(super) struct ActiveWorkspace(pub Uuid);
 
@@ -53,61 +51,41 @@ pub(super) struct AuthenticatedSession(pub SessionDigest);
 #[derive(Clone)]
 pub(super) struct ScopedRepository(pub AttricatRepository);
 
-impl FromRequestParts<AppState> for ScopedRepository {
-    type Rejection = ApiError;
+/// Handlers read each verified fact back from the extensions `authorize`
+/// inserted; a route outside the authorization layer is unauthenticated.
+macro_rules! authorized_extension {
+    ($($fact:ty),+) => {$(
+        impl FromRequestParts<AppState> for $fact {
+            type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, _: &AppState) -> Result<Self, Self::Rejection> {
-        parts
-            .extensions
-            .get::<Self>()
-            .cloned()
-            .ok_or_else(ApiError::unauthenticated)
-    }
+            async fn from_request_parts(
+                parts: &mut Parts,
+                _: &AppState,
+            ) -> Result<Self, Self::Rejection> {
+                parts
+                    .extensions
+                    .get::<Self>()
+                    .cloned()
+                    .ok_or_else(ApiError::unauthenticated)
+            }
+        }
+    )+};
 }
 
-impl FromRequestParts<AppState> for AuthenticatedSession {
-    type Rejection = ApiError;
-
-    async fn from_request_parts(parts: &mut Parts, _: &AppState) -> Result<Self, Self::Rejection> {
-        parts
-            .extensions
-            .get::<Self>()
-            .cloned()
-            .ok_or_else(ApiError::unauthenticated)
-    }
-}
-
-impl FromRequestParts<AppState> for AuthenticatedPrincipal {
-    type Rejection = ApiError;
-
-    async fn from_request_parts(parts: &mut Parts, _: &AppState) -> Result<Self, Self::Rejection> {
-        parts
-            .extensions
-            .get::<Self>()
-            .copied()
-            .ok_or_else(ApiError::unauthenticated)
-    }
-}
-
-impl FromRequestParts<AppState> for ActiveWorkspace {
-    type Rejection = ApiError;
-
-    async fn from_request_parts(parts: &mut Parts, _: &AppState) -> Result<Self, Self::Rejection> {
-        parts
-            .extensions
-            .get::<Self>()
-            .copied()
-            .ok_or_else(ApiError::unauthenticated)
-    }
-}
+authorized_extension!(
+    ScopedRepository,
+    AuthenticatedSession,
+    AuthenticatedPrincipal,
+    ActiveWorkspace
+);
 
 pub(super) async fn authorize(
     State(state): State<AppState>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
-    // Production mounts the same API under /api; all policy and public-route
-    // checks must use the same canonical concrete path.
+    // Policy and public-route checks use the path without the `/api` mount
+    // prefix.
     let path = super::canonical_route(request.uri().path());
     if is_public_route(path) {
         return Ok(next.run(request).await);
@@ -350,9 +328,6 @@ fn is_public_route(path: &str) -> bool {
         path,
         // The OAuth callback carries a single-use, unguessable state.
         "/public/extension-oauth/callback"
-            | "/health"
-            | "/health/live"
-            | "/health/ready"
             | "/auth/login"
             | "/auth/discover"
             | "/auth/sample-logins"
@@ -387,12 +362,11 @@ mod route_tests {
     use super::*;
 
     #[test]
-    fn api_alias_uses_identical_public_and_scoped_policy_paths() {
+    fn public_and_scoped_policy_paths_ignore_the_api_prefix() {
         for route in [
             "/auth/login",
             "/auth/discover",
             "/auth/sample-logins",
-            "/health/ready",
             "/onboarding/complete",
             "/public/extension-oauth/callback",
         ] {

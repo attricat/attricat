@@ -1270,7 +1270,7 @@ mod timing_tests {
     const PERMIT_RELEASE_TIMEOUT: Duration = Duration::from_secs(2);
 
     #[test]
-    fn api_aliases_use_the_canonical_route_for_middleware() {
+    fn middleware_routes_ignore_the_api_prefix() {
         assert_eq!(
             canonical_route("/api/blueprints/{blueprint_id}"),
             "/blueprints/{blueprint_id}"
