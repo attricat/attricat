@@ -19,7 +19,7 @@ export const RoleSelectField = ({
       select
       value={value}
     >
-      {roles?.map((role) => (
+      {(roles ?? []).map((role) => (
         <MenuItem key={role.id} value={role.id}>
           {role.code}
         </MenuItem>
