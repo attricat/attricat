@@ -166,7 +166,7 @@ export const ReusableAttributeEditorPage = ({
               />
             )}
             <Button disabled={save.isPending} onClick={cancel}>
-              {t('reusableAttributes.editor.cancel')}
+              {t('common.cancel')}
             </Button>
             <Button
               disabled={!canSave}

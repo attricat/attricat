@@ -237,7 +237,7 @@ export const ConnectionDialog = ({
       </DialogContent>
       <DialogActions>
         <Button disabled={create.isPending} onClick={onClose}>
-          {t('extensionExports.cancel')}
+          {t('common.cancel')}
         </Button>
         <Button
           disabled={create.isPending}

@@ -51,7 +51,7 @@ export const DuplicateRecordDialog = ({
       </DialogContent>
       <DialogActions>
         <Button disabled={duplication.isPending} onClick={onClose}>
-          {t('records.cancel')}
+          {t('common.cancel')}
         </Button>
         <Button
           disabled={duplication.isPending}

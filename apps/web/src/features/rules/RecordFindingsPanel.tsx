@@ -16,7 +16,7 @@ import { Link } from '@tanstack/react-router';
 import { PlayIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
-import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { EmptyState } from '../../components/EmptyState';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { RuleIcon } from '../../components/systemIcons';

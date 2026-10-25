@@ -193,7 +193,7 @@ export const BlueprintEditorPage = ({
             <Chip color="warning" label={t('definitionEditor.unsaved.chip')} />
           )}
           <Button disabled={save.isPending} onClick={cancel}>
-            {t('blueprints.cancel')}
+            {t('common.cancel')}
           </Button>
           <Button
             disabled={!canSave || source.isError}

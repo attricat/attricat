@@ -134,7 +134,7 @@ const TeamDialog = ({
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={onClose}>{t('workspace.cancel')}</Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
           <form.Subscribe selector={(state) => state.isSubmitting}>
             {(submitting) => (
               <Button disabled={submitting} type="submit" variant="contained">
@@ -285,7 +285,7 @@ export const WorkspaceTeamsSection = ({
         </DialogContent>
         <DialogActions>
           <Button disabled={remove.isPending} onClick={closeDelete}>
-            {t('workspace.cancel')}
+            {t('common.cancel')}
           </Button>
           <Button
             color="error"

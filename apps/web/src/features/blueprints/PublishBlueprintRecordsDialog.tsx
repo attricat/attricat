@@ -11,7 +11,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { listPublicationChannels } from '../exports/api';
 import { exportQueryKeys } from '../exports/queryKeys';
 import { allPublicationChannels } from './constants';
@@ -75,7 +75,7 @@ export const PublishBlueprintRecordsDialog = ({
       </DialogContent>
       <DialogActions>
         <Button disabled={isPending} onClick={onClose}>
-          {t('blueprints.cancel')}
+          {t('common.cancel')}
         </Button>
         <Button
           disabled={isPending}

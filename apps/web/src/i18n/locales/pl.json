@@ -541,7 +541,6 @@
     "addReusableAttributeOrGroup": "Dodaj niestandardowy atrybut lub grupę atrybutów",
     "chooseReusableAttributeOrGroup": "Wybierz, co chcesz dodać.",
     "back": "Wstecz",
-    "cancel": "Anuluj",
     "schemaValidationFailed": "Wartość nie spełnia wymagań schematu.",
     "loadingOptions": "Wczytywanie opcji...",
     "couldNotLoadRecords": "Nie udało się wczytać rekordów typu {{blueprint}}.",
@@ -861,7 +860,6 @@
       "superseded": "Zastąpiona"
     },
     "automaticMigrationUnavailable": "Automatyczna migracja nie jest dostępna dla tej wersji. Istniejące rekordy nadal można migrować pojedynczo do sprawdzenia.",
-    "cancel": "Anuluj",
     "latestVersion": "Najnowsza: w{{version}}",
     "updated": "Zaktualizowano",
     "notPublished": "Nie opublikowano",
@@ -1264,7 +1262,6 @@
     "matchInAttribute": "{{term}} w {{attribute}}",
     "searchDetailsSeparator": "; ",
     "retry": "Ponów",
-    "cancel": "Anuluj",
     "blueprintOption": "{{name}} ({{code}})",
     "relationshipFacetLabel": "{{attribute}} ({{blueprint}})",
     "attributeFilterPill": "{{field}} {{operator}} {{value}}",
@@ -1716,7 +1713,6 @@
     "renameRole": "Zmień nazwę roli",
     "duplicateRole": "Duplikuj rolę",
     "retireRole": "Wycofaj rolę",
-    "cancel": "Anuluj",
     "saving": "Zapisywanie…",
     "rename": "Zmień nazwę",
     "duplicate": "Duplikuj",
@@ -1996,7 +1992,6 @@
       "description": "Przestrzeń nazw wynika z aktywnego obszaru roboczego i nie można jej ustawić w definicji.",
       "newTitle": "Nowy atrybut wielokrotnego użytku",
       "editTitle": "Edytuj {{name}}",
-      "cancel": "Anuluj",
       "saveRevision": "Zapisz rewizję",
       "createAttribute": "Utwórz atrybut"
     },
@@ -2028,7 +2023,6 @@
       "position": "Pozycja",
       "revisions": "Opublikowane rewizje",
       "revisionsHelp": "Grupować można tylko opublikowane rewizje.",
-      "cancel": "Anuluj",
       "create": "Utwórz grupę",
       "requiredFields": "Kod, nazwa i co najmniej jedna opublikowana rewizja są wymagane.",
       "invalidPosition": "Pozycja musi być nieujemną liczbą całkowitą."
@@ -2266,7 +2260,6 @@
     "parameters": "Parametry (JSON)",
     "parametersHelp": "Ustawienia odczytywane przez rozszerzenie, np. domena sklepu lub marketplace.",
     "parametersInvalid": "Wpisz obiekt JSON.",
-    "cancel": "Anuluj",
     "create": "Utwórz",
     "connectionStatus": {
       "pending_authorization": "Oczekuje na autoryzację",

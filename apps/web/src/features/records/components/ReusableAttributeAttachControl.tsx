@@ -3,7 +3,7 @@ import { Button } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PlusIcon } from 'lucide-react';
-import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
+import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { invalidateRecord } from '../invalidateRecord';
 import { ReusableAttributeAttachDialog } from './ReusableAttributeAttachDialog';
 import { useReusableAttributeAttachment } from './useReusableAttributeAttachment';

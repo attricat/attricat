@@ -170,7 +170,7 @@ export const WorkspaceRoleActionDialog = ({
         </DialogContent>
         <DialogActions>
           <Button disabled={mutation.isPending} onClick={onClose}>
-            {t('workspace.cancel')}
+            {t('common.cancel')}
           </Button>
           <Button
             color={isRetiring ? 'error' : 'primary'}

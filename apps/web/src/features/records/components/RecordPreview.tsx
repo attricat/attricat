@@ -11,7 +11,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
-import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
+import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { BlueprintLink } from '../../blueprints/BlueprintLink';
 import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
 import { useCan, useCanOn } from '../../auth/useCan';

@@ -47,7 +47,7 @@ import type { ExplorerSort } from './search';
 import { SearchInfoDialog } from './SearchInfoDialog';
 import { SendSelectedToAgentDialog } from './SendSelectedToAgentDialog';
 import { useRecordPublicationActions } from './useRecordPublicationActions';
-import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useExplorerColumnPreferences } from './useExplorerColumnPreferences';
 import type { ExplorerSelection } from './useExplorerSelection';
 import { VirtualizedExplorerTable } from './VirtualizedExplorerTable';

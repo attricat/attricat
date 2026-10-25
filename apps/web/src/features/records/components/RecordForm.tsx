@@ -74,7 +74,7 @@ import { useStatusTransitionDenialText } from '../useStatusTransitionDenialText'
 import { checkViolationError } from '../../../api/checkViolations';
 import { violationFieldErrors } from '../checkViolations';
 import { useViolationText } from '../../../components/useViolationText';
-import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
+import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { RecordFormAttributeEditor } from './RecordFormAttributeEditor';
 import { useQueuedFileUploadsContext } from '../../files/queuedFileUploads';
 import { useInitialFocus } from '../../../components/initialFocus';

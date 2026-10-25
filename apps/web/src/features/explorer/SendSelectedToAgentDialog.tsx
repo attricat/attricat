@@ -143,7 +143,7 @@ export const SendSelectedToAgentDialog = ({
       </DialogContent>
       <DialogActions>
         <Button disabled={start.isPending} onClick={onClose}>
-          {t('explorer.cancel')}
+          {t('common.cancel')}
         </Button>
         <form.Subscribe selector={(state) => state.values.instructions}>
           {(instructions) => (

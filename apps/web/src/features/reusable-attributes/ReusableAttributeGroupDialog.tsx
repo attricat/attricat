@@ -164,7 +164,7 @@ export const ReusableAttributeGroupDialog = ({
         </DialogContent>
         <DialogActions>
           <Button disabled={save.isPending} onClick={onClose}>
-            {t('reusableAttributes.groupDialog.cancel')}
+            {t('common.cancel')}
           </Button>
           <Button
             disabled={save.isPending || !published.length}

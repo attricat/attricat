@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { blueprintExtensionContextVersion } from './constants';
 import type { Blueprint } from './schemas';
@@ -60,7 +60,7 @@ export const PublishBlueprintDialog = ({
       </DialogContent>
       <DialogActions>
         <Button disabled={isPending} onClick={onClose}>
-          {t('blueprints.cancel')}
+          {t('common.cancel')}
         </Button>
         <Button disabled={isPending} onClick={onConfirm} variant="contained">
           {isPending ? t('blueprints.publishing') : t('blueprints.publish')}

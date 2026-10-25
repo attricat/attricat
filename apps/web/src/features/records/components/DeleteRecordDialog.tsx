@@ -50,7 +50,7 @@ export const DeleteRecordDialog = ({
       </DialogContent>
       <DialogActions>
         <Button disabled={deletion.isPending} onClick={onClose}>
-          {t('records.cancel')}
+          {t('common.cancel')}
         </Button>
         <Button
           color="error"

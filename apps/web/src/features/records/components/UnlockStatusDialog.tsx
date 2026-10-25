@@ -11,7 +11,7 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
+import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { unlockRecordStatus } from '../api';
 import { invalidateRecord } from '../invalidateRecord';
 import { attributeLabel } from '../recordDisplay';
@@ -95,7 +95,7 @@ export const UnlockStatusDialog = ({
       </DialogContent>
       <DialogActions>
         <Button disabled={unlock.isPending} onClick={onClose}>
-          {t('records.cancel')}
+          {t('common.cancel')}
         </Button>
         <Button
           disabled={unlock.isPending || to === undefined}

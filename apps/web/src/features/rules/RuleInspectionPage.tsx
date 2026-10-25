@@ -3,7 +3,7 @@ import { createLink } from '@tanstack/react-router';
 import { Alert, Box, Button, Tab, Tabs, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { ApiRequestError } from '../../api/request';
-import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
