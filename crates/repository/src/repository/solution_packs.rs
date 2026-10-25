@@ -3709,6 +3709,271 @@ impl AttricatRepository {
         })
     }
 
+    /// Creates a staged sample record from its canonical plan evidence.
+    async fn apply_sample_record_step(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        plan_id: Uuid,
+        step: &PendingApplicationStep,
+        object_store: &dyn ObjectStore,
+    ) -> Result<(Value, Vec<crate::domain_events::NewDomainEvent>), RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        Ok({
+            let (blueprint_id, blueprint_version, canonical_digest, canonical_input) = sqlx::query_as::<_, (Uuid, i64, String, Value)>(
+            "SELECT blueprint_id,blueprint_version,canonical_declaration_sha256,canonical_input FROM solution_pack_plan_sample_records WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=$3 AND target_id=$4 FOR UPDATE",
+        )
+        .bind(workspace_id).bind(plan_id).bind(&step.logical_key).bind(step.target_id)
+        .fetch_optional(&mut **tx).await?
+        .ok_or_else(|| RepositoryError::InvalidSolutionPackPlan("sample staging evidence is missing".into()))?;
+            let sample: SampleRecord = serde_json::from_value(
+                canonical_input
+                    .get("record")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            )
+            .map_err(|_| {
+                RepositoryError::InvalidSolutionPackPlan("sample staging input is invalid".into())
+            })?;
+            let contexts = self
+                .sample_context_ids(tx, plan_id, sample_record_contexts(&sample))
+                .await?;
+            let file_values = sample.files.clone();
+            let mut values = sample
+                .facts
+                .into_iter()
+                .map(|fact| NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: fact.attribute.rsplit('/').next().map(str::to_owned),
+                    context_id: fact.context.as_ref().map(|context| contexts[context]),
+                    value: fact.value,
+                })
+                .collect::<Vec<_>>();
+            for relationship in sample.relationships {
+                let target_ids = sqlx::query_as::<_, (String, Uuid)>(
+                "SELECT logical_key,target_id FROM solution_pack_plan_sample_records WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=ANY($3)",
+            )
+            .bind(workspace_id).bind(plan_id).bind(&relationship.targets)
+            .fetch_all(&mut **tx).await?
+            .into_iter().collect::<std::collections::BTreeMap<_, _>>();
+                if target_ids.len() != relationship.targets.len() {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "sample relationship target evidence is missing".into(),
+                    ));
+                }
+                for target in relationship.targets {
+                    values.push(NewAttributeValue::Relationship {
+                        attribute_id: None,
+                        attribute_code: relationship
+                            .attribute
+                            .rsplit('/')
+                            .next()
+                            .map(str::to_owned),
+                        context_id: relationship
+                            .context
+                            .as_ref()
+                            .map(|context| contexts[context]),
+                        target_record_id: target_ids[&target],
+                    });
+                }
+            }
+            let (record, changes, event) = self
+                .create_record_in_transaction(
+                    tx,
+                    ChosenIdRecordCreate {
+                        record_id: step.target_id,
+                        blueprint_id,
+                        blueprint_version,
+                        values,
+                        files: super::record_commands::CreateFileValues::None,
+                        system_tags: vec![SAMPLE_SYSTEM_TAG.to_owned()],
+                        system_metadata: serde_json::json!({}),
+                        host_sample_marker: true,
+                    },
+                )
+                .await
+                .map_err(solution_pack_mutation_error)?;
+            // Bundled files are attached in the same transaction before
+            // the write is staged, and the record is validated again
+            // and its preview refreshed with them, like an ordinary
+            // file write.
+            let file_count = self
+                .attach_sample_files(
+                    tx,
+                    plan_id,
+                    record.id,
+                    &file_values,
+                    &contexts,
+                    object_store,
+                )
+                .await?;
+            if file_count > 0 {
+                self.revalidate_record(tx, &record)
+                    .await
+                    .map_err(solution_pack_mutation_error)?;
+            }
+            let mut record_repository = self.clone();
+            if let Some(audit) = record_repository.audit_context.as_mut() {
+                audit.target = serde_json::json!({"type":"record","id":record.id});
+            }
+            record_repository
+                .stage_record_mutation(tx, changes, event)
+                .await?;
+            (
+                {
+                    let mut result = serde_json::json!({"id":record.id,"blueprint_id":record.blueprint_id,"blueprint_version":record.blueprint_version,"is_sample":true,"canonical_declaration_sha256":canonical_digest});
+                    if file_count > 0 {
+                        result["file_count"] = file_count.into();
+                    }
+                    result
+                },
+                Vec::new(),
+            )
+        })
+    }
+
+    /// Appends the pack's Explore navigation or extension layout entries to
+    /// the workspace settings, or records that they are already satisfied.
+    async fn apply_workspace_setting_step(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        application_id: Uuid,
+        step: &PendingApplicationStep,
+    ) -> Result<(Value, Vec<crate::domain_events::NewDomainEvent>), RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        Ok({
+            if step.target_id != workspace_id
+                || !matches!(step.action.as_str(), "append" | "satisfied")
+            {
+                return Err(RepositoryError::InvalidSolutionPackPlan(
+                    "persisted workspace setting step is invalid".into(),
+                ));
+            }
+            if step.target_code == "explore_navigation" {
+                let desired = parse_explore_navigation_payload(
+                    step.normalized_payload.clone().ok_or_else(|| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "missing workspace setting payload".into(),
+                        )
+                    })?,
+                )?;
+                let current = self
+                    .lock_explore_navigation_in_transaction(tx, workspace_id)
+                    .await?;
+                self.validate_explore_navigation_entries_in_transaction(tx, workspace_id, &desired)
+                    .await
+                    .map_err(solution_pack_navigation_error)?;
+                let all_exact = navigation_entries_all_exact(&current, &desired);
+                let outcome = if step.action == "satisfied" {
+                    if !all_exact {
+                        return Err(RepositoryError::SolutionPackPlanStale);
+                    }
+                    "satisfied"
+                } else if !navigation_entries_appendable(&current, &desired) {
+                    return Err(RepositoryError::SolutionPackPlanStale);
+                } else if all_exact {
+                    "satisfied"
+                } else {
+                    let mut merged = current;
+                    for entry in &desired {
+                        if !merged
+                            .iter()
+                            .any(|current| current.blueprint_code == entry.blueprint_code)
+                        {
+                            merged.push(entry.clone());
+                        }
+                    }
+                    self.write_explore_navigation_in_transaction(tx, workspace_id, &merged)
+                        .await?;
+                    "appended"
+                };
+                (
+                    serde_json::json!({
+                        "setting": "explore_navigation",
+                        "entry_count": desired.len(),
+                        "outcome": outcome,
+                    }),
+                    Vec::new(),
+                )
+            } else if step.target_code == "lexicon" {
+                let entries =
+                    parse_lexicon_payload(step.normalized_payload.clone().ok_or_else(|| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "missing workspace setting payload".into(),
+                        )
+                    })?)?;
+                let pack_id: String = sqlx::query_scalar(
+                "SELECT pack_id FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2",
+            )
+            .bind(workspace_id)
+            .bind(application_id)
+            .fetch_one(&mut **tx)
+            .await?;
+                let written = Self::apply_solution_pack_lexicon_in_transaction(
+                    tx,
+                    workspace_id,
+                    &pack_id,
+                    &entries,
+                )
+                .await?;
+                (
+                    serde_json::json!({
+                        "setting": "lexicon",
+                        "entry_count": entries.len(),
+                        "written_count": written,
+                        "outcome": if written == 0 { "satisfied" } else { "appended" },
+                    }),
+                    Vec::new(),
+                )
+            } else if step.target_code == "extension_layout" {
+                let desired = parse_extension_layout_payload(
+                    step.normalized_payload.clone().ok_or_else(|| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "missing workspace setting payload".into(),
+                        )
+                    })?,
+                )?;
+                self.revalidate_extension_contributions(tx, &extension_layout_snapshots(&desired))
+                    .await?;
+                let current = self
+                    .lock_workspace_extension_layout_in_transaction(tx, workspace_id)
+                    .await
+                    .map_err(solution_pack_layout_error)?;
+                let before_sha256 = json_sha256(&current)?;
+                let all_exact = extension_layout_entries_all_exact(&current, &desired);
+                let (outcome, merged) = if step.action == "satisfied" {
+                    if !all_exact {
+                        return Err(RepositoryError::SolutionPackPlanStale);
+                    }
+                    ("satisfied", current)
+                } else if !extension_layout_entries_appendable(&current, &desired) {
+                    return Err(RepositoryError::SolutionPackPlanStale);
+                } else if all_exact {
+                    ("satisfied", current)
+                } else {
+                    let merged = merge_extension_layout(current, &desired)?;
+                    self.write_workspace_extension_layout_in_transaction(tx, workspace_id, &merged)
+                        .await?;
+                    ("appended", merged)
+                };
+                let after_sha256 = json_sha256(&merged)?;
+                (
+                    serde_json::json!({
+                        "setting": "extension_layout",
+                        "entry_count": desired.len(),
+                        "outcome": outcome,
+                        "before_sha256": before_sha256,
+                        "after_sha256": after_sha256,
+                    }),
+                    Vec::new(),
+                )
+            } else {
+                return Err(RepositoryError::InvalidSolutionPackPlan(
+                    "persisted workspace setting step is invalid".into(),
+                ));
+            }
+        })
+    }
+
     async fn apply_next_solution_pack_step_inner(
         &self,
         application_id: Uuid,
@@ -3896,117 +4161,8 @@ impl AttricatRepository {
                     self.apply_seed_step(&mut tx, &step).await?
                 }
                 "sample_record" => {
-                    let (blueprint_id, blueprint_version, canonical_digest, canonical_input) = sqlx::query_as::<_, (Uuid, i64, String, Value)>(
-                        "SELECT blueprint_id,blueprint_version,canonical_declaration_sha256,canonical_input FROM solution_pack_plan_sample_records WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=$3 AND target_id=$4 FOR UPDATE",
-                    )
-                    .bind(workspace_id).bind(plan_id).bind(&step.logical_key).bind(step.target_id)
-                    .fetch_optional(&mut *tx).await?
-                    .ok_or_else(|| RepositoryError::InvalidSolutionPackPlan("sample staging evidence is missing".into()))?;
-                    let sample: SampleRecord = serde_json::from_value(
-                        canonical_input
-                            .get("record")
-                            .cloned()
-                            .unwrap_or(Value::Null),
-                    )
-                    .map_err(|_| {
-                        RepositoryError::InvalidSolutionPackPlan(
-                            "sample staging input is invalid".into(),
-                        )
-                    })?;
-                    let contexts = self
-                        .sample_context_ids(&mut tx, plan_id, sample_record_contexts(&sample))
-                        .await?;
-                    let file_values = sample.files.clone();
-                    let mut values = sample
-                        .facts
-                        .into_iter()
-                        .map(|fact| NewAttributeValue::Scalar {
-                            attribute_id: None,
-                            attribute_code: fact.attribute.rsplit('/').next().map(str::to_owned),
-                            context_id: fact.context.as_ref().map(|context| contexts[context]),
-                            value: fact.value,
-                        })
-                        .collect::<Vec<_>>();
-                    for relationship in sample.relationships {
-                        let target_ids = sqlx::query_as::<_, (String, Uuid)>(
-                            "SELECT logical_key,target_id FROM solution_pack_plan_sample_records WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=ANY($3)",
-                        )
-                        .bind(workspace_id).bind(plan_id).bind(&relationship.targets)
-                        .fetch_all(&mut *tx).await?
-                        .into_iter().collect::<std::collections::BTreeMap<_, _>>();
-                        if target_ids.len() != relationship.targets.len() {
-                            return Err(RepositoryError::InvalidSolutionPackPlan(
-                                "sample relationship target evidence is missing".into(),
-                            ));
-                        }
-                        for target in relationship.targets {
-                            values.push(NewAttributeValue::Relationship {
-                                attribute_id: None,
-                                attribute_code: relationship
-                                    .attribute
-                                    .rsplit('/')
-                                    .next()
-                                    .map(str::to_owned),
-                                context_id: relationship
-                                    .context
-                                    .as_ref()
-                                    .map(|context| contexts[context]),
-                                target_record_id: target_ids[&target],
-                            });
-                        }
-                    }
-                    let (record, changes, event) = self
-                        .create_record_in_transaction(
-                            &mut tx,
-                            ChosenIdRecordCreate {
-                                record_id: step.target_id,
-                                blueprint_id,
-                                blueprint_version,
-                                values,
-                                files: super::record_commands::CreateFileValues::None,
-                                system_tags: vec![SAMPLE_SYSTEM_TAG.to_owned()],
-                                system_metadata: serde_json::json!({}),
-                                host_sample_marker: true,
-                            },
-                        )
-                        .await
-                        .map_err(solution_pack_mutation_error)?;
-                    // Bundled files are attached in the same transaction before
-                    // the write is staged, and the record is validated again
-                    // and its preview refreshed with them, like an ordinary
-                    // file write.
-                    let file_count = self
-                        .attach_sample_files(
-                            &mut tx,
-                            plan_id,
-                            record.id,
-                            &file_values,
-                            &contexts,
-                            object_store,
-                        )
-                        .await?;
-                    if file_count > 0 {
-                        self.revalidate_record(&mut tx, &record)
-                            .await
-                            .map_err(solution_pack_mutation_error)?;
-                    }
-                    let mut record_repository = self.clone();
-                    if let Some(audit) = record_repository.audit_context.as_mut() {
-                        audit.target = serde_json::json!({"type":"record","id":record.id});
-                    }
-                    record_repository
-                        .stage_record_mutation(&mut tx, changes, event)
-                        .await?;
-                    (
-                        {
-                            let mut result = serde_json::json!({"id":record.id,"blueprint_id":record.blueprint_id,"blueprint_version":record.blueprint_version,"is_sample":true,"canonical_declaration_sha256":canonical_digest});
-                            if file_count > 0 {
-                                result["file_count"] = file_count.into();
-                            }
-                            result
-                        },
-                        Vec::new(),
-                    )
+                    self.apply_sample_record_step(&mut tx, plan_id, &step, object_store)
+                        .await?
                 }
                 "presentation_asset" => {
                     let payload: PresentationAssetPayload = serde_json::from_value(
@@ -4084,152 +4240,8 @@ impl AttricatRepository {
                     )
                 }
                 "workspace_setting" => {
-                    if step.target_id != workspace_id
-                        || !matches!(step.action.as_str(), "append" | "satisfied")
-                    {
-                        return Err(RepositoryError::InvalidSolutionPackPlan(
-                            "persisted workspace setting step is invalid".into(),
-                        ));
-                    }
-                    if step.target_code == "explore_navigation" {
-                        let desired = parse_explore_navigation_payload(
-                            step.normalized_payload.clone().ok_or_else(|| {
-                                RepositoryError::InvalidSolutionPackPlan(
-                                    "missing workspace setting payload".into(),
-                                )
-                            })?,
-                        )?;
-                        let current = self
-                            .lock_explore_navigation_in_transaction(&mut tx, workspace_id)
-                            .await?;
-                        self.validate_explore_navigation_entries_in_transaction(
-                            &mut tx,
-                            workspace_id,
-                            &desired,
-                        )
-                        .await
-                        .map_err(solution_pack_navigation_error)?;
-                        let all_exact = navigation_entries_all_exact(&current, &desired);
-                        let outcome = if step.action == "satisfied" {
-                            if !all_exact {
-                                return Err(RepositoryError::SolutionPackPlanStale);
-                            }
-                            "satisfied"
-                        } else if !navigation_entries_appendable(&current, &desired) {
-                            return Err(RepositoryError::SolutionPackPlanStale);
-                        } else if all_exact {
-                            "satisfied"
-                        } else {
-                            let mut merged = current;
-                            for entry in &desired {
-                                if !merged
-                                    .iter()
-                                    .any(|current| current.blueprint_code == entry.blueprint_code)
-                                {
-                                    merged.push(entry.clone());
-                                }
-                            }
-                            self.write_explore_navigation_in_transaction(
-                                &mut tx,
-                                workspace_id,
-                                &merged,
-                            )
-                            .await?;
-                            "appended"
-                        };
-                        (
-                            serde_json::json!({
-                                "setting": "explore_navigation",
-                                "entry_count": desired.len(),
-                                "outcome": outcome,
-                            }),
-                            Vec::new(),
-                        )
-                    } else if step.target_code == "lexicon" {
-                        let entries = parse_lexicon_payload(
-                            step.normalized_payload.clone().ok_or_else(|| {
-                                RepositoryError::InvalidSolutionPackPlan(
-                                    "missing workspace setting payload".into(),
-                                )
-                            })?,
-                        )?;
-                        let pack_id: String = sqlx::query_scalar(
-                            "SELECT pack_id FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2",
-                        )
-                        .bind(workspace_id)
-                        .bind(application_id)
-                        .fetch_one(&mut *tx)
-                        .await?;
-                        let written = Self::apply_solution_pack_lexicon_in_transaction(
-                            &mut tx,
-                            workspace_id,
-                            &pack_id,
-                            &entries,
-                        )
-                        .await?;
-                        (
-                            serde_json::json!({
-                                "setting": "lexicon",
-                                "entry_count": entries.len(),
-                                "written_count": written,
-                                "outcome": if written == 0 { "satisfied" } else { "appended" },
-                            }),
-                            Vec::new(),
-                        )
-                    } else if step.target_code == "extension_layout" {
-                        let desired = parse_extension_layout_payload(
-                            step.normalized_payload.clone().ok_or_else(|| {
-                                RepositoryError::InvalidSolutionPackPlan(
-                                    "missing workspace setting payload".into(),
-                                )
-                            })?,
-                        )?;
-                        self.revalidate_extension_contributions(
-                            &mut tx,
-                            &extension_layout_snapshots(&desired),
-                        )
-                        .await?;
-                        let current = self
-                            .lock_workspace_extension_layout_in_transaction(&mut tx, workspace_id)
-                            .await
-                            .map_err(solution_pack_layout_error)?;
-                        let before_sha256 = json_sha256(&current)?;
-                        let all_exact = extension_layout_entries_all_exact(&current, &desired);
-                        let (outcome, merged) = if step.action == "satisfied" {
-                            if !all_exact {
-                                return Err(RepositoryError::SolutionPackPlanStale);
-                            }
-                            ("satisfied", current)
-                        } else if !extension_layout_entries_appendable(&current, &desired) {
-                            return Err(RepositoryError::SolutionPackPlanStale);
-                        } else if all_exact {
-                            ("satisfied", current)
-                        } else {
-                            let merged = merge_extension_layout(current, &desired)?;
-                            self.write_workspace_extension_layout_in_transaction(
-                                &mut tx,
-                                workspace_id,
-                                &merged,
-                            )
-                            .await?;
-                            ("appended", merged)
-                        };
-                        let after_sha256 = json_sha256(&merged)?;
-                        (
-                            serde_json::json!({
-                                "setting": "extension_layout",
-                                "entry_count": desired.len(),
-                                "outcome": outcome,
-                                "before_sha256": before_sha256,
-                                "after_sha256": after_sha256,
-                            }),
-                            Vec::new(),
-                        )
-                    } else {
-                        return Err(RepositoryError::InvalidSolutionPackPlan(
-                            "persisted workspace setting step is invalid".into(),
-                        ));
-                    }
+                    self.apply_workspace_setting_step(&mut tx, application_id, &step)
+                        .await?
                 }
                 _ => {
                     return Err(RepositoryError::InvalidSolutionPackPlan(
