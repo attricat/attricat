@@ -16,8 +16,7 @@ import type { Blueprint } from './api';
 import { blueprintStatusChipColor } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import { useCanOn } from '../auth/useCan';
-import { capabilities } from '../auth/capabilities';
-import { accessTargetKinds } from '../auth/api';
+import { capabilities, accessTargetKinds } from '../auth/capabilities';
 
 export const RevisionHistory = ({
   blueprintId,

@@ -26,3 +26,12 @@ export const capabilities = {
   contextsWrite: 'contexts_write',
   agentsRun: 'agents_run',
 } as const satisfies Record<string, Capability>;
+
+/** Targets whose scoped grants `checkAccess` evaluates. */
+export const accessTargetKinds = {
+  record: 'record',
+  blueprint: 'blueprint',
+  context: 'context',
+} as const;
+export type AccessTargetKind =
+  (typeof accessTargetKinds)[keyof typeof accessTargetKinds];

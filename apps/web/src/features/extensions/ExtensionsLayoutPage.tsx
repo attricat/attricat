@@ -70,7 +70,9 @@ export const ExtensionsLayoutPage = () => {
 
   if (session.data && !canManage) {
     return (
-      <Alert severity="error">{t('extensions.notAuthorizedManage')}</Alert>
+      <Alert severity="error">
+        {t('auth.notAuthorized.extensions_manage')}
+      </Alert>
     );
   }
 

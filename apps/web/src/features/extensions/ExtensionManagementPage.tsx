@@ -1,6 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
 import { Link, type ToOptions } from '@tanstack/react-router';
-import { Alert, Box, Button, Tab, Tabs } from '@mui/material';
+import { Box, Button, Tab, Tabs } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -16,8 +15,8 @@ import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
 import { extensionManagementTabIds } from './constants';
 import { ExtensionIcon } from '../../components/systemIcons';
-import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
+import { RequireCapability } from '../auth/RequireCapability';
 
 const extensionTabs = [
   {
@@ -51,57 +50,49 @@ export const ExtensionManagementPage = ({
   tab,
 }: ExtensionManagementPageProps) => {
   const { t } = useTranslation();
-  const session = useQuery(sessionOptions());
-  const canRead = useCan(capabilities.extensionsRead);
   const canManage = useCan(capabilities.extensionsManage);
 
-  if (session.data && !canRead) {
-    return (
-      <PageContainer>
-        <Alert severity="error">{t('extensions.notAuthorizedView')}</Alert>
-      </PageContainer>
-    );
-  }
-
   return (
-    <PageContainer>
-      <PageHeader
-        icon={ExtensionIcon}
-        title={t('extensions.title')}
-        description={t('extensions.description')}
-        actions={
-          canManage ? (
-            <Button
+    <RequireCapability capability={capabilities.extensionsRead}>
+      <PageContainer>
+        <PageHeader
+          icon={ExtensionIcon}
+          title={t('extensions.title')}
+          description={t('extensions.description')}
+          actions={
+            canManage ? (
+              <Button
+                component={Link}
+                startIcon={<UploadIcon />}
+                to="/manage/extensions/sideload"
+              >
+                {t('extensions.uploadArchive')}
+              </Button>
+            ) : undefined
+          }
+        />
+        <Tabs aria-label={t('extensions.title')} sx={{ mb: 3 }} value={tab}>
+          {extensionTabs.map((item, index) => (
+            <Tab
+              aria-controls={extensionManagementTabIds.panel(index)}
               component={Link}
-              startIcon={<UploadIcon />}
-              to="/manage/extensions/sideload"
-            >
-              {t('extensions.uploadArchive')}
-            </Button>
-          ) : undefined
-        }
-      />
-      <Tabs aria-label={t('extensions.title')} sx={{ mb: 3 }} value={tab}>
-        {extensionTabs.map((item, index) => (
-          <Tab
-            aria-controls={extensionManagementTabIds.panel(index)}
-            component={Link}
-            icon={<item.icon aria-hidden size={compactIconSize} />}
-            id={extensionManagementTabIds.tab(index)}
-            key={item.to}
-            label={t(item.label)}
-            to={item.to}
-            value={index}
-          />
-        ))}
-      </Tabs>
-      <Box
-        aria-labelledby={extensionManagementTabIds.tab(tab)}
-        id={extensionManagementTabIds.panel(tab)}
-        role="tabpanel"
-      >
-        {children}
-      </Box>
-    </PageContainer>
+              icon={<item.icon aria-hidden size={compactIconSize} />}
+              id={extensionManagementTabIds.tab(index)}
+              key={item.to}
+              label={t(item.label)}
+              to={item.to}
+              value={index}
+            />
+          ))}
+        </Tabs>
+        <Box
+          aria-labelledby={extensionManagementTabIds.tab(tab)}
+          id={extensionManagementTabIds.panel(tab)}
+          role="tabpanel"
+        >
+          {children}
+        </Box>
+      </PageContainer>
+    </RequireCapability>
   );
 };

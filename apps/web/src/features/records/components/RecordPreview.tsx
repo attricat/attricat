@@ -58,8 +58,7 @@ import { RecordControlsPanel } from './RecordControlsPanel';
 import { RelationshipPickerActionBar } from './RelationshipPickerActionBar';
 import { useRecordPublications } from './useRecordPublications';
 import { errorMessage } from '../../../api/errors';
-import { capabilities } from '../../auth/capabilities';
-import { accessTargetKinds } from '../../auth/api';
+import { capabilities, accessTargetKinds } from '../../auth/capabilities';
 
 const loadRecordCommentsPanel = () =>
   import('../../record-comments/RecordCommentsPanel');

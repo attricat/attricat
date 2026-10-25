@@ -3,9 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
-import { type AccessTargetKind } from './api';
 import { useAccess, type Capability } from './useCan';
 import { sessionOptions } from './queryOptions';
+import { accessTargetKinds, type AccessTargetKind } from './capabilities';
 
 /**
  * Renders a page only for callers holding `capability`, workspace-wide or on
@@ -26,7 +26,7 @@ export const RequireCapability = ({
   const session = useQuery(sessionOptions());
   const access = useAccess(
     capability,
-    target?.kind ?? 'record',
+    target?.kind ?? accessTargetKinds.record,
     target ? [target.id] : [],
   );
   const allowed = target

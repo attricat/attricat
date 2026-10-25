@@ -233,7 +233,9 @@
       "agents_run": "Nie masz uprawnień do korzystania z agentów w tym obszarze roboczym.",
       "blueprints_write": "Nie masz uprawnień do edytowania schematów w tym obszarze roboczym.",
       "contexts_write": "Nie masz uprawnień do tworzenia kontekstów w tym obszarze roboczym.",
-      "records_write": "Nie masz uprawnień do tworzenia rekordów w tym obszarze roboczym."
+      "records_write": "Nie masz uprawnień do tworzenia rekordów w tym obszarze roboczym.",
+      "extensions_read": "Nie masz uprawnień do wyświetlania rozszerzeń.",
+      "extensions_manage": "Nie masz uprawnień do zarządzania rozszerzeniami."
     },
     "signIn": "Zaloguj się",
     "signInTo": "Zaloguj się do {{identifier}}",
@@ -1579,9 +1581,6 @@
     "moreActions": "Więcej akcji rozszerzenia",
     "moreContent": "Więcej treści rozszerzeń",
     "groupedNavigation": "Nawigacja rozszerzeń",
-    "notAuthorizedView": "Nie masz uprawnień do wyświetlania rozszerzeń.",
-    "notAuthorizedInstall": "Nie masz uprawnień do instalowania rozszerzeń.",
-    "notAuthorizedManage": "Nie masz uprawnień do zarządzania rozszerzeniami.",
     "uploadTitle": "Prześlij archiwum rozszerzenia",
     "uploadDescription": "Zainstaluj lokalne archiwum rozszerzenia .tar.zst. Zostanie zweryfikowane i zainstalowane jako wyłączone.",
     "back": "Powrót do rozszerzeń",

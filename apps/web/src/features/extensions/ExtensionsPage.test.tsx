@@ -20,7 +20,8 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }));
 
-vi.mock('../auth/api', () => ({
+vi.mock('../auth/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../auth/api')>()),
   currentSession: vi.fn().mockResolvedValue({
     capabilities: { extensions_manage: true, extensions_read: true },
   }),

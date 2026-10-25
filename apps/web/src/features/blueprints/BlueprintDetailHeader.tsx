@@ -9,8 +9,7 @@ import type { Blueprint } from './schemas';
 import { BlueprintIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
 import { useCanOn } from '../auth/useCan';
-import { capabilities } from '../auth/capabilities';
-import { accessTargetKinds } from '../auth/api';
+import { capabilities, accessTargetKinds } from '../auth/capabilities';
 
 export const BlueprintDetailHeader = ({
   blueprint,

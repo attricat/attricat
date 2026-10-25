@@ -31,8 +31,7 @@ import { EXPORT_TABLE_COLUMN_COUNT } from './constants';
 import { exportQueryKeys } from './queryKeys';
 import { ExportIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
-import { capabilities } from '../auth/capabilities';
-import { accessTargetKinds } from '../auth/api';
+import { capabilities, accessTargetKinds } from '../auth/capabilities';
 
 export const ExportsPage = () => {
   const { t } = useTranslation();

@@ -6,8 +6,7 @@ import type { Attribute, StatusTransitionAccess } from '../api';
 import { attributeLabel } from '../recordDisplay';
 import { statusCodeLabel, statusOptionLabel, type StatusLock } from '../status';
 import { UnlockStatusDialog } from './UnlockStatusDialog';
-import { capabilities } from '../../auth/capabilities';
-import { accessTargetKinds } from '../../auth/api';
+import { capabilities, accessTargetKinds } from '../../auth/capabilities';
 
 type StatusLockNoticeProps = {
   locks: readonly StatusLock[];

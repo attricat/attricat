@@ -30,8 +30,7 @@ import { BlueprintIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
 import { useAccess, useCan } from '../auth/useCan';
 import { errorMessage } from '../../api/errors';
-import { capabilities } from '../auth/capabilities';
-import { accessTargetKinds } from '../auth/api';
+import { capabilities, accessTargetKinds } from '../auth/capabilities';
 
 export const BlueprintsPage = () => {
   const { t } = useTranslation();

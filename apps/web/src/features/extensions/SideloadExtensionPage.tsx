@@ -1,24 +1,20 @@
 import { useForm } from '@tanstack/react-form';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Alert, Button, Paper, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { UploadIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { useCan } from '../auth/useCan';
 import { sideloadExtension } from './managementApi';
 import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
 import { extensionArchiveAccept } from './constants';
 import { ExtensionIcon } from '../../components/systemIcons';
-import { sessionOptions } from '../auth/queryOptions';
-import { capabilities } from '../auth/capabilities';
 
 export const SideloadExtensionPage = () => {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const session = useQuery(sessionOptions());
   const sideload = useMutation({
     mutationFn: sideloadExtension,
     onSuccess: () => invalidateExtensions(client),
@@ -29,13 +25,6 @@ export const SideloadExtensionPage = () => {
       if (value.archive) sideload.mutate(value.archive);
     },
   });
-  const canManage = useCan(capabilities.extensionsManage);
-  if (session.data && !canManage)
-    return (
-      <PageContainer>
-        <Alert severity="error">{t('extensions.notAuthorizedInstall')}</Alert>
-      </PageContainer>
-    );
   return (
     <PageContainer>
       <PageHeader
@@ -82,7 +71,7 @@ export const SideloadExtensionPage = () => {
           <form.Subscribe selector={(state) => state.values.archive}>
             {(archive) => (
               <Button
-                disabled={!canManage || !archive || sideload.isPending}
+                disabled={!archive || sideload.isPending}
                 sx={{ mt: 2 }}
                 type="submit"
                 variant="contained"

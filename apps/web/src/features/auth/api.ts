@@ -7,6 +7,7 @@ import {
 } from '../../api/request';
 import { FILE_STATUS_VALUES } from '../files/constants';
 import { httpStatus } from '../../api/httpStatus';
+import type { AccessTargetKind } from './capabilities';
 
 const ownAvatarSchema = z.object({
   file_id: z.uuid(),
@@ -116,15 +117,6 @@ export const confirmPasswordReset = async (token: string, password: string) => {
     body: JSON.stringify({ token, password }),
   });
 };
-
-/** Targets whose scoped grants `checkAccess` evaluates. */
-export const accessTargetKinds = {
-  record: 'record',
-  blueprint: 'blueprint',
-  context: 'context',
-} as const;
-export type AccessTargetKind =
-  (typeof accessTargetKinds)[keyof typeof accessTargetKinds];
 
 /** The most targets one access check may name. */
 export const maxAccessTargets = 500;

@@ -1,13 +1,9 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import {
-  checkAccess,
-  maxAccessTargets,
-  type AccessTargetKind,
-  type Session,
-} from './api';
+import { checkAccess, maxAccessTargets, type Session } from './api';
 import { authQueryKeys } from './queryKeys';
 import { sessionOptions } from './queryOptions';
+import { type AccessTargetKind } from './capabilities';
 
 export type Capability = keyof NonNullable<Session['capabilities']>;
 
