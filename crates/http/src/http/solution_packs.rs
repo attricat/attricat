@@ -11,7 +11,7 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{AppState, auth::ScopedRepository, error::ApiError, pagination::MAX_OFFSET};
+use super::{AppState, auth::ScopedRepository, error::ApiError, pagination::page_bounds};
 use crate::{
     repository::{
         CreateSolutionPackPlanRequest, SolutionPackApplication, SolutionPackApplicationSummary,
@@ -589,14 +589,12 @@ const MAX_HISTORY_PAGE_SIZE: i64 = 100;
 
 impl ListApplicationsQuery {
     fn bounds(&self) -> Result<(i64, i64), ApiError> {
-        let limit = self.limit.unwrap_or(DEFAULT_HISTORY_PAGE_SIZE);
-        let offset = self.offset.unwrap_or(0);
-        if !(1..=MAX_HISTORY_PAGE_SIZE).contains(&limit) || !(0..=MAX_OFFSET).contains(&offset) {
-            return Err(ApiError::invalid_input(format!(
-                "limit must be 1-{MAX_HISTORY_PAGE_SIZE} and offset must be 0-{MAX_OFFSET}"
-            )));
-        }
-        Ok((limit, offset))
+        page_bounds(
+            self.limit,
+            self.offset,
+            DEFAULT_HISTORY_PAGE_SIZE,
+            MAX_HISTORY_PAGE_SIZE,
+        )
     }
 }
 

@@ -1,5 +1,5 @@
 use super::{
-    auth::ScopedRepository, error::ApiError, extractors::ApiQuery, pagination::MAX_OFFSET,
+    auth::ScopedRepository, error::ApiError, extractors::ApiQuery, pagination::page_bounds,
 };
 use crate::{
     constants::DEFAULT_LIST_PAGE_SIZE,
@@ -31,13 +31,12 @@ pub(super) async fn list(
     ScopedRepository(repository): ScopedRepository,
     ApiQuery(query): ApiQuery<AuditEventsQuery>,
 ) -> Result<Json<AuditEventPage>, ApiError> {
-    let limit = query.limit.unwrap_or(i64::from(DEFAULT_LIST_PAGE_SIZE));
-    let offset = query.offset.unwrap_or(0);
-    if !(1..=MAX_AUDIT_EVENT_PAGE_SIZE).contains(&limit) || !(0..=MAX_OFFSET).contains(&offset) {
-        return Err(ApiError::invalid_input(format!(
-            "limit must be between 1 and {MAX_AUDIT_EVENT_PAGE_SIZE} and offset must be between 0 and {MAX_OFFSET}"
-        )));
-    }
+    let (limit, offset) = page_bounds(
+        query.limit,
+        query.offset,
+        i64::from(DEFAULT_LIST_PAGE_SIZE),
+        MAX_AUDIT_EVENT_PAGE_SIZE,
+    )?;
     if query
         .occurred_after
         .zip(query.occurred_before)

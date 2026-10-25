@@ -29,15 +29,34 @@ impl ArrayPage {
     }
 
     pub(super) fn bounds(self) -> Result<(i64, i64), ApiError> {
-        let limit = self.limit.unwrap_or(MAX_ARRAY_LIMIT);
-        let offset = self.offset.unwrap_or(0);
-        if !(1..=MAX_ARRAY_LIMIT).contains(&limit) || !(0..=MAX_OFFSET).contains(&offset) {
-            return Err(ApiError::invalid_input(format!(
-                "limit must be 1-{MAX_ARRAY_LIMIT} and offset must be 0-{MAX_OFFSET}"
-            )));
-        }
-        Ok((limit, offset))
+        page_bounds(self.limit, self.offset, MAX_ARRAY_LIMIT, MAX_ARRAY_LIMIT)
     }
+}
+
+/// Validates an offset page: `limit` defaults to `default` and must be at
+/// most `max`; `offset` defaults to zero and stops at [`MAX_OFFSET`].
+pub(super) fn page_bounds(
+    limit: Option<i64>,
+    offset: Option<i64>,
+    default: i64,
+    max: i64,
+) -> Result<(i64, i64), ApiError> {
+    let limit = limit.unwrap_or(default);
+    let offset = offset.unwrap_or(0);
+    if !(1..=max).contains(&limit) || !(0..=MAX_OFFSET).contains(&offset) {
+        return Err(ApiError::invalid_input(format!(
+            "limit must be 1-{max} and offset must be 0-{MAX_OFFSET}"
+        )));
+    }
+    Ok((limit, offset))
+}
+
+/// The offset of the page after `(limit, offset)`, when there is one within
+/// [`MAX_OFFSET`].
+pub(super) fn next_offset(has_more: bool, (limit, offset): (i64, i64)) -> Option<i64> {
+    has_more
+        .then_some(offset + limit)
+        .filter(|next| *next <= MAX_OFFSET)
 }
 
 /// Serializes one page as an array; `x-next-offset` signals more items.
@@ -46,10 +65,7 @@ pub(super) fn array_response<T: Serialize>(
     (limit, offset): (i64, i64),
 ) -> Response {
     let mut response = Json(items).into_response();
-    if let Some(next) = has_more
-        .then_some(offset + limit)
-        .filter(|next| *next <= MAX_OFFSET)
-    {
+    if let Some(next) = next_offset(has_more, (limit, offset)) {
         response
             .headers_mut()
             .insert(NEXT_OFFSET, HeaderValue::from(next));

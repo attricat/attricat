@@ -15,7 +15,7 @@ use super::{
     conditional,
     error::ApiError,
     extractors::{ApiPath, ApiQuery},
-    pagination::MAX_OFFSET,
+    pagination::page_bounds,
 };
 use crate::{
     repository::{MAX_PRESENTATION_ASSET_PAGE_SIZE, PresentationAsset},
@@ -25,17 +25,11 @@ use crate::{
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ListQuery {
-    #[serde(default = "default_limit")]
-    limit: i64,
-    #[serde(default)]
-    offset: i64,
+    limit: Option<i64>,
+    offset: Option<i64>,
 }
 
 const DEFAULT_PAGE_SIZE: i64 = 25;
-
-fn default_limit() -> i64 {
-    DEFAULT_PAGE_SIZE
-}
 
 fn private_cache_headers() -> HeaderMap {
     let mut headers = HeaderMap::new();
@@ -50,20 +44,15 @@ pub(super) async fn list(
     ScopedRepository(repository): ScopedRepository,
     ApiQuery(query): ApiQuery<ListQuery>,
 ) -> Result<(HeaderMap, Json<Vec<PresentationAsset>>), ApiError> {
-    if !(1..=MAX_PRESENTATION_ASSET_PAGE_SIZE).contains(&query.limit)
-        || !(0..=MAX_OFFSET).contains(&query.offset)
-    {
-        return Err(ApiError::invalid_input(format!(
-            "limit must be 1-{MAX_PRESENTATION_ASSET_PAGE_SIZE} and offset must be 0-{MAX_OFFSET}"
-        )));
-    }
+    let (limit, offset) = page_bounds(
+        query.limit,
+        query.offset,
+        DEFAULT_PAGE_SIZE,
+        MAX_PRESENTATION_ASSET_PAGE_SIZE,
+    )?;
     Ok((
         private_cache_headers(),
-        Json(
-            repository
-                .list_presentation_assets(query.limit, query.offset)
-                .await?,
-        ),
+        Json(repository.list_presentation_assets(limit, offset).await?),
     ))
 }
 

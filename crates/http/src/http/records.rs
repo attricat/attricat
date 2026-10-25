@@ -3,7 +3,7 @@ use super::{
     data_health::invalidate_data_health,
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
-    pagination::MAX_OFFSET,
+    pagination::{next_offset, page_bounds},
 };
 use crate::{
     attricat_read_service::AttricatReadService,
@@ -725,20 +725,12 @@ pub(super) struct HistoryPageQuery {
 }
 
 fn checked_history_page(query: &HistoryPageQuery) -> Result<(i64, i64), ApiError> {
-    let limit = query.limit.unwrap_or(DEFAULT_HISTORY_PAGE_SIZE);
-    let offset = query.offset.unwrap_or(0);
-    if !(1..=MAX_HISTORY_PAGE_SIZE).contains(&limit) || !(0..=MAX_OFFSET).contains(&offset) {
-        return Err(ApiError::invalid_input(format!(
-            "limit must be 1-{MAX_HISTORY_PAGE_SIZE} and offset must be 0-{MAX_OFFSET}"
-        )));
-    }
-    Ok((limit, offset))
-}
-
-fn next_history_offset(has_more: bool, offset: i64, limit: i64) -> Option<i64> {
-    has_more
-        .then_some(offset + limit)
-        .filter(|next| *next <= MAX_OFFSET)
+    page_bounds(
+        query.limit,
+        query.offset,
+        DEFAULT_HISTORY_PAGE_SIZE,
+        MAX_HISTORY_PAGE_SIZE,
+    )
 }
 
 pub(super) async fn get_record_changes(
@@ -759,7 +751,7 @@ pub(super) async fn get_record_changes(
         .record_audit_changes_page(record_id, limit, offset)
         .await?;
     Ok(Json(
-        json!({"items": items, "next_offset": next_history_offset(has_more, offset, limit)}),
+        json!({"items": items, "next_offset": next_offset(has_more, (limit, offset))}),
     ))
 }
 pub(super) async fn get_value_history(
@@ -778,7 +770,7 @@ pub(super) async fn get_value_history(
         .value_history_page(record_id, limit, offset)
         .await?;
     Ok(Json(
-        json!({"items": items, "next_offset": next_history_offset(has_more, offset, limit)}),
+        json!({"items": items, "next_offset": next_offset(has_more, (limit, offset))}),
     ))
 }
 #[derive(Deserialize)]
