@@ -296,6 +296,39 @@ struct InstalledExtensionRow {
     manifest: Value,
 }
 
+/// Whether a stored object has exactly `size` bytes with SHA-256 `sha256`.
+fn object_matches(stored: &StoredObject, size: usize, sha256: &str) -> bool {
+    stored.bytes.len() == size && format!("{:x}", Sha256::digest(&stored.bytes)) == sha256
+}
+
+/// Reads a staged or existing object and checks it against its recorded
+/// length and SHA-256. A missing or altered object fails integrity; an
+/// unreachable store is unavailable.
+async fn verify_stored_object(
+    object_store: &dyn ObjectStore,
+    key: &str,
+    byte_size: i64,
+    sha256: &str,
+) -> Result<(), RepositoryError> {
+    let size = usize::try_from(byte_size)
+        .map_err(|_| RepositoryError::SolutionPackAssetObjectIntegrityFailed)?;
+    let stored = get_object_for_integrity(object_store, key, size)
+        .await
+        .map_err(|error| match error {
+            ObjectStoreError::Unavailable
+            | ObjectStoreError::TimedOut(_)
+            | ObjectStoreError::Operation(_) => {
+                RepositoryError::SolutionPackAssetStorageUnavailable
+            }
+            ObjectStoreError::NotFound => RepositoryError::SolutionPackAssetObjectIntegrityFailed,
+        })?;
+    if object_matches(&stored, size, sha256) {
+        Ok(())
+    } else {
+        Err(RepositoryError::SolutionPackAssetObjectIntegrityFailed)
+    }
+}
+
 fn installed_extension_snapshot(
     installed: InstalledExtensionRow,
 ) -> (String, InstalledExtensionSnapshot) {
@@ -787,10 +820,7 @@ impl AttricatRepository {
             let verified = stored
                 && get_object_for_integrity(object_store, &file.object_key, bytes.len())
                     .await
-                    .is_ok_and(|stored| {
-                        stored.bytes.len() == bytes.len()
-                            && format!("{:x}", Sha256::digest(&stored.bytes)) == file.sha256
-                    });
+                    .is_ok_and(|stored| object_matches(&stored, bytes.len(), &file.sha256));
             if !verified {
                 sqlx::query("UPDATE file_upload_intents SET cleanup_after=clock_timestamp() WHERE workspace_id=$1 AND object_key=ANY($2) AND state='pending'")
                     .bind(self.workspace_id.0)
@@ -1177,8 +1207,9 @@ impl AttricatRepository {
                         ))
                     }
                 })?;
-            let actual_sha256 = format!("{:x}", Sha256::digest(&object.bytes));
-            if object.bytes.len() as i64 != existing.3 || actual_sha256 != existing.4 {
+            if !usize::try_from(existing.3)
+                .is_ok_and(|size| object_matches(&object, size, &existing.4))
+            {
                 return Err(RepositoryError::InvalidSolutionPackPlan(format!(
                     "existing presentation asset '{}' object integrity failed",
                     requested.id
@@ -1574,10 +1605,11 @@ impl AttricatRepository {
             )
             .await
             {
-                Ok(stored) => Some(
-                    stored.bytes.len() == asset.stored_bytes.len()
-                        && format!("{:x}", Sha256::digest(&stored.bytes)) == asset.stored_sha256,
-                ),
+                Ok(stored) => Some(object_matches(
+                    &stored,
+                    asset.stored_bytes.len(),
+                    &asset.stored_sha256,
+                )),
                 Err(
                     ObjectStoreError::Unavailable
                     | ObjectStoreError::TimedOut(_)
@@ -1595,9 +1627,7 @@ impl AttricatRepository {
                     get_object_for_integrity(object_store, &key, asset.stored_bytes.len())
                         .await
                         .is_ok_and(|stored| {
-                            stored.bytes.len() == asset.stored_bytes.len()
-                                && format!("{:x}", Sha256::digest(&stored.bytes))
-                                    == asset.stored_sha256
+                            object_matches(&stored, asset.stored_bytes.len(), &asset.stored_sha256)
                         })
                 }
             };
@@ -3643,25 +3673,7 @@ impl AttricatRepository {
                 {
                     return Err(RepositoryError::SolutionPackPlanStale);
                 }
-                let expected_size = usize::try_from(actual.2)
-                    .map_err(|_| RepositoryError::SolutionPackAssetObjectIntegrityFailed)?;
-                let stored = get_object_for_integrity(object_store, &actual.4, expected_size)
-                    .await
-                    .map_err(|error| match error {
-                        ObjectStoreError::Unavailable
-                        | ObjectStoreError::TimedOut(_)
-                        | ObjectStoreError::Operation(_) => {
-                            RepositoryError::SolutionPackAssetStorageUnavailable
-                        }
-                        ObjectStoreError::NotFound => {
-                            RepositoryError::SolutionPackAssetObjectIntegrityFailed
-                        }
-                    })?;
-                if stored.bytes.len() as i64 != actual.2
-                    || format!("{:x}", Sha256::digest(&stored.bytes)) != actual.3
-                {
-                    return Err(RepositoryError::SolutionPackAssetObjectIntegrityFailed);
-                }
+                verify_stored_object(object_store, &actual.4, actual.2, &actual.3).await?;
                 (
                     serde_json::json!({"outcome":"reused","id":step.target_id,"purpose":actual.0,"media_type":actual.1,"byte_size":actual.2,"sha256":actual.3,"source_sha256":expected[0].source_sha256}),
                     Vec::new(),
@@ -3917,25 +3929,13 @@ impl AttricatRepository {
                             "presentation asset staging evidence is inconsistent".into(),
                         ));
                     }
-                    let expected_size = usize::try_from(payload.byte_size)
-                        .map_err(|_| RepositoryError::SolutionPackAssetObjectIntegrityFailed)?;
-                    let stored = get_object_for_integrity(object_store, &staged.0, expected_size)
-                        .await
-                        .map_err(|error| match error {
-                            ObjectStoreError::Unavailable
-                            | ObjectStoreError::TimedOut(_)
-                            | ObjectStoreError::Operation(_) => {
-                                RepositoryError::SolutionPackAssetStorageUnavailable
-                            }
-                            ObjectStoreError::NotFound => {
-                                RepositoryError::SolutionPackAssetObjectIntegrityFailed
-                            }
-                        })?;
-                    if stored.bytes.len() as i64 != payload.byte_size
-                        || format!("{:x}", Sha256::digest(&stored.bytes)) != payload.stored_sha256
-                    {
-                        return Err(RepositoryError::SolutionPackAssetObjectIntegrityFailed);
-                    }
+                    verify_stored_object(
+                        object_store,
+                        &staged.0,
+                        payload.byte_size,
+                        &payload.stored_sha256,
+                    )
+                    .await?;
                     sqlx::query("INSERT INTO presentation_assets (id,workspace_id,purpose,media_type,byte_size,sha256,width,height,object_key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
                         .bind(step.target_id)
                         .bind(workspace_id)
@@ -5245,25 +5245,7 @@ impl AttricatRepository {
                     ));
                 }
                 if created.insert(file_id) {
-                    let expected_size = usize::try_from(byte_size)
-                        .map_err(|_| RepositoryError::SolutionPackAssetObjectIntegrityFailed)?;
-                    let stored = get_object_for_integrity(object_store, &object_key, expected_size)
-                        .await
-                        .map_err(|error| match error {
-                            ObjectStoreError::Unavailable
-                            | ObjectStoreError::TimedOut(_)
-                            | ObjectStoreError::Operation(_) => {
-                                RepositoryError::SolutionPackAssetStorageUnavailable
-                            }
-                            ObjectStoreError::NotFound => {
-                                RepositoryError::SolutionPackAssetObjectIntegrityFailed
-                            }
-                        })?;
-                    if stored.bytes.len() as i64 != byte_size
-                        || format!("{:x}", Sha256::digest(&stored.bytes)) != sha256
-                    {
-                        return Err(RepositoryError::SolutionPackAssetObjectIntegrityFailed);
-                    }
+                    verify_stored_object(object_store, &object_key, byte_size, &sha256).await?;
                     self.insert_file_in_transaction(
                         tx,
                         file_id,
