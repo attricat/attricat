@@ -36,17 +36,13 @@ export const listLexiconEntries = (language: string) =>
 
 /** Every stored entry with its source, for lexicon management. */
 export const listStoredLexiconEntries = (signal?: AbortSignal) =>
-  request(
-    LEXICON_ENTRIES_PATH,
-    storedLexiconEntrySchema.array(),
-    signal === undefined ? undefined : { signal },
-  );
+  request(LEXICON_ENTRIES_PATH, storedLexiconEntrySchema.array(), { signal });
 
 export const getLexiconReport = (language: string, signal?: AbortSignal) =>
   request(
     `${LEXICON_REPORT_PATH}?${query({ [LEXICON_REPORT_LANGUAGES_PARAM]: language })}`,
     lexiconReportSchema,
-    signal === undefined ? undefined : { signal },
+    { signal },
   );
 
 export const saveLexiconEntry = (entry: LexiconEntry) =>

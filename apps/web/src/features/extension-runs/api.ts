@@ -6,6 +6,7 @@ import {
   extensionRunSchema,
   startedExtensionRunSchema,
 } from './schemas';
+import { uuidSegment } from '../../api/pathSegments';
 
 type StartExtensionRunInput = {
   release_id: string;
@@ -26,8 +27,7 @@ type StartExtensionRunInput = {
  */
 type ExtensionRunScope = 'visible' | 'own';
 
-const runPath = (runId: string) =>
-  `${extensionRunsPath}/${encodeURIComponent(z.uuid().parse(runId))}`;
+const runPath = (runId: string) => `${extensionRunsPath}/${uuidSegment(runId)}`;
 
 const scoped = (path: string, scope: ExtensionRunScope) =>
   scope === 'own' ? `${path}?scope=own` : path;
@@ -75,6 +75,6 @@ export const extensionRunArtifactUrl = (
   scope: ExtensionRunScope = 'visible',
 ) =>
   scoped(
-    `${runPath(runId)}/artifacts/${encodeURIComponent(z.uuid().parse(artifactId))}/download`,
+    `${runPath(runId)}/artifacts/${uuidSegment(artifactId)}/download`,
     scope,
   );

@@ -49,6 +49,7 @@ describe('reusable attribute API client', () => {
     await listReusableAttributes(true);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/reusable-attributes?include_drafts=true',
+      { signal: undefined },
     );
 
     respond(attribute);

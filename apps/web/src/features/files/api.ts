@@ -9,15 +9,13 @@ import {
   updateFileReferencesSchema,
 } from './schemas';
 import { uploadFormFields } from './constants';
+import { uuidSegment } from '../../api/pathSegments';
 
 export const getFileMetadata = (fileId: string) =>
-  request(
-    `/api/files/${encodeURIComponent(z.uuid().parse(fileId))}`,
-    fileMetadataSchema,
-  );
+  request(`/api/files/${uuidSegment(fileId)}`, fileMetadataSchema);
 
 export const fileDownloadUrl = (fileId: string, variant?: string) =>
-  `/api/files/${encodeURIComponent(z.uuid().parse(fileId))}${variant ? `/variants/${encodeURIComponent(variant)}/download` : '/download'}`;
+  `/api/files/${uuidSegment(fileId)}${variant ? `/variants/${encodeURIComponent(variant)}/download` : '/download'}`;
 
 export const uploadFiles = async ({
   recordId,
@@ -41,7 +39,7 @@ export const uploadFiles = async ({
       file,
     ),
   );
-  const path = `/api/records/${encodeURIComponent(z.uuid().parse(recordId))}/file-attributes/${encodeURIComponent(attributeCode)}/uploads`;
+  const path = `/api/records/${uuidSegment(recordId)}/file-attributes/${encodeURIComponent(attributeCode)}/uploads`;
   return requestUpload(path, data, fileUploadResultSchema, onProgress);
 };
 
@@ -71,7 +69,7 @@ export const uploadStagedFiles = async ({
       file,
     ),
   );
-  const path = `/api/blueprints/${encodeURIComponent(z.uuid().parse(blueprintId))}/file-attributes/${encodeURIComponent(attributeCode)}/staged-uploads`;
+  const path = `/api/blueprints/${uuidSegment(blueprintId)}/file-attributes/${encodeURIComponent(attributeCode)}/staged-uploads`;
   return requestUpload(path, data, stagedUploadResultSchema, onProgress);
 };
 
@@ -81,7 +79,7 @@ export const updateFileReferences = (
   input: z.infer<typeof updateFileReferencesSchema>,
 ) =>
   request(
-    `/api/records/${encodeURIComponent(z.uuid().parse(recordId))}/file-attributes/${encodeURIComponent(attributeCode)}/references`,
+    `/api/records/${uuidSegment(recordId)}/file-attributes/${encodeURIComponent(attributeCode)}/references`,
     fileReferencesUpdateResultSchema,
     {
       method: 'PUT',
@@ -102,7 +100,7 @@ export const uploadConversationFiles = async (
     ),
   );
   return request(
-    `/api/agent/conversations/${encodeURIComponent(z.uuid().parse(conversationId))}/uploads`,
+    `/api/agent/conversations/${uuidSegment(conversationId)}/uploads`,
     conversationUploadResultSchema,
     { method: 'POST', body: data },
   );

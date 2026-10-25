@@ -8,12 +8,10 @@ import {
   type Workflow,
   type WorkflowRun,
 } from './schemas';
+import { uuidSegment, versionSegment } from '../../api/pathSegments';
 
 export type { Workflow } from './schemas';
 
-const workflowPath = (id: string) => encodeURIComponent(z.uuid().parse(id));
-const versionPath = (version: number) =>
-  z.number().int().positive().parse(version);
 const definitionRequest = (definition: string) => ({
   body: JSON.stringify({ definition }),
   headers: { 'Content-Type': 'application/json' },
@@ -25,7 +23,7 @@ export const listWorkflows = (): Promise<Workflow[]> =>
 
 export const listWorkflowRevisions = (id: string): Promise<Workflow[]> =>
   request(
-    `/api/workflows/${workflowPath(id)}/versions`,
+    `/api/workflows/${uuidSegment(id)}/versions`,
     z.array(workflowSchema),
   );
 
@@ -34,7 +32,7 @@ export const getWorkflowRevision = (
   version: number,
 ): Promise<Workflow> =>
   request(
-    `/api/workflows/${workflowPath(id)}/versions/${versionPath(version)}`,
+    `/api/workflows/${uuidSegment(id)}/versions/${versionSegment(version)}`,
     workflowSchema,
   );
 
@@ -55,7 +53,7 @@ export const createWorkflowRevision = (
   definition: string,
 ): Promise<Workflow> =>
   request(
-    `/api/workflows/${workflowPath(id)}/versions`,
+    `/api/workflows/${uuidSegment(id)}/versions`,
     workflowSchema,
     definitionRequest(definition),
   );
@@ -65,7 +63,7 @@ export const publishWorkflowRevision = (
   version: number,
 ): Promise<Workflow> =>
   request(
-    `/api/workflows/${workflowPath(id)}/versions/${versionPath(version)}/publish`,
+    `/api/workflows/${uuidSegment(id)}/versions/${versionSegment(version)}/publish`,
     workflowSchema,
     { method: 'POST' },
   );
@@ -75,7 +73,7 @@ export const enableWorkflowRevision = (
   version: number,
 ): Promise<Workflow> =>
   request(
-    `/api/workflows/${workflowPath(id)}/versions/${versionPath(version)}/enable`,
+    `/api/workflows/${uuidSegment(id)}/versions/${versionSegment(version)}/enable`,
     workflowSchema,
     { method: 'POST' },
   );
@@ -86,7 +84,7 @@ export const runWorkflowNow = (
   idempotencyKey: string,
 ): Promise<{ id: string }> =>
   request(
-    `/api/workflows/${workflowPath(id)}/run-now`,
+    `/api/workflows/${uuidSegment(id)}/run-now`,
     z.object({ id: z.uuid() }),
     {
       body: JSON.stringify({
@@ -99,7 +97,7 @@ export const runWorkflowNow = (
   );
 
 export const disableWorkflow = (id: string): Promise<Workflow> =>
-  request(`/api/workflows/${workflowPath(id)}/disable`, workflowSchema, {
+  request(`/api/workflows/${uuidSegment(id)}/disable`, workflowSchema, {
     method: 'POST',
   });
 
@@ -107,6 +105,6 @@ export const listWorkflowRuns = (): Promise<WorkflowRun[]> =>
   request('/api/workflow-runs', z.array(workflowRunSchema));
 
 export const replayWorkflowRun = (id: string) =>
-  requestNoContent(`/api/workflow-runs/${workflowPath(id)}/replay`, {
+  requestNoContent(`/api/workflow-runs/${uuidSegment(id)}/replay`, {
     method: 'POST',
   });

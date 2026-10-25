@@ -9,6 +9,7 @@ import {
   type ReusableAttribute,
   type ReusableAttributeGroup,
 } from './schemas';
+import { uuidSegment } from '../../api/pathSegments';
 
 export type { ReusableAttribute, ReusableAttributeGroup } from './schemas';
 
@@ -19,7 +20,7 @@ export const listReusableAttributes = (
   request(
     `/api/reusable-attributes${includeDrafts ? '?include_drafts=true' : ''}`,
     z.array(reusableAttributeSchema),
-    signal === undefined ? undefined : { signal },
+    { signal },
   );
 
 export const createReusableAttribute = (input: CreateReusableAttribute) =>
@@ -34,7 +35,7 @@ export const createReusableAttributeRevision = (
   input: CreateReusableAttribute,
 ) =>
   request(
-    `/api/reusable-attributes/${encodeURIComponent(z.uuid().parse(definitionId))}/versions`,
+    `/api/reusable-attributes/${uuidSegment(definitionId)}/versions`,
     reusableAttributeSchema,
     {
       method: 'POST',
@@ -55,7 +56,7 @@ export const validateReusableAttribute = (
   request(
     definitionId === undefined
       ? '/api/reusable-attributes/validate'
-      : `/api/reusable-attributes/${encodeURIComponent(z.uuid().parse(definitionId))}/versions/validate`,
+      : `/api/reusable-attributes/${uuidSegment(definitionId)}/versions/validate`,
     reusableAttributeSchema,
     {
       method: 'POST',
@@ -69,7 +70,7 @@ export const publishReusableAttributeRevision = (
   revisionId: string,
 ): Promise<ReusableAttribute> =>
   request(
-    `/api/reusable-attribute-revisions/${encodeURIComponent(z.uuid().parse(revisionId))}/publish`,
+    `/api/reusable-attribute-revisions/${uuidSegment(revisionId)}/publish`,
     reusableAttributeSchema,
     { method: 'POST' },
   );
@@ -78,7 +79,7 @@ export const listReusableAttributeGroups = (signal?: AbortSignal) =>
   request(
     '/api/reusable-attribute-groups',
     z.array(reusableAttributeGroupSchema),
-    signal === undefined ? undefined : { signal },
+    { signal },
   );
 
 export const createReusableAttributeGroup = (input: {
@@ -95,7 +96,7 @@ export const createReusableAttributeGroup = (input: {
 
 export const attachReusableAttribute = (recordId: string, revisionId: string) =>
   request(
-    `/api/v1/records/${encodeURIComponent(z.uuid().parse(recordId))}/reusable-attributes`,
+    `/api/v1/records/${uuidSegment(recordId)}/reusable-attributes`,
     z.unknown(),
     {
       method: 'POST',
@@ -111,7 +112,7 @@ export const attachReusableAttributeGroup = (
   groupId: string,
 ) =>
   request(
-    `/api/v1/records/${encodeURIComponent(z.uuid().parse(recordId))}/reusable-attribute-groups/${encodeURIComponent(z.uuid().parse(groupId))}`,
+    `/api/v1/records/${uuidSegment(recordId)}/reusable-attribute-groups/${uuidSegment(groupId)}`,
     z.array(z.unknown()),
     { method: 'POST' },
   );

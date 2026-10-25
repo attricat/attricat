@@ -83,6 +83,7 @@ describe('record API client', () => {
     await getBlueprintByCode('summer sale', 2);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/blueprints/by-code/summer%20sale/versions/2',
+      { signal: undefined },
     );
 
     respond({
@@ -97,7 +98,9 @@ describe('record API client', () => {
       context: { default: {} },
     });
     await getRecordForm(recordId);
-    expect(fetchMock).toHaveBeenCalledWith(`/api/v1/records/${recordId}`);
+    expect(fetchMock).toHaveBeenCalledWith(`/api/v1/records/${recordId}`, {
+      signal: undefined,
+    });
   });
 
   it('soft-deletes via the record DELETE endpoint without parsing a response body', async () => {
@@ -120,6 +123,7 @@ describe('record API client', () => {
     await getRecordPublications(recordId);
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/v1/records/${recordId}/publications`,
+      { signal: undefined },
     );
 
     respond({

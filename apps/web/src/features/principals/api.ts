@@ -2,13 +2,14 @@ import { z } from 'zod';
 import { request, requestNoContent } from '../../api/request';
 import { DIRECTORY_PATH, TEAMS_PATH } from './constants';
 import { directorySchema, teamSchema } from './schemas';
+import { uuidSegment } from '../../api/pathSegments';
 
 const json = (method: string, body: unknown): RequestInit => ({
   method,
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(body),
 });
-const teamPath = (id: string) => `${TEAMS_PATH}/${z.uuid().parse(id)}`;
+const teamPath = (id: string) => `${TEAMS_PATH}/${uuidSegment(id)}`;
 
 export type TeamInput = {
   code: string;

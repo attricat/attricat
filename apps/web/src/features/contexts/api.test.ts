@@ -22,7 +22,9 @@ describe('context API client', () => {
     await expect(listContexts()).resolves.toEqual([
       { id: contextId, code: 'default', data: {}, parent_id: null },
     ]);
-    expect(fetchMock).toHaveBeenCalledWith('/api/contexts');
+    expect(fetchMock).toHaveBeenCalledWith('/api/contexts', {
+      signal: undefined,
+    });
   });
 
   it('forwards navigation cancellation signals', async () => {

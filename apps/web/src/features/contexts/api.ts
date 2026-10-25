@@ -24,11 +24,7 @@ export type AttributeContext = z.infer<typeof attributeContextSchema>;
 export const listContexts = (
   signal?: AbortSignal,
 ): Promise<AttributeContext[]> =>
-  request(
-    '/api/contexts',
-    z.array(attributeContextSchema),
-    signal === undefined ? undefined : { signal },
-  );
+  request('/api/contexts', z.array(attributeContextSchema), { signal });
 
 export const createContext = (
   code: string,

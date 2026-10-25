@@ -10,13 +10,13 @@ import {
   runSchema,
   toolCallSchema,
 } from './schemas';
+import { uuidSegment } from '../../api/pathSegments';
 
 const json = (method: string, body?: unknown): RequestInit => ({
   method,
   headers: { 'Content-Type': 'application/json' },
   body: body === undefined ? undefined : JSON.stringify(body),
 });
-const uuidPathParam = (id: string) => encodeURIComponent(z.uuid().parse(id));
 const queryParam = (value: string) => encodeURIComponent(value);
 
 export const listConversations = () =>
@@ -31,13 +31,13 @@ export const searchConversations = (query: string, cursor?: string) => {
 };
 export const getConversation = (id: string, signal?: AbortSignal) =>
   request(
-    `/api/agent/conversations/${uuidPathParam(id)}`,
+    `/api/agent/conversations/${uuidSegment(id)}`,
     conversationDetailSchema,
-    signal === undefined ? undefined : { signal },
+    { signal },
   );
 export const updateConversationTitle = (id: string, title: string) =>
   request(
-    `/api/agent/conversations/${uuidPathParam(id)}`,
+    `/api/agent/conversations/${uuidSegment(id)}`,
     conversationSchema,
     json('PATCH', { title }),
   );
@@ -52,15 +52,15 @@ export const createConversation = (
   );
 export const listMessages = (id: string, signal?: AbortSignal) =>
   request(
-    `/api/agent/conversations/${uuidPathParam(id)}/messages`,
+    `/api/agent/conversations/${uuidSegment(id)}/messages`,
     z.array(messageSchema),
-    signal === undefined ? undefined : { signal },
+    { signal },
   );
 export const listRuns = (id: string, signal?: AbortSignal) =>
   request(
-    `/api/agent/conversations/${uuidPathParam(id)}/runs`,
+    `/api/agent/conversations/${uuidSegment(id)}/runs`,
     z.array(runSchema),
-    signal === undefined ? undefined : { signal },
+    { signal },
   );
 export const sendMessage = (
   id: string,
@@ -68,7 +68,7 @@ export const sendMessage = (
   attachmentIds: string[] = [],
 ) =>
   request(
-    `/api/agent/conversations/${uuidPathParam(id)}/messages`,
+    `/api/agent/conversations/${uuidSegment(id)}/messages`,
     runResponseSchema,
     json('POST', { content, attachment_ids: attachmentIds }),
   );
@@ -76,13 +76,13 @@ export const listApprovals = (conversationId?: string, signal?: AbortSignal) =>
   request(
     `/api/agent/approvals${conversationId ? `?conversation_id=${queryParam(conversationId)}` : ''}`,
     z.array(toolCallSchema),
-    signal === undefined ? undefined : { signal },
+    { signal },
   );
 export const decideApproval = (id: string, approved: boolean) =>
   request(
-    `/api/agent/tool-calls/${uuidPathParam(id)}/${approved ? 'approve' : 'reject'}`,
+    `/api/agent/tool-calls/${uuidSegment(id)}/${approved ? 'approve' : 'reject'}`,
     z.unknown(),
     json('POST'),
   );
 export const agentRunEventsUrl = (id: string) =>
-  `/api/agent/runs/${uuidPathParam(id)}/events`;
+  `/api/agent/runs/${uuidSegment(id)}/events`;

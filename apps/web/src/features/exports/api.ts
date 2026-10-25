@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { request } from '../../api/request';
 import { PUBLICATION_CHANNELS_PATH } from './constants';
+import { uuidSegment } from '../../api/pathSegments';
 
 const publicationChannelSchema = z.object({
   context_id: z.uuid(),
@@ -29,7 +30,7 @@ export const updatePublicationChannel = (
   checks: PublicationChannelChecks = {},
 ) =>
   request(
-    `${PUBLICATION_CHANNELS_PATH}/${encodeURIComponent(z.uuid().parse(contextId))}`,
+    `${PUBLICATION_CHANNELS_PATH}/${uuidSegment(contextId)}`,
     publicationChannelSchema,
     {
       method: 'PUT',

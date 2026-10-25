@@ -11,6 +11,7 @@ import {
   type Blueprint,
   type BlueprintWithAttributes,
 } from './schemas';
+import { uuidSegment, versionSegment } from '../../api/pathSegments';
 
 export type { Blueprint, BlueprintWithAttributes } from './schemas';
 
@@ -22,9 +23,9 @@ export const listBlueprintRevisions = (
   signal?: AbortSignal,
 ): Promise<Blueprint[]> =>
   request(
-    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions`,
+    `/api/blueprints/${uuidSegment(id)}/versions`,
     z.array(blueprintSchema),
-    signal === undefined ? undefined : { signal },
+    { signal },
   );
 
 export const getBlueprintRevision = (
@@ -32,7 +33,7 @@ export const getBlueprintRevision = (
   version: number,
 ): Promise<BlueprintWithAttributes> =>
   request(
-    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}`,
+    `/api/blueprints/${uuidSegment(id)}/versions/${versionSegment(version)}`,
     blueprintWithAttributesSchema,
   );
 
@@ -50,7 +51,7 @@ export const createBlueprintRevision = (
   definition: string,
 ): Promise<BlueprintWithAttributes> =>
   request(
-    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions`,
+    `/api/blueprints/${uuidSegment(id)}/versions`,
     blueprintWithAttributesSchema,
     {
       body: JSON.stringify({ definition }),
@@ -71,7 +72,7 @@ export const validateBlueprint = (
   request(
     id === undefined
       ? '/api/blueprints/validate'
-      : `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/validate`,
+      : `/api/blueprints/${uuidSegment(id)}/versions/validate`,
     blueprintWithAttributesSchema,
     {
       body: JSON.stringify({ definition }),
@@ -83,13 +84,13 @@ export const validateBlueprint = (
 
 export const listBlueprintMigrationBatches = (id: string) =>
   request(
-    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/migration-batches`,
+    `/api/blueprints/${uuidSegment(id)}/migration-batches`,
     z.array(blueprintMigrationBatchStatusSchema),
   );
 
 export const getSafeBlueprintMigrationImpact = (id: string, version: number) =>
   request(
-    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/safe-migration-impact`,
+    `/api/blueprints/${uuidSegment(id)}/versions/${versionSegment(version)}/safe-migration-impact`,
     blueprintMigrationImpactSchema,
   );
 
@@ -99,7 +100,7 @@ export const startSafeBlueprintMigrationBatch = (
   removalDisposition?: RemovalDisposition,
 ) =>
   request(
-    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/safe-migration-batches`,
+    `/api/blueprints/${uuidSegment(id)}/versions/${versionSegment(version)}/safe-migration-batches`,
     blueprintMigrationBatchSchema,
     removalDisposition
       ? {
@@ -116,7 +117,7 @@ export const publishBlueprintRecords = (
   contextId: string,
 ) =>
   request(
-    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/record-publications`,
+    `/api/blueprints/${uuidSegment(id)}/versions/${versionSegment(version)}/record-publications`,
     blueprintRecordPublicationSummarySchema,
     {
       method: 'POST',
@@ -130,7 +131,7 @@ export const publishBlueprintRecordsAllChannels = (
   version: number,
 ) =>
   request(
-    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/record-publications/publish-all`,
+    `/api/blueprints/${uuidSegment(id)}/versions/${versionSegment(version)}/record-publications/publish-all`,
     blueprintRecordPublicationSummarySchema,
     { method: 'POST' },
   );
@@ -140,7 +141,7 @@ export const publishBlueprintRevision = (
   version: number,
 ): Promise<BlueprintWithAttributes> =>
   request(
-    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/publish`,
+    `/api/blueprints/${uuidSegment(id)}/versions/${versionSegment(version)}/publish`,
     blueprintWithAttributesSchema,
     { method: 'POST' },
   );

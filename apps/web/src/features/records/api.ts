@@ -39,6 +39,7 @@ import {
 } from './schemas';
 
 import type { RecordControlCursor } from './schemas';
+import { uuidSegment } from '../../api/pathSegments';
 export { viewBlockTypes } from './schemas';
 export type {
   Attribute,
@@ -72,8 +73,7 @@ export type {
 export { ApiRequestError } from '../../api/request';
 
 /** Path of one record in the versioned record API. */
-const recordPath = (id: string) =>
-  `/api/v1/records/${encodeURIComponent(uuidSchema.parse(id))}`;
+const recordPath = (id: string) => `/api/v1/records/${uuidSegment(id)}`;
 
 type SearchRecordsOptions = {
   blueprint: string;
@@ -194,11 +194,7 @@ export const getRelationshipTreeFacetChildren = (
   );
 
 export const listRecordBlueprints = (signal?: AbortSignal) =>
-  request(
-    '/api/blueprints',
-    z.array(blueprintSchema),
-    signal === undefined ? undefined : { signal },
-  );
+  request('/api/blueprints', z.array(blueprintSchema), { signal });
 export const getRecordLabels = (
   recordIds: readonly string[],
   signal?: AbortSignal,
@@ -211,13 +207,13 @@ export const getRecordLabels = (
   });
 export const getRecordPreview = (id: string, signal?: AbortSignal) =>
   request(
-    `/api/records/${encodeURIComponent(uuidSchema.parse(id))}/preview?relationship_depth=${RECORD_PREVIEW_QUERY.relationshipDepth}&relationship_limit=${RECORD_PREVIEW_QUERY.relationshipLimit}`,
+    `/api/records/${uuidSegment(id)}/preview?relationship_depth=${RECORD_PREVIEW_QUERY.relationshipDepth}&relationship_limit=${RECORD_PREVIEW_QUERY.relationshipLimit}`,
     recordPreviewResponseSchema,
-    signal === undefined ? undefined : { signal },
+    { signal },
   );
 export const getResolvedRecordPreview = (id: string, contextId: string) =>
   request(
-    `/api/records/${encodeURIComponent(uuidSchema.parse(id))}/resolved-preview?context_id=${encodeURIComponent(uuidSchema.parse(contextId))}`,
+    `/api/records/${uuidSegment(id)}/resolved-preview?context_id=${uuidSegment(contextId)}`,
     resolvedRecordPreviewSchema,
   );
 export const getRecordHierarchy = (
@@ -226,7 +222,7 @@ export const getRecordHierarchy = (
   field: string,
 ) =>
   request(
-    `/api/records/${encodeURIComponent(uuidSchema.parse(id))}/hierarchy?context_id=${encodeURIComponent(uuidSchema.parse(contextId))}&field=${encodeURIComponent(field)}`,
+    `/api/records/${uuidSegment(id)}/hierarchy?context_id=${uuidSegment(contextId)}&field=${encodeURIComponent(field)}`,
     recordHierarchySchema,
   );
 export const getBlueprintByCode = (
@@ -236,11 +232,7 @@ export const getBlueprintByCode = (
 ) => {
   const input = getBlueprintRequestSchema.parse({ code, version });
   const path = `/api/blueprints/by-code/${encodeURIComponent(input.code)}${input.version === undefined ? '' : `/versions/${input.version}`}`;
-  return request(
-    path,
-    blueprintWithAttributesSchema,
-    signal === undefined ? undefined : { signal },
-  );
+  return request(path, blueprintWithAttributesSchema, { signal });
 };
 export const getBlueprintRevision = (id: string, version: number) => {
   const input = getBlueprintRevisionRequestSchema.parse({ id, version });
@@ -250,24 +242,17 @@ export const getBlueprintRevision = (id: string, version: number) => {
   );
 };
 export const getCurrentBlueprint = (id: string) =>
-  request(
-    `/api/blueprints/${encodeURIComponent(uuidSchema.parse(id))}`,
-    blueprintWithAttributesSchema,
-  );
+  request(`/api/blueprints/${uuidSegment(id)}`, blueprintWithAttributesSchema);
 export const getRecordChanges = (id: string, offset: number) =>
   request(
-    `/api/records/${encodeURIComponent(uuidSchema.parse(id))}/changes?limit=${RECORD_CHANGES_PAGE_SIZE}&offset=${offset}`,
+    `/api/records/${uuidSegment(id)}/changes?limit=${RECORD_CHANGES_PAGE_SIZE}&offset=${offset}`,
     z.object({
       items: z.array(recordAuditChangeSchema),
       next_offset: z.number().int().nonnegative().nullable(),
     }),
   );
 export const getRecordForm = (id: string, signal?: AbortSignal) =>
-  request(
-    recordPath(id),
-    recordFormResponseSchema,
-    signal === undefined ? undefined : { signal },
-  );
+  request(recordPath(id), recordFormResponseSchema, { signal });
 export const createRecord = (
   input: z.input<typeof createRecordRequestSchema>,
 ) => {
@@ -290,7 +275,7 @@ export const smartFillRecordForm = (
 };
 
 export const deleteRecord = (id: string) =>
-  requestNoContent(`/api/records/${encodeURIComponent(uuidSchema.parse(id))}`, {
+  requestNoContent(`/api/records/${uuidSegment(id)}`, {
     method: 'DELETE',
   });
 
@@ -314,7 +299,7 @@ export const getRecordPublications = (id: string, signal?: AbortSignal) =>
   request(
     `${recordPath(id)}/publications`,
     z.array(recordPublicationStatusSchema),
-    signal === undefined ? undefined : { signal },
+    { signal },
   );
 const recordsPublicationsResponseSchema = z.object({
   items: z.array(
@@ -343,7 +328,7 @@ export const getRecordPublicationReadiness = (
   request(
     `${recordPath(id)}/publications/readiness`,
     z.array(recordPublicationReadinessSchema),
-    signal === undefined ? undefined : { signal },
+    { signal },
   );
 export const publishRecord = (id: string, contextId: string) =>
   request(`${recordPath(id)}/publications`, recordPublicationStatusSchema, {
@@ -415,12 +400,10 @@ export const getStatusTransitions = (
 ) =>
   request(
     `${recordPath(id)}/status-transitions${
-      contextId
-        ? `?context_id=${encodeURIComponent(uuidSchema.parse(contextId))}`
-        : ''
+      contextId ? `?context_id=${uuidSegment(contextId)}` : ''
     }`,
     itemsResponseSchema(statusTransitionAccessSchema),
-    signal === undefined ? undefined : { signal },
+    { signal },
   );
 
 const recordControlQuery = (cursor?: RecordControlCursor) =>
@@ -434,7 +417,7 @@ export const getRecordApprovals = (
   request(
     `${recordPath(id)}/approvals${recordControlQuery(cursor)}`,
     recordControlPageSchema(recordApprovalSchema),
-    signal === undefined ? undefined : { signal },
+    { signal },
   );
 
 export const getRecordRetentionHolds = (
@@ -445,5 +428,5 @@ export const getRecordRetentionHolds = (
   request(
     `${recordPath(id)}/retention-holds${recordControlQuery(cursor)}`,
     recordControlPageSchema(retentionHoldSchema),
-    signal === undefined ? undefined : { signal },
+    { signal },
   );

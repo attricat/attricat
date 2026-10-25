@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import i18n from 'i18next';
 import { request, requestNoContent } from '../../api/request';
+import { uuidSegment } from '../../api/pathSegments';
 
 const uuid = z.uuid();
 const tokenSchema = z.object({
@@ -51,6 +52,6 @@ export const createToken = (input: z.input<typeof tokenInputSchema>) => {
   );
 };
 export const revokeToken = (id: string) =>
-  requestNoContent(`/api/personal-access-tokens/${uuid.parse(id)}`, {
+  requestNoContent(`/api/personal-access-tokens/${uuidSegment(id)}`, {
     method: 'DELETE',
   });

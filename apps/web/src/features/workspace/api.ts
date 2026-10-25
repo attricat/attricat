@@ -2,6 +2,7 @@ import { z } from 'zod';
 import i18n from 'i18next';
 import { request, requestNoContent } from '../../api/request';
 import { bulkEditPolicies, maxBulkEditMaxRecords } from './constants';
+import { uuidSegment } from '../../api/pathSegments';
 
 const uuid = z.uuid();
 const scopeTypeSchema = z.enum([
@@ -127,18 +128,18 @@ export const listMembers = () =>
   request('/api/workspace/members', z.array(memberSchema));
 export const grantMemberRole = (memberId: string, input: GrantInput) =>
   request(
-    `/api/workspace/members/${uuid.parse(memberId)}/grants`,
+    `/api/workspace/members/${uuidSegment(memberId)}/grants`,
     z.object({ id: uuid }),
     json('POST', grantInputSchema.parse(input)),
   );
 export const revokeMemberRole = (memberId: string, grantId: string) =>
   requestNoContent(
-    `/api/workspace/members/${uuid.parse(memberId)}/grants/${uuid.parse(grantId)}`,
+    `/api/workspace/members/${uuidSegment(memberId)}/grants/${uuidSegment(grantId)}`,
     { method: 'DELETE' },
   );
 export const transferOwnership = (id: string) =>
   requestNoContent(
-    `/api/workspace/members/${uuid.parse(id)}/transfer-ownership`,
+    `/api/workspace/members/${uuidSegment(id)}/transfer-ownership`,
     {
       method: 'POST',
     },
@@ -182,7 +183,7 @@ export const createInvitation = (
     json('POST', invitationInputSchema.parse(input)),
   );
 export const revokeInvitation = (id: string) =>
-  requestNoContent(`/api/workspace/invitations/${uuid.parse(id)}`, {
+  requestNoContent(`/api/workspace/invitations/${uuidSegment(id)}`, {
     method: 'DELETE',
   });
 export const acceptInvitation = (secret: string) =>
@@ -245,12 +246,12 @@ export const updateRole = (
   input: z.input<typeof roleInputSchema>,
 ) =>
   requestNoContent(
-    `/api/workspace/roles/${uuid.parse(id)}`,
+    `/api/workspace/roles/${uuidSegment(id)}`,
     json('PUT', roleInputSchema.parse(input)),
   );
 export const duplicateRole = (id: string, code: string) =>
   request(
-    `/api/workspace/roles/${uuid.parse(id)}/duplicate`,
+    `/api/workspace/roles/${uuidSegment(id)}/duplicate`,
     z.object({ id: uuid }),
     json('POST', {
       code: z
@@ -261,7 +262,7 @@ export const duplicateRole = (id: string, code: string) =>
   );
 export const retireRole = (id: string, replacement_role_id?: string) =>
   requestNoContent(
-    `/api/workspace/roles/${uuid.parse(id)}/retire`,
+    `/api/workspace/roles/${uuidSegment(id)}/retire`,
     json('POST', {
       ...(replacement_role_id
         ? { replacement_role_id: uuid.parse(replacement_role_id) }
