@@ -6,6 +6,7 @@
 //! evolving ABI; the others are frozen legacy worlds). Every call is checked
 //! against the immutable release manifest and invocation-time grants.
 
+use attricat_domain::states::ArtifactState;
 use std::{
     collections::{HashMap, VecDeque},
     fs::{File, OpenOptions},
@@ -3075,7 +3076,7 @@ impl OperationState {
                 }
             }
         };
-        if artifact.state == "completed" {
+        if artifact.state == ArtifactState::Completed {
             return Ok(artifact.id.to_string());
         }
         let path =

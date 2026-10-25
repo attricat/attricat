@@ -11,6 +11,7 @@
 use super::network_v2::{admit_request, granted_rule, https_url};
 use super::*;
 use crate::extension_runtime::connections;
+use attricat_domain::states::ArtifactState;
 use attricat_domain::states::FileStatus;
 
 /// Headers a caller may not set on a v2 transfer: the host owns them.
@@ -839,7 +840,7 @@ impl OperationState {
                 .await
         }
         .map_err(|_| "output is not authorized")?;
-        if artifact.state != "completed"
+        if artifact.state != ArtifactState::Completed
             || artifact.content_length <= 0
             || artifact.content_length as u64 > max_transfer_bytes
         {

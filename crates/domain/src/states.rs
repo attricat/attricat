@@ -152,6 +152,49 @@ crate::code_enum! {
     }
 }
 
+crate::code_enum! {
+    /// Where a file processing job stands.
+    pub enum FileJobStatus (UnknownFileJobStatus: "file job status") {
+        Queued => "queued",
+        Running => "running",
+        /// Failed an attempt and waits for its backoff before the next one.
+        Retryable => "retryable",
+        Completed => "completed",
+        Failed => "failed",
+    }
+}
+
+crate::code_enum! {
+    /// Whether an extension connection can issue access tokens.
+    pub enum ConnectionStatus (UnknownConnectionStatus: "connection status") {
+        PendingAuthorization => "pending_authorization",
+        Active => "active",
+        Failed => "failed",
+        Revoked => "revoked",
+    }
+}
+
+crate::code_enum! {
+    /// Where an extension operation's artifact upload stands.
+    pub enum ArtifactState (UnknownArtifactState: "artifact state") {
+        Incomplete => "incomplete",
+        Completed => "completed",
+        Aborted => "aborted",
+    }
+}
+
+crate::code_enum! {
+    /// The outcome of one target record of a workflow action that updates
+    /// referencing records.
+    pub enum WorkflowTargetStatus (UnknownWorkflowTargetStatus: "workflow target status") {
+        Completed => "completed",
+        /// Retried while the run retries.
+        Failed => "failed",
+        /// No longer referenced the trigger record when revisited.
+        Skipped => "skipped",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,6 +222,26 @@ mod tests {
             RevisionStatus::parse,
         );
         crate::codes::assert_codes_round_trip(RunStatus::ALL, RunStatus::as_str, RunStatus::parse);
+        crate::codes::assert_codes_round_trip(
+            FileJobStatus::ALL,
+            FileJobStatus::as_str,
+            FileJobStatus::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            ConnectionStatus::ALL,
+            ConnectionStatus::as_str,
+            ConnectionStatus::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            ArtifactState::ALL,
+            ArtifactState::as_str,
+            ArtifactState::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            WorkflowTargetStatus::ALL,
+            WorkflowTargetStatus::as_str,
+            WorkflowTargetStatus::parse,
+        );
         crate::codes::assert_codes_round_trip(
             RecordMigrationStatus::ALL,
             RecordMigrationStatus::as_str,

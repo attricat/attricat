@@ -4,6 +4,7 @@
 //! opaque UUIDs and the HTTP download path resolves the same workspace-scoped
 //! metadata before it asks object storage for bytes.
 
+use attricat_domain::states::ArtifactState;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::{FromRow, Postgres, Transaction};
@@ -26,7 +27,8 @@ pub struct ExtensionOperationArtifact {
     pub installed_release_id: Uuid,
     pub operation_run_id: Uuid,
     pub direction: String,
-    pub state: String,
+    #[sqlx(try_from = "String")]
+    pub state: ArtifactState,
     pub content_length: i64,
     pub media_type: String,
     pub checksum_sha256: Option<String>,

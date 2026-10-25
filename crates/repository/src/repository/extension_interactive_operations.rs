@@ -5,6 +5,7 @@
 //! authorization grant: the initiator's current access is checked again by
 //! every selection read, catalog write and artifact download.
 
+use attricat_domain::states::RunStatus;
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 
 use attricat_domain::model::{Attribute, Record};
@@ -69,7 +70,8 @@ struct InteractiveRunRow {
     contribution_id: Option<String>,
     operation_id: String,
     actor_user_id: Option<Uuid>,
-    status: String,
+    #[sqlx(try_from = "String")]
+    status: RunStatus,
     cancellation_requested: bool,
     lifecycle_started: bool,
     attempts: i32,
@@ -144,12 +146,12 @@ pub struct InteractiveRunArtifact {
 impl From<InteractiveRunRow> for InteractiveRun {
     fn from(row: InteractiveRunRow) -> Self {
         let started = row.lifecycle_started || row.attempts > 0;
-        let status = match row.status.as_str() {
-            "completed" => InteractiveRunStatus::Completed,
-            "cancelled" => InteractiveRunStatus::Cancelled,
-            "dead_letter" => InteractiveRunStatus::Failed,
+        let status = match row.status {
+            RunStatus::Completed => InteractiveRunStatus::Completed,
+            RunStatus::Cancelled => InteractiveRunStatus::Cancelled,
+            RunStatus::DeadLetter => InteractiveRunStatus::Failed,
             _ if row.cancellation_requested => InteractiveRunStatus::Cancelling,
-            "leased" => InteractiveRunStatus::Running,
+            RunStatus::Leased => InteractiveRunStatus::Running,
             _ if started => InteractiveRunStatus::Running,
             _ => InteractiveRunStatus::Queued,
         };
@@ -177,7 +179,7 @@ impl From<InteractiveRunRow> for InteractiveRun {
             blueprint_version: row.selection_blueprint_version,
             context_id: row.selection_context_id,
             created_at: row.created_at,
-            outputs_expire_at: (row.status == "completed")
+            outputs_expire_at: (status == InteractiveRunStatus::Completed)
                 .then_some(row.completed_at)
                 .flatten()
                 .map(|at| at + Duration::days(OPERATION_OUTPUT_RETENTION_DAYS)),
@@ -823,14 +825,14 @@ impl AttricatRepository {
 mod tests {
     use super::*;
 
-    fn row(status: &str) -> InteractiveRunRow {
+    fn row(status: RunStatus) -> InteractiveRunRow {
         InteractiveRunRow {
             id: Uuid::nil(),
             extension_id: "acme".into(),
             contribution_id: Some("bulk".into()),
             operation_id: "generate".into(),
             actor_user_id: None,
-            status: status.into(),
+            status,
             cancellation_requested: false,
             lifecycle_started: false,
             attempts: 0,
@@ -850,31 +852,31 @@ mod tests {
     #[test]
     fn execution_status_is_separate_from_domain_outcome() {
         assert_eq!(
-            InteractiveRun::from(row("pending")).status,
+            InteractiveRun::from(row(RunStatus::Pending)).status,
             InteractiveRunStatus::Queued
         );
-        let mut started = row("pending");
+        let mut started = row(RunStatus::Pending);
         started.lifecycle_started = true;
         assert_eq!(
             InteractiveRun::from(started).status,
             InteractiveRunStatus::Running
         );
-        let mut cancelling = row("leased");
+        let mut cancelling = row(RunStatus::Leased);
         cancelling.cancellation_requested = true;
         let cancelling = InteractiveRun::from(cancelling);
         assert_eq!(cancelling.status, InteractiveRunStatus::Cancelling);
         assert!(!cancelling.can_cancel);
-        let completed = InteractiveRun::from(row("completed"));
+        let completed = InteractiveRun::from(row(RunStatus::Completed));
         assert_eq!(completed.status, InteractiveRunStatus::Completed);
         assert!(completed.outputs_expire_at.is_some());
-        let mut revoked = row("dead_letter");
+        let mut revoked = row(RunStatus::DeadLetter);
         revoked.last_error_code = Some(INITIATOR_ACCESS_REVOKED.into());
         assert_eq!(
             InteractiveRun::from(revoked).failure,
             Some(InteractiveRunFailure::AccessRevoked)
         );
         assert_eq!(
-            InteractiveRun::from(row("dead_letter")).failure,
+            InteractiveRun::from(row(RunStatus::DeadLetter)).failure,
             Some(InteractiveRunFailure::ExtensionFailed)
         );
     }

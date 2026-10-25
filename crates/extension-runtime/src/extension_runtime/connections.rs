@@ -13,6 +13,7 @@
 //! rule with the same DNS pinning, TLS and no-redirect policy as every other
 //! mediated request. Tokens never reach a component, a log or an error.
 
+use attricat_domain::states::ConnectionStatus;
 use std::sync::OnceLock;
 
 use attricat_extension_manifest::extensions::{ClientAuthentication, ConnectionKind};
@@ -190,7 +191,7 @@ pub async fn access_token(
         .await
         .map_err(|error| TokenError::Invalid(error.to_string()))?;
     let kind = connection_kind(installation, &cached.kind)?.clone();
-    if cached.status != "active" {
+    if cached.status != ConnectionStatus::Active {
         return Err(TokenError::Invalid(format!(
             "connection '{connection}' is {} and needs an operator",
             cached.status
@@ -238,8 +239,8 @@ pub async fn access_token(
     };
     // Another worker may have failed the grant meanwhile; its refresh token
     // is not sent again.
-    if refresh.credentials.status != "active" {
-        let status = refresh.credentials.status.clone();
+    if refresh.credentials.status != ConnectionStatus::Active {
+        let status = refresh.credentials.status;
         let _ = refresh.release().await;
         return Err(TokenError::Invalid(format!(
             "connection '{connection}' is {status} and needs an operator"

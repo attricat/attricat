@@ -6,6 +6,7 @@
 
 mod support;
 
+use api::states::ConnectionStatus;
 use std::sync::{Arc, Mutex};
 
 use api::{
@@ -1069,7 +1070,7 @@ async fn moving_the_token_endpoint_to_another_host_needs_the_secret_and_drops_to
         .await
         .unwrap();
     assert!(same_origin.has_refresh_token);
-    assert_eq!(same_origin.status, "active");
+    assert_eq!(same_origin.status, ConnectionStatus::Active);
     // The stored secret is never sent to another host unasked.
     assert!(
         repository
@@ -1084,7 +1085,7 @@ async fn moving_the_token_endpoint_to_another_host_needs_the_secret_and_drops_to
     assert!(updated.has_client_secret);
     assert!(!updated.has_refresh_token);
     assert!(!updated.has_access_token);
-    assert_eq!(updated.status, "pending_authorization");
+    assert_eq!(updated.status, ConnectionStatus::PendingAuthorization);
 }
 
 fn base64_decode(value: &str) -> Vec<u8> {

@@ -8,6 +8,7 @@
 //! an access token into a mediated request, and never reach a component, the
 //! management API, logs, traces or audit records.
 
+use attricat_domain::states::ConnectionStatus;
 use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
@@ -108,7 +109,8 @@ pub struct ExtensionConnection {
     pub client_id: String,
     pub scope: Option<String>,
     pub parameters: Value,
-    pub status: String,
+    #[sqlx(try_from = "String")]
+    pub status: ConnectionStatus,
     pub last_error: Option<String>,
     pub last_refreshed_at: Option<DateTime<Utc>>,
     pub access_token_expires_at: Option<DateTime<Utc>>,
@@ -180,7 +182,7 @@ pub struct ConnectionCredentials {
     pub device_authorization_url: Option<String>,
     pub client_id: String,
     pub scope: Option<String>,
-    pub status: String,
+    pub status: ConnectionStatus,
     pub client_secret: Option<String>,
     pub refresh_token: Option<String>,
     pub access_token: Option<String>,
@@ -215,7 +217,8 @@ struct CredentialRow {
     device_authorization_url: Option<String>,
     client_id: String,
     scope: Option<String>,
-    status: String,
+    #[sqlx(try_from = "String")]
+    status: ConnectionStatus,
     client_secret_ciphertext: Option<Vec<u8>>,
     refresh_token_ciphertext: Option<Vec<u8>>,
     access_token_ciphertext: Option<Vec<u8>>,
@@ -259,7 +262,7 @@ impl CredentialRow {
 /// A connection's cached access token, read without its other secrets.
 pub struct ConnectionAccessToken {
     pub kind: String,
-    pub status: String,
+    pub status: ConnectionStatus,
     pub access_token: Option<String>,
     pub access_token_expires_at: Option<DateTime<Utc>>,
     /// When the token was issued, so a short-lived token is not refreshed on
@@ -552,16 +555,16 @@ impl AttricatRepository {
             .map(|token| seal(id, "refresh_token", token))
             .transpose()?;
         let status = match input.grant_type.as_str() {
-            "client_credentials" => "active",
-            "refresh_token" if refresh_token.is_some() => "active",
-            _ => "pending_authorization",
+            "client_credentials" => ConnectionStatus::Active,
+            "refresh_token" if refresh_token.is_some() => ConnectionStatus::Active,
+            _ => ConnectionStatus::PendingAuthorization,
         };
         let mut transaction = self.pool.begin().await?;
         let created = sqlx::query_as(&format!("INSERT INTO extension_connections(id,workspace_id,extension_id,connection,kind,display_name,grant_type,host_permission_id,token_url,device_authorization_url,client_id,scope,parameters,client_secret_ciphertext,refresh_token_ciphertext,status,authorization_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING {CONNECTION_FIELDS}"))
             .bind(id).bind(self.workspace_id()).bind(&input.extension_id).bind(&input.connection)
             .bind(&input.kind).bind(&input.display_name).bind(&input.grant_type).bind(&input.host_permission_id)
             .bind(&input.token_url).bind(&input.device_authorization_url).bind(&input.client_id)
-            .bind(&input.scope).bind(&input.parameters).bind(client_secret).bind(refresh_token).bind(status)
+            .bind(&input.scope).bind(&input.parameters).bind(client_secret).bind(refresh_token).bind(status.as_str())
             .bind(&input.authorization_url)
             .fetch_one(&mut *transaction).await
             .map_err(|error| match error {
@@ -724,7 +727,8 @@ impl AttricatRepository {
         struct AccessTokenRow {
             id: Uuid,
             kind: String,
-            status: String,
+            #[sqlx(try_from = "String")]
+            status: ConnectionStatus,
             access_token_ciphertext: Option<Vec<u8>>,
             access_token_expires_at: Option<DateTime<Utc>>,
             last_refreshed_at: Option<DateTime<Utc>>,

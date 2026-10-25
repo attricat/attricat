@@ -3,6 +3,7 @@
 //! The worker owns state transitions: HTTP only stages the original and queues a
 //! metadata job.  Claims and all state changes are database transactions, while
 //! object writes are deliberately idempotent (stable variant keys).
+use attricat_domain::states::FileJobStatus;
 use std::{
     io::Cursor,
     sync::{Arc, Mutex},
@@ -398,7 +399,7 @@ impl FileWorker {
         let terminal = job.attempts >= self.config.max_attempts;
         let backoff = (1_i64 << job.attempts.min(8)).min(MAX_BACKOFF_SECONDS);
         let changed = sqlx::query("UPDATE file_processing_jobs SET status = $2, available_at = now() + make_interval(secs => $3), locked_at = NULL, worker_id = NULL, lease_token = NULL, last_error = $4, updated_at = now() WHERE id = $1 AND status = 'running' AND worker_id = $5 AND lease_token = $6")
-            .bind(job.id).bind(if terminal { "failed" } else { "retryable" }).bind(backoff).bind(error).bind(&self.config.worker_id).bind(job.lease_token).execute(&self.pool).await?.rows_affected();
+            .bind(job.id).bind(if terminal { FileJobStatus::Failed } else { FileJobStatus::Retryable }.as_str()).bind(backoff).bind(error).bind(&self.config.worker_id).bind(job.lease_token).execute(&self.pool).await?.rows_affected();
         if changed != 1 {
             tracing::warn!(job_id = %job.id, "file job lease lost before failure could be recorded");
             return Ok(());
@@ -411,8 +412,14 @@ impl FileWorker {
         Ok(())
     }
     pub async fn record_metrics(&self) -> Result<(), sqlx::Error> {
-        const STATUSES: [&str; 4] = ["queued", "running", "retryable", "failed"];
-        for status in STATUSES {
+        // Gauges cover the unfinished jobs and the failures waiting for an operator.
+        const STATUSES: [FileJobStatus; 4] = [
+            FileJobStatus::Queued,
+            FileJobStatus::Running,
+            FileJobStatus::Retryable,
+            FileJobStatus::Failed,
+        ];
+        for status in STATUSES.map(FileJobStatus::as_str) {
             gauge!("attricat_file_worker_queue_depth", "status" => status).set(0.0);
             gauge!("attricat_file_worker_oldest_age_seconds", "status" => status).set(0.0);
             gauge!("attricat_file_worker_retries", "status" => status).set(0.0);
@@ -424,7 +431,10 @@ impl FileWorker {
         .await?;
         let mut queued = 0_i64;
         for (status, count, oldest_age, retries) in rows {
-            if matches!(status.as_str(), "queued" | "retryable") {
+            if matches!(
+                FileJobStatus::parse(&status),
+                Some(FileJobStatus::Queued | FileJobStatus::Retryable)
+            ) {
                 queued += count;
             }
             gauge!("attricat_file_worker_queue_depth", "status" => status.clone())

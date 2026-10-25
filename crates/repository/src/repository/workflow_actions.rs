@@ -6,6 +6,7 @@
 use super::system_annotations::{TagMetadataPatch, apply_tag_metadata_patch};
 use super::*;
 use crate::model::UpdateRecordFormRequest;
+use attricat_domain::states::WorkflowTargetStatus;
 use sqlx::{Postgres, Transaction};
 use std::collections::HashSet;
 
@@ -382,7 +383,7 @@ impl AttricatRepository {
         }
         let settled: HashSet<Uuid> = recorded
             .iter()
-            .filter(|(_, status)| status != "failed")
+            .filter(|(_, status)| status != WorkflowTargetStatus::Failed.as_str())
             .map(|(record_id, _)| *record_id)
             .collect();
         // Previously failed targets are always revisited, even if they stopped
@@ -392,7 +393,7 @@ impl AttricatRepository {
             .chain(
                 recorded
                     .into_iter()
-                    .filter(|(_, status)| status == "failed")
+                    .filter(|(_, status)| status == WorkflowTargetStatus::Failed.as_str())
                     .map(|(record_id, _)| record_id),
             )
             .filter(|target| !settled.contains(target))
