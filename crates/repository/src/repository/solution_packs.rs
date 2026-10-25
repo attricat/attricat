@@ -366,7 +366,7 @@ struct InstalledExtensionRow {
 
 fn installed_extension_snapshot(
     installed: InstalledExtensionRow,
-) -> Result<(String, InstalledExtensionSnapshot), RepositoryError> {
+) -> (String, InstalledExtensionSnapshot) {
     // Historical/synthetic requirement-only rows may not have a decodable
     // manifest. They can still satisfy the pre-existing version/configuration
     // requirement contract, but cannot prove a contribution declaration.
@@ -375,7 +375,7 @@ fn installed_extension_snapshot(
         .unwrap_or_default();
     let policy_compatible =
         extension_policy::allows(&installed.extension_id, installed.installed_release_id);
-    Ok((
+    (
         installed.extension_id,
         InstalledExtensionSnapshot {
             installed_release_id: installed.installed_release_id,
@@ -386,7 +386,7 @@ fn installed_extension_snapshot(
             contributions,
             pending_install: false,
         },
-    ))
+    )
 }
 
 /// Planning view of an official release the plan would install.
@@ -1841,7 +1841,7 @@ impl AttricatRepository {
             .await?
             .into_iter()
             .map(installed_extension_snapshot)
-            .collect::<Result<_, _>>()?
+            .collect()
         };
         // An extension installed since resolution is evaluated as installed.
         let official_extensions = official_extensions
@@ -4362,7 +4362,7 @@ impl AttricatRepository {
         .await?
         .into_iter()
         .map(installed_extension_snapshot)
-        .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+        .collect::<std::collections::BTreeMap<_, _>>();
         for persisted in requirements {
             if !persisted.required || !matches!(persisted.status.as_str(), "satisfied" | "install")
             {
@@ -4444,7 +4444,7 @@ impl AttricatRepository {
         .await?
         .into_iter()
         .map(installed_extension_snapshot)
-        .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+        .collect::<std::collections::BTreeMap<_, _>>();
         for entry in contributions {
             let extension_id = entry
                 .contribution

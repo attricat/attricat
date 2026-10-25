@@ -238,7 +238,7 @@ mod tests {
     fn equal_schemas_share_one_compiled_validator() {
         let schema = serde_json::json!({ "type": "string", "pattern": "^cached-[0-9]+$" });
         let first = validator(&schema).unwrap();
-        assert!(Arc::ptr_eq(&first, &validator(&schema.clone()).unwrap()));
+        assert!(Arc::ptr_eq(&first, &validator(&schema).unwrap()));
         let other = serde_json::json!({ "type": "string", "pattern": "^cached-[a-z]+$" });
         assert!(!Arc::ptr_eq(&first, &validator(&other).unwrap()));
         assert!(

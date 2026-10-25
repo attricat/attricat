@@ -1905,7 +1905,7 @@ impl ExtensionPackage {
                         "extension archive contains multiple manifest.json files".into(),
                     ));
                 }
-            } else if files.insert(path.to_owned(), bytes).is_some() {
+            } else if files.insert(path.clone(), bytes).is_some() {
                 return Err(ManifestError::Invalid(
                     "extension archive contains duplicate file paths".into(),
                 ));

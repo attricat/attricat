@@ -136,7 +136,7 @@ async fn token(State(seen): State<Shared>, body: String) -> Response {
                 )
                     .into_response();
             }
-            seen.used_refresh_tokens.push(presented.clone());
+            seen.used_refresh_tokens.push(presented);
             seen.refreshes += 1;
             let next = seen.refreshes + 1;
             Json(json!({

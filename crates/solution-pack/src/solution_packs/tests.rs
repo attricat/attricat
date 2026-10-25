@@ -1686,7 +1686,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
     let valid_layout = json!({
         "format_version": 1,
         "kind": "extension_layout",
-        "entries": [layout_entry.clone()],
+        "entries": [layout_entry],
     });
     assert!(
         attricat_validation::validate_json_schema(&layout_schema, &valid_layout)
@@ -1713,7 +1713,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         json!({
             "format_version": 1,
             "kind": "extension_layout",
-            "entries": [layout_entry.clone(), layout_entry.clone()],
+            "entries": [layout_entry.clone(), layout_entry],
         }),
         json!({
             "format_version": 1,
@@ -2733,7 +2733,7 @@ value_type = "string"
             physical_codes: BTreeSet::from(["shared".to_owned()]),
             existing_presentation_assets: BTreeMap::new(),
             existing_blueprints: BTreeMap::from([(
-                key.clone(),
+                key,
                 ExistingBlueprintSnapshot {
                     id: uuid::Uuid::from_u128(102),
                     code: "shared".to_owned(),

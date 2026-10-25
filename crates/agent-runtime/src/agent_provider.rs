@@ -475,7 +475,7 @@ mod tests {
         let client = OpenAiCompatibleClient::new(&config).unwrap();
         let body = serde_json::to_value(ChatRequest {
             model: client.model.clone(),
-            reasoning_effort: client.reasoning_effort.clone(),
+            reasoning_effort: client.reasoning_effort,
             messages: vec![],
             tools: vec![],
             parallel_tool_calls: false,

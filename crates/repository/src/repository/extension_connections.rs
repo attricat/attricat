@@ -1006,7 +1006,7 @@ mod tests {
         assert_eq!(open(id, "refresh_token", &sealed).unwrap(), "secret-value");
         assert!(open(id, "access_token", &sealed).is_err());
         assert!(open(Uuid::new_v4(), "refresh_token", &sealed).is_err());
-        let mut tampered = sealed.clone();
+        let mut tampered = sealed;
         *tampered.last_mut().unwrap() ^= 1;
         assert!(open(id, "refresh_token", &tampered).is_err());
     }
