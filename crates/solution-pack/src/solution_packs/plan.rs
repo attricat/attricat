@@ -117,6 +117,11 @@ pub struct PlanningWorkspaceSnapshot {
     pub seed: SeedWorkspaceSnapshot,
 }
 
+/// A persisted kind or action that no variant names.
+#[derive(Debug, thiserror::Error)]
+#[error("unknown persisted solution-pack value '{0}'")]
+pub struct UnknownPlanValue(pub String);
+
 /// The kind of resource a plan maps or acts on. Persisted as the
 /// `resource_kind` of plan mappings, plan actions and application steps.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -151,6 +156,26 @@ impl PlanResourceKind {
     }
 }
 
+impl TryFrom<String> for PlanResourceKind {
+    type Error = UnknownPlanValue;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "blueprint" => Ok(Self::Blueprint),
+            "presentation_asset" => Ok(Self::PresentationAsset),
+            "workspace_setting" => Ok(Self::WorkspaceSetting),
+            "prerequisite" => Ok(Self::Prerequisite),
+            "context" => Ok(Self::Context),
+            "publication_channel" => Ok(Self::PublicationChannel),
+            "rule" => Ok(Self::Rule),
+            "workflow" => Ok(Self::Workflow),
+            "saved_search" => Ok(Self::SavedSearch),
+            "sample_record" => Ok(Self::SampleRecord),
+            _ => Err(UnknownPlanValue(value)),
+        }
+    }
+}
+
 /// How a plan mapping chooses its workspace target.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -169,6 +194,19 @@ impl MappingKind {
             Self::Existing => "existing",
             Self::Create => "create",
             Self::Workspace => "workspace",
+        }
+    }
+}
+
+impl TryFrom<String> for MappingKind {
+    type Error = UnknownPlanValue;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "existing" => Ok(Self::Existing),
+            "create" => Ok(Self::Create),
+            "workspace" => Ok(Self::Workspace),
+            _ => Err(UnknownPlanValue(value)),
         }
     }
 }
@@ -209,6 +247,23 @@ impl PlanActionKind {
     /// other resources can depend on it.
     pub const fn provides_target(self) -> bool {
         matches!(self, Self::Create | Self::Map)
+    }
+}
+
+impl TryFrom<String> for PlanActionKind {
+    type Error = UnknownPlanValue;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "create" => Ok(Self::Create),
+            "map" => Ok(Self::Map),
+            "append" => Ok(Self::Append),
+            "satisfied" => Ok(Self::Satisfied),
+            "skip" => Ok(Self::Skip),
+            "conflict" => Ok(Self::Conflict),
+            "blocked" => Ok(Self::Blocked),
+            _ => Err(UnknownPlanValue(value)),
+        }
     }
 }
 

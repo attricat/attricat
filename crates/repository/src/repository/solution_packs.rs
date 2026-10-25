@@ -140,12 +140,14 @@ pub struct SolutionPackCheckSummary {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 pub struct SolutionPackPlanMapping {
     pub position: i64,
-    pub resource_kind: String,
+    #[sqlx(try_from = "String")]
+    pub resource_kind: PlanResourceKind,
     pub logical_key: String,
     pub target_id: Uuid,
     pub target_code: String,
     pub target_version: Option<i64>,
-    pub mapping_kind: String,
+    #[sqlx(try_from = "String")]
+    pub mapping_kind: MappingKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot: Option<Value>,
 }
@@ -153,9 +155,11 @@ pub struct SolutionPackPlanMapping {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 pub struct SolutionPackPlanAction {
     pub position: i64,
-    pub resource_kind: String,
+    #[sqlx(try_from = "String")]
+    pub resource_kind: PlanResourceKind,
     pub logical_key: String,
-    pub action: String,
+    #[sqlx(try_from = "String")]
+    pub action: PlanActionKind,
     pub reason_code: String,
     pub summary: Value,
     pub preconditions: Value,
@@ -175,9 +179,11 @@ struct ExistingAssetEvidence {
 
 #[derive(sqlx::FromRow)]
 struct PersistedSolutionPackPlanAction {
-    resource_kind: String,
+    #[sqlx(try_from = "String")]
+    resource_kind: PlanResourceKind,
     logical_key: String,
-    action: String,
+    #[sqlx(try_from = "String")]
+    action: PlanActionKind,
     reason_code: String,
     normalized_payload: Option<Value>,
     preconditions: Value,
@@ -186,21 +192,25 @@ struct PersistedSolutionPackPlanAction {
 #[derive(Serialize, sqlx::FromRow)]
 struct PlanEvidenceMapping {
     position: i64,
-    resource_kind: String,
+    #[sqlx(try_from = "String")]
+    resource_kind: PlanResourceKind,
     logical_key: String,
     target_id: Uuid,
     target_code: String,
     target_version: Option<i64>,
-    mapping_kind: String,
+    #[sqlx(try_from = "String")]
+    mapping_kind: MappingKind,
     snapshot: Value,
 }
 
 #[derive(Serialize, sqlx::FromRow)]
 struct PlanEvidenceAction {
     position: i64,
-    resource_kind: String,
+    #[sqlx(try_from = "String")]
+    resource_kind: PlanResourceKind,
     logical_key: String,
-    action: String,
+    #[sqlx(try_from = "String")]
+    action: PlanActionKind,
     reason_code: String,
     summary: Value,
     normalized_payload: Option<Value>,
@@ -246,9 +256,9 @@ struct PlanEvidenceExtensionRequirement {
 #[derive(Clone, Debug, Serialize)]
 pub struct SolutionPackPlanConflict {
     pub position: i64,
-    pub resource_kind: String,
+    pub resource_kind: PlanResourceKind,
     pub logical_key: String,
-    pub action: String,
+    pub action: PlanActionKind,
     pub reason_code: String,
 }
 
@@ -1738,12 +1748,12 @@ fn materialize_plan(
         .enumerate()
         .map(|(position, mapping)| SolutionPackPlanMapping {
             position: position as i64,
-            resource_kind: mapping.resource_kind.as_str().to_owned(),
+            resource_kind: mapping.resource_kind,
             logical_key: mapping.logical_key.clone(),
             target_id: mapping.target_id,
             target_code: mapping.target_code.clone(),
             target_version: mapping.target_version,
-            mapping_kind: mapping.mapping_kind.as_str().to_owned(),
+            mapping_kind: mapping.mapping_kind,
             snapshot: (mapping.mapping_kind == MappingKind::Existing)
                 .then(|| mapping.snapshot.clone()),
         })
@@ -1754,9 +1764,9 @@ fn materialize_plan(
         .enumerate()
         .map(|(position, action)| SolutionPackPlanAction {
             position: position as i64,
-            resource_kind: action.resource_kind.as_str().to_owned(),
+            resource_kind: action.resource_kind,
             logical_key: action.logical_key.clone(),
-            action: action.action.as_str().to_owned(),
+            action: action.action,
             reason_code: action.reason_code.to_owned(),
             summary: action.summary.clone(),
             preconditions: action.preconditions.clone(),
@@ -1847,12 +1857,17 @@ fn materialize_plan(
 fn conflict_summaries(actions: &[SolutionPackPlanAction]) -> Vec<SolutionPackPlanConflict> {
     actions
         .iter()
-        .filter(|action| matches!(action.action.as_str(), "conflict" | "blocked"))
+        .filter(|action| {
+            matches!(
+                action.action,
+                PlanActionKind::Conflict | PlanActionKind::Blocked
+            )
+        })
         .map(|action| SolutionPackPlanConflict {
             position: action.position,
-            resource_kind: action.resource_kind.clone(),
+            resource_kind: action.resource_kind,
             logical_key: action.logical_key.clone(),
-            action: action.action.clone(),
+            action: action.action,
             reason_code: action.reason_code.clone(),
         })
         .collect()
@@ -2428,7 +2443,8 @@ pub struct SolutionPackApplicationSummary {
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 pub struct SolutionPackApplicationStep {
     pub position: i64,
-    pub resource_kind: String,
+    #[sqlx(try_from = "String")]
+    pub resource_kind: PlanResourceKind,
     pub logical_key: String,
     pub target_id: Uuid,
     pub target_code: String,
@@ -2444,11 +2460,13 @@ pub struct SolutionPackApplicationStep {
 
 #[derive(sqlx::FromRow)]
 struct RevalidationStep {
-    resource_kind: String,
+    #[sqlx(try_from = "String")]
+    resource_kind: PlanResourceKind,
     target_id: Uuid,
     target_code: String,
     state: String,
-    action: String,
+    #[sqlx(try_from = "String")]
+    action: PlanActionKind,
     normalized_payload: Option<Value>,
     preconditions: Value,
 }
@@ -2457,7 +2475,7 @@ struct RevalidationStep {
 #[serde(deny_unknown_fields)]
 struct TargetAbsentPrecondition {
     kind: String,
-    resource_kind: String,
+    resource_kind: PlanResourceKind,
     code: String,
 }
 
@@ -2491,12 +2509,14 @@ struct ExistingBlueprintMappingSnapshot {
 #[derive(sqlx::FromRow)]
 struct PendingApplicationStep {
     position: i64,
-    resource_kind: String,
+    #[sqlx(try_from = "String")]
+    resource_kind: PlanResourceKind,
     logical_key: String,
     target_id: Uuid,
     target_code: String,
     target_version: Option<i64>,
-    action: String,
+    #[sqlx(try_from = "String")]
+    action: PlanActionKind,
     normalized_payload: Option<Value>,
     preconditions: Value,
 }
@@ -2751,39 +2771,46 @@ impl AttricatRepository {
             .map(|mapping| (mapping.logical_key.as_str(), mapping))
             .collect::<std::collections::BTreeMap<_, _>>();
         for mapping in &mappings {
-            let valid = match mapping.resource_kind.as_str() {
-                "blueprint" => match mapping.mapping_kind.as_str() {
-                    "create" => mapping.target_version == Some(1),
-                    "existing" => mapping.target_version.is_some_and(|version| version > 0),
+            let valid = match mapping.resource_kind {
+                PlanResourceKind::Blueprint => match mapping.mapping_kind {
+                    MappingKind::Create => mapping.target_version == Some(1),
+                    MappingKind::Existing => {
+                        mapping.target_version.is_some_and(|version| version > 0)
+                    }
                     _ => false,
                 },
-                "presentation_asset" => {
-                    matches!(mapping.mapping_kind.as_str(), "create" | "existing")
-                        && mapping.target_version.is_none()
+                PlanResourceKind::PresentationAsset => {
+                    matches!(
+                        mapping.mapping_kind,
+                        MappingKind::Create | MappingKind::Existing
+                    ) && mapping.target_version.is_none()
                         && mapping.target_code == "presentation_asset"
                 }
-                "sample_record" => {
-                    mapping.mapping_kind == "create"
+                PlanResourceKind::SampleRecord => {
+                    mapping.mapping_kind == MappingKind::Create
                         && mapping.target_version.is_none()
                         && mapping.target_code == "sample_record"
                 }
-                "prerequisite" => {
-                    mapping.mapping_kind == "existing" && mapping.target_version.is_none()
-                }
-                "context" | "publication_channel" => {
-                    matches!(mapping.mapping_kind.as_str(), "create" | "existing")
+                PlanResourceKind::Prerequisite => {
+                    mapping.mapping_kind == MappingKind::Existing
                         && mapping.target_version.is_none()
                 }
-                "rule" | "workflow" => {
-                    mapping.mapping_kind == "create" && mapping.target_version == Some(1)
+                PlanResourceKind::Context | PlanResourceKind::PublicationChannel => {
+                    matches!(
+                        mapping.mapping_kind,
+                        MappingKind::Create | MappingKind::Existing
+                    ) && mapping.target_version.is_none()
                 }
-                "saved_search" => {
-                    mapping.mapping_kind == "create"
+                PlanResourceKind::Rule | PlanResourceKind::Workflow => {
+                    mapping.mapping_kind == MappingKind::Create && mapping.target_version == Some(1)
+                }
+                PlanResourceKind::SavedSearch => {
+                    mapping.mapping_kind == MappingKind::Create
                         && mapping.target_version.is_none()
                         && mapping.target_code == "saved_search"
                 }
-                "workspace_setting" => {
-                    mapping.mapping_kind == "workspace"
+                PlanResourceKind::WorkspaceSetting => {
+                    mapping.mapping_kind == MappingKind::Workspace
                         && mapping.target_id == workspace_id
                         && mapping.target_version.is_none()
                         && matches!(
@@ -2793,14 +2820,15 @@ impl AttricatRepository {
                                 | ("workspace/lexicon", "lexicon")
                         )
                 }
-                _ => false,
             };
             if !valid {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
                     "unsupported persisted resource mapping".into(),
                 ));
             }
-            if mapping.mapping_kind == "existing" && mapping.resource_kind == "presentation_asset" {
+            if mapping.mapping_kind == MappingKind::Existing
+                && mapping.resource_kind == PlanResourceKind::PresentationAsset
+            {
                 let snapshot: ExistingAssetEvidence =
                     serde_json::from_value(mapping.snapshot.clone().ok_or_else(|| {
                         RepositoryError::InvalidSolutionPackPlan(
@@ -2829,7 +2857,9 @@ impl AttricatRepository {
                     ));
                 }
             }
-            if mapping.mapping_kind == "existing" && mapping.resource_kind == "blueprint" {
+            if mapping.mapping_kind == MappingKind::Existing
+                && mapping.resource_kind == PlanResourceKind::Blueprint
+            {
                 let snapshot = mapping
                     .snapshot
                     .clone()
@@ -2871,50 +2901,100 @@ impl AttricatRepository {
             // Mapping positions preserve manifest declaration order while action positions
             // preserve dependency execution order. The logical key is their stable join key.
             let valid = action.resource_kind == mapping.resource_kind
-                && match action.resource_kind.as_str() {
-                    "blueprint" => {
+                && match action.resource_kind {
+                    PlanResourceKind::Blueprint => {
                         matches!(
-                            (action.action.as_str(), mapping.mapping_kind.as_str()),
-                            ("create" | "skip" | "conflict" | "blocked", "create")
-                                | ("map" | "conflict" | "blocked", "existing")
+                            (action.action, mapping.mapping_kind),
+                            (
+                                PlanActionKind::Create
+                                    | PlanActionKind::Skip
+                                    | PlanActionKind::Conflict
+                                    | PlanActionKind::Blocked,
+                                MappingKind::Create
+                            ) | (
+                                PlanActionKind::Map
+                                    | PlanActionKind::Conflict
+                                    | PlanActionKind::Blocked,
+                                MappingKind::Existing
+                            )
                         )
                     }
-                    "workspace_setting" => matches!(
-                        action.action.as_str(),
-                        "append" | "satisfied" | "skip" | "conflict" | "blocked"
+                    PlanResourceKind::WorkspaceSetting => matches!(
+                        action.action,
+                        PlanActionKind::Append
+                            | PlanActionKind::Satisfied
+                            | PlanActionKind::Skip
+                            | PlanActionKind::Conflict
+                            | PlanActionKind::Blocked
                     ),
-                    "presentation_asset" => matches!(
-                        (action.action.as_str(), mapping.mapping_kind.as_str()),
-                        ("create" | "skip" | "conflict" | "blocked", "create")
-                            | ("map" | "conflict" | "blocked", "existing")
+                    PlanResourceKind::PresentationAsset => matches!(
+                        (action.action, mapping.mapping_kind),
+                        (
+                            PlanActionKind::Create
+                                | PlanActionKind::Skip
+                                | PlanActionKind::Conflict
+                                | PlanActionKind::Blocked,
+                            MappingKind::Create
+                        ) | (
+                            PlanActionKind::Map
+                                | PlanActionKind::Conflict
+                                | PlanActionKind::Blocked,
+                            MappingKind::Existing
+                        )
                     ),
-                    "sample_record" => {
-                        action.action == "create" && mapping.mapping_kind == "create"
+                    PlanResourceKind::SampleRecord => {
+                        action.action == PlanActionKind::Create
+                            && mapping.mapping_kind == MappingKind::Create
                     }
-                    "prerequisite" => matches!(action.action.as_str(), "map" | "blocked"),
-                    "context" => matches!(
-                        (action.action.as_str(), mapping.mapping_kind.as_str()),
-                        ("create" | "skip" | "conflict" | "blocked", "create")
-                            | ("map", "existing")
+                    PlanResourceKind::Prerequisite => {
+                        matches!(action.action, PlanActionKind::Map | PlanActionKind::Blocked)
+                    }
+                    PlanResourceKind::Context => matches!(
+                        (action.action, mapping.mapping_kind),
+                        (
+                            PlanActionKind::Create
+                                | PlanActionKind::Skip
+                                | PlanActionKind::Conflict
+                                | PlanActionKind::Blocked,
+                            MappingKind::Create
+                        ) | (PlanActionKind::Map, MappingKind::Existing)
                     ),
-                    "publication_channel" => matches!(
-                        (action.action.as_str(), mapping.mapping_kind.as_str()),
-                        ("create" | "skip" | "conflict" | "blocked", "create")
-                            | ("satisfied" | "skip" | "conflict" | "blocked", "existing")
+                    PlanResourceKind::PublicationChannel => matches!(
+                        (action.action, mapping.mapping_kind),
+                        (
+                            PlanActionKind::Create
+                                | PlanActionKind::Skip
+                                | PlanActionKind::Conflict
+                                | PlanActionKind::Blocked,
+                            MappingKind::Create
+                        ) | (
+                            PlanActionKind::Satisfied
+                                | PlanActionKind::Skip
+                                | PlanActionKind::Conflict
+                                | PlanActionKind::Blocked,
+                            MappingKind::Existing
+                        )
                     ),
-                    "rule" | "workflow" | "saved_search" => matches!(
-                        (action.action.as_str(), mapping.mapping_kind.as_str()),
-                        ("create" | "skip" | "conflict" | "blocked", "create")
+                    PlanResourceKind::Rule
+                    | PlanResourceKind::Workflow
+                    | PlanResourceKind::SavedSearch => matches!(
+                        (action.action, mapping.mapping_kind),
+                        (
+                            PlanActionKind::Create
+                                | PlanActionKind::Skip
+                                | PlanActionKind::Conflict
+                                | PlanActionKind::Blocked,
+                            MappingKind::Create
+                        )
                     ),
-                    _ => false,
                 };
             if !valid {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
                     "unsupported persisted resource action".into(),
                 ));
             }
-            if action.resource_kind == "presentation_asset"
-                && action.action == "skip"
+            if action.resource_kind == PlanResourceKind::PresentationAsset
+                && action.action == PlanActionKind::Skip
                 && (action.reason_code != "optional_not_selected"
                     || action.normalized_payload.is_some()
                     || action.preconditions != serde_json::json!([]))
@@ -2923,7 +3003,9 @@ impl AttricatRepository {
                     "persisted optional presentation asset skip evidence is invalid".into(),
                 ));
             }
-            if action.resource_kind == "presentation_asset" && action.action == "create" {
+            if action.resource_kind == PlanResourceKind::PresentationAsset
+                && action.action == PlanActionKind::Create
+            {
                 let payload: PresentationAssetPayload =
                     serde_json::from_value(action.normalized_payload.clone().ok_or_else(|| {
                         RepositoryError::InvalidSolutionPackPlan(
@@ -2957,7 +3039,9 @@ impl AttricatRepository {
                     ));
                 }
             }
-            if action.action == "map" && action.resource_kind == "presentation_asset" {
+            if action.action == PlanActionKind::Map
+                && action.resource_kind == PlanResourceKind::PresentationAsset
+            {
                 if action.reason_code != "exact_asset_match" || action.normalized_payload.is_some()
                 {
                     return Err(RepositoryError::InvalidSolutionPackPlan(
@@ -2988,7 +3072,9 @@ impl AttricatRepository {
                     ));
                 }
             }
-            if action.action == "map" && action.resource_kind == "blueprint" {
+            if action.action == PlanActionKind::Map
+                && action.resource_kind == PlanResourceKind::Blueprint
+            {
                 if !matches!(
                     action.reason_code.as_str(),
                     "exact_blueprint_match" | "prerequisite_blueprint_match"
@@ -3379,7 +3465,9 @@ impl AttricatRepository {
         .fetch_all(&mut **tx)
         .await?;
         for step in steps {
-            if step.action == "map" && step.resource_kind == "presentation_asset" {
+            if step.action == PlanActionKind::Map
+                && step.resource_kind == PlanResourceKind::PresentationAsset
+            {
                 let expected: Vec<ExistingAssetEvidence> =
                     serde_json::from_value(step.preconditions).map_err(|_| {
                         RepositoryError::InvalidSolutionPackPlan(
@@ -3407,17 +3495,20 @@ impl AttricatRepository {
                 }
                 continue;
             }
-            if step.resource_kind == "prerequisite" {
+            if step.resource_kind == PlanResourceKind::Prerequisite {
                 self.revalidate_prerequisite(tx, step.target_id, &step.preconditions)
                     .await?;
                 continue;
             }
-            if step.resource_kind == "context" && step.action == "map" {
+            if step.resource_kind == PlanResourceKind::Context && step.action == PlanActionKind::Map
+            {
                 self.revalidate_existing_context(tx, step.target_id, &step.target_code)
                     .await?;
                 continue;
             }
-            if step.resource_kind == "publication_channel" && step.action == "satisfied" {
+            if step.resource_kind == PlanResourceKind::PublicationChannel
+                && step.action == PlanActionKind::Satisfied
+            {
                 self.revalidate_satisfied_channel(
                     tx,
                     step.target_id,
@@ -3426,10 +3517,10 @@ impl AttricatRepository {
                 .await?;
                 continue;
             }
-            if step.action == "map" {
+            if step.action == PlanActionKind::Map {
                 continue;
             }
-            if step.resource_kind == "workspace_setting" {
+            if step.resource_kind == PlanResourceKind::WorkspaceSetting {
                 if step.target_id != workspace_id {
                     return Err(RepositoryError::InvalidSolutionPackPlan(
                         "persisted workspace setting mapping is invalid".into(),
@@ -3446,7 +3537,7 @@ impl AttricatRepository {
                     let current = self
                         .lock_explore_navigation_in_transaction(tx, workspace_id)
                         .await?;
-                    if step.state == "completed" || step.action == "satisfied" {
+                    if step.state == "completed" || step.action == PlanActionKind::Satisfied {
                         self.validate_explore_navigation_entries_in_transaction(
                             tx,
                             workspace_id,
@@ -3457,11 +3548,12 @@ impl AttricatRepository {
                     }
                     let all_exact = navigation_entries_all_exact(&current, &payload);
                     let appendable = navigation_entries_appendable(&current, &payload);
-                    let valid = if step.state == "completed" || step.action == "satisfied" {
-                        all_exact
-                    } else {
-                        step.action == "append" && appendable
-                    };
+                    let valid =
+                        if step.state == "completed" || step.action == PlanActionKind::Satisfied {
+                            all_exact
+                        } else {
+                            step.action == PlanActionKind::Append && appendable
+                        };
                     if !valid {
                         return Err(RepositoryError::SolutionPackPlanStale);
                     }
@@ -3492,11 +3584,12 @@ impl AttricatRepository {
                         .map_err(solution_pack_layout_error)?;
                     let all_exact = extension_layout_entries_all_exact(&current, &payload);
                     let appendable = extension_layout_entries_appendable(&current, &payload);
-                    let valid = if step.state == "completed" || step.action == "satisfied" {
-                        all_exact
-                    } else {
-                        step.action == "append" && appendable
-                    };
+                    let valid =
+                        if step.state == "completed" || step.action == PlanActionKind::Satisfied {
+                            all_exact
+                        } else {
+                            step.action == PlanActionKind::Append && appendable
+                        };
                     if !valid {
                         return Err(RepositoryError::SolutionPackPlanStale);
                     }
@@ -3522,7 +3615,7 @@ impl AttricatRepository {
                     "persisted application preconditions do not match the step".into(),
                 ));
             }
-            if step.resource_kind == "sample_record" {
+            if step.resource_kind == PlanResourceKind::SampleRecord {
                 let exists = sqlx::query_scalar::<_, bool>(
                     "SELECT EXISTS(SELECT 1 FROM records WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL)",
                 )
@@ -3535,7 +3628,7 @@ impl AttricatRepository {
                 }
                 continue;
             }
-            if step.resource_kind == "presentation_asset" {
+            if step.resource_kind == PlanResourceKind::PresentationAsset {
                 let exists = sqlx::query_scalar::<_, bool>(
                     "SELECT EXISTS(SELECT 1 FROM presentation_assets WHERE workspace_id=$1 AND id=$2)",
                 )
@@ -3549,11 +3642,14 @@ impl AttricatRepository {
                 continue;
             }
             if matches!(
-                step.resource_kind.as_str(),
-                "publication_channel" | "rule" | "workflow" | "saved_search"
+                step.resource_kind,
+                PlanResourceKind::PublicationChannel
+                    | PlanResourceKind::Rule
+                    | PlanResourceKind::Workflow
+                    | PlanResourceKind::SavedSearch
             ) {
                 let (exists, code_taken) = self
-                    .seed_target_state(tx, &step.resource_kind, step.target_id, &step.target_code)
+                    .seed_target_state(tx, step.resource_kind, step.target_id, &step.target_code)
                     .await?;
                 let valid = if step.state == "completed" {
                     exists
@@ -3565,7 +3661,10 @@ impl AttricatRepository {
                 }
                 continue;
             }
-            if !matches!(step.resource_kind.as_str(), "blueprint" | "context") {
+            if !matches!(
+                step.resource_kind,
+                PlanResourceKind::Blueprint | PlanResourceKind::Context
+            ) {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
                     "unsupported persisted resource kind".into(),
                 ));
@@ -3573,7 +3672,7 @@ impl AttricatRepository {
             let matches =
                 super::workspace_resource_code_matches(tx, workspace_id, &step.target_code).await?;
             let valid = if step.state == "completed" {
-                matches.as_slice() == [(step.resource_kind.clone(), step.target_id)]
+                matches.as_slice() == [(step.resource_kind.as_str().to_owned(), step.target_id)]
             } else {
                 matches.is_empty()
             };
@@ -3842,7 +3941,10 @@ impl AttricatRepository {
         let workspace_id = self.workspace_id.0;
         Ok({
             if step.target_id != workspace_id
-                || !matches!(step.action.as_str(), "append" | "satisfied")
+                || !matches!(
+                    step.action,
+                    PlanActionKind::Append | PlanActionKind::Satisfied
+                )
             {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
                     "persisted workspace setting step is invalid".into(),
@@ -3863,7 +3965,7 @@ impl AttricatRepository {
                     .await
                     .map_err(solution_pack_navigation_error)?;
                 let all_exact = navigation_entries_all_exact(&current, &desired);
-                let outcome = if step.action == "satisfied" {
+                let outcome = if step.action == PlanActionKind::Satisfied {
                     if !all_exact {
                         return Err(RepositoryError::SolutionPackPlanStale);
                     }
@@ -3940,7 +4042,7 @@ impl AttricatRepository {
                     .map_err(solution_pack_layout_error)?;
                 let before_sha256 = json_sha256(&current)?;
                 let all_exact = extension_layout_entries_all_exact(&current, &desired);
-                let (outcome, merged) = if step.action == "satisfied" {
+                let (outcome, merged) = if step.action == PlanActionKind::Satisfied {
                     if !all_exact {
                         return Err(RepositoryError::SolutionPackPlanStale);
                     }
@@ -4033,13 +4135,13 @@ impl AttricatRepository {
         self.revalidate_all_existing_blueprints(&mut tx, application_id)
             .await?;
         *attempted_position = Some(step.position);
-        if step.resource_kind != "workspace_setting"
-            && !matches!(step.action.as_str(), "map" | "satisfied")
+        if step.resource_kind != PlanResourceKind::WorkspaceSetting
+            && !matches!(step.action, PlanActionKind::Map | PlanActionKind::Satisfied)
         {
             self.ensure_target_absent(&mut tx, &step).await?;
         }
-        let (result_snapshot, events) = if step.action == "map" {
-            if step.resource_kind == "presentation_asset" {
+        let (result_snapshot, events) = if step.action == PlanActionKind::Map {
+            if step.resource_kind == PlanResourceKind::PresentationAsset {
                 let expected: Vec<ExistingAssetEvidence> =
                     serde::Deserialize::deserialize(&step.preconditions).map_err(|_| {
                         RepositoryError::InvalidSolutionPackPlan(
@@ -4067,13 +4169,13 @@ impl AttricatRepository {
                     serde_json::json!({"outcome":"reused","id":step.target_id,"purpose":actual.0,"media_type":actual.1,"byte_size":actual.2,"sha256":actual.3,"source_sha256":expected[0].source_sha256}),
                     Vec::new(),
                 )
-            } else if step.resource_kind == "prerequisite" {
+            } else if step.resource_kind == PlanResourceKind::Prerequisite {
                 (
                     self.revalidate_prerequisite(&mut tx, step.target_id, &step.preconditions)
                         .await?,
                     Vec::new(),
                 )
-            } else if step.resource_kind == "context" {
+            } else if step.resource_kind == PlanResourceKind::Context {
                 (
                     self.revalidate_existing_context(&mut tx, step.target_id, &step.target_code)
                         .await?,
@@ -4093,8 +4195,8 @@ impl AttricatRepository {
                 )
             }
         } else {
-            match step.resource_kind.as_str() {
-                "blueprint" => {
+            match step.resource_kind {
+                PlanResourceKind::Blueprint => {
                     let payload: BlueprintPayload = serde_json::from_value(
                         step.normalized_payload.clone().ok_or_else(|| {
                             RepositoryError::InvalidSolutionPackPlan(
@@ -4157,14 +4259,16 @@ impl AttricatRepository {
                         events,
                     )
                 }
-                "context" | "publication_channel" | "rule" | "workflow" | "saved_search" => {
-                    self.apply_seed_step(&mut tx, &step).await?
-                }
-                "sample_record" => {
+                PlanResourceKind::Context
+                | PlanResourceKind::PublicationChannel
+                | PlanResourceKind::Rule
+                | PlanResourceKind::Workflow
+                | PlanResourceKind::SavedSearch => self.apply_seed_step(&mut tx, &step).await?,
+                PlanResourceKind::SampleRecord => {
                     self.apply_sample_record_step(&mut tx, plan_id, &step, object_store)
                         .await?
                 }
-                "presentation_asset" => {
+                PlanResourceKind::PresentationAsset => {
                     let payload: PresentationAssetPayload = serde_json::from_value(
                         step.normalized_payload.clone().ok_or_else(|| {
                             RepositoryError::InvalidSolutionPackPlan(
@@ -4239,7 +4343,7 @@ impl AttricatRepository {
                         Vec::new(),
                     )
                 }
-                "workspace_setting" => {
+                PlanResourceKind::WorkspaceSetting => {
                     self.apply_workspace_setting_step(&mut tx, application_id, &step)
                         .await?
                 }
@@ -4272,7 +4376,7 @@ impl AttricatRepository {
         step: &PendingApplicationStep,
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.0;
-        if step.resource_kind == "sample_record" {
+        if step.resource_kind == PlanResourceKind::SampleRecord {
             let exists: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM records WHERE workspace_id=$1 AND id=$2)",
             )
@@ -4286,7 +4390,7 @@ impl AttricatRepository {
                 Ok(())
             };
         }
-        if step.resource_kind == "presentation_asset" {
+        if step.resource_kind == PlanResourceKind::PresentationAsset {
             let exists: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM presentation_assets WHERE workspace_id=$1 AND id=$2)",
             )
@@ -4301,23 +4405,26 @@ impl AttricatRepository {
             };
         }
         if matches!(
-            step.resource_kind.as_str(),
-            "publication_channel" | "rule" | "workflow" | "saved_search"
+            step.resource_kind,
+            PlanResourceKind::PublicationChannel
+                | PlanResourceKind::Rule
+                | PlanResourceKind::Workflow
+                | PlanResourceKind::SavedSearch
         ) {
-            match step.resource_kind.as_str() {
-                "rule" => {
+            match step.resource_kind {
+                PlanResourceKind::Rule => {
                     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
                         .bind(format!("rule-code:{workspace_id}:{}", step.target_code))
                         .execute(&mut **tx)
                         .await?;
                 }
-                "workflow" => {
+                PlanResourceKind::Workflow => {
                     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
                         .bind(format!("workflow-code:{workspace_id}:{}", step.target_code))
                         .execute(&mut **tx)
                         .await?;
                 }
-                "publication_channel" => {
+                PlanResourceKind::PublicationChannel => {
                     sqlx::query("SELECT id FROM attribute_contexts WHERE workspace_id=$1 AND id=$2 FOR UPDATE")
                         .bind(workspace_id)
                         .bind(step.target_id)
@@ -4327,7 +4434,7 @@ impl AttricatRepository {
                 _ => {}
             }
             let (exists, code_taken) = self
-                .seed_target_state(tx, &step.resource_kind, step.target_id, &step.target_code)
+                .seed_target_state(tx, step.resource_kind, step.target_id, &step.target_code)
                 .await?;
             return if exists || code_taken {
                 Err(RepositoryError::SolutionPackPlanStale)
@@ -4335,7 +4442,10 @@ impl AttricatRepository {
                 Ok(())
             };
         }
-        if !matches!(step.resource_kind.as_str(), "blueprint" | "context") {
+        if !matches!(
+            step.resource_kind,
+            PlanResourceKind::Blueprint | PlanResourceKind::Context
+        ) {
             return Err(RepositoryError::InvalidSolutionPackPlan(
                 "unsupported persisted resource kind".into(),
             ));
@@ -5501,21 +5611,21 @@ impl AttricatRepository {
     async fn seed_target_state(
         &self,
         tx: &mut Transaction<'_, Postgres>,
-        resource_kind: &str,
+        resource_kind: PlanResourceKind,
         target_id: Uuid,
         target_code: &str,
     ) -> Result<(bool, bool), RepositoryError> {
         let query = match resource_kind {
-            "rule" => {
+            PlanResourceKind::Rule => {
                 "SELECT EXISTS(SELECT 1 FROM rules WHERE workspace_id=$1 AND id=$2), EXISTS(SELECT 1 FROM rules WHERE workspace_id=$1 AND code=$3)"
             }
-            "workflow" => {
+            PlanResourceKind::Workflow => {
                 "SELECT EXISTS(SELECT 1 FROM workflows WHERE workspace_id=$1 AND id=$2), EXISTS(SELECT 1 FROM workflows WHERE workspace_id=$1 AND code=$3)"
             }
-            "saved_search" => {
+            PlanResourceKind::SavedSearch => {
                 "SELECT EXISTS(SELECT 1 FROM saved_views WHERE workspace_id=$1 AND id=$2), false AND $3 <> ''"
             }
-            "publication_channel" => {
+            PlanResourceKind::PublicationChannel => {
                 "SELECT EXISTS(SELECT 1 FROM publication_channels WHERE workspace_id=$1 AND context_id=$2), false AND $3 <> ''"
             }
             _ => {
@@ -5540,8 +5650,8 @@ impl AttricatRepository {
     ) -> Result<(Value, Vec<crate::domain_events::NewDomainEvent>), RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let payload = step.normalized_payload.as_ref();
-        match (step.resource_kind.as_str(), step.action.as_str()) {
-            ("context", "create") => {
+        match (step.resource_kind, step.action) {
+            (PlanResourceKind::Context, PlanActionKind::Create) => {
                 let payload: ContextPayload = seed_payload(payload, "context")?;
                 if payload.code != step.target_code {
                     return Err(RepositoryError::InvalidSolutionPackPlan(
@@ -5569,12 +5679,12 @@ impl AttricatRepository {
                     )],
                 ))
             }
-            ("publication_channel", "satisfied") => Ok((
+            (PlanResourceKind::PublicationChannel, PlanActionKind::Satisfied) => Ok((
                 self.revalidate_satisfied_channel(tx, step.target_id, payload)
                     .await?,
                 Vec::new(),
             )),
-            ("publication_channel", "create") => {
+            (PlanResourceKind::PublicationChannel, PlanActionKind::Create) => {
                 let payload: PublicationChannelPayload =
                     seed_payload(payload, "publication channel")?;
                 if payload.context_id != step.target_id {
@@ -5597,7 +5707,7 @@ impl AttricatRepository {
                 .map_err(solution_pack_mutation_error)?;
                 Ok((payload.result(), Vec::new()))
             }
-            ("rule", "create") => {
+            (PlanResourceKind::Rule, PlanActionKind::Create) => {
                 let payload: RulePayload = seed_payload(payload, "rule")?;
                 let id = self
                     .create_rule_in_transaction(
@@ -5638,7 +5748,7 @@ impl AttricatRepository {
                     Vec::new(),
                 ))
             }
-            ("workflow", "create") => {
+            (PlanResourceKind::Workflow, PlanActionKind::Create) => {
                 let payload: WorkflowPayload = seed_payload(payload, "workflow")?;
                 let id = self
                     .create_workflow_in_transaction(
@@ -5673,7 +5783,7 @@ impl AttricatRepository {
                     Vec::new(),
                 ))
             }
-            ("saved_search", "create") => {
+            (PlanResourceKind::SavedSearch, PlanActionKind::Create) => {
                 let payload: SavedSearchPayload = seed_payload(payload, "saved search")?;
                 if payload.visibility != "workspace" || !payload.state.is_object() {
                     return Err(RepositoryError::InvalidSolutionPackPlan(
