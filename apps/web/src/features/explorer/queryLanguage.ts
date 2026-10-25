@@ -404,7 +404,11 @@ export const queryCursorContext = (
   const parts = before.split(relationshipPathSeparator);
   const partial = parts.pop() ?? '';
   const afterCursor = token.text.slice(cursor - token.start);
-  const selectorRest = afterCursor.search(/[.:]/);
+  const selectorRest = [...afterCursor].findIndex(
+    (character) =>
+      character === relationshipPathSeparator ||
+      character === querySelectorSeparator,
+  );
   return {
     kind: 'field',
     path: parts,
