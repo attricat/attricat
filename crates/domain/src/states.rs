@@ -36,6 +36,24 @@ crate::code_enum! {
 }
 
 crate::code_enum! {
+    /// Where a leased workflow, rule or extension operation run stands.
+    pub enum RunStatus (UnknownRunStatus: "run status") {
+        Pending => "pending",
+        Leased => "leased",
+        Completed => "completed",
+        DeadLetter => "dead_letter",
+        Cancelled => "cancelled",
+    }
+}
+
+impl RunStatus {
+    /// Whether the run will not be leased again.
+    pub const fn is_terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::DeadLetter | Self::Cancelled)
+    }
+}
+
+crate::code_enum! {
     /// Whether a blueprint, reusable attribute, workflow or rule revision is
     /// still editable or published.
     pub enum RevisionStatus (UnknownRevisionStatus: "revision status") {
@@ -70,5 +88,6 @@ mod tests {
             RevisionStatus::as_str,
             RevisionStatus::parse,
         );
+        crate::codes::assert_codes_round_trip(RunStatus::ALL, RunStatus::as_str, RunStatus::parse);
     }
 }

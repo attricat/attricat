@@ -3,6 +3,7 @@ use crate::{
     domain_events::DomainEvent,
     task_queue::{TaskInsert, TaskKind},
 };
+use attricat_domain::states::RunStatus;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use uuid::Uuid;
@@ -31,7 +32,8 @@ pub struct WorkflowRun {
     pub trigger_event_id: Option<Uuid>,
     pub trigger_sequence: Option<i64>,
     pub source: String,
-    pub status: String,
+    #[sqlx(try_from = "String")]
+    pub status: RunStatus,
     pub attempts: i32,
     pub failed_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -76,7 +78,8 @@ struct WorkflowRunRow {
     trigger_event_id: Option<Uuid>,
     trigger_sequence: Option<i64>,
     source: String,
-    status: String,
+    #[sqlx(try_from = "String")]
+    status: RunStatus,
     attempts: i32,
     failed_at: Option<DateTime<Utc>>,
     completed_at: Option<DateTime<Utc>>,

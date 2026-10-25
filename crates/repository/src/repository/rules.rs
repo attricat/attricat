@@ -6,6 +6,7 @@ use crate::{
     model::{CreateManualRuleRun, CreateRule, Rule, RuleFinding, RuleRun},
     task_queue::{TaskInsert, TaskKind},
 };
+use attricat_domain::states::RunStatus;
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -825,7 +826,7 @@ impl AttricatRepository {
                 "rule task subject is missing".into(),
             ));
         };
-        if matches!(status.as_str(), "cancelled" | "completed" | "dead_letter") {
+        if stored_code::<RunStatus>(status)?.is_terminal() {
             tx.commit().await?;
             return Ok(None);
         }

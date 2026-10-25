@@ -11,6 +11,7 @@ use crate::{
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
 use async_trait::async_trait;
+use attricat_domain::states::RunStatus;
 use attricat_repository::round_trips::measure;
 use serde_json::Value;
 use std::{
@@ -76,7 +77,7 @@ impl TaskHandler for WorkflowTaskHandler {
         };
         // A crash after the token-fenced domain completion but before generic
         // acknowledgement is replay-safe: no action is re-executed.
-        if run.run.status == "dead_letter" {
+        if run.run.status == RunStatus::DeadLetter {
             // Repair an older split terminal transition by terminalizing the
             // reclaimed envelope, never by incorrectly acknowledging it.
             scoped
@@ -89,7 +90,7 @@ impl TaskHandler for WorkflowTaskHandler {
                 .map_err(|error| task_error(error.into()))?;
             return Ok(TaskOutcome::DeadLettered);
         }
-        if matches!(run.run.status.as_str(), "completed" | "cancelled") {
+        if matches!(run.run.status, RunStatus::Completed | RunStatus::Cancelled) {
             return Ok(TaskOutcome::Complete);
         }
         match execute(&scoped, &run, &task).await {

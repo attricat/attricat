@@ -4,6 +4,8 @@
 //! management projections and audit metadata. Snapshots and diagnostics are
 //! recursively redacted before they become durable operator-visible data.
 
+use super::stored_code;
+use attricat_domain::states::RunStatus;
 use chrono::{DateTime, Duration, Utc};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -341,7 +343,7 @@ impl AttricatRepository {
                 "operation task subject missing".into(),
             ));
         };
-        if matches!(status.as_str(), "cancelled" | "completed" | "dead_letter") {
+        if stored_code::<RunStatus>(status)?.is_terminal() {
             transaction.commit().await?;
             return Ok(None);
         }
@@ -479,7 +481,10 @@ impl AttricatRepository {
             ));
         };
         transaction.commit().await?;
-        Ok(matches!(status.as_str(), "completed" | "cancelled"))
+        Ok(matches!(
+            stored_code::<RunStatus>(status)?,
+            RunStatus::Completed | RunStatus::Cancelled
+        ))
     }
 
     /// Records that the cooperative cancellation export has returned while
