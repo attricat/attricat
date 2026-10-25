@@ -44,6 +44,14 @@ const MAX_CLIENT_ID_CHARS: usize = 512;
 const MAX_CONNECTION_URL_CHARS: usize = 2048;
 const MAX_SECRET_INPUT_BYTES: usize = 8 * 1024;
 const MAX_CONNECTION_PARAMETERS_BYTES: usize = 16 * 1024;
+/// Mapping rows a page returns when the request does not say.
+const DEFAULT_EXPORT_MAPPING_PAGE: u32 = 50;
+/// The longest retry idempotency key, in ASCII bytes.
+const MAX_IDEMPOTENCY_KEY_BYTES: usize = 40;
+/// The longest OAuth callback state and public file link token.
+const MAX_OPAQUE_TOKEN_BYTES: usize = 128;
+/// The longest provider error code an OAuth callback keeps.
+const MAX_PROVIDER_ERROR_BYTES: usize = 64;
 
 fn installed_manifest(value: &Value) -> Result<Manifest, ApiError> {
     serde::Deserialize::deserialize(value)
@@ -156,7 +164,10 @@ pub(super) async fn extension_export_status(
             query.connection.as_deref(),
             query.status.as_deref(),
             query.after,
-            query.limit.unwrap_or(50).clamp(1, MAX_EXPORT_MAPPING_PAGE),
+            query
+                .limit
+                .unwrap_or(DEFAULT_EXPORT_MAPPING_PAGE)
+                .clamp(1, MAX_EXPORT_MAPPING_PAGE),
             true,
         )
         .await?;
@@ -215,14 +226,12 @@ pub(super) async fn retry_export(
     principal
         .require_workspace_permission(&state.repository, workspace.0, Permission::RecordsRead)
         .await?;
-    if input
-        .idempotency_key
-        .as_ref()
-        .is_some_and(|key| key.is_empty() || key.len() > 40 || !key.is_ascii())
-    {
-        return Err(ApiError::invalid_input(
-            "idempotency_key must be 1-40 ASCII bytes".into(),
-        ));
+    if input.idempotency_key.as_ref().is_some_and(|key| {
+        key.is_empty() || key.len() > MAX_IDEMPOTENCY_KEY_BYTES || !key.is_ascii()
+    }) {
+        return Err(ApiError::invalid_input(format!(
+            "idempotency_key must be 1-{MAX_IDEMPOTENCY_KEY_BYTES} ASCII bytes"
+        )));
     }
     let outcome = repository
         .retry_exports(
@@ -730,7 +739,7 @@ pub(super) async fn oauth_callback(
     let Some(oauth_state) = query
         .state
         .as_deref()
-        .filter(|value| !value.is_empty() && value.len() <= 128)
+        .filter(|value| !value.is_empty() && value.len() <= MAX_OPAQUE_TOKEN_BYTES)
     else {
         return redirect(None, None, "expired");
     };
@@ -808,7 +817,7 @@ pub(super) async fn oauth_callback(
             // Only a short, plain error code from the provider is kept.
             let reason = error
                 .filter(|error| {
-                    error.len() <= 64
+                    error.len() <= MAX_PROVIDER_ERROR_BYTES
                         && error
                             .bytes()
                             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
@@ -1119,7 +1128,7 @@ pub(super) async fn public_file(
     ApiPath(token): ApiPath<String>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    if token.is_empty() || token.len() > 128 {
+    if token.is_empty() || token.len() > MAX_OPAQUE_TOKEN_BYTES {
         return Err(ApiError::not_found("file"));
     }
     let digest = format!("{:x}", Sha256::digest(token.as_bytes()));

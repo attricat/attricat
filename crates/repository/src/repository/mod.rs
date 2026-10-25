@@ -211,9 +211,10 @@ pub use extension_attricat_data::{
     MAX_EXTENSION_LOOKUP_VALUE_BYTES,
 };
 pub use extension_connections::{
-    ConnectionAccessToken, ConnectionCredentials, ConnectionRefresh, DeviceAuthorization,
-    ExtensionConnection, ExtensionConnectionPatch, IssuedTokens, NewExtensionConnection,
-    PUBLIC_FILE_LINK_GRANTS, use_extension_credential_key,
+    ConnectionAccessToken, ConnectionCredentials, ConnectionRefresh, DEVICE_INTERVAL_SECONDS,
+    DeviceAuthorization, ExtensionConnection, ExtensionConnectionPatch, IssuedTokens,
+    MAX_CONNECTION_ERROR_CHARS, MAX_DEVICE_USER_CODE_CHARS, MAX_DEVICE_VERIFICATION_URI_CHARS,
+    NewExtensionConnection, PUBLIC_FILE_LINK_GRANTS, use_extension_credential_key,
 };
 pub use extension_connector_pages::{
     ConnectorPageV2Request, MAX_EXPANDED_RELATIONSHIPS, MAX_WITHDRAWN_PAGE,

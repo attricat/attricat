@@ -17,6 +17,10 @@ const MAX_REJECTION_CODE_BYTES: usize = 128;
 const MAX_OUTCOME_MESSAGE_BYTES: usize = 2048;
 /// The longest delay a component may request before a retry or resumption.
 pub(super) const MAX_COMPONENT_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
+/// The first retry delay, doubled for each later attempt.
+const RETRY_BACKOFF_BASE: Duration = Duration::from_secs(5);
+/// The longest delay between retries without a requested delay.
+const MAX_RETRY_BACKOFF: Duration = Duration::from_secs(60 * 60);
 
 /// A record-level failure reported by a component.
 #[derive(Clone, Debug)]
@@ -92,7 +96,7 @@ impl From<wit::Failure> for InvocationFailure {
 /// 5 s, 10 s, 20 s, ... capped at one hour.
 pub(super) fn retry_backoff(attempt: u32) -> Duration {
     let exponent = attempt.saturating_sub(1).min(10);
-    Duration::from_secs(5 * (1u64 << exponent)).min(Duration::from_secs(60 * 60))
+    (RETRY_BACKOFF_BASE * (1u32 << exponent)).min(MAX_RETRY_BACKOFF)
 }
 
 #[cfg(test)]

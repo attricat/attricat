@@ -547,6 +547,8 @@ pub struct EventHandler {
     pub max_wait_ms: Option<u64>,
 }
 
+/// The longest connection kind or export destination title.
+const MAX_TITLE_BYTES: usize = 200;
 pub const MAX_DEBOUNCE_MS: u64 = 60 * 60 * 1000;
 pub const MAX_DEBOUNCE_WAIT_MS: u64 = 24 * 60 * 60 * 1000;
 
@@ -1289,7 +1291,7 @@ impl Manifest {
             valid_id(&kind.id, "connection kind id")?;
             let grant_types = kind.grant_types.iter().collect::<HashSet<_>>();
             if kind.title.trim().is_empty()
-                || kind.title.len() > 200
+                || kind.title.len() > MAX_TITLE_BYTES
                 || kind.grant_types.is_empty()
                 || grant_types.len() != kind.grant_types.len()
             {
@@ -1359,7 +1361,7 @@ impl Manifest {
         }
         for export in &server.exports {
             valid_id(&export.id, "export destination id")?;
-            if export.title.trim().is_empty() || export.title.len() > 200 {
+            if export.title.trim().is_empty() || export.title.len() > MAX_TITLE_BYTES {
                 return Err(ManifestError::Invalid(format!(
                     "export destination '{}' needs a title",
                     export.id

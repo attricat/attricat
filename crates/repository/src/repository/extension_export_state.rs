@@ -52,6 +52,10 @@ const MAX_EXTERNAL_ID_BYTES: usize = 512;
 const MAX_EXTERNAL_IDS_BYTES: usize = 8 * 1024;
 const MAX_CONTENT_HASH_BYTES: usize = 128;
 const MAX_EXPORT_ERROR_BYTES: usize = 8 * 1024;
+/// The longest lease failure message kept on a mapping.
+const MAX_LEASE_FAILURE_CHARS: usize = 1024;
+/// The most handler failures one listing returns.
+const MAX_HANDLER_FAILURES: i64 = 200;
 
 fn invalid(message: impl Into<String>) -> RepositoryError {
     RepositoryError::InvalidExtension(message.into())
@@ -358,7 +362,7 @@ impl AttricatRepository {
         limit: i64,
     ) -> Result<Vec<HandlerFailure>, RepositoryError> {
         Ok(sqlx::query_as("SELECT a.event_id,e.event_type,a.handler_id,a.status,a.attempts,a.error_code,a.error_message,a.record_id,a.updated_at FROM extension_handler_attempts a JOIN domain_events e ON e.id=a.event_id WHERE a.workspace_id=$1 AND a.extension_id=$2 AND a.status IN ('rejected','exhausted') ORDER BY a.updated_at DESC LIMIT $3")
-            .bind(self.workspace_id()).bind(extension_id).bind(limit.clamp(1, 200))
+            .bind(self.workspace_id()).bind(extension_id).bind(limit.clamp(1, MAX_HANDLER_FAILURES))
             .fetch_all(&self.pool).await?)
     }
 
@@ -984,7 +988,7 @@ impl AttricatRepository {
         // but a withdrawal, so a retrying status would never clear.
         Ok(sqlx::query(&format!("UPDATE extension_export_mappings m SET status=CASE WHEN r.deleted_at IS NULL THEN 'retrying' ELSE m.status END,error=CASE WHEN r.deleted_at IS NULL THEN jsonb_build_object('code',$4::text,'message',$5::text) ELSE m.error END,attempts=CASE WHEN r.deleted_at IS NULL THEN m.attempts+1 ELSE m.attempts END,{CLEAR_LEASE},updated_at=clock_timestamp() FROM records r WHERE r.workspace_id=m.workspace_id AND r.id=m.record_id AND m.workspace_id=$1 AND m.extension_id=$2 AND m.lease_holder=$3"))
             .bind(self.workspace_id()).bind(extension_id).bind(holder).bind(code)
-            .bind(message.chars().take(1024).collect::<String>())
+            .bind(message.chars().take(MAX_LEASE_FAILURE_CHARS).collect::<String>())
             .execute(&self.pool).await?.rows_affected())
     }
 

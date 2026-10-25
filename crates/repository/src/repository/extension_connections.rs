@@ -292,6 +292,14 @@ pub struct DeviceAuthorization {
 /// How long a refresh claim lasts if its worker never settles it: longer than
 /// a DNS lookup and a token request may take at their longest timeouts.
 const REFRESH_CLAIM: chrono::Duration = chrono::Duration::seconds(300);
+/// The longest connection error kept, as the `last_error` column allows.
+pub const MAX_CONNECTION_ERROR_CHARS: usize = 1024;
+/// The device user code length the `device_user_code` column allows.
+pub const MAX_DEVICE_USER_CODE_CHARS: usize = 128;
+/// The verification link length the `device_verification_uri` column allows.
+pub const MAX_DEVICE_VERIFICATION_URI_CHARS: usize = 2048;
+/// The polling intervals the `device_interval_seconds` column allows.
+pub const DEVICE_INTERVAL_SECONDS: std::ops::RangeInclusive<i32> = 1..=3600;
 
 /// A connection claimed for a token refresh or device-code poll. While the
 /// claim is live no other worker refreshes the same connection, so a
@@ -429,7 +437,7 @@ impl ConnectionRefresh {
     /// (`revoked`) needs an operator to reconnect; other failures keep the
     /// connection usable for a later attempt.
     pub async fn fail(mut self, message: &str, revoked: bool) -> Result<(), RepositoryError> {
-        let message: String = message.chars().take(1024).collect();
+        let message: String = message.chars().take(MAX_CONNECTION_ERROR_CHARS).collect();
         let (workspace_id, id, claim) = (self.workspace_id, self.credentials.id, self.claim);
         self.settle(sqlx::query("UPDATE extension_connections SET status=CASE WHEN $4 THEN 'failed' ELSE status END,last_error=$3,access_token_ciphertext=CASE WHEN $4 THEN NULL ELSE access_token_ciphertext END,refresh_claim=NULL,refresh_claimed_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_claim=$5")
             .bind(workspace_id).bind(id).bind(message).bind(revoked).bind(claim))
@@ -444,7 +452,7 @@ impl ConnectionRefresh {
         mut self,
         message: &str,
     ) -> Result<(), RepositoryError> {
-        let message: String = message.chars().take(1024).collect();
+        let message: String = message.chars().take(MAX_CONNECTION_ERROR_CHARS).collect();
         let (workspace_id, id, claim) = (self.workspace_id, self.credentials.id, self.claim);
         self.settle(sqlx::query("UPDATE extension_connections SET device_code_ciphertext=NULL,device_user_code=NULL,device_verification_uri=NULL,device_expires_at=NULL,device_interval_seconds=NULL,device_polled_at=NULL,status=CASE WHEN status IN ('active','revoked') THEN status ELSE 'failed' END,last_error=$3,refresh_claim=NULL,refresh_claimed_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_claim=$4")
             .bind(workspace_id).bind(id).bind(message).bind(claim))
@@ -828,7 +836,7 @@ impl AttricatRepository {
         let updated = sqlx::query_as(&format!("UPDATE extension_connections SET device_code_ciphertext=$3,device_user_code=$4,device_verification_uri=$5,device_expires_at=$6,device_interval_seconds=$7,device_polled_at=NULL,status=CASE WHEN status='active' AND (access_token_ciphertext IS NOT NULL OR refresh_token_ciphertext IS NOT NULL) THEN 'active' ELSE 'pending_authorization' END,last_error=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}"))
             .bind(self.workspace_id()).bind(current.id).bind(device_code)
             .bind(&authorization.user_code).bind(&authorization.verification_uri)
-            .bind(authorization.expires_at).bind(authorization.interval_seconds.clamp(1, 3600))
+            .bind(authorization.expires_at).bind(authorization.interval_seconds.clamp(*DEVICE_INTERVAL_SECONDS.start(), *DEVICE_INTERVAL_SECONDS.end()))
             .fetch_one(&mut *transaction).await?;
         self.write_audit_event(&mut transaction).await?;
         transaction.commit().await?;
@@ -894,7 +902,7 @@ impl AttricatRepository {
         connection: &str,
         message: &str,
     ) -> Result<(), RepositoryError> {
-        let message: String = message.chars().take(1024).collect();
+        let message: String = message.chars().take(MAX_CONNECTION_ERROR_CHARS).collect();
         sqlx::query("UPDATE extension_connections SET status=CASE WHEN status IN ('active','revoked') THEN status ELSE 'failed' END,last_error=$4,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3")
             .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(message)
             .execute(&self.pool).await?;

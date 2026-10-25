@@ -24,7 +24,8 @@ use ring::rand::{SecureRandom, SystemRandom};
 
 use super::*;
 use crate::repository::{
-    ConnectionCredentials, DeviceAuthorization, ExtensionConnection, IssuedTokens,
+    ConnectionCredentials, DEVICE_INTERVAL_SECONDS, DeviceAuthorization, ExtensionConnection,
+    IssuedTokens, MAX_DEVICE_USER_CODE_CHARS, MAX_DEVICE_VERIFICATION_URI_CHARS,
 };
 
 /// A cached access token is refreshed this long before it expires, or half
@@ -32,6 +33,14 @@ use crate::repository::{
 const TOKEN_EXPIRY_SKEW: TimeDelta = TimeDelta::seconds(60);
 /// The shortest lifetime a token response's `expires_in` is taken to state.
 const MIN_TOKEN_LIFETIME_SECONDS: i64 = 30;
+/// Access tokens claiming a longer lifetime are refreshed after a year.
+const MAX_TOKEN_LIFETIME_SECONDS: i64 = 365 * 24 * 60 * 60;
+/// A device authorization lasts this long when the provider does not say.
+const DEFAULT_DEVICE_AUTHORIZATION_SECONDS: i64 = 10 * 60;
+/// Device authorizations claiming a longer lifetime expire after a day.
+const MAX_DEVICE_AUTHORIZATION_SECONDS: i64 = 24 * 60 * 60;
+/// The device polling interval when the provider does not say (RFC 8628).
+const DEFAULT_DEVICE_INTERVAL_SECONDS: i64 = 5;
 /// How soon a caller waiting for another worker's refresh first rechecks
 /// it; the wait doubles up to [`REFRESH_WAIT_MAX_STEP`].
 const REFRESH_WAIT_STEP: std::time::Duration = std::time::Duration::from_millis(200);
@@ -360,13 +369,13 @@ pub async fn start_device_authorization(
         let expires_in = body
             .get("expires_in")
             .and_then(Value::as_i64)
-            .unwrap_or(600)
-            .clamp(1, 86_400);
+            .unwrap_or(DEFAULT_DEVICE_AUTHORIZATION_SECONDS)
+            .clamp(1, MAX_DEVICE_AUTHORIZATION_SECONDS);
         // The operator is shown the code and follows the link, so both must be
         // short and the link plain http(s).
         let link = |name: &str| {
             text(name).ok().filter(|uri| {
-                uri.len() <= 2048
+                uri.len() <= MAX_DEVICE_VERIFICATION_URI_CHARS
                     && url::Url::parse(uri)
                         .is_ok_and(|url| matches!(url.scheme(), "https" | "http"))
             })
@@ -374,7 +383,7 @@ pub async fn start_device_authorization(
         let invalid =
             || TokenError::Rejected("the provider's device authorization is invalid".into());
         let user_code = text("user_code")?;
-        if user_code.is_empty() || user_code.len() > 128 {
+        if user_code.is_empty() || user_code.len() > MAX_DEVICE_USER_CODE_CHARS {
             return Err(invalid());
         }
         let authorization = DeviceAuthorization {
@@ -387,8 +396,11 @@ pub async fn start_device_authorization(
             interval_seconds: body
                 .get("interval")
                 .and_then(Value::as_i64)
-                .unwrap_or(5)
-                .clamp(1, 3600) as i32,
+                .unwrap_or(DEFAULT_DEVICE_INTERVAL_SECONDS)
+                .clamp(
+                    i64::from(*DEVICE_INTERVAL_SECONDS.start()),
+                    i64::from(*DEVICE_INTERVAL_SECONDS.end()),
+                ) as i32,
         };
         repository
             .record_extension_device_authorization(
@@ -591,7 +603,10 @@ async fn token_request(
         .and_then(|value| value.as_i64().or_else(|| value.as_str()?.parse().ok()))
         .filter(|seconds| *seconds > 0)
         .map(|seconds| {
-            Utc::now() + TimeDelta::seconds(seconds.clamp(MIN_TOKEN_LIFETIME_SECONDS, 365 * 86_400))
+            Utc::now()
+                + TimeDelta::seconds(
+                    seconds.clamp(MIN_TOKEN_LIFETIME_SECONDS, MAX_TOKEN_LIFETIME_SECONDS),
+                )
         });
     Ok(IssuedTokens {
         access_token,
