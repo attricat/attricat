@@ -97,6 +97,17 @@ light and dark modes.
   accessible names. Codes are identifiers and stay untranslated.
   `lexiconCountNoun` needs the raw name, so pass it unresolved.
 
+## API errors
+
+Show an API failure by its `code`, not its `message`:
+
+- Translate the code as `apiErrors.<code>` in both `en.json` and `pl.json`,
+  interpolating fields from the error's `details` after validating them.
+- Never render `ApiRequestError.message` directly. It is English, meant for
+  the CLI and agents, and is only the fallback for a code without a
+  translation.
+- A new backend error code ships with both translations.
+
 ## Timestamps
 
 - The API stores and returns instants in UTC. Render every instant through `src/time`: `<Timestamp value={iso} />` in JSX, or `useInstantFormat()` where only a string fits (for example a tooltip title or accessible label). Do not call `toLocaleString`, `toLocaleDateString`, `toLocaleTimeString`, or `Intl.DateTimeFormat` elsewhere; ESLint rejects them outside `src/time`.

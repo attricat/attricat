@@ -96,10 +96,12 @@ Never write a domain value as a bare literal in more than one place. Give it
 one name and refer to that name everywhere:
 
 - Closed sets (permission codes, attribute value types, run and installation
-  states, resource kinds) are enums in the crate that owns the concept, with
-  `as_str` and `TryFrom<String>`. Decode database rows into them with
-  `#[sqlx(try_from = "String")]` and `match` exhaustively instead of comparing
-  strings.
+  states, resource kinds) are enums declared with `attricat_domain::code_enum!`,
+  which provides `as_str`, `parse`, `TryFrom<String>`, serde and `codes()` for
+  JSON Schema lists. Shared concepts live in `attricat_domain` (`permissions`,
+  `value_type`, `states`, `attribute_options`). Decode database rows into them
+  with `#[sqlx(try_from = "String")]`, scalar and tuple queries with
+  `stored_code`, and `match` exhaustively instead of comparing strings.
 - Single values (limits, sizes, durations, default codes, cache-control
   headers) are `const`s named for what they bound, next to related constants,
   with a doc comment when the reason is not obvious. Write durations in their
@@ -110,6 +112,24 @@ one name and refer to that name everywhere:
 Literals are fine where they are the wire format itself: JSON keys, JSON
 Schema keywords, SQL text, and a value used exactly once whose meaning is
 plain from its surroundings.
+
+## Error codes
+
+Clients and agents act on an error's `code`, and the web app translates
+errors by it, so a code is part of the API contract:
+
+- Every failure a client can see has a code in `ErrorCode`
+  (`crates/repository/src/repository/error_codes.rs`), including the HTTP
+  layer's transport codes. After adding one, run `just contracts` to refresh
+  `contracts/api-error-codes.json` and add its translation to both web
+  locales.
+- `message` is English for the CLI, agents and logs, and may change. Never
+  localize it on the server.
+- Anything a translation needs to name (an attribute, a limit, a resource)
+  goes in `details` as structured fields, documented in [the API
+  reference](api.md#errors), not only in `message`.
+- Give a failure the web UI can trigger its own code. `invalid_input` is for
+  malformed requests the UI already prevents.
 
 ## Compile-time measurement
 

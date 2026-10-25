@@ -35,6 +35,13 @@ durations and status codes get one name (an enum or `const`) that every use
 refers to; see [Named values](docs/backend-architecture.md#named-values) and
 the TypeScript rule in [Frontend Conventions](docs/frontend.md#typescript).
 
+## Error codes
+
+Every client-visible failure has a code in the `ErrorCode` contract, with an
+English `message` and structured `details`; the web app translates it by
+code in both locales. See [Error codes](docs/backend-architecture.md#error-codes)
+and [API errors](docs/frontend.md#api-errors).
+
 ## Worktree development server
 
 Run `just setup` from the repository root before any other `just` recipe. It
