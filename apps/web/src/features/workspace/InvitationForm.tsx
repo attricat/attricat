@@ -1,13 +1,22 @@
 import { useForm } from '@tanstack/react-form';
 import { useQueryClient } from '@tanstack/react-query';
-import { Button, Paper, Stack, TextField, Typography } from '@mui/material';
-import { useRef, useState } from 'react';
+import {
+  Alert,
+  Button,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { errorMessage } from '../../api/errors';
+import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 import {
   createInvitation,
+  createWorkspaceUser,
   ensureActiveScopeTarget,
   selectedScopeTarget,
+  type ScopeType,
 } from './api';
 import { workspaceScope } from './constants';
 import { ExpiryField, RoleSelectField } from './InvitationFormFields';
@@ -15,12 +24,28 @@ import { parseFutureExpiry } from './invitationExpiry';
 import { workspaceQueryKeys } from './queryKeys';
 import { ScopeFields } from './ScopeFields';
 
-export const InviteExistingUserForm = ({
+type InvitationValues = {
+  email: string;
+  display_name: string;
+  role_id: string;
+  scope_type: ScopeType;
+  scope_target_id: string;
+  expires_at: string;
+};
+
+/**
+ * Invites someone to the workspace with a role. With `createUser` the
+ * account is created first, optionally named; otherwise the email must
+ * belong to an existing user.
+ */
+export const InvitationForm = ({
+  createUser = false,
   onCreated,
   onError,
   roles,
   workspaceId,
 }: {
+  createUser?: boolean;
   onCreated: () => unknown;
   onError: (message?: string) => void;
   roles?: { code: string; id: string }[];
@@ -28,24 +53,12 @@ export const InviteExistingUserForm = ({
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const inviting = useRef(false);
-  const [isInviting, setIsInviting] = useState(false);
-  const form = useForm({
-    defaultValues: {
-      email: '',
-      role_id: '',
-      scope_type: workspaceScope,
-      scope_target_id: workspaceId ?? '',
-      expires_at: '',
-    },
-    onSubmit: async ({ value }) => {
-      if (inviting.current) return;
-      inviting.current = true;
-      setIsInviting(true);
-      onError(undefined);
-      try {
-        const expiresAt = parseFutureExpiry(value.expires_at);
-        const input = ensureActiveScopeTarget(
+  const invite = useExclusiveMutation({
+    mutationFn: async (value: InvitationValues) => {
+      const expiresAt = parseFutureExpiry(value.expires_at);
+      const input = {
+        email: value.email,
+        ...ensureActiveScopeTarget(
           {
             role_id: value.role_id,
             scope_type: value.scope_type,
@@ -59,26 +72,37 @@ export const InviteExistingUserForm = ({
           client.getQueryData(
             workspaceQueryKeys.grantTargets(value.scope_type),
           ),
-        );
-        await createInvitation({
-          email: value.email,
+        ),
+        expires_at: expiresAt.toISOString(),
+      };
+      if (createUser)
+        await createWorkspaceUser({
           ...input,
-          expires_at: expiresAt.toISOString(),
+          display_name: value.display_name || undefined,
         });
-        void onCreated();
-        form.reset();
-      } catch (reason) {
-        onError(
-          reason instanceof Error
-            ? errorMessage(reason)
-            : t('workspace.createInvitationFailed'),
-        );
-      } finally {
-        inviting.current = false;
-        setIsInviting(false);
-      }
+      else await createInvitation(input);
     },
+    onMutate: () => onError(undefined),
+    onSuccess: () => {
+      void onCreated();
+      form.reset();
+    },
+    onError: (reason) => onError(errorMessage(reason)),
   });
+  const form = useForm({
+    defaultValues: {
+      email: '',
+      display_name: '',
+      role_id: '',
+      scope_type: workspaceScope,
+      scope_target_id: workspaceId ?? '',
+      expires_at: '',
+    } as InvitationValues,
+    onSubmit: ({ value }) => invite.submit(value),
+  });
+  const title = createUser
+    ? t('workspace.createUserInvite')
+    : t('workspace.inviteExisting');
   return (
     <Paper
       component="form"
@@ -89,7 +113,10 @@ export const InviteExistingUserForm = ({
       sx={{ p: 2 }}
     >
       <Stack spacing={2}>
-        <Typography variant="h6">{t('workspace.inviteExisting')}</Typography>
+        <Typography variant="h6">{title}</Typography>
+        {createUser && (
+          <Alert severity="info">{t('workspace.inviteEmailInfo')}</Alert>
+        )}
         <form.Field name="email">
           {(field) => (
             <TextField
@@ -101,6 +128,17 @@ export const InviteExistingUserForm = ({
             />
           )}
         </form.Field>
+        {createUser && (
+          <form.Field name="display_name">
+            {(field) => (
+              <TextField
+                label={t('workspace.displayNameOptional')}
+                onChange={(event) => field.handleChange(event.target.value)}
+                value={field.state.value}
+              />
+            )}
+          </form.Field>
+        )}
         <form.Field name="role_id">
           {(field) => (
             <RoleSelectField
@@ -131,8 +169,10 @@ export const InviteExistingUserForm = ({
             />
           )}
         </form.Field>
-        <Button disabled={isInviting} type="submit" variant="contained">
-          {t('workspace.createInvitation')}
+        <Button disabled={invite.isPending} type="submit" variant="contained">
+          {createUser
+            ? t('workspace.createUserInvite')
+            : t('workspace.createInvitation')}
         </Button>
       </Stack>
     </Paper>

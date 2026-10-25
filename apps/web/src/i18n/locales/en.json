@@ -1649,8 +1649,6 @@
     "createCustomRole": "Create custom role",
     "createRole": "Create role",
     "invitationExpiry": "Invitation expiry must be in the future.",
-    "createInvitationFailed": "Could not create invitation",
-    "createUserFailed": "Could not create user",
     "notAuthorizedInvitations": "You are not authorized to manage invitations.",
     "expires": "expires <timestamp/>",
     "createUserInvite": "Create user and invite",

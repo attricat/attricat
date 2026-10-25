@@ -3,9 +3,8 @@ import { Alert, Stack } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listAssignableRoles, listInvitations } from './api';
-import { CreateUserInviteForm } from './CreateUserInviteForm';
 import { InvitationList } from './InvitationList';
-import { InviteExistingUserForm } from './InviteExistingUserForm';
+import { InvitationForm } from './InvitationForm';
 import { principalQueryKeys } from '../principals/queryKeys';
 import { workspaceQueryKeys } from './queryKeys';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -52,13 +51,14 @@ export const WorkspaceInvitationsSection = ({
         onChanged={refresh}
         onError={setError}
       />
-      <CreateUserInviteForm
+      <InvitationForm
+        createUser
         onCreated={refresh}
         onError={setError}
         roles={roles.data}
         workspaceId={workspaceId}
       />
-      <InviteExistingUserForm
+      <InvitationForm
         onCreated={refresh}
         onError={setError}
         roles={roles.data}

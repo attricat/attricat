@@ -1719,8 +1719,6 @@
     "createCustomRole": "Utwórz własną rolę",
     "createRole": "Utwórz rolę",
     "invitationExpiry": "Data wygaśnięcia zaproszenia musi przypadać w przyszłości.",
-    "createInvitationFailed": "Nie udało się utworzyć zaproszenia",
-    "createUserFailed": "Nie udało się utworzyć użytkownika",
     "notAuthorizedInvitations": "Nie masz uprawnień do zarządzania zaproszeniami.",
     "expires": "wygasa <timestamp/>",
     "createUserInvite": "Utwórz użytkownika i zaproś",
