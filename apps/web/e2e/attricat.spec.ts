@@ -278,9 +278,8 @@ test('rejects a browser create that violates a blueprint schema', async ({
   await page.getByRole('button', { name: 'Load blueprint' }).click();
   await page.getByLabel('title').fill('no');
 
-  await expect(
-    page.getByText('Does not meet the schema requirements.'),
-  ).toBeVisible();
+  // The field names the schema rule the value fails.
+  await expect(page.getByText('Enter at least 3 characters.')).toBeVisible();
   await page.getByRole('button', { name: 'Create record' }).click();
   await expect(page).toHaveURL(/\/records\/new(\?|$)/);
   expect(createRequests).toBe(0);
@@ -304,7 +303,8 @@ test('creates a context from context management', async ({ page }) => {
 
   await expect(page).toHaveURL(/\/manage\/contexts$/);
   await expect(page.getByText(code)).toBeVisible();
-  await expect(page.getByText('{"market":"US"}')).toBeVisible();
+  // JSON values render formatted.
+  await expect(page.getByText('{ "market": "US" }')).toBeVisible();
 });
 
 test('navigates outgoing, hierarchical, and incoming relationships', async ({
