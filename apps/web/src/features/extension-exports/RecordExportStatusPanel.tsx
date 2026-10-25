@@ -29,6 +29,7 @@ import type {
   ExportDestination,
   ExportMapping,
 } from './schemas';
+import { errorMessage } from '../../api/errors';
 
 type Row = {
   key: string;
@@ -135,7 +136,7 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
     return <CircularProgress aria-label={t('extensionExports.loading')} />;
   }
   if (status.error) {
-    return <Alert severity="error">{status.error.message}</Alert>;
+    return <Alert severity="error">{errorMessage(status.error)}</Alert>;
   }
   const rows = exportRows(
     status.data.statuses,
@@ -155,7 +156,7 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
     <Box>
       {retry.error && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {retry.error.message}
+          {errorMessage(retry.error)}
         </Alert>
       )}
       {!!retry.data?.job_errors.length && (
@@ -202,6 +203,8 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
                     )}
                     {mapping?.error && (
                       <Typography color="error" variant="caption">
+                        {/* The extension's own recorded push error, not a failed request. */}
+                        {/* eslint-disable-next-line no-restricted-syntax */}
                         {[mapping.error.code, mapping.error.message]
                           .filter(Boolean)
                           .join(': ')}

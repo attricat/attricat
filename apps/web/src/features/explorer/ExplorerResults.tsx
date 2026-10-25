@@ -10,6 +10,7 @@ import type { OpenRecordPanel } from './ExplorerTableCells';
 import type { ExplorerSearch } from './search';
 import type { ExplorerData } from './useExplorerData';
 import { useExplorerSelection } from './useExplorerSelection';
+import { errorMessage } from '../../api/errors';
 
 type Props = {
   data: ExplorerData;
@@ -83,7 +84,7 @@ export const ExplorerResults = ({
     <>
       {results.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {results.error.message}
+          {errorMessage(results.error)}
         </Alert>
       )}
       {results.data && (

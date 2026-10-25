@@ -20,6 +20,7 @@ import {
   staleAfterLabelId,
   staleAfterSelectMinWidth,
 } from './constants';
+import { errorMessage } from '../../api/errors';
 
 type Props = {
   staleAfterDays: number;
@@ -116,7 +117,7 @@ const DataHealthControlsForm = ({
       </Stack>
       {refreshError && (
         <Alert severity="error" sx={{ mt: 2 }}>
-          {refreshError.message}
+          {errorMessage(refreshError)}
         </Alert>
       )}
     </>

@@ -15,6 +15,7 @@ import {
 import { maximumTitleBytes } from './constants';
 import { updateConversationTitle } from './api';
 import { agentQueryKeys } from './queryKeys';
+import { errorMessage } from '../../api/errors';
 
 export const RenameConversationDialog = ({
   conversationId,
@@ -93,7 +94,7 @@ export const RenameConversationDialog = ({
           </form.Field>
           {rename.error && (
             <Alert severity="error" sx={{ mt: 2 }}>
-              {rename.error.message}
+              {errorMessage(rename.error)}
             </Alert>
           )}
         </DialogContent>

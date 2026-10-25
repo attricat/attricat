@@ -20,6 +20,7 @@ import { agentQueryKeys } from './queryKeys';
 import { useMessageAttachments } from './useMessageAttachments';
 import { AgentIcon } from '../../components/systemIcons';
 import { useInitialFocus } from '../../components/initialFocus';
+import { errorMessage } from '../../api/errors';
 
 export const NewConversationPage = () => {
   const { t } = useTranslation();
@@ -123,7 +124,7 @@ export const NewConversationPage = () => {
             severity="error"
             sx={{ mt: 2 }}
           >
-            {t('agents.messageNotSent')}: {start.error.message}
+            {t('agents.messageNotSent')}: {errorMessage(start.error)}
           </Alert>
         )}
       </Box>

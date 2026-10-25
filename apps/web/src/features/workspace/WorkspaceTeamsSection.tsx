@@ -34,6 +34,7 @@ import type { DirectoryUser, Team } from '../principals/schemas';
 import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
 import { EmptyState } from '../../components/EmptyState';
 import { TeamIcon } from '../../components/systemIcons';
+import { errorMessage } from '../../api/errors';
 
 type Editing = { team: Team | null } | null;
 /** The team keeps its name in the dialog while it fades out after closing. */
@@ -88,7 +89,7 @@ const TeamDialog = ({
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             {save.isError && (
-              <Alert severity="error">{save.error.message}</Alert>
+              <Alert severity="error">{errorMessage(save.error)}</Alert>
             )}
             <form.Field name="name">
               {(field) => (
@@ -193,9 +194,11 @@ export const WorkspaceTeamsSection = ({
       <Typography color="text.secondary" variant="body2">
         {t('workspace.teamsDescription')}
       </Typography>
-      {teams.isError && <Alert severity="error">{teams.error.message}</Alert>}
+      {teams.isError && (
+        <Alert severity="error">{errorMessage(teams.error)}</Alert>
+      )}
       {directory.isError && (
-        <Alert severity="error">{directory.error.message}</Alert>
+        <Alert severity="error">{errorMessage(directory.error)}</Alert>
       )}
       <Paper>
         {teams.isPending && <LinearProgress aria-label={t('app.loading')} />}
@@ -276,7 +279,7 @@ export const WorkspaceTeamsSection = ({
           </DialogContentText>
           {remove.isError && (
             <Alert severity="error" sx={{ mt: 2 }}>
-              {remove.error.message}
+              {errorMessage(remove.error)}
             </Alert>
           )}
         </DialogContent>

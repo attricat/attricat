@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { JsonBlock } from '../../components/JsonValue';
 import { previewExport } from './api';
 import type { ExportDestination } from './schemas';
+import { errorMessage } from '../../api/errors';
 
 /**
  * The payload a destination would receive for one record, with the issues
@@ -59,7 +60,7 @@ export const ExportPreviewDialog = ({
           <CircularProgress aria-label={t('extensionExports.previewLoading')} />
         )}
         {preview.error && (
-          <Alert severity="error">{preview.error.message}</Alert>
+          <Alert severity="error">{errorMessage(preview.error)}</Alert>
         )}
         {preview.data && (
           <Stack spacing={2}>

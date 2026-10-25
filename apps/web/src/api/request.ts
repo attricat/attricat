@@ -38,6 +38,8 @@ export const apiRequestError = (
   const error = apiErrorSchema.safeParse(body);
   return new ApiRequestError(
     status,
+    // The wire message itself; errorMessage translates the resulting error.
+    // eslint-disable-next-line no-restricted-syntax
     error.success ? error.data.error.message : fallbackMessage,
     error.success ? error.data.error.code : undefined,
     error.success ? error.data.error.details : undefined,

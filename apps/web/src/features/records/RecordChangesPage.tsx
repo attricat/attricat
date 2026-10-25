@@ -14,6 +14,7 @@ import { recordFormOptions } from './queryOptions';
 import type { RecordAuditChange } from './api';
 import { recordQueryKeys } from './queryKeys';
 import { BlueprintLink } from '../blueprints/BlueprintLink';
+import { errorMessage } from '../../api/errors';
 
 type EventChanges = [RecordAuditChange, ...RecordAuditChange[]];
 
@@ -64,7 +65,7 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
       )}
       {changes.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {changes.error.message}
+          {errorMessage(changes.error)}
         </Alert>
       )}
       {changes.data && (
@@ -77,7 +78,7 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
           )}
           {changes.isFetchNextPageError && (
             <Alert severity="error" sx={{ mb: 2 }}>
-              {changes.error.message}
+              {errorMessage(changes.error)}
             </Alert>
           )}
           {changes.hasNextPage && (

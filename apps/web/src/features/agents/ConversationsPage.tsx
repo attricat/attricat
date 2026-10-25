@@ -29,6 +29,7 @@ import { agentQueryKeys } from './queryKeys';
 import { isTitlePending } from './titlePolling';
 import { EmptyState } from '../../components/EmptyState';
 import { AgentIcon } from '../../components/systemIcons';
+import { errorMessage } from '../../api/errors';
 
 export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
   const { t } = useTranslation();
@@ -89,7 +90,7 @@ export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
       </Box>
       {conversations.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {conversations.error.message}
+          {errorMessage(conversations.error)}
         </Alert>
       )}
       <Paper sx={{ mt: 3 }}>

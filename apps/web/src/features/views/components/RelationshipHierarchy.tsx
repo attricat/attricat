@@ -11,6 +11,7 @@ import {
   VIEW_COMPONENT_IDS,
   VIEW_COMPONENT_VERSION,
 } from '../constants';
+import { errorMessage } from '../../../api/errors';
 
 export const RelationshipHierarchy = ({
   attribute,
@@ -61,7 +62,9 @@ export const RelationshipHierarchy = ({
   const failedHierarchy = hierarchies.find((hierarchy) => hierarchy.isError);
   if (failedHierarchy)
     return (
-      <Typography color="error">{failedHierarchy.error.message}</Typography>
+      <Typography color="error">
+        {errorMessage(failedHierarchy.error)}
+      </Typography>
     );
   const paths = hierarchies.flatMap(
     (hierarchy) => hierarchy.data?.paths ?? [hierarchy.data?.items ?? []],

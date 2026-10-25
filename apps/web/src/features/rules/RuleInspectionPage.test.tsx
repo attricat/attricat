@@ -274,7 +274,7 @@ describe('RuleInspectionPage', () => {
     );
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain(
-      'the latest dry run found 3 existing violations',
+      'Records already violate this rule (3).',
     );
     await user.click(
       within(alert).getByRole('button', { name: 'Enable anyway' }),

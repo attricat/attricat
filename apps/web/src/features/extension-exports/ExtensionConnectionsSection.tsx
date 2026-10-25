@@ -34,6 +34,7 @@ import {
 import { ConnectionDialog } from './ConnectionDialog';
 import { extensionExportQueryKeys } from './queryKeys';
 import type { ExtensionConnection, ManifestExports } from './schemas';
+import { errorMessage } from '../../api/errors';
 
 const statusColors = {
   active: 'success',
@@ -159,7 +160,7 @@ const ConnectionRow = ({
       )}
       {error && (
         <Alert severity="error" sx={{ mt: 1 }}>
-          {error.message}
+          {errorMessage(error)}
         </Alert>
       )}
       {connection.device_user_code && connection.device_verification_uri && (
@@ -349,7 +350,7 @@ export const ExtensionConnectionsSection = ({
         {t('extensionExports.connectionsDescription')}
       </Typography>
       {connections.error && (
-        <Alert severity="error">{connections.error.message}</Alert>
+        <Alert severity="error">{errorMessage(connections.error)}</Alert>
       )}
       {connections.data?.length === 0 && (
         <EmptyState

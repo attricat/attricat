@@ -22,6 +22,7 @@ import {
   STATUS_PUBLISHED,
 } from './constants';
 import { reusableAttributeQueryKeys } from './queryKeys';
+import { errorMessage } from '../../api/errors';
 
 export const ReusableAttributeGroupDialog = ({
   attributes,
@@ -156,7 +157,7 @@ export const ReusableAttributeGroupDialog = ({
             </form.Field>
             {(validationError || save.error) && (
               <Alert severity="error">
-                {validationError ?? save.error?.message}
+                {validationError ?? errorMessage(save.error)}
               </Alert>
             )}
           </Stack>

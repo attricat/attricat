@@ -38,6 +38,7 @@ import {
   resultsTableHeight,
 } from './constants';
 import type { BrowseBy } from './search';
+import { errorMessage } from '../../api/errors';
 
 type Props = {
   blueprint: string;
@@ -302,7 +303,7 @@ const BrowseLevel = ({
   if (children.isError)
     return (
       <Typography color="error" sx={{ pl: indent + 1, py: 1 }} variant="body2">
-        {children.error.message}
+        {errorMessage(children.error)}
       </Typography>
     );
   // Pages arrive in ID order; show each level alphabetically. A node on the

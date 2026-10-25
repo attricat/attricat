@@ -11,6 +11,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { duplicateRecord, type AttricatRecord } from '../api';
 import { invalidateRecordSearches } from '../invalidateRecord';
+import { errorMessage } from '../../../api/errors';
 
 /** Confirms copying a record, then reports the copy. */
 export const DuplicateRecordDialog = ({
@@ -44,7 +45,7 @@ export const DuplicateRecordDialog = ({
         <Typography>{t('records.duplicateRecordConfirmation')}</Typography>
         {duplication.isError && (
           <Alert severity="error" sx={{ mt: 2 }}>
-            {duplication.error.message}
+            {errorMessage(duplication.error)}
           </Alert>
         )}
       </DialogContent>

@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { createConnection, type NewConnection } from './api';
 import type { ConnectionGrantType } from './constants';
 import type { ManifestExports } from './schemas';
+import { errorMessage } from '../../api/errors';
 
 type ConnectionKind = NonNullable<
   ManifestExports['server']
@@ -120,7 +121,7 @@ export const ConnectionDialog = ({
           }}
         >
           {create.error && (
-            <Alert severity="error">{create.error.message}</Alert>
+            <Alert severity="error">{errorMessage(create.error)}</Alert>
           )}
           <TextField
             label={t('extensionExports.connectionKind')}

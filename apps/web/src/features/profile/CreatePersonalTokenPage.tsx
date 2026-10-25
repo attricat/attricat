@@ -38,6 +38,7 @@ import { SecretDialog } from './SecretDialog';
 import { createToken, listTokenPermissions } from './api';
 import { profileQueryKeys } from './queryKeys';
 import { useInitialFocus } from '../../components/initialFocus';
+import { errorMessage } from '../../api/errors';
 
 const permissionGroup = (code: string) => code.split('.')[0] ?? code;
 
@@ -160,7 +161,7 @@ export const CreatePersonalTokenPage = () => {
         </Stack>
         {error && <Alert severity="error">{error}</Alert>}
         {permissions.isError && (
-          <Alert severity="error">{permissions.error.message}</Alert>
+          <Alert severity="error">{errorMessage(permissions.error)}</Alert>
         )}
         <ProfileSection
           description={t('profile.tokenDetailsDescription')}

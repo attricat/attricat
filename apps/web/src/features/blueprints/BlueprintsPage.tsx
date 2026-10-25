@@ -29,6 +29,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { BlueprintIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
 import { useAccess, useCan } from '../auth/useCan';
+import { errorMessage } from '../../api/errors';
 
 export const BlueprintsPage = () => {
   const { t } = useTranslation();
@@ -87,7 +88,7 @@ export const BlueprintsPage = () => {
       )}
       {blueprints.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {blueprints.error.message}
+          {errorMessage(blueprints.error)}
         </Alert>
       )}
       {blueprints.data && (

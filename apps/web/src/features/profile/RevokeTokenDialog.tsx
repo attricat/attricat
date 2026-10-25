@@ -12,6 +12,7 @@ import { useId } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { revokeToken, type PersonalToken } from './api';
 import { profileQueryKeys } from './queryKeys';
+import { errorMessage } from '../../api/errors';
 
 export const RevokeTokenDialog = ({
   onClose,
@@ -42,7 +43,7 @@ export const RevokeTokenDialog = ({
       <DialogContent>
         {revoke.isError && (
           <Alert severity="error" sx={{ mb: 4 }}>
-            {t('profile.revokeFailed', { message: revoke.error.message })}
+            {t('profile.revokeFailed', { message: errorMessage(revoke.error) })}
           </Alert>
         )}
         <DialogContentText>

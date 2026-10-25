@@ -11,6 +11,7 @@ import { workflowCapabilities } from './constants';
 import { workflowQueryKeys } from './queryKeys';
 import { WorkflowDefinitionForm } from './WorkflowDefinitionForm';
 import { WorkflowIcon } from '../../components/systemIcons';
+import { errorMessage } from '../../api/errors';
 
 export const WorkflowEditorPage = ({
   workflowId,
@@ -59,7 +60,7 @@ export const WorkflowEditorPage = ({
       />
       {source.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {source.error.message}
+          {errorMessage(source.error)}
         </Alert>
       )}
       <WorkflowDefinitionForm

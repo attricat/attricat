@@ -23,8 +23,12 @@ const interpolatedDetails = (details: unknown) =>
  * details and the server's English `message`; the message itself is only the
  * fallback for a code without a translation.
  */
-export const errorMessage = (error: unknown): string | undefined => {
-  if (error === null || error === undefined) return undefined;
+export function errorMessage(error: Error): string;
+export function errorMessage(
+  error: Error | null | undefined,
+): string | undefined;
+export function errorMessage(error: Error | null | undefined) {
+  if (!error) return undefined;
   if (error instanceof ApiRequestError && error.code) {
     const key = `${API_ERROR_KEY_PREFIX}.${error.code}`;
     if (i18n.exists(key))
@@ -35,5 +39,5 @@ export const errorMessage = (error: unknown): string | undefined => {
     if (import.meta.env.DEV)
       console.warn(`No translation for API error code ${error.code}`);
   }
-  return error instanceof Error ? error.message : String(error);
-};
+  return error.message;
+}

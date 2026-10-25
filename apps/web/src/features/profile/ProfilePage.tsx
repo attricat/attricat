@@ -29,6 +29,7 @@ import {
   profileSkeletonWidth,
   profileValueSkeletonWidth,
 } from './constants';
+import { errorMessage } from '../../api/errors';
 
 const AccountDetail = ({
   label,
@@ -73,7 +74,7 @@ export const ProfilePage = () => {
   return (
     <Stack spacing={6}>
       {session.isError && (
-        <Alert severity="error">{session.error.message}</Alert>
+        <Alert severity="error">{errorMessage(session.error)}</Alert>
       )}
       <ProfileSection
         description={t('profile.accountDescription')}

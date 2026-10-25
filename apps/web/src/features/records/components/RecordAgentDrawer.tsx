@@ -24,6 +24,7 @@ import {
   CONVERSATION_TITLE_POLL_INTERVAL,
   RECORD_DRAWER_WIDTH,
 } from '../constants';
+import { errorMessage } from '../../../api/errors';
 
 export const RecordAgentDrawer = ({
   recordId,
@@ -152,10 +153,12 @@ export const RecordAgentDrawer = ({
               </Button>
             }
           >
-            {conversations.error.message}
+            {errorMessage(conversations.error)}
           </Alert>
         )}
-        {create.error && <Alert severity="error">{create.error.message}</Alert>}
+        {create.error && (
+          <Alert severity="error">{errorMessage(create.error)}</Alert>
+        )}
         {open && conversationId ? (
           <ConversationPanel
             key={conversationId}

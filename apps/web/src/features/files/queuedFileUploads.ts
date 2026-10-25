@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import type { NewFileAttributeValue } from '../records/api';
 import { uploadStagedFiles } from './api';
 import type { PendingFile } from './usePendingFileUploads';
+import { errorMessage } from '../../api/errors';
 
 /** Files chosen before their record exists, keyed by attribute code. */
 export type QueuedFiles = Readonly<Record<string, readonly PendingFile[]>>;
@@ -99,7 +100,8 @@ export const useQueuedFileUploads = (scope: string | undefined) => {
           // Staged files read as ready again and can still be removed.
           change(item.id, { progress: 0, stagedFileId });
         } catch (error) {
-          const message = error instanceof Error ? error.message : undefined;
+          const message =
+            error instanceof Error ? errorMessage(error) : undefined;
           failed.push({ filename: item.file.name, message });
           change(item.id, { error: message ?? uploadFailed, progress: 0 });
         }

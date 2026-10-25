@@ -33,6 +33,7 @@ import { recordQueryKeys } from './queryKeys';
 import { invalidateRecord } from './invalidateRecord';
 import { useRecordLabels } from './useRecordLabels';
 import { attributeValueKinds } from './valueTypes';
+import { errorMessage } from '../../api/errors';
 
 export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
@@ -192,7 +193,7 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
       )}
       {preview.error && (
         <Alert severity="error" sx={{ mt: 4 }}>
-          {preview.error.message}
+          {errorMessage(preview.error)}
         </Alert>
       )}
       {preview.data && (

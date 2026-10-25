@@ -80,6 +80,13 @@ export default tseslint.config(
           message:
             'Render instants with <Timestamp> or useInstantFormat from src/time.',
         },
+        {
+          // A query's or mutation's error is shown translated by its code.
+          selector:
+            'MemberExpression[property.name="message"][object.type="MemberExpression"][object.property.name="error"]',
+          message:
+            'Show request failures with errorMessage() from src/api/errors, which translates API error codes.',
+        },
       ],
       'react-refresh/only-export-components': [
         'warn',

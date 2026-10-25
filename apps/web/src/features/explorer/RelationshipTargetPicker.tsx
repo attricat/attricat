@@ -12,6 +12,7 @@ import {
 import { dropdownOptionLabel, displayLabel } from '../records/recordDisplay';
 import { recordQueryKeys } from '../records/queryKeys';
 import { RelationshipTargetOption } from './RelationshipTargetOption';
+import { errorMessage } from '../../api/errors';
 
 type Props = {
   onSelectedIdsChange: (ids: string[]) => void;
@@ -107,7 +108,7 @@ export const RelationshipTargetPicker = ({
       )}
       {targets.isError && (
         <Typography color="error" variant="body2">
-          {targets.error.message}
+          {errorMessage(targets.error)}
         </Typography>
       )}
     </Stack>

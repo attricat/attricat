@@ -31,6 +31,7 @@ import {
 } from './languages';
 import { normalizeLexiconTerm } from './references';
 import { useLexiconMutations } from './useLexiconMutations';
+import { errorMessage } from '../../api/errors';
 
 /**
  * Adds or edits one translation. In edit mode the identity (key, context,
@@ -223,7 +224,7 @@ export const LexiconEntryDialog = ({
           </Stack>
           {save.error && (
             <Alert severity="error" sx={{ mt: 2 }}>
-              {save.error.message}
+              {errorMessage(save.error)}
             </Alert>
           )}
         </DialogContent>

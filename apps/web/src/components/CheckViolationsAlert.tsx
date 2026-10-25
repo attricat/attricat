@@ -7,6 +7,7 @@ import {
   type CheckViolation,
 } from '../api/checkViolations';
 import { useViolationText } from './useViolationText';
+import { errorMessage } from '../api/errors';
 
 type Props = {
   title: string;
@@ -56,7 +57,7 @@ export const ApiErrorAlert = ({
   if (!checks)
     return (
       <Alert action={action} severity="error" sx={sx}>
-        {error.message}
+        {errorMessage(error)}
       </Alert>
     );
   return (

@@ -8,6 +8,7 @@ import { fileCardinalities } from './constants';
 import { acceptsFile, pendingFileId } from './fileAcceptance';
 import { useQueuedFileUploadsContext } from './queuedFileUploads';
 import type { FileMetadata } from './schemas';
+import { errorMessage } from '../../api/errors';
 
 export type PendingFile = {
   file: File;
@@ -133,7 +134,7 @@ export const usePendingFileUploads = (options: Options) => {
             updatePending(item.id, {
               error:
                 error instanceof Error
-                  ? error.message
+                  ? errorMessage(error)
                   : t('files.uploadFailed'),
               progress: 0,
             });
@@ -167,7 +168,9 @@ export const usePendingFileUploads = (options: Options) => {
     } catch (error) {
       if (active.current)
         setErrors([
-          error instanceof Error ? error.message : t('files.updateFailed'),
+          error instanceof Error
+            ? errorMessage(error)
+            : t('files.updateFailed'),
         ]);
       await refresh();
       return false;

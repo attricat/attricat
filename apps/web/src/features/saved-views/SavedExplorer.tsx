@@ -6,6 +6,7 @@ import { Explorer } from '../explorer/Explorer';
 import type { ExplorerSearch } from '../explorer/search';
 import { getSavedView } from './api';
 import { savedViewQueryKeys } from './queryKeys';
+import { errorMessage } from '../../api/errors';
 
 // Memoized so that changes of the route that leave the search alone, such as
 // opening a record in the panel, do not re-render the results.
@@ -30,7 +31,8 @@ export const SavedExplorer = memo(function SavedExplorer({
   if (!id) return <Explorer search={search} />;
   if (view.isPending)
     return <CircularProgress aria-label={t('explorer.loadingSavedSearch')} />;
-  if (view.isError) return <Alert severity="error">{view.error.message}</Alert>;
+  if (view.isError)
+    return <Alert severity="error">{errorMessage(view.error)}</Alert>;
   return (
     <Explorer
       search={savedSearch ?? view.data.state}

@@ -27,6 +27,7 @@ import {
   maxBulkEditMaxRecords,
 } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
+import { errorMessage } from '../../api/errors';
 
 const AgentSettingsForm = ({ settings }: { settings: AgentSettings }) => {
   const { t } = useTranslation();
@@ -145,7 +146,9 @@ const AgentSettingsForm = ({ settings }: { settings: AgentSettings }) => {
         <Typography role="status" variant="body2">
           {notice}
         </Typography>
-        {save.isError && <Alert severity="error">{save.error.message}</Alert>}
+        {save.isError && (
+          <Alert severity="error">{errorMessage(save.error)}</Alert>
+        )}
       </Stack>
     </Box>
   );
@@ -178,7 +181,7 @@ export const WorkspaceAgentSection = ({
         <CircularProgress aria-label={t('workspace.loadingAgentSettings')} />
       )}
       {settings.isError && (
-        <Alert severity="error">{settings.error.message}</Alert>
+        <Alert severity="error">{errorMessage(settings.error)}</Alert>
       )}
       {settings.data && <AgentSettingsForm settings={settings.data} />}
     </Stack>

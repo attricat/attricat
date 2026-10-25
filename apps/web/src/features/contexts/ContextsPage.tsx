@@ -19,6 +19,7 @@ import { contextQueryKeys } from './queryKeys';
 import { EmptyState } from '../../components/EmptyState';
 import { ContextIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
+import { errorMessage } from '../../api/errors';
 
 export const ContextsPage = () => {
   const { t } = useTranslation();
@@ -53,7 +54,7 @@ export const ContextsPage = () => {
       )}
       {contexts.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {contexts.error.message}
+          {errorMessage(contexts.error)}
         </Alert>
       )}
       {contexts.data && (

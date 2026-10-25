@@ -18,6 +18,7 @@ import { ReusableAttributeGroupsTable } from './ReusableAttributeGroupsTable';
 import { ReusableAttributesTable } from './ReusableAttributesTable';
 import { ReusableAttributeIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
+import { errorMessage } from '../../api/errors';
 
 export const ReusableAttributesPage = () => {
   const { t } = useTranslation();
@@ -75,9 +76,9 @@ export const ReusableAttributesPage = () => {
       />
       {(attributes.error || groups.error || publish.error) && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {attributes.error?.message ??
-            groups.error?.message ??
-            publish.error?.message}
+          {errorMessage(attributes.error) ??
+            errorMessage(groups.error) ??
+            errorMessage(publish.error)}
         </Alert>
       )}
       {attributes.isPending ? (

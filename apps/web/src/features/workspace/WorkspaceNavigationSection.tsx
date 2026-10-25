@@ -22,6 +22,7 @@ import {
 import { navigationSelectMinWidth } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
 import { lexiconText } from '../lexicon/lexicon';
+import { errorMessage } from '../../api/errors';
 
 export const WorkspaceNavigationSection = ({
   canManage,
@@ -79,9 +80,9 @@ export const WorkspaceNavigationSection = ({
       </Typography>
       {(navigation.isError || roles.isError || blueprints.isError) && (
         <Alert severity="error">
-          {navigation.error?.message ??
-            roles.error?.message ??
-            blueprints.error?.message}
+          {errorMessage(navigation.error) ??
+            errorMessage(roles.error) ??
+            errorMessage(blueprints.error)}
         </Alert>
       )}
       {displayed.map((entry, index) => (
@@ -226,7 +227,9 @@ export const WorkspaceNavigationSection = ({
           {t('workspace.saveNavigation')}
         </Button>
       </Stack>
-      {save.isError && <Alert severity="error">{save.error.message}</Alert>}
+      {save.isError && (
+        <Alert severity="error">{errorMessage(save.error)}</Alert>
+      )}
     </Stack>
   );
 };

@@ -25,6 +25,7 @@ import { canonicalLanguage, languageLabel } from './languages';
 import { parseLexiconFile } from './lexiconFile';
 import type { LexiconFile } from './schemas';
 import { useLexiconMutations } from './useLexiconMutations';
+import { errorMessage } from '../../api/errors';
 
 /** Imports a JSON or TOML lexicon file, the format `acli lexicon export` writes. */
 export const ImportLexiconDialog = ({
@@ -114,7 +115,7 @@ export const ImportLexiconDialog = ({
             ))}
           </RadioGroup>
           {importFile.error && (
-            <Alert severity="error">{importFile.error.message}</Alert>
+            <Alert severity="error">{errorMessage(importFile.error)}</Alert>
           )}
         </Stack>
       </DialogContent>

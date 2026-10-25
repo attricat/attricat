@@ -12,6 +12,7 @@ import type { StoredLexiconEntry } from './schemas';
 import { useLexiconMutations } from './useLexiconMutations';
 import { LEXICON_MANAGEMENT_NAMESPACES } from './constants';
 import { pluralCategoryLabel } from './languages';
+import { errorMessage } from '../../api/errors';
 
 export const DeleteLexiconEntryDialog = ({
   entry,
@@ -40,7 +41,7 @@ export const DeleteLexiconEntryDialog = ({
         </DialogContentText>
         {remove.error && (
           <Alert severity="error" sx={{ mt: 2 }}>
-            {remove.error.message}
+            {errorMessage(remove.error)}
           </Alert>
         )}
       </DialogContent>

@@ -32,6 +32,7 @@ import {
 import { activeMemberState, ownerRoleCode, workspaceScope } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
 import { ScopeFields } from './ScopeFields';
+import { errorMessage } from '../../api/errors';
 
 export const WorkspaceMembersSection = ({
   canManage,
@@ -131,9 +132,11 @@ export const WorkspaceMembersSection = ({
     <Stack spacing={2} sx={{ mt: 3 }}>
       {error && <Alert severity="error">{error}</Alert>}
       {members.isError && (
-        <Alert severity="error">{members.error.message}</Alert>
+        <Alert severity="error">{errorMessage(members.error)}</Alert>
       )}
-      {roles.isError && <Alert severity="error">{roles.error.message}</Alert>}
+      {roles.isError && (
+        <Alert severity="error">{errorMessage(roles.error)}</Alert>
+      )}
       <Paper>
         <List>
           {members.data?.map((member) => (

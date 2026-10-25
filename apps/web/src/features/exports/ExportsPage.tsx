@@ -30,6 +30,7 @@ import { ChannelChecksEditor } from './ChannelChecksEditor';
 import { EXPORT_TABLE_COLUMN_COUNT } from './constants';
 import { exportQueryKeys } from './queryKeys';
 import { ExportIcon } from '../../components/systemIcons';
+import { errorMessage } from '../../api/errors';
 
 export const ExportsPage = () => {
   const { t } = useTranslation();
@@ -90,9 +91,9 @@ export const ExportsPage = () => {
       </Typography>
       {(contexts.isError || channels.isError || updateChannel.isError) && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {contexts.error?.message ??
-            channels.error?.message ??
-            updateChannel.error?.message}
+          {errorMessage(contexts.error) ??
+            errorMessage(channels.error) ??
+            errorMessage(updateChannel.error)}
         </Alert>
       )}
       {(contexts.isPending || channels.isPending) && (

@@ -57,6 +57,7 @@ import { RecordPreviewToolbar } from './RecordPreviewToolbar';
 import { RecordControlsPanel } from './RecordControlsPanel';
 import { RelationshipPickerActionBar } from './RelationshipPickerActionBar';
 import { useRecordPublications } from './useRecordPublications';
+import { errorMessage } from '../../../api/errors';
 
 const loadRecordCommentsPanel = () =>
   import('../../record-comments/RecordCommentsPanel');
@@ -329,12 +330,12 @@ export const RecordPreview = ({
                 )}
                 {resolved.isError && (
                   <Alert severity="error" sx={{ mt: 3 }}>
-                    {resolved.error.message}
+                    {errorMessage(resolved.error)}
                   </Alert>
                 )}
                 {blueprint.isError && (
                   <Alert severity="error" sx={{ mt: 3 }}>
-                    {blueprint.error.message}
+                    {errorMessage(blueprint.error)}
                   </Alert>
                 )}
                 {resolved.data && blueprint.data && (

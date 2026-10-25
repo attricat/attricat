@@ -22,6 +22,7 @@ import {
   commentInputSchema,
   type RecordComment,
 } from './schemas';
+import { errorMessage } from '../../api/errors';
 
 export const CommentComposer = ({
   recordId,
@@ -121,7 +122,7 @@ export const CommentComposer = ({
         )}
         {mutation.error && (
           <Alert severity="error">
-            {conflict ? t('comments.conflict') : mutation.error.message}
+            {conflict ? t('comments.conflict') : errorMessage(mutation.error)}
           </Alert>
         )}
         {conflict && onReload && (

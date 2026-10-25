@@ -37,6 +37,7 @@ import { WorkflowRevisionTable } from './WorkflowRevisionTable';
 import { WorkflowRunTable } from './WorkflowRunTable';
 import { WorkflowSourcePanel } from './WorkflowSourcePanel';
 import { WorkflowIcon } from '../../components/systemIcons';
+import { errorMessage } from '../../api/errors';
 
 export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const { t } = useTranslation();
@@ -118,7 +119,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   if (revisions.isError)
     return (
       <PageContainer>
-        <Alert severity="error">{revisions.error.message}</Alert>
+        <Alert severity="error">{errorMessage(revisions.error)}</Alert>
       </PageContainer>
     );
   if (!current)
@@ -173,12 +174,14 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       )}
       {mutationError && (
         <Alert severity="error" sx={{ mt: 2 }}>
-          {mutationError.message}
+          {errorMessage(mutationError)}
         </Alert>
       )}
       {runs.isError && (
         <Alert severity="warning" sx={{ mt: 2 }}>
-          {t('workflows.runsUnavailable', { message: runs.error.message })}
+          {t('workflows.runsUnavailable', {
+            message: errorMessage(runs.error),
+          })}
         </Alert>
       )}
       <Tabs

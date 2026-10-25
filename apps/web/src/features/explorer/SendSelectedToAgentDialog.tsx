@@ -26,6 +26,7 @@ import {
   maximumAgentConversationBlueprintNameLength,
   maximumAgentInstructionsLength,
 } from './constants';
+import { errorMessage } from '../../api/errors';
 
 export const SendSelectedToAgentDialog = ({
   blueprintName,
@@ -136,7 +137,7 @@ export const SendSelectedToAgentDialog = ({
             )}
           </form.Field>
           {start.isError && (
-            <Alert severity="error">{start.error.message}</Alert>
+            <Alert severity="error">{errorMessage(start.error)}</Alert>
           )}
         </Stack>
       </DialogContent>

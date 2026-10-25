@@ -17,6 +17,7 @@ import { runTableEmptyColSpan, workflowRunStatus } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import { workflowQueryKeys } from './queryKeys';
 import type { WorkflowRun } from './schemas';
+import { errorMessage } from '../../api/errors';
 
 const runStatusColor = (status: WorkflowRun['status']) => {
   if (status === workflowRunStatus.deadLetter) return 'error';
@@ -102,7 +103,7 @@ export const WorkflowRunTable = ({
       </Box>
       {replay.isError && (
         <Alert severity="error" sx={{ m: 2 }}>
-          {replay.error.message}
+          {errorMessage(replay.error)}
         </Alert>
       )}
     </Paper>

@@ -23,6 +23,7 @@ import {
   previewRefreshMilliseconds,
   timeZonePickerMaxWidth,
 } from './constants';
+import { errorMessage } from '../../api/errors';
 
 type TimeZoneOption = {
   /** `null` follows the browser zone. */
@@ -73,7 +74,7 @@ export const TimeZonePreference = ({ disabled }: { disabled: boolean }) => {
     <Stack spacing={2}>
       {save.isError && (
         <Alert severity="error">
-          {t('timeZone.saveFailed', { message: save.error.message })}
+          {t('timeZone.saveFailed', { message: errorMessage(save.error) })}
         </Alert>
       )}
       <Autocomplete

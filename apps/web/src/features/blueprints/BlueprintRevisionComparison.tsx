@@ -11,6 +11,7 @@ import { lazy, Suspense, type ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Blueprint } from './schemas';
 import type { BlueprintRevisionComparison as Comparison } from './useBlueprintRevisionComparison';
+import { errorMessage } from '../../api/errors';
 
 const TomlDiffEditor = lazy(() =>
   import('./TomlDiffEditor').then(({ TomlDiffEditor }) => ({
@@ -89,7 +90,7 @@ export const BlueprintRevisionComparison = ({
       </Stack>
       {(left.isError || right.isError) && (
         <Alert severity="error" sx={{ mt: 2 }}>
-          {left.error?.message ?? right.error?.message}
+          {errorMessage(left.error) ?? errorMessage(right.error)}
         </Alert>
       )}
       <Box sx={{ mt: 3 }}>

@@ -16,6 +16,7 @@ import { AuditFilters } from './AuditFilters';
 import { auditPageSize } from './constants';
 import { auditQueryKeys } from './queryKeys';
 import { AuditLogIcon } from '../../components/systemIcons';
+import { errorMessage } from '../../api/errors';
 
 export const AuditLogPage = () => {
   const { t } = useTranslation();
@@ -53,7 +54,9 @@ export const AuditLogPage = () => {
         onApply={applyFilters}
         onChange={updateDraft}
       />
-      {events.isError && <Alert severity="error">{events.error.message}</Alert>}
+      {events.isError && (
+        <Alert severity="error">{errorMessage(events.error)}</Alert>
+      )}
       <AuditEventsTable
         events={events.data?.events}
         isLoading={events.isLoading}

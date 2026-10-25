@@ -19,6 +19,7 @@ import {
   displayNameMaxLength,
   displayNameMinLength,
 } from './constants';
+import { errorMessage } from '../../api/errors';
 
 export const ChangeDisplayNameDialog = ({
   initialName,
@@ -104,7 +105,7 @@ export const ChangeDisplayNameDialog = ({
           </form.Field>
           {save.error && (
             <Alert severity="error" sx={{ mt: 2 }}>
-              {save.error.message}
+              {errorMessage(save.error)}
             </Alert>
           )}
         </DialogContent>

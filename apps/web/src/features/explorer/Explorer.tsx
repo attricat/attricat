@@ -37,6 +37,7 @@ import { useExplorerData } from './useExplorerData';
 import { useSavedSearchActions } from '../saved-views/useSavedSearchActions';
 import { useExplorerSearchActions } from './useExplorerSearchActions';
 import { lexiconText } from '../lexicon/lexicon';
+import { errorMessage } from '../../api/errors';
 
 type Props = {
   search: ExplorerSearch;
@@ -170,7 +171,7 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
             blueprintSchema={selectedBlueprint.data}
             currentVersion={currentBlueprint?.version}
             revisions={revisions.data}
-            revisionsError={revisions.error?.message}
+            revisionsError={errorMessage(revisions.error)}
             revisionsLoading={revisions.isPending}
             onRetryRevisions={() => void revisions.refetch()}
             lockedBlueprint={Boolean(search.locked)}

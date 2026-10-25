@@ -42,6 +42,7 @@ import {
 import { ExportStatusChip } from './ExportStatusChip';
 import { extensionExportQueryKeys } from './queryKeys';
 import type { ExportStatusCount, ManifestExports } from './schemas';
+import { errorMessage } from '../../api/errors';
 
 const allConnections = '';
 
@@ -155,8 +156,10 @@ export const ExtensionExportStatusSection = ({
           destinations: exports.map((item) => item.title).join(', '),
         })}
       </Typography>
-      {page.error && <Alert severity="error">{page.error.message}</Alert>}
-      {retry.error && <Alert severity="error">{retry.error.message}</Alert>}
+      {page.error && <Alert severity="error">{errorMessage(page.error)}</Alert>}
+      {retry.error && (
+        <Alert severity="error">{errorMessage(retry.error)}</Alert>
+      )}
       {!!retry.data?.job_errors.length && (
         <Alert severity="warning">
           {t('extensionExports.retryJobErrors', {
@@ -334,6 +337,8 @@ export const ExtensionExportStatusSection = ({
                   <ExportStatusChip status={mapping.status} />
                 </TableCell>
                 <TableCell>
+                  {/* The extension's own recorded push error, not a failed request. */}
+                  {/* eslint-disable-next-line no-restricted-syntax */}
                   {[mapping.error?.code, mapping.error?.message]
                     .filter(Boolean)
                     .join(': ') || '—'}

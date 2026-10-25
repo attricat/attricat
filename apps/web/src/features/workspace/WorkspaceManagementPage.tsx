@@ -13,6 +13,7 @@ import { WorkspaceMembersSection } from './WorkspaceMembersSection';
 import { WorkspaceNavigationSection } from './WorkspaceNavigationSection';
 import { WorkspaceRolesSection } from './WorkspaceRolesSection';
 import { WorkspaceTeamsSection } from './WorkspaceTeamsSection';
+import { errorMessage } from '../../api/errors';
 
 export type WorkspaceManagementSection =
   'members' | 'teams' | 'roles' | 'invitations' | 'navigation' | 'agent';
@@ -101,7 +102,7 @@ export const WorkspaceManagementPage = ({
           ))}
       </Box>
       {session.isError && (
-        <Alert severity="error">{session.error.message}</Alert>
+        <Alert severity="error">{errorMessage(session.error)}</Alert>
       )}
       {section === 'members' && (
         <WorkspaceMembersSection

@@ -72,7 +72,7 @@ attribute_code = "${attribute}"`,
   await expect(ruleRow).toContainText('Disabled');
   await ruleRow.getByRole('button', { name: 'Run now' }).click();
   await expect(page.getByRole('alert')).toContainText(
-    'rule has no enabled revision to run',
+    'The rule has no enabled revision.',
   );
 
   const toggle = ruleRow.getByRole('switch', {

@@ -20,6 +20,7 @@ import { parseContextMetadata } from './contextMetadata';
 import { contextQueryKeys } from './queryKeys';
 import { ContextIcon } from '../../components/systemIcons';
 import { useInitialFocus } from '../../components/initialFocus';
+import { errorMessage } from '../../api/errors';
 
 export const CreateContextPage = () => {
   const { t } = useTranslation();
@@ -150,7 +151,7 @@ export const CreateContextPage = () => {
             )}
           </form.Field>
           {create.error && (
-            <Alert severity="error">{create.error.message}</Alert>
+            <Alert severity="error">{errorMessage(create.error)}</Alert>
           )}
           <Button
             disabled={

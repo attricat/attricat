@@ -14,6 +14,7 @@ import { toggledSort } from './explorerSearchState';
 import type { OpenRecordPanel } from './ExplorerTableCells';
 import type { ExplorerSort } from './search';
 import { useExplorerSelection } from './useExplorerSelection';
+import { errorMessage } from '../../api/errors';
 
 type Props = {
   blueprint: Blueprint;
@@ -75,7 +76,7 @@ export const ExplorerOverviewSection = ({
         </Button>
       </Stack>
       {error ? (
-        <Alert severity="error">{error.message}</Alert>
+        <Alert severity="error">{errorMessage(error)}</Alert>
       ) : (
         page && (
           <ExplorerResultsTable

@@ -37,6 +37,7 @@ import { useRecordLabels } from '../records/useRecordLabels';
 import { RulesSection } from './RulesSection';
 import { RunsSection } from './RunsSection';
 import { RuleIcon } from '../../components/systemIcons';
+import { errorMessage } from '../../api/errors';
 
 const RouterTab = createLink(Tab);
 
@@ -187,7 +188,7 @@ export const RuleInspectionPage = ({
               severity="warning"
               sx={{ mt: 3 }}
             >
-              {toggle.error.message}
+              {errorMessage(toggle.error)}
             </Alert>
           ) : (
             <ApiErrorAlert error={toggle.error} sx={{ mt: 3 }} />

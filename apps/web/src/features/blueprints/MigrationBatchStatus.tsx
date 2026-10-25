@@ -24,6 +24,7 @@ import {
 } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import type { BlueprintMigrationBatchStatus as MigrationBatch } from './schemas';
+import { errorMessage } from '../../api/errors';
 
 const statusColor = (status: MigrationBatch['status']) => {
   if (status === migrationBatchStatuses.completed) return 'success';
@@ -89,7 +90,7 @@ export const MigrationBatchStatus = ({
       </Stack>
       {batches.isError && (
         <Alert severity="error" sx={{ mt: 2 }}>
-          {batches.error.message}
+          {errorMessage(batches.error)}
         </Alert>
       )}
       {batches.isPending && (

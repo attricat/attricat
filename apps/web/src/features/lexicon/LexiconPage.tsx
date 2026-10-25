@@ -42,6 +42,7 @@ import {
 import { downloadLexiconFile } from './lexiconFile';
 import { lexiconQueryKeys } from './queryKeys';
 import type { StoredLexiconEntry } from './schemas';
+import { errorMessage } from '../../api/errors';
 
 type DialogState =
   | { kind: 'add'; draft: LexiconEntryDraft }
@@ -177,12 +178,12 @@ export const LexiconPage = ({
       </Stack>
       {exportFile.error && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {exportFile.error.message}
+          {errorMessage(exportFile.error)}
         </Alert>
       )}
       {report.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {report.error.message}
+          {errorMessage(report.error)}
         </Alert>
       )}
       {coverage && (
@@ -198,7 +199,7 @@ export const LexiconPage = ({
       )}
       {entries.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {entries.error.message}
+          {errorMessage(entries.error)}
         </Alert>
       )}
       {entries.data && (

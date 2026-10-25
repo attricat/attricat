@@ -26,6 +26,7 @@ import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import { recordQueryKeys } from '../records/queryKeys';
 import { blueprintQueryKeys } from './queryKeys';
 import { BlueprintIcon } from '../../components/systemIcons';
+import { errorMessage } from '../../api/errors';
 
 type PendingUnsavedAction =
   { templateIndex: number; type: 'replace' } | { type: 'discard' };
@@ -219,13 +220,13 @@ export const BlueprintEditorPage = ({
       {source.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
           {t('blueprints.couldNotLoadSource', {
-            message: source.error.message,
+            message: errorMessage(source.error),
           })}
         </Alert>
       )}
       {save.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {t('blueprints.draftNotSaved', { message: save.error.message })}
+          {t('blueprints.draftNotSaved', { message: errorMessage(save.error) })}
         </Alert>
       )}
       {!blueprintId && (

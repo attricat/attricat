@@ -19,6 +19,7 @@ import {
   updateRole,
   type WorkspaceRole,
 } from './api';
+import { errorMessage } from '../../api/errors';
 
 export type RoleDialogAction =
   | { role: WorkspaceRole; type: 'rename' }
@@ -163,7 +164,7 @@ export const WorkspaceRoleActionDialog = ({
           )}
           {mutation.isError && (
             <Alert severity="error" sx={{ mt: 2 }}>
-              {mutation.error.message}
+              {errorMessage(mutation.error)}
             </Alert>
           )}
         </DialogContent>

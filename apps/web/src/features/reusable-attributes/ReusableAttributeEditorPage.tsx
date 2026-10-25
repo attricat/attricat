@@ -26,6 +26,7 @@ import { ReusableAttributePreview } from './ReusableAttributePreview';
 import { reusableAttributeTemplates } from './templates';
 import { ReusableAttributeIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
+import { errorMessage } from '../../api/errors';
 
 type PendingUnsavedAction =
   { templateIndex: number; type: 'replace' } | { type: 'discard' };
@@ -181,7 +182,7 @@ export const ReusableAttributeEditorPage = ({
       />
       {save.error && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {save.error.message}
+          {errorMessage(save.error)}
         </Alert>
       )}
       {!definitionId && (

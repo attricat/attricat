@@ -6,6 +6,7 @@ import { recordSelectionSearch, type ExplorerSearch } from '../explorer/search';
 import { createSavedView } from './api';
 import { savedViewQueryKeys } from './queryKeys';
 import { SaveSearchDialog, type SaveSearchValues } from './SaveSearchDialog';
+import { errorMessage } from '../../api/errors';
 
 type Props = {
   records: RecordItem[];
@@ -44,7 +45,7 @@ export const SaveSelectionAsSearchDialog = ({
 
   return (
     <SaveSearchDialog
-      error={save.error?.message ?? ''}
+      error={errorMessage(save.error) ?? ''}
       isPending={save.isPending}
       onClose={onClose}
       onSave={(values) => save.mutate(values)}

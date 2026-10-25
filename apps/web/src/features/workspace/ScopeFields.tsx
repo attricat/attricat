@@ -11,6 +11,7 @@ import {
 import { listGrantTargets, selectedScopeTarget, type ScopeType } from './api';
 import { workspaceScope } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
+import { errorMessage } from '../../api/errors';
 
 type ScopeFieldsProps = {
   onScopeChange: (scope: ScopeType) => void;
@@ -93,7 +94,7 @@ const ScopeTargetField = ({
   return (
     <>
       {targets.isError && (
-        <Alert severity="error">{targets.error.message}</Alert>
+        <Alert severity="error">{errorMessage(targets.error)}</Alert>
       )}
       <TextField
         required

@@ -11,6 +11,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { deleteRecord } from '../api';
 import { removeRecord } from '../invalidateRecord';
+import { errorMessage } from '../../../api/errors';
 
 export const DeleteRecordDialog = ({
   recordId,
@@ -43,7 +44,7 @@ export const DeleteRecordDialog = ({
         <Typography>{t('records.deleteRecordConfirmation')}</Typography>
         {deletion.isError && (
           <Alert severity="error" sx={{ mt: 2 }}>
-            {deletion.error.message}
+            {errorMessage(deletion.error)}
           </Alert>
         )}
       </DialogContent>

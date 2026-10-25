@@ -23,6 +23,7 @@ import {
   WorkspaceRoleActionDialog,
   type RoleDialogAction,
 } from './WorkspaceRoleActionDialog';
+import { errorMessage } from '../../api/errors';
 
 export const WorkspaceRolesSection = ({
   canManage,
@@ -78,9 +79,11 @@ export const WorkspaceRolesSection = ({
   return (
     <Stack spacing={2} sx={{ mt: 3 }}>
       {error && <Alert severity="error">{error}</Alert>}
-      {roles.isError && <Alert severity="error">{roles.error.message}</Alert>}
+      {roles.isError && (
+        <Alert severity="error">{errorMessage(roles.error)}</Alert>
+      )}
       {permissions.isError && (
-        <Alert severity="error">{permissions.error.message}</Alert>
+        <Alert severity="error">{errorMessage(permissions.error)}</Alert>
       )}
       <Paper>
         <List>

@@ -33,6 +33,7 @@ import {
 import { Timestamp } from '../../time/Timestamp';
 import { EmptyState } from '../../components/EmptyState';
 import { WorkflowIcon } from '../../components/systemIcons';
+import { errorMessage } from '../../api/errors';
 
 const WorkflowDetailLink = Link as unknown as ComponentType<{
   params: { workflowId: string };
@@ -121,12 +122,14 @@ export const WorkflowsPage = () => {
       />
       {workflows.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {workflows.error.message}
+          {errorMessage(workflows.error)}
         </Alert>
       )}
       {runs.isError && (
         <Alert severity="warning" sx={{ mt: 3 }}>
-          {t('workflows.runsUnavailable', { message: runs.error.message })}
+          {t('workflows.runsUnavailable', {
+            message: errorMessage(runs.error),
+          })}
         </Alert>
       )}
       {workflows.isPending && (

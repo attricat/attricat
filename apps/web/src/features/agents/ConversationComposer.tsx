@@ -8,6 +8,7 @@ import { sendMessage } from './api';
 import { composerMinRows } from './constants';
 import { MessageInputBox } from './MessageInputBox';
 import { useMessageAttachments } from './useMessageAttachments';
+import { errorMessage } from '../../api/errors';
 
 export type ConversationComposerProps = {
   conversationId: string;
@@ -112,7 +113,7 @@ export const ConversationComposer = ({
           severity="error"
           sx={{ mt: 1 }}
         >
-          {t('agents.messageNotSent')}: {send.error.message}
+          {t('agents.messageNotSent')}: {errorMessage(send.error)}
         </Alert>
       )}
     </Box>

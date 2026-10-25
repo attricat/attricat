@@ -128,7 +128,7 @@
     "relationship_target_type_mismatch": "Schemat powiązanego rekordu nie jest dozwolony w tej relacji.",
     "request_timeout": "Żądanie trwało zbyt długo. Spróbuj ponownie.",
     "rule_dry_run_required": "Przed włączeniem tej rewizji reguły wykonaj pełny próbny przebieg.",
-    "rule_has_existing_violations": "Rekordy już naruszają tę regułę. Popraw je albo zaakceptuj istniejące naruszenia.",
+    "rule_has_existing_violations": "Rekordy już naruszają tę regułę (naruszenia: {{existing_violations}}). Popraw je albo zaakceptuj istniejące naruszenia.",
     "rule_not_enabled": "Reguła nie ma włączonej rewizji. Włącz ją albo uruchom próbny przebieg.",
     "rule_not_published": "Opublikuj rewizję reguły przed jej włączeniem.",
     "rule_violation": "Zmiana narusza egzekwowane reguły.",

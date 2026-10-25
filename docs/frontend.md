@@ -101,12 +101,16 @@ light and dark modes.
 
 Show an API failure by its `code`, not its `message`:
 
-- Translate the code as `apiErrors.<code>` in both `en.json` and `pl.json`,
-  interpolating fields from the error's `details` after validating them.
-- Never render `ApiRequestError.message` directly. It is English, meant for
-  the CLI and agents, and is only the fallback for a code without a
-  translation.
-- A new backend error code ships with both translations.
+- Render a failed query or mutation with `errorMessage()` from
+  `src/api/errors`. It translates `apiErrors.<code>` in the active language,
+  interpolating the error's scalar `details` and, for generic codes such as
+  `invalid_input`, the server's `{{message}}`.
+- Never render `ApiRequestError.message` directly; ESLint rejects
+  `<query>.error.message`. The message is English, meant for the CLI and
+  agents, and is only the fallback for a code without a translation.
+- A new backend error code ships with translations in both `en.json` and
+  `pl.json`; `src/api/errors.test.ts` checks them against
+  `contracts/api-error-codes.json`.
 
 ## Timestamps
 

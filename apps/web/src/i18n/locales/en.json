@@ -126,7 +126,7 @@
     "relationship_target_type_mismatch": "The linked record's blueprint isn't allowed for this relationship.",
     "request_timeout": "The request took too long. Try again.",
     "rule_dry_run_required": "Run a full dry run of this rule revision before enabling it.",
-    "rule_has_existing_violations": "Records already violate this rule. Fix them or accept the existing violations.",
+    "rule_has_existing_violations": "Records already violate this rule ({{existing_violations}}). Fix them or accept the existing violations.",
     "rule_not_enabled": "The rule has no enabled revision. Enable it or start a dry run.",
     "rule_not_published": "Publish the rule revision before enabling it.",
     "rule_violation": "The change violates enforcing rules.",

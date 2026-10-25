@@ -2,6 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { checkDelayMs, type DefinitionKind } from './constants';
 import { definitionQueryKeys } from './queryKeys';
+import { errorMessage } from '../../api/errors';
 
 export const checkStatuses = {
   checking: 'checking',
@@ -80,7 +81,8 @@ export const useDefinitionCheck = <T>({
         ? checkStatuses.invalid
         : checkStatuses.valid;
   return {
-    error: status === checkStatuses.invalid ? query.error?.message : undefined,
+    error:
+      status === checkStatuses.invalid ? errorMessage(query.error) : undefined,
     result: lastValid?.result,
     stale: lastValid !== undefined && lastValid.definition !== definition,
     status,

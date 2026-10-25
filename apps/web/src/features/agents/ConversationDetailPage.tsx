@@ -12,6 +12,7 @@ import { ConversationPanel } from './ConversationPanel';
 import { isTitlePending } from './titlePolling';
 import { RenameConversationDialog } from './RenameConversationDialog';
 import { AgentIcon } from '../../components/systemIcons';
+import { errorMessage } from '../../api/errors';
 
 export type ConversationDetailPageProps = { conversationId: string };
 
@@ -62,7 +63,7 @@ export const ConversationDetailPage = ({
           </Alert>
         )}
         {conversation.error && (
-          <Alert severity="error">{conversation.error.message}</Alert>
+          <Alert severity="error">{errorMessage(conversation.error)}</Alert>
         )}
         {renameOpen && conversation.data && (
           <RenameConversationDialog
