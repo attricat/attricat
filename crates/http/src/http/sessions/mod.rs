@@ -12,8 +12,7 @@ use super::{
 };
 use crate::{
     account::{
-        ActionTokenSecret, IssuedLifecycleAction, LifecycleActionPurpose, SessionDigest,
-        SessionSecret, validate_password,
+        ActionTokenSecret, LifecycleActionPurpose, SessionDigest, SessionSecret, validate_password,
     },
     constants::SESSION_LIFETIME_HOURS,
     repository::RepositoryError,
@@ -149,27 +148,22 @@ pub(super) async fn request_password_reset(
     else {
         return Ok(axum::http::StatusCode::NO_CONTENT);
     };
-    let issued = IssuedLifecycleAction::issue(
-        LifecycleActionPurpose::PasswordReset,
-        Utc::now() + Duration::minutes(PASSWORD_RESET_LIFETIME_MINUTES),
-        crate::account::SecurityVersion::new(credential.security_version.into()),
-        Some(crate::account::CredentialVersion::new(
-            credential.credential_version.into(),
-        )),
-    );
+    // The repository captures the user's current security and credential
+    // versions when it stores the token.
+    let secret = ActionTokenSecret::generate();
     state
         .repository
         .issue_lifecycle_token(
             Uuid::new_v4(),
             credential.user_id,
             LifecycleActionPurpose::PasswordReset.as_str(),
-            issued.action.token_digest().as_ref(),
-            issued.action.expires_at(),
+            secret.digest().as_ref(),
+            Utc::now() + Duration::minutes(PASSWORD_RESET_LIFETIME_MINUTES),
         )
         .await?;
     let reset_url = super::members::action_url(
         &state.password_reset_url,
-        &[("token", issued.secret.expose_for_delivery())],
+        &[("token", secret.expose_for_delivery())],
     )?;
     // Delivery failure must not change the response: a 500 only for real,
     // verified accounts would disclose which addresses exist.

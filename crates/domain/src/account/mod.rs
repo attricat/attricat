@@ -9,8 +9,7 @@ pub use credentials::{
     PasswordPolicyError, hash_password, validate_password,
 };
 pub use lifecycle::{
-    ActionTokenDigest, ActionTokenDigestError, ActionTokenSecret, ActionTokenSecretError,
-    ActionVerification, CredentialVersion, IssuedLifecycleAction, LifecycleAction,
-    LifecycleActionError, LifecycleActionPurpose, LifecycleActionPurposeError, SecurityVersion,
+    ActionTokenDigest, ActionTokenSecret, ActionTokenSecretError, LifecycleActionPurpose,
+    LifecycleActionPurposeError,
 };
 pub use sessions::{SessionDigest, SessionSecret, SessionSecretError};
