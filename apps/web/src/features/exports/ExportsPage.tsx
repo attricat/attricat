@@ -31,6 +31,8 @@ import { EXPORT_TABLE_COLUMN_COUNT } from './constants';
 import { exportQueryKeys } from './queryKeys';
 import { ExportIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
+import { capabilities } from '../auth/capabilities';
+import { accessTargetKinds } from '../auth/api';
 
 export const ExportsPage = () => {
   const { t } = useTranslation();
@@ -40,15 +42,15 @@ export const ExportsPage = () => {
     queryFn: ({ signal }) => listContexts(signal),
   });
   const channelAccess = useAccess(
-    'contexts_write',
-    'context',
+    capabilities.contextsWrite,
+    accessTargetKinds.context,
     contexts.data?.map((context) => context.id) ?? [],
   );
   const channels = useQuery({
     queryKey: exportQueryKeys.channels(),
     queryFn: listPublicationChannels,
   });
-  const canReadRules = useCan('rules_read');
+  const canReadRules = useCan(capabilities.rulesRead);
   // Rule codes are suggestions only; a reader without rule access can type them.
   const rules = useQuery({
     ...ruleDefinitionsOptions(),

@@ -43,6 +43,7 @@ import { ExportStatusChip } from './ExportStatusChip';
 import { extensionExportQueryKeys } from './queryKeys';
 import type { ExportStatusCount, ManifestExports } from './schemas';
 import { errorMessage } from '../../api/errors';
+import { capabilities } from '../auth/capabilities';
 
 const allConnections = '';
 
@@ -79,7 +80,7 @@ export const ExtensionExportStatusSection = ({
   const client = useQueryClient();
   // The status lists records across the workspace, so it needs
   // workspace-wide read access.
-  const canReadRecords = useCan('records_read');
+  const canReadRecords = useCan(capabilities.recordsRead);
   const exports = canReadRecords ? (manifest.server?.exports ?? []) : [];
   // Until an operator picks one, show the first connection with exports.
   const [chosenConnection, setConnection] = useState<string | null>();

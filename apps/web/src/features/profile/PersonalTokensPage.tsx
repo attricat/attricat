@@ -4,10 +4,11 @@ import { PlusIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCan } from '../auth/useCan';
 import { PersonalTokens } from './PersonalTokens';
+import { capabilities } from '../auth/capabilities';
 
 export const PersonalTokensPage = () => {
   const { t } = useTranslation();
-  const canManage = useCan('tokens_manage');
+  const canManage = useCan(capabilities.tokensManage);
   return (
     <Stack spacing={5}>
       <Stack

@@ -49,6 +49,7 @@ import {
   type RuleRevisions,
 } from './ruleRevisions';
 import { findingEvidenceSchema } from './schemas';
+import { capabilities } from '../auth/capabilities';
 
 const isActive = (run: RuleRun) =>
   ACTIVE_RULE_RUN_STATUSES.includes(run.status);
@@ -227,8 +228,8 @@ export const RecordFindingsPanel = ({
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const canRead = useCan('rules_read');
-  const canManage = useCan('rules_manage');
+  const canRead = useCan(capabilities.rulesRead);
+  const canManage = useCan(capabilities.rulesManage);
   const rules = useQuery({ ...ruleDefinitionsOptions(), enabled: canRead });
   const findings = useInfiniteQuery({
     ...recordFindingsOptions(recordId),

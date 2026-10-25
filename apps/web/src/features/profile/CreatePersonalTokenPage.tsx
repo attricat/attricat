@@ -39,6 +39,7 @@ import { createToken, listTokenPermissions } from './api';
 import { profileQueryKeys } from './queryKeys';
 import { useInitialFocus } from '../../components/initialFocus';
 import { errorMessage } from '../../api/errors';
+import { capabilities } from '../auth/capabilities';
 
 const permissionGroup = (code: string) => code.split('.')[0] ?? code;
 
@@ -72,7 +73,7 @@ export const CreatePersonalTokenPage = () => {
   const { show } = useToast();
   const navigate = useNavigate();
   const client = useQueryClient();
-  const canManage = useCan('tokens_manage');
+  const canManage = useCan(capabilities.tokensManage);
   const permissions = useQuery({
     enabled: canManage,
     queryKey: profileQueryKeys.tokenPermissions(),

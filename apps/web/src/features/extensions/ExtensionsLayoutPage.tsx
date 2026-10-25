@@ -13,12 +13,13 @@ import {
 import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { workspaceExtensionLayoutSchema } from './schemas';
 import { sessionOptions } from '../auth/queryOptions';
+import { capabilities } from '../auth/capabilities';
 
 export const ExtensionsLayoutPage = () => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const session = useQuery(sessionOptions());
-  const canManage = useCan('extensions_manage');
+  const canManage = useCan(capabilities.extensionsManage);
   const layout = useQuery({
     queryKey: extensionManagementQueryKeys.layout(),
     queryFn: workspaceExtensionLayout,

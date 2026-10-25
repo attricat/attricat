@@ -10,10 +10,11 @@ import {
 } from './extensionPageUtils';
 import { installedExtensions } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
+import { capabilities } from '../auth/capabilities';
 
 export const ExtensionsInstalledPage = () => {
   const { t } = useTranslation();
-  const canRead = useCan('extensions_read');
+  const canRead = useCan(capabilities.extensionsRead);
   const installed = useQuery({
     queryKey: extensionManagementQueryKeys.installed(),
     queryFn: installedExtensions,

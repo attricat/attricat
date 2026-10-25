@@ -5,12 +5,12 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
 import { getWorkflowRevision } from './api';
-import { workflowCapabilities } from './constants';
 import { workflowQueryKeys } from './queryKeys';
 import { WorkflowDefinitionForm } from './WorkflowDefinitionForm';
 import { WorkflowIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 import { sessionOptions } from '../auth/queryOptions';
+import { capabilities } from '../auth/capabilities';
 
 export const WorkflowEditorPage = ({
   workflowId,
@@ -21,7 +21,7 @@ export const WorkflowEditorPage = ({
 }) => {
   const { t } = useTranslation();
   const session = useQuery(sessionOptions());
-  const canManage = useCan(workflowCapabilities.manage);
+  const canManage = useCan(capabilities.workflowsManage);
   const source = useQuery({
     queryKey: workflowQueryKeys.revision(workflowId ?? '', sourceVersion ?? 0),
     queryFn: () => getWorkflowRevision(workflowId!, sourceVersion!),

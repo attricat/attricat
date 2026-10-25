@@ -23,11 +23,12 @@ import { backgroundProcessingQueryKeys } from './queryKeys';
 import { EmptyState } from '../../components/EmptyState';
 import { BackgroundProcessingIcon } from '../../components/systemIcons';
 import { sessionOptions } from '../auth/queryOptions';
+import { capabilities } from '../auth/capabilities';
 
 export const BackgroundProcessingPage = () => {
   const { t } = useTranslation();
   const session = useQuery(sessionOptions());
-  const canRead = useCan('data_health_read');
+  const canRead = useCan(capabilities.dataHealthRead);
   const status = useQuery({
     queryKey: backgroundProcessingQueryKeys.status(session.data?.workspace_id),
     queryFn: getBackgroundProcessingStatus,

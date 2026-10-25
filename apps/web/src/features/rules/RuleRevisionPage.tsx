@@ -16,6 +16,7 @@ import { SHORT_RECORD_ID_LENGTH } from './constants';
 import { ruleDefinitionsOptions } from './queryOptions';
 import { RuleLifecycleChip } from './RuleCells';
 import { sessionOptions } from '../auth/queryOptions';
+import { capabilities } from '../auth/capabilities';
 
 /** One rule revision with the definition its findings were checked against. */
 export const RuleRevisionPage = ({
@@ -28,7 +29,7 @@ export const RuleRevisionPage = ({
 }) => {
   const { t } = useTranslation();
   const session = useQuery(sessionOptions());
-  const canRead = useCan('rules_read');
+  const canRead = useCan(capabilities.rulesRead);
   const rules = useQuery({ ...ruleDefinitionsOptions(), enabled: canRead });
   const rule = rules.data?.find(
     (candidate) => candidate.id === ruleId && candidate.version === version,

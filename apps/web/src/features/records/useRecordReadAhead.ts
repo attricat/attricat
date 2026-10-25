@@ -13,6 +13,7 @@ import {
   recordRetentionHoldsOptions,
 } from './queryOptions';
 import { sessionOptions } from '../auth/queryOptions';
+import { capabilities } from '../auth/capabilities';
 
 /**
  * Starts loading what a record's side panels show as soon as the record
@@ -27,7 +28,7 @@ export const useRecordReadAhead = (
   relatedBlueprintCodes: readonly string[] = [],
 ) => {
   const client = useQueryClient();
-  const canReadRules = useCan('rules_read');
+  const canReadRules = useCan(capabilities.rulesRead);
   const session = useQuery(sessionOptions());
   useEffect(() => {
     void client.prefetchInfiniteQuery(recordApprovalsOptions(recordId));

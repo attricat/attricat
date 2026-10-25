@@ -58,6 +58,8 @@ import { RecordControlsPanel } from './RecordControlsPanel';
 import { RelationshipPickerActionBar } from './RelationshipPickerActionBar';
 import { useRecordPublications } from './useRecordPublications';
 import { errorMessage } from '../../../api/errors';
+import { capabilities } from '../../auth/capabilities';
+import { accessTargetKinds } from '../../auth/api';
 
 const loadRecordCommentsPanel = () =>
   import('../../record-comments/RecordCommentsPanel');
@@ -136,11 +138,19 @@ export const RecordPreview = ({
   const { contextId, contexts, defaultContextId, setSelectedContext } =
     useRecordContextSelection(initialContextId);
   const selectedContextId = contextId ?? undefined;
-  const canPublish = useCanOn('records_publish', 'record', recordId);
-  const canDeleteRecords = useCanOn('records_delete', 'record', recordId);
-  const canCreateRecords = useCan('records_write');
-  const canAskAgent = useCan('agents_run');
-  const canReadRules = useCan('rules_read');
+  const canPublish = useCanOn(
+    capabilities.recordsPublish,
+    accessTargetKinds.record,
+    recordId,
+  );
+  const canDeleteRecords = useCanOn(
+    capabilities.recordsDelete,
+    accessTargetKinds.record,
+    recordId,
+  );
+  const canCreateRecords = useCan(capabilities.recordsWrite);
+  const canAskAgent = useCan(capabilities.agentsRun);
+  const canReadRules = useCan(capabilities.rulesRead);
   const publications = useRecordPublications(recordId, contextId, canPublish);
   const { blueprint, recordForm, resolved, statusTransitions } =
     useRecordPreviewData(recordId, contextId);

@@ -22,12 +22,7 @@ import {
   publishWorkflowRevision,
   runWorkflowNow,
 } from './api';
-import {
-  workflowCapabilities,
-  workflowDetailTab,
-  type WorkflowDetailTab,
-  workflowStatus,
-} from './constants';
+import { workflowDetailTab, type WorkflowDetailTab, workflowStatus } from './constants';
 import { workflowQueryKeys } from './queryKeys';
 import { WorkflowActions } from './WorkflowActions';
 import { WorkflowComparePanel } from './WorkflowComparePanel';
@@ -37,6 +32,7 @@ import { WorkflowSourcePanel } from './WorkflowSourcePanel';
 import { WorkflowIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 import { sessionOptions } from '../auth/queryOptions';
+import { capabilities } from '../auth/capabilities';
 
 export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const { t } = useTranslation();
@@ -47,8 +43,8 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const [leftVersion, setLeftVersion] = useState<number>();
   const tabId = useTabAccessibility();
   const session = useQuery(sessionOptions());
-  const canRead = useCan(workflowCapabilities.read);
-  const canManage = useCan(workflowCapabilities.manage);
+  const canRead = useCan(capabilities.workflowsRead);
+  const canManage = useCan(capabilities.workflowsManage);
   const revisions = useQuery({
     queryKey: workflowQueryKeys.revisions(workflowId),
     queryFn: () => listWorkflowRevisions(workflowId),

@@ -30,18 +30,20 @@ import { BlueprintIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
 import { useAccess, useCan } from '../auth/useCan';
 import { errorMessage } from '../../api/errors';
+import { capabilities } from '../auth/capabilities';
+import { accessTargetKinds } from '../auth/api';
 
 export const BlueprintsPage = () => {
   const { t } = useTranslation();
-  const canEdit = useCan('blueprints_write');
+  const canEdit = useCan(capabilities.blueprintsWrite);
   const [query, setQuery] = useState('');
   const blueprints = useQuery({
     queryKey: blueprintQueryKeys.catalogue(),
     queryFn: listBlueprints,
   });
   const editAccess = useAccess(
-    'blueprints_write',
-    'blueprint',
+    capabilities.blueprintsWrite,
+    accessTargetKinds.blueprint,
     (blueprints.data ?? []).map((blueprint) => blueprint.id),
   );
   const matchingBlueprints = (blueprints.data ?? []).filter((blueprint) => {

@@ -16,6 +16,8 @@ import type { Blueprint } from './api';
 import { blueprintStatusChipColor } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import { useCanOn } from '../auth/useCan';
+import { capabilities } from '../auth/capabilities';
+import { accessTargetKinds } from '../auth/api';
 
 export const RevisionHistory = ({
   blueprintId,
@@ -25,7 +27,11 @@ export const RevisionHistory = ({
   revisions: Blueprint[];
 }) => {
   const { t } = useTranslation();
-  const canEdit = useCanOn('blueprints_write', 'blueprint', blueprintId);
+  const canEdit = useCanOn(
+    capabilities.blueprintsWrite,
+    accessTargetKinds.blueprint,
+    blueprintId,
+  );
   return (
     <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
       <Typography component="h2" variant="h6">

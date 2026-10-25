@@ -1,9 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { CreateContextPage } from '../../../features/contexts/CreateContextPage';
 import { RequireCapability } from '../../../features/auth/RequireCapability';
+import { capabilities } from '../../../features/auth/capabilities';
 
 const NewContextRoute = () => (
-  <RequireCapability capability="contexts_write">
+  <RequireCapability capability={capabilities.contextsWrite}>
     <CreateContextPage />
   </RequireCapability>
 );

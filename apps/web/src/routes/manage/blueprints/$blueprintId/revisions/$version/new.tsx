@@ -1,13 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { BlueprintEditorPage } from '../../../../../../features/blueprints/BlueprintEditorPage';
 import { RequireCapability } from '../../../../../../features/auth/RequireCapability';
+import { capabilities } from '../../../../../../features/auth/capabilities';
+import { accessTargetKinds } from '../../../../../../features/auth/api';
 
 const RevisionEditorRoute = () => {
   const { blueprintId, version } = Route.useParams();
   return (
     <RequireCapability
-      capability="blueprints_write"
-      target={{ kind: 'blueprint', id: blueprintId }}
+      capability={capabilities.blueprintsWrite}
+      target={{ kind: accessTargetKinds.blueprint, id: blueprintId }}
     >
       <BlueprintEditorPage
         blueprintId={blueprintId}

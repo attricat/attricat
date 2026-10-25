@@ -26,6 +26,7 @@ import { ExtensionBudgetsSection } from '../extension-exports/ExtensionBudgetsSe
 import { ExtensionConnectionsSection } from '../extension-exports/ExtensionConnectionsSection';
 import { ExtensionExportStatusSection } from '../extension-exports/ExtensionExportStatusSection';
 import { manifestExportsSchema } from '../extension-exports/schemas';
+import { capabilities } from '../auth/capabilities';
 
 type InstallationAction =
   | { action: ExtensionLifecycleAction }
@@ -57,7 +58,7 @@ export const InstalledExtensionPage = ({
     queryKey: extensionManagementQueryKeys.detail(extensionId),
     queryFn: () => extensionDetail(extensionId),
   });
-  const canManage = useCan('extensions_manage');
+  const canManage = useCan(capabilities.extensionsManage);
   const action = useMutation({
     mutationFn: (input: InstallationAction) =>
       runInstallationAction(extensionId, input).then(() => undefined),

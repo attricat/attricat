@@ -7,10 +7,11 @@ import { ErrorNotice } from './ExtensionErrorNotice';
 import { repositoryParts } from './extensionPageUtils';
 import { discoverExtensions } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
+import { capabilities } from '../auth/capabilities';
 
 export const ExtensionsMarketplacePage = () => {
   const { t } = useTranslation();
-  const canRead = useCan('extensions_read');
+  const canRead = useCan(capabilities.extensionsRead);
   const marketplace = useQuery({
     queryKey: extensionManagementQueryKeys.marketplace(),
     queryFn: discoverExtensions,

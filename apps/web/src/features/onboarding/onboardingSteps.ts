@@ -5,6 +5,7 @@ import {
   ExtensionIcon,
   WorkspaceIcon,
 } from '../../components/systemIcons';
+import { capabilities } from '../auth/capabilities';
 
 export type OnboardingCapabilities = {
   blueprints_write?: boolean;
@@ -29,7 +30,7 @@ type OnboardingStep = {
 const onboardingSteps: readonly OnboardingStep[] = [
   {
     actionKey: 'onboarding.steps.blueprint.action',
-    capability: 'blueprints_write',
+    capability: capabilities.blueprintsWrite,
     descriptionKey: 'onboarding.steps.blueprint.description',
     documentationPage: 'blueprints',
     icon: BlueprintIcon,
@@ -46,7 +47,7 @@ const onboardingSteps: readonly OnboardingStep[] = [
   },
   {
     actionKey: 'onboarding.steps.invite.action',
-    capability: 'members_manage',
+    capability: capabilities.membersManage,
     descriptionKey: 'onboarding.steps.invite.description',
     documentationPage: 'workspaces',
     icon: WorkspaceIcon,
@@ -55,7 +56,7 @@ const onboardingSteps: readonly OnboardingStep[] = [
   },
   {
     actionKey: 'onboarding.steps.extensions.action',
-    capability: 'extensions_read',
+    capability: capabilities.extensionsRead,
     descriptionKey: 'onboarding.steps.extensions.description',
     documentationPage: 'extensions',
     icon: ExtensionIcon,

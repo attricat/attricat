@@ -12,6 +12,7 @@ import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
 import { ExtensionIcon } from '../../components/systemIcons';
+import { capabilities } from '../auth/capabilities';
 
 export const MarketplaceExtensionPage = ({
   owner,
@@ -30,7 +31,7 @@ export const MarketplaceExtensionPage = ({
     mutationFn: installExtension,
     onSuccess: () => invalidateExtensions(client),
   });
-  const canManage = useCan('extensions_manage');
+  const canManage = useCan(capabilities.extensionsManage);
   return (
     <PageContainer>
       <PageHeader

@@ -5,13 +5,14 @@ import {
   type DataHealthSearch,
 } from '../../features/data-health/schemas';
 import { RequireCapability } from '../../features/auth/RequireCapability';
+import { capabilities } from '../../features/auth/capabilities';
 
 const parseDataHealthSearch = (
   input: Record<string, unknown>,
 ): DataHealthSearch => dataHealthSearchSchema.parse(input);
 
 const DataHealthRoute = () => (
-  <RequireCapability capability="data_health_read">
+  <RequireCapability capability={capabilities.dataHealthRead}>
     <DataHealthPage search={Route.useSearch()} />
   </RequireCapability>
 );

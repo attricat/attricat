@@ -19,10 +19,11 @@ import { ReusableAttributesTable } from './ReusableAttributesTable';
 import { ReusableAttributeIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
 import { errorMessage } from '../../api/errors';
+import { capabilities } from '../auth/capabilities';
 
 export const ReusableAttributesPage = () => {
   const { t } = useTranslation();
-  const canEdit = useCan('blueprints_write');
+  const canEdit = useCan(capabilities.blueprintsWrite);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [groupOpen, setGroupOpen] = useState(false);

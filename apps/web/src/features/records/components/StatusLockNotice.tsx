@@ -6,6 +6,8 @@ import type { Attribute, StatusTransitionAccess } from '../api';
 import { attributeLabel } from '../recordDisplay';
 import { statusCodeLabel, statusOptionLabel, type StatusLock } from '../status';
 import { UnlockStatusDialog } from './UnlockStatusDialog';
+import { capabilities } from '../../auth/capabilities';
+import { accessTargetKinds } from '../../auth/api';
 
 type StatusLockNoticeProps = {
   locks: readonly StatusLock[];
@@ -34,7 +36,8 @@ export const StatusLockNotice = ({
 }: StatusLockNoticeProps) => {
   const { t, i18n } = useTranslation();
   const canUnlock =
-    useCanOn('records_unlock', 'record', recordId) && updatedAt !== undefined;
+    useCanOn(capabilities.recordsUnlock, accessTargetKinds.record, recordId) &&
+    updatedAt !== undefined;
   const [unlocking, setUnlocking] = useState<string>();
   if (locks.length === 0) return null;
   const list = (items: string[], type: Intl.ListFormatType) =>

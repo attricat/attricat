@@ -17,6 +17,7 @@ import { useCan } from '../auth/useCan';
 import { extensionManagementTabIds } from './constants';
 import { ExtensionIcon } from '../../components/systemIcons';
 import { sessionOptions } from '../auth/queryOptions';
+import { capabilities } from '../auth/capabilities';
 
 const extensionTabs = [
   {
@@ -51,8 +52,8 @@ export const ExtensionManagementPage = ({
 }: ExtensionManagementPageProps) => {
   const { t } = useTranslation();
   const session = useQuery(sessionOptions());
-  const canRead = useCan('extensions_read');
-  const canManage = useCan('extensions_manage');
+  const canRead = useCan(capabilities.extensionsRead);
+  const canManage = useCan(capabilities.extensionsManage);
 
   if (session.data && !canRead) {
     return (

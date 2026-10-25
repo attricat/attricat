@@ -117,8 +117,13 @@ export const confirmPasswordReset = async (token: string, password: string) => {
 };
 
 /** Targets whose scoped grants `checkAccess` evaluates. */
-export const accessTargetKinds = ['record', 'blueprint', 'context'] as const;
-export type AccessTargetKind = (typeof accessTargetKinds)[number];
+export const accessTargetKinds = {
+  record: 'record',
+  blueprint: 'blueprint',
+  context: 'context',
+} as const;
+export type AccessTargetKind =
+  (typeof accessTargetKinds)[keyof typeof accessTargetKinds];
 
 /** The most targets one access check may name. */
 export const maxAccessTargets = 500;

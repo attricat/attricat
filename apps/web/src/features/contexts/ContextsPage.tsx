@@ -20,10 +20,11 @@ import { EmptyState } from '../../components/EmptyState';
 import { ContextIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
 import { errorMessage } from '../../api/errors';
+import { capabilities } from '../auth/capabilities';
 
 export const ContextsPage = () => {
   const { t } = useTranslation();
-  const canCreate = useCan('contexts_write');
+  const canCreate = useCan(capabilities.contextsWrite);
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
     queryFn: ({ signal }) => listContexts(signal),

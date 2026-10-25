@@ -13,6 +13,7 @@ import { invalidateExtensions } from './extensionPageUtils';
 import { extensionArchiveAccept } from './constants';
 import { ExtensionIcon } from '../../components/systemIcons';
 import { sessionOptions } from '../auth/queryOptions';
+import { capabilities } from '../auth/capabilities';
 
 export const SideloadExtensionPage = () => {
   const { t } = useTranslation();
@@ -28,7 +29,7 @@ export const SideloadExtensionPage = () => {
       if (value.archive) sideload.mutate(value.archive);
     },
   });
-  const canManage = useCan('extensions_manage');
+  const canManage = useCan(capabilities.extensionsManage);
   if (session.data && !canManage)
     return (
       <PageContainer>

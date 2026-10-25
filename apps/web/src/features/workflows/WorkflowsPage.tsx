@@ -22,17 +22,13 @@ import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
 import { listWorkflowRuns, listWorkflows, type Workflow } from './api';
 import { workflowQueryKeys } from './queryKeys';
-import {
-  workflowCapabilities,
-  workflowRoutes,
-  workflowRunStatus,
-  workflowStatus,
-} from './constants';
+import { workflowRoutes, workflowRunStatus, workflowStatus } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import { EmptyState } from '../../components/EmptyState';
 import { WorkflowIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 import { sessionOptions } from '../auth/queryOptions';
+import { capabilities } from '../auth/capabilities';
 
 const WorkflowDetailLink = Link as unknown as ComponentType<{
   params: { workflowId: string };
@@ -42,8 +38,8 @@ const WorkflowDetailLink = Link as unknown as ComponentType<{
 export const WorkflowsPage = () => {
   const { t } = useTranslation();
   const session = useQuery(sessionOptions());
-  const canRead = useCan(workflowCapabilities.read);
-  const canManage = useCan(workflowCapabilities.manage);
+  const canRead = useCan(capabilities.workflowsRead);
+  const canManage = useCan(capabilities.workflowsManage);
   const workflows = useQuery({
     queryKey: workflowQueryKeys.all(),
     queryFn: listWorkflows,

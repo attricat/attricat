@@ -39,6 +39,7 @@ import {
 } from './useMobileNavigationSection';
 import { Box, Divider, IconButton, List, Typography } from '@mui/material';
 import { sessionOptions } from '../features/auth/queryOptions';
+import { capabilities } from '../features/auth/capabilities';
 
 type SideNavigationProps = {
   compact?: boolean;
@@ -101,7 +102,7 @@ export const SideNavigation = ({
   const managementItems = getVisibleManagementNavigationItems(
     session.data?.capabilities,
   );
-  const canBrowseExtensions = useCan('extensions_read');
+  const canBrowseExtensions = useCan(capabilities.extensionsRead);
   const exploreActive = pathname === navigationRoutes.explore;
   const exploreLinkProps = {
     allRecordsSelected: exploreActive && !search.locked,

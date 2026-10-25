@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
 import { AgentIcon, SavedSearchIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
+import { capabilities } from '../auth/capabilities';
 
 type Props = {
   disabled: boolean;
@@ -24,7 +25,7 @@ export const ExplorerSelectionActionsMenu = ({
   onSendToAgent,
 }: Props) => {
   const { t } = useTranslation();
-  const canSendToAgent = useCan('agents_run');
+  const canSendToAgent = useCan(capabilities.agentsRun);
   const menuId = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const close = () => setAnchor(null);

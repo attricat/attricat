@@ -9,6 +9,8 @@ import type { Blueprint } from './schemas';
 import { BlueprintIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
 import { useCanOn } from '../auth/useCan';
+import { capabilities } from '../auth/capabilities';
+import { accessTargetKinds } from '../auth/api';
 
 export const BlueprintDetailHeader = ({
   blueprint,
@@ -28,11 +30,19 @@ export const BlueprintDetailHeader = ({
   onPublishRecords: () => void;
 }) => {
   const { t } = useTranslation();
-  const canEdit = useCanOn('blueprints_write', 'blueprint', blueprint.id);
-  const canPublish = useCanOn('blueprints_publish', 'blueprint', blueprint.id);
+  const canEdit = useCanOn(
+    capabilities.blueprintsWrite,
+    accessTargetKinds.blueprint,
+    blueprint.id,
+  );
+  const canPublish = useCanOn(
+    capabilities.blueprintsPublish,
+    accessTargetKinds.blueprint,
+    blueprint.id,
+  );
   const canPublishRecords = useCanOn(
-    'records_publish',
-    'blueprint',
+    capabilities.recordsPublish,
+    accessTargetKinds.blueprint,
     blueprint.id,
   );
   return (

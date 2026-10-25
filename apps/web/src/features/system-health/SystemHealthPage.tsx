@@ -21,6 +21,7 @@ import { getSystemHealth } from './api';
 import { systemHealthQueryKeys } from './queryKeys';
 import type { SystemHealth } from './schemas';
 import { sessionOptions } from '../auth/queryOptions';
+import { capabilities } from '../auth/capabilities';
 
 const BuildDetails = ({ build }: { build: SystemHealth['build'] }) => {
   const { t } = useTranslation();
@@ -79,7 +80,7 @@ const BuildDetails = ({ build }: { build: SystemHealth['build'] }) => {
 export const SystemHealthPage = () => {
   const { t } = useTranslation();
   const session = useQuery(sessionOptions());
-  const canRead = useCan('data_health_read');
+  const canRead = useCan(capabilities.dataHealthRead);
   const health = useQuery({
     queryKey: systemHealthQueryKeys.health(),
     queryFn: getSystemHealth,

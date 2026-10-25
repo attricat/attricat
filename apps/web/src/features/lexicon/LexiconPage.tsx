@@ -42,6 +42,7 @@ import { lexiconQueryKeys } from './queryKeys';
 import type { StoredLexiconEntry } from './schemas';
 import { errorMessage } from '../../api/errors';
 import { sessionOptions } from '../auth/queryOptions';
+import { capabilities } from '../auth/capabilities';
 
 type DialogState =
   | { kind: 'add'; draft: LexiconEntryDraft }
@@ -61,7 +62,7 @@ export const LexiconPage = ({
   const [filter, setFilter] = useState('');
   const [dialog, setDialog] = useState<DialogState>();
   const session = useQuery(sessionOptions());
-  const canEdit = useCan('blueprints_write');
+  const canEdit = useCan(capabilities.blueprintsWrite);
   const entries = useQuery({
     queryKey: lexiconQueryKeys.entries(),
     queryFn: ({ signal }) => listStoredLexiconEntries(signal),

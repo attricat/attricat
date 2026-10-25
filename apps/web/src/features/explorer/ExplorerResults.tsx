@@ -11,6 +11,7 @@ import type { ExplorerSearch } from './search';
 import type { ExplorerData } from './useExplorerData';
 import { useExplorerSelection } from './useExplorerSelection';
 import { errorMessage } from '../../api/errors';
+import { capabilities } from '../auth/capabilities';
 
 type Props = {
   data: ExplorerData;
@@ -40,7 +41,7 @@ export const ExplorerResults = ({
     relationshipTreeSelections,
     results,
   } = data;
-  const canReadDataHealth = useCan('data_health_read');
+  const canReadDataHealth = useCan(capabilities.dataHealthRead);
   const resultPages = results.data?.pages ?? [];
   const firstPage = resultPages[0];
   const resultBlueprint = firstPage?.blueprint;

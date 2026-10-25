@@ -4,6 +4,7 @@ import { RouterButton } from '../../components/RouterLink';
 import { ExplorerIcon } from '../../components/systemIcons';
 import { BlueprintLink } from '../blueprints/BlueprintLink';
 import { useCan } from '../auth/useCan';
+import { capabilities } from '../auth/capabilities';
 
 type Props = {
   blueprint: string | undefined;
@@ -28,7 +29,7 @@ export const ExplorerPageHeader = ({
   locked,
 }: Props) => {
   const { t } = useTranslation();
-  const canCreate = useCan('records_write');
+  const canCreate = useCan(capabilities.recordsWrite);
   return (
     <PageHeader
       actions={

@@ -9,6 +9,7 @@ import { useCan } from '../auth/useCan';
 import { workspaceExportStatus } from './api';
 import { exportStatuses, type ExportStatus } from './constants';
 import { extensionExportQueryKeys } from './queryKeys';
+import { capabilities } from '../auth/capabilities';
 
 export type ExportStatusFilterValue = {
   extension: string;
@@ -28,7 +29,7 @@ export const ExportStatusFilterControl = ({
   onChange: (value: ExportStatusFilterValue | undefined) => void;
 }) => {
   const { t } = useTranslation();
-  const canRead = useCan('data_health_read');
+  const canRead = useCan(capabilities.dataHealthRead);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const overview = useQuery({
     queryKey: extensionExportQueryKeys.workspace(),

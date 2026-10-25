@@ -37,6 +37,7 @@ import { RunsSection } from './RunsSection';
 import { RuleIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 import { sessionOptions } from '../auth/queryOptions';
+import { capabilities } from '../auth/capabilities';
 
 const RouterTab = createLink(Tab);
 
@@ -48,8 +49,8 @@ export const RuleInspectionPage = ({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const session = useQuery(sessionOptions());
-  const canRead = useCan('rules_read');
-  const canManage = useCan('rules_manage');
+  const canRead = useCan(capabilities.rulesRead);
+  const canManage = useCan(capabilities.rulesManage);
   // Findings and runs name their rule revision from the definitions.
   const rules = useQuery({ ...ruleDefinitionsOptions(), enabled: canRead });
   const revisions = ruleRevisionsByKey(rules.data ?? []);

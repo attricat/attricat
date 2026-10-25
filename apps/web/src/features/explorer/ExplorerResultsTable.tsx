@@ -57,6 +57,8 @@ import { EmptyState } from '../../components/EmptyState';
 import { RecordIcon } from '../../components/systemIcons';
 import { useCanOn } from '../auth/useCan';
 import { useLatestCallback } from '../../components/useLatestCallback';
+import { capabilities } from '../auth/capabilities';
+import { accessTargetKinds } from '../auth/api';
 
 // The column dialog carries drag-and-drop; load it when first opened so it
 // stays out of the Explorer's startup bundle.
@@ -187,18 +189,18 @@ export const ExplorerResultsTable = ({
   if (activeActionRecord)
     publicationItems.set(activeActionRecord.id, activeActionRecord);
   const canPublish = useCanOn(
-    'records_publish',
-    'record',
+    capabilities.recordsPublish,
+    accessTargetKinds.record,
     activeActionRecord?.id,
   );
   const canDelete = useCanOn(
-    'records_delete',
-    'record',
+    capabilities.recordsDelete,
+    accessTargetKinds.record,
     activeActionRecord?.id,
   );
   const canDuplicate = useCanOn(
-    'records_write',
-    'record',
+    capabilities.recordsWrite,
+    accessTargetKinds.record,
     activeActionRecord?.id,
   );
   const { error, publicationsByRecordId, publish, readiness, unpublish } =

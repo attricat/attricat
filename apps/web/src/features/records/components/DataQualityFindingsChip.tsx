@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { recordFindingCountOptions } from '../../rules/queryOptions';
 import { useCan } from '../../auth/useCan';
+import { capabilities } from '../../auth/capabilities';
 
 /**
  * Warns about unresolved data quality findings for a record and opens their
@@ -16,7 +17,7 @@ export const DataQualityFindingsChip = ({
   onOpen: () => void;
 }) => {
   const { t } = useTranslation();
-  const canReadRules = useCan('rules_read');
+  const canReadRules = useCan(capabilities.rulesRead);
   const count = useQuery({
     ...recordFindingCountOptions(recordId),
     enabled: canReadRules,

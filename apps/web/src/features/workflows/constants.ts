@@ -18,11 +18,6 @@ export const workflowDetailTab = {
 export type WorkflowDetailTab =
   (typeof workflowDetailTab)[keyof typeof workflowDetailTab];
 
-export const workflowCapabilities = {
-  read: 'workflows_read',
-  manage: 'workflows_manage',
-} as const;
-
 export const workflowRoutes = {
   list: '/manage/workflows',
   create: '/manage/workflows/new',
