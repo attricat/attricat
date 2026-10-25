@@ -925,6 +925,7 @@ mod tests {
             allowed_mime_groups: vec!["image/*".to_owned()],
             allowed_extensions: vec!["png".to_owned()],
             max_bytes: Some(1024),
+            purposes: vec![],
             image_only: true,
         }
     }
@@ -981,6 +982,7 @@ mod tests {
             allowed_mime_groups: vec![],
             allowed_extensions: vec![],
             max_bytes: None,
+            purposes: vec![],
             image_only: false,
         };
 

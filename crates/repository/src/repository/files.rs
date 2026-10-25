@@ -4,33 +4,11 @@ use crate::domain_events::{ATTRIBUTE_VALUE_CHANGED_V1, AttributeValueMutationV1}
 use crate::model::NewFileAttributeValue;
 use crate::persistence_rows::{Db, IntoDomain};
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sqlx::Transaction;
 use std::collections::{HashMap, HashSet};
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct FilePolicy {
-    pub cardinality: String,
-    #[serde(default)]
-    pub ordered: bool,
-    pub allowed_mime_groups: Vec<String>,
-    pub allowed_extensions: Vec<String>,
-    pub max_bytes: Option<u64>,
-    pub image_only: bool,
-}
-
-impl FilePolicy {
-    /// Whether a file of a detected MIME type is accepted by this policy.
-    pub fn allows(&self, mime: &str, filename: &str, size: u64) -> bool {
-        attricat_validation::files::FileConstraints {
-            allowed_mime_groups: &self.allowed_mime_groups,
-            allowed_extensions: &self.allowed_extensions,
-            max_bytes: self.max_bytes,
-            image_only: self.image_only,
-        }
-        .allows(mime, filename, size)
-    }
-}
+pub use attricat_blueprint::FilePolicy;
 
 /// A file attribute's local value before and after one write.
 struct FileValueChange<'a> {

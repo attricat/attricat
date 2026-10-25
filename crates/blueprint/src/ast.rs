@@ -476,13 +476,16 @@ pub struct IncludeRef {
     pub version: i64,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+/// Stored as JSON on the attribute row and read back by the repository.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FilePolicy {
     pub cardinality: String,
+    #[serde(default)]
     pub ordered: bool,
     pub allowed_mime_groups: Vec<String>,
     pub allowed_extensions: Vec<String>,
     pub max_bytes: Option<u64>,
+    #[serde(default)]
     pub purposes: Vec<String>,
     pub image_only: bool,
 }
