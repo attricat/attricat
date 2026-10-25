@@ -12,6 +12,17 @@ use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
+/// A migration's source rows and the attributes of both revisions.
+#[derive(Clone, Copy)]
+struct MigrationAttributes<'a> {
+    source_values: &'a [AttributeValue],
+    source_attributes: &'a [Attribute],
+    source_by_id: &'a HashMap<Uuid, &'a Attribute>,
+    target_by_code: &'a HashMap<&'a str, &'a Attribute>,
+    target_by_id: &'a HashMap<Uuid, &'a Attribute>,
+    default_context_id: Option<Uuid>,
+}
+
 const TRANSACTION_DURATION_METRIC: &str = "attricat_record_migration_transaction_duration_seconds";
 const VALUES_METRIC: &str = "attricat_record_migration_values_total";
 
@@ -387,6 +398,129 @@ impl AttricatRepository {
             .await
     }
 
+    /// Drops supplied values and relationship sets identical to compatible
+    /// source rows. The migration form submits every populated target field;
+    /// treating those as confirmations rather than replacements preserves
+    /// their row identity, as an empty automatic migration does.
+    async fn drop_confirmed_migration_values(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        input: &mut MigrateRecordRequest,
+        attributes: MigrationAttributes<'_>,
+    ) -> Result<(), RepositoryError> {
+        let MigrationAttributes {
+            source_values,
+            source_attributes,
+            source_by_id,
+            target_by_code,
+            target_by_id,
+            default_context_id,
+        } = attributes;
+        let mut effective_values = Vec::with_capacity(input.values.len());
+        for supplied in std::mem::take(&mut input.values) {
+            let (attribute_id, attribute_code, supplied_context_id) = match &supplied {
+                NewAttributeValue::Scalar {
+                    attribute_id,
+                    attribute_code,
+                    context_id,
+                    ..
+                }
+                | NewAttributeValue::Relationship {
+                    attribute_id,
+                    attribute_code,
+                    context_id,
+                    ..
+                } => (*attribute_id, attribute_code.as_deref(), *context_id),
+            };
+            let code = attribute_code.or_else(|| {
+                attribute_id.and_then(|id| target_by_id.get(&id).map(|a| a.code.as_str()))
+            });
+            let context_id = self
+                .resolve_context_id(transaction, supplied_context_id)
+                .await?;
+            let unchanged = code.is_some_and(|code| {
+                let target = target_by_code.get(code).copied();
+                source_values.iter().any(|current| {
+                    let Some(source) = source_by_id.get(&current.attribute_id).copied() else {
+                        return false;
+                    };
+                    source.code == code
+                        && current.context_id == context_id
+                        && target.is_some_and(|target| {
+                            migration_value_compatible(source, target, current, default_context_id)
+                        })
+                        && match &supplied {
+                            NewAttributeValue::Scalar { value, .. } => {
+                                current.relationship_target_record_id.is_none()
+                                    && migration_scalar_values_equal(
+                                        &source.value_type,
+                                        &current.value,
+                                        value,
+                                    )
+                            }
+                            NewAttributeValue::Relationship {
+                                target_record_id, ..
+                            } => {
+                                current.active
+                                    && current.relationship_target_record_id
+                                        == Some(*target_record_id)
+                            }
+                        }
+                })
+            });
+            if !unchanged {
+                effective_values.push(supplied);
+            }
+        }
+        input.values = effective_values;
+
+        let mut effective_relationships = Vec::with_capacity(input.relationships.len());
+        for relationship in std::mem::take(&mut input.relationships) {
+            let code = relationship.attribute_code.as_deref().or_else(|| {
+                relationship
+                    .attribute_id
+                    .and_then(|id| target_by_id.get(&id).map(|a| a.code.as_str()))
+            });
+            let context_id = self
+                .resolve_context_id(transaction, relationship.context_id)
+                .await?;
+            let unchanged = code.is_some_and(|code| {
+                let source = source_attributes.iter().find(|source| source.code == code);
+                let target = target_by_code.get(code).copied();
+                source.is_some_and(|source| {
+                    target.is_some_and(|target| {
+                        migration_contract_compatible(
+                            source,
+                            target,
+                            context_id,
+                            default_context_id,
+                        )
+                    })
+                }) && source_values
+                    .iter()
+                    .filter(|current| {
+                        current.active
+                            && current.context_id == context_id
+                            && source_by_id
+                                .get(&current.attribute_id)
+                                .is_some_and(|source| source.code == code)
+                    })
+                    .filter_map(|current| current.relationship_target_record_id)
+                    .collect::<HashSet<_>>()
+                    == relationship
+                        .target_record_ids
+                        .iter()
+                        .copied()
+                        .collect::<HashSet<_>>()
+            });
+            if !unchanged {
+                effective_relationships.push(relationship);
+            }
+        }
+        input.relationships = effective_relationships;
+        Ok(())
+    }
+
     pub async fn migrate_record_to_latest_checked(
         &self,
         record_id: Uuid,
@@ -504,112 +638,19 @@ impl AttricatRepository {
             .collect();
         let default_context_id = self.resolve_context_id(&mut transaction, None).await?;
 
-        // The migration form submits all populated target fields. Treat values
-        // and relationship sets that are identical to compatible source rows as
-        // confirmations, not replacements, so the normal HTTP path preserves
-        // their row identity just like an empty automatic-migration payload.
-        let mut effective_values = Vec::with_capacity(input.values.len());
-        for supplied in std::mem::take(&mut input.values) {
-            let (attribute_id, attribute_code, supplied_context_id) = match &supplied {
-                NewAttributeValue::Scalar {
-                    attribute_id,
-                    attribute_code,
-                    context_id,
-                    ..
-                }
-                | NewAttributeValue::Relationship {
-                    attribute_id,
-                    attribute_code,
-                    context_id,
-                    ..
-                } => (*attribute_id, attribute_code.as_deref(), *context_id),
-            };
-            let code = attribute_code.or_else(|| {
-                attribute_id.and_then(|id| target_by_id.get(&id).map(|a| a.code.as_str()))
-            });
-            let context_id = self
-                .resolve_context_id(&mut transaction, supplied_context_id)
-                .await?;
-            let unchanged = code.is_some_and(|code| {
-                let target = target_by_code.get(code).copied();
-                source_values.iter().any(|current| {
-                    let Some(source) = source_by_id.get(&current.attribute_id).copied() else {
-                        return false;
-                    };
-                    source.code == code
-                        && current.context_id == context_id
-                        && target.is_some_and(|target| {
-                            migration_value_compatible(source, target, current, default_context_id)
-                        })
-                        && match &supplied {
-                            NewAttributeValue::Scalar { value, .. } => {
-                                current.relationship_target_record_id.is_none()
-                                    && migration_scalar_values_equal(
-                                        &source.value_type,
-                                        &current.value,
-                                        value,
-                                    )
-                            }
-                            NewAttributeValue::Relationship {
-                                target_record_id, ..
-                            } => {
-                                current.active
-                                    && current.relationship_target_record_id
-                                        == Some(*target_record_id)
-                            }
-                        }
-                })
-            });
-            if !unchanged {
-                effective_values.push(supplied);
-            }
-        }
-        input.values = effective_values;
-
-        let mut effective_relationships = Vec::with_capacity(input.relationships.len());
-        for relationship in std::mem::take(&mut input.relationships) {
-            let code = relationship.attribute_code.as_deref().or_else(|| {
-                relationship
-                    .attribute_id
-                    .and_then(|id| target_by_id.get(&id).map(|a| a.code.as_str()))
-            });
-            let context_id = self
-                .resolve_context_id(&mut transaction, relationship.context_id)
-                .await?;
-            let unchanged = code.is_some_and(|code| {
-                let source = source_attributes.iter().find(|source| source.code == code);
-                let target = target_by_code.get(code).copied();
-                source.is_some_and(|source| {
-                    target.is_some_and(|target| {
-                        migration_contract_compatible(
-                            source,
-                            target,
-                            context_id,
-                            default_context_id,
-                        )
-                    })
-                }) && source_values
-                    .iter()
-                    .filter(|current| {
-                        current.active
-                            && current.context_id == context_id
-                            && source_by_id
-                                .get(&current.attribute_id)
-                                .is_some_and(|source| source.code == code)
-                    })
-                    .filter_map(|current| current.relationship_target_record_id)
-                    .collect::<HashSet<_>>()
-                    == relationship
-                        .target_record_ids
-                        .iter()
-                        .copied()
-                        .collect::<HashSet<_>>()
-            });
-            if !unchanged {
-                effective_relationships.push(relationship);
-            }
-        }
-        input.relationships = effective_relationships;
+        self.drop_confirmed_migration_values(
+            &mut transaction,
+            &mut input,
+            MigrationAttributes {
+                source_values: &source_values,
+                source_attributes: &source_attributes,
+                source_by_id: &source_by_id,
+                target_by_code: &target_by_code,
+                target_by_id: &target_by_id,
+                default_context_id,
+            },
+        )
+        .await?;
 
         let mut supplied_keys: HashSet<AttributeContextKey> = HashSet::new();
         let mut supplied_scalar_keys: HashSet<AttributeContextKey> = HashSet::new();
