@@ -9,9 +9,6 @@ that do not define them.
 
 - `detail`: the record page layout, used for both display and editing, and
   the layout of the create and migration forms.
-- `edit`: deprecated. The UI ignores it. The compiler still accepts it and
-  still requires edit-capable components inside it, but no longer requires it
-  to place required attributes.
 - `page_title`: the record page's browser tab title, joined from scalar
   `fields` with an optional `separator`. Record blueprints only, under that
   name. The page falls back to the `dropdown_option` label, then a short ID.

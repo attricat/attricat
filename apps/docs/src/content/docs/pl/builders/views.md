@@ -18,7 +18,7 @@ Widoki są opcjonalne. Bez nich aplikacja internetowa pokazuje atrybuty w kolejn
 | `explorer` | Ustawienia domyślne **Przeglądarki rekordów**, np. atrybut wyświetlany w panelu **Przeglądaj według**. |
 | `extension_layout` | Kolejność i widoczność paneli i akcji rozszerzeń na stronach rekordów tego schematu. |
 
-Widok `views.edit` jest przestarzały. Aplikacja internetowa go ignoruje, a schematy, które nadal go definiują, pozostają poprawne.
+Nie ma osobnego widoku edycji: rekordy edytuje się na miejscu w układzie szczegółów. Schemat, który definiuje `views.edit`, zostaje odrzucony.
 
 ## Budowanie układu szczegółów
 

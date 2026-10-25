@@ -579,9 +579,7 @@ listed on every allowed target blueprint.
 
 `views.detail` lays out both display and editing: the record page renders
 every field the user may change as an editor in its place, and the create and
-migration forms use the same layout. `views.edit` is deprecated; the UI ignores
-it, and the compiler still accepts it (checking its components' `edit`
-capability) without requiring it to place required attributes.
+migration forms use the same layout. The compiler rejects a `views.edit`.
 
 Field, relationship-list, and table blocks may optionally reference a
 platform-registered component:

@@ -737,10 +737,6 @@ fields = ["phone"]
 type = "stack"
 children = [{ type = "field", field = "phone", component = { id = "attricat.phone_display", version = 1 } }]
 
-[views.edit]
-type = "stack"
-children = [{ type = "field", field = "phone", component = { id = "attricat.phone_edit", version = 1 } }]
-
 [views.table]
 type = "table"
 columns = [{ field = "phone", renderer = { id = "attricat.phone_display", version = 1 } }]
@@ -752,7 +748,6 @@ value_type = "string"
     assert!(compile(parse(source).unwrap(), &[], source).is_ok());
     for invalid in [
         source.replace("value_type = \"string\"", "value_type = \"integer\""),
-        source.replace("attricat.phone_edit", "attricat.phone_display"),
         source.replace("attricat.phone_display", "attricat.phone_edit"),
         source.replace("version = 1 }", "version = 2 }"),
         source.replace(
@@ -777,9 +772,6 @@ fields = ["url"]
 [views.detail]
 type = "stack"
 children = [{ type = "field", field = "url", component = { id = "attricat.url_display", version = 1 } }]
-[views.edit]
-type = "stack"
-children = [{ type = "field", field = "url", component = { id = "attricat.url_edit", version = 1 } }]
 [views.table]
 type = "table"
 columns = [{ field = "url", renderer = { id = "attricat.url_display", version = 1 } }]
@@ -791,7 +783,6 @@ value_type = "string"
     for invalid in [
         source.replace("value_type = \"string\"", "value_type = \"number\""),
         source.replace("attricat.url_display", "attricat.url_edit"),
-        source.replace("attricat.url_edit", "attricat.url_display"),
         source.replace("version = 1 }", "version = 2 }"),
         source.replace("version = 1 }", "version = 1, props = { unsafe = true } }"),
     ] {
@@ -813,9 +804,6 @@ fields = ["hex"]
 [views.detail]
 type = "stack"
 children = [{ type = "field", field = "hex", component = { id = "attricat.color_display", version = 1 } }]
-[views.edit]
-type = "stack"
-children = [{ type = "field", field = "hex", component = { id = "attricat.color_edit", version = 1 } }]
 [views.table]
 type = "table"
 columns = [{ field = "hex", renderer = { id = "attricat.color_display", version = 1 } }]
@@ -824,7 +812,6 @@ columns = [{ field = "hex", renderer = { id = "attricat.color_display", version 
     for invalid in [
         source.replace("value_type = \"string\"", "value_type = \"number\""),
         source.replace("attricat.color_display", "attricat.color_edit"),
-        source.replace("attricat.color_edit", "attricat.color_display"),
         source.replace("version = 1 }", "version = 2 }"),
         source.replace("version = 1 }", "version = 1, props = { alpha = true } }"),
         source.replace("type = \"field\"", "type = \"relationship_list\""),
@@ -1450,10 +1437,8 @@ value_type = "json"
 }
 
 #[test]
-fn deprecated_edit_view_has_no_placement_requirements() {
-    // Records are edited in place on the detail view; a legacy `views.edit`
-    // is accepted for compatibility but no longer has to place required
-    // attributes.
+fn edit_views_are_rejected() {
+    // Records are edited in place on the detail view.
     let source = r#"
 format_version = 1
 code = "product"
@@ -1477,7 +1462,10 @@ value_type = "string"
 code = "price"
 value_type = "number"
 "#;
-    compile(parse(source).unwrap(), &[], source).unwrap();
+    assert!(matches!(
+        compile(parse(source).unwrap(), &[], source),
+        Err(BlueprintError::EditViewRemoved)
+    ));
 }
 
 fn compile_source(source: &str) -> Result<attricat_blueprint::CompiledBlueprint, BlueprintError> {

@@ -2025,7 +2025,7 @@
         "$ref": "#/$defs/ViewDefinition"
       },
       "default": {},
-      "description": "Named views: `dropdown_option`, `page_title`, `table`, `detail`, and `extension_layout`.\nThe `detail` layout also drives editing; a legacy `edit` view is ignored.",
+      "description": "Named views: `dropdown_option`, `page_title`, `table`, `detail`, and `extension_layout`.\nThe `detail` layout also drives editing.",
       "type": "object",
       "x-attricat-key-suggestions": [
         "dropdown_option",

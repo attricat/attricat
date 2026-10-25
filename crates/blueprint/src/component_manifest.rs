@@ -109,7 +109,6 @@ pub(crate) fn validate_component(
 fn required_view_capability(view: &str) -> Option<&'static str> {
     match view {
         "detail" | "table" => Some("display"),
-        "edit" => Some("edit"),
         _ => None,
     }
 }

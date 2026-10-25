@@ -44,6 +44,8 @@ pub enum BlueprintError {
     InvalidExtensionLayout,
     #[error("explorer views must be named views.explorer on a record blueprint")]
     InvalidExplorerView,
+    #[error("views.edit is no longer supported; records are edited on the detail view")]
+    EditViewRemoved,
     #[error(
         "views.explorer browse_by '{0}' must be false, a relationship with a single target blueprint, or a path of up to three such relationships with cardinality = \"one\""
     )]

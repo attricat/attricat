@@ -144,6 +144,9 @@ pub fn compile(
     {
         return Err(BlueprintError::MissingDropdownOptionView);
     }
+    if definition.views.contains_key("edit") {
+        return Err(BlueprintError::EditViewRemoved);
+    }
     for (name, view) in &definition.views {
         crate::view_validation::validate_view(
             name,

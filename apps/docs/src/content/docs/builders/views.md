@@ -18,7 +18,7 @@ Views are optional. Without them, the web app shows attributes in declaration or
 | `explorer` | Explorer defaults, such as the field the **Browse by** panel lists. |
 | `extension_layout` | Order and visibility of extension panels and actions on this blueprint's record pages. |
 
-`views.edit` is deprecated. The web app ignores it, and blueprints that still define it remain valid.
+There is no separate edit view: records are edited in place on the detail layout. A blueprint that defines `views.edit` is rejected.
 
 ## Building a detail layout
 

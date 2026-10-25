@@ -58,7 +58,7 @@ struct RawBlueprintDefinition {
     #[serde(default)]
     includes: Vec<IncludeRef>,
     /// Named views: `dropdown_option`, `page_title`, `table`, `detail`, and `extension_layout`.
-    /// The `detail` layout also drives editing; a legacy `edit` view is ignored.
+    /// The `detail` layout also drives editing.
     #[serde(default)]
     #[schemars(extend("x-attricat-key-suggestions" = KNOWN_VIEW_NAMES))]
     views: HashMap<String, ViewDefinition>,

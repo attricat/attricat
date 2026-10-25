@@ -15,20 +15,17 @@ import {
   headingEditableAttributes,
   unplacedEditableAttributes,
 } from '../records/recordFormAttributes';
-import { legacyEditViewName, sandboxEditTab } from './constants';
+import { sandboxEditTab } from './constants';
 import { RenderedBlueprintView } from './RenderedBlueprintView';
 import { SandboxAttributeEditor } from './SandboxAttributeEditor';
 import { sandboxValidation, sandboxValuesForFields } from './sandboxValues';
 
 type ViewTab = readonly [name: string, view: ViewDefinition | undefined];
 
-/**
- * The sandbox editor, using the detail layout, always comes first. A
- * deprecated `edit` view is not shown.
- */
+/** The sandbox editor, using the detail layout, always comes first. */
 const viewTabs = (views: Blueprint['views']): ViewTab[] => [
   [sandboxEditTab, views.detail],
-  ...Object.entries(views).filter(([name]) => name !== legacyEditViewName),
+  ...Object.entries(views),
 ];
 
 export const BlueprintViewsPreview = ({

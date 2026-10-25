@@ -47,11 +47,6 @@ export const blueprintVersionMetadataTabs = {
 export type BlueprintVersionMetadataTab =
   (typeof blueprintVersionMetadataTabs)[keyof typeof blueprintVersionMetadataTabs];
 
-/**
- * Deprecated view name: records are edited in place on the detail view, so a
- * blueprint's `views.edit` is ignored.
- */
-export const legacyEditViewName = 'edit';
 /** Sandbox tab that edits sample values through the detail layout. */
 export const sandboxEditTab = 'sandbox';
 
