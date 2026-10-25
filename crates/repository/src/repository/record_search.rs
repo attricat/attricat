@@ -278,38 +278,49 @@ struct IncomingRelationshipRow {
     blueprint_context_fallback: Value,
 }
 
-/// Root records whose active relationships, resolved for the context path
-/// `$6`, reach one of `$4` at exactly the path `$3`. `$1` blueprint, `$2`
-/// optional version, `$5` workspace. `{edge_context}` is replaced with
-/// [`resolved_context`].
-const RELATIONSHIP_FILTER_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, depth) AS (
+/// Walks the relationship path `$3` from every record of blueprint `$1`
+/// (optional version `$2`) as `reached(root_id, current_id, depth)`, for the
+/// filter statements below. `{workspace}` is replaced with the statement's
+/// workspace parameter; `{edge_context}` stays for [`resolved_context`].
+const REACHED_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, depth) AS (
                        SELECT e.id, e.id, 0
                          FROM records e
                         WHERE e.blueprint_id = $1
                           AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                          AND e.workspace_id = $5 AND e.deleted_at IS NULL
+                          AND e.workspace_id = {workspace} AND e.deleted_at IS NULL
                        UNION ALL
                        SELECT reached.root_id, av.relationship_target_record_id, reached.depth + 1
                          FROM reached
                          JOIN records source ON source.id = reached.current_id
-                          AND source.workspace_id = $5 AND source.deleted_at IS NULL
+                          AND source.workspace_id = {workspace} AND source.deleted_at IS NULL
                          JOIN attributes relationship ON relationship.blueprint_id = source.blueprint_id
                           AND relationship.blueprint_version = source.blueprint_version
-                          AND relationship.workspace_id = $5
+                          AND relationship.workspace_id = {workspace}
                           AND relationship.code = $3[reached.depth + 1]
                           AND relationship.value_type = 'relationship'
                          JOIN attribute_values av ON av.record_id = source.id
-                          AND av.workspace_id = $5
+                          AND av.workspace_id = {workspace}
                           AND av.attribute_id = relationship.id AND av.active
                           AND {edge_context}
                           AND av.relationship_target_record_id IS NOT NULL
                          JOIN records target ON target.id = av.relationship_target_record_id
-                          AND target.workspace_id = $5 AND target.deleted_at IS NULL
+                          AND target.workspace_id = {workspace} AND target.deleted_at IS NULL
                          JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
                           AND target_blueprint.version = target.blueprint_version
                           AND target_blueprint.code = relationship.target_blueprint_code
                         WHERE reached.depth < cardinality($3)
-                   )
+                   )"#;
+
+/// A filter statement with its `{reached}` walk expanded for `workspace`.
+fn with_reached(statement: &str, workspace: &str) -> String {
+    statement.replace("{reached}", &REACHED_SQL.replace("{workspace}", workspace))
+}
+
+/// Root records whose active relationships, resolved for the context path
+/// `$6`, reach one of `$4` at exactly the path `$3`. `$1` blueprint, `$2`
+/// optional version, `$5` workspace. `{edge_context}` is replaced with
+/// [`resolved_context`].
+const RELATIONSHIP_FILTER_SQL: &str = r#"{reached}
                    SELECT DISTINCT root_id
                      FROM reached
                     WHERE depth = cardinality($3) AND current_id = ANY($4)"#;
@@ -319,34 +330,7 @@ const RELATIONSHIP_FILTER_SQL: &str = r#"WITH RECURSIVE reached(root_id, current
 /// optional version, `$3` relationship path, `$4` leaf field, `$5` value type,
 /// `$6` operator, `$7` value, `$8` workspace. `{edge_context}` and
 /// `{value_context}` are replaced with [`resolved_context`].
-const SCALAR_FILTER_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, depth) AS (
-                       SELECT e.id, e.id, 0
-                         FROM records e
-                        WHERE e.blueprint_id = $1
-                          AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                          AND e.workspace_id = $8 AND e.deleted_at IS NULL
-                       UNION ALL
-                       SELECT reached.root_id, av.relationship_target_record_id, reached.depth + 1
-                         FROM reached
-                         JOIN records source ON source.id = reached.current_id
-                          AND source.workspace_id = $8 AND source.deleted_at IS NULL
-                         JOIN attributes relationship ON relationship.blueprint_id = source.blueprint_id
-                          AND relationship.blueprint_version = source.blueprint_version
-                          AND relationship.workspace_id = $8
-                          AND relationship.code = $3[reached.depth + 1]
-                          AND relationship.value_type = 'relationship'
-                         JOIN attribute_values av ON av.record_id = source.id
-                          AND av.workspace_id = $8
-                          AND av.attribute_id = relationship.id AND av.active
-                          AND {edge_context}
-                          AND av.relationship_target_record_id IS NOT NULL
-                         JOIN records target ON target.id = av.relationship_target_record_id
-                          AND target.workspace_id = $8 AND target.deleted_at IS NULL
-                         JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
-                          AND target_blueprint.version = target.blueprint_version
-                          AND target_blueprint.code = relationship.target_blueprint_code
-                        WHERE reached.depth < cardinality($3)
-                   )
+const SCALAR_FILTER_SQL: &str = r#"{reached}
                    SELECT DISTINCT reached.root_id
                      FROM reached
                      JOIN records leaf ON leaf.id = reached.current_id
@@ -756,7 +740,7 @@ impl AttricatRepository {
         // One INTERSECT branch per filter. Shared parameters: $1 blueprint,
         // $2 version, $3 workspace, $4 context path; each filter binds a path
         // and targets.
-        let statement = RELATIONSHIP_FILTER_SQL.replace(
+        let statement = with_reached(RELATIONSHIP_FILTER_SQL, "$5").replace(
             "{edge_context}",
             &resolved_context("av", "relationship", "$6"),
         );
@@ -829,7 +813,7 @@ impl AttricatRepository {
             // Every scalar filter becomes one INTERSECT branch of a single
             // statement. Shared parameters: $1 blueprint, $2 version,
             // $3 workspace, $4 context path; each filter binds five more.
-            let statement = SCALAR_FILTER_SQL
+            let statement = with_reached(SCALAR_FILTER_SQL, "$8")
                 .replace(
                     "{edge_context}",
                     &resolved_context("av", "relationship", "$9"),
