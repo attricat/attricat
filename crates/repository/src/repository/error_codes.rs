@@ -16,8 +16,10 @@ use super::{CheckViolation, RepositoryError};
 
 macro_rules! error_codes {
     ($($variant:ident = $code:literal,)+) => {
-        /// The closed set of machine-readable error codes. Serializes as its
-        /// snake_case wire string, which clients and agents switch on.
+        /// The closed set of machine-readable error codes, including the
+        /// HTTP layer's transport codes (authentication, request limits,
+        /// files). Serializes as its snake_case wire string, which clients
+        /// and agents switch on; `contracts/api-error-codes.json` lists it.
         #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
         pub enum ErrorCode {
             $($variant,)+
@@ -45,18 +47,21 @@ error_codes! {
     AttributeNotApplicable = "attribute_not_applicable",
     AttributeValueSchemaMismatch = "attribute_value_schema_mismatch",
     AttributeValueTypeMismatch = "attribute_value_type_mismatch",
+    BadGateway = "bad_gateway",
+    BadRequest = "bad_request",
     BlueprintMigrationNotSafe = "blueprint_migration_not_safe",
     BlueprintNotPublished = "blueprint_not_published",
     CommentConflict = "comment_conflict",
     Conflict = "conflict",
-    RecordBlueprintCurrent = "record_blueprint_current",
-    RecordCheckFailed = "record_check_failed",
-    RecordIdTaken = "record_id_taken",
-    RecordSchemaMismatch = "record_schema_mismatch",
+    CsrfFailed = "csrf_failed",
+    DisabledInDemo = "disabled_in_demo",
     ExtensionAlreadyInstalled = "extension_already_installed",
     FileAttributeReadonly = "file_attribute_readonly",
     FileCardinalityExceeded = "file_cardinality_exceeded",
+    FileCountExceeded = "file_count_exceeded",
+    FileProcessing = "file_processing",
     FileReferencesChanged = "file_references_changed",
+    FileTooLarge = "file_too_large",
     Forbidden = "forbidden",
     GlobalRelationshipSearchBudgetExceeded = "global_relationship_search_budget_exceeded",
     GlobalRelationshipSearchTimedOut = "global_relationship_search_timed_out",
@@ -64,9 +69,12 @@ error_codes! {
     InternalError = "internal_error",
     InvalidAnnotationPatch = "invalid_annotation_patch",
     InvalidBlueprintDefinition = "invalid_blueprint_definition",
+    InvalidCredentials = "invalid_credentials",
+    InvalidFile = "invalid_file",
     InvalidFilePolicy = "invalid_file_policy",
     InvalidFileReferences = "invalid_file_references",
     InvalidInput = "invalid_input",
+    InvalidRange = "invalid_range",
     InvalidRuleDefinition = "invalid_rule_definition",
     InvalidSystemMetadata = "invalid_system_metadata",
     InvalidSystemTags = "invalid_system_tags",
@@ -76,19 +84,28 @@ error_codes! {
     MigrationNotApplicable = "migration_not_applicable",
     MigrationTargetChanged = "migration_target_changed",
     NotFound = "not_found",
+    PayloadTooLarge = "payload_too_large",
     ProtectedAnnotationNamespace = "protected_annotation_namespace",
     PublicationChannelDisabled = "publication_channel_disabled",
     PublicationChecksFailed = "publication_checks_failed",
+    RateLimited = "rate_limited",
+    RecordBlueprintCurrent = "record_blueprint_current",
+    RecordCheckFailed = "record_check_failed",
+    RecordIdTaken = "record_id_taken",
     RecordLocked = "record_locked",
+    RecordSchemaMismatch = "record_schema_mismatch",
     RelationshipCardinalityConflict = "relationship_cardinality_conflict",
     RelationshipCycle = "relationship_cycle",
     RelationshipHierarchyViolations = "relationship_hierarchy_violations",
+    RelationshipPathSortRequiresSingleResultVersion = "relationship_path_sort_requires_single_result_version",
     RelationshipTargetTypeMismatch = "relationship_target_type_mismatch",
+    RequestTimeout = "request_timeout",
     RuleDryRunRequired = "rule_dry_run_required",
     RuleHasExistingViolations = "rule_has_existing_violations",
     RuleNotEnabled = "rule_not_enabled",
     RuleNotPublished = "rule_not_published",
     RuleViolation = "rule_violation",
+    ServiceUnavailable = "service_unavailable",
     SolutionPackApplicationFailed = "solution_pack_application_failed",
     SolutionPackApplicationInvalid = "solution_pack_application_invalid",
     SolutionPackPlanExpired = "solution_pack_plan_expired",
@@ -99,10 +116,14 @@ error_codes! {
     StatusPreconditionRequired = "status_precondition_required",
     StatusSeparationOfDuties = "status_separation_of_duties",
     StatusTransitionForbidden = "status_transition_forbidden",
+    StorageConflict = "storage_conflict",
+    StorageQuotaExceeded = "storage_quota_exceeded",
     StorageUnavailable = "storage_unavailable",
     TransitionConditionsUnmet = "transition_conditions_unmet",
+    Unauthenticated = "unauthenticated",
     UniqueKeyConflict = "unique_key_conflict",
     UniqueKeyDuplicates = "unique_key_duplicates",
+    UnsupportedMediaType = "unsupported_media_type",
     WorkflowNotEnabled = "workflow_not_enabled",
     WorkflowNotPublished = "workflow_not_published",
 }
@@ -594,5 +615,34 @@ mod tests {
             );
             assert_eq!(serde_json::to_value(code).unwrap(), json!(wire));
         }
+    }
+
+    const CONTRACT: &str = "contracts/api-error-codes.json";
+    const UPDATE_CONTRACTS: &str = "UPDATE_CONTRACTS";
+
+    /// Clients translate errors by code, so they check their translations
+    /// against this list.
+    #[test]
+    fn error_code_contract_is_current() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .unwrap()
+            .join(CONTRACT);
+        let mut codes = ErrorCode::ALL
+            .iter()
+            .map(|code| code.as_str())
+            .collect::<Vec<_>>();
+        codes.sort_unstable();
+        let mut rendered = serde_json::to_string_pretty(&json!({ "codes": codes })).unwrap();
+        rendered.push('\n');
+        if std::env::var_os(UPDATE_CONTRACTS).is_some() {
+            std::fs::write(&path, rendered).unwrap();
+            return;
+        }
+        assert!(
+            std::fs::read_to_string(&path).unwrap_or_default() == rendered,
+            "{CONTRACT} is stale; run `just contracts`"
+        );
     }
 }

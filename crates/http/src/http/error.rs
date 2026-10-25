@@ -5,19 +5,19 @@ use axum::{
 };
 use serde::Serialize;
 
-use crate::repository::{ErrorClass, RepositoryError};
+use crate::repository::{ErrorClass, ErrorCode, RepositoryError};
 
 #[derive(Debug)]
 pub(super) struct ApiError {
     status: StatusCode,
-    code: &'static str,
+    code: ErrorCode,
     message: String,
     /// Machine-readable context for clients that recover from the error,
     /// such as the record holding a conflicting unique key.
     details: Option<serde_json::Value>,
 }
 impl ApiError {
-    fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
+    fn new(status: StatusCode, code: ErrorCode, message: impl Into<String>) -> Self {
         Self {
             status,
             code,
@@ -32,35 +32,35 @@ impl ApiError {
     pub(super) fn unauthenticated() -> Self {
         Self::new(
             StatusCode::UNAUTHORIZED,
-            "unauthenticated",
+            ErrorCode::Unauthenticated,
             "authentication is required",
         )
     }
     pub(super) fn csrf_failed() -> Self {
         Self::new(
             StatusCode::FORBIDDEN,
-            "csrf_failed",
+            ErrorCode::CsrfFailed,
             "a valid CSRF token is required",
         )
     }
     pub(super) fn rate_limited() -> Self {
         Self::new(
             StatusCode::TOO_MANY_REQUESTS,
-            "rate_limited",
+            ErrorCode::RateLimited,
             "too many login attempts; try again later",
         )
     }
     pub(super) fn invalid_credentials() -> Self {
         Self::new(
             StatusCode::UNAUTHORIZED,
-            "invalid_credentials",
+            ErrorCode::InvalidCredentials,
             "invalid email or password",
         )
     }
     pub(super) fn forbidden() -> Self {
         Self::new(
             StatusCode::FORBIDDEN,
-            "forbidden",
+            ErrorCode::Forbidden,
             "you are not authorized to perform this action",
         )
     }
@@ -68,21 +68,21 @@ impl ApiError {
     pub(super) fn disabled_in_demo() -> Self {
         Self::new(
             StatusCode::FORBIDDEN,
-            "disabled_in_demo",
+            ErrorCode::DisabledInDemo,
             "this action is disabled in the demo",
         )
     }
     pub(super) fn not_found(resource: &'static str) -> Self {
         Self::new(
             StatusCode::NOT_FOUND,
-            "not_found",
+            ErrorCode::NotFound,
             format!("{resource} was not found"),
         )
     }
     pub(super) fn service_unavailable(message: &'static str) -> Self {
         Self::new(
             StatusCode::SERVICE_UNAVAILABLE,
-            "service_unavailable",
+            ErrorCode::ServiceUnavailable,
             message,
         )
     }
@@ -92,102 +92,114 @@ impl ApiError {
     pub(super) fn request_timeout() -> Self {
         Self::new(
             StatusCode::SERVICE_UNAVAILABLE,
-            "request_timeout",
+            ErrorCode::RequestTimeout,
             "request exceeded the server time limit",
         )
     }
     /// An upstream dependency (e.g. the LLM provider) returned an unusable
     /// response to a valid request.
     pub(super) fn bad_gateway(message: &'static str) -> Self {
-        Self::new(StatusCode::BAD_GATEWAY, "bad_gateway", message)
+        Self::new(StatusCode::BAD_GATEWAY, ErrorCode::BadGateway, message)
     }
     pub(super) fn internal(message: &'static str) -> Self {
-        Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_error", message)
+        Self::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorCode::InternalError,
+            message,
+        )
     }
     pub(super) fn invalid_search_query(message: String) -> Self {
-        Self::new(StatusCode::BAD_REQUEST, "invalid_input", message)
+        Self::new(StatusCode::BAD_REQUEST, ErrorCode::InvalidInput, message)
     }
     pub(super) fn conflict(message: &'static str) -> Self {
-        Self::new(StatusCode::CONFLICT, "conflict", message)
+        Self::new(StatusCode::CONFLICT, ErrorCode::Conflict, message)
     }
     pub(super) fn invalid_input(message: String) -> Self {
-        Self::new(StatusCode::UNPROCESSABLE_ENTITY, "invalid_input", message)
+        Self::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::InvalidInput,
+            message,
+        )
     }
     pub(super) fn relationship_sort_requires_single_version() -> Self {
         Self::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            "relationship_path_sort_requires_single_result_version",
+            ErrorCode::RelationshipPathSortRequiresSingleResultVersion,
             "related-value sorting requires results from one blueprint version",
         )
     }
     pub(super) fn storage_conflict() -> Self {
         Self::new(
             StatusCode::CONFLICT,
-            "storage_conflict",
+            ErrorCode::StorageConflict,
             "storage revision conflict",
         )
     }
     pub(super) fn storage_quota_exceeded() -> Self {
         Self::new(
             StatusCode::PAYLOAD_TOO_LARGE,
-            "storage_quota_exceeded",
+            ErrorCode::StorageQuotaExceeded,
             "extension storage quota exceeded",
         )
     }
     pub(super) fn payload_too_large() -> Self {
         Self::new(
             StatusCode::PAYLOAD_TOO_LARGE,
-            "payload_too_large",
+            ErrorCode::PayloadTooLarge,
             "request body exceeds the configured size limit",
         )
     }
     pub(super) fn file_too_large() -> Self {
         Self::new(
             StatusCode::PAYLOAD_TOO_LARGE,
-            "file_too_large",
+            ErrorCode::FileTooLarge,
             "file exceeds the configured size limit",
         )
     }
     pub(super) fn file_count_exceeded() -> Self {
         Self::new(
             StatusCode::PAYLOAD_TOO_LARGE,
-            "file_count_exceeded",
+            ErrorCode::FileCountExceeded,
             "request exceeds the configured file count limit",
         )
     }
     pub(super) fn unsupported_media_type() -> Self {
         Self::new(
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            "unsupported_media_type",
+            ErrorCode::UnsupportedMediaType,
             "file type is not allowed",
         )
     }
     pub(super) fn invalid_file(message: &'static str) -> Self {
-        Self::new(StatusCode::UNPROCESSABLE_ENTITY, "invalid_file", message)
+        Self::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::InvalidFile,
+            message,
+        )
     }
     pub(super) fn invalid_range() -> Self {
         Self::new(
             StatusCode::RANGE_NOT_SATISFIABLE,
-            "invalid_range",
+            ErrorCode::InvalidRange,
             "requested byte range is not satisfiable",
         )
     }
     pub(super) fn file_processing() -> Self {
         Self::new(
             StatusCode::CONFLICT,
-            "file_processing",
+            ErrorCode::FileProcessing,
             "file is not available for download",
         )
     }
     pub(super) fn storage_unavailable() -> Self {
         Self::new(
             StatusCode::SERVICE_UNAVAILABLE,
-            "storage_unavailable",
+            ErrorCode::StorageUnavailable,
             "object storage is unavailable",
         )
     }
     fn bad_request(message: &'static str) -> Self {
-        Self::new(StatusCode::BAD_REQUEST, "bad_request", message)
+        Self::new(StatusCode::BAD_REQUEST, ErrorCode::BadRequest, message)
     }
     pub(super) fn from_json_rejection(rejection: axum::extract::rejection::JsonRejection) -> Self {
         use axum::extract::rejection::JsonRejection;
@@ -197,7 +209,7 @@ impl ApiError {
             ),
             JsonRejection::MissingJsonContentType(_) => Self::new(
                 StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                "unsupported_media_type",
+                ErrorCode::UnsupportedMediaType,
                 "request body must be `application/json`",
             ),
             JsonRejection::BytesRejection(rejection) => Self::from_bytes_rejection(rejection),
@@ -241,7 +253,7 @@ impl From<RepositoryError> for ApiError {
         }
         Self {
             status,
-            code: description.code.as_str(),
+            code: description.code,
             message: description.message,
             details: description.details,
         }
@@ -253,7 +265,7 @@ struct ErrorBody<'a> {
 }
 #[derive(Serialize)]
 struct ErrorDetail<'a> {
-    code: &'a str,
+    code: ErrorCode,
     message: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     details: Option<&'a serde_json::Value>,
@@ -262,7 +274,7 @@ struct ErrorDetail<'a> {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         if self.status.is_server_error() {
-            tracing::error!(code = self.code, message = %self.message, "API operation failed");
+            tracing::error!(code = self.code.as_str(), message = %self.message, "API operation failed");
         }
         (
             self.status,

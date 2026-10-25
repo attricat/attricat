@@ -650,8 +650,9 @@ targets its record and records `metadata.batch` with `operation_index` and
 ## Errors
 
 Every failure returns `{ "error": { "code", "message", "details"? } }` with the
-HTTP status. Switch on `code`; `message` is for people and may change. Codes
-and statuses for write failures follow one rule:
+HTTP status. Switch on `code`; `message` is for people and may change.
+[`contracts/api-error-codes.json`](../contracts/api-error-codes.json) lists
+every code. Codes and statuses for write failures follow one rule:
 
 - `409` means the current state of other data blocks the write: another record
   holds the key, the record is locked, a revision changed, or existing data
