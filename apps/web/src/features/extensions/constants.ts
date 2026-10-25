@@ -56,14 +56,14 @@ export const selectionSources = {
   explorerSelection: 'explorer_selection',
 } as const;
 
-export const contributionKinds = [
-  'route',
-  'navigation',
-  'embedded',
-  'action',
-  'panel',
-  'dialog',
-] as const;
+export const contributionKinds = {
+  route: 'route',
+  navigation: 'navigation',
+  embedded: 'embedded',
+  action: 'action',
+  panel: 'panel',
+  dialog: 'dialog',
+} as const;
 export const navigationGroups = ['promoted', 'grouped'] as const;
 export const promotedNavigationGroup = 'promoted';
 

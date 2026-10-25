@@ -23,6 +23,7 @@ import {
   type RecordComment,
 } from './schemas';
 import { errorMessage } from '../../api/errors';
+import { httpStatus } from '../../api/httpStatus';
 
 export const CommentComposer = ({
   recordId,
@@ -57,7 +58,8 @@ export const CommentComposer = ({
     mutation.error instanceof ApiRequestError &&
     [401, 403, 404].includes(mutation.error.status);
   const conflict =
-    mutation.error instanceof ApiRequestError && mutation.error.status === 409;
+    mutation.error instanceof ApiRequestError &&
+    mutation.error.status === httpStatus.conflict;
   const locked = disabled || mutation.isPending || forbidden || conflict;
   const form = useForm({
     defaultValues: { body: comment?.body ?? '' },

@@ -30,3 +30,5 @@ export const maximumWatchedExtensionRuns = 20;
 export const runSkeletonCount = 2;
 export const runSkeletonHeight = 136;
 export const runDetailSkeletonHeight = 240;
+/** Whose runs a request covers: all the caller can see, or only their own. */
+export const extensionRunScopes = { visible: 'visible', own: 'own' } as const;

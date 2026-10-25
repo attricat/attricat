@@ -5,6 +5,7 @@ import type {
   FormAttributeValue,
   StatusTransitionAccess,
 } from './api';
+import { attributeValueTypes } from './valueTypes';
 
 export const STATUS_SCHEMA_KEY = 'x-attricat-status';
 const codeSchema = z
@@ -85,7 +86,7 @@ export const statusConfiguration = (
   attribute: Attribute,
 ): StatusConfiguration | undefined => {
   if (
-    attribute.value_type !== 'string' ||
+    attribute.value_type !== attributeValueTypes.string ||
     !attribute.value_schema ||
     typeof attribute.value_schema !== 'object'
   )

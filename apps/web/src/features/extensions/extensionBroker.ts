@@ -13,6 +13,7 @@ import {
   listExtensionRuns,
   startExtensionRun,
 } from '../extension-runs/api';
+import { extensionRunScopes } from '../extension-runs/constants';
 import {
   isSelectionContribution,
   parseSelectionContext,
@@ -43,6 +44,7 @@ import {
   maximumOperationIdempotencyKeyLength,
   operationIdempotencyKeyPattern,
   operationMethodPrefix,
+  contributionKinds,
 } from './constants';
 import { exportMappingExtensionOutlet } from '../extension-exports/constants';
 import { refreshCurrentRecord } from './refreshRecord';
@@ -209,7 +211,7 @@ const frameSelection = ({
  * for an operator; the client checks again.
  */
 const ownRun = async (runId: string, { contribution }: BrokerDependencies) => {
-  const run = await getExtensionRun(runId, 'own');
+  const run = await getExtensionRun(runId, extensionRunScopes.own);
   if (run.extension_id !== contribution.extension_id || !run.initiated_by_me)
     throw new Error(extensionProtocolErrors.requestDenied);
   return run;
@@ -265,7 +267,7 @@ const handleOperation = async (
   ) {
     const { run_id } = runReferenceSchema.parse(payload);
     await ownRun(run_id, dependencies);
-    await cancelExtensionRun(run_id, 'own');
+    await cancelExtensionRun(run_id, extensionRunScopes.own);
     return null;
   }
   if (
@@ -277,7 +279,7 @@ const handleOperation = async (
     if (!run.artifacts.some((artifact) => artifact.id === artifact_id))
       throw new Error(extensionProtocolErrors.requestDenied);
     dependencies.downloadArtifact(
-      extensionRunArtifactUrl(run_id, artifact_id, 'own'),
+      extensionRunArtifactUrl(run_id, artifact_id, extensionRunScopes.own),
     );
     return null;
   }
@@ -333,7 +335,7 @@ export const handleBrokerRequest = async (
   if (
     method === extensionBrokerMethods.command &&
     // Panels are read-only, except the operator-only export mapping editor.
-    (contribution.kind !== 'panel' ||
+    (contribution.kind !== contributionKinds.panel ||
       contribution.outlet === exportMappingExtensionOutlet) &&
     can(extensionCapabilities.commands)
   )

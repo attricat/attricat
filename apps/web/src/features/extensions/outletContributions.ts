@@ -6,7 +6,11 @@ import {
   type ActionSelection,
 } from './actionSelection';
 import type { ExtensionContribution } from './api';
-import { navigationOutlet, outletCapacities } from './constants';
+import {
+  navigationOutlet,
+  outletCapacities,
+  contributionKinds,
+} from './constants';
 import { outletContextSchemas } from './outletContextSchemas';
 import { extensionOutletSchema } from './schemas';
 
@@ -96,11 +100,14 @@ const supportsOutlet = (
   outlet: OutletName,
 ) =>
   contribution.outlet === outlet &&
-  ((contribution.kind === 'embedded' && embeddedOutlets.has(outlet)) ||
-    (contribution.kind === 'action' && actionOutlets.has(outlet)) ||
-    (contribution.kind === 'panel' && panelOutlets.has(outlet)) ||
+  ((contribution.kind === contributionKinds.embedded &&
+    embeddedOutlets.has(outlet)) ||
+    (contribution.kind === contributionKinds.action &&
+      actionOutlets.has(outlet)) ||
+    (contribution.kind === contributionKinds.panel &&
+      panelOutlets.has(outlet)) ||
     (outlet === navigationOutlet &&
-      contribution.kind === 'navigation' &&
+      contribution.kind === contributionKinds.navigation &&
       contribution.route !== null));
 
 const hasValidContext = (
@@ -151,7 +158,7 @@ export const navigationByExtension = (
 ) => {
   const appsByExtension = new Map<string, ExtensionContribution[]>();
   contributions
-    .filter((item) => item.kind === 'navigation')
+    .filter((item) => item.kind === contributionKinds.navigation)
     .forEach((item) => {
       const apps = appsByExtension.get(item.extension_id) ?? [];
       apps.push(item);

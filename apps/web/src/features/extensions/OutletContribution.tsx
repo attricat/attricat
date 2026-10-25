@@ -2,6 +2,7 @@ import type { ExtensionContribution } from './api';
 import { ExtensionFrame } from './ExtensionFrame';
 import { ExtensionNavigationItem } from './ExtensionNavigationItem';
 import type { OutletContext } from './outletContributions';
+import { contributionKinds } from './constants';
 
 type OutletContributionProps = {
   contribution: ExtensionContribution;
@@ -15,7 +16,7 @@ export const OutletContribution = ({
   context,
   onNavigate,
 }: OutletContributionProps) =>
-  contribution.kind === 'navigation' ? (
+  contribution.kind === contributionKinds.navigation ? (
     <ExtensionNavigationItem
       contribution={contribution}
       onNavigate={onNavigate}

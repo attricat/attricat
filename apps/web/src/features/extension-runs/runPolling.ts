@@ -4,6 +4,7 @@ import {
   extensionRunPollMilliseconds,
   type ExtensionRunStatus,
 } from './constants';
+import { isClientErrorStatus } from '../../api/httpStatus';
 
 /** Whether a run can still change: queued, running or cancelling. */
 export const isActiveExtensionRun = (run: { status: ExtensionRunStatus }) =>
@@ -15,10 +16,6 @@ export const isActiveExtensionRun = (run: { status: ExtensionRunStatus }) =>
  */
 export const extensionRunRefetchInterval = (active: boolean, error: unknown) =>
   active &&
-  !(
-    error instanceof ApiRequestError &&
-    error.status >= 400 &&
-    error.status < 500
-  )
+  !(error instanceof ApiRequestError && isClientErrorStatus(error.status))
     ? extensionRunPollMilliseconds
     : false;

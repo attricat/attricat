@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import i18n from 'i18next';
 import { apiFetch, csrfToken } from './fetch';
+import { httpStatus, isSuccessStatus } from './httpStatus';
 
 const apiErrorSchema = z.object({
   error: z.object({
@@ -61,7 +62,9 @@ export const request = async <T>(
 ): Promise<T> => {
   const response = await responseFor(path, init);
   const result = schema.safeParse(
-    response.status === 204 ? undefined : await response.json(),
+    response.status === httpStatus.noContent
+      ? undefined
+      : await response.json(),
   );
   if (!result.success)
     throw new Error(
@@ -139,7 +142,7 @@ export const requestUpload = async <T>(
       } catch {
         body = undefined;
       }
-      if (upload.status < 200 || upload.status >= 300) {
+      if (!isSuccessStatus(upload.status)) {
         reject(apiRequestError(upload.status, body));
         return;
       }

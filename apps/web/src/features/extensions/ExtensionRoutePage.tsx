@@ -2,6 +2,7 @@ import { Alert, Box, CircularProgress } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { ExtensionFrame } from './ExtensionFrame';
 import { useExtensionRuntime } from './useExtensionRuntime';
+import { contributionKinds } from './constants';
 
 type ExtensionRoutePageProps = {
   extensionId: string;
@@ -33,7 +34,7 @@ export const ExtensionRoutePage = ({
     );
   const contribution = runtime.data?.find(
     (item) =>
-      item.kind === 'route' &&
+      item.kind === contributionKinds.route &&
       item.extension_id === extensionId &&
       item.id === contributionId,
   );

@@ -3,6 +3,7 @@ import { principalConfiguration } from '../principals/principal';
 import { resolveValueEditor } from '../views/components/registry';
 import type { Attribute, ComponentReference } from './api';
 import { STATUS_SCHEMA_KEY } from './status';
+import { attributeValueTypes } from './valueTypes';
 
 export const ENUM_LABELS_SCHEMA_KEY = 'x-attricat-enum-labels';
 
@@ -18,7 +19,7 @@ export const choiceOptions = (
 ): ChoiceOption[] | undefined => {
   const schema = attribute.value_schema;
   if (
-    attribute.value_type !== 'string' ||
+    attribute.value_type !== attributeValueTypes.string ||
     !schema ||
     typeof schema !== 'object' ||
     STATUS_SCHEMA_KEY in schema ||

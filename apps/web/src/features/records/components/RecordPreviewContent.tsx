@@ -9,6 +9,7 @@ import {
 import {
   selectionSources,
   supportedOutletContextVersion,
+  contributionKinds,
 } from '../../extensions/constants';
 import { useExtensionRuntime } from '../../extensions/useExtensionRuntime';
 import { RecordView } from '../../views/components/RecordView';
@@ -68,10 +69,13 @@ export const RecordPreviewContent = ({
   };
   const runtime = useExtensionRuntime(runtimeScope);
   const hasAttributePanels = runtime.data?.some(
-    (item) => item.outlet === 'record_attribute_panel' && item.kind === 'panel',
+    (item) =>
+      item.outlet === 'record_attribute_panel' &&
+      item.kind === contributionKinds.panel,
   );
   const hasFilePanels = runtime.data?.some(
-    (item) => item.outlet === 'file_panel' && item.kind === 'panel',
+    (item) =>
+      item.outlet === 'file_panel' && item.kind === contributionKinds.panel,
   );
   const renderAttributeDecoration = (attribute: Attribute) => (
     <ExtensionPopoverOutlet

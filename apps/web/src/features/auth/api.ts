@@ -6,6 +6,7 @@ import {
   requestUpload,
 } from '../../api/request';
 import { FILE_STATUS_VALUES } from '../files/constants';
+import { httpStatus } from '../../api/httpStatus';
 
 const ownAvatarSchema = z.object({
   file_id: z.uuid(),
@@ -146,7 +147,11 @@ export const currentSession = async () => {
   try {
     return await request('/api/auth/session', sessionSchema);
   } catch (error) {
-    if (error instanceof ApiRequestError && error.status === 401) return null;
+    if (
+      error instanceof ApiRequestError &&
+      error.status === httpStatus.unauthorized
+    )
+      return null;
     throw error;
   }
 };
