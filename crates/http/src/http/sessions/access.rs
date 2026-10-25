@@ -9,6 +9,7 @@ use super::super::{
     extractors::ApiJson,
 };
 use crate::repository::AuthorizationTargetKind;
+use attricat_domain::permissions::Permission;
 
 /// Targets one access check may name; a page of explorer rows fits.
 const MAX_ACCESS_TARGETS: usize = 500;
@@ -23,17 +24,21 @@ pub(in super::super) enum AccessTargetKind {
 
 impl AccessTargetKind {
     /// The permissions the API checks against targets of this kind.
-    fn scoped_permissions(self) -> &'static [&'static str] {
+    fn scoped_permissions(self) -> &'static [Permission] {
         match self {
             Self::Record => &[
-                "records.read",
-                "records.write",
-                "records.delete",
-                "records.publish",
-                "records.unlock",
+                Permission::RecordsRead,
+                Permission::RecordsWrite,
+                Permission::RecordsDelete,
+                Permission::RecordsPublish,
+                Permission::RecordsUnlock,
             ],
-            Self::Blueprint => &["blueprints.write", "blueprints.publish", "records.publish"],
-            Self::Context => &["contexts.write"],
+            Self::Blueprint => &[
+                Permission::BlueprintsWrite,
+                Permission::BlueprintsPublish,
+                Permission::RecordsPublish,
+            ],
+            Self::Context => &[Permission::ContextsWrite],
         }
     }
 }
@@ -51,7 +56,7 @@ impl From<AccessTargetKind> for AuthorizationTargetKind {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(in super::super) struct AccessRequest {
-    permission: String,
+    permission: Permission,
     kind: AccessTargetKind,
     ids: Vec<Uuid>,
 }
@@ -73,7 +78,7 @@ pub(in super::super) async fn check_access(
     if !request
         .kind
         .scoped_permissions()
-        .contains(&request.permission.as_str())
+        .contains(&request.permission)
     {
         return Err(ApiError::invalid_input(format!(
             "permission {} is not checked against this kind of target",
@@ -88,7 +93,7 @@ pub(in super::super) async fn check_access(
     let AuthenticatedPrincipal(user_id, _) = principal;
     let repository = &state.repository;
     if !repository
-        .principal_token_permits(principal.actor(), workspace_id, &request.permission)
+        .principal_token_permits(principal.actor(), workspace_id, request.permission)
         .await?
     {
         return Ok(Json(AccessResponse {
@@ -99,7 +104,7 @@ pub(in super::super) async fn check_access(
         .authorized_target_ids(
             user_id,
             workspace_id,
-            &request.permission,
+            request.permission,
             request.kind.into(),
             &request.ids,
         )

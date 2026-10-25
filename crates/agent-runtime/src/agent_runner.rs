@@ -18,6 +18,7 @@ use crate::{
     },
     storage::ObjectStore,
 };
+use attricat_domain::permissions::Permission;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -841,21 +842,44 @@ pub async fn resume_claimed(
     .await
 }
 
-/// The audited authorization scope of the notification tools, which need
-/// active membership rather than a permission grant.
-const OWN_NOTIFICATIONS_SCOPE: &str = "own_notifications";
+/// What authorizes a mutating tool.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ToolAuthorization {
+    /// A permission, checked on the target when the tool names one.
+    Permission(Permission, Option<Uuid>),
+    /// Notification tools change only the initiating user's own inbox, so
+    /// they need active membership rather than a grant.
+    OwnNotifications,
+}
 
-fn mutation_authorization(name: &str, arguments: &Value) -> Option<(&'static str, Option<Uuid>)> {
-    Some(match name {
-        "create_blueprint" | "create_blueprint_revision" => ("blueprints.write", None),
-        "publish_blueprint" => ("blueprints.publish", None),
-        "create_record" | "link_file" => ("records.write", None),
+impl ToolAuthorization {
+    /// The audited authorization scope.
+    fn audit_scope(self) -> Value {
+        match self {
+            Self::Permission(permission, _) => json!({"permission": permission}),
+            Self::OwnNotifications => json!({"scope": "own_notifications"}),
+        }
+    }
+
+    fn target_id(self) -> Option<Uuid> {
+        match self {
+            Self::Permission(_, target_id) => target_id,
+            Self::OwnNotifications => None,
+        }
+    }
+}
+
+fn mutation_authorization(name: &str, arguments: &Value) -> Option<ToolAuthorization> {
+    let (permission, target_id) = match name {
+        "create_blueprint" | "create_blueprint_revision" => (Permission::BlueprintsWrite, None),
+        "publish_blueprint" => (Permission::BlueprintsPublish, None),
+        "create_record" | "link_file" => (Permission::RecordsWrite, None),
         // Every operation is authorized separately in `mutation_authorized`.
-        "apply_record_batch" => ("records.write", None),
+        "apply_record_batch" => (Permission::RecordsWrite, None),
         // Every record is authorized as it is changed; see `bulk_edits`.
-        bulk_edits::TOOL => ("records.write", None),
+        bulk_edits::TOOL => (Permission::RecordsWrite, None),
         "publish_record" | "unpublish_record" | "publish_record_to_all_channels" => (
-            "records.publish",
+            Permission::RecordsPublish,
             arguments
                 .get("record_id")
                 .and_then(Value::as_str)
@@ -868,30 +892,30 @@ fn mutation_authorization(name: &str, arguments: &Value) -> Option<(&'static str
         | "remove_record_relationships"
         | "migrate_record"
         | "update_record_annotations" => (
-            "records.write",
+            Permission::RecordsWrite,
             arguments
                 .get("record_id")
                 .and_then(Value::as_str)
                 .and_then(|id| id.parse().ok()),
         ),
         "delete_record" => (
-            "records.delete",
+            Permission::RecordsDelete,
             arguments
                 .get("record_id")
                 .and_then(Value::as_str)
                 .and_then(|id| id.parse().ok()),
         ),
-        "create_context" => ("contexts.write", None),
+        "create_context" => (Permission::ContextsWrite, None),
         "update_context" | "delete_context" => (
-            "contexts.write",
+            Permission::ContextsWrite,
             arguments
                 .get("context_id")
                 .and_then(Value::as_str)
                 .and_then(|id| id.parse().ok()),
         ),
-        "create_saved_search" | "update_saved_search" => ("records.read", None),
+        "create_saved_search" | "update_saved_search" => (Permission::RecordsRead, None),
         "duplicate_record" => (
-            "records.write",
+            Permission::RecordsWrite,
             arguments
                 .get("record_id")
                 .and_then(Value::as_str)
@@ -899,20 +923,19 @@ fn mutation_authorization(name: &str, arguments: &Value) -> Option<(&'static str
         ),
         // Like the HTTP route, every reader of a record may comment on it.
         "add_record_comment" => (
-            "records.read",
+            Permission::RecordsRead,
             arguments
                 .get("record_id")
                 .and_then(Value::as_str)
                 .and_then(|id| id.parse().ok()),
         ),
-        "acknowledge_rule_finding" => ("rules.manage", None),
-        // Notification tools change only the initiating user's own inbox;
-        // `mutation_authorized` checks active membership instead of a grant.
+        "acknowledge_rule_finding" => (Permission::RulesManage, None),
         "mark_notifications_read" | "mark_all_notifications_read" | "delete_notifications" => {
-            (OWN_NOTIFICATIONS_SCOPE, None)
+            return Some(ToolAuthorization::OwnNotifications);
         }
         _ => return None,
-    })
+    };
+    Some(ToolAuthorization::Permission(permission, target_id))
 }
 
 pub async fn mutation_authorized(
@@ -922,10 +945,7 @@ pub async fn mutation_authorized(
     name: &str,
     arguments: &Value,
 ) -> Result<bool, RepositoryError> {
-    if matches!(
-        mutation_authorization(name, arguments),
-        Some((OWN_NOTIFICATIONS_SCOPE, _))
-    ) {
+    if mutation_authorization(name, arguments) == Some(ToolAuthorization::OwnNotifications) {
         return repository.is_active_principal(actor, workspace).await;
     }
     if name == bulk_edits::TOOL {
@@ -936,7 +956,7 @@ pub async fn mutation_authorized(
                 .principal_token_permits(
                     agent_tools::tool_actor(repository, actor),
                     workspace,
-                    "records.write",
+                    Permission::RecordsWrite,
                 )
                 .await?);
     }
@@ -955,7 +975,9 @@ pub async fn mutation_authorized(
             )
             .await;
     }
-    let Some((permission, target_id)) = mutation_authorization(name, arguments) else {
+    let Some(ToolAuthorization::Permission(permission, target_id)) =
+        mutation_authorization(name, arguments)
+    else {
         return Ok(false);
     };
     repository
@@ -974,7 +996,7 @@ fn agent_audit_context(
     run: &crate::repository::AgentRun,
     call: &crate::repository::AgentToolCall,
 ) -> AuditContext {
-    let (permission, target_id) = mutation_authorization(&call.tool_name, &call.arguments)
+    let authorization = mutation_authorization(&call.tool_name, &call.arguments)
         .expect("only known mutation tools are executed");
     AuditContext {
         actor_user_id: Some(actor.user_id),
@@ -984,8 +1006,8 @@ fn agent_audit_context(
         request_id: call.id,
         correlation_id: run.id,
         action: format!("attricat.agent.{}", call.tool_name),
-        authorization_scope: json!({"permission": permission}),
-        target: match target_id {
+        authorization_scope: authorization.audit_scope(),
+        target: match authorization.target_id() {
             Some(id) => json!({"id": id}),
             None => json!({"tool": call.tool_name}),
         },
@@ -1018,8 +1040,9 @@ pub(crate) async fn fail_run(
 
 #[cfg(test)]
 mod tests {
-    use super::{SYSTEM_PROMPT_SECTIONS, mutation_authorization, system_prompt};
+    use super::{SYSTEM_PROMPT_SECTIONS, ToolAuthorization, mutation_authorization, system_prompt};
     use crate::repository::{AgentSettings, BulkEditPolicy};
+    use attricat_domain::permissions::Permission;
     use serde_json::json;
     use uuid::Uuid;
 
@@ -1036,16 +1059,19 @@ mod tests {
         }
         assert_eq!(
             super::mutation_authorization("acknowledge_rule_finding", &json!({})),
-            Some(("rules.manage", None))
+            Some(ToolAuthorization::Permission(Permission::RulesManage, None))
         );
         let record = Uuid::new_v4();
         assert_eq!(
             super::mutation_authorization("add_record_comment", &json!({"record_id": record})),
-            Some(("records.read", Some(record)))
+            Some(ToolAuthorization::Permission(
+                Permission::RecordsRead,
+                Some(record)
+            ))
         );
         assert_eq!(
             super::mutation_authorization("delete_notifications", &json!({})),
-            Some((super::OWN_NOTIFICATIONS_SCOPE, None))
+            Some(ToolAuthorization::OwnNotifications)
         );
     }
 
@@ -1153,11 +1179,17 @@ mod tests {
         ] {
             assert_eq!(
                 mutation_authorization(name, &json!({"record_id":id})),
-                Some(("records.write", Some(id)))
+                Some(ToolAuthorization::Permission(
+                    Permission::RecordsWrite,
+                    Some(id)
+                ))
             );
             assert_eq!(
                 mutation_authorization(name, &json!({"record_id":"invalid"})),
-                Some(("records.write", None))
+                Some(ToolAuthorization::Permission(
+                    Permission::RecordsWrite,
+                    None
+                ))
             );
         }
     }
@@ -1168,7 +1200,10 @@ mod tests {
         for name in ["update_context", "delete_context"] {
             assert_eq!(
                 mutation_authorization(name, &json!({"context_id":id})),
-                Some(("contexts.write", Some(id)))
+                Some(ToolAuthorization::Permission(
+                    Permission::ContextsWrite,
+                    Some(id)
+                ))
             );
         }
     }

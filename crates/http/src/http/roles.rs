@@ -7,7 +7,7 @@ use super::{
     error::ApiError,
     extractors::{ApiJson, ApiPath},
 };
-use crate::repository::{Permission, WorkspaceGrantTarget, WorkspaceRole};
+use crate::repository::{PermissionInfo, WorkspaceGrantTarget, WorkspaceRole};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -59,7 +59,7 @@ pub(super) async fn list_permissions(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
-) -> Result<Json<Vec<Permission>>, ApiError> {
+) -> Result<Json<Vec<PermissionInfo>>, ApiError> {
     Ok(Json(
         repository
             .list_workspace_permissions(actor, workspace)
@@ -71,7 +71,7 @@ pub(super) async fn list_token_permissions(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
-) -> Result<Json<Vec<Permission>>, ApiError> {
+) -> Result<Json<Vec<PermissionInfo>>, ApiError> {
     Ok(Json(
         repository
             .list_workspace_token_permissions(actor, workspace)

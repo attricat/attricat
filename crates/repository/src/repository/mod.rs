@@ -62,6 +62,7 @@ use crate::{
         ResolvedRecordPreviewResponse, ReusableAttribute, ReusableAttributeGroup,
     },
 };
+use attricat_domain::permissions::Permission;
 
 mod agent_settings;
 mod agents;
@@ -250,7 +251,7 @@ pub use record_search::{
 };
 pub use retention::RetentionDays;
 pub use retention_holds::FileRetentionHold;
-pub use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
+pub use roles::{PermissionInfo, WorkspaceGrantTarget, WorkspaceRole};
 pub use rules::{ClaimedRuleRun, RuleCandidateResult};
 pub use search_page::{SEARCH_TOTAL_COUNT_CAP, SearchPageRequest, SearchPhase};
 pub use search_scope::{
@@ -774,7 +775,7 @@ impl AttricatRepository {
             &mut connection,
             actor,
             self.workspace_id.0,
-            "records.read",
+            Permission::RecordsRead,
             record_ids,
         )
         .await
@@ -788,7 +789,7 @@ impl AttricatRepository {
     pub(crate) async fn ensure_actor_may(
         &self,
         connection: &mut sqlx::PgConnection,
-        permission: &str,
+        permission: Permission,
         record_ids: &[Uuid],
     ) -> Result<(), RepositoryError> {
         let Some(actor) = self.authorization_actor else {
@@ -806,7 +807,7 @@ impl AttricatRepository {
         &self,
         connection: &mut sqlx::PgConnection,
         actor: AuthorizationActor,
-        permission: &str,
+        permission: Permission,
         record_ids: &[Uuid],
     ) -> Result<(), RepositoryError> {
         let permitted = Self::principal_record_ids_on(

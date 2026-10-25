@@ -24,6 +24,7 @@ use crate::{
     },
     repository::ApprovalDecision,
 };
+use attricat_domain::permissions::Permission;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -100,7 +101,7 @@ pub(super) async fn create_conversation(
             .principal_may(
                 request_actor(&repository, user),
                 workspace,
-                "records.read",
+                Permission::RecordsRead,
                 Some(record_id),
                 None,
             )
@@ -159,7 +160,7 @@ pub(super) async fn readable_conversation(
             .principal_may(
                 request_actor(repository, user),
                 workspace,
-                "records.read",
+                Permission::RecordsRead,
                 Some(record_id),
                 None,
             )
@@ -183,11 +184,15 @@ async fn retain_readable<T>(
     record_ids.sort_unstable();
     record_ids.dedup();
     let readable = if repository
-        .principal_token_permits(request_actor(repository, user), workspace, "records.read")
+        .principal_token_permits(
+            request_actor(repository, user),
+            workspace,
+            Permission::RecordsRead,
+        )
         .await?
     {
         repository
-            .authorized_record_ids(user, workspace, "records.read", &record_ids)
+            .authorized_record_ids(user, workspace, Permission::RecordsRead, &record_ids)
             .await?
     } else {
         Default::default()
@@ -540,7 +545,7 @@ async fn authorize_event_stream(
     // Unlike request middleware, a response body can outlive its credential
     // and grants. principal_may also checks live PAT revocation and expiry.
     principal
-        .require_workspace_permission(repository, workspace, "agents.run")
+        .require_workspace_permission(repository, workspace, Permission::AgentsRun)
         .await?;
     readable_conversation(repository, principal.0, workspace, conversation).await?;
     Ok(())

@@ -785,11 +785,17 @@ impl RecordBatchOperation {
     }
 
     /// The permission the operation needs and the record it is checked on.
-    pub fn permission(&self) -> (&'static str, Option<Uuid>) {
+    pub fn permission(&self) -> (crate::permissions::Permission, Option<Uuid>) {
         match self {
-            Self::Create { .. } => ("records.write", None),
-            Self::Update { record_id, .. } => ("records.write", Some(*record_id)),
-            Self::Delete { record_id, .. } => ("records.delete", Some(*record_id)),
+            Self::Create { .. } => (crate::permissions::Permission::RecordsWrite, None),
+            Self::Update { record_id, .. } => (
+                crate::permissions::Permission::RecordsWrite,
+                Some(*record_id),
+            ),
+            Self::Delete { record_id, .. } => (
+                crate::permissions::Permission::RecordsDelete,
+                Some(*record_id),
+            ),
         }
     }
 

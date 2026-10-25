@@ -28,6 +28,7 @@ use crate::{
         StartInteractiveOperation,
     },
 };
+use attricat_domain::permissions::Permission;
 
 /// The frame never supplies a workspace, actor or installation; the host
 /// derives those from the session and the resolved contribution. The
@@ -129,7 +130,7 @@ async fn visible_run(
         .principal_may(
             principal.actor(),
             workspace.0,
-            "extensions.manage",
+            Permission::ExtensionsManage,
             None,
             None,
         )
@@ -419,7 +420,7 @@ pub(super) async fn repair_annotations(
         .principal_may(
             principal.actor(),
             workspace.0,
-            "records.write",
+            Permission::RecordsWrite,
             Some(record_id),
             None,
         )

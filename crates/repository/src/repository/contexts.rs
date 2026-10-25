@@ -10,6 +10,7 @@ use super::generations::{Generation, advance_generation};
 use super::record_commands::lock_record_writes;
 use super::{AttricatRepository, RepositoryError, validate_code};
 use crate::model::{AttributeContext, CreateAttributeContext, Record, UpdateAttributeContext};
+use attricat_domain::permissions::Permission;
 
 impl AttricatRepository {
     pub async fn create_context(
@@ -148,7 +149,7 @@ impl AttricatRepository {
                 .is_authorized(
                     user_id,
                     workspace_id,
-                    "contexts.read",
+                    Permission::ContextsRead,
                     Some(context.id),
                     None,
                 )

@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use super::{ApiError, AppState, SessionSecret};
 use crate::constants::{CSRF_COOKIE, SECONDS_PER_HOUR, SESSION_COOKIE};
+use attricat_domain::permissions::Permission;
 
 #[derive(Serialize)]
 pub(in crate::http) struct SessionResponse {
@@ -63,31 +64,32 @@ pub(super) struct SessionCapabilities {
 
 impl SessionResponse {
     pub(super) fn restrict_to_permissions(&mut self, permissions: &[String]) {
-        let permits = |code: &str| permissions.iter().any(|value| value == code);
+        let permits =
+            |permission: Permission| permissions.iter().any(|value| value == permission.as_str());
         let c = &mut self.capabilities;
-        c.audit_read &= permits("audit.read");
-        c.data_health_read &= permits("data_health.read");
-        c.members_manage &= permits("members.manage");
-        c.roles_manage &= permits("roles.manage");
-        c.roles_grant &= permits("roles.grant");
-        c.tokens_manage &= permits("tokens.manage");
-        c.workspace_navigation_manage &= permits("workspace_navigation.manage");
-        c.agents_manage &= permits("agents.manage");
-        c.extensions_read &= permits("extensions.read");
-        c.extensions_manage &= permits("extensions.manage");
-        c.workflows_read &= permits("workflows.read");
-        c.workflows_manage &= permits("workflows.manage");
-        c.rules_read &= permits("rules.read");
-        c.rules_manage &= permits("rules.manage");
-        c.records_publish &= permits("records.publish");
-        c.records_unlock &= permits("records.unlock");
-        c.records_delete &= permits("records.delete");
-        c.blueprints_write &= permits("blueprints.write");
-        c.records_write &= permits("records.write");
-        c.records_read &= permits("records.read");
-        c.blueprints_publish &= permits("blueprints.publish");
-        c.contexts_write &= permits("contexts.write");
-        c.agents_run &= permits("agents.run");
+        c.audit_read &= permits(Permission::AuditRead);
+        c.data_health_read &= permits(Permission::DataHealthRead);
+        c.members_manage &= permits(Permission::MembersManage);
+        c.roles_manage &= permits(Permission::RolesManage);
+        c.roles_grant &= permits(Permission::RolesGrant);
+        c.tokens_manage &= permits(Permission::TokensManage);
+        c.workspace_navigation_manage &= permits(Permission::WorkspaceNavigationManage);
+        c.agents_manage &= permits(Permission::AgentsManage);
+        c.extensions_read &= permits(Permission::ExtensionsRead);
+        c.extensions_manage &= permits(Permission::ExtensionsManage);
+        c.workflows_read &= permits(Permission::WorkflowsRead);
+        c.workflows_manage &= permits(Permission::WorkflowsManage);
+        c.rules_read &= permits(Permission::RulesRead);
+        c.rules_manage &= permits(Permission::RulesManage);
+        c.records_publish &= permits(Permission::RecordsPublish);
+        c.records_unlock &= permits(Permission::RecordsUnlock);
+        c.records_delete &= permits(Permission::RecordsDelete);
+        c.blueprints_write &= permits(Permission::BlueprintsWrite);
+        c.records_write &= permits(Permission::RecordsWrite);
+        c.records_read &= permits(Permission::RecordsRead);
+        c.blueprints_publish &= permits(Permission::BlueprintsPublish);
+        c.contexts_write &= permits(Permission::ContextsWrite);
+        c.agents_run &= permits(Permission::AgentsRun);
     }
 }
 
@@ -188,30 +190,30 @@ async fn session_response_payload_with_identifier(
 }
 
 /// Workspace-wide permissions reported as session capability flags.
-const CAPABILITY_PERMISSIONS: [&str; 23] = [
-    "audit.read",
-    "data_health.read",
-    "members.manage",
-    "roles.manage",
-    "roles.grant",
-    "tokens.manage",
-    "workspace_navigation.manage",
-    "agents.manage",
-    "extensions.read",
-    "extensions.manage",
-    "workflows.read",
-    "workflows.manage",
-    "rules.read",
-    "rules.manage",
-    "records.publish",
-    "records.unlock",
-    "records.delete",
-    "blueprints.write",
-    "records.write",
-    "records.read",
-    "blueprints.publish",
-    "contexts.write",
-    "agents.run",
+const CAPABILITY_PERMISSIONS: [Permission; 23] = [
+    Permission::AuditRead,
+    Permission::DataHealthRead,
+    Permission::MembersManage,
+    Permission::RolesManage,
+    Permission::RolesGrant,
+    Permission::TokensManage,
+    Permission::WorkspaceNavigationManage,
+    Permission::AgentsManage,
+    Permission::ExtensionsRead,
+    Permission::ExtensionsManage,
+    Permission::WorkflowsRead,
+    Permission::WorkflowsManage,
+    Permission::RulesRead,
+    Permission::RulesManage,
+    Permission::RecordsPublish,
+    Permission::RecordsUnlock,
+    Permission::RecordsDelete,
+    Permission::BlueprintsWrite,
+    Permission::RecordsWrite,
+    Permission::RecordsRead,
+    Permission::BlueprintsPublish,
+    Permission::ContextsWrite,
+    Permission::AgentsRun,
 ];
 
 async fn session_capabilities(
@@ -225,31 +227,31 @@ async fn session_capabilities(
         .repository
         .workspace_permissions(user_id, workspace_id, &CAPABILITY_PERMISSIONS)
         .await?;
-    let has = |permission: &str| granted.contains(permission);
+    let has = |permission: Permission| granted.contains(permission.as_str());
     Ok(SessionCapabilities {
-        audit_read: has("audit.read"),
-        data_health_read: has("data_health.read"),
-        members_manage: has("members.manage"),
-        roles_manage: has("roles.manage"),
-        roles_grant: has("roles.grant"),
-        tokens_manage: has("tokens.manage"),
-        workspace_navigation_manage: has("workspace_navigation.manage"),
-        agents_manage: has("agents.manage"),
-        extensions_read: has("extensions.read"),
-        extensions_manage: has("extensions.manage"),
-        workflows_read: has("workflows.read"),
-        workflows_manage: has("workflows.manage"),
-        rules_read: has("rules.read"),
-        rules_manage: has("rules.manage"),
-        records_publish: has("records.publish"),
-        records_unlock: has("records.unlock"),
-        records_delete: has("records.delete"),
-        blueprints_write: has("blueprints.write"),
-        records_write: has("records.write"),
-        records_read: has("records.read"),
-        blueprints_publish: has("blueprints.publish"),
-        contexts_write: has("contexts.write"),
-        agents_run: has("agents.run"),
+        audit_read: has(Permission::AuditRead),
+        data_health_read: has(Permission::DataHealthRead),
+        members_manage: has(Permission::MembersManage),
+        roles_manage: has(Permission::RolesManage),
+        roles_grant: has(Permission::RolesGrant),
+        tokens_manage: has(Permission::TokensManage),
+        workspace_navigation_manage: has(Permission::WorkspaceNavigationManage),
+        agents_manage: has(Permission::AgentsManage),
+        extensions_read: has(Permission::ExtensionsRead),
+        extensions_manage: has(Permission::ExtensionsManage),
+        workflows_read: has(Permission::WorkflowsRead),
+        workflows_manage: has(Permission::WorkflowsManage),
+        rules_read: has(Permission::RulesRead),
+        rules_manage: has(Permission::RulesManage),
+        records_publish: has(Permission::RecordsPublish),
+        records_unlock: has(Permission::RecordsUnlock),
+        records_delete: has(Permission::RecordsDelete),
+        blueprints_write: has(Permission::BlueprintsWrite),
+        records_write: has(Permission::RecordsWrite),
+        records_read: has(Permission::RecordsRead),
+        blueprints_publish: has(Permission::BlueprintsPublish),
+        contexts_write: has(Permission::ContextsWrite),
+        agents_run: has(Permission::AgentsRun),
     })
 }
 

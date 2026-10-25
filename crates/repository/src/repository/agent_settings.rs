@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{AttricatRepository, RepositoryError};
+use attricat_domain::permissions::Permission;
 
 /// How many records one bulk edit may change unless a workspace sets another
 /// limit.
@@ -12,8 +13,6 @@ pub const DEFAULT_BULK_EDIT_MAX_RECORDS: u32 = 500;
 /// The highest limit a workspace may set. Records change one at a time, so
 /// the bound keeps one approved edit within a run's time.
 pub const MAX_BULK_EDIT_MAX_RECORDS: u32 = 5_000;
-/// Who may read and change a workspace's agent settings.
-const AGENT_SETTINGS_PERMISSION: &str = "agents.manage";
 
 /// How bulk value edits the agent proposes are approved.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -68,13 +67,7 @@ impl AttricatRepository {
         workspace_id: Uuid,
     ) -> Result<(), RepositoryError> {
         if self
-            .is_authorized(
-                actor_id,
-                workspace_id,
-                AGENT_SETTINGS_PERMISSION,
-                None,
-                None,
-            )
+            .is_authorized(actor_id, workspace_id, Permission::AgentsManage, None, None)
             .await?
         {
             Ok(())

@@ -36,6 +36,7 @@ use crate::{
     },
     storage::ObjectStoreError,
 };
+use attricat_domain::permissions::Permission;
 
 /// Extension-chosen media must never run as active content on the API origin.
 pub(super) const SANDBOXED_CONTENT_POLICY: &str = "sandbox; default-src 'none'";
@@ -890,7 +891,7 @@ pub(super) async fn command(
             .principal_may(
                 principal.actor(),
                 workspace.0,
-                "extensions.manage",
+                Permission::ExtensionsManage,
                 None,
                 None,
             )

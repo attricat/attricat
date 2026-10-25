@@ -5,6 +5,7 @@ use super::record_values::{
 };
 use super::write_context::WriteContext;
 use super::*;
+use attricat_domain::permissions::Permission;
 use attricat_validation::status::{
     STATUS_KEY, StatusCoverage, TransitionRequirements, has_record_controls, status_approval,
     status_lock, status_option_labels, status_retention_days, transition_edges,
@@ -120,9 +121,6 @@ pub struct UnlockRecordStatus {
     pub to: String,
     pub expected_updated_at: DateTime<Utc>,
 }
-
-/// Lets owners and administrators leave any locking status.
-const UNLOCK_PERMISSION: &str = "records.unlock";
 
 /// A context whose saved effective status locks some of the record.
 struct ActiveLock<'a> {
@@ -497,7 +495,12 @@ impl AttricatRepository {
                 "the transition requires an identified user".to_owned(),
             )));
         };
-        if let Some(permission) = &requirements.permission {
+        if let Some(code) = &requirements.permission {
+            let Some(permission) = Permission::parse(code) else {
+                return Ok(Some(forbidden(format!(
+                    "the transition requires an unknown permission '{code}'"
+                ))));
+            };
             match self
                 .ensure_principal_may(transaction, actor, permission, &[record.id])
                 .await
@@ -1275,8 +1278,13 @@ impl AttricatRepository {
             .acting_principal()
             .ok_or(RepositoryError::ActorNotAuthorized)?;
         let mut transaction = self.pool.begin().await?;
-        self.ensure_principal_may(&mut transaction, actor, UNLOCK_PERMISSION, &[record_id])
-            .await?;
+        self.ensure_principal_may(
+            &mut transaction,
+            actor,
+            Permission::RecordsUnlock,
+            &[record_id],
+        )
+        .await?;
         let record = self
             .get_record(record_id)
             .await?

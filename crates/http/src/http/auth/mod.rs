@@ -1,3 +1,4 @@
+use attricat_domain::permissions::Permission;
 use axum::{
     extract::{FromRequestParts, Request, State},
     http::{Method, request::Parts},
@@ -42,7 +43,7 @@ impl AuthenticatedPrincipal {
         self,
         repository: &AttricatRepository<S>,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
     ) -> Result<(), ApiError> {
         if repository
             .principal_may(self.actor(), workspace_id, permission, None, None)
@@ -213,10 +214,10 @@ pub(super) async fn authorize(
         _ => generations,
     };
     // A token's permissions were read with the credential in this request.
-    let token_permits = |permission: &str| {
+    let token_permits = |permission: Permission| {
         token_permissions
             .as_ref()
-            .is_none_or(|permissions| permissions.contains(permission))
+            .is_none_or(|permissions| permissions.contains(permission.as_str()))
     };
     let is_active_principal = || async {
         match active_principal {

@@ -26,6 +26,7 @@ use uuid::Uuid;
 use attricat_agent_runtime::smart_fill::{
     SmartFillError, SmartFillProposal, SmartFillRequest, propose_record_form_values,
 };
+use attricat_domain::permissions::Permission;
 
 pub(super) async fn smart_fill_record_form(
     State(state): State<AppState>,
@@ -38,7 +39,7 @@ pub(super) async fn smart_fill_record_form(
         .principal_may(
             principal.actor(),
             workspace_id,
-            "records.read",
+            Permission::RecordsRead,
             Some(input.record_id),
             None,
         )
@@ -152,7 +153,7 @@ pub(super) async fn get_record_form(
                 .principal_may(
                     principal.actor(),
                     workspace_id,
-                    "records.write",
+                    Permission::RecordsWrite,
                     Some(record_id),
                     None,
                 )

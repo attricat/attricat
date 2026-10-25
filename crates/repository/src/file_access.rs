@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::repository::{AttricatRepository, RepositoryError};
+use attricat_domain::permissions::Permission;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FileAccessOperation {
@@ -91,7 +92,7 @@ pub async fn authorize_file_read(
     // consulted per readable target, in order, until one allows.
     let record_ids: Vec<Uuid> = targets.iter().map(|target| target.record_id).collect();
     let readable = repository
-        .authorized_record_ids(principal, workspace, "records.read", &record_ids)
+        .authorized_record_ids(principal, workspace, Permission::RecordsRead, &record_ids)
         .await?;
     for target in targets {
         if readable.contains(&target.record_id)

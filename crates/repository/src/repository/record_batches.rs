@@ -8,6 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
+use attricat_domain::permissions::Permission;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -31,7 +32,7 @@ impl AttricatRepository {
         request: &RecordBatchRequest,
     ) -> Result<bool, RepositoryError> {
         let actor = AuthorizationActor { user_id, token_id };
-        let mut targets: BTreeMap<&str, Vec<Uuid>> = BTreeMap::new();
+        let mut targets: BTreeMap<Permission, Vec<Uuid>> = BTreeMap::new();
         let mut untargeted = BTreeSet::new();
         for operation in &request.operations {
             match operation.permission() {

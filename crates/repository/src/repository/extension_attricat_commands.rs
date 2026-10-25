@@ -10,6 +10,7 @@ use super::extension_attricat_data::{
 use super::record_commands::{ChosenIdRecordCreate, writes_relationship_values};
 use super::*;
 use crate::model::UpdateRecordFormRequest;
+use attricat_domain::permissions::Permission;
 use sha2::Digest;
 use sqlx::{Postgres, Transaction};
 use std::collections::BTreeSet;
@@ -475,7 +476,7 @@ impl AttricatRepository {
             self.lock_relationship_cardinality_writes(transaction)
                 .await?;
         }
-        self.ensure_actor_may(transaction, "records.write", &[record_id])
+        self.ensure_actor_may(transaction, Permission::RecordsWrite, &[record_id])
             .await?;
         // A run bound to a user may link only to records that user can read,
         // whether or not they are in the run's selection.
@@ -495,7 +496,7 @@ impl AttricatRepository {
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect();
-        self.ensure_actor_may(transaction, "records.read", &targets)
+        self.ensure_actor_may(transaction, Permission::RecordsRead, &targets)
             .await?;
         let (record, changes, event) = self
             .update_record_in_transaction(

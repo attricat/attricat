@@ -30,6 +30,7 @@ use crate::{
     },
     search_filters::{check_selected_ids, resolve_agent_relationship_filter},
 };
+use attricat_domain::permissions::Permission;
 const BLUEPRINT_AUTHORING_GUIDE: &str = include_str!("../../../docs/blueprints.md");
 const VIEW_CONFIGURATION_GUIDE: &str = include_str!("../../../docs/views.md");
 const JSON_SCHEMA_GUIDE: &str = include_str!("../../../docs/json-schema-validation.md");
@@ -1197,10 +1198,14 @@ pub async fn change_names(
     record_ids.dedup();
     let mut names = HashMap::new();
     let readable = repository
-        .authorized_record_ids(actor, workspace, "records.read", &record_ids)
+        .authorized_record_ids(actor, workspace, Permission::RecordsRead, &record_ids)
         .await?;
     if !repository
-        .principal_token_permits(tool_actor(repository, actor), workspace, "records.read")
+        .principal_token_permits(
+            tool_actor(repository, actor),
+            workspace,
+            Permission::RecordsRead,
+        )
         .await?
     {
         record_ids.clear();
@@ -1222,7 +1227,11 @@ pub async fn change_names(
     }
     if let Some(context_id) = uuid_at(arguments, "context_id")
         && repository
-            .principal_token_permits(tool_actor(repository, actor), workspace, "contexts.read")
+            .principal_token_permits(
+                tool_actor(repository, actor),
+                workspace,
+                Permission::ContextsRead,
+            )
             .await?
         && let Some(context) = repository
             .list_authorized_contexts(actor, workspace)
@@ -1237,7 +1246,7 @@ pub async fn change_names(
             .principal_may(
                 tool_actor(repository, actor),
                 workspace,
-                "blueprints.read",
+                Permission::BlueprintsRead,
                 None,
                 None,
             )
@@ -1584,7 +1593,7 @@ pub async fn execute_read(
                 )));
             }
             let readable = repository
-                .authorized_record_ids(actor, workspace, "records.read", &record_ids)
+                .authorized_record_ids(actor, workspace, Permission::RecordsRead, &record_ids)
                 .await?;
             record_ids.retain(|id| readable.contains(id));
             json!({"items": repository.record_labels(&record_ids).await?})
@@ -1962,7 +1971,7 @@ pub async fn execute_read(
                 .await?;
             let target_ids = counts.keys().copied().collect::<Vec<_>>();
             let readable = repository
-                .authorized_record_ids(actor, workspace, "records.read", &target_ids)
+                .authorized_record_ids(actor, workspace, Permission::RecordsRead, &target_ids)
                 .await?;
             let mut groups = counts
                 .into_iter()
@@ -2052,7 +2061,7 @@ pub async fn execute_read(
             }
             let ids = candidates.iter().map(|(id, _, _)| *id).collect::<Vec<_>>();
             let readable = repository
-                .authorized_record_ids(actor, workspace, "records.read", &ids)
+                .authorized_record_ids(actor, workspace, Permission::RecordsRead, &ids)
                 .await?;
             let labels = repository
                 .record_labels(&ids.into_iter().filter(|id| readable.contains(id)).collect::<Vec<_>>())
@@ -3012,33 +3021,37 @@ async fn read_authorized(
         "list_blueprints"
         | "get_blueprint"
         | "get_blueprint_revision"
-        | "list_reusable_attributes" => ("blueprints.read", None, None),
+        | "list_reusable_attributes" => (Permission::BlueprintsRead, None, None),
         // Like the HTTP label route, each ID is authorized when the tool runs
         // and unreadable records are omitted.
         "get_record_labels" => {
             return Ok(repository
-                .principal_token_permits(tool_actor(repository, actor), workspace, "records.read")
+                .principal_token_permits(
+                    tool_actor(repository, actor),
+                    workspace,
+                    Permission::RecordsRead,
+                )
                 .await?);
         }
-        "data_health_summary" | "data_health_details" => ("data_health.read", None, None),
+        "data_health_summary" | "data_health_details" => (Permission::DataHealthRead, None, None),
         // Compiling a draft reads no workspace data; it needs the same access
         // as reading the definitions it imitates.
-        "validate_rule_definition" => ("rules.read", None, None),
-        "validate_workflow_definition" => ("workflows.read", None, None),
-        "preview_blueprint_migration_impact" => ("blueprints.read", None, None),
+        "validate_rule_definition" => (Permission::RulesRead, None, None),
+        "validate_workflow_definition" => (Permission::WorkflowsRead, None, None),
+        "preview_blueprint_migration_impact" => (Permission::BlueprintsRead, None, None),
         "list_rule_findings" | "get_rule_definition" | "list_rule_runs" => {
-            ("rules.read", None, None)
+            (Permission::RulesRead, None, None)
         }
         "list_workflow_runs" | "get_workflow_definition" | "get_workflow_run" => {
-            ("workflows.read", None, None)
+            (Permission::WorkflowsRead, None, None)
         }
         "list_extension_operation_runs"
         | "get_extension_operation_run"
-        | "list_blueprint_connector_jobs" => ("extensions.manage", None, None),
-        "list_contexts" => ("contexts.read", None, Some("__context_list__")),
-        "get_workspace_directory" => ("records.read", None, None),
+        | "list_blueprint_connector_jobs" => (Permission::ExtensionsManage, None, None),
+        "list_contexts" => (Permission::ContextsRead, None, Some("__context_list__")),
+        "get_workspace_directory" => (Permission::RecordsRead, None, None),
         "get_context" => (
-            "contexts.read",
+            Permission::ContextsRead,
             Some(parse_uuid(arguments, "context_id")?),
             None,
         ),
@@ -3053,20 +3066,24 @@ async fn read_authorized(
         | "get_incoming_relationships"
         | "get_record_hierarchy"
         | "list_record_comments" => (
-            "records.read",
+            Permission::RecordsRead,
             Some(parse_uuid(arguments, "record_id")?),
             None,
         ),
         // HTTP migration previews require record write authority even though
         // the preview itself is non-mutating.
         "preview_record_migration" => (
-            "records.write",
+            Permission::RecordsWrite,
             Some(parse_uuid(arguments, "record_id")?),
             None,
         ),
         "view_image" | "read_file" => {
             if !repository
-                .principal_token_permits(tool_actor(repository, actor), workspace, "records.read")
+                .principal_token_permits(
+                    tool_actor(repository, actor),
+                    workspace,
+                    Permission::RecordsRead,
+                )
                 .await?
             {
                 return Ok(false);
@@ -3093,7 +3110,7 @@ async fn read_authorized(
         | "find_records"
         | "count_records"
         | "list_saved_searches"
-        | "get_saved_search" => ("records.read", None, None),
+        | "get_saved_search" => (Permission::RecordsRead, None, None),
         _ => return Err(ToolError::UnknownTool(name.to_owned())),
     };
     Ok(repository

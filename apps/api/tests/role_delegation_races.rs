@@ -1,5 +1,7 @@
 mod support;
 
+use api::permissions::Permission;
+
 use std::time::Duration;
 
 use api::repository::AttricatRepository;
@@ -254,7 +256,13 @@ async fn role_edit_cannot_restore_permissions_removed_during_its_lock_wait(pool:
     );
     assert!(
         !repository
-            .is_authorized(user, bootstrap_workspace_id(), "records.write", None, None)
+            .is_authorized(
+                user,
+                bootstrap_workspace_id(),
+                Permission::RecordsWrite,
+                None,
+                None
+            )
             .await
             .unwrap()
     );

@@ -24,6 +24,7 @@ use super::{
     AttricatRepository, AuthorizationActor, ClaimedTask, RepositoryError,
     extension_annotations::own_annotations,
 };
+use attricat_domain::permissions::Permission;
 
 /// Completed output remains downloadable for this long.
 pub const OPERATION_OUTPUT_RETENTION_DAYS: i64 = 30;
@@ -373,7 +374,7 @@ impl AttricatRepository {
         self.ensure_principal_may(
             &mut transaction,
             input.actor,
-            "records.read",
+            Permission::RecordsRead,
             &input.record_ids,
         )
         .await?;
@@ -479,7 +480,7 @@ impl AttricatRepository {
             &mut connection,
             actor,
             self.workspace_id.0,
-            "records.read",
+            Permission::RecordsRead,
             &record_ids,
         )
         .await?;
@@ -539,7 +540,7 @@ impl AttricatRepository {
         .bind(self.workspace_id.0)
         .fetch_all(&mut *connection)
         .await?;
-        self.ensure_principal_may(&mut connection, actor, "records.read", &members)
+        self.ensure_principal_may(&mut connection, actor, Permission::RecordsRead, &members)
             .await
     }
 
@@ -700,7 +701,7 @@ impl AttricatRepository {
                 &mut connection,
                 scope.actor,
                 self.workspace_id.0,
-                "records.read",
+                Permission::RecordsRead,
                 &page,
             )
             .await?

@@ -1,9 +1,10 @@
+use attricat_domain::permissions::Permission;
 use axum::http::Method;
 use uuid::Uuid;
 
 #[derive(Clone, Copy)]
 pub(super) struct Policy {
-    pub(super) permission: &'static str,
+    pub(super) permission: Permission,
     pub(super) target: TargetKind,
 }
 
@@ -33,29 +34,29 @@ pub(super) enum TargetKind {
 // Some operations need both workspace-member management and the narrower
 // authority to grant roles. Keep the extra check at the HTTP boundary so PATs
 // cannot inherit it implicitly from their owner's RBAC grants.
-pub(super) fn additional_permission(path: &str) -> Option<&'static str> {
+pub(super) fn additional_permission(path: &str) -> Option<Permission> {
     match path {
         "/workspace/members/{member_id}/grants"
-        | "/workspace/members/{member_id}/grants/{grant_id}" => Some("roles.grant"),
+        | "/workspace/members/{member_id}/grants/{grant_id}" => Some(Permission::RolesGrant),
         _ => None,
     }
 }
 
 pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     let read = |target| Policy {
-        permission: "records.read",
+        permission: Permission::RecordsRead,
         target,
     };
     let write = |target| Policy {
-        permission: "records.write",
+        permission: Permission::RecordsWrite,
         target,
     };
     let blueprint = if method == Method::GET {
-        "blueprints.read"
+        Permission::BlueprintsRead
     } else if path.ends_with("/publish") || path.ends_with("/safe-migration-batches") {
-        "blueprints.publish"
+        Permission::BlueprintsPublish
     } else {
-        "blueprints.write"
+        Permission::BlueprintsWrite
     };
     // This POST carries read selectors in its body; it is not a record edit.
     if method == Method::POST && path == "/v1/records/{record_id}/incoming-relationships" {
@@ -83,9 +84,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path.starts_with("/lexicon/") {
         return Some(Policy {
             permission: if method == Method::GET {
-                "blueprints.read"
+                Permission::BlueprintsRead
             } else {
-                "blueprints.write"
+                Permission::BlueprintsWrite
             },
             target: TargetKind::None,
         });
@@ -113,7 +114,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             && path == "/solution-packs/applications/{application_id}/checks/{run_id}")
     {
         return Some(Policy {
-            permission: "solution_packs.manage",
+            permission: Permission::SolutionPacksManage,
             target: TargetKind::None,
         });
     }
@@ -121,13 +122,13 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         || path.starts_with("/extension-registries/extensions/")
     {
         return Some(Policy {
-            permission: "extensions.read",
+            permission: Permission::ExtensionsRead,
             target: TargetKind::None,
         });
     }
     if path == "/extension-registries" || path.starts_with("/extension-registries/") {
         return Some(Policy {
-            permission: "extensions.manage",
+            permission: Permission::ExtensionsManage,
             target: TargetKind::None,
         });
     }
@@ -137,13 +138,13 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     // catalog access.
     if path == "/extensions/{extension_id}/exports/{export_id}/preview" {
         return Some(Policy {
-            permission: "records.write",
+            permission: Permission::RecordsWrite,
             target: TargetKind::None,
         });
     }
     if path == "/export-status" {
         return Some(Policy {
-            permission: "data_health.read",
+            permission: Permission::DataHealthRead,
             target: TargetKind::None,
         });
     }
@@ -157,7 +158,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         || path == "/extensions/{extension_id}/operations"
     {
         return Some(Policy {
-            permission: "extensions.manage",
+            permission: Permission::ExtensionsManage,
             target: TargetKind::None,
         });
     }
@@ -168,13 +169,13 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         || path.starts_with("/extension-runs/")
     {
         return Some(Policy {
-            permission: "records.read",
+            permission: Permission::RecordsRead,
             target: TargetKind::ExtensionRun,
         });
     }
     if path == "/extensions/{extension_id}/{contribution_id}/command" {
         return Some(Policy {
-            permission: "records.write",
+            permission: Permission::RecordsWrite,
             target: TargetKind::None,
         });
     }
@@ -183,7 +184,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         || path == "/extensions/{extension_id}/{contribution_id}/storage/{release_id}"
     {
         return Some(Policy {
-            permission: "records.read",
+            permission: Permission::RecordsRead,
             target: TargetKind::None,
         });
     }
@@ -193,9 +194,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     {
         return Some(Policy {
             permission: if method == Method::GET {
-                "extensions.read"
+                Permission::ExtensionsRead
             } else {
-                "extensions.manage"
+                Permission::ExtensionsManage
             },
             target: TargetKind::None,
         });
@@ -210,9 +211,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     {
         return Some(Policy {
             permission: if method == Method::GET {
-                "rules.read"
+                Permission::RulesRead
             } else {
-                "rules.manage"
+                Permission::RulesManage
             },
             target: TargetKind::None,
         });
@@ -225,16 +226,16 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     {
         return Some(Policy {
             permission: if method == Method::GET {
-                "workflows.read"
+                Permission::WorkflowsRead
             } else {
-                "workflows.manage"
+                Permission::WorkflowsManage
             },
             target: TargetKind::None,
         });
     }
     if path.starts_with("/agent/") {
         return Some(Policy {
-            permission: "agents.run",
+            permission: Permission::AgentsRun,
             target: TargetKind::None,
         });
     }
@@ -244,22 +245,22 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path.starts_with("/event-deliveries/") {
         return Some(Policy {
             permission: if method == Method::GET {
-                "data_health.read"
+                Permission::DataHealthRead
             } else {
-                "roles.manage"
+                Permission::RolesManage
             },
             target: TargetKind::None,
         });
     }
     if path == "/audit-events" {
         return Some(Policy {
-            permission: "audit.read",
+            permission: Permission::AuditRead,
             target: TargetKind::None,
         });
     }
     if path == "/workspace/extension-layout" {
         return Some(Policy {
-            permission: "extensions.manage",
+            permission: Permission::ExtensionsManage,
             target: TargetKind::None,
         });
     }
@@ -268,37 +269,37 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         || path.starts_with("/workspace/extension-secrets/")
     {
         return Some(Policy {
-            permission: "extensions.manage",
+            permission: Permission::ExtensionsManage,
             target: TargetKind::None,
         });
     }
     if path == "/workspace/assignable-roles" || path.starts_with("/workspace/grant-targets/") {
         return Some(Policy {
-            permission: "members.manage",
+            permission: Permission::MembersManage,
             target: TargetKind::None,
         });
     }
     if path == "/workspace/navigation/sidebar" {
         return Some(Policy {
-            permission: "records.read",
+            permission: Permission::RecordsRead,
             target: TargetKind::WorkspaceNavigation,
         });
     }
     if path == "/workspace/navigation" {
         return Some(Policy {
-            permission: "workspace_navigation.manage",
+            permission: Permission::WorkspaceNavigationManage,
             target: TargetKind::None,
         });
     }
     if path == "/workspace/agent-settings" {
         return Some(Policy {
-            permission: "agents.manage",
+            permission: Permission::AgentsManage,
             target: TargetKind::None,
         });
     }
     if path == "/workspace/token-permissions" {
         return Some(Policy {
-            permission: "tokens.manage",
+            permission: Permission::TokensManage,
             target: TargetKind::None,
         });
     }
@@ -307,7 +308,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         || path.starts_with("/workspace/roles/")
     {
         return Some(Policy {
-            permission: "roles.manage",
+            permission: Permission::RolesManage,
             target: TargetKind::None,
         });
     }
@@ -320,19 +321,19 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         || path.starts_with("/workspace/teams/")
     {
         return Some(Policy {
-            permission: "members.manage",
+            permission: Permission::MembersManage,
             target: TargetKind::None,
         });
     }
     if path == "/personal-access-tokens" || path.starts_with("/personal-access-tokens/") {
         return Some(Policy {
-            permission: "tokens.manage",
+            permission: Permission::TokensManage,
             target: TargetKind::None,
         });
     }
     if path == "/metrics" || path == "/system/health" || path.starts_with("/data-health/") {
         return Some(Policy {
-            permission: "data_health.read",
+            permission: Permission::DataHealthRead,
             target: TargetKind::None,
         });
     }
@@ -343,9 +344,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     {
         return Some(Policy {
             permission: if method == Method::GET {
-                "blueprints.read"
+                Permission::BlueprintsRead
             } else {
-                "blueprints.write"
+                Permission::BlueprintsWrite
             },
             target: TargetKind::None,
         });
@@ -359,7 +360,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         || path == "/blueprints/{blueprint_id}/versions/{version}/record-publications/publish-all"
     {
         return Some(Policy {
-            permission: "records.publish",
+            permission: Permission::RecordsPublish,
             target: TargetKind::BlueprintId,
         });
     }
@@ -388,22 +389,22 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     }
     if path == "/publication-channels" {
         return Some(Policy {
-            permission: "contexts.read",
+            permission: Permission::ContextsRead,
             target: TargetKind::None,
         });
     }
     if path == "/publication-channels/{context_id}" {
         return Some(Policy {
-            permission: "contexts.write",
+            permission: Permission::ContextsWrite,
             target: TargetKind::PublicationChannelContext,
         });
     }
     if path == "/contexts/{code}" {
         return Some(Policy {
             permission: if method == Method::GET {
-                "contexts.read"
+                Permission::ContextsRead
             } else {
-                "contexts.write"
+                Permission::ContextsWrite
             },
             target: TargetKind::ContextCode,
         });
@@ -411,9 +412,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path == "/contexts/id/{id}" {
         return Some(Policy {
             permission: if method == Method::GET {
-                "contexts.read"
+                Permission::ContextsRead
             } else {
-                "contexts.write"
+                Permission::ContextsWrite
             },
             target: TargetKind::ContextId,
         });
@@ -421,9 +422,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path == "/contexts" {
         return Some(Policy {
             permission: if method == Method::GET {
-                "contexts.read"
+                Permission::ContextsRead
             } else {
-                "contexts.write"
+                Permission::ContextsWrite
             },
             target: if method == Method::GET {
                 TargetKind::ContextList
@@ -436,7 +437,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     // record, so it is a workspace-level permission rather than record write.
     if path.starts_with("/files/{file_id}/retention-holds") && method != Method::GET {
         return Some(Policy {
-            permission: "files.hold",
+            permission: Permission::FilesHold,
             target: TargetKind::None,
         });
     }
@@ -445,20 +446,20 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     }
     if path == "/v1/records/{record_id}/status-unlock" {
         return Some(Policy {
-            permission: "records.unlock",
+            permission: Permission::RecordsUnlock,
             target: TargetKind::RecordId,
         });
     }
     if path.starts_with("/v1/records/{record_id}/publications") && method != Method::GET {
         return Some(Policy {
-            permission: "records.publish",
+            permission: Permission::RecordsPublish,
             target: TargetKind::RecordId,
         });
     }
     if path.starts_with("/v1/records/{record_id}") || path.starts_with("/records/{record_id}") {
         return Some(if method == Method::DELETE {
             Policy {
-                permission: "records.delete",
+                permission: Permission::RecordsDelete,
                 target: TargetKind::RecordId,
             }
         } else if method == Method::GET {
@@ -526,21 +527,21 @@ mod tests {
             "/v1/records/{record_id}/incoming-relationships",
         )
         .unwrap();
-        assert_eq!(policy.permission, "records.read");
+        assert_eq!(policy.permission, Permission::RecordsRead);
         assert!(matches!(policy.target, TargetKind::RecordId));
     }
 
     #[test]
     fn record_publication_lookups_are_reads_filtered_by_the_handler() {
         let lookup = policy(&Method::POST, "/v1/records/publications").unwrap();
-        assert_eq!(lookup.permission, "records.read");
+        assert_eq!(lookup.permission, Permission::RecordsRead);
         assert!(matches!(lookup.target, TargetKind::RecordList));
     }
 
     #[test]
     fn record_labels_are_reads_filtered_by_the_handler() {
         let labels = policy(&Method::POST, "/v1/records/labels").unwrap();
-        assert_eq!(labels.permission, "records.read");
+        assert_eq!(labels.permission, Permission::RecordsRead);
         assert!(matches!(labels.target, TargetKind::RecordList));
         assert_eq!(
             target(
@@ -560,9 +561,9 @@ mod tests {
         ] {
             assert_eq!(
                 policy(&Method::POST, path).unwrap().permission,
-                "members.manage"
+                Permission::MembersManage
             );
-            assert_eq!(additional_permission(path), Some("roles.grant"));
+            assert_eq!(additional_permission(path), Some(Permission::RolesGrant));
         }
     }
 
@@ -571,7 +572,7 @@ mod tests {
         for method in [Method::GET, Method::PUT] {
             assert_eq!(
                 policy(&method, "/workspace/agent-settings").map(|policy| policy.permission),
-                Some("agents.manage")
+                Some(Permission::AgentsManage)
             );
         }
     }
@@ -581,7 +582,7 @@ mod tests {
         for path in ["/directory", "/directory/users/{user_id}"] {
             assert_eq!(
                 policy(&Method::GET, path).unwrap().permission,
-                "records.read"
+                Permission::RecordsRead
             );
         }
         for (method, path) in [
@@ -592,7 +593,7 @@ mod tests {
         ] {
             assert_eq!(
                 policy(&method, path).unwrap().permission,
-                "members.manage",
+                Permission::MembersManage,
                 "{method} {path}"
             );
         }
@@ -602,25 +603,25 @@ mod tests {
     fn workflow_routes_require_read_or_manage_permissions() {
         assert_eq!(
             policy(&Method::GET, "/workflows").unwrap().permission,
-            "workflows.read"
+            Permission::WorkflowsRead
         );
         assert_eq!(
             policy(&Method::GET, "/workflows/{workflow_id}/versions/1")
                 .unwrap()
                 .permission,
-            "workflows.read"
+            Permission::WorkflowsRead
         );
         assert_eq!(
             policy(&Method::POST, "/workflows/validate")
                 .unwrap()
                 .permission,
-            "workflows.manage"
+            Permission::WorkflowsManage
         );
         assert_eq!(
             policy(&Method::POST, "/workflows/{workflow_id}/disable")
                 .unwrap()
                 .permission,
-            "workflows.manage"
+            Permission::WorkflowsManage
         );
     }
 
@@ -629,7 +630,7 @@ mod tests {
         let context_id = Uuid::new_v4();
         let route = "/publication-channels/{context_id}";
         let policy = policy(&Method::PUT, route).unwrap();
-        assert_eq!(policy.permission, "contexts.write");
+        assert_eq!(policy.permission, Permission::ContextsWrite);
         assert!(matches!(
             policy.target,
             TargetKind::PublicationChannelContext
@@ -647,7 +648,7 @@ mod tests {
     #[test]
     fn record_batches_are_authorized_per_operation_by_their_handler() {
         let batch = policy(&Method::POST, "/v1/records/batch").unwrap();
-        assert_eq!(batch.permission, "records.write");
+        assert_eq!(batch.permission, Permission::RecordsWrite);
         assert!(matches!(batch.target, TargetKind::RecordBatch));
         assert_eq!(
             target(
@@ -682,7 +683,7 @@ mod tests {
         ] {
             assert_eq!(
                 policy(&Method::POST, path).unwrap().permission,
-                "blueprints.write",
+                Permission::BlueprintsWrite,
                 "{path}"
             );
         }
@@ -697,7 +698,7 @@ mod tests {
             )
             .unwrap()
             .permission,
-            "records.publish"
+            Permission::RecordsPublish
         );
         assert_eq!(
             policy(
@@ -706,7 +707,7 @@ mod tests {
             )
             .unwrap()
             .permission,
-            "records.publish"
+            Permission::RecordsPublish
         );
     }
 
@@ -716,7 +717,7 @@ mod tests {
             policy(&Method::POST, "/v1/records/{record_id}/publications")
                 .unwrap()
                 .permission,
-            "records.publish"
+            Permission::RecordsPublish
         );
         assert_eq!(
             policy(
@@ -725,7 +726,7 @@ mod tests {
             )
             .unwrap()
             .permission,
-            "records.publish"
+            Permission::RecordsPublish
         );
     }
 
@@ -760,7 +761,7 @@ mod tests {
         ] {
             assert_eq!(
                 policy(&method, path).unwrap().permission,
-                "solution_packs.manage"
+                Permission::SolutionPacksManage
             );
         }
         assert!(policy(&Method::POST, "/solution-packs/apply").is_none());
@@ -782,7 +783,10 @@ mod tests {
                 "/extension-runs/{run_id}/artifacts/{artifact_id}/download",
             ),
         ] {
-            assert_eq!(policy(&method, path).unwrap().permission, "records.read");
+            assert_eq!(
+                policy(&method, path).unwrap().permission,
+                Permission::RecordsRead
+            );
         }
         assert_eq!(
             policy(
@@ -791,7 +795,7 @@ mod tests {
             )
             .unwrap()
             .permission,
-            "extensions.read"
+            Permission::ExtensionsRead
         );
         for path in [
             "/extensions/{extension_id}/annotation-namespace",
@@ -799,7 +803,7 @@ mod tests {
         ] {
             assert_eq!(
                 policy(&Method::POST, path).unwrap().permission,
-                "extensions.manage"
+                Permission::ExtensionsManage
             );
         }
     }
@@ -815,36 +819,36 @@ mod tests {
         ] {
             assert_eq!(
                 policy(&Method::PATCH, path).unwrap().permission,
-                "extensions.manage"
+                Permission::ExtensionsManage
             );
         }
         assert_eq!(
             policy(&Method::GET, "/extensions").unwrap().permission,
-            "extensions.read"
+            Permission::ExtensionsRead
         );
         assert_eq!(
             policy(&Method::POST, "/extensions").unwrap().permission,
-            "extensions.manage"
+            Permission::ExtensionsManage
         );
         assert_eq!(
             policy(&Method::POST, "/extensions/sideload")
                 .unwrap()
                 .permission,
-            "extensions.manage"
+            Permission::ExtensionsManage
         );
         for method in [Method::GET, Method::PUT] {
             assert_eq!(
                 policy(&method, "/workspace/extension-layout")
                     .unwrap()
                     .permission,
-                "extensions.manage"
+                Permission::ExtensionsManage
             );
         }
         assert_eq!(
             policy(&Method::POST, "/extensions/{extension_id}/enable")
                 .unwrap()
                 .permission,
-            "extensions.manage"
+            Permission::ExtensionsManage
         );
         for path in [
             "/extensions/{extension_id}/operations",
@@ -854,7 +858,7 @@ mod tests {
         ] {
             assert_eq!(
                 policy(&Method::POST, path).unwrap().permission,
-                "extensions.manage"
+                Permission::ExtensionsManage
             );
         }
         assert_eq!(
@@ -864,7 +868,7 @@ mod tests {
             )
             .unwrap()
             .permission,
-            "records.read"
+            Permission::RecordsRead
         );
         assert_eq!(
             policy(
@@ -873,7 +877,7 @@ mod tests {
             )
             .unwrap()
             .permission,
-            "records.read"
+            Permission::RecordsRead
         );
         assert_eq!(
             policy(
@@ -882,7 +886,7 @@ mod tests {
             )
             .unwrap()
             .permission,
-            "records.write"
+            Permission::RecordsWrite
         );
     }
 }

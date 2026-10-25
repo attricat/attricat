@@ -16,6 +16,7 @@ use crate::{
         valid_connection_key,
     },
 };
+use attricat_domain::permissions::Permission;
 use attricat_validation::saved_search;
 use axum::{
     Json,
@@ -508,7 +509,7 @@ pub(super) async fn record_publications(
         )));
     }
     let readable = repository
-        .authorized_record_ids(caller, workspace, "records.read", &record_ids)
+        .authorized_record_ids(caller, workspace, Permission::RecordsRead, &record_ids)
         .await?;
     record_ids.retain(|id| readable.contains(id));
     let mut statuses = repository
@@ -560,7 +561,7 @@ pub(super) async fn record_labels(
         )));
     }
     let readable = repository
-        .authorized_record_ids(caller, workspace, "records.read", &record_ids)
+        .authorized_record_ids(caller, workspace, Permission::RecordsRead, &record_ids)
         .await?;
     record_ids.retain(|id| readable.contains(id));
     Ok(Json(RecordLabelsResponse {

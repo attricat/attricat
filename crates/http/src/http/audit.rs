@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use super::auth::AuthenticatedPrincipal;
 use crate::repository::AuditContext;
+use attricat_domain::permissions::Permission;
 
 const REQUEST_ID_HEADER: &str = "x-request-id";
 const CORRELATION_ID_HEADER: &str = "x-correlation-id";
@@ -75,56 +76,56 @@ fn action(method: &Method, route: &str) -> String {
     format!("attricat.{resource}.{verb}")
 }
 
-fn audit_permission(method: &Method, route: &str) -> &'static str {
+fn audit_permission(method: &Method, route: &str) -> Permission {
     if route.starts_with("/v1/records/{record_id}/comments") {
-        "records.read"
+        Permission::RecordsRead
     } else if route == "/extensions/{extension_id}/{contribution_id}/command" {
-        "records.write"
+        Permission::RecordsWrite
     } else if route == "/extensions/{extension_id}/{contribution_id}/operations"
         || route.starts_with("/extension-runs")
     {
-        "records.read"
+        Permission::RecordsRead
     } else if route.starts_with("/solution-packs") || route.starts_with("/presentation-assets") {
-        "solution_packs.manage"
+        Permission::SolutionPacksManage
     } else if route.contains("connector-jobs")
         || route.starts_with("/extension-registries")
         || route.starts_with("/extensions")
         || route.starts_with("/extension-operation-schedules")
     {
-        "extensions.manage"
+        Permission::ExtensionsManage
     } else if route.starts_with("/workflows") {
-        "workflows.manage"
+        Permission::WorkflowsManage
     } else if route.starts_with("/rules") || route.starts_with("/rule-findings") {
-        "rules.manage"
+        Permission::RulesManage
     } else if route.starts_with("/lexicon") {
-        "blueprints.write"
+        Permission::BlueprintsWrite
     } else if route.starts_with("/blueprints") {
         if route.ends_with("/publish") {
-            "blueprints.publish"
+            Permission::BlueprintsPublish
         } else {
-            "blueprints.write"
+            Permission::BlueprintsWrite
         }
     } else if route.starts_with("/v1/records/{record_id}/publications") {
-        "records.publish"
+        Permission::RecordsPublish
     } else if route == "/v1/records/{record_id}/status-unlock" {
-        "records.unlock"
+        Permission::RecordsUnlock
     } else if route.starts_with("/contexts") || route.starts_with("/publication-channels") {
-        "contexts.write"
+        Permission::ContextsWrite
     } else if route.starts_with("/personal-access-tokens") {
-        "tokens.manage"
+        Permission::TokensManage
     } else if route.starts_with("/workspace/members") || route.starts_with("/workspace/invitations")
     {
-        "members.manage"
+        Permission::MembersManage
     } else if route.starts_with("/workspace/roles") {
-        "roles.manage"
+        Permission::RolesManage
     } else if route.starts_with("/workspace/navigation") {
-        "workspace_navigation.manage"
+        Permission::WorkspaceNavigationManage
     } else if route.starts_with("/workspace/agent-settings") {
-        "agents.manage"
+        Permission::AgentsManage
     } else if method == Method::DELETE {
-        "records.delete"
+        Permission::RecordsDelete
     } else {
-        "records.write"
+        Permission::RecordsWrite
     }
 }
 
@@ -211,26 +212,26 @@ mod tests {
     fn mutation_audit_permissions_match_workspace_management_routes() {
         assert_eq!(
             audit_permission(&Method::POST, "/personal-access-tokens"),
-            "tokens.manage"
+            Permission::TokensManage
         );
         assert_eq!(
             audit_permission(&Method::PATCH, "/workspace/members/{id}"),
-            "members.manage"
+            Permission::MembersManage
         );
         assert_eq!(
             audit_permission(&Method::DELETE, "/workspace/roles/{id}"),
-            "roles.manage"
+            Permission::RolesManage
         );
         assert_eq!(
             audit_permission(&Method::PUT, "/workspace/agent-settings"),
-            "agents.manage"
+            Permission::AgentsManage
         );
         assert_eq!(
             audit_permission(
                 &Method::POST,
                 "/extensions/{extension_id}/{contribution_id}/command"
             ),
-            "records.write"
+            Permission::RecordsWrite
         );
     }
 
@@ -238,7 +239,7 @@ mod tests {
     fn workflow_mutations_audit_workflow_management_permission() {
         assert_eq!(
             audit_permission(&Method::POST, "/workflows/{workflow_id}/disable"),
-            "workflows.manage"
+            Permission::WorkflowsManage
         );
         let (_, target) = audit_context(
             &Method::POST,

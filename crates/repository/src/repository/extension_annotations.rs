@@ -17,6 +17,7 @@ use uuid::Uuid;
 use super::EventPublisher;
 use super::{AttricatRepository, RepositoryError, SAMPLE_SYSTEM_TAG, system_annotations};
 use crate::domain_events::RECORD_ANNOTATIONS_CHANGED_V1;
+use attricat_domain::permissions::Permission;
 
 /// Maximum add/remove/set/delete operations in one patch.
 pub const MAX_ANNOTATION_PATCH_OPERATIONS: usize = 32;
@@ -463,7 +464,7 @@ impl AttricatRepository {
     ) -> Result<i64, RepositoryError> {
         patch.validate(authority)?;
         patch.validate_qualified_tags(extension_id)?;
-        self.ensure_actor_may(&mut *transaction, "records.read", &[record_id])
+        self.ensure_actor_may(&mut *transaction, Permission::RecordsRead, &[record_id])
             .await?;
         // Row lock first, as on every generic record write, then the claim's
         // namespace lock.

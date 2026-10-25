@@ -33,6 +33,7 @@ use crate::{
         valid_connection_key,
     },
 };
+use attricat_domain::permissions::Permission;
 
 /// The most failed handler deliveries an export status page lists.
 const HANDLER_FAILURE_LIMIT: i64 = 20;
@@ -147,7 +148,7 @@ pub(super) async fn extension_export_status(
     ApiQuery(query): ApiQuery<ExportStatusQuery>,
 ) -> Result<Json<ExtensionExportStatus>, ApiError> {
     principal
-        .require_workspace_permission(&state.repository, workspace.0, "records.read")
+        .require_workspace_permission(&state.repository, workspace.0, Permission::RecordsRead)
         .await?;
     let (mappings, next) = repository
         .export_mapping_list(
@@ -212,7 +213,7 @@ pub(super) async fn retry_export(
     ApiJson(input): ApiJson<RetryRequest>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     principal
-        .require_workspace_permission(&state.repository, workspace.0, "records.read")
+        .require_workspace_permission(&state.repository, workspace.0, Permission::RecordsRead)
         .await?;
     if input
         .idempotency_key
@@ -255,7 +256,7 @@ pub(super) async fn list_connections(
         .principal_may(
             principal.actor(),
             workspace.0,
-            "extensions.manage",
+            Permission::ExtensionsManage,
             None,
             None,
         )
@@ -759,7 +760,7 @@ pub(super) async fn oauth_callback(
                 token_id: None,
             },
             workspace_id,
-            "extensions.manage",
+            Permission::ExtensionsManage,
             None,
             None,
         )
@@ -1040,7 +1041,7 @@ pub(super) async fn preview_export(
     // Without a target only a workspace-wide grant matches, so the command
     // cannot read anything the caller could not.
     principal
-        .require_workspace_permission(&state.repository, workspace.0, "records.read")
+        .require_workspace_permission(&state.repository, workspace.0, Permission::RecordsRead)
         .await?;
     let installation = runtime_installation(&repository, &extension_id).await?;
     // A preview is a client command, so it needs the same grant.

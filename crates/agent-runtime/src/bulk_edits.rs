@@ -22,6 +22,7 @@ use crate::{
     model::{Attribute, RelationshipFilter, SearchBlueprint, SearchFilter},
     repository::{AgentRun, AgentToolCall, AttricatRepository, RepositoryError},
 };
+use attricat_domain::permissions::Permission;
 
 pub const TOOL: &str = "bulk_set_record_values";
 
@@ -179,11 +180,15 @@ pub async fn resolve(
     }
     let ids: Vec<Uuid> = targets.iter().map(|target| target.record_id).collect();
     let readable = if repository
-        .principal_token_permits(tool_actor(repository, actor), workspace, "records.read")
+        .principal_token_permits(
+            tool_actor(repository, actor),
+            workspace,
+            Permission::RecordsRead,
+        )
         .await?
     {
         repository
-            .authorized_record_ids(actor, workspace, "records.read", &ids)
+            .authorized_record_ids(actor, workspace, Permission::RecordsRead, &ids)
             .await?
     } else {
         HashSet::new()
@@ -430,7 +435,7 @@ async fn select_filter(
         .principal_may(
             tool_actor(repository, actor),
             workspace,
-            "records.read",
+            Permission::RecordsRead,
             None,
             None,
         )
@@ -582,7 +587,7 @@ async fn apply_record(
         .principal_may(
             tool_actor(repository, actor),
             workspace,
-            "records.write",
+            Permission::RecordsWrite,
             Some(record.record_id),
             None,
         )

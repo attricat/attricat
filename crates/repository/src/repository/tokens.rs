@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use super::{AttricatRepository, RepositoryError};
+use attricat_domain::permissions::Permission;
 
 /// Byte length of the digests stored in place of secret tokens.
 pub(super) const TOKEN_DIGEST_BYTES: usize = 32;
@@ -41,9 +42,15 @@ impl AttricatRepository {
             return Err(RepositoryError::NotFound("valid token input"));
         }
         let mut tx = self.pool.begin().await?;
-        let permitted =
-            Self::is_authorized_on(&mut tx, user_id, workspace_id, "tokens.manage", None, None)
-                .await?;
+        let permitted = Self::is_authorized_on(
+            &mut tx,
+            user_id,
+            workspace_id,
+            Permission::TokensManage,
+            None,
+            None,
+        )
+        .await?;
         if !permitted {
             return Err(RepositoryError::NotFound("token authority"));
         }

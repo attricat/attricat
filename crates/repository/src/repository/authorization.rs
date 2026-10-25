@@ -12,11 +12,14 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         &self,
         user_id: Uuid,
         workspace_id: Uuid,
-        permissions: &[&str],
+        permissions: &[Permission],
     ) -> Result<HashSet<String>, RepositoryError> {
+        let codes: Vec<&str> = permissions
+            .iter()
+            .map(|permission| permission.as_str())
+            .collect();
         let mut connection = self.pool.acquire().await?;
-        Self::workspace_permissions_on(&mut connection, user_id, workspace_id, Some(permissions))
-            .await
+        Self::workspace_permissions_on(&mut connection, user_id, workspace_id, Some(&codes)).await
     }
 
     /// Every permission the user holds workspace-wide at `generations`, from
@@ -57,7 +60,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         generations: Option<WorkspaceGenerations>,
         user_id: Uuid,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
         target_id: Option<Uuid>,
         target_code: Option<&str>,
     ) -> Result<bool, RepositoryError> {
@@ -65,7 +68,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             && self
                 .cached_workspace_permissions(user_id, workspace_id, generations)
                 .await?
-                .contains(permission)
+                .contains(permission.as_str())
         {
             return Ok(true);
         }
@@ -97,7 +100,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         connection: &mut sqlx::PgConnection,
         actor: AuthorizationActor,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
         record_ids: &[Uuid],
     ) -> Result<HashSet<Uuid>, RepositoryError> {
         if record_ids.is_empty()
@@ -121,7 +124,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         &self,
         actor: AuthorizationActor,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
         target_id: Option<Uuid>,
         target_code: Option<&str>,
     ) -> Result<bool, RepositoryError> {
@@ -141,7 +144,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         connection: &mut sqlx::PgConnection,
         actor: AuthorizationActor,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
         target_id: Option<Uuid>,
         target_code: Option<&str>,
     ) -> Result<bool, RepositoryError> {
@@ -163,7 +166,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         &self,
         actor: AuthorizationActor,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
     ) -> Result<bool, RepositoryError> {
         let mut connection = self.pool.acquire().await?;
         Self::token_permits_on(&mut connection, actor, workspace_id, permission).await
@@ -174,7 +177,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         connection: &mut sqlx::PgConnection,
         actor: AuthorizationActor,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
     ) -> Result<bool, RepositoryError> {
         let Some(token_id) = actor.token_id else {
             return Ok(true);
@@ -185,7 +188,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         .bind(token_id)
         .bind(actor.user_id)
         .bind(workspace_id)
-        .bind(permission)
+        .bind(permission.as_str())
         .fetch_one(&mut *connection)
         .await?)
     }
@@ -199,7 +202,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         &self,
         user_id: Uuid,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
         record_ids: &[Uuid],
     ) -> Result<HashSet<Uuid>, RepositoryError> {
         if record_ids.is_empty() {
@@ -220,7 +223,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         connection: &mut sqlx::PgConnection,
         user_id: Uuid,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
         record_ids: &[Uuid],
     ) -> Result<HashSet<Uuid>, RepositoryError> {
         if record_ids.is_empty() {
@@ -247,7 +250,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         &self,
         user_id: Uuid,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
         target_codes: &[String],
     ) -> Result<HashSet<String>, RepositoryError> {
         if target_codes.is_empty() {
@@ -277,7 +280,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         &self,
         user_id: Uuid,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
         kind: AuthorizationTargetKind,
         target_ids: &[Uuid],
     ) -> Result<HashSet<Uuid>, RepositoryError> {
@@ -316,7 +319,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         &self,
         user_id: Uuid,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
         target_id: Option<Uuid>,
         target_code: Option<&str>,
     ) -> Result<bool, RepositoryError> {
@@ -338,7 +341,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         connection: &mut sqlx::PgConnection,
         user_id: Uuid,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
         target_id: Option<Uuid>,
         target_code: Option<&str>,
     ) -> Result<bool, RepositoryError> {
@@ -394,7 +397,7 @@ pub enum AuthorizationTargetKind {
 /// permission, or those of any of the named roles.
 #[derive(Clone, Copy)]
 pub(crate) enum GrantCodes<'a> {
-    Permission(&'a str),
+    Permission(Permission),
     Roles(&'a [String]),
 }
 
@@ -419,7 +422,7 @@ impl<'a> GrantCodes<'a> {
     /// The codes to bind as `$3`.
     fn codes(&self) -> Vec<&'a str> {
         match *self {
-            Self::Permission(permission) => vec![permission],
+            Self::Permission(permission) => vec![permission.as_str()],
             Self::Roles(roles) => roles.iter().map(String::as_str).collect(),
         }
     }

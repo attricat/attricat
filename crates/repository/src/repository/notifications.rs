@@ -6,6 +6,7 @@
 //! read and write below is keyed by the workspace scope and the recipient.
 
 use super::{AttricatRepository, RepositoryError};
+use attricat_domain::permissions::Permission;
 use attricat_validation::principal::{PrincipalKind, PrincipalRef};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -157,7 +158,7 @@ impl AttricatRepository {
                     transaction,
                     *recipient,
                     self.workspace_id(),
-                    "records.read",
+                    Permission::RecordsRead,
                     &[id],
                 )
                 .await?

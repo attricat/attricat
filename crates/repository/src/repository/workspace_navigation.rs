@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use super::generations::{Generation, advance_generation};
 use super::{AttricatRepository, RepositoryError};
+use attricat_domain::permissions::Permission;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ExploreNavigationEntry {
@@ -42,7 +43,7 @@ impl AttricatRepository {
             .is_authorized(
                 actor_id,
                 workspace_id,
-                "workspace_navigation.manage",
+                Permission::WorkspaceNavigationManage,
                 None,
                 None,
             )
@@ -90,7 +91,7 @@ impl AttricatRepository {
             .map(|entry| entry.blueprint_code.clone())
             .collect();
         let readable = self
-            .authorized_target_codes(actor_id, workspace_id, "records.read", &codes)
+            .authorized_target_codes(actor_id, workspace_id, Permission::RecordsRead, &codes)
             .await?;
         let names = &configuration.names;
         let mut items = Vec::new();

@@ -1,5 +1,7 @@
 mod support;
 
+use api::permissions::Permission;
+
 use support::*;
 
 #[sqlx::test]
@@ -225,7 +227,13 @@ async fn batched_workspace_permissions_match_per_permission_checks(pool: PgPool)
             .await
             .unwrap();
     assert!(!permissions.is_empty());
-    let permission_refs = permissions.iter().map(String::as_str).collect::<Vec<_>>();
+    let permissions = permissions
+        .iter()
+        .map(|code| {
+            code.parse::<Permission>()
+                .expect("seeded permissions are known")
+        })
+        .collect::<Vec<_>>();
 
     let mut principals = vec![BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap()];
     for (email, scope, state) in [
@@ -269,16 +277,16 @@ async fn batched_workspace_permissions_match_per_permission_checks(pool: PgPool)
     let mut granted_counts = Vec::new();
     for user_id in principals {
         let batched = repository
-            .workspace_permissions(user_id, workspace_id, &permission_refs)
+            .workspace_permissions(user_id, workspace_id, &permissions)
             .await
             .unwrap();
-        for permission in &permissions {
+        for &permission in &permissions {
             let expected = repository
                 .is_authorized(user_id, workspace_id, permission, None, None)
                 .await
                 .unwrap();
             assert_eq!(
-                batched.contains(permission),
+                batched.contains(permission.as_str()),
                 expected,
                 "{user_id} {permission}"
             );
@@ -369,12 +377,18 @@ async fn batched_record_authorization_matches_per_target_checks(pool: PgPool) {
     let mut accepted = Vec::new();
     for user_id in principals {
         let batched = repository
-            .authorized_record_ids(user_id, workspace_id, "records.read", &requested)
+            .authorized_record_ids(user_id, workspace_id, Permission::RecordsRead, &requested)
             .await
             .unwrap();
         for record_id in requested {
             let expected = repository
-                .is_authorized(user_id, workspace_id, "records.read", Some(record_id), None)
+                .is_authorized(
+                    user_id,
+                    workspace_id,
+                    Permission::RecordsRead,
+                    Some(record_id),
+                    None,
+                )
                 .await
                 .unwrap();
             assert_eq!(

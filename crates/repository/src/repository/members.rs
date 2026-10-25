@@ -11,9 +11,7 @@ use super::{
 
 use super::roles::OWNER_ROLE_ID;
 use super::tokens::TOKEN_DIGEST_BYTES;
-
-pub(super) const MEMBERS_MANAGE_PERMISSION: &str = "members.manage";
-const ROLES_GRANT_PERMISSION: &str = "roles.grant";
+use attricat_domain::permissions::Permission;
 
 type WorkspaceUserInvitation = (Uuid, Uuid, String, Uuid, Vec<u8>, DateTime<Utc>);
 
@@ -69,7 +67,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         invitation: Option<WorkspaceUserInvitation>,
         action_digest: Option<Vec<u8>>,
     ) -> Result<CreatedWorkspaceUser, RepositoryError> {
-        self.require_member_permission(actor_id, workspace_id, MEMBERS_MANAGE_PERMISSION)
+        self.require_member_permission(actor_id, workspace_id, Permission::MembersManage)
             .await?;
         if email != email.trim().to_lowercase()
             || !email.contains('@')
@@ -85,7 +83,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             &mut tx,
             actor_id,
             workspace_id,
-            MEMBERS_MANAGE_PERMISSION,
+            Permission::MembersManage,
         )
         .await?;
         let user = sqlx::query("INSERT INTO users (id, email, display_name, email_verified_at) VALUES ($1, $2, NULLIF(btrim($3), ''), clock_timestamp()) ON CONFLICT (email) DO UPDATE SET display_name = COALESCE(users.display_name, EXCLUDED.display_name) RETURNING id, state, email_verified_at, security_version")
@@ -252,7 +250,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         &self,
         actor_id: Uuid,
         workspace_id: Uuid,
-        permission: &str,
+        permission: Permission,
     ) -> Result<(), RepositoryError> {
         if self
             .is_authorized(actor_id, workspace_id, permission, None, None)
@@ -325,7 +323,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         actor_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<Vec<WorkspaceMember>, RepositoryError> {
-        self.require_member_permission(actor_id, workspace_id, MEMBERS_MANAGE_PERMISSION)
+        self.require_member_permission(actor_id, workspace_id, Permission::MembersManage)
             .await?;
         Ok(sqlx::query_as("SELECT m.id, m.user_id, u.email, u.display_name, avatar.id AS avatar_file_id, m.state, m.created_at, m.updated_at, coalesce(jsonb_agg(jsonb_build_object('id', g.id, 'role_id', g.role_id, 'role_code', r.code, 'scope_type', g.scope_type, 'scope_target_id', g.scope_target_id) ORDER BY g.created_at) FILTER (WHERE g.id IS NOT NULL), '[]'::jsonb) AS grants FROM workspace_memberships m JOIN users u ON u.id = m.user_id LEFT JOIN files avatar ON m.state = 'active' AND avatar.workspace_id = m.workspace_id AND avatar.id = m.avatar_file_id AND avatar.purpose = 'avatar' AND avatar.status = 'ready' AND avatar.deleted_at IS NULL LEFT JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id LEFT JOIN roles r ON r.id = g.role_id WHERE m.workspace_id = $1 GROUP BY m.id, u.id, avatar.id ORDER BY u.email").bind(workspace_id).fetch_all(&self.pool).await?)
     }
@@ -339,14 +337,14 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         if !matches!(state, "active" | "inactive") {
             return Err(RepositoryError::NotFound("membership state"));
         }
-        self.require_member_permission(actor_id, workspace_id, MEMBERS_MANAGE_PERMISSION)
+        self.require_member_permission(actor_id, workspace_id, Permission::MembersManage)
             .await?;
         let mut tx = self.pool.begin().await?;
         Self::lock_workspace_permission_on(
             &mut tx,
             actor_id,
             workspace_id,
-            MEMBERS_MANAGE_PERMISSION,
+            Permission::MembersManage,
         )
         .await?;
         sqlx::query(
@@ -399,11 +397,11 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         scope_type: &str,
         scope_target_id: Uuid,
     ) -> Result<Uuid, RepositoryError> {
-        self.require_member_permission(actor_id, workspace_id, ROLES_GRANT_PERMISSION)
+        self.require_member_permission(actor_id, workspace_id, Permission::RolesGrant)
             .await?;
         let id = Uuid::new_v4();
         let mut tx = self.pool.begin().await?;
-        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, ROLES_GRANT_PERMISSION)
+        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, Permission::RolesGrant)
             .await?;
         self.ensure_token_can_delegate_role_on(&mut tx, actor_id, workspace_id, role_id)
             .await?;
@@ -438,14 +436,14 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .fetch_optional(&self.pool)
                 .await?
                 .ok_or(RepositoryError::NotFound("role grant"))?;
-        self.require_member_permission(actor_id, workspace_id, ROLES_GRANT_PERMISSION)
+        self.require_member_permission(actor_id, workspace_id, Permission::RolesGrant)
             .await?;
         let role_id: Uuid = grant.try_get("role_id")?;
         if role_id == OWNER_ROLE_ID && !self.active_owner(actor_id, workspace_id).await? {
             return Err(RepositoryError::NotFound("owner authority"));
         }
         let mut tx = self.pool.begin().await?;
-        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, ROLES_GRANT_PERMISSION)
+        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, Permission::RolesGrant)
             .await?;
         let grant = sqlx::query("SELECT membership_id, role_id FROM role_grants WHERE id = $1 AND workspace_id = $2 AND membership_id = $3 FOR UPDATE")
             .bind(grant_id)
@@ -532,7 +530,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         digest: &[u8],
         expires_at: DateTime<Utc>,
     ) -> Result<(), RepositoryError> {
-        self.require_member_permission(actor_id, workspace_id, MEMBERS_MANAGE_PERMISSION)
+        self.require_member_permission(actor_id, workspace_id, Permission::MembersManage)
             .await?;
         if email != email.trim().to_lowercase()
             || !email.contains('@')
@@ -547,7 +545,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             &mut tx,
             actor_id,
             workspace_id,
-            MEMBERS_MANAGE_PERMISSION,
+            Permission::MembersManage,
         )
         .await?;
         self.ensure_token_can_delegate_role_on(&mut tx, actor_id, workspace_id, role_id)
@@ -569,7 +567,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         actor_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<Vec<WorkspaceInvitation>, RepositoryError> {
-        self.require_member_permission(actor_id, workspace_id, MEMBERS_MANAGE_PERMISSION)
+        self.require_member_permission(actor_id, workspace_id, Permission::MembersManage)
             .await?;
         Ok(sqlx::query_as("SELECT i.id, i.invitee_email, i.inviter_user_id, u.email AS inviter_email, i.role_id, r.code AS role_code, i.scope_type, i.scope_target_id, i.expires_at, i.accepted_at, i.accepted_by_user_id, i.revoked_at, i.created_at FROM workspace_invitations i JOIN users u ON u.id = i.inviter_user_id JOIN roles r ON r.id = i.role_id WHERE i.workspace_id = $1 ORDER BY i.created_at DESC").bind(workspace_id).fetch_all(&self.pool).await?)
     }
@@ -579,7 +577,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         workspace_id: Uuid,
         id: Uuid,
     ) -> Result<WorkspaceInvitation, RepositoryError> {
-        self.require_member_permission(actor_id, workspace_id, MEMBERS_MANAGE_PERMISSION)
+        self.require_member_permission(actor_id, workspace_id, Permission::MembersManage)
             .await?;
         sqlx::query_as("SELECT i.id, i.invitee_email, i.inviter_user_id, u.email AS inviter_email, i.role_id, r.code AS role_code, i.scope_type, i.scope_target_id, i.expires_at, i.accepted_at, i.accepted_by_user_id, i.revoked_at, i.created_at FROM workspace_invitations i JOIN users u ON u.id = i.inviter_user_id JOIN roles r ON r.id = i.role_id WHERE i.workspace_id = $1 AND i.id = $2")
             .bind(workspace_id)
@@ -594,14 +592,14 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         actor_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<bool, RepositoryError> {
-        self.require_member_permission(actor_id, workspace_id, MEMBERS_MANAGE_PERMISSION)
+        self.require_member_permission(actor_id, workspace_id, Permission::MembersManage)
             .await?;
         let mut tx = self.pool.begin().await?;
         Self::lock_workspace_permission_on(
             &mut tx,
             actor_id,
             workspace_id,
-            MEMBERS_MANAGE_PERMISSION,
+            Permission::MembersManage,
         )
         .await?;
         let revoked = sqlx::query("UPDATE workspace_invitations SET revoked_at = clock_timestamp() WHERE id = $1 AND workspace_id = $2 AND accepted_at IS NULL AND revoked_at IS NULL").bind(id).bind(workspace_id).execute(&mut *tx).await?.rows_affected() == 1;

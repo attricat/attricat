@@ -1,5 +1,7 @@
 mod support;
 
+use api::permissions::Permission;
+
 use std::time::Duration;
 
 use api::repository::{AttricatRepository, RepositoryError};
@@ -158,7 +160,13 @@ async fn old_invitation_cannot_restore_a_revoked_role_grant(pool: PgPool) {
     );
     assert!(
         !repository
-            .is_authorized(user, bootstrap_workspace_id(), "records.read", None, None)
+            .is_authorized(
+                user,
+                bootstrap_workspace_id(),
+                Permission::RecordsRead,
+                None,
+                None
+            )
             .await
             .unwrap()
     );
