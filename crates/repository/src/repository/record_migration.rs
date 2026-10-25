@@ -12,6 +12,14 @@ use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
+/// What a migration does with each current source row.
+struct MigrationRowPlan {
+    archive_ids: Vec<Uuid>,
+    /// Source value IDs by the target attribute they move to.
+    remap_ids: HashMap<Uuid, Vec<Uuid>>,
+    unresolved: HashSet<String>,
+}
+
 /// A migration's source rows and the attributes of both revisions.
 #[derive(Clone, Copy)]
 struct MigrationAttributes<'a> {
@@ -521,6 +529,131 @@ impl AttricatRepository {
         Ok(())
     }
 
+    /// Sorts the record's current source rows: archived (discarded,
+    /// incompatible or replaced), remapped to a compatible target attribute,
+    /// or unresolved because an incompatible value has no replacement in its
+    /// own context.
+    async fn plan_migration_rows(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        input: &MigrateRecordRequest,
+        attributes: MigrationAttributes<'_>,
+    ) -> Result<MigrationRowPlan, RepositoryError> {
+        let MigrationAttributes {
+            source_values,
+            source_by_id,
+            target_by_code,
+            target_by_id,
+            default_context_id,
+            ..
+        } = attributes;
+        let mut supplied_keys: HashSet<AttributeContextKey> = HashSet::new();
+        let mut supplied_scalar_keys: HashSet<AttributeContextKey> = HashSet::new();
+        let mut supplied_relationship_sets: HashSet<AttributeContextKey> = HashSet::new();
+        let mut supplied_relationship_values = HashSet::new();
+        for value in &input.values {
+            let (attribute_id, attribute_code, context_id, relationship_target) = match value {
+                NewAttributeValue::Scalar {
+                    attribute_id,
+                    attribute_code,
+                    context_id,
+                    ..
+                } => (*attribute_id, attribute_code.as_deref(), *context_id, None),
+                NewAttributeValue::Relationship {
+                    attribute_id,
+                    attribute_code,
+                    context_id,
+                    target_record_id,
+                } => (
+                    *attribute_id,
+                    attribute_code.as_deref(),
+                    *context_id,
+                    Some(*target_record_id),
+                ),
+            };
+            let code = attribute_code.or_else(|| {
+                attribute_id.and_then(|id| target_by_id.get(&id).map(|a| a.code.as_str()))
+            });
+            if let Some(code) = code {
+                let context_id = self.resolve_context_id(transaction, context_id).await?;
+                supplied_keys.insert((code.to_owned(), context_id));
+                if let Some(target) = relationship_target {
+                    supplied_relationship_values.insert((code.to_owned(), context_id, target));
+                } else {
+                    supplied_scalar_keys.insert((code.to_owned(), context_id));
+                }
+            }
+        }
+        for relationship in &input.relationships {
+            let code = relationship.attribute_code.as_deref().or_else(|| {
+                relationship
+                    .attribute_id
+                    .and_then(|id| target_by_id.get(&id).map(|a| a.code.as_str()))
+            });
+            if let Some(code) = code {
+                let context_id = self
+                    .resolve_context_id(transaction, relationship.context_id)
+                    .await?;
+                supplied_keys.insert((code.to_owned(), context_id));
+                supplied_relationship_sets.insert((code.to_owned(), context_id));
+            }
+        }
+        let discarded_attributes: HashSet<_> = input
+            .discard_attributes
+            .iter()
+            .map(String::as_str)
+            .collect();
+        let mut archive_ids = Vec::new();
+        let mut remap_ids: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+        let mut unresolved = HashSet::new();
+
+        for value in source_values
+            .iter()
+            .filter(|value| source_by_id.contains_key(&value.attribute_id))
+        {
+            let source = source_by_id
+                .get(&value.attribute_id)
+                .expect("filtered source attribute exists");
+            let target = target_by_code.get(source.code.as_str()).copied();
+            let compatible = target.is_some_and(|target| {
+                migration_value_compatible(source, target, value, default_context_id)
+            });
+            let discarded = discarded_attributes.contains(source.code.as_str());
+            let key = (source.code.clone(), value.context_id);
+            // A replacement in another context does not resolve this value;
+            // silently archiving it would lose data in the current context.
+            if !compatible && !discarded && !supplied_keys.contains(&key) {
+                unresolved.insert(source.code.clone());
+                continue;
+            }
+            let replaced = if source.value_type == "relationship" {
+                supplied_relationship_sets.contains(&key)
+                    || value.relationship_target_record_id.is_some_and(|target| {
+                        supplied_relationship_values.contains(&(
+                            source.code.clone(),
+                            value.context_id,
+                            target,
+                        ))
+                    })
+            } else {
+                supplied_scalar_keys.contains(&key)
+            };
+            if discarded || !compatible || replaced {
+                archive_ids.push(value.id);
+            } else {
+                remap_ids
+                    .entry(target.expect("compatible target exists").id)
+                    .or_default()
+                    .push(value.id);
+            }
+        }
+        Ok(MigrationRowPlan {
+            archive_ids,
+            remap_ids,
+            unresolved,
+        })
+    }
+
     pub async fn migrate_record_to_latest_checked(
         &self,
         record_id: Uuid,
@@ -652,108 +785,24 @@ impl AttricatRepository {
         )
         .await?;
 
-        let mut supplied_keys: HashSet<AttributeContextKey> = HashSet::new();
-        let mut supplied_scalar_keys: HashSet<AttributeContextKey> = HashSet::new();
-        let mut supplied_relationship_sets: HashSet<AttributeContextKey> = HashSet::new();
-        let mut supplied_relationship_values = HashSet::new();
-        for value in &input.values {
-            let (attribute_id, attribute_code, context_id, relationship_target) = match value {
-                NewAttributeValue::Scalar {
-                    attribute_id,
-                    attribute_code,
-                    context_id,
-                    ..
-                } => (*attribute_id, attribute_code.as_deref(), *context_id, None),
-                NewAttributeValue::Relationship {
-                    attribute_id,
-                    attribute_code,
-                    context_id,
-                    target_record_id,
-                } => (
-                    *attribute_id,
-                    attribute_code.as_deref(),
-                    *context_id,
-                    Some(*target_record_id),
-                ),
-            };
-            let code = attribute_code.or_else(|| {
-                attribute_id.and_then(|id| target_by_id.get(&id).map(|a| a.code.as_str()))
-            });
-            if let Some(code) = code {
-                let context_id = self
-                    .resolve_context_id(&mut transaction, context_id)
-                    .await?;
-                supplied_keys.insert((code.to_owned(), context_id));
-                if let Some(target) = relationship_target {
-                    supplied_relationship_values.insert((code.to_owned(), context_id, target));
-                } else {
-                    supplied_scalar_keys.insert((code.to_owned(), context_id));
-                }
-            }
-        }
-        for relationship in &input.relationships {
-            let code = relationship.attribute_code.as_deref().or_else(|| {
-                relationship
-                    .attribute_id
-                    .and_then(|id| target_by_id.get(&id).map(|a| a.code.as_str()))
-            });
-            if let Some(code) = code {
-                let context_id = self
-                    .resolve_context_id(&mut transaction, relationship.context_id)
-                    .await?;
-                supplied_keys.insert((code.to_owned(), context_id));
-                supplied_relationship_sets.insert((code.to_owned(), context_id));
-            }
-        }
-        let discarded_attributes: HashSet<_> = input
-            .discard_attributes
-            .iter()
-            .map(String::as_str)
-            .collect();
-        let mut archive_ids = Vec::new();
-        let mut remap_ids: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
-        let mut unresolved = HashSet::new();
-
-        for value in source_values
-            .iter()
-            .filter(|value| source_by_id.contains_key(&value.attribute_id))
-        {
-            let source = source_by_id
-                .get(&value.attribute_id)
-                .expect("filtered source attribute exists");
-            let target = target_by_code.get(source.code.as_str()).copied();
-            let compatible = target.is_some_and(|target| {
-                migration_value_compatible(source, target, value, default_context_id)
-            });
-            let discarded = discarded_attributes.contains(source.code.as_str());
-            let key = (source.code.clone(), value.context_id);
-            // A replacement in another context does not resolve this value;
-            // silently archiving it would lose data in the current context.
-            if !compatible && !discarded && !supplied_keys.contains(&key) {
-                unresolved.insert(source.code.clone());
-                continue;
-            }
-            let replaced = if source.value_type == "relationship" {
-                supplied_relationship_sets.contains(&key)
-                    || value.relationship_target_record_id.is_some_and(|target| {
-                        supplied_relationship_values.contains(&(
-                            source.code.clone(),
-                            value.context_id,
-                            target,
-                        ))
-                    })
-            } else {
-                supplied_scalar_keys.contains(&key)
-            };
-            if discarded || !compatible || replaced {
-                archive_ids.push(value.id);
-            } else {
-                remap_ids
-                    .entry(target.expect("compatible target exists").id)
-                    .or_default()
-                    .push(value.id);
-            }
-        }
+        let MigrationRowPlan {
+            archive_ids,
+            remap_ids,
+            unresolved,
+        } = self
+            .plan_migration_rows(
+                &mut transaction,
+                &input,
+                MigrationAttributes {
+                    source_values: &source_values,
+                    source_attributes: &source_attributes,
+                    source_by_id: &source_by_id,
+                    target_by_code: &target_by_code,
+                    target_by_id: &target_by_id,
+                    default_context_id,
+                },
+            )
+            .await?;
         if !unresolved.is_empty() {
             let unresolved: Vec<_> = unresolved.into_iter().collect();
             sqlx::query(
