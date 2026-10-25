@@ -6618,7 +6618,7 @@ impl AttricatRepository {
                     self.insert_file_in_transaction(
                         tx,
                         file_id,
-                        &crate::repository::NewUploadedFile {
+                        crate::repository::NewUploadedFile {
                             original_filename: filename.clone(),
                             display_filename: filename,
                             mime_type: media_type,
@@ -6626,6 +6626,7 @@ impl AttricatRepository {
                             sha256,
                             object_key,
                         },
+                        super::files::UploadClaim::Immediate,
                     )
                     .await?;
                 }

@@ -111,6 +111,28 @@ pub struct FileObject {
     pub sha256: String,
 }
 
+/// Who may attach an uploaded file that no attribute references yet.
+pub(super) enum UploadClaim<'a> {
+    /// The upload transaction references the file itself.
+    Immediate,
+    /// A create of a record of `blueprint_id` by `user_id` may claim it for
+    /// `attribute_code` in `context_id` until `expires_at`.
+    Staged {
+        expires_at: DateTime<Utc>,
+        user_id: Uuid,
+        blueprint_id: Uuid,
+        attribute_code: &'a str,
+        context_id: Uuid,
+    },
+    /// A message by `user_id` in `conversation_id` may attach it until
+    /// `expires_at`.
+    Conversation {
+        expires_at: DateTime<Utc>,
+        conversation_id: Uuid,
+        user_id: Uuid,
+    },
+}
+
 impl AttricatRepository {
     /// Validates the immutable record blueprint and returns its file policy before
     /// object bytes are accepted. The record is locked again while persisting,
@@ -175,18 +197,11 @@ impl AttricatRepository {
         let mut result = Vec::with_capacity(files.len());
         for file in files {
             let id = Uuid::new_v4();
-            let status = "queued".to_owned();
-            self.insert_file_in_transaction(&mut transaction, id, &file)
-                .await?;
+            result.push(
+                self.insert_file_in_transaction(&mut transaction, id, file, UploadClaim::Immediate)
+                    .await?,
+            );
             file_ids.push(id);
-            result.push(UploadedFile {
-                id,
-                filename: file.display_filename,
-                mime_type: file.mime_type,
-                byte_size: file.byte_size as i64,
-                sha256: file.sha256,
-                status,
-            });
         }
         let updated = self
             .replace_file_value(
@@ -210,25 +225,80 @@ impl AttricatRepository {
     }
 
     /// Records an uploaded object as a queued workspace file with a metadata
-    /// job, in the caller's transaction. Every attribute file write uses it.
+    /// job, in the caller's transaction. `claim` says who may later attach a
+    /// file that nothing references yet, and until when reconciliation keeps it.
     pub(super) async fn insert_file_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         id: Uuid,
-        file: &NewUploadedFile,
-    ) -> Result<(), RepositoryError> {
+        file: NewUploadedFile,
+        claim: UploadClaim<'_>,
+    ) -> Result<UploadedFile, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         self.finish_file_upload(transaction, &file.object_key)
             .await?;
+        let (expires_at, staged, conversation) = match claim {
+            UploadClaim::Immediate => (None, None, None),
+            UploadClaim::Staged {
+                expires_at,
+                user_id,
+                blueprint_id,
+                attribute_code,
+                context_id,
+            } => (
+                Some(expires_at),
+                Some((user_id, blueprint_id, attribute_code, context_id)),
+                None,
+            ),
+            UploadClaim::Conversation {
+                expires_at,
+                conversation_id,
+                user_id,
+            } => (Some(expires_at), None, Some((conversation_id, user_id))),
+        };
         sqlx::query(
-            "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'queued')",
+            "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at, staged_upload_user_id, staged_upload_blueprint_id, staged_upload_attribute_code, staged_upload_context_id, conversation_upload_conversation_id, conversation_upload_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'queued',$9,$10,$11,$12,$13,$14,$15)",
         )
-        .bind(id).bind(workspace_id).bind(&file.original_filename).bind(&file.display_filename)
-        .bind(&file.mime_type).bind(file.byte_size as i64).bind(&file.sha256).bind(&file.object_key)
-        .execute(&mut **transaction).await?;
+        .bind(id)
+        .bind(workspace_id)
+        .bind(&file.original_filename)
+        .bind(&file.display_filename)
+        .bind(&file.mime_type)
+        .bind(file.byte_size as i64)
+        .bind(&file.sha256)
+        .bind(&file.object_key)
+        .bind(expires_at)
+        .bind(staged.map(|staged| staged.0))
+        .bind(staged.map(|staged| staged.1))
+        .bind(staged.map(|staged| staged.2))
+        .bind(staged.map(|staged| staged.3))
+        .bind(conversation.map(|conversation| conversation.0))
+        .bind(conversation.map(|conversation| conversation.1))
+        .execute(&mut **transaction)
+        .await?;
         sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(id).execute(&mut **transaction).await?;
-        Ok(())
+        Ok(UploadedFile {
+            id,
+            filename: file.display_filename,
+            mime_type: file.mime_type,
+            byte_size: file.byte_size as i64,
+            sha256: file.sha256,
+            status: "queued".to_owned(),
+        })
+    }
+
+    /// The database time `seconds` from now, as stored in a claim window.
+    async fn claim_window_end(
+        transaction: &mut Transaction<'_, Postgres>,
+        seconds: i64,
+    ) -> Result<DateTime<Utc>, RepositoryError> {
+        Ok(
+            sqlx::query_scalar("SELECT now() + make_interval(secs => $1)")
+                .bind(seconds)
+                .fetch_one(&mut **transaction)
+                .await?,
+        )
     }
 
     /// References files from an attribute value at the given positions.
@@ -654,7 +724,6 @@ impl AttricatRepository {
         context_id: Option<Uuid>,
         files: Vec<NewUploadedFile>,
     ) -> Result<StagedUploadResult, RepositoryError> {
-        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         let (policy, context_id) = self
             .staged_upload_attribute(&mut transaction, blueprint_id, attribute_code, context_id)
@@ -662,50 +731,25 @@ impl AttricatRepository {
         if policy.cardinality == "one" && files.len() != 1 {
             return Err(RepositoryError::FileCardinality);
         }
-        let expires_at: DateTime<Utc> =
-            sqlx::query_scalar("SELECT now() + make_interval(secs => $1)")
-                .bind(STAGED_UPLOAD_LIFETIME_SECONDS)
-                .fetch_one(&mut *transaction)
-                .await?;
+        let expires_at =
+            Self::claim_window_end(&mut transaction, STAGED_UPLOAD_LIFETIME_SECONDS).await?;
         let mut result = Vec::with_capacity(files.len());
         for file in files {
-            self.finish_file_upload(&mut transaction, &file.object_key)
-                .await?;
-            let id = Uuid::new_v4();
-            let status = "queued".to_owned();
-            sqlx::query(
-                "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at, staged_upload_user_id, staged_upload_blueprint_id, staged_upload_attribute_code, staged_upload_context_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",
-            )
-            .bind(id)
-            .bind(workspace_id)
-            .bind(&file.original_filename)
-            .bind(&file.display_filename)
-            .bind(&file.mime_type)
-            .bind(file.byte_size as i64)
-            .bind(&file.sha256)
-            .bind(&file.object_key)
-            .bind(&status)
-            .bind(expires_at)
-            .bind(uploaded_by)
-            .bind(blueprint_id)
-            .bind(attribute_code)
-            .bind(context_id)
-            .execute(&mut *transaction)
-            .await?;
-            sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")
-                .bind(Uuid::new_v4())
-                .bind(workspace_id)
-                .bind(id)
-                .execute(&mut *transaction)
-                .await?;
-            result.push(UploadedFile {
-                id,
-                filename: file.display_filename,
-                mime_type: file.mime_type,
-                byte_size: file.byte_size as i64,
-                sha256: file.sha256,
-                status,
-            });
+            result.push(
+                self.insert_file_in_transaction(
+                    &mut transaction,
+                    Uuid::new_v4(),
+                    file,
+                    UploadClaim::Staged {
+                        expires_at,
+                        user_id: uploaded_by,
+                        blueprint_id,
+                        attribute_code,
+                        context_id,
+                    },
+                )
+                .await?,
+            );
         }
         transaction.commit().await?;
         Ok(StagedUploadResult {
@@ -737,43 +781,24 @@ impl AttricatRepository {
         if !exists {
             return Err(RepositoryError::NotFound("conversation"));
         }
+        let expires_at =
+            Self::claim_window_end(&mut transaction, CONVERSATION_ATTACHMENT_LIFETIME_SECONDS)
+                .await?;
         let mut result = Vec::with_capacity(files.len());
         for file in files {
-            self.finish_file_upload(&mut transaction, &file.object_key)
-                .await?;
-            let id = Uuid::new_v4();
-            let status = "queued".to_owned();
-            sqlx::query(
-                "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at, conversation_upload_conversation_id, conversation_upload_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now() + make_interval(secs => $10),$11,$12)",
-            )
-            .bind(id)
-            .bind(workspace_id)
-            .bind(&file.original_filename)
-            .bind(&file.display_filename)
-            .bind(&file.mime_type)
-            .bind(file.byte_size as i64)
-            .bind(&file.sha256)
-            .bind(&file.object_key)
-            .bind(&status)
-            .bind(CONVERSATION_ATTACHMENT_LIFETIME_SECONDS)
-            .bind(conversation_id)
-            .bind(uploaded_by_user_id)
-            .execute(&mut *transaction)
-            .await?;
-            sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")
-                .bind(Uuid::new_v4())
-                .bind(workspace_id)
-                .bind(id)
-                .execute(&mut *transaction)
-                .await?;
-            result.push(UploadedFile {
-                id,
-                filename: file.display_filename,
-                mime_type: file.mime_type,
-                byte_size: file.byte_size as i64,
-                sha256: file.sha256,
-                status,
-            });
+            result.push(
+                self.insert_file_in_transaction(
+                    &mut transaction,
+                    Uuid::new_v4(),
+                    file,
+                    UploadClaim::Conversation {
+                        expires_at,
+                        conversation_id,
+                        user_id: uploaded_by_user_id,
+                    },
+                )
+                .await?,
+            );
         }
         transaction.commit().await?;
         Ok(result)
