@@ -38,8 +38,8 @@ use crate::{
 };
 
 use super::{
-    AttricatRepository, EventPublisher, ExploreNavigationEntry, RepositoryError, SAMPLE_SYSTEM_TAG,
-    blueprints::blueprint_event, extensions::empty_workspace_extension_layout,
+    AttricatRepository, EventPublisher, ExploreNavigationEntry, ExtensionState, RepositoryError,
+    SAMPLE_SYSTEM_TAG, blueprints::blueprint_event, extensions::empty_workspace_extension_layout,
     record_commands::ChosenIdRecordCreate,
 };
 
@@ -301,7 +301,8 @@ struct InstalledExtensionRow {
     extension_id: String,
     installed_release_id: Uuid,
     version: String,
-    state: String,
+    #[sqlx(try_from = "String")]
+    state: ExtensionState,
     configuration: Value,
     manifest: Value,
 }
@@ -375,7 +376,7 @@ fn pending_extension_snapshot(release: &ResolvedExtensionRelease) -> InstalledEx
     InstalledExtensionSnapshot {
         installed_release_id: release.installed_release_id,
         version: release.manifest.version.clone(),
-        state: "disabled".to_owned(),
+        state: ExtensionState::Disabled,
         configuration: release.configuration.clone(),
         policy_compatible: extension_policy::allows(
             &release.extension_id,
@@ -1790,7 +1791,9 @@ fn materialize_plan(
                 reason_code: requirement.reason_code.to_owned(),
                 installed_release_id: requirement.installed_release_id,
                 installed_version: requirement.installed_version.clone(),
-                installed_state: requirement.installed_state.clone(),
+                installed_state: requirement
+                    .installed_state
+                    .map(|state| state.as_str().to_owned()),
                 configuration_matches: requirement.configuration_matches,
                 install: None,
             },
@@ -2044,7 +2047,7 @@ async fn insert_plan_rows(
             .bind(requirement.reason_code)
             .bind(requirement.installed_release_id)
             .bind(&requirement.installed_version)
-            .bind(&requirement.installed_state)
+            .bind(requirement.installed_state.map(ExtensionState::as_str))
             .bind(requirement.configuration_matches)
             .bind(&requirement.evaluation_template)
             .execute(&mut **tx)
@@ -3435,7 +3438,7 @@ impl AttricatRepository {
             };
             if snapshot.installed_release_id != entry.installed_release_id
                 || snapshot.version != entry.installed_version
-                || snapshot.state == "quarantined"
+                || snapshot.state == ExtensionState::Quarantined
                 || !snapshot.policy_compatible
                 || snapshot
                     .contributions
@@ -4899,7 +4902,7 @@ async fn evaluate_solution_pack_check(
                 .ok()
                 .zip(semver::Version::parse(&version).ok())
                 .is_some_and(|(requirement, version)| requirement.matches(&version));
-            let installed_ok = version_matches && state != "quarantined";
+            let installed_ok = version_matches && state != ExtensionState::Quarantined.as_str();
             let evidence =
                 serde_json::json!({"extension_id":extension_id,"version":version,"state":state});
             match predicate {
@@ -4908,7 +4911,7 @@ async fn evaluate_solution_pack_check(
                     "installed",
                     if !version_matches {
                         "incompatible_version"
-                    } else if state == "quarantined" {
+                    } else if state == ExtensionState::Quarantined.as_str() {
                         "quarantined"
                     } else {
                         "not_installed"
@@ -4999,7 +5002,7 @@ fn extension_enabled_evaluation(
 ) -> (bool, &'static str) {
     if !installed_ok {
         (false, "not_installed")
-    } else if state != "enabled" {
+    } else if state != ExtensionState::Enabled.as_str() {
         (false, "disabled")
     } else if !workspace_enabled {
         (false, "workspace_extensions_disabled")

@@ -37,6 +37,7 @@ use crate::{
     storage::ObjectStoreError,
 };
 use attricat_domain::permissions::Permission;
+use attricat_domain::states::ExtensionState;
 
 /// Extension-chosen media must never run as active content on the API origin.
 pub(super) const SANDBOXED_CONTENT_POLICY: &str = "sandbox; default-src 'none'";
@@ -78,7 +79,7 @@ pub(super) struct InstallationResponse {
     id: Uuid,
     extension_id: String,
     installed_release_id: Uuid,
-    state: String,
+    state: ExtensionState,
     configuration: Value,
     configuration_version: Option<i32>,
     created_at: chrono::DateTime<chrono::Utc>,

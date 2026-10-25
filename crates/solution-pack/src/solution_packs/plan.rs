@@ -2,6 +2,7 @@
 //! reviewable plan of mappings and actions. Planning never reads or writes the
 //! workspace itself.
 
+use attricat_domain::states::ExtensionState;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use attricat_blueprint::BlueprintKind;
@@ -46,7 +47,7 @@ impl BlueprintPublication {
 pub struct InstalledExtensionSnapshot {
     pub installed_release_id: uuid::Uuid,
     pub version: String,
-    pub state: String,
+    pub state: ExtensionState,
     pub configuration: Value,
     pub policy_compatible: bool,
     /// Stable contribution key to its manifest-declared outlet.
@@ -304,7 +305,7 @@ pub struct PlannedExtensionRequirement {
     pub reason_code: &'static str,
     pub installed_release_id: Option<uuid::Uuid>,
     pub installed_version: Option<String>,
-    pub installed_state: Option<String>,
+    pub installed_state: Option<ExtensionState>,
     pub configuration_matches: Option<bool>,
     pub evaluation_template: Value,
 }
@@ -353,7 +354,7 @@ pub fn evaluate_extension_requirement(
         {
             "incompatible_version"
         }
-        Some(installed) if installed.state == "quarantined" => "quarantined",
+        Some(installed) if installed.state == ExtensionState::Quarantined => "quarantined",
         Some(installed) if !installed.policy_compatible => "policy_incompatible",
         Some(_) if configuration_matches != Some(true) => "configuration_mismatch",
         Some(_) => "satisfied",
@@ -395,7 +396,7 @@ pub fn evaluate_extension_requirement(
         reason_code,
         installed_release_id: installed.map(|installed| installed.installed_release_id),
         installed_version: installed.map(|installed| installed.version.clone()),
-        installed_state: installed.map(|installed| installed.state.clone()),
+        installed_state: installed.map(|installed| installed.state),
         configuration_matches,
         evaluation_template: template.cloned().unwrap_or_else(|| serde_json::json!({})),
     }
@@ -431,7 +432,7 @@ fn contribution_unmet_reason(
     if !version_matches {
         return Some("incompatible_version");
     }
-    if installed.state == "quarantined" {
+    if installed.state == ExtensionState::Quarantined {
         return Some("quarantined");
     }
     if !installed.policy_compatible {

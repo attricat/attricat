@@ -22,6 +22,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::repository::ExtensionState;
 use crate::{
     extension_installer::{ExtensionInstallError, ExtensionInstaller},
     extension_registry::{
@@ -312,7 +313,9 @@ fn dependency_order(
             };
             let available = match (pending.get(&dependency.id), installed.get(&dependency.id)) {
                 (Some(planned), _) => matches(&planned.manifest.version),
-                (None, Some(existing)) => existing.state == "enabled" && matches(&existing.version),
+                (None, Some(existing)) => {
+                    existing.state == ExtensionState::Enabled && matches(&existing.version)
+                }
                 (None, None) => false,
             };
             if !available {
@@ -408,7 +411,7 @@ async fn install_planned_extension(
     // Only a disabled installation of the planned release is ours to finish.
     // An enabled one is done; anything else changed outside this plan.
     if installation.installed_release_id != planned.installed_release_id
-        || installation.state != "disabled"
+        || installation.state != ExtensionState::Disabled
     {
         return Ok(());
     }

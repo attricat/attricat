@@ -1,3 +1,4 @@
+use attricat_domain::states::ExtensionState;
 use std::io::Write;
 
 use serde_json::json;
@@ -606,7 +607,7 @@ fn validates_and_plans_extension_layout_item_level_merge() {
     let installed = InstalledExtensionSnapshot {
         installed_release_id: uuid::Uuid::from_u128(7),
         version: "1.2.0".into(),
-        state: "disabled".into(),
+        state: ExtensionState::Disabled,
         configuration: json!({}),
         policy_compatible: true,
         contributions: BTreeMap::from([("acme.shop:nav".to_owned(), "navigation".to_owned())]),
@@ -701,7 +702,7 @@ fn validates_and_plans_extension_layout_item_level_merge() {
         .contributions
         .insert("acme.shop:nav".to_owned(), "record_action".to_owned());
     let mut quarantined = installed.clone();
-    quarantined.state = "quarantined".to_owned();
+    quarantined.state = ExtensionState::Quarantined;
     let mut policy_incompatible = installed.clone();
     policy_incompatible.policy_compatible = false;
     let mut incompatible_version = installed.clone();
@@ -854,7 +855,7 @@ hidden = []
                             InstalledExtensionSnapshot {
                                 installed_release_id: uuid::Uuid::from_u128(101),
                                 version: "1.0.0".to_owned(),
-                                state: "enabled".to_owned(),
+                                state: ExtensionState::Enabled,
                                 configuration: json!({}),
                                 policy_compatible: true,
                                 contributions,
@@ -1310,7 +1311,7 @@ fn extension_requirement_evaluation_is_deterministic_and_does_not_require_enable
     let installed = InstalledExtensionSnapshot {
         installed_release_id: uuid::Uuid::nil(),
         version: "2.2.0".into(),
-        state: "disabled".into(),
+        state: ExtensionState::Disabled,
         configuration: json!({"endpoint":"https://example.test","unrelated_secret":"not exposed"}),
         policy_compatible: true,
         contributions: BTreeMap::new(),
@@ -1357,7 +1358,7 @@ fn extension_requirement_evaluation_is_deterministic_and_does_not_require_enable
     assert_eq!(optional_satisfied.status, "satisfied");
 
     let quarantined = InstalledExtensionSnapshot {
-        state: "quarantined".into(),
+        state: ExtensionState::Quarantined,
         ..installed
     };
     let blocked = evaluate_extension_requirement(&requirement, None, Some(&quarantined));
@@ -1379,7 +1380,7 @@ fn pending_official_release_is_planned_as_an_install_without_installed_state() {
     let pending = InstalledExtensionSnapshot {
         installed_release_id: uuid::Uuid::from_u128(7),
         version: "2.3.0".into(),
-        state: "disabled".into(),
+        state: ExtensionState::Disabled,
         configuration: json!({}),
         policy_compatible: true,
         contributions: BTreeMap::new(),

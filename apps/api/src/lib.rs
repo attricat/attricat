@@ -3,7 +3,7 @@
 //! crates for the binaries and the integration tests.
 
 pub use attricat_agent_runtime::agents;
-pub use attricat_domain::{account, model, permissions, task_queue, value_type};
+pub use attricat_domain::{account, model, permissions, states, task_queue, value_type};
 
 pub mod constants {
     //! Constants of the layers the binaries compose, plus the maintenance pool size.

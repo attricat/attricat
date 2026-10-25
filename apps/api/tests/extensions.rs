@@ -1,5 +1,6 @@
 mod support;
 
+use api::states::ExtensionState;
 use api::value_type::ValueType;
 use std::{io::Cursor, path::Path, sync::Arc};
 
@@ -1960,7 +1961,7 @@ async fn workspace_safe_mode_blocks_runtime_descriptors_and_storage_without_muta
             .await
             .unwrap()
             .state,
-        "enabled"
+        ExtensionState::Enabled
     );
 
     repository
@@ -2191,7 +2192,7 @@ async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool
         )
         .await
         .unwrap();
-    assert_eq!(installed.state, "disabled");
+    assert_eq!(installed.state, ExtensionState::Disabled);
     assert_eq!(
         store
             .get(&installed_artifact_key(
@@ -2239,7 +2240,7 @@ async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool
             .await
             .unwrap()
             .state,
-        "enabled"
+        ExtensionState::Enabled
     );
 
     // A runtime candidate is not authorization: the invocation-time lookup
@@ -2301,7 +2302,7 @@ async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool
             .await
             .unwrap()
             .state,
-        "quarantined"
+        ExtensionState::Quarantined
     );
     repository
         .grant_extension("acme.extension", "capability", "network.request")
@@ -2317,7 +2318,7 @@ async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool
             .await
             .unwrap()
             .state,
-        "enabled"
+        ExtensionState::Enabled
     );
     repository
         .disable_extension("acme.extension")

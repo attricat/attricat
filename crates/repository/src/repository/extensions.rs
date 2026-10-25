@@ -209,21 +209,7 @@ fn event_contract_subscription_allowed(
         .any(|item| item.provider == provider && item.contract == contract)
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ExtensionState {
-    Disabled,
-    Enabled,
-    Quarantined,
-}
-impl ExtensionState {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Disabled => "disabled",
-            Self::Enabled => "enabled",
-            Self::Quarantined => "quarantined",
-        }
-    }
-}
+pub use attricat_domain::states::ExtensionState;
 
 #[derive(Clone, Debug, FromRow)]
 pub struct ExtensionInstallation {
@@ -231,7 +217,8 @@ pub struct ExtensionInstallation {
     pub workspace_id: Uuid,
     pub extension_id: String,
     pub installed_release_id: Uuid,
-    pub state: String,
+    #[sqlx(try_from = "String")]
+    pub state: ExtensionState,
     pub configuration: Value,
     pub configuration_version: Option<i32>,
     pub created_at: DateTime<Utc>,
@@ -265,7 +252,8 @@ pub struct InstalledExtension {
     pub id: Uuid,
     pub extension_id: String,
     pub installed_release_id: Uuid,
-    pub state: String,
+    #[sqlx(try_from = "String")]
+    pub state: ExtensionState,
     pub configuration: Value,
     pub configuration_version: Option<i32>,
     pub created_at: DateTime<Utc>,
@@ -924,7 +912,7 @@ impl AttricatRepository {
             &row,
             "install",
             None,
-            Some("disabled"),
+            Some(ExtensionState::Disabled),
             source,
             json!({}),
         )
@@ -1152,8 +1140,8 @@ impl AttricatRepository {
             &mut transaction,
             &row,
             "configure",
-            Some(&current.state),
-            Some(&row.state),
+            Some(current.state),
+            Some(row.state),
             "configuration",
             json!({}),
         )
@@ -1223,8 +1211,8 @@ impl AttricatRepository {
             &mut transaction,
             &current,
             "grant",
-            Some(&current.state),
-            Some(&current.state),
+            Some(current.state),
+            Some(current.state),
             grant_kind,
             json!({"grant_id": grant_id}),
         )
@@ -1266,7 +1254,7 @@ impl AttricatRepository {
                 ));
             }
         };
-        if current.state == "enabled" && required {
+        if current.state == ExtensionState::Enabled && required {
             return Err(RepositoryError::InvalidExtensionTransition(
                 "disable an extension before revoking a required grant",
             ));
@@ -1284,8 +1272,8 @@ impl AttricatRepository {
             &mut transaction,
             &current,
             "revoke",
-            Some(&current.state),
-            Some(&current.state),
+            Some(current.state),
+            Some(current.state),
             grant_kind,
             json!({"grant_id": grant_id}),
         )
@@ -1303,7 +1291,7 @@ impl AttricatRepository {
             .await?;
         let mut transaction = self.pool.begin().await?;
         let current = self.lock_extension(&mut transaction, extension_id).await?;
-        if current.state == "quarantined" {
+        if current.state == ExtensionState::Quarantined {
             let manifest = self
                 .installed_release_manifest(&mut transaction, current.installed_release_id)
                 .await?;
@@ -1312,7 +1300,7 @@ impl AttricatRepository {
                 .validate_configuration(&current.configuration)
                 .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
         }
-        if current.state == "enabled" {
+        if current.state == ExtensionState::Enabled {
             return Err(RepositoryError::InvalidExtensionTransition(
                 "an extension is already enabled",
             ));
@@ -1326,8 +1314,8 @@ impl AttricatRepository {
             &mut transaction,
             &row,
             "enable",
-            Some(&current.state),
-            Some("enabled"),
+            Some(current.state),
+            Some(ExtensionState::Enabled),
             "lifecycle",
             json!({}),
         )
@@ -1361,7 +1349,7 @@ impl AttricatRepository {
         }
         let mut transaction = self.pool.begin().await?;
         let current = self.lock_extension(&mut transaction, extension_id).await?;
-        if current.state == "quarantined" {
+        if current.state == ExtensionState::Quarantined {
             return Err(RepositoryError::InvalidExtensionTransition(
                 "an extension is already quarantined",
             ));
@@ -1375,8 +1363,8 @@ impl AttricatRepository {
             &mut transaction,
             &row,
             "quarantine",
-            Some(&current.state),
-            Some("quarantined"),
+            Some(current.state),
+            Some(ExtensionState::Quarantined),
             "runtime",
             json!({"code": diagnostic_code}),
         )
@@ -1422,13 +1410,13 @@ impl AttricatRepository {
             source,
         )
         .await?;
-        let state = if current.state == "enabled" {
-            "disabled"
+        let state = if current.state == ExtensionState::Enabled {
+            ExtensionState::Disabled
         } else {
-            &current.state
+            current.state
         };
         let row = sqlx::query_as::<_, ExtensionInstallation>("UPDATE extension_installations SET installed_release_id = $2, state = $3, configuration = '{}'::jsonb, configuration_version = $4, updated_at = clock_timestamp() WHERE id = $1 RETURNING id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at")
-            .bind(current.id).bind(installed_release_id).bind(state).bind(manifest.configuration.as_ref().map(|item| item.version as i32)).fetch_one(&mut *transaction).await?;
+            .bind(current.id).bind(installed_release_id).bind(state.as_str()).bind(manifest.configuration.as_ref().map(|item| item.version as i32)).fetch_one(&mut *transaction).await?;
         sqlx::query("DELETE FROM extension_grants WHERE installation_id = $1")
             .bind(current.id)
             .execute(&mut *transaction)
@@ -1441,8 +1429,8 @@ impl AttricatRepository {
             &mut transaction,
             &row,
             "upgrade",
-            Some(&current.state),
-            Some(&row.state),
+            Some(current.state),
+            Some(row.state),
             source,
             json!({"prior_installed_release_id": current.installed_release_id}),
         )
@@ -1461,7 +1449,7 @@ impl AttricatRepository {
             &mut transaction,
             &current,
             "remove",
-            Some(&current.state),
+            Some(current.state),
             None,
             "lifecycle",
             json!({}),
@@ -1514,14 +1502,14 @@ impl AttricatRepository {
             self.ensure_no_enabled_dependents(&mut transaction, &current.extension_id)
                 .await?;
         }
-        if current.state == state.as_str() {
+        if current.state == state {
             return Err(RepositoryError::InvalidExtensionTransition(
                 "extension is already in the requested state",
             ));
         }
         // Re-enablement validates the installed release and configuration; disabling
         // remains available as a separate remediation step.
-        if current.state == "quarantined" && state == ExtensionState::Disabled {
+        if current.state == ExtensionState::Quarantined && state == ExtensionState::Disabled {
             let manifest = self
                 .installed_release_manifest(&mut transaction, current.installed_release_id)
                 .await?;
@@ -1531,7 +1519,7 @@ impl AttricatRepository {
                 .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
         }
         let row = self
-            .update_extension_state(&mut transaction, &current, state.clone())
+            .update_extension_state(&mut transaction, &current, state)
             .await?;
         if state == ExtensionState::Disabled {
             self.revoke_extension_file_links(&mut transaction, &current.extension_id)
@@ -1541,8 +1529,8 @@ impl AttricatRepository {
             &mut transaction,
             &row,
             operation,
-            Some(&current.state),
-            Some(state.as_str()),
+            Some(current.state),
+            Some(state),
             "lifecycle",
             json!({}),
         )
@@ -1747,14 +1735,14 @@ impl AttricatRepository {
         transaction: &mut Transaction<'_, Postgres>,
         installation: &ExtensionInstallation,
         operation: &str,
-        prior_state: Option<&str>,
-        new_state: Option<&str>,
+        prior_state: Option<ExtensionState>,
+        new_state: Option<ExtensionState>,
         source: &str,
         diagnostics: Value,
     ) -> Result<(), RepositoryError> {
         let audit = self.audit_context.as_ref();
         sqlx::query("INSERT INTO extension_lifecycle_records (id, workspace_id, installation_id, extension_id, installed_release_id, operation, prior_state, new_state, outcome, actor_user_id, actor_token_id, request_id, correlation_id, source, diagnostics) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'success', $9, $10, $11, $12, $13, $14)")
-            .bind(Uuid::new_v4()).bind(installation.workspace_id).bind(installation.id).bind(&installation.extension_id).bind(installation.installed_release_id).bind(operation).bind(prior_state).bind(new_state).bind(audit.and_then(|item| item.actor_user_id)).bind(audit.and_then(|item| item.actor_token_id)).bind(audit.map(|item| item.request_id).unwrap_or_else(Uuid::new_v4)).bind(audit.map(|item| item.correlation_id).unwrap_or_else(Uuid::new_v4)).bind(source).bind(diagnostics).execute(&mut **transaction).await?;
+            .bind(Uuid::new_v4()).bind(installation.workspace_id).bind(installation.id).bind(&installation.extension_id).bind(installation.installed_release_id).bind(operation).bind(prior_state.map(ExtensionState::as_str)).bind(new_state.map(ExtensionState::as_str)).bind(audit.and_then(|item| item.actor_user_id)).bind(audit.and_then(|item| item.actor_token_id)).bind(audit.map(|item| item.request_id).unwrap_or_else(Uuid::new_v4)).bind(audit.map(|item| item.correlation_id).unwrap_or_else(Uuid::new_v4)).bind(source).bind(diagnostics).execute(&mut **transaction).await?;
         Ok(())
     }
     async fn required_grants_present(
@@ -1852,7 +1840,7 @@ impl AttricatRepository {
             let version = Version::parse(&version).map_err(|_| {
                 RepositoryError::InvalidExtension("stored dependency version is invalid".into())
             })?;
-            if dependency_state != "enabled" || !range.matches(&version) {
+            if dependency_state != ExtensionState::Enabled.as_str() || !range.matches(&version) {
                 return Err(RepositoryError::InvalidExtension(format!(
                     "dependency '{}' is not enabled at a compatible version",
                     dependency.id
@@ -1896,7 +1884,7 @@ impl AttricatRepository {
                     })
                 })
             });
-            if state != "enabled" || !compatible {
+            if state != ExtensionState::Enabled.as_str() || !compatible {
                 return Err(RepositoryError::InvalidExtension(format!(
                     "event contract '{}:{}' is not enabled at a compatible version",
                     consumed.provider, consumed.contract
