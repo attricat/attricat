@@ -14,6 +14,8 @@ use axum::{
 pub(super) const IMMUTABLE: &str = "private, max-age=31536000, immutable";
 /// Private caching for a representation that must be revalidated each use.
 pub(super) const REVALIDATE: &str = "private, no-cache";
+/// A private representation that must never be stored.
+pub(super) const NO_STORE: &str = "private, no-store";
 
 /// A strong entity tag value, quoted.
 pub(super) fn entity_tag(value: &str) -> Option<HeaderValue> {

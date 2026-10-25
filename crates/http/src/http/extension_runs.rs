@@ -6,13 +6,7 @@
 //! Requests with `scope=own` (all extension frame requests) see only the
 //! caller's own runs.
 
-use axum::{
-    Json,
-    body::Body,
-    extract::State,
-    http::{HeaderValue, StatusCode, header},
-    response::Response,
-};
+use axum::{Json, extract::State, http::StatusCode, response::Response};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -33,7 +27,6 @@ use crate::{
         ExtensionAnnotations, InteractiveRun, InteractiveRunArtifact, RepositoryError,
         StartInteractiveOperation,
     },
-    storage::ObjectStoreError,
 };
 
 /// The frame never supplies a workspace, actor or installation; the host
@@ -367,51 +360,23 @@ pub(super) async fn download(
     let key = artifact
         .object_key
         .ok_or_else(|| ApiError::not_found("completed extension output"))?;
-    let object = state
-        .object_store
-        .get_stream(&key)
-        .await
-        .map_err(|error| match error {
-            ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_) => {
-                ApiError::service_unavailable("extension output storage is unavailable")
-            }
-            ObjectStoreError::NotFound | ObjectStoreError::Operation(_) => {
-                ApiError::internal("extension output could not be loaded")
-            }
-        })?;
-    let mut response = Response::new(Body::from_stream(object.stream));
-    let headers = response.headers_mut();
-    headers.insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_str(&artifact.media_type)
-            .map_err(|_| ApiError::internal("stored output media type is invalid"))?,
-    );
-    headers.insert(
-        header::CONTENT_LENGTH,
-        HeaderValue::from(artifact.content_length),
-    );
-    headers.insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("private, no-store"),
-    );
-    headers.insert(
-        header::X_CONTENT_TYPE_OPTIONS,
-        HeaderValue::from_static("nosniff"),
-    );
-    // Extension-controlled media must never render as active content.
-    headers.insert(
-        header::CONTENT_DISPOSITION,
-        HeaderValue::from_str(&format!(
+    let body = super::extensions::stored_object_body(
+        &state,
+        &key,
+        "extension output storage is unavailable",
+        "extension output could not be loaded",
+    )
+    .await?;
+    super::extensions::sandboxed_download(
+        body,
+        &artifact.media_type,
+        artifact.content_length,
+        &format!(
             "attachment; filename=\"{}\"",
             download_filename(name.as_deref(), artifact_id)
-        ))
-        .map_err(|_| ApiError::internal("output filename is invalid"))?,
-    );
-    headers.insert(
-        header::CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static(super::extensions::SANDBOXED_CONTENT_POLICY),
-    );
-    Ok(response)
+        ),
+        super::conditional::NO_STORE,
+    )
 }
 
 /// Operator inventory of an extension's annotation namespace.

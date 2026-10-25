@@ -1100,49 +1100,84 @@ pub(super) async fn download_operation_artifact(
     let key = artifact
         .object_key
         .ok_or_else(|| ApiError::not_found("completed operation artifact"))?;
+    let body = stored_object_body(
+        &state,
+        &key,
+        "operation artifact storage is unavailable",
+        "operation artifact could not be loaded",
+    )
+    .await?;
+    let mut response = sandboxed_download(
+        body,
+        &artifact.media_type,
+        artifact.content_length,
+        "attachment",
+        "private, immutable",
+    )?;
+    if let Some(checksum) = artifact.checksum_sha256 {
+        response.headers_mut().insert(
+            header::ETAG,
+            conditional::entity_tag(&checksum).ok_or_else(|| {
+                ApiError::internal("stored operation artifact checksum is invalid")
+            })?,
+        );
+    }
+    Ok(response)
+}
+
+/// Opens a stored object as a response body; the messages name the resource
+/// when storage is unavailable or the object cannot be read.
+pub(super) async fn stored_object_body(
+    state: &AppState,
+    key: &str,
+    unavailable: &'static str,
+    unreadable: &'static str,
+) -> Result<Body, ApiError> {
     let object = state
         .object_store
-        .get_stream(&key)
+        .get_stream(key)
         .await
         .map_err(|error| match error {
             ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_) => {
-                ApiError::service_unavailable("operation artifact storage is unavailable")
+                ApiError::service_unavailable(unavailable)
             }
             ObjectStoreError::NotFound | ObjectStoreError::Operation(_) => {
-                ApiError::internal("operation artifact could not be loaded")
+                ApiError::internal(unreadable)
             }
         })?;
-    let mut response = Response::new(Body::from_stream(object.stream));
+    Ok(Body::from_stream(object.stream))
+}
+
+/// An extension-produced file as an inert download. Its media type is
+/// extension-controlled, so a browser must never render it (e.g. `text/html`
+/// or SVG) as active content on the API origin.
+pub(super) fn sandboxed_download(
+    body: Body,
+    media_type: &str,
+    content_length: i64,
+    disposition: &str,
+    cache_control: &'static str,
+) -> Result<Response, ApiError> {
+    let mut response = Response::new(body);
     let headers = response.headers_mut();
     headers.insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_str(&artifact.media_type)
-            .map_err(|_| ApiError::internal("stored operation artifact media type is invalid"))?,
+        HeaderValue::from_str(media_type)
+            .map_err(|_| ApiError::internal("stored artifact media type is invalid"))?,
     );
-    headers.insert(
-        header::CONTENT_LENGTH,
-        HeaderValue::from(artifact.content_length),
-    );
-    if let Some(checksum) = artifact.checksum_sha256 {
-        headers.insert(
-            header::ETAG,
-            HeaderValue::from_str(&format!("\"{checksum}\""))
-                .map_err(|_| ApiError::internal("stored operation artifact checksum is invalid"))?,
-        );
-    }
+    headers.insert(header::CONTENT_LENGTH, HeaderValue::from(content_length));
     headers.insert(
         header::CACHE_CONTROL,
-        HeaderValue::from_static("private, immutable"),
+        HeaderValue::from_static(cache_control),
     );
     headers.insert(
         header::X_CONTENT_TYPE_OPTIONS,
         HeaderValue::from_static("nosniff"),
     );
-    // The media type is extension-controlled. Never let a browser render an
-    // artifact (e.g. `text/html` or SVG) as active content on the API origin.
     headers.insert(
         header::CONTENT_DISPOSITION,
-        HeaderValue::from_static("attachment"),
+        HeaderValue::from_str(disposition)
+            .map_err(|_| ApiError::internal("artifact filename is invalid"))?,
     );
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
@@ -1177,20 +1212,14 @@ pub(super) async fn artifact(
             conditional::REVALIDATE,
         ));
     }
-    let object =
-        state
-            .object_store
-            .get_stream(&artifact_key)
-            .await
-            .map_err(|error| match error {
-                ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_) => {
-                    ApiError::service_unavailable("extension artifact storage is unavailable")
-                }
-                ObjectStoreError::NotFound | ObjectStoreError::Operation(_) => {
-                    ApiError::internal("extension artifact could not be loaded")
-                }
-            })?;
-    let mut response = Response::new(Body::from_stream(object.stream));
+    let body = stored_object_body(
+        &state,
+        &artifact_key,
+        "extension artifact storage is unavailable",
+        "extension artifact could not be loaded",
+    )
+    .await?;
+    let mut response = Response::new(body);
     let headers = response.headers_mut();
     headers.insert(
         header::CONTENT_TYPE,

@@ -35,7 +35,7 @@ fn private_cache_headers() -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(
         header::CACHE_CONTROL,
-        HeaderValue::from_static("private, no-store"),
+        HeaderValue::from_static(super::conditional::NO_STORE),
     );
     headers
 }

@@ -292,6 +292,12 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
         download.headers()["content-disposition"],
         "attachment; filename=\"summary.txt\""
     );
+    assert_eq!(
+        download.headers()["content-security-policy"],
+        "sandbox; default-src 'none'"
+    );
+    assert_eq!(download.headers()["x-content-type-options"], "nosniff");
+    assert_eq!(download.headers()["cache-control"], "private, no-store");
     // Display order is preserved by the frozen membership.
     assert_eq!(
         download.text().await.unwrap(),
