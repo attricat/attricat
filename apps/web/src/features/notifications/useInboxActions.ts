@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../api/errors';
 import { useToast } from '../../components/useToast';
 import {
   deleteNotification,
@@ -8,9 +9,6 @@ import {
   setNotificationRead,
 } from './api';
 import { notificationQueryKeys } from './queryKeys';
-
-const errorMessage = (cause: unknown) =>
-  cause instanceof Error ? cause.message : String(cause);
 
 /**
  * Inbox changes; each refreshes the inbox lists and the unread count. A
@@ -36,7 +34,7 @@ export const useInboxActions = (
     client.invalidateQueries({
       queryKey: notificationQueryKeys.all(workspaceId, userId),
     });
-  const onError = (cause: unknown) =>
+  const onError = (cause: Error) =>
     show({ message: errorMessage(cause), severity: 'error' });
   // The list shows read changes itself; deletion has its own message.
   const meta = { toast: false };

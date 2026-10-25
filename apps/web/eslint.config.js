@@ -81,9 +81,16 @@ export default tseslint.config(
             'Render instants with <Timestamp> or useInstantFormat from src/time.',
         },
         {
-          // A query's or mutation's error is shown translated by its code.
-          selector:
+          // A query's or mutation's error is shown translated by its code,
+          // whether read from the query, from several queries at once, or
+          // from a rejected request.
+          selector: [
             'MemberExpression[property.name="message"][object.type="MemberExpression"][object.property.name="error"]',
+            'MemberExpression[property.name="message"][object.type="LogicalExpression"]',
+            'ConditionalExpression[test.operator="instanceof"] > MemberExpression.consequent[property.name="message"]',
+            'CallExpression[callee.property.name="catch"] MemberExpression[property.name="message"]',
+            'Property[key.name="onError"] MemberExpression[property.name="message"]',
+          ].join(', '),
           message:
             'Show request failures with errorMessage() from src/api/errors, which translates API error codes.',
         },

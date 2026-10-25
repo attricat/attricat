@@ -3,6 +3,7 @@ import { Alert, Button, Stack } from '@mui/material';
 import { ImageUpIcon, Trash2Icon } from 'lucide-react';
 import { type ChangeEvent, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../api/errors';
 import { removeAvatar, uploadAvatar } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import {
@@ -59,7 +60,7 @@ export const AvatarControls = ({
     onProgress(0);
     upload.mutate(file);
   };
-  const error = rejection ?? (upload.error ?? remove.error)?.message;
+  const error = rejection ?? errorMessage(upload.error ?? remove.error);
 
   return (
     <Stack spacing={2} sx={{ alignItems: 'flex-start' }}>

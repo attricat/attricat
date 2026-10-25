@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../api/errors';
 import { copyToClipboard } from '../../components/clipboard';
 import { useToast } from '../../components/useToast';
 import {
@@ -26,9 +27,6 @@ import {
 import { savedViewQueryKeys } from './queryKeys';
 import type { SaveSearchValues } from './SaveSearchDialog';
 import type { SavedView } from './schemas';
-
-const errorMessage = (cause: unknown) =>
-  cause instanceof Error ? cause.message : String(cause);
 
 export const useSavedSearchActions = ({
   savedView,
@@ -68,7 +66,7 @@ export const useSavedSearchActions = ({
       setSaveOpen(false);
       void navigate({ to: '/', search: { savedView: view.id } });
     },
-    onError: (cause) => setError(cause.message),
+    onError: (cause) => setError(errorMessage(cause)),
   });
 
   const runBusy = async (action: () => Promise<void>) => {
@@ -76,7 +74,10 @@ export const useSavedSearchActions = ({
     try {
       await action();
     } catch (cause) {
-      show({ message: errorMessage(cause), severity: 'error' });
+      show({
+        message: cause instanceof Error ? errorMessage(cause) : String(cause),
+        severity: 'error',
+      });
     } finally {
       setBusy(false);
     }

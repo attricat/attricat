@@ -104,7 +104,7 @@ export const WorkspaceMembersSection = ({
       } catch (reason) {
         setError(
           reason instanceof Error
-            ? reason.message
+            ? errorMessage(reason)
             : t('workspace.grantRoleFailed'),
         );
       } finally {
@@ -176,7 +176,7 @@ export const WorkspaceMembersSection = ({
                     onClick={() =>
                       revokeMemberRole(member.id, grant.id)
                         .then(refresh)
-                        .catch((e) => setError(e.message))
+                        .catch((e: Error) => setError(errorMessage(e)))
                     }
                   >
                     {t('workspace.revoke', { role: grant.role_code })}
@@ -188,7 +188,7 @@ export const WorkspaceMembersSection = ({
                     onClick={() =>
                       transferOwnership(member.id)
                         .then(refresh)
-                        .catch((e) => setError(e.message))
+                        .catch((e: Error) => setError(errorMessage(e)))
                     }
                   >
                     {t('workspace.transferOwnership')}

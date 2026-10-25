@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Navigate, useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../api/errors';
 import { returnToStorageKey } from '../../app/storageKeys';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { AuthFormShell, authFormWidth } from './AuthFormShell';
@@ -108,7 +109,7 @@ const WorkspaceLoginForm = ({
         } catch (reason) {
           setError(
             reason instanceof Error
-              ? reason.message
+              ? errorMessage(reason)
               : t('auth.workspaceNotFound'),
           );
         }
@@ -188,7 +189,9 @@ const PasswordLoginForm = ({
           });
         } catch (reason) {
           setError(
-            reason instanceof Error ? reason.message : t('auth.loginFailed'),
+            reason instanceof Error
+              ? errorMessage(reason)
+              : t('auth.loginFailed'),
           );
         }
       }),

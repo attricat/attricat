@@ -64,7 +64,7 @@ export const WorkspaceRolesSection = ({
       } catch (reason) {
         setError(
           reason instanceof Error
-            ? reason.message
+            ? errorMessage(reason)
             : t('workspace.createRoleFailed'),
         );
       } finally {

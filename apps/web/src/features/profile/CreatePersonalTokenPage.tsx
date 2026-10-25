@@ -111,7 +111,9 @@ export const CreatePersonalTokenPage = () => {
         void client.invalidateQueries({ queryKey: profileQueryKeys.tokens() });
       } catch (reason) {
         setError(
-          reason instanceof Error ? reason.message : t('profile.createFailed'),
+          reason instanceof Error
+            ? errorMessage(reason)
+            : t('profile.createFailed'),
         );
       } finally {
         creating.current = false;

@@ -2,6 +2,7 @@ import { Alert, Button, Stack, TextField, Typography } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../api/errors';
 import { NarrowPage } from '../../components/CenteredPage';
 import { acceptInvitation } from './api';
 import { useInitialFocus } from '../../components/initialFocus';
@@ -31,7 +32,7 @@ export const AcceptInvitationPage = ({
           severity: 'error',
           text:
             reason instanceof Error
-              ? reason.message
+              ? errorMessage(reason)
               : t('workspace.acceptInvitationFailed'),
         });
       }

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../api/errors';
 import { TomlEditor } from '../../components/TomlEditor';
 import { draftEditors } from '../drafts/constants';
 import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
@@ -116,7 +117,7 @@ export const WorkflowDefinitionForm = ({
         </form.Field>
         {(validate.error || save.error) && (
           <Alert severity="error">
-            {(validate.error ?? save.error)?.message}
+            {errorMessage(validate.error ?? save.error)}
           </Alert>
         )}
         {validate.data && (

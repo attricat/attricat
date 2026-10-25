@@ -3,6 +3,7 @@ import { useForm } from '@tanstack/react-form';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../api/errors';
 import { ArrowLeftIcon } from 'lucide-react';
 import { AuthFormShell } from './AuthFormShell';
 import { confirmPasswordReset, requestPasswordReset } from './api';
@@ -20,7 +21,7 @@ export const PasswordResetRequestPage = () => {
       } catch (reason) {
         setError(
           reason instanceof Error
-            ? reason.message
+            ? errorMessage(reason)
             : t('auth.requestResetFailed'),
         );
       }
@@ -85,7 +86,7 @@ export const PasswordResetConfirmationPage = ({
       } catch (reason) {
         setError(
           reason instanceof Error
-            ? reason.message
+            ? errorMessage(reason)
             : t('auth.resetPasswordFailed'),
         );
       }

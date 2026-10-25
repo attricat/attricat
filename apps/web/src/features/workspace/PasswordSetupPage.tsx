@@ -3,6 +3,7 @@ import { useForm } from '@tanstack/react-form';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../api/errors';
 import { NarrowPage } from '../../components/CenteredPage';
 import { completeOnboarding } from './api';
 import { useInitialFocus } from '../../components/initialFocus';
@@ -46,7 +47,7 @@ export const PasswordSetupPage = ({
           severity: 'error',
           text:
             reason instanceof Error
-              ? reason.message
+              ? errorMessage(reason)
               : t('workspace.onboardingFailed'),
         });
       }

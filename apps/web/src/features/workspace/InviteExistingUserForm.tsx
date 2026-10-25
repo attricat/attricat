@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button, Paper, Stack, TextField, Typography } from '@mui/material';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../api/errors';
 import {
   createInvitation,
   ensureActiveScopeTarget,
@@ -69,7 +70,7 @@ export const InviteExistingUserForm = ({
       } catch (reason) {
         onError(
           reason instanceof Error
-            ? reason.message
+            ? errorMessage(reason)
             : t('workspace.createInvitationFailed'),
         );
       } finally {

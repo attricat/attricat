@@ -1,5 +1,6 @@
 import { Button, List, ListItem, ListItemText, Paper } from '@mui/material';
 import { Trans, useTranslation } from 'react-i18next';
+import { errorMessage } from '../../api/errors';
 import { Timestamp } from '../../time/Timestamp';
 import { revokeInvitation } from './api';
 
@@ -37,7 +38,7 @@ export const InvitationList = ({
                   onClick={() =>
                     revokeInvitation(item.id)
                       .then(onChanged)
-                      .catch((e: Error) => onError(e.message))
+                      .catch((e: Error) => onError(errorMessage(e)))
                   }
                 >
                   {t('workspace.revokeInvitation')}

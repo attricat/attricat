@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box } from '@mui/material';
+import { errorMessage } from '../../api/errors';
 import { decideApproval } from './api';
 import { smartFillRecordForm } from '../records/api';
 import { thinkingRunStatuses } from './constants';
@@ -69,7 +70,7 @@ export const ConversationPanel = ({
     >
       {(messages.error || runs.error || approvals.error) && (
         <Alert severity="error">
-          {(messages.error ?? runs.error ?? approvals.error)?.message}
+          {errorMessage(messages.error ?? runs.error ?? approvals.error)}
         </Alert>
       )}
       {live.error && <Alert severity="info">{live.error}</Alert>}

@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../api/errors';
 import {
   createWorkspaceUser,
   ensureActiveScopeTarget,
@@ -78,7 +79,7 @@ export const CreateUserInviteForm = ({
       } catch (reason) {
         onError(
           reason instanceof Error
-            ? reason.message
+            ? errorMessage(reason)
             : t('workspace.createUserFailed'),
         );
       } finally {
