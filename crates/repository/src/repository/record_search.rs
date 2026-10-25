@@ -542,17 +542,13 @@ impl AttricatRepository {
         limit: i64,
         cursor: Option<Uuid>,
     ) -> Result<RecordPreviewPage, RepositoryError> {
+        let context_fallback_target = context_fallback_column("target");
         validate_code(blueprint_code)?;
         validate_code(relationship)?;
         let rows = sqlx::query_as::<_, RecordPreviewRow>(
-            r#"SELECT target.id, target.blueprint_version, ('attricat.sample'=ANY(target.system_tags)) AS is_sample, target.created_at, target.projections -> 'preview' AS preview,
+            &format!(r#"SELECT target.id, target.blueprint_version, ('attricat.sample'=ANY(target.system_tags)) AS is_sample, target.created_at, target.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
-                      (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
-                         FROM attributes attribute
-                        WHERE attribute.workspace_id = $6
-                          AND attribute.blueprint_id = target.blueprint_id
-                          AND attribute.blueprint_version = target.blueprint_version
-                          AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
+                      {context_fallback_target} AS blueprint_context_fallback
                FROM attribute_values av
                JOIN records source ON source.id = av.record_id
                 AND source.workspace_id = $6 AND source.deleted_at IS NULL
@@ -570,7 +566,7 @@ impl AttricatRepository {
                  AND target.workspace_id = $6 AND target.deleted_at IS NULL
                  AND b.workspace_id = $6 AND b.code = $4
                ORDER BY target.id
-               LIMIT $5"#,
+               LIMIT $5"#),
         )
         .bind(related_from)
         .bind(relationship)
@@ -596,24 +592,20 @@ impl AttricatRepository {
         &self,
         record_ids: &[Uuid],
     ) -> Result<Vec<RecordLabel>, RepositoryError> {
+        let context_fallback_e = context_fallback_column("e");
         if record_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let rows = sqlx::query_as::<_, RecordLabelRow>(
+        let rows = sqlx::query_as::<_, RecordLabelRow>(&format!(
             r#"SELECT e.id, b.code AS blueprint_code, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
-                      (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
-                         FROM attributes attribute
-                        WHERE attribute.workspace_id = $2
-                          AND attribute.blueprint_id = e.blueprint_id
-                          AND attribute.blueprint_version = e.blueprint_version
-                          AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
+                      {context_fallback_e} AS blueprint_context_fallback
                FROM records e
                JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
                 AND b.workspace_id = $2
                WHERE e.workspace_id = $2 AND e.deleted_at IS NULL AND e.id = ANY($1)
-               ORDER BY e.id"#,
-        )
+               ORDER BY e.id"#
+        ))
         .bind(record_ids)
         .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
@@ -679,6 +671,7 @@ impl AttricatRepository {
         limit: i64,
         cursor: Option<(DateTime<Utc>, Uuid)>,
     ) -> Result<IncomingRelationshipsPage, RepositoryError> {
+        let context_fallback_source = context_fallback_column("source");
         self.get_record(record_id)
             .await?
             .ok_or(RepositoryError::NotFound("record"))?;
@@ -690,15 +683,10 @@ impl AttricatRepository {
             .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
         let (cursor_created_at, cursor_id) = cursor.unzip();
         let rows = sqlx::query_as::<_, IncomingRelationshipRow>(
-            r#"SELECT source.id, b.code AS blueprint_code, source.blueprint_version,
+            &format!(r#"SELECT source.id, b.code AS blueprint_code, source.blueprint_version,
                       ('attricat.sample'=ANY(source.system_tags)) AS is_sample, source.created_at, source.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
-                      (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
-                         FROM attributes attribute
-                        WHERE attribute.workspace_id = $6
-                          AND attribute.blueprint_id = source.blueprint_id
-                          AND attribute.blueprint_version = source.blueprint_version
-                          AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
+                      {context_fallback_source} AS blueprint_context_fallback
                FROM records source
                JOIN blueprints b ON b.id = source.blueprint_id AND b.version = source.blueprint_version
                WHERE source.workspace_id = $6 AND source.deleted_at IS NULL
@@ -719,7 +707,7 @@ impl AttricatRepository {
                  )
                  AND ($3::timestamptz IS NULL OR (source.created_at, source.id) > ($3, $4))
                ORDER BY source.created_at, source.id
-               LIMIT $5"#,
+               LIMIT $5"#),
         )
         .bind(record_id)
         .bind(selectors)
@@ -987,6 +975,7 @@ impl AttricatRepository {
         limit: i64,
         cursor: Option<(DateTime<Utc>, Uuid)>,
     ) -> Result<(Vec<RecordPreview>, Option<String>), RepositoryError> {
+        let context_fallback_e = context_fallback_column("e");
         let RecordSearchScope {
             blueprint_id,
             blueprint_version,
@@ -1001,11 +990,7 @@ impl AttricatRepository {
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
-                      (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
-                         FROM attributes attribute
-                        WHERE attribute.blueprint_id = e.blueprint_id
-                          AND attribute.blueprint_version = e.blueprint_version
-                          AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
+                      {context_fallback_e} AS blueprint_context_fallback
                 FROM records e
                 JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
                 WHERE e.workspace_id = $10
@@ -1219,6 +1204,7 @@ impl AttricatRepository {
         cursor: Option<&str>,
         sort: &RecordSearchSort,
     ) -> Result<(Vec<RecordPreview>, Option<String>), RepositoryError> {
+        let context_fallback_e = context_fallback_column("e");
         let RecordSearchScope {
             blueprint_id,
             blueprint_version,
@@ -1314,9 +1300,7 @@ impl AttricatRepository {
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
-                      (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
-                         FROM attributes attribute WHERE attribute.blueprint_id = e.blueprint_id
-                           AND attribute.blueprint_version = e.blueprint_version AND attribute.deleted_at IS NULL) AS blueprint_context_fallback,
+                      {context_fallback_e} AS blueprint_context_fallback,
                       sort_value.{column}::text AS sort_value, sort_value.{column} IS NULL AS sort_is_null,
                       e.id AS sort_target_id
                 FROM records e
@@ -1389,6 +1373,7 @@ impl AttricatRepository {
         sort: &RecordSearchSort,
         cursor: Option<&SortedSearchCursor>,
     ) -> Result<(Vec<RecordPreview>, Option<String>), RepositoryError> {
+        let context_fallback_e = context_fallback_column("e");
         let RecordSearchScope {
             blueprint_id,
             blueprint_version,
@@ -1430,9 +1415,7 @@ impl AttricatRepository {
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                          b.views AS blueprint_views,
-                         (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
-                            FROM attributes attribute WHERE attribute.blueprint_id = e.blueprint_id
-                              AND attribute.blueprint_version = e.blueprint_version AND attribute.deleted_at IS NULL) AS blueprint_context_fallback,
+                         {context_fallback_e} AS blueprint_context_fallback,
                          ({expression})::text AS sort_value, false AS sort_is_null, e.id AS sort_target_id
                   FROM records e
                   JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
@@ -1495,6 +1478,7 @@ impl AttricatRepository {
         cursor_target_id: Option<Uuid>,
         cursor_id: Option<Uuid>,
     ) -> Result<(Vec<RecordPreview>, Option<String>), RepositoryError> {
+        let context_fallback_e = context_fallback_column("e");
         let RecordSearchScope {
             blueprint_id,
             blueprint_version,
@@ -1527,10 +1511,7 @@ impl AttricatRepository {
             let sql = format!(
                 r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                           b.views AS blueprint_views,
-                          (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
-                             FROM attributes attribute WHERE attribute.blueprint_id = e.blueprint_id
-                               AND attribute.blueprint_version = e.blueprint_version
-                               AND attribute.workspace_id = $14 AND attribute.deleted_at IS NULL) AS blueprint_context_fallback,
+                          {context_fallback_e} AS blueprint_context_fallback,
                           sort_value.{column}::text AS sort_value, false AS sort_is_null,
                           sort_value.record_id AS sort_target_id
                      FROM (
@@ -1591,10 +1572,7 @@ impl AttricatRepository {
             let sql = format!(
                 r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                           b.views AS blueprint_views,
-                          (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
-                             FROM attributes attribute WHERE attribute.blueprint_id = e.blueprint_id
-                               AND attribute.blueprint_version = e.blueprint_version
-                               AND attribute.workspace_id = $14 AND attribute.deleted_at IS NULL) AS blueprint_context_fallback,
+                          {context_fallback_e} AS blueprint_context_fallback,
                           NULL::text AS sort_value, true AS sort_is_null,
                           e.id AS sort_target_id
                      FROM records e
@@ -1967,6 +1945,7 @@ impl AttricatRepository {
         context: &SearchContext,
     ) -> Result<Option<HashMap<Uuid, HashMap<String, Vec<RelatedRecordPreview>>>>, RepositoryError>
     {
+        let context_fallback_target = context_fallback_column("target");
         if items.is_empty() || relationships.is_empty() {
             return Ok(None);
         }
@@ -1994,17 +1973,13 @@ impl AttricatRepository {
         )
         .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
         let rows = sqlx::query_as::<_, RelatedTablePreviewRow>(
-            &r#"SELECT source.id AS source_id, a.code AS attribute_code,
+            &format!(r#"SELECT source.id AS source_id, a.code AS attribute_code,
                       context.id AS relationship_context_id,
                       context.code AS relationship_context_code,
                       target.id, target.blueprint_id, target.blueprint_version, ('attricat.sample'=ANY(target.system_tags)) AS is_sample,
                       target.projections -> 'preview' AS preview,
                       target_blueprint.views AS blueprint_views,
-                      (SELECT COALESCE(jsonb_object_agg(target_attribute.code, target_attribute.context_fallback), '{}'::jsonb)
-                         FROM attributes target_attribute
-                        WHERE target_attribute.blueprint_id = target.blueprint_id
-                          AND target_attribute.blueprint_version = target.blueprint_version
-                          AND target_attribute.deleted_at IS NULL) AS blueprint_context_fallback
+                      {context_fallback_target} AS blueprint_context_fallback
                  FROM records source
                  JOIN attribute_values av ON av.record_id = source.id
                   AND av.active
@@ -2013,7 +1988,7 @@ impl AttricatRepository {
                   AND a.blueprint_id = source.blueprint_id
                   AND a.blueprint_version = source.blueprint_version
                   AND a.deleted_at IS NULL
-                  AND {edge_context}
+                  AND {{edge_context}}
                  JOIN LATERAL jsonb_to_recordset($2::jsonb)
                     AS requested(attribute_code text, target_blueprint_code text)
                     ON requested.attribute_code = a.code
@@ -2025,7 +2000,7 @@ impl AttricatRepository {
                   AND target_blueprint.version = target.blueprint_version
                 WHERE source.id = ANY($1)
                   AND source.deleted_at IS NULL
-                ORDER BY source.id, a.code, context.code, av.id"#
+                ORDER BY source.id, a.code, context.code, av.id"#)
                 .replace("{edge_context}", &resolved_context("av", "a", "$3")),
         )
         .bind(items.iter().map(|item| item.id).collect::<Vec<_>>())
@@ -3640,6 +3615,19 @@ fn relationship_sort_forward_joins(depth: usize) -> Result<String, RepositoryErr
 
 /// The `attribute_values` column a sortable value type is stored in, and the
 /// SQL type its cursor value is cast to.
+/// The revision's `{code: context_fallback}` map for the record aliased
+/// `record`, as a select-list expression.
+fn context_fallback_column(record: &str) -> String {
+    format!(
+        "(SELECT COALESCE(jsonb_object_agg(fallback.code, fallback.context_fallback), '{{}}'::jsonb) \
+           FROM attributes fallback \
+          WHERE fallback.workspace_id = {record}.workspace_id \
+            AND fallback.blueprint_id = {record}.blueprint_id \
+            AND fallback.blueprint_version = {record}.blueprint_version \
+            AND fallback.deleted_at IS NULL)"
+    )
+}
+
 fn native_sort_column(value_type: &str) -> Result<(&'static str, &'static str), RepositoryError> {
     match value_type {
         "string" => Ok(("value_text", "text")),
