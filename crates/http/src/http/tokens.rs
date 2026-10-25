@@ -1,11 +1,10 @@
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, http::StatusCode};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::{
-    AppState,
     auth::{ActiveWorkspace, AuthenticatedPrincipal},
     error::ApiError,
     extractors::{ApiJson, ApiPath},
@@ -57,7 +56,6 @@ impl From<PersonalApiToken> for TokenMetadata {
 }
 
 pub(super) async fn create(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(user_id, issuer_token_id): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
@@ -91,7 +89,6 @@ pub(super) async fn create(
 }
 
 pub(super) async fn list(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
@@ -107,7 +104,6 @@ pub(super) async fn list(
 }
 
 pub(super) async fn revoke(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,

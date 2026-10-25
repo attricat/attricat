@@ -1,8 +1,7 @@
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, http::StatusCode};
 use serde::Deserialize;
 
 use super::{
-    AppState,
     auth::{ActiveWorkspace, AuthenticatedPrincipal, ScopedRepository},
     error::ApiError,
     extractors::ApiJson,
@@ -16,7 +15,6 @@ pub(super) struct NavigationInput {
 }
 
 pub(super) async fn configured(
-    State(_state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -29,7 +27,6 @@ pub(super) async fn configured(
 }
 
 pub(super) async fn sidebar(
-    State(_state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -40,7 +37,6 @@ pub(super) async fn sidebar(
 }
 
 pub(super) async fn update(
-    State(_state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,

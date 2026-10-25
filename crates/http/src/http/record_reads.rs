@@ -71,7 +71,6 @@ pub(super) struct ListPreviewsQuery {
     cursor: Option<Uuid>,
 }
 pub(super) async fn get_record(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
 ) -> Result<Json<Record>, ApiError> {
@@ -139,7 +138,6 @@ pub(super) async fn get_record_hierarchy(
         .ok_or_else(|| ApiError::not_found("record"))
 }
 pub(super) async fn get_resolved_preview(
-    State(_state): State<AppState>,
     principal: super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,

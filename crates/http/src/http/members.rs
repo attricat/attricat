@@ -277,7 +277,6 @@ pub(super) fn opaque_secret(prefix: &str) -> String {
 }
 
 pub(super) async fn list_members(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -402,7 +401,6 @@ pub(super) async fn create_invitation(
 }
 
 pub(super) async fn list_invitations(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -415,7 +413,6 @@ pub(super) async fn list_invitations(
 }
 
 pub(super) async fn revoke_invitation(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -432,7 +429,6 @@ pub(super) async fn revoke_invitation(
 }
 
 pub(super) async fn accept_invitation(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
     ApiJson(input): ApiJson<AcceptInvitationRequest>,

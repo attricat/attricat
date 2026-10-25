@@ -1,9 +1,8 @@
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::{
-    AppState,
     auth::{ActiveWorkspace, AuthenticatedPrincipal},
     error::ApiError,
     extractors::{ApiJson, ApiPath},
@@ -35,7 +34,6 @@ pub(super) struct CreatedRole {
 }
 
 pub(super) async fn list(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -46,7 +44,6 @@ pub(super) async fn list(
 }
 
 pub(super) async fn list_assignable_roles(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -59,7 +56,6 @@ pub(super) async fn list_assignable_roles(
 }
 
 pub(super) async fn list_permissions(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -72,7 +68,6 @@ pub(super) async fn list_permissions(
 }
 
 pub(super) async fn list_token_permissions(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -85,7 +80,6 @@ pub(super) async fn list_token_permissions(
 }
 
 pub(super) async fn list_grant_targets(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -99,7 +93,6 @@ pub(super) async fn list_grant_targets(
 }
 
 pub(super) async fn create(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -112,7 +105,6 @@ pub(super) async fn create(
 }
 
 pub(super) async fn update(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -126,7 +118,6 @@ pub(super) async fn update(
 }
 
 pub(super) async fn duplicate(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -140,7 +131,6 @@ pub(super) async fn duplicate(
 }
 
 pub(super) async fn retire(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,

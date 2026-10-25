@@ -53,7 +53,6 @@ pub(super) async fn validate_blueprint_revision(
     ))
 }
 pub(super) async fn list_record_blueprints(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiQuery(query): ApiQuery<BlueprintQuery>,
 ) -> Result<Json<Vec<Blueprint>>, ApiError> {
@@ -64,7 +63,6 @@ pub(super) async fn list_record_blueprints(
     ))
 }
 pub(super) async fn list_blueprints(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
 ) -> Result<Json<Vec<Blueprint>>, ApiError> {
     Ok(Json(repository.list_blueprints().await?))
@@ -82,7 +80,6 @@ pub(super) async fn create_blueprint_revision(
     Ok((StatusCode::CREATED, Json(blueprint)))
 }
 pub(super) async fn list_blueprint_revisions(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(blueprint_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<Blueprint>>, ApiError> {
@@ -91,7 +88,6 @@ pub(super) async fn list_blueprint_revisions(
     ))
 }
 pub(super) async fn get_blueprint(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(blueprint_id): ApiPath<Uuid>,
 ) -> Result<Json<BlueprintWithAttributes>, ApiError> {
@@ -102,7 +98,6 @@ pub(super) async fn get_blueprint(
         .ok_or_else(|| ApiError::not_found("blueprint"))
 }
 pub(super) async fn get_blueprint_revision(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
 ) -> Result<Json<BlueprintWithAttributes>, ApiError> {
@@ -113,7 +108,6 @@ pub(super) async fn get_blueprint_revision(
         .ok_or_else(|| ApiError::not_found("blueprint version"))
 }
 pub(super) async fn list_blueprint_migration_batches(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(blueprint_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<BlueprintMigrationBatchStatus>>, ApiError> {
@@ -125,7 +119,6 @@ pub(super) async fn list_blueprint_migration_batches(
 }
 
 pub(super) async fn safe_blueprint_migration_impact(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
 ) -> Result<Json<BlueprintMigrationImpact>, ApiError> {
@@ -192,7 +185,6 @@ pub(super) async fn publish_blueprint_records_all_channels(
 }
 
 pub(super) async fn get_blueprint_by_code(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(code): ApiPath<String>,
     ApiQuery(query): ApiQuery<BlueprintQuery>,
@@ -209,7 +201,6 @@ pub(super) async fn get_blueprint_by_code(
         .ok_or_else(|| ApiError::not_found("blueprint"))
 }
 pub(super) async fn get_blueprint_by_code_and_version(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((code, version)): ApiPath<(String, i64)>,
 ) -> Result<Json<BlueprintWithAttributes>, ApiError> {

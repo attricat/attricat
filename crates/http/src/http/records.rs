@@ -538,7 +538,6 @@ pub(super) async fn duplicate_record(
 }
 
 pub(super) async fn get_record_form(
-    State(_state): State<AppState>,
     principal: super::auth::AuthenticatedPrincipal,
     super::auth::ActiveWorkspace(workspace_id): super::auth::ActiveWorkspace,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
@@ -631,7 +630,6 @@ pub(super) async fn list_incoming_relationships(
     ))
 }
 pub(super) async fn list_record_publications(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<crate::model::RecordPublicationStatus>>, ApiError> {
@@ -680,7 +678,6 @@ pub(super) async fn unpublish_record(
     Ok(StatusCode::NO_CONTENT)
 }
 pub(super) async fn preview_record_migration(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
 ) -> Result<Json<crate::model::RecordMigrationPreview>, ApiError> {
@@ -712,7 +709,6 @@ pub(super) async fn append_values(
     Ok((StatusCode::CREATED, Json(values)))
 }
 pub(super) async fn get_current_values(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<AttributeValue>>, ApiError> {
@@ -746,7 +742,6 @@ fn next_history_offset(has_more: bool, offset: i64, limit: i64) -> Option<i64> {
 }
 
 pub(super) async fn get_record_changes(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<HistoryPageQuery>,
@@ -768,7 +763,6 @@ pub(super) async fn get_record_changes(
     ))
 }
 pub(super) async fn get_value_history(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<HistoryPageQuery>,

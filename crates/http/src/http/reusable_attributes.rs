@@ -1,5 +1,4 @@
 use super::{
-    AppState,
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
@@ -10,7 +9,7 @@ use crate::{
         RecordReusableAttribute, ReusableAttribute, ReusableAttributeGroup,
     },
 };
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, http::StatusCode};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -22,7 +21,6 @@ pub(super) struct ReusableAttributeQuery {
 }
 
 pub(super) async fn list(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiQuery(query): ApiQuery<ReusableAttributeQuery>,
 ) -> Result<Json<Vec<ReusableAttribute>>, ApiError> {
@@ -34,7 +32,6 @@ pub(super) async fn list(
 }
 
 pub(super) async fn create(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<CreateReusableAttribute>,
 ) -> Result<(StatusCode, Json<ReusableAttribute>), ApiError> {
@@ -72,7 +69,6 @@ pub(super) async fn validate_revision(
 }
 
 pub(super) async fn create_revision(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(definition_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<CreateReusableAttribute>,
@@ -88,7 +84,6 @@ pub(super) async fn create_revision(
 }
 
 pub(super) async fn publish_revision(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(revision_id): ApiPath<Uuid>,
 ) -> Result<Json<ReusableAttribute>, ApiError> {
@@ -100,14 +95,12 @@ pub(super) async fn publish_revision(
 }
 
 pub(super) async fn list_groups(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
 ) -> Result<Json<Vec<ReusableAttributeGroup>>, ApiError> {
     Ok(Json(repository.list_reusable_attribute_groups().await?))
 }
 
 pub(super) async fn create_group(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<CreateReusableAttributeGroup>,
 ) -> Result<(StatusCode, Json<ReusableAttributeGroup>), ApiError> {
@@ -122,7 +115,6 @@ pub(super) async fn create_group(
 }
 
 pub(super) async fn attach(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<AttachReusableAttribute>,
@@ -138,7 +130,6 @@ pub(super) async fn attach(
 }
 
 pub(super) async fn attach_group(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((record_id, group_id)): ApiPath<(Uuid, Uuid)>,
 ) -> Result<(StatusCode, Json<Vec<RecordReusableAttribute>>), ApiError> {

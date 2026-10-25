@@ -26,7 +26,6 @@ pub(super) async fn create_context(
     Ok((StatusCode::CREATED, Json(context)))
 }
 pub(super) async fn list_contexts(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
@@ -38,13 +37,11 @@ pub(super) async fn list_contexts(
     ))
 }
 pub(super) async fn list_publication_channels(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
 ) -> Result<Json<Vec<PublicationChannel>>, ApiError> {
     Ok(Json(repository.list_publication_channels().await?))
 }
 pub(super) async fn set_publication_channel(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(context_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<UpdatePublicationChannel>,
@@ -56,7 +53,6 @@ pub(super) async fn set_publication_channel(
     ))
 }
 pub(super) async fn get_context(
-    State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(code): ApiPath<String>,
 ) -> Result<Json<AttributeContext>, ApiError> {

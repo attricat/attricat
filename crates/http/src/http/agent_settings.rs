@@ -1,7 +1,6 @@
-use axum::{Json, extract::State};
+use axum::Json;
 
 use super::{
-    AppState,
     auth::{ActiveWorkspace, AuthenticatedPrincipal, ScopedRepository},
     error::ApiError,
     extractors::ApiJson,
@@ -9,7 +8,6 @@ use super::{
 use crate::repository::AgentSettings;
 
 pub(super) async fn configured(
-    State(_state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -22,7 +20,6 @@ pub(super) async fn configured(
 }
 
 pub(super) async fn update(
-    State(_state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
