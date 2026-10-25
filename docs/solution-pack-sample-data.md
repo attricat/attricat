@@ -103,15 +103,6 @@ uploaded but never attached are released at the same points and removed by
 ordinary upload cleanup. Ordinary record, audit, and event records remain
 unchanged.
 
-## Samples in later releases
-
-For a strictly newer release, an administrator may select one completed earlier
-application with `--from-application`. New sample keys can create records;
-unchanged declarations reuse their recorded record identities without resetting
-live values or sample markers. Changed declarations are blocked, and removed
-ones do not delete records. Missing reused records cause conflicts rather than
-automatic recreation.
-
 ## Cleanup limits
 
 There is no pack operation to reset, update, publish, delete, or uninstall a

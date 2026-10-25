@@ -1427,30 +1427,15 @@ enum SolutionPackCommand {
         #[arg(long)]
         blueprint_publication: Option<BlueprintPublicationArgument>,
         /// Explicitly reuse a published blueprint (`logical_key=existing_code`).
-        #[arg(
-            long = "map",
-            value_name = "LOGICAL_KEY=EXISTING_CODE",
-            conflicts_with = "from_application"
-        )]
+        #[arg(long = "map", value_name = "LOGICAL_KEY=EXISTING_CODE")]
         blueprint_maps: Vec<String>,
         /// Explicitly reuse an immutable presentation asset (`logical_key=asset_uuid`).
-        #[arg(
-            long = "map-asset",
-            value_name = "LOGICAL_KEY=ASSET_UUID",
-            conflicts_with = "from_application"
-        )]
+        #[arg(long = "map-asset", value_name = "LOGICAL_KEY=ASSET_UUID")]
         asset_maps: Vec<String>,
         /// Use an existing context for a pack context instead of creating one
         /// (`logical_key=existing_code`).
-        #[arg(
-            long = "map-context",
-            value_name = "LOGICAL_KEY=EXISTING_CODE",
-            conflicts_with = "from_application"
-        )]
+        #[arg(long = "map-context", value_name = "LOGICAL_KEY=EXISTING_CODE")]
         context_maps: Vec<String>,
-        /// Reuse unchanged resources from one completed application.
-        #[arg(long, conflicts_with_all = ["blueprint_maps", "asset_maps", "context_maps"])]
-        from_application: Option<Uuid>,
         /// Explicitly select the pack's optional synthetic sample records.
         #[arg(long)]
         include_sample_data: bool,
@@ -3390,7 +3375,6 @@ async fn solution_pack_command(
             blueprint_maps,
             asset_maps,
             context_maps,
-            from_application: None,
             include_sample_data: false,
         } if blueprint_maps.is_empty() && asset_maps.is_empty() && context_maps.is_empty() => {
             request(
@@ -3410,7 +3394,6 @@ async fn solution_pack_command(
             blueprint_maps,
             asset_maps,
             context_maps,
-            from_application,
             include_sample_data,
         } => {
             let mut path = format!(
@@ -3418,10 +3401,6 @@ async fn solution_pack_command(
                 segment(prefix),
                 publication.as_str()
             );
-            if let Some(application_id) = from_application {
-                path.push_str("&from_application=");
-                path.push_str(&segment(application_id));
-            }
             if include_sample_data {
                 path.push_str("&include_sample_data=true");
             }
@@ -6216,24 +6195,6 @@ value = "Blue shirt"
                 "--from-application",
                 "00000000-0000-4000-8000-000000000001",
             ])
-            .is_ok()
-        );
-        assert!(
-            Cli::try_parse_from([
-                "acli",
-                "solution-pack",
-                "plan",
-                "--file",
-                "pack.tar.zst",
-                "--prefix",
-                "ecom",
-                "--blueprint-publication",
-                "publish",
-                "--from-application",
-                "00000000-0000-4000-8000-000000000001",
-                "--map",
-                "blueprints/product=shared_product",
-            ])
             .is_err()
         );
         let show = Cli::try_parse_from([
@@ -6507,7 +6468,6 @@ value = "Blue shirt"
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
                 context_maps: Vec::new(),
-                from_application: None,
                 include_sample_data: false,
             },
         )
@@ -6527,7 +6487,6 @@ value = "Blue shirt"
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
                 context_maps: Vec::new(),
-                from_application: None,
                 include_sample_data: false,
             },
         )
@@ -6561,7 +6520,6 @@ value = "Blue shirt"
                     blueprint_maps: vec![mapping.to_owned()],
                     asset_maps: Vec::new(),
                     context_maps: Vec::new(),
-                    from_application: None,
                     include_sample_data: false,
                 },
             )
@@ -6638,7 +6596,6 @@ value = "Blue shirt"
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
                 context_maps: Vec::new(),
-                from_application: None,
                 include_sample_data: false,
             },
         )
@@ -6650,35 +6607,6 @@ value = "Blue shirt"
             received.lock().unwrap().take().unwrap(),
             (
                 "prefix=shop+prefix&blueprint_publication=publish".to_owned(),
-                "application/zstd".to_owned(),
-                b"opaque archive bytes".to_vec()
-            )
-        );
-
-        let prior_application_id = Uuid::parse_str("00000000-0000-4000-8000-000000000123").unwrap();
-        solution_pack_command(
-            &Client::new(),
-            &api,
-            SolutionPackCommand::Plan {
-                command: None,
-                file: Some(archive.path().to_path_buf()),
-                prefix: Some("shop".to_owned()),
-                blueprint_publication: Some(BlueprintPublicationArgument::Publish),
-                blueprint_maps: Vec::new(),
-                asset_maps: Vec::new(),
-                context_maps: Vec::new(),
-                from_application: Some(prior_application_id),
-                include_sample_data: false,
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(
-            received.lock().unwrap().take().unwrap(),
-            (
-                format!(
-                    "prefix=shop&blueprint_publication=publish&from_application={prior_application_id}"
-                ),
                 "application/zstd".to_owned(),
                 b"opaque archive bytes".to_vec()
             )
@@ -6700,7 +6628,6 @@ value = "Blue shirt"
                     "assets/brand-logo=00000000-0000-4000-8000-000000000999".to_owned(),
                 ],
                 context_maps: vec!["contexts/poland=PL".to_owned()],
-                from_application: None,
                 include_sample_data: false,
             },
         )
@@ -6736,7 +6663,6 @@ value = "Blue shirt"
                 ],
                 asset_maps: Vec::new(),
                 context_maps: Vec::new(),
-                from_application: None,
                 include_sample_data: false,
             },
         )
@@ -6754,7 +6680,6 @@ value = "Blue shirt"
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
                 context_maps: Vec::new(),
-                from_application: None,
                 include_sample_data: false,
             },
         )

@@ -194,7 +194,7 @@ acli connector-job list <blueprint-id>
 acli connector-job run <job-id> --idempotency-key <key>
 
 acli solution-pack inspect --file pack.tar.zst
-acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... --map-context logical_key=existing_code ... | --from-application <uuid>]
+acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... --map-context logical_key=existing_code ...]
 acli solution-pack plan show <plan-id>
 acli solution-pack apply <plan-id>
 acli solution-pack applications list [--limit 25 --offset 0]
@@ -365,12 +365,6 @@ presentation assets; context mappings select an existing same-workspace context
 that the pack's context, publication channel, rules, saved searches, and sample
 values use instead of a newly created one. `--include-sample-data` explicitly selects the pack's
 optional synthetic sample records and is omitted by default.
-`solution-pack plan --from-application <uuid>` is mutually exclusive with all
-mapping flag types and keeps the archive as raw `application/zstd`. It explicitly
-selects one completed same-workspace application of the same pack for a strictly
-newer SemVer release; the server never searches history automatically. Unchanged
-exact published targets are reused, added keys create normally, changed or drifted
-targets block, and removed keys are informational evidence only.
 Solution-pack inspection, planning, application, checks, and history are performed
 only by the authenticated server; the CLI neither unpacks nor validates the archive
 and prints only the server's safe, bounded JSON response. `solution-pack apply`

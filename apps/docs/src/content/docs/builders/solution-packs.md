@@ -134,17 +134,6 @@ Retry interrupted or resumable failed applications with the same plan ID. The se
 
 If workspace changes make a plan stale, review completed steps and diagnostics before creating another plan. If a later step fails permanently, earlier successful writes remain in the workspace; Attricat does not roll them back.
 
-## Apply a newer release
-
-```sh
-acli solution-pack plan --file pack-v2.tar.zst --prefix example \
-  --blueprint-publication publish --from-application <application-id>
-```
-
-Select one completed application of the same pack in the same workspace. The release must be strictly newer, and `--from-application` cannot be combined with explicit maps.
-
-Unchanged exact published blueprints and unchanged assets can be reused; new resources can be created. Contexts from the earlier installation are reused, and rules, workflows, saved searches, and channels it already created are skipped as `provided_by_prior_application`, never updated. Changed definitions are blocked as `update_not_supported`. Removed resources are reported without deletion. Missing or modified prior targets may conflict. Agree on a supported migration procedure with the publisher for changes the pack cannot apply.
-
 ## Optional sample data
 
 Add `--include-sample-data` during planning only after reviewing the warning. Samples are created against published blueprints and receive a visible **Sample** badge. Their values are set in the default context, or in one of the pack's contexts when the pack says so. Samples can also attach files bundled in the pack, such as images or PDFs; planning uploads them to ordinary file storage, and they appear on the sample records as ordinary files. Attricat checks each file's type and the attribute's file rules, but cannot tell whether its content is fictional. They are ordinary records: creation emits audit records and `record.created.v1` events, may run enabled workflows/extensions, and may cause external effects. Values can remain in ordinary audit/event history after temporary pack staging is removed.
@@ -159,7 +148,7 @@ A started sample-selected application has a fixed 30-day resumability window. To
 acli solution-pack applications abandon <application-id>
 ```
 
-Abandoning an application removes staged inputs, including bundled files that were never attached. Previously created records and ordinary audit/event history remain unchanged. Deleting a sample record removes it with its values in every context and its files, like any other record; stored files follow ordinary file retention. Later releases do not reset live sample values or restore removed sample markers. There is no dataset reset or automatic cleanup command.
+Abandoning an application removes staged inputs, including bundled files that were never attached. Previously created records and ordinary audit/event history remain unchanged. Deleting a sample record removes it with its values in every context and its files, like any other record; stored files follow ordinary file retention. There is no dataset reset or automatic cleanup command.
 
 ## Translations
 

@@ -161,8 +161,6 @@ pub enum MappingKind {
     Create,
     /// A workspace-wide setting.
     Workspace,
-    /// A sample record an earlier application created.
-    Reuse,
 }
 
 impl MappingKind {
@@ -171,7 +169,6 @@ impl MappingKind {
             Self::Existing => "existing",
             Self::Create => "create",
             Self::Workspace => "workspace",
-            Self::Reuse => "reuse",
         }
     }
 }

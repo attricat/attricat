@@ -302,7 +302,6 @@ pub(super) async fn inspect(
 pub(super) struct CreatePlanQuery {
     prefix: String,
     blueprint_publication: BlueprintPublication,
-    from_application: Option<Uuid>,
     #[serde(default)]
     include_sample_data: bool,
 }
@@ -317,13 +316,6 @@ pub(super) async fn create_plan(
     request: Request,
 ) -> Result<(StatusCode, Json<SolutionPackPlan>), ApiError> {
     let (archive, mappings, asset_mappings, context_mappings) = parse_plan_request(request).await?;
-    if query.from_application.is_some()
-        && (!mappings.is_empty() || !asset_mappings.is_empty() || !context_mappings.is_empty())
-    {
-        return Err(ApiError::invalid_input(
-            "from_application and explicit mappings are mutually exclusive".into(),
-        ));
-    }
     let pack = unpack_solution_pack(archive).await?;
     let official_extensions = resolve_official_extensions(
         &repository,
@@ -341,7 +333,6 @@ pub(super) async fn create_plan(
                 blueprint_mappings: &mappings,
                 asset_mappings: &asset_mappings,
                 context_mappings: &context_mappings,
-                prior_application_id: query.from_application,
                 include_sample_data: query.include_sample_data,
                 official_extensions: &official_extensions,
             },

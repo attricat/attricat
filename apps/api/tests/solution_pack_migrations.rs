@@ -191,19 +191,8 @@ async fn context_constraint_upgrade_preserves_history_and_rejects_new_rows(pool:
     );
 
     apply_migration(&pool, &migrations.join(LATER_RELEASE_MIGRATION)).await;
-    assert_eq!(
-        sqlx::query_scalar::<_, serde_json::Value>(
-            "SELECT release_change_snapshot FROM solution_pack_applications WHERE id=$1"
-        )
-        .bind(application_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap(),
-        serde_json::json!([])
-    );
-    sqlx::query("UPDATE solution_pack_plans SET prior_application_id=$2,resource_evidence_format=2 WHERE id=$1")
+    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_format=2 WHERE id=$1")
         .bind(plan_id)
-        .bind(application_id)
         .execute(&pool)
         .await
         .unwrap();
@@ -214,23 +203,6 @@ async fn context_constraint_upgrade_preserves_history_and_rejects_new_rows(pool:
             .await
             .is_err()
     );
-    sqlx::query("INSERT INTO solution_pack_plan_release_changes (plan_id,workspace_id,position,logical_key,change_kind,current_canonical_definition_sha256,reason_code,evidence) VALUES ($1,$2,0,'blueprints/added','added',$3,'new_blueprint','{}'::jsonb)")
-        .bind(plan_id)
-        .bind(workspace_id)
-        .bind("b".repeat(64))
-        .execute(&pool)
-        .await
-        .unwrap();
-    assert!(
-        sqlx::query("INSERT INTO solution_pack_plan_release_changes (plan_id,workspace_id,position,logical_key,change_kind,current_canonical_definition_sha256,reason_code,evidence) VALUES ($1,$2,1,'blueprints/invalid','unchanged',$3,'unchanged_from_prior_application','{}'::jsonb)")
-            .bind(plan_id)
-            .bind(workspace_id)
-            .bind("b".repeat(64))
-            .execute(&pool)
-            .await
-            .is_err()
-    );
-
     apply_migration(&pool, &migrations.join(PRESENTATION_ASSET_MIGRATION)).await;
     assert_eq!(
         sqlx::query_scalar::<_, i64>(

@@ -134,17 +134,6 @@ Jeśli stosowanie pakietu zostało przerwane lub zakończyło się błędem, kt�
 
 Jeśli zmiany w obszarze roboczym unieważniły plan, przejrzyj ukończone kroki i diagnostykę przed utworzeniem kolejnego. Jeśli późniejszy krok zakończy się trwałym błędem, wcześniejsze udane zapisy pozostają w obszarze roboczym; Attricat ich nie wycofuje.
 
-## Zastosuj nowsze wydanie
-
-```sh
-acli solution-pack plan --file pack-v2.tar.zst --prefix example \
-  --blueprint-publication publish --from-application <application-id>
-```
-
-Wskaż jedno ukończone zastosowanie tego samego pakietu w tym samym obszarze roboczym. Wydanie musi być nowsze. `--from-application` nie można łączyć z jawnymi mapowaniami.
-
-Niezmienione, dokładnie zgodne opublikowane Schematy i niezmienione zasoby graficzne mogą być użyte ponownie; nowe zasoby mogą zostać utworzone. Konteksty z wcześniejszej instalacji są używane ponownie, a reguły, przepływy pracy, zapisane wyszukiwania i kanały, które już utworzyła, są pomijane jako `provided_by_prior_application` i nigdy nie są aktualizowane. Zmienione definicje są blokowane jako `update_not_supported`. Usunięte zasoby są raportowane, ale nie kasowane. Brakujące lub zmodyfikowane wcześniejsze zasoby mogą powodować konflikty. Dla zmian, których pakiet nie obsługuje, uzgodnij z wydawcą procedurę migracji.
-
 ## Opcjonalne dane przykładowe
 
 Dodaj `--include-sample-data` podczas planowania dopiero po przeczytaniu ostrzeżenia. Rekordy przykładowe powstają na podstawie opublikowanych Schematów i otrzymują widoczne oznaczenie danych przykładowych. Ich wartości trafiają do kontekstu domyślnego albo, jeśli tak przewiduje pakiet, do jednego z jego kontekstów. Rekordy przykładowe mogą też mieć dołączone pliki z pakietu, na przykład obrazy lub dokumenty PDF; planowanie przesyła je do zwykłego magazynu plików, a w rekordach przykładowych pojawiają się jako zwykłe pliki. Attricat sprawdza typ każdego pliku i reguły plików atrybutu, ale nie potrafi ocenić, czy jego treść jest fikcyjna. Są zwykłymi rekordami: ich tworzenie zapisuje audyt i zdarzenia `record.created.v1`, może uruchamiać aktywne przepływy pracy lub rozszerzenia i powodować skutki w systemach zewnętrznych. Wartości mogą pozostać w historii audytu i zdarzeń po usunięciu tymczasowych danych pakietu.
@@ -159,7 +148,7 @@ Stosowanie pakietu z danymi przykładowymi można wznowić przez 30 dni od rozpo
 acli solution-pack applications abandon <application-id>
 ```
 
-Po porzuceniu serwer usuwa tymczasowe dane wejściowe, w tym pliki z pakietu, które nie zostały dołączone. Wcześniej utworzone rekordy i zwykła historia audytu oraz zdarzeń pozostają bez zmian. Usunięcie rekordu przykładowego usuwa go razem z wartościami we wszystkich kontekstach i plikami, jak każdy inny rekord; przechowywane pliki podlegają zwykłym zasadom przechowywania plików. Późniejsze wydania nie resetują bieżących wartości ani nie przywracają usuniętych oznaczeń danych przykładowych. Nie ma polecenia resetowania zestawu ani automatycznego sprzątania.
+Po porzuceniu serwer usuwa tymczasowe dane wejściowe, w tym pliki z pakietu, które nie zostały dołączone. Wcześniej utworzone rekordy i zwykła historia audytu oraz zdarzeń pozostają bez zmian. Usunięcie rekordu przykładowego usuwa go razem z wartościami we wszystkich kontekstach i plikami, jak każdy inny rekord; przechowywane pliki podlegają zwykłym zasadom przechowywania plików. Nie ma polecenia resetowania zestawu ani automatycznego sprzątania.
 
 ## Tłumaczenia
 

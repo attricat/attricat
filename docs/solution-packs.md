@@ -265,32 +265,6 @@ Sample-selected plans have additional identity and recovery constraints. Do not
 create a fresh plan expecting it to replay the same dataset. See
 [sample retry, expiry, and abandonment](solution-pack-sample-data.md#retry-expiry-and-abandonment).
 
-## Apply a newer release
-
-Explicitly name one completed application of the same pack in the same workspace:
-
-```sh
-acli solution-pack plan --file pack-v2.tar.zst --prefix example \
-  --blueprint-publication publish --from-application <application-id>
-```
-
-The new release must have a strictly newer version. This option cannot be
-combined with `--map` or `--map-asset`; Attricat does not search history or infer
-lineage automatically.
-
-- Unchanged exact published blueprint targets and unchanged assets can be reused.
-- Contexts the earlier application created or mapped are reused
-  (`unchanged_from_prior_application`). Rules, workflows, saved searches, and
-  channels it already created are skipped as `provided_by_prior_application`;
-  they are never updated or recreated.
-- New resources can be created.
-- Changed definitions are blocked as `update_not_supported`.
-- Removed resources are reported without deleting anything.
-- Missing, deleted, unpublished, or changed prior targets may cause conflicts.
-
-If a release needs unsupported updates, agree on a supported migration procedure
-with the publisher. A new pack version cannot update existing blueprints.
-
 ## Translations
 
 A pack may ship entries for the workspace [lexicon](blueprints.md#translated-labels),

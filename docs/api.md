@@ -70,8 +70,8 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/solution-packs/plans` | Revalidate an uploaded archive and persist an immutable, workspace-scoped dry-run (`solution_packs.manage`). See [plan request and response](#solution-pack-plan-upload). |
 | `GET` | `/solution-packs/plans/{plan-id}` | Read a safe summary of an immutable plan in the authenticated workspace (`solution_packs.manage`). Cross-workspace IDs return `404`. |
 | `POST` | `/solution-packs/plans/{plan-id}/apply` | Start or resume one immutable application without a request body or choice flags (`solution_packs.manage`); see [apply semantics](#solution-pack-plan-upload). |
-| `GET` | `/solution-packs/applications?limit=25&offset=0` | List compact, bounded, workspace-scoped application provenance, including optional prior application identity, without mapping snapshots, steps, or normalized resource payloads (`solution_packs.manage`; limit 1–100, offset 0–10000). |
-| `GET` | `/solution-packs/applications/{application-id}` | Read safe application provenance, its ordered release-change snapshot, and ordered step results (`solution_packs.manage`). Blueprint source, normalized resource payloads, archive bytes, and secrets are never returned. |
+| `GET` | `/solution-packs/applications?limit=25&offset=0` | List compact, bounded, workspace-scoped application provenance without mapping snapshots, steps, or normalized resource payloads (`solution_packs.manage`; limit 1–100, offset 0–10000). |
+| `GET` | `/solution-packs/applications/{application-id}` | Read safe application provenance and ordered step results (`solution_packs.manage`). Blueprint source, normalized resource payloads, archive bytes, and secrets are never returned. |
 | `POST` | `/solution-packs/applications/{application-id}/abandon` | Permanently abandon a resumable sample-selected application and scrub its staged inputs; already committed records remain ordinary workspace data (`solution_packs.manage`). |
 | `GET`, `POST` | `/solution-packs/applications/{application-id}/checks` | List bounded immutable setup-check history, or rerun the application's informational checks against current workspace state (`solution_packs.manage`). Check runs never mutate resources. |
 | `GET` | `/solution-packs/applications/{application-id}/checks/{run-id}` | Read one same-workspace immutable check run and its ordered results (`solution_packs.manage`). |
@@ -300,16 +300,9 @@ Inspection never returns resource bytes, archive paths, or private object keys.
 `POST /solution-packs/plans` requires `prefix` and
 `blueprint_publication=draft|publish` query parameters. Optional
 `include_sample_data=true` explicitly selects synthetic sample records;
-omitting it skips them. A `from_application=<uuid>` query parameter selects
-one completed application of the same pack in the same workspace, at a lower
-SemVer release. It cannot be combined with explicit maps. Attricat does not
-search history or suggest a mapping. The planner creates resources for added
-keys and reuses unchanged, exactly matching published targets. It blocks changed
-definitions and reports conflicts for missing, unpublished, revision-drifted, or
-hash-drifted targets. Removed keys are recorded without deleting resources.
+omitting it skips them. Attricat does not search history or suggest a mapping.
 
-Without explicit maps, upload the archive as `application/zstd`, including
-when using `from_application`. For explicit reuse, send `multipart/form-data`
+Without explicit maps, upload the archive as `application/zstd`. For explicit reuse, send `multipart/form-data`
 with exactly one streamed `archive` part (`application/zstd`) and repeated
 `blueprint_map` JSON text parts such as
 `{"key":"blueprints/product","code":"shared_product"}`, `asset_map`
@@ -327,8 +320,7 @@ against completed applications of the required pack in the workspace; they are
 never installed automatically. See
 [solution-pack operation](solution-packs.md#prerequisite-packs).
 
-The response is at most 1 MiB. It contains safe source/digest metadata,
-optional prior-application identity, ordered release-change evidence, mapping
+The response is at most 1 MiB. It contains safe source/digest metadata, mapping
 and action summaries, extension requirement outcomes, reasons, preconditions,
 readiness, and a fixed 24-hour expiry. A requirement with status `install` also
 carries `install`: the official release's `version`, `repository`, `tag_name`,

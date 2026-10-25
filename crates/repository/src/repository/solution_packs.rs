@@ -67,7 +67,6 @@ pub struct CreateSolutionPackPlanRequest<'a> {
     pub asset_mappings: &'a [PresentationAssetMappingRequest],
     /// Explicit existing contexts selected for pack contexts.
     pub context_mappings: &'a [ContextMappingRequest],
-    pub prior_application_id: Option<Uuid>,
     pub include_sample_data: bool,
     /// Official releases of missing extensions, in dependency order, that the
     /// plan may install. See [`crate::solution_pack_extensions`].
@@ -108,7 +107,6 @@ pub struct SolutionPackPlan {
     pub host_api: String,
     pub prefix: String,
     pub blueprint_publication: String,
-    pub prior_application_id: Option<Uuid>,
     pub ready: bool,
     pub sample_data_selected: bool,
     pub sample_declaration_sha256: Option<String>,
@@ -129,72 +127,6 @@ pub struct SolutionPackPlan {
     pub extension_requirements: Vec<SolutionPackPlanExtensionRequirement>,
     #[sqlx(skip)]
     pub checks: Vec<SolutionPackCheckSummary>,
-    #[sqlx(skip)]
-    pub release_changes: Vec<SolutionPackReleaseChange>,
-}
-
-#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
-pub struct SolutionPackReleaseChange {
-    pub position: i64,
-    pub logical_key: String,
-    pub change_kind: String,
-    pub prior_target_id: Option<Uuid>,
-    pub prior_target_code: Option<String>,
-    pub prior_target_version: Option<i64>,
-    pub prior_canonical_definition_sha256: Option<String>,
-    pub current_canonical_definition_sha256: Option<String>,
-    pub reason_code: String,
-    pub evidence: Value,
-}
-
-#[derive(Clone, Debug)]
-struct PriorAsset {
-    position: i64,
-    logical_key: String,
-    target_id: Uuid,
-    purpose: String,
-    media_type: String,
-    byte_size: i64,
-    source_sha256: String,
-    stored_sha256: String,
-}
-
-#[derive(Clone, Debug)]
-struct PriorSample {
-    position: i64,
-    logical_key: String,
-    target_id: Uuid,
-    blueprint_id: Uuid,
-    blueprint_version: i64,
-    canonical_declaration_sha256: String,
-}
-
-#[derive(Clone, Debug)]
-struct PriorBlueprint {
-    position: i64,
-    logical_key: String,
-    target_id: Uuid,
-    target_code: String,
-    target_version: i64,
-    kind: String,
-    canonical_definition_sha256: String,
-    definition_hash: String,
-    was_published: bool,
-}
-
-#[derive(sqlx::FromRow)]
-struct PriorExecutionRow {
-    position: i64,
-    logical_key: String,
-    target_id: Uuid,
-    target_code: String,
-    target_version: Option<i64>,
-    mapping_kind: String,
-    mapping_snapshot: Value,
-    action: String,
-    normalized_payload: Option<Value>,
-    step_state: String,
-    result_snapshot: Option<Value>,
 }
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
@@ -426,289 +358,6 @@ fn manifest_contributions(
         .collect()
 }
 
-async fn load_prior_application(
-    repository: &AttricatRepository,
-    tx: &mut Transaction<'_, Postgres>,
-    workspace_id: Uuid,
-    application_id: Uuid,
-    pack: &ValidatedSolutionPack,
-) -> Result<(String, Vec<PriorBlueprint>), RepositoryError> {
-    let (state, pack_id, pack_version, plan_id) =
-        sqlx::query_as::<_, (String, String, String, Uuid)>(
-            "SELECT state,pack_id,pack_version,plan_id FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2 FOR SHARE",
-        )
-        .bind(workspace_id)
-        .bind(application_id)
-        .fetch_optional(&mut **tx)
-        .await?
-        .ok_or(RepositoryError::NotFound("solution-pack application"))?;
-    if state != "completed" {
-        return Err(RepositoryError::InvalidSolutionPackPlan(
-            "prior solution-pack application is not completed".into(),
-        ));
-    }
-    if pack_id != pack.manifest().id {
-        return Err(RepositoryError::InvalidSolutionPackPlan(
-            "prior solution-pack application has a different pack ID".into(),
-        ));
-    }
-    let prior_version = semver::Version::parse(&pack_version).map_err(|_| {
-        RepositoryError::InvalidSolutionPackPlan(
-            "prior solution-pack application has an invalid version".into(),
-        )
-    })?;
-    let current_version = semver::Version::parse(&pack.manifest().version).map_err(|_| {
-        RepositoryError::InvalidSolutionPackPlan("solution-pack version is invalid".into())
-    })?;
-    if current_version.cmp_precedence(&prior_version) != std::cmp::Ordering::Greater {
-        return Err(RepositoryError::InvalidSolutionPackPlan(
-            "solution-pack version must be greater than the prior application version".into(),
-        ));
-    }
-    repository
-        .validate_persisted_solution_pack_resources(tx, plan_id)
-        .await?;
-    let source_evidence_sha256: Option<String> = sqlx::query_scalar(
-        "SELECT resource_evidence_sha256 FROM solution_pack_plans WHERE workspace_id=$1 AND id=$2",
-    )
-    .bind(workspace_id)
-    .bind(plan_id)
-    .fetch_one(&mut **tx)
-    .await?;
-    if source_evidence_sha256.is_none() {
-        return Err(RepositoryError::InvalidSolutionPackPlan(
-            "prior solution-pack application is missing plan integrity evidence".into(),
-        ));
-    }
-
-    let expected_blueprint_count = sqlx::query_scalar::<_, i64>(
-        "SELECT count(*) FROM solution_pack_plan_actions WHERE workspace_id=$1 AND plan_id=$2 AND resource_kind='blueprint' AND action IN ('create','map')",
-    )
-    .bind(workspace_id)
-    .bind(plan_id)
-    .fetch_one(&mut **tx)
-    .await?;
-    let rows = sqlx::query_as::<_, PriorExecutionRow>(
-        "SELECT m.position,m.logical_key,m.target_id,m.target_code,m.target_version,m.mapping_kind,m.snapshot AS mapping_snapshot,a.action,a.normalized_payload,s.state AS step_state,s.result_snapshot FROM solution_pack_plan_mappings m JOIN solution_pack_plan_actions a ON a.plan_id=m.plan_id AND a.logical_key=m.logical_key JOIN solution_pack_application_steps s ON s.application_id=$3 AND s.plan_id=m.plan_id AND s.logical_key=m.logical_key WHERE m.workspace_id=$1 AND m.plan_id=$2 AND m.resource_kind='blueprint' AND a.resource_kind='blueprint' AND s.resource_kind='blueprint' AND a.action IN ('create','map') ORDER BY m.position",
-    )
-    .bind(workspace_id)
-    .bind(plan_id)
-    .bind(application_id)
-    .fetch_all(&mut **tx)
-    .await?;
-    if rows.len() as i64 != expected_blueprint_count {
-        return Err(RepositoryError::InvalidSolutionPackPlan(
-            "prior solution-pack application has incomplete blueprint evidence".into(),
-        ));
-    }
-    let mut prior = Vec::with_capacity(rows.len());
-    for row in rows {
-        if row.step_state != "completed" {
-            return Err(RepositoryError::InvalidSolutionPackPlan(
-                "prior solution-pack application has incomplete blueprint evidence".into(),
-            ));
-        }
-        let target_version = row
-            .target_version
-            .filter(|version| *version > 0)
-            .ok_or_else(|| {
-                RepositoryError::InvalidSolutionPackPlan(
-                    "prior solution-pack application has invalid blueprint revision evidence"
-                        .into(),
-                )
-            })?;
-        let result = row
-            .result_snapshot
-            .as_ref()
-            .and_then(Value::as_object)
-            .ok_or_else(|| {
-                RepositoryError::InvalidSolutionPackPlan(
-                    "prior solution-pack application is missing blueprint result evidence".into(),
-                )
-            })?;
-        if result.get("id").and_then(Value::as_str) != Some(row.target_id.to_string().as_str())
-            || result.get("code").and_then(Value::as_str) != Some(row.target_code.as_str())
-            || result.get("version").and_then(Value::as_i64) != Some(target_version)
-        {
-            return Err(RepositoryError::InvalidSolutionPackPlan(
-                "prior solution-pack blueprint result evidence is inconsistent".into(),
-            ));
-        }
-        let was_published = result.get("status").and_then(Value::as_str) == Some("published");
-        let (kind, canonical_definition_sha256, definition_hash) =
-            match (row.action.as_str(), row.mapping_kind.as_str()) {
-                ("map", "existing") => {
-                    let snapshot: ExistingBlueprintMappingSnapshot =
-                        serde_json::from_value(row.mapping_snapshot).map_err(|_| {
-                            RepositoryError::InvalidSolutionPackPlan(
-                                "prior mapped blueprint evidence is invalid".into(),
-                            )
-                        })?;
-                    if snapshot.id != row.target_id
-                        || snapshot.code != row.target_code
-                        || snapshot.version != target_version
-                    {
-                        return Err(RepositoryError::InvalidSolutionPackPlan(
-                            "prior mapped blueprint evidence is inconsistent".into(),
-                        ));
-                    }
-                    (
-                        snapshot.kind,
-                        snapshot.canonical_definition_hash,
-                        snapshot.definition_hash,
-                    )
-                }
-                ("create", "create") => {
-                    let definition = row
-                        .normalized_payload
-                        .as_ref()
-                        .and_then(|payload| payload.get("definition"))
-                        .and_then(Value::as_str)
-                        .ok_or_else(|| {
-                            RepositoryError::InvalidSolutionPackPlan(
-                                "prior created blueprint evidence is invalid".into(),
-                            )
-                        })?;
-                    let value: toml::Value = toml::from_str(definition).map_err(|_| {
-                        RepositoryError::InvalidSolutionPackPlan(
-                            "prior created blueprint definition is invalid".into(),
-                        )
-                    })?;
-                    let kind = value
-                        .get("kind")
-                        .and_then(toml::Value::as_str)
-                        .filter(|kind| matches!(*kind, "record" | "mixin"))
-                        .ok_or_else(|| {
-                            RepositoryError::InvalidSolutionPackPlan(
-                                "prior created blueprint kind is invalid".into(),
-                            )
-                        })?
-                        .to_owned();
-                    let hash = attricat_blueprint::raw_hash(definition);
-                    (kind, hash.clone(), hash)
-                }
-                _ => {
-                    return Err(RepositoryError::InvalidSolutionPackPlan(
-                        "prior solution-pack blueprint execution is unsupported".into(),
-                    ));
-                }
-            };
-        prior.push(PriorBlueprint {
-            position: row.position,
-            logical_key: row.logical_key,
-            target_id: row.target_id,
-            target_code: row.target_code,
-            target_version,
-            kind,
-            canonical_definition_sha256,
-            definition_hash,
-            was_published,
-        });
-    }
-    Ok((pack_version, prior))
-}
-
-async fn load_prior_assets(
-    tx: &mut Transaction<'_, Postgres>,
-    workspace_id: Uuid,
-    application_id: Uuid,
-) -> Result<Vec<PriorAsset>, RepositoryError> {
-    let rows = sqlx::query_as::<_, (i64, String, Uuid, String, Value, String, Value, Option<Value>, String, Option<Value>)>(
-        "SELECT m.position,m.logical_key,m.target_id,m.mapping_kind,m.snapshot,a.action,a.summary,a.normalized_payload,s.state,s.result_snapshot FROM solution_pack_plan_mappings m JOIN solution_pack_plan_actions a ON a.plan_id=m.plan_id AND a.logical_key=m.logical_key JOIN solution_pack_application_steps s ON s.application_id=$2 AND s.plan_id=m.plan_id AND s.logical_key=m.logical_key WHERE m.workspace_id=$1 AND m.plan_id=(SELECT plan_id FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2) AND m.resource_kind='presentation_asset' ORDER BY m.position",
-    )
-    .bind(workspace_id)
-    .bind(application_id)
-    .fetch_all(&mut **tx)
-    .await?;
-    let mut prior = Vec::with_capacity(rows.len());
-    for (
-        position,
-        logical_key,
-        target_id,
-        mapping_kind,
-        snapshot,
-        action,
-        summary,
-        payload,
-        state,
-        result,
-    ) in rows
-    {
-        if state != "completed" || !matches!(action.as_str(), "create" | "map") || result.is_none()
-        {
-            return Err(RepositoryError::InvalidSolutionPackPlan(
-                "prior solution-pack application has incomplete presentation asset evidence".into(),
-            ));
-        }
-        let evidence = if mapping_kind == "existing" {
-            snapshot
-        } else {
-            payload.ok_or_else(|| {
-                RepositoryError::InvalidSolutionPackPlan(
-                    "prior presentation asset payload is missing".into(),
-                )
-            })?
-        };
-        let purpose = evidence
-            .get("purpose")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                RepositoryError::InvalidSolutionPackPlan(
-                    "prior presentation asset purpose is missing".into(),
-                )
-            })?
-            .to_owned();
-        let media_type = evidence
-            .get("media_type")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                RepositoryError::InvalidSolutionPackPlan(
-                    "prior presentation asset media type is missing".into(),
-                )
-            })?
-            .to_owned();
-        let byte_size = evidence
-            .get("byte_size")
-            .and_then(Value::as_i64)
-            .ok_or_else(|| {
-                RepositoryError::InvalidSolutionPackPlan(
-                    "prior presentation asset size is missing".into(),
-                )
-            })?;
-        let stored_sha256 = evidence
-            .get("stored_sha256")
-            .or_else(|| evidence.get("sha256"))
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                RepositoryError::InvalidSolutionPackPlan(
-                    "prior presentation asset digest is missing".into(),
-                )
-            })?
-            .to_owned();
-        let source_sha256 = summary
-            .get("source_sha256")
-            .or_else(|| evidence.get("source_sha256"))
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                RepositoryError::InvalidSolutionPackPlan(
-                    "prior presentation asset source digest is missing".into(),
-                )
-            })?
-            .to_owned();
-        prior.push(PriorAsset {
-            position,
-            logical_key,
-            target_id,
-            purpose,
-            media_type,
-            byte_size,
-            source_sha256,
-            stored_sha256,
-        });
-    }
-    Ok(prior)
-}
-
 /// Pack contexts a sample record sets values in.
 fn sample_record_contexts(record: &SampleRecord) -> std::collections::BTreeSet<&str> {
     record
@@ -752,69 +401,6 @@ fn canonical_sample_input(pack: &ValidatedSolutionPack, record: &SampleRecord) -
         Sha256::digest(serde_json::to_vec(&canonical_input).expect("sample record serializes"))
     );
     (canonical_input, digest)
-}
-
-async fn load_prior_samples(
-    tx: &mut Transaction<'_, Postgres>,
-    workspace_id: Uuid,
-    application_id: Uuid,
-) -> Result<Vec<PriorSample>, RepositoryError> {
-    let rows = sqlx::query_as::<_, (i64, String, Uuid, Uuid, i64, String, String, Option<Value>)>(
-        "SELECT e.position::bigint,e.logical_key,e.target_id,e.blueprint_id,e.blueprint_version,e.canonical_declaration_sha256,s.state,s.result_snapshot FROM solution_pack_plan_sample_evidence e JOIN solution_pack_applications a ON a.workspace_id=e.workspace_id AND a.plan_id=e.plan_id JOIN solution_pack_application_steps s ON s.workspace_id=e.workspace_id AND s.application_id=a.id AND s.logical_key=e.logical_key AND s.resource_kind='sample_record' WHERE e.workspace_id=$1 AND a.id=$2 ORDER BY e.position",
-    )
-    .bind(workspace_id)
-    .bind(application_id)
-    .fetch_all(&mut **tx)
-    .await?;
-    let expected: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM solution_pack_plan_sample_evidence e JOIN solution_pack_applications a ON a.workspace_id=e.workspace_id AND a.plan_id=e.plan_id WHERE e.workspace_id=$1 AND a.id=$2",
-    )
-    .bind(workspace_id)
-    .bind(application_id)
-    .fetch_one(&mut **tx)
-    .await?;
-    if rows.len() as i64 != expected {
-        return Err(RepositoryError::InvalidSolutionPackPlan(
-            "prior solution-pack application has incomplete sample evidence".into(),
-        ));
-    }
-    let mut prior = Vec::with_capacity(rows.len());
-    for (
-        position,
-        logical_key,
-        target_id,
-        blueprint_id,
-        blueprint_version,
-        digest,
-        state,
-        result,
-    ) in rows
-    {
-        let result = result.as_ref().and_then(Value::as_object);
-        if state != "completed"
-            || result
-                .and_then(|value| value.get("id"))
-                .and_then(Value::as_str)
-                != Some(target_id.to_string().as_str())
-            || result
-                .and_then(|value| value.get("canonical_declaration_sha256"))
-                .and_then(Value::as_str)
-                != Some(digest.as_str())
-        {
-            return Err(RepositoryError::InvalidSolutionPackPlan(
-                "prior solution-pack sample result evidence is incomplete".into(),
-            ));
-        }
-        prior.push(PriorSample {
-            position,
-            logical_key,
-            target_id,
-            blueprint_id,
-            blueprint_version,
-            canonical_declaration_sha256: digest,
-        });
-    }
-    Ok(prior)
 }
 
 /// The latest published revision of a blueprint code, with the canonical
@@ -940,29 +526,6 @@ async fn existing_contexts(
     .into_iter()
     .map(ExistingContextRow::into_snapshot)
     .collect())
-}
-
-#[derive(sqlx::FromRow)]
-struct PriorSeedStep {
-    resource_kind: String,
-    logical_key: String,
-    target_id: Uuid,
-    target_code: String,
-}
-
-/// Seed resources a completed earlier application created or reused.
-async fn load_prior_seed_steps(
-    tx: &mut Transaction<'_, Postgres>,
-    workspace_id: Uuid,
-    application_id: Uuid,
-) -> Result<Vec<PriorSeedStep>, RepositoryError> {
-    Ok(sqlx::query_as::<_, PriorSeedStep>(
-        "SELECT resource_kind,logical_key,target_id,target_code FROM solution_pack_application_steps WHERE workspace_id=$1 AND application_id=$2 AND state='completed' AND resource_kind IN ('context','publication_channel','rule','workflow','saved_search') ORDER BY position",
-    )
-    .bind(workspace_id)
-    .bind(application_id)
-    .fetch_all(&mut **tx)
-    .await?)
 }
 
 /// Marks staged sample-file uploads of the given plans for immediate cleanup.
@@ -1474,7 +1037,6 @@ impl AttricatRepository {
             blueprint_mappings: requested_mappings,
             asset_mappings: requested_asset_mappings,
             context_mappings: requested_context_mappings,
-            prior_application_id,
             include_sample_data,
             official_extensions,
         } = request;
@@ -1492,15 +1054,6 @@ impl AttricatRepository {
         self.reconcile_solution_pack_asset_cleanup(object_store)
             .await?;
         self.cleanup_solution_pack_sample_staging().await?;
-        if prior_application_id.is_some()
-            && (!requested_mappings.is_empty()
-                || !requested_asset_mappings.is_empty()
-                || !requested_context_mappings.is_empty())
-        {
-            return Err(RepositoryError::InvalidSolutionPackPlan(
-                "from_application and explicit mappings are mutually exclusive".into(),
-            ));
-        }
         validate_blueprint_mapping_requests(pack, requested_mappings)
             .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
         validate_presentation_asset_mapping_requests(pack, requested_asset_mappings)
@@ -1521,17 +1074,6 @@ impl AttricatRepository {
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             .execute(&mut *tx)
             .await?;
-        let (prior_pack_version, prior_blueprints, prior_assets, prior_samples) =
-            if let Some(application_id) = prior_application_id {
-                let (version, blueprints) =
-                    load_prior_application(self, &mut tx, workspace_id, application_id, pack)
-                        .await?;
-                let assets = load_prior_assets(&mut tx, workspace_id, application_id).await?;
-                let samples = load_prior_samples(&mut tx, workspace_id, application_id).await?;
-                (Some(version), blueprints, assets, samples)
-            } else {
-                (None, Vec::new(), Vec::new(), Vec::new())
-            };
         let physical_codes = sqlx::query_scalar::<_, String>(
             "SELECT code FROM blueprints WHERE workspace_id = $1 AND code IS NOT NULL UNION SELECT code FROM attribute_contexts WHERE workspace_id = $1",
         )
@@ -1653,175 +1195,6 @@ impl AttricatRepository {
                 },
             );
         }
-        let current_asset_keys = pack
-            .manifest()
-            .resources
-            .presentation_assets
-            .iter()
-            .map(|resource| resource.key.as_str())
-            .collect::<std::collections::BTreeSet<_>>();
-        let mut prior_asset_conflicts = std::collections::BTreeMap::new();
-        for prior in &prior_assets {
-            if !current_asset_keys.contains(prior.logical_key.as_str()) {
-                continue;
-            }
-            let actual = sqlx::query_as::<_, (String, String, i64, String, String)>(
-                "SELECT purpose,media_type,byte_size,sha256,object_key FROM presentation_assets WHERE workspace_id=$1 AND id=$2",
-            )
-            .bind(workspace_id)
-            .bind(prior.target_id)
-            .fetch_optional(&mut *tx)
-            .await?;
-            let Some(actual) = actual else {
-                prior_asset_conflicts.insert(prior.logical_key.clone(), "prior_target_missing");
-                continue;
-            };
-            let expected_size = usize::try_from(actual.2).map_err(|_| {
-                RepositoryError::InvalidSolutionPackPlan(
-                    "prior presentation asset size is invalid".into(),
-                )
-            })?;
-            let object_valid =
-                match get_object_for_integrity(object_store, &actual.4, expected_size).await {
-                    Ok(stored) => {
-                        stored.bytes.len() as i64 == actual.2
-                            && format!("{:x}", Sha256::digest(&stored.bytes)) == actual.3
-                    }
-                    Err(
-                        ObjectStoreError::Unavailable
-                        | ObjectStoreError::TimedOut(_)
-                        | ObjectStoreError::Operation(_),
-                    ) => return Err(RepositoryError::SolutionPackAssetStorageUnavailable),
-                    Err(ObjectStoreError::NotFound) => false,
-                };
-            if actual.0 != prior.purpose
-                || actual.1 != prior.media_type
-                || actual.2 != prior.byte_size
-                || actual.3 != prior.stored_sha256
-                || !object_valid
-            {
-                prior_asset_conflicts.insert(prior.logical_key.clone(), "prior_target_drifted");
-                continue;
-            }
-            existing_presentation_assets.insert(
-                prior.logical_key.clone(),
-                ExistingPresentationAssetSnapshot {
-                    id: prior.target_id,
-                    purpose: actual.0,
-                    media_type: actual.1,
-                    byte_size: actual.2,
-                    sha256: actual.3,
-                },
-            );
-        }
-        let current_blueprint_keys = pack
-            .manifest()
-            .resources
-            .blueprints
-            .iter()
-            .map(|resource| resource.key.as_str())
-            .collect::<std::collections::BTreeSet<_>>();
-        let mut prior_target_conflicts = std::collections::BTreeMap::new();
-        for prior in &prior_blueprints {
-            if !current_blueprint_keys.contains(prior.logical_key.as_str()) {
-                continue;
-            }
-            let current = sqlx::query_as::<_, (Uuid, Option<String>, i64, String, String, String, String, Option<DateTime<Utc>>)>(
-                "SELECT id,code,version,kind,definition_hash,definition,status,deleted_at FROM blueprints WHERE workspace_id=$1 AND id=$2 AND version=$3",
-            )
-            .bind(workspace_id)
-            .bind(prior.target_id)
-            .bind(prior.target_version)
-            .fetch_optional(&mut *tx)
-            .await?;
-            let latest_published_version = sqlx::query_scalar::<_, Option<i64>>(
-                "SELECT max(version) FROM blueprints WHERE workspace_id=$1 AND id=$2 AND status='published' AND deleted_at IS NULL",
-            )
-            .bind(workspace_id)
-            .bind(prior.target_id)
-            .fetch_one(&mut *tx)
-            .await?;
-            let mut conflict = (!prior.was_published).then_some("prior_target_unpublished");
-            let mut snapshot = ExistingBlueprintSnapshot {
-                id: prior.target_id,
-                code: prior.target_code.clone(),
-                version: prior.target_version,
-                kind: prior.kind.clone(),
-                canonical_definition_hash: prior.canonical_definition_sha256.clone(),
-                definition_hash: prior.definition_hash.clone(),
-            };
-            if conflict.is_none() {
-                match current {
-                    None if latest_published_version.is_some() => {
-                        conflict = Some("prior_target_revision_drifted");
-                    }
-                    None => conflict = Some("prior_target_missing"),
-                    Some((
-                        id,
-                        code,
-                        version,
-                        kind,
-                        definition_hash,
-                        definition,
-                        status,
-                        deleted_at,
-                    )) => {
-                        if deleted_at.is_some() {
-                            conflict = Some("prior_target_deleted");
-                        } else if status != "published" {
-                            conflict = Some("prior_target_unpublished");
-                        } else if latest_published_version != Some(prior.target_version)
-                            || code.as_deref() != Some(prior.target_code.as_str())
-                            || version != prior.target_version
-                            || kind != prior.kind
-                        {
-                            conflict = Some("prior_target_revision_drifted");
-                        } else {
-                            let compiled = crate::blueprint_resolver::compile_definition(
-                                &mut tx,
-                                workspace_id,
-                                &definition,
-                            )
-                            .await;
-                            let canonical = toml::from_str::<toml::Value>(&definition)
-                                .ok()
-                                .and_then(|value| toml::to_string(&value).ok())
-                                .map(|definition| attricat_blueprint::raw_hash(&definition));
-                            if compiled
-                                .ok()
-                                .map(|value| value.raw_definition_hash)
-                                .as_deref()
-                                != Some(definition_hash.as_str())
-                                || definition_hash != prior.definition_hash
-                                || canonical.as_deref()
-                                    != Some(prior.canonical_definition_sha256.as_str())
-                            {
-                                conflict = Some("prior_target_drifted");
-                            } else {
-                                snapshot = ExistingBlueprintSnapshot {
-                                    id,
-                                    code: code.expect("validated target code"),
-                                    version,
-                                    kind,
-                                    canonical_definition_hash: canonical
-                                        .expect("validated canonical hash"),
-                                    definition_hash,
-                                };
-                            }
-                        }
-                    }
-                }
-            }
-            if let Some(reason) = conflict {
-                prior_target_conflicts.insert(prior.logical_key.clone(), reason);
-                // Make the target unavailable to the ordinary planner so its
-                // existing dependency propagation and workspace-setting
-                // semantics remain authoritative.
-                snapshot.canonical_definition_hash = "0".repeat(SHA256_HEX_LEN);
-            }
-            existing_blueprints.insert(prior.logical_key.clone(), snapshot);
-        }
-
         let extension_ids = pack
             .manifest()
             .extensions
@@ -1863,40 +1236,6 @@ impl AttricatRepository {
                 &mut existing_blueprints,
             )
             .await?;
-        let prior_seed_steps = match prior_application_id {
-            Some(application_id) => {
-                load_prior_seed_steps(&mut tx, workspace_id, application_id).await?
-            }
-            None => Vec::new(),
-        };
-        // Contexts an earlier application provided map back to themselves
-        // while they keep the code it gave them.
-        let mut seed = seed;
-        let prior_context_steps = prior_seed_steps
-            .iter()
-            .filter(|step| {
-                step.resource_kind == PlanResourceKind::Context.as_str()
-                    && pack.context(&step.logical_key).is_some()
-            })
-            .collect::<Vec<_>>();
-        let prior_context_ids = prior_context_steps
-            .iter()
-            .map(|step| step.target_id)
-            .collect::<Vec<_>>();
-        let current_contexts = existing_contexts(&mut tx, workspace_id, &prior_context_ids, &[])
-            .await?
-            .into_iter()
-            .map(|context| (context.id, context))
-            .collect::<std::collections::HashMap<_, _>>();
-        for step in prior_context_steps {
-            if let Some(context) = current_contexts
-                .get(&step.target_id)
-                .filter(|context| context.code == step.target_code)
-            {
-                seed.existing_contexts
-                    .insert(step.logical_key.clone(), context.clone());
-            }
-        }
         let mut draft = build_solution_pack_plan(
             pack,
             prefix,
@@ -1917,228 +1256,10 @@ impl AttricatRepository {
             },
         )
         .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
-        // A later release neither updates nor recreates seed resources an
-        // earlier application already provided; contexts map back to them.
-        for step in &prior_seed_steps {
-            let Some(action) = draft
-                .actions
-                .iter_mut()
-                .find(|action| action.logical_key == step.logical_key)
-            else {
-                continue;
-            };
-            if step.resource_kind == PlanResourceKind::Context.as_str() {
-                if action.action == PlanActionKind::Map {
-                    action.reason_code = "unchanged_from_prior_application";
-                }
-            } else if action.resource_kind.as_str() == step.resource_kind
-                && matches!(
-                    action.action,
-                    PlanActionKind::Create | PlanActionKind::Conflict | PlanActionKind::Blocked
-                )
-            {
-                action.action = PlanActionKind::Skip;
-                action.reason_code = "provided_by_prior_application";
-                action.normalized_payload = None;
-                action.preconditions = serde_json::json!([]);
-            }
-        }
         draft.ready = draft.is_applicable();
-
-        let mut release_changes = Vec::new();
-        if prior_application_id.is_some() {
-            let prior_by_key = prior_blueprints
-                .iter()
-                .map(|prior| (prior.logical_key.as_str(), prior))
-                .collect::<std::collections::BTreeMap<_, _>>();
-            for resource in &pack.manifest().resources.blueprints {
-                let current_hash = draft
-                    .blueprint_canonical_definition_hashes
-                    .get(&resource.key)
-                    .cloned()
-                    .ok_or_else(|| {
-                        RepositoryError::InvalidSolutionPackPlan(
-                            "current blueprint canonical evidence is missing".into(),
-                        )
-                    })?;
-                let (change_kind, reason_code, prior) =
-                    match prior_by_key.get(resource.key.as_str()) {
-                        None => ("added", "new_blueprint", None),
-                        Some(prior) if prior.canonical_definition_sha256 != current_hash => {
-                            ("changed", "update_not_supported", Some(*prior))
-                        }
-                        Some(prior) => (
-                            "unchanged",
-                            "unchanged_from_prior_application",
-                            Some(*prior),
-                        ),
-                    };
-                let action = draft
-                    .actions
-                    .iter_mut()
-                    .find(|action| {
-                        action.resource_kind == PlanResourceKind::Blueprint
-                            && action.logical_key == resource.key
-                    })
-                    .expect("planner emits every blueprint action");
-                if let Some(target_reason) = prior_target_conflicts.get(&resource.key) {
-                    action.action = PlanActionKind::Conflict;
-                    action.reason_code = target_reason;
-                    action.normalized_payload = None;
-                    draft.ready = false;
-                } else if change_kind == "changed" {
-                    action.action = PlanActionKind::Conflict;
-                    action.reason_code = "update_not_supported";
-                    action.normalized_payload = None;
-                    draft.ready = false;
-                } else if change_kind == "unchanged" && action.action == PlanActionKind::Map {
-                    action.reason_code = "unchanged_from_prior_application";
-                }
-                release_changes.push(SolutionPackReleaseChange {
-                    position: release_changes.len() as i64,
-                    logical_key: resource.key.clone(),
-                    change_kind: change_kind.to_owned(),
-                    prior_target_id: prior.map(|prior| prior.target_id),
-                    prior_target_code: prior.map(|prior| prior.target_code.clone()),
-                    prior_target_version: prior.map(|prior| prior.target_version),
-                    prior_canonical_definition_sha256: prior
-                        .map(|prior| prior.canonical_definition_sha256.clone()),
-                    current_canonical_definition_sha256: Some(current_hash),
-                    reason_code: prior_target_conflicts
-                        .get(&resource.key)
-                        .copied()
-                        .unwrap_or(reason_code)
-                        .to_owned(),
-                    evidence: serde_json::json!({"prior_pack_version":prior_pack_version}),
-                });
-            }
-            let prior_assets_by_key = prior_assets
-                .iter()
-                .map(|prior| (prior.logical_key.as_str(), prior))
-                .collect::<std::collections::BTreeMap<_, _>>();
-            for resource in &pack.manifest().resources.presentation_assets {
-                let current = pack
-                    .presentation_asset(&resource.key)
-                    .expect("validated presentation asset exists");
-                let (change_kind, reason_code, prior) =
-                    match prior_assets_by_key.get(resource.key.as_str()) {
-                        None => ("added", "new_presentation_asset", None),
-                        Some(prior)
-                            if prior.purpose != current.purpose
-                                || prior.media_type != current.media_type
-                                || prior.source_sha256 != current.source_sha256
-                                || prior.stored_sha256 != current.stored_sha256
-                                || prior.byte_size != current.stored_bytes.len() as i64 =>
-                        {
-                            ("changed", "update_not_supported", Some(*prior))
-                        }
-                        Some(prior) => (
-                            "unchanged",
-                            "unchanged_from_prior_application",
-                            Some(*prior),
-                        ),
-                    };
-                let action = draft
-                    .actions
-                    .iter_mut()
-                    .find(|action| {
-                        action.resource_kind == PlanResourceKind::PresentationAsset
-                            && action.logical_key == resource.key
-                    })
-                    .expect("planner emits every presentation asset action");
-                if let Some(target_reason) = prior_asset_conflicts.get(&resource.key) {
-                    action.action = PlanActionKind::Conflict;
-                    action.reason_code = target_reason;
-                    action.normalized_payload = None;
-                    draft.ready = false;
-                } else if change_kind == "changed" {
-                    action.action = PlanActionKind::Conflict;
-                    action.reason_code = "update_not_supported";
-                    action.normalized_payload = None;
-                    draft.ready = false;
-                } else if change_kind == "unchanged" && action.action == PlanActionKind::Map {
-                    action.reason_code = "unchanged_from_prior_application";
-                }
-                release_changes.push(SolutionPackReleaseChange {
-                    position: release_changes.len() as i64,
-                    logical_key: resource.key.clone(),
-                    change_kind: change_kind.to_owned(),
-                    prior_target_id: prior.map(|prior| prior.target_id),
-                    prior_target_code: prior.map(|_| "presentation_asset".to_owned()),
-                    prior_target_version: None,
-                    prior_canonical_definition_sha256: prior
-                        .map(|prior| prior.stored_sha256.clone()),
-                    current_canonical_definition_sha256: Some(current.stored_sha256.clone()),
-                    reason_code: prior_asset_conflicts
-                        .get(&resource.key)
-                        .copied()
-                        .unwrap_or(reason_code)
-                        .to_owned(),
-                    evidence: serde_json::json!({
-                        "prior_pack_version": prior_pack_version,
-                        "purpose": current.purpose,
-                        "media_type": current.media_type,
-                        "byte_size": current.stored_bytes.len(),
-                        "source_byte_size": current.source_byte_size,
-                        "source_sha256": current.source_sha256,
-                        "stored_sha256": current.stored_sha256,
-                    }),
-                });
-            }
-            for prior in &prior_blueprints {
-                if !current_blueprint_keys.contains(prior.logical_key.as_str()) {
-                    release_changes.push(SolutionPackReleaseChange {
-                        position: release_changes.len() as i64,
-                        logical_key: prior.logical_key.clone(),
-                        change_kind: "removed".into(),
-                        prior_target_id: Some(prior.target_id),
-                        prior_target_code: Some(prior.target_code.clone()),
-                        prior_target_version: Some(prior.target_version),
-                        prior_canonical_definition_sha256: Some(prior.canonical_definition_sha256.clone()),
-                        current_canonical_definition_sha256: None,
-                        reason_code: "removed_from_release".into(),
-                        evidence: serde_json::json!({"prior_position":prior.position,"prior_pack_version":prior_pack_version}),
-                    });
-                }
-            }
-            for prior in &prior_assets {
-                if !current_asset_keys.contains(prior.logical_key.as_str()) {
-                    release_changes.push(SolutionPackReleaseChange {
-                        position: release_changes.len() as i64,
-                        logical_key: prior.logical_key.clone(),
-                        change_kind: "removed".into(),
-                        prior_target_id: Some(prior.target_id),
-                        prior_target_code: Some("presentation_asset".into()),
-                        prior_target_version: None,
-                        prior_canonical_definition_sha256: Some(prior.stored_sha256.clone()),
-                        current_canonical_definition_sha256: None,
-                        reason_code: "removed_from_release".into(),
-                        evidence: serde_json::json!({
-                            "prior_position": prior.position,
-                            "prior_pack_version": prior_pack_version,
-                            "purpose": prior.purpose,
-                            "media_type": prior.media_type,
-                            "byte_size": prior.byte_size,
-                            "source_sha256": prior.source_sha256,
-                            "stored_sha256": prior.stored_sha256,
-                        }),
-                    });
-                }
-            }
-        }
 
         if include_sample_data {
             let sample = pack.sample_data().expect("selected sample exists");
-            let prior_by_key = prior_samples
-                .iter()
-                .map(|prior| (prior.logical_key.as_str(), prior))
-                .collect::<std::collections::BTreeMap<_, _>>();
-            let current_keys = sample
-                .declaration
-                .records
-                .iter()
-                .map(|record| record.key.as_str())
-                .collect::<std::collections::BTreeSet<_>>();
             for record_index in &sample.target_first_order {
                 let record = &sample.declaration.records[*record_index];
                 let blueprint_mapping = draft
@@ -2186,114 +1307,24 @@ impl AttricatRepository {
                     }
                 }
                 let (_, current_digest) = canonical_sample_input(pack, record);
-                let prior = prior_by_key.get(record.key.as_str()).copied();
-                let unchanged = prior.is_some_and(|prior| {
-                    prior.canonical_declaration_sha256 == current_digest
-                        && prior.blueprint_id == blueprint_mapping.target_id
-                        && prior.blueprint_version == blueprint_version
-                });
-                let mut reusable = unchanged;
-                let (
-                    target_id,
-                    mapping_kind,
-                    action,
-                    reason_code,
-                    normalized_payload,
-                    preconditions,
-                ) = if let Some(prior) = prior {
-                    let target_matches = sqlx::query_as::<_, (Uuid, i64)>(
-                            "SELECT blueprint_id,blueprint_version FROM records WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL",
-                        )
-                        .bind(workspace_id)
-                        .bind(prior.target_id)
-                        .fetch_optional(&mut *tx)
-                        .await?
-                        == Some((prior.blueprint_id, prior.blueprint_version));
-                    reusable = unchanged && target_matches;
-                    if reusable {
-                        (
-                            prior.target_id,
-                            MappingKind::Reuse,
-                            PlanActionKind::Map,
-                            "unchanged_from_prior_application",
-                            None,
-                            serde_json::json!([{"kind":"existing_sample_record","id":prior.target_id,"blueprint_id":prior.blueprint_id,"blueprint_version":prior.blueprint_version}]),
-                        )
-                    } else {
-                        draft.ready = false;
-                        (
-                            prior.target_id,
-                            MappingKind::Reuse,
-                            PlanActionKind::Conflict,
-                            if unchanged {
-                                "prior_sample_target_missing_or_changed"
-                            } else {
-                                "update_not_supported"
-                            },
-                            None,
-                            serde_json::json!([]),
-                        )
-                    }
-                } else {
-                    (
-                        Uuid::new_v4(),
-                        MappingKind::Create,
-                        PlanActionKind::Create,
-                        "sample_selected",
-                        Some(serde_json::json!({"private_staging":true})),
-                        serde_json::json!([{"kind":"target_absent","resource_kind":"sample_record","code":"sample_record"}]),
-                    )
-                };
                 draft.mappings.push(PlannedMapping {
                     resource_kind: PlanResourceKind::SampleRecord,
                     logical_key: record.key.clone(),
-                    target_id,
+                    target_id: Uuid::new_v4(),
                     target_code: "sample_record".to_owned(),
                     target_version: None,
-                    mapping_kind,
-                    snapshot: serde_json::json!({"blueprint_id":blueprint_mapping.target_id,"blueprint_version":blueprint_version,"canonical_declaration_sha256":current_digest.clone()}),
+                    mapping_kind: MappingKind::Create,
+                    snapshot: serde_json::json!({"blueprint_id":blueprint_mapping.target_id,"blueprint_version":blueprint_version,"canonical_declaration_sha256":current_digest}),
                 });
                 draft.actions.push(PlannedAction {
                     resource_kind: PlanResourceKind::SampleRecord,
                     logical_key: record.key.clone(),
-                    action,
-                    reason_code,
+                    action: PlanActionKind::Create,
+                    reason_code: "sample_selected",
                     summary: serde_json::json!({"blueprint":record.blueprint,"scalar_count":record.facts.len(),"relationship_target_count":record.relationships.iter().map(|relationship| relationship.targets.len()).sum::<usize>(),"warning":crate::solution_pack_sample_data::SAMPLE_AUTOMATION_WARNING}),
-                    normalized_payload,
-                    preconditions,
+                    normalized_payload: Some(serde_json::json!({"private_staging":true})),
+                    preconditions: serde_json::json!([{"kind":"target_absent","resource_kind":"sample_record","code":"sample_record"}]),
                 });
-                if prior_application_id.is_some() {
-                    release_changes.push(SolutionPackReleaseChange {
-                        position: release_changes.len() as i64,
-                        logical_key: record.key.clone(),
-                        change_kind: if prior.is_none() { "added" } else if reusable { "unchanged" } else { "changed" }.into(),
-                        prior_target_id: prior.map(|prior| prior.target_id),
-                        prior_target_code: prior.map(|_| "sample_record".to_owned()),
-                        prior_target_version: None,
-                        prior_canonical_definition_sha256: prior.map(|prior| prior.canonical_declaration_sha256.clone()),
-                        current_canonical_definition_sha256: Some(current_digest),
-                        reason_code: reason_code.into(),
-                        evidence: serde_json::json!({"prior_pack_version":prior_pack_version,"blueprint":record.blueprint}),
-                    });
-                }
-            }
-            if prior_application_id.is_some() {
-                for prior in &prior_samples {
-                    if !current_keys.contains(prior.logical_key.as_str()) {
-                        release_changes.push(SolutionPackReleaseChange {
-                            position: release_changes.len() as i64,
-                            logical_key: prior.logical_key.clone(),
-                            change_kind: "removed".into(),
-                            prior_target_id: Some(prior.target_id),
-                            prior_target_code: Some("sample_record".into()),
-                            prior_target_version: None,
-                            prior_canonical_definition_sha256: Some(prior.canonical_declaration_sha256.clone()),
-                            current_canonical_definition_sha256: None,
-                            reason_code: "removed_from_release".into(),
-                            evidence: serde_json::json!({"prior_position":prior.position,"prior_pack_version":prior_pack_version}),
-                        });
-                    }
-                }
             }
         }
         let id = Uuid::new_v4();
@@ -2327,11 +1358,7 @@ impl AttricatRepository {
             prefix,
             publication,
             (created_at, expires_at),
-            (
-                prior_application_id,
-                release_changes.clone(),
-                include_sample_data,
-            ),
+            include_sample_data,
             &draft,
         );
         for requirement in &mut plan.extension_requirements {
@@ -2351,7 +1378,7 @@ impl AttricatRepository {
             ));
         }
         sqlx::query(
-            "INSERT INTO solution_pack_plans (id, workspace_id, actor_user_id, actor_token_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, prior_application_id, ready, created_at, expires_at, readme_markdown, release_notes_markdown, setup_checklist, sample_data_selected, sample_declaration_sha256, sample_record_count, sample_automation_warning) VALUES ($1, $2, $3, $4, 'local_archive', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)",
+            "INSERT INTO solution_pack_plans (id, workspace_id, actor_user_id, actor_token_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, created_at, expires_at, readme_markdown, release_notes_markdown, setup_checklist, sample_data_selected, sample_declaration_sha256, sample_record_count, sample_automation_warning) VALUES ($1, $2, $3, $4, 'local_archive', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)",
         )
         .bind(id)
         .bind(workspace_id)
@@ -2367,7 +1394,6 @@ impl AttricatRepository {
         .bind(&manifest.attricat.host_api)
         .bind(prefix)
         .bind(publication.as_str())
-        .bind(prior_application_id)
         .bind(initial_ready)
         .bind(created_at)
         .bind(expires_at)
@@ -2523,7 +1549,6 @@ impl AttricatRepository {
                 .execute(&mut *tx)
                 .await?;
         }
-        insert_release_changes(&mut tx, workspace_id, id, &release_changes).await?;
         let evidence_format = if !staged_sample_files.is_empty() {
             5_i16
         } else if include_sample_data {
@@ -2660,7 +1685,7 @@ impl AttricatRepository {
     ) -> Result<Option<SolutionPackPlan>, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let Some(mut plan) = sqlx::query_as::<_, SolutionPackPlan>(
-            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, prior_application_id, ready, sample_data_selected, sample_declaration_sha256, sample_record_count, sample_automation_warning, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2",
+            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, sample_data_selected, sample_declaration_sha256, sample_record_count, sample_automation_warning, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2",
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -2692,13 +1717,6 @@ impl AttricatRepository {
         .fetch_all(&self.pool)
         .await?;
         plan.checks = load_plan_check_summaries(&self.pool, workspace_id, plan_id).await?;
-        plan.release_changes = sqlx::query_as::<_, SolutionPackReleaseChange>(
-            "SELECT position,logical_key,change_kind,prior_target_id,prior_target_code,prior_target_version,prior_canonical_definition_sha256,current_canonical_definition_sha256,reason_code,evidence FROM solution_pack_plan_release_changes WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
-        )
-        .bind(workspace_id)
-        .bind(plan_id)
-        .fetch_all(&self.pool)
-        .await?;
         Ok(Some(plan))
     }
 }
@@ -2709,12 +1727,11 @@ fn materialize_plan(
     prefix: &str,
     publication: BlueprintPublication,
     timestamps: (DateTime<Utc>, DateTime<Utc>),
-    selection: (Option<Uuid>, Vec<SolutionPackReleaseChange>, bool),
+    include_sample_data: bool,
     draft: &SolutionPackPlanDraft,
 ) -> SolutionPackPlan {
     let (id, workspace_id) = identity;
     let (created_at, expires_at) = timestamps;
-    let (prior_application_id, release_changes, include_sample_data) = selection;
     let manifest = pack.manifest();
     let mappings = draft
         .mappings
@@ -2784,7 +1801,6 @@ fn materialize_plan(
         host_api: manifest.attricat.host_api.clone(),
         prefix: prefix.to_owned(),
         blueprint_publication: publication.as_str().to_owned(),
-        prior_application_id,
         ready: draft.ready,
         sample_data_selected: include_sample_data,
         sample_declaration_sha256: include_sample_data.then(|| {
@@ -2826,7 +1842,6 @@ fn materialize_plan(
                 predicate_type: check.predicate.predicate_type().to_owned(),
             })
             .collect(),
-        release_changes,
     }
 }
 
@@ -2965,32 +1980,6 @@ async fn insert_extension_installs(
     Ok(())
 }
 
-async fn insert_release_changes(
-    tx: &mut Transaction<'_, Postgres>,
-    workspace_id: Uuid,
-    plan_id: Uuid,
-    changes: &[SolutionPackReleaseChange],
-) -> Result<(), RepositoryError> {
-    for change in changes {
-        sqlx::query("INSERT INTO solution_pack_plan_release_changes (plan_id,workspace_id,position,logical_key,change_kind,prior_target_id,prior_target_code,prior_target_version,prior_canonical_definition_sha256,current_canonical_definition_sha256,reason_code,evidence) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)")
-            .bind(plan_id)
-            .bind(workspace_id)
-            .bind(change.position)
-            .bind(&change.logical_key)
-            .bind(&change.change_kind)
-            .bind(change.prior_target_id)
-            .bind(&change.prior_target_code)
-            .bind(change.prior_target_version)
-            .bind(&change.prior_canonical_definition_sha256)
-            .bind(&change.current_canonical_definition_sha256)
-            .bind(&change.reason_code)
-            .bind(&change.evidence)
-            .execute(&mut **tx)
-            .await?;
-    }
-    Ok(())
-}
-
 fn presentation_asset_object_key(workspace_id: Uuid, plan_id: Uuid, target_id: Uuid) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"attricat.presentation-asset.object.v1\0");
@@ -3122,18 +2111,11 @@ async fn plan_resource_evidence_sha256_v3(
     plan_id: Uuid,
 ) -> Result<String, RepositoryError> {
     let header: Value = sqlx::query_scalar(
-        "SELECT jsonb_build_object('format_version',2,'plan_id',p.id,'workspace_id',p.workspace_id,'archive_sha256',p.archive_sha256,'pack_id',p.pack_id,'pack_version',p.pack_version,'prefix',p.prefix,'blueprint_publication',p.blueprint_publication,'prior_application_id',p.prior_application_id,'prior_pack_version',a.pack_version,'ready',p.ready) FROM solution_pack_plans p LEFT JOIN solution_pack_applications a ON a.workspace_id=p.workspace_id AND a.id=p.prior_application_id WHERE p.workspace_id=$1 AND p.id=$2",
+        "SELECT jsonb_build_object('format_version',2,'plan_id',p.id,'workspace_id',p.workspace_id,'archive_sha256',p.archive_sha256,'pack_id',p.pack_id,'pack_version',p.pack_version,'prefix',p.prefix,'blueprint_publication',p.blueprint_publication,'ready',p.ready) FROM solution_pack_plans p WHERE p.workspace_id=$1 AND p.id=$2",
     )
     .bind(workspace_id)
     .bind(plan_id)
     .fetch_one(&mut **tx)
-    .await?;
-    let release_changes = sqlx::query_as::<_, SolutionPackReleaseChange>(
-        "SELECT position,logical_key,change_kind,prior_target_id,prior_target_code,prior_target_version,prior_canonical_definition_sha256,current_canonical_definition_sha256,reason_code,evidence FROM solution_pack_plan_release_changes WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
-    )
-    .bind(workspace_id)
-    .bind(plan_id)
-    .fetch_all(&mut **tx)
     .await?;
     let mappings = sqlx::query_as::<_, PlanEvidenceMapping>(
         "SELECT position,resource_kind,logical_key,target_id,target_code,target_version,mapping_kind,snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
@@ -3167,7 +2149,6 @@ async fn plan_resource_evidence_sha256_v3(
     let encoded = if installs.is_empty() {
         serde_json::to_vec(&(
             header,
-            release_changes,
             mappings,
             actions,
             asset_objects,
@@ -3176,7 +2157,6 @@ async fn plan_resource_evidence_sha256_v3(
     } else {
         serde_json::to_vec(&(
             header,
-            release_changes,
             mappings,
             actions,
             asset_objects,
@@ -3194,18 +2174,11 @@ async fn plan_resource_evidence_sha256_v2(
     plan_id: Uuid,
 ) -> Result<String, RepositoryError> {
     let header: Value = sqlx::query_scalar(
-        "SELECT jsonb_build_object('format_version',2,'plan_id',p.id,'workspace_id',p.workspace_id,'archive_sha256',p.archive_sha256,'pack_id',p.pack_id,'pack_version',p.pack_version,'prefix',p.prefix,'blueprint_publication',p.blueprint_publication,'prior_application_id',p.prior_application_id,'prior_pack_version',a.pack_version,'ready',p.ready) FROM solution_pack_plans p LEFT JOIN solution_pack_applications a ON a.workspace_id=p.workspace_id AND a.id=p.prior_application_id WHERE p.workspace_id=$1 AND p.id=$2",
+        "SELECT jsonb_build_object('format_version',2,'plan_id',p.id,'workspace_id',p.workspace_id,'archive_sha256',p.archive_sha256,'pack_id',p.pack_id,'pack_version',p.pack_version,'prefix',p.prefix,'blueprint_publication',p.blueprint_publication,'ready',p.ready) FROM solution_pack_plans p WHERE p.workspace_id=$1 AND p.id=$2",
     )
     .bind(workspace_id)
     .bind(plan_id)
     .fetch_one(&mut **tx)
-    .await?;
-    let release_changes = sqlx::query_as::<_, SolutionPackReleaseChange>(
-        "SELECT position,logical_key,change_kind,prior_target_id,prior_target_code,prior_target_version,prior_canonical_definition_sha256,current_canonical_definition_sha256,reason_code,evidence FROM solution_pack_plan_release_changes WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
-    )
-    .bind(workspace_id)
-    .bind(plan_id)
-    .fetch_all(&mut **tx)
     .await?;
     let mappings = sqlx::query_as::<_, PlanEvidenceMapping>(
         "SELECT position,resource_kind,logical_key,target_id,target_code,target_version,mapping_kind,snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
@@ -3230,22 +2203,9 @@ async fn plan_resource_evidence_sha256_v2(
     .await?;
     let installs = extension_install_evidence(tx, workspace_id, plan_id).await?;
     let encoded = if installs.is_empty() {
-        serde_json::to_vec(&(
-            header,
-            release_changes,
-            mappings,
-            actions,
-            extension_requirements,
-        ))
+        serde_json::to_vec(&(header, mappings, actions, extension_requirements))
     } else {
-        serde_json::to_vec(&(
-            header,
-            release_changes,
-            mappings,
-            actions,
-            extension_requirements,
-            installs,
-        ))
+        serde_json::to_vec(&(header, mappings, actions, extension_requirements, installs))
     }
     .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
     Ok(format!("{:x}", Sha256::digest(encoded)))
@@ -3355,12 +2315,10 @@ pub struct SolutionPackApplication {
     pub pack_id: String,
     pub pack_version: String,
     pub blueprint_publication: String,
-    pub prior_application_id: Option<Uuid>,
     pub state: String,
     pub diagnostic_code: Option<String>,
     pub diagnostic_message: Option<String>,
     pub mapping_snapshot: Value,
-    pub release_change_snapshot: Value,
     pub readme_markdown: Option<String>,
     pub release_notes_markdown: Option<String>,
     pub setup_checklist: Option<Value>,
@@ -3425,7 +2383,6 @@ pub struct SolutionPackApplicationSummary {
     pub pack_id: String,
     pub pack_version: String,
     pub blueprint_publication: String,
-    pub prior_application_id: Option<Uuid>,
     pub state: String,
     pub diagnostic_code: Option<String>,
     pub diagnostic_message: Option<String>,
@@ -3730,20 +2687,14 @@ impl AttricatRepository {
         .bind(plan_id)
         .fetch_all(&mut **tx)
         .await?;
-        let (stored_evidence_sha256, evidence_format, prior_application_id) = sqlx::query_as::<
-            _,
-            (Option<String>, Option<i16>, Option<Uuid>),
-        >(
-            "SELECT resource_evidence_sha256,resource_evidence_format,prior_application_id FROM solution_pack_plans WHERE workspace_id=$1 AND id=$2",
+        let (stored_evidence_sha256, evidence_format) = sqlx::query_as::<_, (Option<String>, Option<i16>)>(
+            "SELECT resource_evidence_sha256,resource_evidence_format FROM solution_pack_plans WHERE workspace_id=$1 AND id=$2",
         )
         .bind(workspace_id)
         .bind(plan_id)
         .fetch_one(&mut **tx)
         .await?;
-        if (matches!(evidence_format, Some(2..=5)) && stored_evidence_sha256.is_none())
-            || (prior_application_id.is_some()
-                && (!matches!(evidence_format, Some(2..=5)) || stored_evidence_sha256.is_none()))
-        {
+        if matches!(evidence_format, Some(2..=5)) && stored_evidence_sha256.is_none() {
             return Err(RepositoryError::InvalidSolutionPackPlan(
                 "persisted solution-pack resource evidence is missing".into(),
             ));
@@ -3817,7 +2768,7 @@ impl AttricatRepository {
                         && mapping.target_code == "presentation_asset"
                 }
                 "sample_record" => {
-                    matches!(mapping.mapping_kind.as_str(), "create" | "reuse")
+                    mapping.mapping_kind == "create"
                         && mapping.target_version.is_none()
                         && mapping.target_code == "sample_record"
                 }
@@ -3942,10 +2893,9 @@ impl AttricatRepository {
                         ("create" | "skip" | "conflict" | "blocked", "create")
                             | ("map" | "conflict" | "blocked", "existing")
                     ),
-                    "sample_record" => matches!(
-                        (action.action.as_str(), mapping.mapping_kind.as_str()),
-                        ("create" | "conflict", "create") | ("map" | "conflict", "reuse")
-                    ),
+                    "sample_record" => {
+                        action.action == "create" && mapping.mapping_kind == "create"
+                    }
                     "prerequisite" => matches!(action.action.as_str(), "map" | "blocked"),
                     "context" => matches!(
                         (action.action.as_str(), mapping.mapping_kind.as_str()),
@@ -3967,42 +2917,6 @@ impl AttricatRepository {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
                     "unsupported persisted resource action".into(),
                 ));
-            }
-            if action.resource_kind == "sample_record" && action.action == "map" {
-                let preconditions = action.preconditions.as_array().ok_or_else(|| {
-                    RepositoryError::InvalidSolutionPackPlan(
-                        "persisted sample reuse preconditions are invalid".into(),
-                    )
-                })?;
-                let expected = preconditions.first().and_then(Value::as_object);
-                let snapshot = mapping
-                    .snapshot
-                    .as_ref()
-                    .and_then(Value::as_object)
-                    .ok_or_else(|| {
-                        RepositoryError::InvalidSolutionPackPlan(
-                            "persisted sample reuse snapshot is invalid".into(),
-                        )
-                    })?;
-                if preconditions.len() != 1
-                    || expected
-                        .and_then(|value| value.get("kind"))
-                        .and_then(Value::as_str)
-                        != Some("existing_sample_record")
-                    || expected
-                        .and_then(|value| value.get("id"))
-                        .and_then(Value::as_str)
-                        != Some(mapping.target_id.to_string().as_str())
-                    || expected.and_then(|value| value.get("blueprint_id"))
-                        != snapshot.get("blueprint_id")
-                    || expected.and_then(|value| value.get("blueprint_version"))
-                        != snapshot.get("blueprint_version")
-                    || action.normalized_payload.is_some()
-                {
-                    return Err(RepositoryError::InvalidSolutionPackPlan(
-                        "persisted sample reuse evidence is inconsistent".into(),
-                    ));
-                }
             }
             if action.resource_kind == "presentation_asset"
                 && action.action == "skip"
@@ -4049,10 +2963,7 @@ impl AttricatRepository {
                 }
             }
             if action.action == "map" && action.resource_kind == "presentation_asset" {
-                if !matches!(
-                    action.reason_code.as_str(),
-                    "exact_asset_match" | "unchanged_from_prior_application"
-                ) || action.normalized_payload.is_some()
+                if action.reason_code != "exact_asset_match" || action.normalized_payload.is_some()
                 {
                     return Err(RepositoryError::InvalidSolutionPackPlan(
                         "persisted asset map action evidence is invalid".into(),
@@ -4085,9 +2996,7 @@ impl AttricatRepository {
             if action.action == "map" && action.resource_kind == "blueprint" {
                 if !matches!(
                     action.reason_code.as_str(),
-                    "exact_blueprint_match"
-                        | "unchanged_from_prior_application"
-                        | "prerequisite_blueprint_match"
+                    "exact_blueprint_match" | "prerequisite_blueprint_match"
                 ) || action.normalized_payload.is_some()
                 {
                     return Err(RepositoryError::InvalidSolutionPackPlan(
@@ -4136,7 +3045,7 @@ impl AttricatRepository {
         let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let plan = sqlx::query_as::<_, SolutionPackPlan>(
-            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, prior_application_id, ready, sample_data_selected, sample_declaration_sha256, sample_record_count, sample_automation_warning, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2 FOR UPDATE",
+            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, sample_data_selected, sample_declaration_sha256, sample_record_count, sample_automation_warning, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2 FOR UPDATE",
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -4199,15 +3108,6 @@ impl AttricatRepository {
         .await?;
         let mapping_snapshot = serde_json::to_value(&mappings)
             .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
-        let release_changes = sqlx::query_as::<_, SolutionPackReleaseChange>(
-            "SELECT position,logical_key,change_kind,prior_target_id,prior_target_code,prior_target_version,prior_canonical_definition_sha256,current_canonical_definition_sha256,reason_code,evidence FROM solution_pack_plan_release_changes WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
-        )
-        .bind(workspace_id)
-        .bind(plan_id)
-        .fetch_all(&mut *tx)
-        .await?;
-        let release_change_snapshot = serde_json::to_value(release_changes)
-            .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
         let application_id = Uuid::new_v4();
         let actor_user_id = self
             .audit_context
@@ -4226,7 +3126,7 @@ impl AttricatRepository {
             .as_ref()
             .map_or(request_id, |value| value.correlation_id);
         let inserted = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO solution_pack_applications (id, workspace_id, plan_id, actor_user_id, actor_token_id, request_id, correlation_id, source_kind, source_metadata, archive_sha256, pack_id, pack_version, blueprint_publication, prior_application_id, state, mapping_snapshot, release_change_snapshot, readme_markdown, release_notes_markdown, setup_checklist, resumable_until) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'running',$15,$16,$17,$18,$19,$20) ON CONFLICT (plan_id) DO NOTHING RETURNING id",
+            "INSERT INTO solution_pack_applications (id, workspace_id, plan_id, actor_user_id, actor_token_id, request_id, correlation_id, source_kind, source_metadata, archive_sha256, pack_id, pack_version, blueprint_publication, state, mapping_snapshot, readme_markdown, release_notes_markdown, setup_checklist, resumable_until) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'running',$14,$15,$16,$17,$18) ON CONFLICT (plan_id) DO NOTHING RETURNING id",
         )
         .bind(application_id)
         .bind(workspace_id)
@@ -4241,9 +3141,7 @@ impl AttricatRepository {
         .bind(&plan.pack_id)
         .bind(&plan.pack_version)
         .bind(&plan.blueprint_publication)
-        .bind(plan.prior_application_id)
         .bind(mapping_snapshot)
-        .bind(release_change_snapshot)
         .bind(&plan.readme_markdown)
         .bind(&plan.release_notes_markdown)
         .bind(&plan.setup_checklist)
@@ -4509,41 +3407,6 @@ impl AttricatRepository {
                             || actual.2 != expected[0].byte_size
                             || actual.3 != expected[0].sha256
                     })
-                {
-                    return Err(RepositoryError::SolutionPackPlanStale);
-                }
-                continue;
-            }
-            if step.action == "map" && step.resource_kind == "sample_record" {
-                let expected = step
-                    .preconditions
-                    .as_array()
-                    .and_then(|values| values.first())
-                    .and_then(Value::as_object)
-                    .ok_or_else(|| {
-                        RepositoryError::InvalidSolutionPackPlan(
-                            "invalid sample reuse preconditions".into(),
-                        )
-                    })?;
-                let expected_id = expected
-                    .get("id")
-                    .and_then(Value::as_str)
-                    .and_then(|value| value.parse::<Uuid>().ok());
-                let expected_blueprint_id = expected
-                    .get("blueprint_id")
-                    .and_then(Value::as_str)
-                    .and_then(|value| value.parse::<Uuid>().ok());
-                let expected_version = expected.get("blueprint_version").and_then(Value::as_i64);
-                let actual = sqlx::query_as::<_, (Uuid, i64)>(
-                    "SELECT blueprint_id,blueprint_version FROM records WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL FOR SHARE",
-                )
-                .bind(workspace_id)
-                .bind(step.target_id)
-                .fetch_optional(&mut **tx)
-                .await?;
-                if expected.get("kind").and_then(Value::as_str) != Some("existing_sample_record")
-                    || expected_id != Some(step.target_id)
-                    || actual != expected_blueprint_id.zip(expected_version)
                 {
                     return Err(RepositoryError::SolutionPackPlanStale);
                 }
@@ -4972,61 +3835,6 @@ impl AttricatRepository {
                 (
                     self.revalidate_existing_context(&mut tx, step.target_id, &step.target_code)
                         .await?,
-                    Vec::new(),
-                )
-            } else if step.resource_kind == "sample_record" {
-                let expected = step
-                    .preconditions
-                    .as_array()
-                    .and_then(|values| values.first())
-                    .and_then(Value::as_object)
-                    .ok_or_else(|| {
-                        RepositoryError::InvalidSolutionPackPlan(
-                            "invalid sample reuse preconditions".into(),
-                        )
-                    })?;
-                let blueprint_id = expected
-                    .get("blueprint_id")
-                    .and_then(Value::as_str)
-                    .and_then(|value| value.parse::<Uuid>().ok())
-                    .ok_or_else(|| {
-                        RepositoryError::InvalidSolutionPackPlan(
-                            "invalid sample reuse blueprint evidence".into(),
-                        )
-                    })?;
-                let blueprint_version = expected
-                    .get("blueprint_version")
-                    .and_then(Value::as_i64)
-                    .ok_or_else(|| {
-                    RepositoryError::InvalidSolutionPackPlan(
-                        "invalid sample reuse blueprint evidence".into(),
-                    )
-                })?;
-                let actual = sqlx::query_as::<_, (Uuid, i64)>(
-                    "SELECT blueprint_id,blueprint_version FROM records WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL FOR SHARE",
-                )
-                .bind(workspace_id)
-                .bind(step.target_id)
-                .fetch_optional(&mut *tx)
-                .await?;
-                if expected.get("kind").and_then(Value::as_str) != Some("existing_sample_record")
-                    || expected.get("id").and_then(Value::as_str)
-                        != Some(step.target_id.to_string().as_str())
-                    || actual != Some((blueprint_id, blueprint_version))
-                {
-                    return Err(RepositoryError::SolutionPackPlanStale);
-                }
-                let digest: String = sqlx::query_scalar(
-                    "SELECT canonical_declaration_sha256 FROM solution_pack_plan_sample_evidence WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=$3 AND target_id=$4",
-                )
-                .bind(workspace_id)
-                .bind(plan_id)
-                .bind(&step.logical_key)
-                .bind(step.target_id)
-                .fetch_one(&mut *tx)
-                .await?;
-                (
-                    serde_json::json!({"outcome":"reused","id":step.target_id,"blueprint_id":blueprint_id,"blueprint_version":blueprint_version,"canonical_declaration_sha256":digest}),
                     Vec::new(),
                 )
             } else {
@@ -5667,7 +4475,7 @@ impl AttricatRepository {
             .execute(&mut *tx)
             .await?;
         let Some(mut application) = sqlx::query_as::<_, SolutionPackApplication>(
-            "SELECT id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,prior_application_id,state,diagnostic_code,diagnostic_message,mapping_snapshot,release_change_snapshot,readme_markdown,release_notes_markdown,setup_checklist,started_at,updated_at,completed_at,resumable_until,abandoned_at FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2",
+            "SELECT id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,diagnostic_code,diagnostic_message,mapping_snapshot,readme_markdown,release_notes_markdown,setup_checklist,started_at,updated_at,completed_at,resumable_until,abandoned_at FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2",
         )
         .bind(workspace_id).bind(application_id).fetch_optional(&mut *tx).await? else {
             tx.commit().await?;
@@ -5871,7 +4679,7 @@ impl AttricatRepository {
     ) -> Result<Vec<SolutionPackApplicationSummary>, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         Ok(sqlx::query_as::<_, SolutionPackApplicationSummary>(
-            "SELECT id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,prior_application_id,state,diagnostic_code,diagnostic_message,started_at,updated_at,completed_at,resumable_until,abandoned_at FROM solution_pack_applications WHERE workspace_id=$1 ORDER BY started_at DESC,id DESC LIMIT $2 OFFSET $3",
+            "SELECT id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,diagnostic_code,diagnostic_message,started_at,updated_at,completed_at,resumable_until,abandoned_at FROM solution_pack_applications WHERE workspace_id=$1 ORDER BY started_at DESC,id DESC LIMIT $2 OFFSET $3",
         ).bind(workspace_id).bind(limit).bind(offset).fetch_all(&self.pool).await?)
     }
 }
