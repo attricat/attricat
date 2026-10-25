@@ -39,6 +39,7 @@ pub use attricat_workers::{
 };
 
 pub mod config;
+pub mod runtime;
 
 use sqlx::migrate::Migrator;
 

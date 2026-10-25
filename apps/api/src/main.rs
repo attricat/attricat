@@ -13,11 +13,11 @@ use api::{
     maintenance,
     repository::{AttricatRepository, SystemRepository},
     rule_runtime,
+    runtime::{ready_object_store, shutdown_signal},
     solution_pack_extensions::{
         LocalExtensionReleases, OfficialExtensionRegistry, OfficialExtensionReleases,
     },
     solution_pack_housekeeping,
-    storage::{ObjectStore, S3ObjectStore},
     task_worker::{self, TaskHandlerRegistry},
     telemetry::{init_metrics, init_tracing},
     workflow_runtime,
@@ -70,10 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             + u64::from(task_pool_connections),
         "configured bounded database connection pools"
     );
-    let object_store = Arc::new(S3ObjectStore::new(storage).await);
-    object_store.readiness().await.map_err(|_| {
-        "object storage readiness failed: cannot access the configured S3 bucket; check S3_ENDPOINT, S3_BUCKET, and credentials"
-    })?;
+    let object_store = ready_object_store(storage).await?;
     let BootstrapConfig {
         workspace_id,
         workspace_name: bootstrap_workspace_name,
@@ -430,22 +427,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     task_pool.close().await;
 
     Ok(())
-}
-
-async fn shutdown_signal() {
-    let ctrl_c = tokio::signal::ctrl_c();
-    #[cfg(unix)]
-    {
-        let mut terminate =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                .expect("install SIGTERM handler");
-        tokio::select! {
-            result = ctrl_c => result.expect("install Ctrl-C handler"),
-            _ = terminate.recv() => {}
-        }
-    }
-    #[cfg(not(unix))]
-    ctrl_c.await.expect("install Ctrl-C handler");
 }
 
 /// Sign-in identifier of the bootstrap workspace in `ATTRICAT_DEMO_MODE`.

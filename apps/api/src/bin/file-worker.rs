@@ -3,7 +3,8 @@ use std::{sync::Arc, time::Duration};
 use api::{
     config::Config,
     file_worker::FileWorker,
-    storage::{ObjectStore, S3ObjectStore},
+    runtime::{ready_object_store, shutdown_signal},
+    storage::ObjectStore,
     telemetry::{PROMETHEUS_CONTENT_TYPE, init_metrics, init_tracing},
 };
 use axum::{
@@ -40,8 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )?;
     let metrics = init_metrics()?;
     let file_worker = config.file_worker;
-    let object_store = Arc::new(S3ObjectStore::new(config.storage).await);
-    object_store.readiness().await.map_err(|_| "file worker storage readiness failed: cannot access the configured S3 bucket; check S3_ENDPOINT, S3_BUCKET, and credentials")?;
+    let object_store = ready_object_store(config.storage).await?;
     let pool = PgPoolOptions::new()
         .max_connections(POOL_CONNECTIONS)
         .connect(config.database.url.expose_secret())
@@ -105,22 +105,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     operations_server.await??;
     tracing::info!("file worker stopped");
     Ok(())
-}
-
-async fn shutdown_signal() {
-    let ctrl_c = tokio::signal::ctrl_c();
-    #[cfg(unix)]
-    {
-        let mut terminate =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                .expect("install SIGTERM handler");
-        tokio::select! {
-            result = ctrl_c => result.expect("install Ctrl-C handler"),
-            _ = terminate.recv() => {}
-        }
-    }
-    #[cfg(not(unix))]
-    ctrl_c.await.expect("install Ctrl-C handler");
 }
 
 async fn worker_liveness() -> impl IntoResponse {
