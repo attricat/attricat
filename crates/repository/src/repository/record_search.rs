@@ -1,6 +1,7 @@
 use super::*;
 use super::{record_projection::display_label, system_annotations::validate_system_tags};
 use crate::model::ExportStatusFilter;
+use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_validation::saved_search::MAX_RELATIONSHIP_HOPS;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
@@ -3719,7 +3720,7 @@ fn encode_search_cursor(created_at: DateTime<Utc>, id: Uuid) -> String {
 
 pub(super) fn empty_preview() -> Value {
     Value::Object(Map::from_iter([(
-        String::from("default"),
+        String::from(DEFAULT_CONTEXT_CODE),
         Value::Object(Map::new()),
     )]))
 }

@@ -25,7 +25,7 @@ use crate::{
 use attricat_repository::attricat_read_service::AttricatReadService;
 use attricat_storage::ObjectStore;
 
-const DEFAULT_CONTEXT_CODE: &str = "default";
+use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

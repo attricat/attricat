@@ -4,6 +4,7 @@
 //! context in the repository boundary and avoids granting the model a network
 //! capability.
 
+use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_domain::states::RecordMigrationStatus;
 use attricat_domain::value_type::ValueType;
 use chrono::{DateTime, Utc};
@@ -1216,7 +1217,7 @@ pub async fn change_names(
     for label in repository.record_labels(&record_ids).await? {
         let display = label
             .display
-            .get("default")
+            .get(DEFAULT_CONTEXT_CODE)
             .and_then(Value::as_str)
             .filter(|display| !display.is_empty());
         names.insert(
@@ -1650,7 +1651,7 @@ pub async fn execute_read(
             let input: Input = decode(arguments)?;
             let context_id = match input.context_id {
                 Some(context_id) => context_id,
-                None => repository.get_context_by_code("default").await?
+                None => repository.get_context_by_code(DEFAULT_CONTEXT_CODE).await?
                     .ok_or(RepositoryError::NotFound("context"))?.id,
             };
             serde_json::to_value(repository
@@ -2077,7 +2078,7 @@ pub async fn execute_read(
                 .filter_map(|(id, blueprint_code, blueprint_name)| {
                     let display = labels.get(&id)?;
                     let label = display
-                        .get("default")
+                        .get(DEFAULT_CONTEXT_CODE)
                         .and_then(Value::as_str)
                         .unwrap_or_default()
                         .to_lowercase();
@@ -2985,7 +2986,7 @@ pub(crate) async fn agent_search_scope(
             query,
             filters,
             relationship_filters,
-            context_code: context_code.unwrap_or("default"),
+            context_code: context_code.unwrap_or(DEFAULT_CONTEXT_CODE),
             actor,
         })
         .await;

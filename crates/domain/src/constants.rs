@@ -13,6 +13,10 @@ pub const DEFAULT_FILE_UPLOAD_MAX_BYTES: usize = 50 * 1024 * 1024;
 pub const DEFAULT_FILE_UPLOAD_MAX_FILES: usize = 10;
 pub const SECONDS_PER_HOUR: i64 = 60 * 60;
 
+/// Code of the context every workspace starts with. Previews and record
+/// labels key the default context's values by it.
+pub const DEFAULT_CONTEXT_CODE: &str = "default";
+
 pub const SESSION_COOKIE: &str = "attricat_session";
 pub const CSRF_COOKIE: &str = "attricat_csrf";
 pub const SESSION_LIFETIME_HOURS: i64 = 8;

@@ -131,8 +131,7 @@ pub use self::sessions::{SampleAccount, SampleLogins};
 pub use self::streams::StreamControl;
 pub use self::system::BuildInfo;
 
-/// Code of the context every workspace starts with.
-const DEFAULT_CONTEXT_CODE: &str = "default";
+use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 const REQUEST_ID_HEADER: &str = "x-request-id";
 const SERVER_TIMING: HeaderName = HeaderName::from_static("server-timing");
 pub(crate) const MILLIS_PER_SECOND: f64 = 1_000.0;

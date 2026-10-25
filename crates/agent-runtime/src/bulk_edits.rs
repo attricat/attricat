@@ -10,6 +10,7 @@
 //! the first failure, which the workspace's system user notes as a comment on
 //! the failed record. Unlike `apply_record_batch`, the edit is not atomic.
 
+use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
@@ -210,7 +211,12 @@ pub async fn resolve(
         .await?
         .into_iter()
         .filter_map(|label| {
-            let display = label.display.get("default")?.as_str()?.trim().to_owned();
+            let display = label
+                .display
+                .get(DEFAULT_CONTEXT_CODE)?
+                .as_str()?
+                .trim()
+                .to_owned();
             (!display.is_empty()).then_some((label.id, display))
         })
         .collect();
@@ -223,7 +229,7 @@ pub async fn resolve(
     // Values without a context are in the default context, which current
     // values name by its ID.
     let default_context = repository
-        .search_context("default")
+        .search_context(DEFAULT_CONTEXT_CODE)
         .await?
         .map(|context| context.requested_id());
     let in_context = |context: Option<Uuid>| context.or(default_context);

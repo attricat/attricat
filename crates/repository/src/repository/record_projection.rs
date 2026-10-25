@@ -3,6 +3,7 @@ use super::values::{ProjectionNativeValueRow, native_value_json};
 use super::*;
 use crate::constants::DEFAULT_PREVIEW_RELATIONSHIP_ITEMS;
 use crate::persistence_rows::{Db, IntoDomain};
+use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -545,7 +546,7 @@ impl AttricatRepository {
         let mut default = Map::new();
         let mut contexts = Map::new();
         for value in values {
-            let values = if value.context_code == "default" {
+            let values = if value.context_code == DEFAULT_CONTEXT_CODE {
                 &mut default
             } else {
                 contexts
@@ -557,7 +558,7 @@ impl AttricatRepository {
             values.insert(value.attribute_code, native_value_json(value.native)?);
         }
         let mut preview = Map::new();
-        preview.insert("default".to_owned(), Value::Object(default));
+        preview.insert(DEFAULT_CONTEXT_CODE.to_owned(), Value::Object(default));
         preview.extend(contexts);
         Ok(Value::Object(preview))
     }
@@ -685,14 +686,14 @@ pub(super) fn display_label(
         .and_then(Value::as_str)
         .unwrap_or(" · ");
     let current = preview.get(context_code).and_then(Value::as_object);
-    let default = preview.get("default").and_then(Value::as_object);
+    let default = preview.get(DEFAULT_CONTEXT_CODE).and_then(Value::as_object);
     Value::String(
         fields
             .iter()
             .filter_map(Value::as_str)
             .filter_map(|field| {
                 current.and_then(|values| values.get(field)).or_else(|| {
-                    (context_code == "default"
+                    (context_code == DEFAULT_CONTEXT_CODE
                         || context_fallback.get(field).and_then(Value::as_str) != Some("none"))
                     .then(|| default.and_then(|values| values.get(field)))
                     .flatten()
@@ -740,7 +741,7 @@ fn assemble_preview(
         let context_code = relationship
             .context_code
             .clone()
-            .unwrap_or_else(|| "default".to_owned());
+            .unwrap_or_else(|| DEFAULT_CONTEXT_CODE.to_owned());
         let context = preview
             .as_object_mut()
             .expect("preview was validated as an object")
@@ -768,7 +769,7 @@ fn assemble_preview(
         )?;
         let mut target_values = target_preview
             .get(&context_code)
-            .or_else(|| target_preview.get("default"))
+            .or_else(|| target_preview.get(DEFAULT_CONTEXT_CODE))
             .cloned()
             .unwrap_or_else(|| Value::Object(Map::new()));
         let target_values = target_values

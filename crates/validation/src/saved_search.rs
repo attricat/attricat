@@ -1,6 +1,7 @@
 //! The Explorer search state stored by named views, share links and saved
 //! searches that solution packs install. Every write path validates and
 //! normalizes the state here, so equal searches are stored identically.
+use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_domain::states::ExportStatus;
 use attricat_domain::value_type::ValueType;
 use serde_json::Value;
@@ -228,7 +229,7 @@ pub fn normalize_state(state: &Value) -> Value {
             object.remove(key);
         }
     }
-    if object.get("context").and_then(Value::as_str) == Some("default") {
+    if object.get("context").and_then(Value::as_str) == Some(DEFAULT_CONTEXT_CODE) {
         object.remove("context");
     }
     if object.get("query").and_then(Value::as_str) == Some("") {

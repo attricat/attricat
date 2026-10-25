@@ -19,6 +19,7 @@
 //! `context_fallback = "none"` only looks at the requested context.
 use super::RepositoryError;
 use super::values::{NativeValueRow, native_value_json};
+use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_domain::value_type::ValueType;
 use attricat_validation::predicate::ResolvedRecord;
 use chrono::{DateTime, Utc};
@@ -84,7 +85,7 @@ impl ContextTree {
     pub(crate) fn default_context(&self) -> Result<&ContextNode, RepositoryError> {
         self.nodes
             .iter()
-            .find(|node| node.parent_id.is_none() && node.code == "default")
+            .find(|node| node.parent_id.is_none() && node.code == DEFAULT_CONTEXT_CODE)
             .or_else(|| self.nodes.iter().find(|node| node.parent_id.is_none()))
             .ok_or(RepositoryError::InvalidContext)
     }

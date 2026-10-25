@@ -1,4 +1,5 @@
 use crate::persistence_rows::{Db, IntoDomain};
+use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use sqlx::query_as;
 use uuid::Uuid;
 
@@ -43,7 +44,7 @@ impl AttricatRepository {
         context_id: Uuid,
         input: CreateAttributeContext,
     ) -> Result<AttributeContext, RepositoryError> {
-        if input.code == "default" {
+        if input.code == DEFAULT_CONTEXT_CODE {
             return Err(RepositoryError::ReservedContextCode);
         }
         validate_code(&input.code)?;
@@ -189,7 +190,7 @@ impl AttricatRepository {
         .fetch_optional(&mut *transaction)
         .await?
         .ok_or(RepositoryError::NotFound("context"))?;
-        if context_code == "default" {
+        if context_code == DEFAULT_CONTEXT_CODE {
             return Err(RepositoryError::DefaultContextProtected);
         }
         let parent_exists = sqlx::query_scalar::<_, bool>(
@@ -259,7 +260,7 @@ impl AttricatRepository {
         .fetch_optional(&self.pool)
         .await?
         .ok_or(RepositoryError::NotFound("context"))?;
-        if context.code == "default" {
+        if context.code == DEFAULT_CONTEXT_CODE {
             return Err(RepositoryError::DefaultContextProtected);
         }
         let mut transaction = self.pool.begin().await?;

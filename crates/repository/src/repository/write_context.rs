@@ -9,6 +9,7 @@
 //! Published blueprint attributes are immutable, and record-scoped attributes
 //! change only under the record lock the writer already holds.
 
+use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_domain::value_type::ValueType;
 use std::{
     collections::{BTreeMap, HashSet},
@@ -280,7 +281,7 @@ impl WriteContext {
         self.tree
             .nodes()
             .iter()
-            .find(|node| node.code == "default")
+            .find(|node| node.code == DEFAULT_CONTEXT_CODE)
             .map(|node| node.id)
             .ok_or(RepositoryError::InvalidContext)
     }
@@ -296,7 +297,7 @@ impl WriteContext {
             if self
                 .tree
                 .get(context_id)
-                .is_none_or(|node| node.code != "default")
+                .is_none_or(|node| node.code != DEFAULT_CONTEXT_CODE)
             {
                 return Err(RepositoryError::DefaultContextOnly);
             }

@@ -2,6 +2,7 @@
 //! collected. A seed only provisions: existing targets are mapped or reported
 //! as conflicts, never updated.
 
+use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use attricat_validation::saved_search;
@@ -777,7 +778,7 @@ fn physical_search_state(
         Value::String(blueprints[&search.blueprint].target_code.clone()),
     );
     match context {
-        Some(context) if context.target_code != "default" => {
+        Some(context) if context.target_code != DEFAULT_CONTEXT_CODE => {
             object.insert("context".into(), Value::String(context.target_code.clone()));
         }
         _ => {
