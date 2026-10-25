@@ -2,6 +2,7 @@ use axum::{
     Json,
     extract::{FromRequest, FromRequestParts, OptionalFromRequest, Path, Query, Request},
 };
+use bytes::Bytes;
 use serde::de::DeserializeOwned;
 
 use super::error::ApiError;
@@ -9,6 +10,21 @@ use super::error::ApiError;
 pub(super) struct ApiJson<T>(pub T);
 pub(super) struct ApiPath<T>(pub T);
 pub(super) struct ApiQuery<T>(pub T);
+/// A raw request body, rejected with the API error envelope.
+pub(super) struct ApiBytes(pub Bytes);
+
+impl<S> FromRequest<S> for ApiBytes
+where
+    S: Send + Sync,
+{
+    type Rejection = ApiError;
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        Bytes::from_request(req, state)
+            .await
+            .map(Self)
+            .map_err(ApiError::from_bytes_rejection)
+    }
+}
 
 impl<S, T> FromRequest<S> for ApiJson<T>
 where

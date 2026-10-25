@@ -1,22 +1,23 @@
 use axum::{
     Json,
     body::to_bytes,
-    extract::{
-        FromRequest, Multipart, Path, Query, Request, State,
-        rejection::{BytesRejection, PathRejection, QueryRejection},
-    },
+    extract::{FromRequest, Multipart, Request, State},
     http::{HeaderMap, StatusCode, header},
+    response::{IntoResponse, Response},
 };
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{AppState, auth::ScopedRepository, error::ApiError, pagination::page_bounds};
+use super::{
+    AppState,
+    auth::ScopedRepository,
+    error::ApiError,
+    extractors::{ApiBytes, ApiPath, ApiQuery},
+    pagination::page_bounds,
+};
 use crate::{
-    repository::{
-        CreateSolutionPackPlanRequest, SolutionPackApplication, SolutionPackApplicationSummary,
-        SolutionPackCheckRun, SolutionPackCheckRunSummary, SolutionPackPlan,
-    },
+    repository::{CreateSolutionPackPlanRequest, SolutionPackPlan},
     solution_pack_extensions::{
         SolutionPackExtensionError, install_planned_extensions, resolve_official_extensions,
     },
@@ -162,11 +163,10 @@ async fn unpack_solution_pack(
 pub(super) async fn inspect(
     ScopedRepository(_repository): ScopedRepository,
     headers: HeaderMap,
-    archive: Result<Bytes, BytesRejection>,
-) -> Result<(StatusCode, Json<InspectionResponse>), ApiError> {
+    ApiBytes(archive): ApiBytes,
+) -> Result<Response, ApiError> {
     require_zstd(&headers)?;
 
-    let archive = archive.map_err(ApiError::from_bytes_rejection)?;
     let pack = unpack_solution_pack(archive).await?;
     let manifest = pack.manifest();
     let blueprints = manifest
@@ -294,8 +294,7 @@ pub(super) async fn inspect(
             .map(|_| vec![SAMPLE_AUTOMATION_WARNING])
             .unwrap_or_default(),
     };
-    ensure_response_size(&response)?;
-    Ok((StatusCode::OK, Json(response)))
+    inspection_json(&response)
 }
 
 #[derive(Deserialize)]
@@ -314,10 +313,9 @@ pub(super) struct CreatePlanQuery {
 pub(super) async fn create_plan(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
-    query: Result<Query<CreatePlanQuery>, QueryRejection>,
+    ApiQuery(query): ApiQuery<CreatePlanQuery>,
     request: Request,
 ) -> Result<(StatusCode, Json<SolutionPackPlan>), ApiError> {
-    let Query(query) = query.map_err(ApiError::from_query_rejection)?;
     let (archive, mappings, asset_mappings, context_mappings) = parse_plan_request(request).await?;
     if query.from_application.is_some()
         && (!mappings.is_empty() || !asset_mappings.is_empty() || !context_mappings.is_empty())
@@ -542,9 +540,8 @@ fn multipart_error(
 pub(super) async fn apply_plan(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
-    plan_id: Result<Path<Uuid>, PathRejection>,
-) -> Result<Json<SolutionPackApplication>, ApiError> {
-    let Path(plan_id) = plan_id.map_err(ApiError::from_path_rejection)?;
+    ApiPath(plan_id): ApiPath<Uuid>,
+) -> Result<Response, ApiError> {
     // Extensions come first: reviewed steps may reference their contributions.
     install_planned_extensions(
         &repository,
@@ -557,8 +554,7 @@ pub(super) async fn apply_plan(
     let application = repository
         .apply_solution_pack_plan(plan_id, state.object_store.as_ref())
         .await?;
-    ensure_application_response_size(&application)?;
-    Ok(Json(application))
+    application_json(&application)
 }
 
 fn extension_error(error: SolutionPackExtensionError) -> ApiError {
@@ -600,105 +596,82 @@ impl ListApplicationsQuery {
 
 pub(super) async fn list_applications(
     ScopedRepository(repository): ScopedRepository,
-    query: Result<Query<ListApplicationsQuery>, QueryRejection>,
-) -> Result<Json<Vec<SolutionPackApplicationSummary>>, ApiError> {
-    let Query(query) = query.map_err(ApiError::from_query_rejection)?;
+    ApiQuery(query): ApiQuery<ListApplicationsQuery>,
+) -> Result<Response, ApiError> {
     let (limit, offset) = query.bounds()?;
     let applications = repository
         .list_solution_pack_applications(limit, offset)
         .await?;
-    ensure_application_response_size(&applications)?;
-    Ok(Json(applications))
+    application_json(&applications)
 }
 
 pub(super) async fn get_application(
     ScopedRepository(repository): ScopedRepository,
-    application_id: Result<Path<Uuid>, PathRejection>,
-) -> Result<Json<SolutionPackApplication>, ApiError> {
-    let Path(application_id) = application_id.map_err(ApiError::from_path_rejection)?;
+    ApiPath(application_id): ApiPath<Uuid>,
+) -> Result<Response, ApiError> {
     let application = repository
         .get_solution_pack_application(application_id)
         .await?
         .ok_or_else(|| ApiError::not_found("solution-pack application"))?;
-    ensure_application_response_size(&application)?;
-    Ok(Json(application))
+    application_json(&application)
 }
 
 pub(super) async fn abandon_application(
     ScopedRepository(repository): ScopedRepository,
-    application_id: Result<Path<Uuid>, PathRejection>,
-    body: Result<Bytes, BytesRejection>,
-) -> Result<Json<SolutionPackApplication>, ApiError> {
-    let Path(application_id) = application_id.map_err(ApiError::from_path_rejection)?;
-    if !body.map_err(ApiError::from_bytes_rejection)?.is_empty() {
-        return Err(ApiError::invalid_input(
-            "solution-pack abandonment body must be empty".to_owned(),
-        ));
-    }
+    ApiPath(application_id): ApiPath<Uuid>,
+    ApiBytes(body): ApiBytes,
+) -> Result<Response, ApiError> {
+    require_empty_body(&body, "solution-pack abandonment")?;
     let application = repository
         .abandon_solution_pack_application(application_id)
         .await?;
-    ensure_application_response_size(&application)?;
-    Ok(Json(application))
+    application_json(&application)
 }
 
 pub(super) async fn rerun_checks(
     ScopedRepository(repository): ScopedRepository,
-    application_id: Result<Path<Uuid>, PathRejection>,
-    body: Result<Bytes, BytesRejection>,
-) -> Result<(StatusCode, Json<SolutionPackCheckRun>), ApiError> {
-    let Path(application_id) = application_id.map_err(ApiError::from_path_rejection)?;
-    if !body.map_err(ApiError::from_bytes_rejection)?.is_empty() {
-        return Err(ApiError::invalid_input(
-            "solution-pack check rerun body must be empty".to_owned(),
-        ));
-    }
+    ApiPath(application_id): ApiPath<Uuid>,
+    ApiBytes(body): ApiBytes,
+) -> Result<(StatusCode, Response), ApiError> {
+    require_empty_body(&body, "solution-pack check rerun")?;
     let run = repository
         .rerun_solution_pack_checks(application_id)
         .await?;
-    ensure_check_response_size(&run)?;
-    Ok((StatusCode::CREATED, Json(run)))
+    Ok((StatusCode::CREATED, check_json(&run)?))
 }
 
 pub(super) async fn list_check_runs(
     ScopedRepository(repository): ScopedRepository,
-    application_id: Result<Path<Uuid>, PathRejection>,
-    query: Result<Query<ListApplicationsQuery>, QueryRejection>,
-) -> Result<Json<Vec<SolutionPackCheckRunSummary>>, ApiError> {
-    let Path(application_id) = application_id.map_err(ApiError::from_path_rejection)?;
-    let Query(query) = query.map_err(ApiError::from_query_rejection)?;
+    ApiPath(application_id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<ListApplicationsQuery>,
+) -> Result<Response, ApiError> {
     let (limit, offset) = query.bounds()?;
     let runs = repository
         .list_solution_pack_check_runs(application_id, limit, offset)
         .await?;
-    ensure_check_response_size(&runs)?;
-    Ok(Json(runs))
+    check_json(&runs)
 }
 
 pub(super) async fn get_check_run(
     ScopedRepository(repository): ScopedRepository,
-    path: Result<Path<(Uuid, Uuid)>, PathRejection>,
-) -> Result<Json<SolutionPackCheckRun>, ApiError> {
-    let Path((application_id, run_id)) = path.map_err(ApiError::from_path_rejection)?;
+    ApiPath((application_id, run_id)): ApiPath<(Uuid, Uuid)>,
+) -> Result<Response, ApiError> {
     let run = repository
         .get_solution_pack_check_run(application_id, run_id)
         .await?
         .ok_or_else(|| ApiError::not_found("solution-pack check run"))?;
-    ensure_check_response_size(&run)?;
-    Ok(Json(run))
+    check_json(&run)
 }
 
 pub(super) async fn get_plan(
     ScopedRepository(repository): ScopedRepository,
-    plan_id: Result<Path<Uuid>, PathRejection>,
-) -> Result<Json<SolutionPackPlan>, ApiError> {
-    let Path(plan_id) = plan_id.map_err(ApiError::from_path_rejection)?;
+    ApiPath(plan_id): ApiPath<Uuid>,
+) -> Result<Response, ApiError> {
     let plan = repository
         .get_solution_pack_plan(plan_id)
         .await?
         .ok_or_else(|| ApiError::not_found("solution-pack plan"))?;
-    ensure_plan_response_size(&plan)?;
-    Ok(Json(plan))
+    plan_json(&plan)
 }
 
 fn require_zstd(headers: &HeaderMap) -> Result<(), ApiError> {
@@ -715,8 +688,8 @@ fn require_zstd(headers: &HeaderMap) -> Result<(), ApiError> {
 
 /// The inspection summary is derived from the uploaded archive, so an
 /// oversized one is the client's input problem.
-fn ensure_response_size(response: &InspectionResponse) -> Result<(), ApiError> {
-    ensure_encoded_response_size(
+fn inspection_json(response: &InspectionResponse) -> Result<Response, ApiError> {
+    bounded_json(
         response,
         MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES,
         ApiError::invalid_input(
@@ -727,41 +700,54 @@ fn ensure_response_size(response: &InspectionResponse) -> Result<(), ApiError> {
 
 // The remaining guards cover server-stored state (possibly after a committed
 // mutation), so exceeding them is a server fault rather than a client error.
-fn ensure_application_response_size(response: &impl Serialize) -> Result<(), ApiError> {
-    ensure_encoded_response_size(
+fn application_json(response: &impl Serialize) -> Result<Response, ApiError> {
+    bounded_json(
         response,
         MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
         ApiError::internal("solution-pack application summary exceeds the size limit"),
     )
 }
 
-fn ensure_check_response_size(response: &impl Serialize) -> Result<(), ApiError> {
-    ensure_encoded_response_size(
+fn check_json(response: &impl Serialize) -> Result<Response, ApiError> {
+    bounded_json(
         response,
         MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES,
         ApiError::internal("solution-pack check response exceeds the size limit"),
     )
 }
 
-fn ensure_plan_response_size(response: &SolutionPackPlan) -> Result<(), ApiError> {
-    ensure_encoded_response_size(
+fn plan_json(response: &SolutionPackPlan) -> Result<Response, ApiError> {
+    bounded_json(
         response,
         MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
         ApiError::internal("solution-pack plan summary exceeds the size limit"),
     )
 }
 
-fn ensure_encoded_response_size(
+/// Encodes `response` once, refusing it when the JSON exceeds `limit`.
+fn bounded_json(
     response: &impl Serialize,
     limit: usize,
     exceeded: ApiError,
-) -> Result<(), ApiError> {
+) -> Result<Response, ApiError> {
     let response_bytes = serde_json::to_vec(response)
         .map_err(|_| ApiError::internal("solution-pack response could not be encoded"))?;
     if response_bytes.len() > limit {
         return Err(exceeded);
     }
-    Ok(())
+    Ok(([(header::CONTENT_TYPE, "application/json")], response_bytes).into_response())
+}
+
+/// Commands that take no input still reject a body, so a client cannot
+/// believe it sent options that were ignored.
+fn require_empty_body(body: &Bytes, command: &str) -> Result<(), ApiError> {
+    if body.is_empty() {
+        Ok(())
+    } else {
+        Err(ApiError::invalid_input(format!(
+            "{command} body must be empty"
+        )))
+    }
 }
 
 fn blueprint_summary(
@@ -807,6 +793,7 @@ fn extension_requirement_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::repository::{SolutionPackCheckRun, SolutionPackCheckRunSummary};
 
     fn response_with_description(description: String) -> InspectionResponse {
         InspectionResponse {
@@ -841,9 +828,9 @@ mod tests {
 
     #[test]
     fn inspection_response_size_guard_rejects_oversized_json() {
-        assert!(ensure_response_size(&response_with_description("small".into())).is_ok());
+        assert!(inspection_json(&response_with_description("small".into())).is_ok());
         assert!(
-            ensure_response_size(&response_with_description(
+            inspection_json(&response_with_description(
                 "x".repeat(MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES)
             ))
             .is_err()
@@ -882,6 +869,6 @@ mod tests {
             results,
         };
         assert!(serde_json::to_vec(&run).unwrap().len() > 256 * 1024);
-        assert!(ensure_check_response_size(&run).is_ok());
+        assert!(check_json(&run).is_ok());
     }
 }
