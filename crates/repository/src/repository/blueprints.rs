@@ -15,6 +15,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
+/// The `blueprints` columns a [`Blueprint`] row is read from.
+const BLUEPRINT_COLUMNS: &str = "id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash";
+
 #[derive(sqlx::FromRow)]
 struct LatestBlueprint {
     version: i64,
@@ -62,12 +65,12 @@ impl AttricatRepository {
         &self,
         blueprint_id: Uuid,
     ) -> Result<Vec<Blueprint>, RepositoryError> {
-        Ok(sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+        Ok(sqlx::query_as::<_, Db<Blueprint>>(&format!(
+            r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
-               ORDER BY version DESC"#,
-        )
+               ORDER BY version DESC"#
+        ))
         .bind(blueprint_id)
         .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
@@ -253,9 +256,9 @@ impl AttricatRepository {
             ))
         })?;
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"INSERT INTO blueprints (id, workspace_id, code, name, kind, version, includes, views, record_schema, status, definition, definition_hash, unique_keys)
+            &format!(r#"INSERT INTO blueprints (id, workspace_id, code, name, kind, version, includes, views, record_schema, status, definition, definition_hash, unique_keys)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, $11, $12)
-               RETURNING id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash"#,
+               RETURNING {BLUEPRINT_COLUMNS}"#),
         )
         .bind(blueprint_id)
         .bind(self.workspace_id.0)
@@ -363,13 +366,13 @@ impl AttricatRepository {
                 None => Ok(None),
             };
         }
-        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+            r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE id = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL
                ORDER BY version DESC
-               LIMIT 1"#,
-        )
+               LIMIT 1"#
+        ))
         .bind(blueprint_id)
         .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
@@ -385,20 +388,16 @@ impl AttricatRepository {
         version: i64,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         if let Some(revision) = self
-            .cached_revision(&self.revision_key(blueprint_id, version))
-            .await
+            .cached_decorated_revision(&self.revision_key(blueprint_id, version))
+            .await?
         {
-            let (blueprint, attributes) = revision.as_ref().clone();
-            return self
-                .decorate_revision(blueprint, attributes)
-                .await
-                .map(Some);
+            return Ok(Some(revision));
         }
-        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+            r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
-               WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL"#,
-        )
+               WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL"#
+        ))
         .bind(blueprint_id)
         .bind(version)
         .bind(self.workspace_id.0)
@@ -420,13 +419,13 @@ impl AttricatRepository {
                 None => Ok(None),
             };
         }
-        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+            r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE code = $1 AND status = 'published' AND workspace_id = $2 AND deleted_at IS NULL
                ORDER BY version DESC
-               LIMIT 1"#,
-        )
+               LIMIT 1"#
+        ))
         .bind(code)
         .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
@@ -441,13 +440,13 @@ impl AttricatRepository {
         code: &str,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
-        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+            r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE code = $1 AND workspace_id = $2 AND deleted_at IS NULL
                ORDER BY version DESC
-               LIMIT 1"#,
-        )
+               LIMIT 1"#
+        ))
         .bind(code)
         .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
@@ -463,20 +462,16 @@ impl AttricatRepository {
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
         if let Some(revision) = self
-            .cached_revision(&self.revision_code_key(code, version))
-            .await
+            .cached_decorated_revision(&self.revision_code_key(code, version))
+            .await?
         {
-            let (blueprint, attributes) = revision.as_ref().clone();
-            return self
-                .decorate_revision(blueprint, attributes)
-                .await
-                .map(Some);
+            return Ok(Some(revision));
         }
-        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+            r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
-               WHERE code = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL"#,
-        )
+               WHERE code = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL"#
+        ))
         .bind(code)
         .bind(version)
         .bind(self.workspace_id.0)
@@ -494,19 +489,15 @@ impl AttricatRepository {
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
         if let Some(revision) = self
-            .cached_revision(&self.revision_code_key(code, version))
-            .await
+            .cached_decorated_revision(&self.revision_code_key(code, version))
+            .await?
         {
-            let (blueprint, attributes) = revision.as_ref().clone();
-            return self
-                .decorate_revision(blueprint, attributes)
-                .await
-                .map(Some);
+            return Ok(Some(revision));
         }
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            &format!(r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
-               WHERE code = $1 AND version = $2 AND status = 'published' AND workspace_id = $3 AND deleted_at IS NULL"#,
+               WHERE code = $1 AND version = $2 AND status = 'published' AND workspace_id = $3 AND deleted_at IS NULL"#),
         )
         .bind(code)
         .bind(version)
@@ -523,12 +514,12 @@ impl AttricatRepository {
         version: i64,
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+            r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL
-               FOR UPDATE"#,
-        )
+               FOR UPDATE"#
+        ))
         .bind(blueprint_id)
         .bind(version)
         .bind(self.workspace_id.0)
@@ -640,12 +631,12 @@ impl AttricatRepository {
         blueprint_id: Uuid,
         version: i64,
     ) -> Result<Blueprint, RepositoryError> {
-        let mut blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"SELECT id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+        let mut blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+            r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL
-               FOR UPDATE"#,
-        )
+               FOR UPDATE"#
+        ))
         .bind(blueprint_id)
         .bind(version)
         .bind(self.workspace_id.0)
@@ -682,9 +673,9 @@ impl AttricatRepository {
                 .enforced_structural_constraints(transaction, blueprint_id)
                 .await?;
             blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-                r#"UPDATE blueprints SET status = 'published', published_at = now(), updated_at = now()
+                &format!(r#"UPDATE blueprints SET status = 'published', published_at = now(), updated_at = now()
                    WHERE id = $1 AND version = $2 AND workspace_id = $3
-                   RETURNING id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash"#,
+                   RETURNING {BLUEPRINT_COLUMNS}"#),
             )
             .bind(blueprint_id)
             .bind(version)
@@ -992,6 +983,21 @@ impl AttricatRepository {
     /// A cached published revision, by ID or by code.
     async fn cached_revision(&self, key: &CacheKey) -> Option<Arc<CachedRevision>> {
         self.cache.get::<CachedRevision>(key).await
+    }
+
+    /// A cached published revision, decorated for the reader; `None` on a
+    /// cache miss.
+    async fn cached_decorated_revision(
+        &self,
+        key: &CacheKey,
+    ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
+        let Some(revision) = self.cached_revision(key).await else {
+            return Ok(None);
+        };
+        let (blueprint, attributes) = revision.as_ref().clone();
+        self.decorate_revision(blueprint, attributes)
+            .await
+            .map(Some)
     }
 
     /// The revision's attributes. Published revisions never change, so their
