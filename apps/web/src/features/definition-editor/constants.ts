@@ -18,9 +18,17 @@ export const discriminatorKey = 'type';
 export const attributesKey = 'attributes';
 export const includesKey = 'includes';
 export const valueTypeKey = 'value_type';
+export const codeKey = 'code';
+export const fromKey = 'from';
+export const targetBlueprintKey = 'target_blueprint';
+export const aliasKey = 'alias';
+export const versionKey = 'version';
 export const relationshipValueType = 'relationship';
 
 export const attributePathSeparator = '.';
+/** Completion sort prefixes: required keys and exact matches come first. */
+export const requiredSortPrefix = '0';
+export const optionalSortPrefix = '1';
 /** Table columns follow at most three relationship hops. */
 export const maxAttributePathHops = 3;
 
