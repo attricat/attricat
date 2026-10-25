@@ -121,6 +121,55 @@ impl ApiError {
             message,
         )
     }
+    /// A 422 with its own code, for failures the web UI can trigger and
+    /// translates by code.
+    pub(super) fn unprocessable(code: ErrorCode, message: impl Into<String>) -> Self {
+        Self::new(StatusCode::UNPROCESSABLE_ENTITY, code, message)
+    }
+    /// Structured context a client needs to explain or recover from the error.
+    pub(super) fn with_details(mut self, details: serde_json::Value) -> Self {
+        self.details = Some(details);
+        self
+    }
+    pub(super) fn password_reset_invalid() -> Self {
+        Self::unprocessable(
+            ErrorCode::PasswordResetInvalid,
+            "password reset link is invalid or expired",
+        )
+    }
+    pub(super) fn password_policy(error: attricat_domain::account::PasswordPolicyError) -> Self {
+        use attricat_domain::account::{
+            MAXIMUM_PASSWORD_BYTES, MINIMUM_PASSWORD_LENGTH, PasswordPolicyError,
+        };
+        let message = error.to_string();
+        match error {
+            PasswordPolicyError::TooShort => {
+                Self::unprocessable(ErrorCode::PasswordTooShort, message)
+                    .with_details(serde_json::json!({ "min": MINIMUM_PASSWORD_LENGTH }))
+            }
+            PasswordPolicyError::TooLong => {
+                Self::unprocessable(ErrorCode::PasswordTooLong, message)
+                    .with_details(serde_json::json!({ "max": MAXIMUM_PASSWORD_BYTES }))
+            }
+            PasswordPolicyError::MissingLetter => {
+                Self::unprocessable(ErrorCode::PasswordMissingLetter, message)
+            }
+            PasswordPolicyError::MissingNumber => {
+                Self::unprocessable(ErrorCode::PasswordMissingNumber, message)
+            }
+            PasswordPolicyError::MissingSymbol => {
+                Self::unprocessable(ErrorCode::PasswordMissingSymbol, message)
+            }
+        }
+    }
+    /// Text outside `min..=max` characters.
+    pub(super) fn text_length(label: &str, min: usize, max: usize) -> Self {
+        Self::unprocessable(
+            ErrorCode::TextLengthInvalid,
+            format!("{label} must be {min}-{max} characters"),
+        )
+        .with_details(serde_json::json!({ "field": label, "min": min, "max": max }))
+    }
     pub(super) fn relationship_sort_requires_single_version() -> Self {
         Self::new(
             StatusCode::UNPROCESSABLE_ENTITY,

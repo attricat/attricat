@@ -85,7 +85,7 @@ value_type = "string"
     assert_eq!(invalid_value.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(
         invalid_value.json::<Value>().await.unwrap()["error"]["code"],
-        "invalid_input"
+        "invalid_code"
     );
 
     let invalid_relationship = client

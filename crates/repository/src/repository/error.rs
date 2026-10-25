@@ -1,6 +1,19 @@
 //! Repository failures. [`super::error_codes`] maps each to its stable API code.
 use super::*;
 
+attricat_domain::code_enum! {
+    /// What owns a code that must be unique in its workspace, reported as
+    /// `details.resource` of `code_taken`.
+    pub enum CodedResource (UnknownCodedResource: "coded resource") {
+        Blueprint => "blueprint",
+        Context => "context",
+        Workflow => "workflow",
+        Rule => "rule",
+        /// An extension connection, named by its connection key.
+        Connection => "connection",
+    }
+}
+
 /// Why a status transition was refused to its actor.
 #[derive(Debug)]
 pub struct StatusTransitionDenial {
@@ -262,18 +275,14 @@ pub enum RepositoryError {
     RelationshipSearchTimedOut,
     #[error("the definition is identical to version {version} of this blueprint")]
     BlueprintRevisionUnchanged { version: i64 },
-    #[error("catalog code is already in use")]
-    AttricatCodeTaken,
+    #[error("the {0} code is already in use")]
+    CodeTaken(CodedResource),
     #[error("invalid team: {0}")]
     InvalidTeam(String),
     #[error("invalid agent settings: {0}")]
     InvalidAgentSettings(String),
-    #[error("workflow code is already in use")]
-    WorkflowCodeTaken,
     #[error("invalid workflow definition: {0}")]
     InvalidWorkflowDefinition(String),
-    #[error("rule code is already in use")]
-    RuleCodeTaken,
     #[error("invalid rule definition: {0}")]
     InvalidRuleDefinition(String),
     #[error("invalid publication channel: {0}")]
@@ -308,8 +317,6 @@ pub enum RepositoryError {
     ExtensionAlreadyInstalled,
     #[error("{0}")]
     ExportMappingConflict(String),
-    #[error("a connection with this name already exists")]
-    ExtensionConnectionExists,
     #[error("invalid domain event: {0}")]
     InvalidDomainEvent(#[from] crate::domain_events::EventContractError),
     #[error("publication context is not an enabled channel")]

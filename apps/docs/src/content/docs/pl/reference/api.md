@@ -33,7 +33,13 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 
 | Kod | Status | Znaczenie |
 | --- | --- | --- |
-| `invalid_input` | 422 | Treść żądania zawiera nieprawidłową wartość, na przykład błędny, powtórzony lub nieznany kod. Komunikat wskazuje, którą. |
+| `invalid_input` | 422 | Treść żądania zawiera nieprawidłową wartość, na przykład powtórzony lub nieznany kod. Komunikat wskazuje, którą. |
+| `invalid_code` | 422 | Kod zawiera znaki inne niż litery ASCII, cyfry, łączniki i podkreślenia. |
+| `code_taken` | 409 | Kod lub nazwa są już używane. `details.resource` to `blueprint`, `context`, `workflow`, `rule` lub `connection`. |
+| `default_context_protected` | 422 | Kontekstu domyślnego nie można zmienić ani usunąć. |
+| `default_context_only` | 422 | Atrybut można zapisywać tylko w kontekście domyślnym. |
+| `context_cycle` | 422 | Kontekst nie może stać się własnym potomkiem. |
+| `context_in_use` | 422 | Nie można usunąć kontekstu, który ma potomków, wartości lub przebiegi rozszerzeń. |
 | `invalid_blueprint_definition` | 422 | TOML schematu się nie kompiluje. Komunikat podaje przyczynę. |
 | `attribute_value_schema_mismatch` | 422 | Wartość nie spełnia `value_schema` swojego atrybutu. |
 | `record_schema_mismatch` | 422 | Rekord nie spełnia swojego `record_schema` w którymś kontekście. |

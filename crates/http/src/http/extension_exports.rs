@@ -2,6 +2,7 @@
 //! credential connections and their OAuth flows, request budgets, connector
 //! resyncs, payload previews and public file links.
 
+use crate::repository::ErrorCode;
 use attricat_domain::states::ExportStatus;
 use axum::{
     Json,
@@ -314,9 +315,7 @@ fn bounded_text(value: &str, label: &str) -> Result<(), ApiError> {
 /// characters as the database counts them.
 fn bounded_chars(value: &str, label: &str, max: usize) -> Result<(), ApiError> {
     if value.trim().is_empty() || value.chars().count() > max {
-        return Err(ApiError::invalid_input(format!(
-            "{label} must be 1-{max} characters"
-        )));
+        return Err(ApiError::text_length(label, 1, max));
     }
     Ok(())
 }
@@ -352,9 +351,11 @@ fn check_authorization_url(grant_type: &str, url: &str) -> Result<(), ApiError> 
         })
         .map(drop)
         .ok_or_else(|| {
-            ApiError::invalid_input(
-                "authorization_url must be an HTTPS URL without query or fragment".into(),
+            ApiError::unprocessable(
+                ErrorCode::HttpsRequired,
+                "authorization_url must be an HTTPS URL without query or fragment",
             )
+            .with_details(serde_json::json!({ "field": "authorization_url" }))
         })
 }
 
@@ -371,8 +372,10 @@ fn with_redirect_uri(mut connection: ExtensionConnection) -> ExtensionConnection
 /// Checks a token or device endpoint against the kind's host permission.
 fn check_endpoint(manifest: &Manifest, rule_id: &str, url: &str) -> Result<(), ApiError> {
     bounded_chars(url, "endpoint URL", MAX_CONNECTION_URL_CHARS)?;
-    let parsed = url::Url::parse(url)
-        .map_err(|_| ApiError::invalid_input("endpoint URLs must be HTTPS URLs".into()))?;
+    let parsed = url::Url::parse(url).map_err(|_| {
+        ApiError::unprocessable(ErrorCode::HttpsRequired, "endpoint URLs must be HTTPS URLs")
+            .with_details(serde_json::json!({ "field": "endpoint_url" }))
+    })?;
     if !manifest
         .host_permission(rule_id)
         .is_some_and(|rule| rule.allows_request_with_query(&parsed, "POST"))

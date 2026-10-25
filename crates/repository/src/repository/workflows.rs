@@ -96,7 +96,7 @@ impl AttricatRepository {
         .fetch_one(&mut **tx)
         .await?;
         if exists {
-            return Err(RepositoryError::WorkflowCodeTaken);
+            return Err(RepositoryError::CodeTaken(CodedResource::Workflow));
         }
         let plan = serde_json::to_value(&compiled)
             .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;

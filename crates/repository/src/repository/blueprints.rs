@@ -117,7 +117,7 @@ impl AttricatRepository {
             .await?
             .is_empty()
         {
-            return Err(RepositoryError::AttricatCodeTaken);
+            return Err(RepositoryError::CodeTaken(CodedResource::Blueprint));
         }
         self.insert_blueprint_revision_in_transaction(
             transaction,
@@ -289,7 +289,7 @@ impl AttricatRepository {
                 .find(|(_, family_blueprint, _)| *family_blueprint == blueprint_id)
                 .map(|(id, _, version)| (*id, *version));
             if existing.is_none() && !families.is_empty() {
-                return Err(RepositoryError::RuleCodeTaken);
+                return Err(RepositoryError::CodeTaken(CodedResource::Rule));
             }
             let (rule_id, rule_version) = existing
                 .map(|(id, version)| (id, version + 1))

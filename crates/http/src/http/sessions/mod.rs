@@ -1,3 +1,4 @@
+use crate::repository::ErrorCode;
 use axum::{Json, extract::State, response::Response};
 use chrono::{Duration, Utc};
 use serde::Deserialize;
@@ -184,20 +185,16 @@ pub(super) async fn confirm_password_reset(
     if state.demo_mode {
         return Err(ApiError::disabled_in_demo());
     }
-    let secret = ActionTokenSecret::from_delivery_value(request.token).map_err(|_| {
-        ApiError::invalid_input("password reset link is invalid or expired".to_owned())
-    })?;
-    validate_password(&request.password)
-        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    let secret = ActionTokenSecret::from_delivery_value(request.token)
+        .map_err(|_| ApiError::password_reset_invalid())?;
+    validate_password(&request.password).map_err(ApiError::password_policy)?;
     let password_hash = hash_password(request.password).await?;
     state
         .repository
         .consume_password_reset(&secret.digest(), &password_hash)
         .await
         .map_err(|error| match error {
-            RepositoryError::NotFound(_) => {
-                ApiError::invalid_input("password reset link is invalid or expired".to_owned())
-            }
+            RepositoryError::NotFound(_) => ApiError::password_reset_invalid(),
             error => error.into(),
         })?;
     Ok(axum::http::StatusCode::NO_CONTENT)
@@ -323,20 +320,24 @@ pub(super) async fn update_display_name(
 /// exactly what the user submitted.
 fn validate_display_name(name: &str) -> Result<(), ApiError> {
     let length = name.chars().count();
+    // One code covers every rule, since the UI states them together.
+    let invalid = |message: &str| {
+        ApiError::unprocessable(ErrorCode::InvalidDisplayName, message).with_details(
+            serde_json::json!({ "min": DISPLAY_NAME_MIN_CHARS, "max": DISPLAY_NAME_MAX_CHARS }),
+        )
+    };
     if !(DISPLAY_NAME_MIN_CHARS..=DISPLAY_NAME_MAX_CHARS).contains(&length) {
-        return Err(ApiError::invalid_input(format!(
+        return Err(invalid(&format!(
             "display name must be {DISPLAY_NAME_MIN_CHARS} to {DISPLAY_NAME_MAX_CHARS} characters"
         )));
     }
     if !name.chars().all(|c| c.is_alphanumeric() || c == ' ') {
-        return Err(ApiError::invalid_input(
-            "display name may contain only letters, digits, and spaces".to_owned(),
+        return Err(invalid(
+            "display name may contain only letters, digits, and spaces",
         ));
     }
     if name.starts_with(' ') || name.ends_with(' ') {
-        return Err(ApiError::invalid_input(
-            "display name cannot start or end with a space".to_owned(),
-        ));
+        return Err(invalid("display name cannot start or end with a space"));
     }
     Ok(())
 }

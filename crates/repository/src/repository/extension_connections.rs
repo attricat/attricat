@@ -577,7 +577,7 @@ impl AttricatRepository {
             .fetch_one(&mut *transaction).await
             .map_err(|error| match error {
                 sqlx::Error::Database(database) if database.is_unique_violation() => {
-                    RepositoryError::ExtensionConnectionExists
+                    RepositoryError::CodeTaken(super::CodedResource::Connection)
                 }
                 error => error.into(),
             })?;

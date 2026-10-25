@@ -53,9 +53,7 @@ fn validate_named(input: &ViewInput) -> Result<(&str, Option<&str>), ApiError> {
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty() && s.len() <= MAX_NAME_BYTES)
-        .ok_or_else(|| {
-            ApiError::invalid_input(format!("name must be 1–{MAX_NAME_BYTES} characters"))
-        })?;
+        .ok_or_else(|| ApiError::text_length("name", 1, MAX_NAME_BYTES))?;
     if !matches!(input.visibility.as_str(), "private" | "workspace")
         || input
             .description

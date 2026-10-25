@@ -1,3 +1,4 @@
+use crate::repository::ErrorCode;
 use attricat_domain::states::MembershipState;
 use axum::{Json, extract::State, http::StatusCode, response::Response};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -206,8 +207,7 @@ pub(super) async fn complete_onboarding(
     State(state): State<AppState>,
     ApiJson(input): ApiJson<CompleteOnboardingRequest>,
 ) -> Result<Response, ApiError> {
-    validate_password(&input.password)
-        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    validate_password(&input.password).map_err(ApiError::password_policy)?;
     let password_hash = super::sessions::hash_password(input.password).await?;
     let onboarding = state
         .repository
@@ -252,9 +252,9 @@ pub(super) async fn complete_onboarding(
 /// deliver to, before an invitation is committed that could never be sent.
 fn deliverable_email(raw: &str) -> Result<String, ApiError> {
     let email = raw.trim().to_lowercase();
-    email
-        .parse::<lettre::Address>()
-        .map_err(|_| ApiError::invalid_input("email must be a valid address".to_owned()))?;
+    email.parse::<lettre::Address>().map_err(|_| {
+        ApiError::unprocessable(ErrorCode::InvalidEmail, "email must be a valid address")
+    })?;
     Ok(email)
 }
 

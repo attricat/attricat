@@ -249,7 +249,7 @@ tags = ["searchable"]
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(
             response.json::<Value>().await.unwrap()["error"]["code"],
-            "invalid_input"
+            "invalid_code"
         );
     }
 
@@ -274,7 +274,7 @@ tags = ["searchable"]
     );
     assert_eq!(
         default_only_write.json::<Value>().await.unwrap()["error"]["code"],
-        "invalid_input"
+        "default_context_only"
     );
     assert_eq!(
         source["projections"],

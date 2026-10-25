@@ -33,7 +33,13 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 
 | Code | Status | Meaning |
 | --- | --- | --- |
-| `invalid_input` | 422 | The request body has an invalid value, such as a malformed, repeated, or unknown code. The message says which. |
+| `invalid_input` | 422 | The request body has an invalid value, such as a repeated or unknown code. The message says which. |
+| `invalid_code` | 422 | A code contains characters other than ASCII letters, digits, hyphens, and underscores. |
+| `code_taken` | 409 | The code or name is already in use. `details.resource` is `blueprint`, `context`, `workflow`, `rule`, or `connection`. |
+| `default_context_protected` | 422 | The default context cannot be changed or deleted. |
+| `default_context_only` | 422 | The attribute can only be written in the default context. |
+| `context_cycle` | 422 | A context cannot become its own descendant. |
+| `context_in_use` | 422 | A context with descendants, values, or extension runs cannot be deleted. |
 | `invalid_blueprint_definition` | 422 | The blueprint TOML does not compile. The message says why. |
 | `attribute_value_schema_mismatch` | 422 | A value fails its attribute's `value_schema`. |
 | `record_schema_mismatch` | 422 | The record fails its `record_schema` in some context. |

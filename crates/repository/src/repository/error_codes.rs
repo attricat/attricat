@@ -51,9 +51,15 @@ error_codes! {
     BadRequest = "bad_request",
     BlueprintMigrationNotSafe = "blueprint_migration_not_safe",
     BlueprintNotPublished = "blueprint_not_published",
+    BlueprintRevisionUnchanged = "blueprint_revision_unchanged",
+    CodeTaken = "code_taken",
     CommentConflict = "comment_conflict",
     Conflict = "conflict",
+    ContextCycle = "context_cycle",
+    ContextInUse = "context_in_use",
     CsrfFailed = "csrf_failed",
+    DefaultContextOnly = "default_context_only",
+    DefaultContextProtected = "default_context_protected",
     DisabledInDemo = "disabled_in_demo",
     ExtensionAlreadyInstalled = "extension_already_installed",
     FileAttributeReadonly = "file_attribute_readonly",
@@ -65,11 +71,16 @@ error_codes! {
     Forbidden = "forbidden",
     GlobalRelationshipSearchBudgetExceeded = "global_relationship_search_budget_exceeded",
     GlobalRelationshipSearchTimedOut = "global_relationship_search_timed_out",
+    HttpsRequired = "https_required",
     IdempotencyKeyReused = "idempotency_key_reused",
     InternalError = "internal_error",
     InvalidAnnotationPatch = "invalid_annotation_patch",
     InvalidBlueprintDefinition = "invalid_blueprint_definition",
+    InvalidCode = "invalid_code",
+    InvalidComment = "invalid_comment",
     InvalidCredentials = "invalid_credentials",
+    InvalidDisplayName = "invalid_display_name",
+    InvalidEmail = "invalid_email",
     InvalidFile = "invalid_file",
     InvalidFilePolicy = "invalid_file_policy",
     InvalidFileReferences = "invalid_file_references",
@@ -84,6 +95,12 @@ error_codes! {
     MigrationNotApplicable = "migration_not_applicable",
     MigrationTargetChanged = "migration_target_changed",
     NotFound = "not_found",
+    PasswordMissingLetter = "password_missing_letter",
+    PasswordMissingNumber = "password_missing_number",
+    PasswordMissingSymbol = "password_missing_symbol",
+    PasswordResetInvalid = "password_reset_invalid",
+    PasswordTooLong = "password_too_long",
+    PasswordTooShort = "password_too_short",
     PayloadTooLarge = "payload_too_large",
     ProtectedAnnotationNamespace = "protected_annotation_namespace",
     PublicationChannelDisabled = "publication_channel_disabled",
@@ -100,6 +117,9 @@ error_codes! {
     RelationshipPathSortRequiresSingleResultVersion = "relationship_path_sort_requires_single_result_version",
     RelationshipTargetTypeMismatch = "relationship_target_type_mismatch",
     RequestTimeout = "request_timeout",
+    ReservedContextCode = "reserved_context_code",
+    ReusableAttributeAlreadyAttached = "reusable_attribute_already_attached",
+    ReusableAttributeNotPublished = "reusable_attribute_not_published",
     RuleDryRunRequired = "rule_dry_run_required",
     RuleHasExistingViolations = "rule_has_existing_violations",
     RuleNotEnabled = "rule_not_enabled",
@@ -119,6 +139,7 @@ error_codes! {
     StorageConflict = "storage_conflict",
     StorageQuotaExceeded = "storage_quota_exceeded",
     StorageUnavailable = "storage_unavailable",
+    TextLengthInvalid = "text_length_invalid",
     TransitionConditionsUnmet = "transition_conditions_unmet",
     Unauthenticated = "unauthenticated",
     UniqueKeyConflict = "unique_key_conflict",
@@ -273,6 +294,17 @@ impl RepositoryError {
                 "context": context,
                 "status": status,
             })),
+            Self::InvalidComment => plain(Unprocessable, Code::InvalidComment)
+                .with_details(json!({ "max": super::record_comments::MAX_COMMENT_LENGTH })),
+            Self::ReusableAttributeNotPublished => {
+                plain(Unprocessable, Code::ReusableAttributeNotPublished)
+            }
+            Self::ReservedContextCode => plain(Unprocessable, Code::ReservedContextCode),
+            Self::InvalidCode => plain(Unprocessable, Code::InvalidCode),
+            Self::DefaultContextProtected => plain(Unprocessable, Code::DefaultContextProtected),
+            Self::ContextCycle => plain(Unprocessable, Code::ContextCycle),
+            Self::ContextInUse => plain(Unprocessable, Code::ContextInUse),
+            Self::DefaultContextOnly => plain(Unprocessable, Code::DefaultContextOnly),
             Self::RecordLocked {
                 attribute,
                 context,
@@ -283,12 +315,10 @@ impl RepositoryError {
                 "status": status,
             })),
             Self::InvalidRetentionHold(_)
-            | Self::InvalidComment
             | Self::InvalidRecordBatch(_)
             | Self::InvalidReusableAttributeCode
             | Self::InvalidLexiconEntry(_)
             | Self::InvalidReusableAttributeDefinition(_)
-            | Self::ReusableAttributeNotPublished
             | Self::InvalidPreview
             | Self::PreviewExpansionLimit
             | Self::InvalidHierarchyRelationship
@@ -297,17 +327,11 @@ impl RepositoryError {
             | Self::InvalidExtensionTransition(_)
             | Self::InvalidDomainEvent(_)
             | Self::InvalidSolutionPackPlan(_)
-            | Self::ReservedContextCode
-            | Self::InvalidCode
             | Self::InvalidTeam(_)
             | Self::InvalidAgentSettings(_)
             | Self::InvalidPublicationChannel(_)
             | Self::InvalidContextData
             | Self::InvalidContext
-            | Self::DefaultContextProtected
-            | Self::ContextCycle
-            | Self::ContextInUse
-            | Self::DefaultContextOnly
             | Self::InvalidAttributeSelector => plain(Unprocessable, Code::InvalidInput),
             Self::NotFound(_) => plain(NotFound, Code::NotFound),
             Self::ActorNotAuthorized | Self::TokenPermissionsUnavailable => ErrorDescription::new(
@@ -465,15 +489,18 @@ impl RepositoryError {
             }
             Self::InvalidRuleDefinition(_) => plain(Unprocessable, Code::InvalidRuleDefinition),
             Self::ExtensionAlreadyInstalled => plain(Conflict, Code::ExtensionAlreadyInstalled),
-            Self::ExportMappingConflict(_) | Self::ExtensionConnectionExists => {
-                plain(Conflict, Code::Conflict)
+            Self::ExportMappingConflict(_) => plain(Conflict, Code::Conflict),
+            Self::CodeTaken(resource) => {
+                plain(Conflict, Code::CodeTaken).with_details(json!({ "resource": resource }))
             }
             Self::ApprovalAlreadyDecided => plain(Conflict, Code::ApprovalAlreadyDecided),
-            Self::ReusableAttributeAlreadyAttached
-            | Self::BlueprintRevisionUnchanged { .. }
-            | Self::AttricatCodeTaken
-            | Self::WorkflowCodeTaken
-            | Self::RuleCodeTaken => plain(Conflict, Code::Conflict),
+            Self::ReusableAttributeAlreadyAttached => {
+                plain(Conflict, Code::ReusableAttributeAlreadyAttached)
+            }
+            Self::BlueprintRevisionUnchanged { version } => {
+                plain(Conflict, Code::BlueprintRevisionUnchanged)
+                    .with_details(json!({ "version": version }))
+            }
             Self::BlueprintNotPublished => plain(Unprocessable, Code::BlueprintNotPublished),
             Self::WorkflowNotPublished => plain(Unprocessable, Code::WorkflowNotPublished),
             Self::WorkflowNotEnabled => plain(Unprocessable, Code::WorkflowNotEnabled),

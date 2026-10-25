@@ -57,7 +57,7 @@ impl AttricatRepository {
             .await?
             .is_empty()
         {
-            return Err(RepositoryError::AttricatCodeTaken);
+            return Err(RepositoryError::CodeTaken(super::CodedResource::Context));
         }
         let parent_id = match input.parent_id {
             Some(parent_id) => parent_id,

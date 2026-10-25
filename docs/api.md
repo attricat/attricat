@@ -688,6 +688,13 @@ results report the same `code`, `message` and `details`.
 | `409` | `annotation_revision_conflict` | `expected`, `actual` revisions |
 | `409` | `rule_dry_run_required` | none when no completed full dry run exists; run `run-now` with `"dry_run": true` and the `version` first. When the latest one was truncated: `truncated: true` and `existing_violations` (found among the candidates it checked), with a distinct message; pass `accept_existing_violations` |
 | `409` | `rule_has_existing_violations` | `existing_violations` (a count); fix the records or pass `accept_existing_violations` |
+| `409` | `code_taken` | `resource`: `blueprint`, `context`, `workflow`, `rule` or `connection`, whose code or name is already in use |
+| `409` | `blueprint_revision_unchanged` | `version`: the existing revision the definition is identical to |
+| `422` | `invalid_comment` | `max` characters |
+| `422` | `password_too_short`, `password_too_long` | `min` characters or `max` bytes |
+| `422` | `invalid_display_name` | `min` and `max` characters |
+| `422` | `text_length_invalid` | `field`, `min` and `max` characters |
+| `422` | `https_required` | `field`: the URL that must use HTTPS |
 
 A failed [record batch](#record-batches) operation keeps that operation's
 status, code and details, and adds `operation_index` and `record_id`.
@@ -699,8 +706,8 @@ they apply) is defined in
 blocked status change, read the status-transitions route.
 
 Other codes carry no details. Common ones are `invalid_input`, `bad_request`,
-`not_found`, `forbidden`, `unauthenticated`, `conflict` (a code or unique value
-is already in use), `stale_record`, `idempotency_key_reused`,
+`not_found`, `forbidden`, `unauthenticated`, `conflict` (a unique value is already
+in use), `stale_record`, `idempotency_key_reused`,
 `payload_too_large`, `rate_limited`, `storage_unavailable` and
 `internal_error`.
 

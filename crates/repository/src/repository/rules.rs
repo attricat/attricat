@@ -177,7 +177,7 @@ impl AttricatRepository {
             }
         }
         if !self.lock_rule_code(tx, &compiled.code).await?.is_empty() {
-            return Err(RepositoryError::RuleCodeTaken);
+            return Err(RepositoryError::CodeTaken(CodedResource::Rule));
         }
         let plan = serde_json::to_value(&compiled)
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;

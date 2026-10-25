@@ -199,7 +199,7 @@ pub use blueprint_connector_jobs::{
 pub use domain_events::{
     EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery, MaterializeScope,
 };
-pub use error::{RepositoryError, StatusTransitionDenial};
+pub use error::{CodedResource, RepositoryError, StatusTransitionDenial};
 pub use extension_annotations::{
     ExtensionAnnotationNamespace, ExtensionAnnotationPatch, ExtensionAnnotations,
     MAX_ANNOTATION_PATCH_OPERATIONS,

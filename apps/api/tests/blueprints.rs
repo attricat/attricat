@@ -500,7 +500,9 @@ async fn blueprint_rules_cannot_take_a_rule_code_owned_by_another_blueprint(pool
                 definition: blueprint_with_rule("second_ruled"),
             })
             .await,
-        Err(api::repository::RepositoryError::RuleCodeTaken)
+        Err(api::repository::RepositoryError::CodeTaken(
+            api::repository::CodedResource::Rule
+        ))
     ));
     let families: i64 =
         sqlx::query_scalar("SELECT count(DISTINCT id) FROM rules WHERE code = 'title-required'")
