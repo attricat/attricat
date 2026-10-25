@@ -145,13 +145,9 @@ pub(super) async fn extension_export_status(
     ApiPath(extension_id): ApiPath<String>,
     ApiQuery(query): ApiQuery<ExportStatusQuery>,
 ) -> Result<Json<ExtensionExportStatus>, ApiError> {
-    if !state
-        .repository
-        .principal_may(principal.actor(), workspace.0, "records.read", None, None)
-        .await?
-    {
-        return Err(ApiError::forbidden());
-    }
+    principal
+        .require_workspace_permission(&state.repository, workspace.0, "records.read")
+        .await?;
     let (mappings, next) = repository
         .export_mapping_list(
             &extension_id,
@@ -214,13 +210,9 @@ pub(super) async fn retry_export(
     ApiPath(extension_id): ApiPath<String>,
     ApiJson(input): ApiJson<RetryRequest>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
-    if !state
-        .repository
-        .principal_may(principal.actor(), workspace.0, "records.read", None, None)
-        .await?
-    {
-        return Err(ApiError::forbidden());
-    }
+    principal
+        .require_workspace_permission(&state.repository, workspace.0, "records.read")
+        .await?;
     if input
         .idempotency_key
         .as_ref()
@@ -1133,13 +1125,9 @@ pub(super) async fn preview_export(
 ) -> Result<Json<Value>, ApiError> {
     // Without a target only a workspace-wide grant matches, so the command
     // cannot read anything the caller could not.
-    if !state
-        .repository
-        .principal_may(principal.actor(), workspace.0, "records.read", None, None)
-        .await?
-    {
-        return Err(ApiError::forbidden());
-    }
+    principal
+        .require_workspace_permission(&state.repository, workspace.0, "records.read")
+        .await?;
     let installation = runtime_installation(&repository, &extension_id).await?;
     // A preview is a client command, so it needs the same grant.
     if !installation.capability_grants.contains("client.commands") {

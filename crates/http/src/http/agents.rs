@@ -539,12 +539,9 @@ async fn authorize_event_stream(
     }
     // Unlike request middleware, a response body can outlive its credential
     // and grants. principal_may also checks live PAT revocation and expiry.
-    if !repository
-        .principal_may(principal.actor(), workspace, "agents.run", None, None)
-        .await?
-    {
-        return Err(ApiError::forbidden());
-    }
+    principal
+        .require_workspace_permission(repository, workspace, "agents.run")
+        .await?;
     readable_conversation(repository, principal.0, workspace, conversation).await?;
     Ok(())
 }

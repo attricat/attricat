@@ -11,7 +11,7 @@ use super::{AppState, audit, error::ApiError};
 use crate::{
     account::{SessionDigest, SessionSecret},
     constants::SESSION_COOKIE,
-    repository::{AttricatRepository, AuthorizationActor},
+    repository::{AttricatRepository, AuthorizationActor, RepositoryScope},
 };
 
 mod policy;
@@ -33,6 +33,24 @@ impl AuthenticatedPrincipal {
         AuthorizationActor {
             user_id: self.0,
             token_id: self.1,
+        }
+    }
+
+    /// Fails with `403` unless the principal holds `permission` across the
+    /// workspace, re-checking live grants and token revocation.
+    pub(super) async fn require_workspace_permission<S: RepositoryScope>(
+        self,
+        repository: &AttricatRepository<S>,
+        workspace_id: Uuid,
+        permission: &str,
+    ) -> Result<(), ApiError> {
+        if repository
+            .principal_may(self.actor(), workspace_id, permission, None, None)
+            .await?
+        {
+            Ok(())
+        } else {
+            Err(ApiError::forbidden())
         }
     }
 }
