@@ -135,6 +135,9 @@ pub struct ExportMapping {
     pub leased_revision: Option<i64>,
 }
 
+/// Assignments that end a mapping's lease.
+const CLEAR_LEASE: &str =
+    "lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL";
 const MAPPING_FIELDS: &str = "extension_id,connection,record_id,external_id,external_ids,content_hash,record_revision,status,error,attempts,retry_requested_at,synced_at,settled_at,updated_at,lease_token,lease_until,lease_holder,leased_revision";
 
 /// How a mapping is selected.
@@ -443,7 +446,7 @@ impl AttricatRepository {
         connection: Option<&str>,
         record_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        sqlx::query(&format!("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4", connection_is("connection", "$3", connection)))
+        sqlx::query(&format!("UPDATE extension_export_mappings SET {CLEAR_LEASE},updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4", connection_is("connection", "$3", connection)))
             .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(record_id)
             .execute(&mut **transaction).await?;
         Ok(())
@@ -533,7 +536,7 @@ impl AttricatRepository {
                 && mapping.lease_holder.as_deref() == holder
                 && mapping.lease_until.is_some_and(|until| until > now);
             let mapping = if own_lease {
-                sqlx::query_as(&format!("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 RETURNING {MAPPING_FIELDS}", connection_is("connection", "$3", connection)))
+                sqlx::query_as(&format!("UPDATE extension_export_mappings SET {CLEAR_LEASE},updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 RETURNING {MAPPING_FIELDS}", connection_is("connection", "$3", connection)))
                     .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(record_id)
                     .fetch_one(&mut *transaction).await?
             } else {
@@ -739,7 +742,7 @@ impl AttricatRepository {
              synced_at=CASE WHEN $5='synced' THEN clock_timestamp() ELSE synced_at END,\
              settled_at=CASE WHEN $14 THEN clock_timestamp() ELSE settled_at END,\
              retry_requested_at=CASE WHEN $15 AND (leased_at IS NULL OR retry_requested_at <= leased_at) THEN NULL ELSE retry_requested_at END,\
-             lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() \
+             {CLEAR_LEASE},updated_at=clock_timestamp() \
              WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 \
              RETURNING {MAPPING_FIELDS}",
             connection_is("connection", "$3", connection)
@@ -779,7 +782,7 @@ impl AttricatRepository {
         lease_token: Uuid,
     ) -> Result<bool, RepositoryError> {
         check_connection(connection)?;
-        Ok(sqlx::query(&format!("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 AND lease_token=$5", connection_is("connection", "$3", connection)))
+        Ok(sqlx::query(&format!("UPDATE extension_export_mappings SET {CLEAR_LEASE},updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 AND lease_token=$5", connection_is("connection", "$3", connection)))
             .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(record_id).bind(lease_token)
             .execute(&self.pool).await?.rows_affected() == 1)
     }
@@ -910,7 +913,7 @@ impl AttricatRepository {
         extension_id: &str,
         holder: &str,
     ) -> Result<u64, RepositoryError> {
-        Ok(sqlx::query("UPDATE extension_export_mappings SET lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND lease_holder=$3")
+        Ok(sqlx::query(&format!("UPDATE extension_export_mappings SET {CLEAR_LEASE},updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND lease_holder=$3"))
             .bind(self.workspace_id()).bind(extension_id).bind(holder)
             .execute(&self.pool).await?.rows_affected())
     }
@@ -929,7 +932,7 @@ impl AttricatRepository {
     ) -> Result<u64, RepositoryError> {
         // A deleted record's lease only ends: its mapping accepts nothing
         // but a withdrawal, so a retrying status would never clear.
-        Ok(sqlx::query("UPDATE extension_export_mappings m SET status=CASE WHEN r.deleted_at IS NULL THEN 'retrying' ELSE m.status END,error=CASE WHEN r.deleted_at IS NULL THEN jsonb_build_object('code',$4::text,'message',$5::text) ELSE m.error END,attempts=CASE WHEN r.deleted_at IS NULL THEN m.attempts+1 ELSE m.attempts END,lease_token=NULL,lease_until=NULL,leased_at=NULL,lease_holder=NULL,leased_revision=NULL,updated_at=clock_timestamp() FROM records r WHERE r.workspace_id=m.workspace_id AND r.id=m.record_id AND m.workspace_id=$1 AND m.extension_id=$2 AND m.lease_holder=$3")
+        Ok(sqlx::query(&format!("UPDATE extension_export_mappings m SET status=CASE WHEN r.deleted_at IS NULL THEN 'retrying' ELSE m.status END,error=CASE WHEN r.deleted_at IS NULL THEN jsonb_build_object('code',$4::text,'message',$5::text) ELSE m.error END,attempts=CASE WHEN r.deleted_at IS NULL THEN m.attempts+1 ELSE m.attempts END,{CLEAR_LEASE},updated_at=clock_timestamp() FROM records r WHERE r.workspace_id=m.workspace_id AND r.id=m.record_id AND m.workspace_id=$1 AND m.extension_id=$2 AND m.lease_holder=$3"))
             .bind(self.workspace_id()).bind(extension_id).bind(holder).bind(code)
             .bind(message.chars().take(1024).collect::<String>())
             .execute(&self.pool).await?.rows_affected())
