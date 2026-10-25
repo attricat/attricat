@@ -10,11 +10,7 @@ import { listBlueprintRevisions } from '../blueprints/api';
 import { listContexts } from '../contexts/api';
 import { defaultContextCode } from '../contexts/constants';
 import { contextQueryKeys } from '../contexts/queryKeys';
-import {
-  getBlueprintByCode,
-  listRecordBlueprints,
-  searchRecordTablePage,
-} from '../records/api';
+import { listRecordBlueprints, searchRecordTablePage } from '../records/api';
 import { isHiddenByDefault } from '../records/attributeVisibility';
 import { contextAncestorCodes } from '../records/previewContext';
 import { recordQueryKeys } from '../records/queryKeys';
@@ -37,6 +33,7 @@ import { isRelationshipPath } from './explorerTableColumns';
 import { isRelationshipFilterAttribute } from './relationshipFilterTypes';
 import type { ExplorerSearch } from './search';
 import { sessionOptions } from '../auth/queryOptions';
+import { blueprintByCodeOptions } from '../records/queryOptions';
 
 /**
  * Loads everything the Explorer page needs for the current search and keeps
@@ -66,12 +63,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
     queryFn: ({ signal }) => listContexts(signal),
   });
   const selectedBlueprint = useQuery({
-    queryKey: recordQueryKeys.blueprintByCode(
-      search.blueprint,
-      effectiveVersion,
-    ),
-    queryFn: ({ signal }) =>
-      getBlueprintByCode(search.blueprint ?? '', effectiveVersion, signal),
+    ...blueprintByCodeOptions(search.blueprint ?? '', effectiveVersion),
     enabled: Boolean(search.blueprint && versionResolved),
   });
   const revisions = useQuery({

@@ -1,9 +1,10 @@
 import { useQueries } from '@tanstack/react-query';
 import { use } from 'react';
-import { getBlueprintByCode, getRecordPreview } from '../api';
+import { getRecordPreview } from '../api';
 import { KnownRecordLabelsContext } from '../knownRecordLabels';
 import { dropdownOptionLabel } from '../recordDisplay';
 import { recordQueryKeys } from '../queryKeys';
+import { blueprintByCodeOptions } from '../queryOptions';
 
 const MAX_RESOLVED_RELATIONSHIP_SELECTIONS = 10;
 
@@ -28,9 +29,7 @@ export const useRelationshipSelectionLabels = (
   const unknownIds = resolvedIds.filter((id) => !knownLabels.has(id));
   const blueprints = useQueries({
     queries: codes.map((code) => ({
-      queryKey: recordQueryKeys.blueprintByCode(code, undefined),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        getBlueprintByCode(code, undefined, signal),
+      ...blueprintByCodeOptions(code),
       enabled: unknownIds.length > 0,
     })),
   });

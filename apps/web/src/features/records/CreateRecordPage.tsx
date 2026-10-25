@@ -13,14 +13,14 @@ import {
   type QueuedFiles,
 } from '../files/queuedFileUploads';
 import { ApiRequestError } from '../../api/request';
-import { createRecord, getBlueprintByCode } from './api';
+import { createRecord } from './api';
 import { RecordForm, type RecordFormHandle } from './components/RecordForm';
 import { RecordPage } from './components/RecordPage';
-import { recordQueryKeys } from './queryKeys';
 import { invalidateRecordSearches } from './invalidateRecord';
 import { attributeValueKinds } from './valueTypes';
 import { invalidFileReferencesCode } from '../files/constants';
 import { useToast } from '../../components/useToast';
+import { blueprintByCodeOptions } from './queryOptions';
 
 export const CreateRecordPage = ({
   search,
@@ -40,9 +40,7 @@ export const CreateRecordPage = ({
   // and can offer its saved draft.
   const blueprintCode = search.blueprint;
   const blueprint = useQuery({
-    queryKey: recordQueryKeys.blueprintByCode(blueprintCode, undefined),
-    queryFn: ({ signal }) =>
-      getBlueprintByCode(blueprintCode!, undefined, signal),
+    ...blueprintByCodeOptions(blueprintCode ?? ''),
     enabled: Boolean(blueprintCode),
   });
   // Another blueprint or version may not have the same file attributes.

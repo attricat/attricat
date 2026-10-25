@@ -170,16 +170,11 @@ export const RecordPreview = ({
         : new Map<string, string>(),
     [contextId, defaultContextId, resolved.data],
   );
+  const currentBlueprintId = resolvedRecord?.blueprint_id ?? '';
   const currentBlueprint = useQuery({
-    queryKey: recordQueryKeys.currentBlueprint(
-      resolvedRecord?.blueprint_id ?? '',
-    ),
-    queryFn: () => {
-      if (!resolvedRecord)
-        throw new Error(t('records.recordPreviewUnavailable'));
-      return getCurrentBlueprint(resolvedRecord.blueprint_id);
-    },
-    enabled: Boolean(resolvedRecord?.blueprint_id),
+    queryKey: recordQueryKeys.currentBlueprint(currentBlueprintId),
+    queryFn: () => getCurrentBlueprint(currentBlueprintId),
+    enabled: Boolean(currentBlueprintId),
   });
   const schemaOutdated =
     currentBlueprint.data && resolvedRecord

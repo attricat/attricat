@@ -8,11 +8,7 @@ import { RouterButton } from '../../components/RouterLink';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/queryKeys';
 import { defaultContextCode } from '../contexts/constants';
-import {
-  getBlueprintByCode,
-  migrateRecord,
-  previewRecordMigration,
-} from './api';
+import { migrateRecord, previewRecordMigration } from './api';
 import { RecordForm } from './components/RecordForm';
 import { RecordPage } from './components/RecordPage';
 import { MigrationIssueList } from './components/MigrationIssueList';
@@ -34,6 +30,7 @@ import { invalidateRecord } from './invalidateRecord';
 import { useRecordLabels } from './useRecordLabels';
 import { attributeValueKinds } from './valueTypes';
 import { errorMessage } from '../../api/errors';
+import { blueprintByCodeOptions } from './queryOptions';
 
 export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
@@ -52,9 +49,7 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
   const sourceCode = preview.data?.target.blueprint.code;
   const sourceVersion = preview.data?.source_version;
   const source = useQuery({
-    queryKey: recordQueryKeys.blueprintByCode(sourceCode, sourceVersion),
-    queryFn: ({ signal }) =>
-      getBlueprintByCode(sourceCode!, sourceVersion, signal),
+    ...blueprintByCodeOptions(sourceCode ?? '', sourceVersion),
     enabled: sourceCode !== undefined && sourceVersion !== undefined,
   });
   const values = preview.data?.values ?? [];

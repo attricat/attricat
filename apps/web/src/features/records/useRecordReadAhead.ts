@@ -8,11 +8,10 @@ import {
   recordRuleRunsOptions,
 } from '../rules/queryOptions';
 import {
+  blueprintByCodeOptions,
   recordApprovalsOptions,
   recordRetentionHoldsOptions,
 } from './queryOptions';
-import { getBlueprintByCode } from './api';
-import { recordQueryKeys } from './queryKeys';
 import { sessionOptions } from '../auth/queryOptions';
 
 /**
@@ -46,10 +45,7 @@ export const useRecordReadAhead = (
   const relatedCodes = relatedBlueprintCodes.join(' ');
   useEffect(() => {
     for (const code of relatedCodes.split(' ').filter(Boolean))
-      void client.prefetchQuery({
-        queryKey: recordQueryKeys.blueprintByCode(code, undefined),
-        queryFn: ({ signal }) => getBlueprintByCode(code, undefined, signal),
-      });
+      void client.prefetchQuery(blueprintByCodeOptions(code));
   }, [client, relatedCodes]);
   useEffect(() => {
     if (!comments || !session.data) return;

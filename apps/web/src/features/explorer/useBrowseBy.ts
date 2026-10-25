@@ -1,9 +1,5 @@
 import { useQueries } from '@tanstack/react-query';
-import {
-  getBlueprintByCode,
-  type BlueprintWithAttributes,
-} from '../records/api';
-import { recordQueryKeys } from '../records/queryKeys';
+import { type BlueprintWithAttributes } from '../records/api';
 import {
   browseByFields,
   browsePathFields,
@@ -15,16 +11,13 @@ import {
 } from './browseBy';
 import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
 import type { BrowseBy } from './search';
+import { blueprintByCodeOptions } from '../records/queryOptions';
 
 /** The latest revisions of the given blueprints. */
 const useBlueprints = (codes: string[]) =>
   // Shares cache entries with relationship filter path discovery.
   useQueries({
-    queries: [...new Set(codes)].map((code) => ({
-      queryKey: recordQueryKeys.blueprintByCode(code, undefined),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        getBlueprintByCode(code, undefined, signal),
-    })),
+    queries: [...new Set(codes)].map((code) => blueprintByCodeOptions(code)),
   });
 
 const lastTargets = (paths: RelationshipFilterAttribute[][]) =>

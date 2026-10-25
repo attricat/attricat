@@ -1,5 +1,6 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import {
+  getBlueprintByCode,
   getRecordApprovals,
   getRecordForm,
   getRecordLabels,
@@ -119,4 +120,11 @@ export const recordStatusTransitionsOptions = (
   queryOptions({
     queryKey: recordQueryKeys.statusTransitions(recordId, contextId),
     queryFn: ({ signal }) => getStatusTransitions(recordId, contextId, signal),
+  });
+
+/** A blueprint with its attributes by code, at its current version unless one is given. */
+export const blueprintByCodeOptions = (code: string, version?: number) =>
+  queryOptions({
+    queryKey: recordQueryKeys.blueprintByCode(code, version),
+    queryFn: ({ signal }) => getBlueprintByCode(code, version, signal),
   });

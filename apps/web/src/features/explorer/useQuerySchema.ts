@@ -1,18 +1,14 @@
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import {
-  getBlueprintByCode,
   type Attribute,
   type Blueprint,
   type BlueprintWithAttributes,
 } from '../records/api';
-import { recordQueryKeys } from '../records/queryKeys';
 import type { QuerySchema } from './queryLanguage';
 import { queryTargetCodes } from './querySuggestions';
 import { lexiconText, useLexiconRevision } from '../lexicon/lexicon';
-
-const targetQueryKey = (code: string) =>
-  recordQueryKeys.blueprintByCode(code, undefined);
+import { blueprintByCodeOptions } from '../records/queryOptions';
 
 /**
  * Builds the schema used to highlight and complete an Explorer query,
@@ -46,7 +42,7 @@ export const useQuerySchema = (
         codes.push(code);
         added = true;
         const cached = queryClient.getQueryData<BlueprintWithAttributes>(
-          targetQueryKey(code),
+          blueprintByCodeOptions(code).queryKey,
         );
         if (cached) cachedTargets.set(code, cached.attributes);
       }
@@ -54,11 +50,7 @@ export const useQuerySchema = (
     }
   }
   const results = useQueries({
-    queries: codes.map((code) => ({
-      queryKey: targetQueryKey(code),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        getBlueprintByCode(code, undefined, signal),
-    })),
+    queries: codes.map((code) => blueprintByCodeOptions(code)),
   });
   const targets = new Map(cachedTargets);
   results.forEach((result, index) => {

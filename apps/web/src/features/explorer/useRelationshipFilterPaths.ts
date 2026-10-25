@@ -1,10 +1,6 @@
 import { useQueries, type UseQueryResult } from '@tanstack/react-query';
-import {
-  getBlueprintByCode,
-  type BlueprintWithAttributes,
-} from '../records/api';
+import { type BlueprintWithAttributes } from '../records/api';
 import { isHiddenByDefault } from '../records/attributeVisibility';
-import { recordQueryKeys } from '../records/queryKeys';
 import {
   explorerVisibilityScope,
   relationshipPathSeparator,
@@ -13,18 +9,14 @@ import {
   isRelationshipFilterAttribute,
   type RelationshipFilterAttribute,
 } from './relationshipFilterTypes';
+import { blueprintByCodeOptions } from '../records/queryOptions';
 
 const targetBlueprintQueries = (
   relationships: RelationshipFilterAttribute[],
   enabled: boolean,
 ) =>
   relationships.map((attribute) => ({
-    queryKey: recordQueryKeys.blueprintByCode(
-      attribute.target_blueprint_code,
-      undefined,
-    ),
-    queryFn: ({ signal }: { signal: AbortSignal }) =>
-      getBlueprintByCode(attribute.target_blueprint_code, undefined, signal),
+    ...blueprintByCodeOptions(attribute.target_blueprint_code),
     enabled,
   }));
 

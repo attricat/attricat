@@ -3,11 +3,10 @@ import { listBlueprints } from '../blueprints/api';
 import { blueprintQueryKeys } from '../blueprints/queryKeys';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/queryKeys';
-import { getBlueprintByCode } from '../records/api';
-import { recordQueryKeys } from '../records/queryKeys';
 import { listRoles } from '../workspace/api';
 import { workspaceQueryKeys } from '../workspace/queryKeys';
 import { referenceStaleTimeMs } from './constants';
+import { blueprintByCodeOptions } from '../records/queryOptions';
 
 export type ReferenceBlueprint = {
   code: string;
@@ -50,8 +49,7 @@ export const createDefinitionReferences = (
   blueprintAttributes: (code, version) =>
     orEmpty(async () => {
       const blueprint = await queryClient.fetchQuery({
-        queryFn: ({ signal }) => getBlueprintByCode(code, version, signal),
-        queryKey: recordQueryKeys.blueprintByCode(code, version),
+        ...blueprintByCodeOptions(code, version),
         staleTime: referenceStaleTimeMs,
       });
       return blueprint.attributes.map((attribute) => ({
