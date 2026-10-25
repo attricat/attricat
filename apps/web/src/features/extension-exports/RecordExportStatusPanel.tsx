@@ -31,6 +31,7 @@ import type {
 } from './schemas';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { formatPushError } from './pushErrors';
 
 type Row = {
   key: string;
@@ -200,11 +201,7 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
                     )}
                     {mapping?.error && (
                       <Typography color="error" variant="caption">
-                        {/* The extension's own recorded push error, not a failed request. */}
-                        {/* eslint-disable-next-line no-restricted-syntax */}
-                        {[mapping.error.code, mapping.error.message]
-                          .filter(Boolean)
-                          .join(': ')}
+                        {formatPushError(mapping.error)}
                       </Typography>
                     )}
                   </Stack>

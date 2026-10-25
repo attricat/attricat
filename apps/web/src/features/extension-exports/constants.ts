@@ -16,6 +16,9 @@ export const exportProblemStatuses: readonly ExportStatus[] = [
   'retrying',
 ];
 
+/** The status the extension page lists first: exports the destination refused. */
+export const initialExportStatusFilter: ExportStatus = 'rejected';
+
 /** Statuses an operator can retry. */
 export const retryableExportStatuses: readonly ExportStatus[] = [
   'rejected',

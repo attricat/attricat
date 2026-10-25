@@ -2,18 +2,12 @@ import {
   Alert,
   Box,
   Button,
-  Checkbox,
   FormControl,
   InputLabel,
   MenuItem,
   Paper,
   Select,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Typography,
 } from '@mui/material';
 import {
@@ -22,45 +16,31 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import { RotateCcwIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { ExportIcon } from '../../components/systemIcons';
-import { Timestamp } from '../../time/Timestamp';
 import { useCan } from '../auth/useCan';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { extensionExportStatus, listConnections, retryExports } from './api';
 import {
   exportMappingExtensionOutlet,
   exportStatuses,
+  initialExportStatusFilter,
   retryableExportStatuses,
   type ExportStatus,
 } from './constants';
-import { ExportStatusChip } from './ExportStatusChip';
 import { extensionExportQueryKeys } from './queryKeys';
-import type { ExportStatusCount, ManifestExports } from './schemas';
+import type { ManifestExports } from './schemas';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
-
-const allConnections = '';
-
-/** Status counts by connection, in a stable order. */
-const countsByConnection = (counts: ExportStatusCount[]) => {
-  const connections = [
-    ...new Set(counts.map((count) => count.connection ?? allConnections)),
-  ].sort();
-  return connections.map((connection) => ({
-    connection: connection === allConnections ? null : connection,
-    counts: Object.fromEntries(
-      counts
-        .filter((count) => (count.connection ?? allConnections) === connection)
-        .map((count) => [count.status, count.count]),
-    ) as Partial<Record<ExportStatus, number>>,
-  }));
-};
+import { allConnections, countsByConnection } from './exportCounts';
+import { ExportCountsTable } from './ExportCountsTable';
+import { ExportMappingsTable } from './ExportMappingsTable';
+import { HandlerFailuresTable } from './HandlerFailuresTable';
+import { supportedOutletContextVersion } from '../extensions/constants';
 
 /**
  * An export extension's destinations: per-connection status counts, the
@@ -84,7 +64,7 @@ export const ExtensionExportStatusSection = ({
   const exports = canReadRecords ? (manifest.server?.exports ?? []) : [];
   // Until an operator picks one, show the first connection with exports.
   const [chosenConnection, setConnection] = useState<string | null>();
-  const [status, setStatus] = useState<ExportStatus>('rejected');
+  const [status, setStatus] = useState<ExportStatus>(initialExportStatusFilter);
   const [selected, setSelected] = useState<string[]>([]);
   const overview = useQuery({
     queryKey: extensionExportQueryKeys.extension(extensionId, {
@@ -172,34 +152,7 @@ export const ExtensionExportStatusSection = ({
           title={t('extensionExports.nothingExported')}
         />
       ) : (
-        <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{t('extensionExports.connection')}</TableCell>
-                {exportStatuses.map((item) => (
-                  <TableCell align="right" key={item}>
-                    {t(`extensionExports.status.${item}`)}
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.connection ?? allConnections}>
-                  <TableCell>
-                    {row.connection ?? t('extensionExports.defaultConnection')}
-                  </TableCell>
-                  {exportStatuses.map((item) => (
-                    <TableCell align="right" key={item}>
-                      {row.counts[item] ?? 0}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Box>
+        <ExportCountsTable rows={rows} />
       )}
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
@@ -287,65 +240,11 @@ export const ExtensionExportStatusSection = ({
           {t('extensionExports.noRecordsInStatus')}
         </Typography>
       ) : (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              {canManage && retryable && <TableCell padding="checkbox" />}
-              <TableCell>{t('extensionExports.record')}</TableCell>
-              <TableCell>{t('extensionExports.statusColumn')}</TableCell>
-              <TableCell>{t('extensionExports.error')}</TableCell>
-              <TableCell>{t('extensionExports.updated')}</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {mappings.map((mapping) => (
-              <TableRow key={mapping.record_id}>
-                {canManage && retryable && (
-                  <TableCell padding="checkbox">
-                    <Checkbox
-                      checked={selected.includes(mapping.record_id)}
-                      slotProps={{
-                        input: {
-                          'aria-label': t('extensionExports.selectRecord', {
-                            record: mapping.record_id,
-                          }),
-                        },
-                      }}
-                      onChange={(event) =>
-                        setSelected((current) =>
-                          event.target.checked
-                            ? [...current, mapping.record_id]
-                            : current.filter((id) => id !== mapping.record_id),
-                        )
-                      }
-                    />
-                  </TableCell>
-                )}
-                <TableCell sx={{ overflowWrap: 'anywhere' }}>
-                  <Link
-                    params={{ recordId: mapping.record_id }}
-                    to="/records/$recordId"
-                  >
-                    {mapping.external_id ?? mapping.record_id}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <ExportStatusChip status={mapping.status} />
-                </TableCell>
-                <TableCell>
-                  {/* The extension's own recorded push error, not a failed request. */}
-                  {/* eslint-disable-next-line no-restricted-syntax */}
-                  {[mapping.error?.code, mapping.error?.message]
-                    .filter(Boolean)
-                    .join(': ') || '—'}
-                </TableCell>
-                <TableCell>
-                  <Timestamp value={mapping.updated_at} />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <ExportMappingsTable
+          mappings={mappings}
+          onSelectedChange={setSelected}
+          selected={canManage && retryable ? selected : undefined}
+        />
       )}
       {page.hasNextPage && (
         <Box sx={{ mt: 2 }}>
@@ -356,44 +255,15 @@ export const ExtensionExportStatusSection = ({
         </Box>
       )}
       {handlerFailures.length > 0 && (
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="subtitle1">
-            {t('extensionExports.handlerFailures')}
-          </Typography>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{t('extensionExports.event')}</TableCell>
-                <TableCell>{t('extensionExports.error')}</TableCell>
-                <TableCell>{t('extensionExports.attempts')}</TableCell>
-                <TableCell>{t('extensionExports.updated')}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {handlerFailures.map((failure) => (
-                <TableRow key={`${failure.event_id}:${failure.handler_id}`}>
-                  <TableCell>
-                    {failure.event_type} · {failure.handler_id}
-                  </TableCell>
-                  <TableCell>
-                    {[failure.error_code, failure.error_message]
-                      .filter(Boolean)
-                      .join(': ')}
-                  </TableCell>
-                  <TableCell>{failure.attempts}</TableCell>
-                  <TableCell>
-                    <Timestamp value={failure.updated_at} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Box>
+        <HandlerFailuresTable failures={handlerFailures} />
       )}
       {exports.map((destination) => (
         <Box key={destination.id} sx={{ mt: 3 }}>
           <ExtensionOutlet
-            context={{ context_version: 1, export_id: destination.id }}
+            context={{
+              context_version: supportedOutletContextVersion,
+              export_id: destination.id,
+            }}
             extensionId={extensionId}
             outlet={exportMappingExtensionOutlet}
           />

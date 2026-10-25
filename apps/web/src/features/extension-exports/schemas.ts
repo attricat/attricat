@@ -73,6 +73,7 @@ const handlerFailureSchema = z.object({
   record_id: z.uuid().nullable(),
   updated_at: z.string(),
 });
+export type HandlerFailure = z.infer<typeof handlerFailureSchema>;
 
 export const extensionExportStatusSchema = z.object({
   counts: z.array(exportStatusCountSchema),
