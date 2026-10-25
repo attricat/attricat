@@ -11,12 +11,12 @@ use crate::{
         ResolvedRecordPreviewResponse, SearchRecordsRequest,
     },
     repository::{
-        EXPORT_STATUSES, MAX_SEARCH_FILTERS, RelationshipFacetHop, RepositoryError,
-        SearchPageRequest, SearchPhase, SearchScopeError, SearchScopeRequest, intersect_record_ids,
-        valid_connection_key,
+        MAX_SEARCH_FILTERS, RelationshipFacetHop, RepositoryError, SearchPageRequest, SearchPhase,
+        SearchScopeError, SearchScopeRequest, intersect_record_ids, valid_connection_key,
     },
 };
 use attricat_domain::permissions::Permission;
+use attricat_domain::states::ExportStatus;
 use attricat_domain::value_type::ValueType;
 use attricat_validation::saved_search;
 use axum::{
@@ -196,7 +196,7 @@ pub(super) async fn search_record_previews(
     // The export status filter is a predicate of the page query, so it never
     // materializes the records it matches.
     if let Some(export) = &input.export_status {
-        if !EXPORT_STATUSES.contains(&export.status.as_str()) {
+        if ExportStatus::parse(&export.status).is_none() {
             return Err(ApiError::invalid_input("unknown export status".to_owned()));
         }
         if export

@@ -2,6 +2,7 @@
 //! credential connections and their OAuth flows, request budgets, connector
 //! resyncs, payload previews and public file links.
 
+use attricat_domain::states::ExportStatus;
 use axum::{
     Json,
     extract::State,
@@ -25,12 +26,11 @@ use crate::{
         MAX_RATE_LIMIT_REQUESTS, MAX_RATE_LIMIT_SECONDS, Manifest, RateLimit, validate_schema,
     },
     repository::{
-        AttricatRepository, AuthorizationActor, EXPORT_STATUSES, ExportConnectionLabel,
-        ExportDestinationDescriptor, ExportMapping, ExportRetryRequest, ExportStatusCount,
-        ExtensionConnection, ExtensionConnectionPatch, ExtensionRuntimeInstallation,
-        HandlerFailure, MAX_CONNECTOR_RECORD_FILTER, MAX_EXPORT_MAPPING_PAGE,
-        NewExtensionConnection, RepositoryError, record_ids_selection, sorted_record_ids,
-        valid_connection_key,
+        AttricatRepository, AuthorizationActor, ExportConnectionLabel, ExportDestinationDescriptor,
+        ExportMapping, ExportRetryRequest, ExportStatusCount, ExtensionConnection,
+        ExtensionConnectionPatch, ExtensionRuntimeInstallation, HandlerFailure,
+        MAX_CONNECTOR_RECORD_FILTER, MAX_EXPORT_MAPPING_PAGE, NewExtensionConnection,
+        RepositoryError, record_ids_selection, sorted_record_ids, valid_connection_key,
     },
 };
 use attricat_domain::permissions::Permission;
@@ -977,7 +977,7 @@ pub(super) async fn resync_connector_job(
         // The run selects each record once, as its idempotency key does.
         (Some(ids), None) => Some(sorted_record_ids(&ids)),
         (None, Some(status)) => {
-            if !EXPORT_STATUSES.contains(&status.as_str()) {
+            if ExportStatus::parse(&status).is_none() {
                 return Err(ApiError::invalid_input("unknown export status".into()));
             }
             let job = repository

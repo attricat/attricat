@@ -209,7 +209,7 @@ impl HostState {
                     )
                     .await
                     .map_err(error)?;
-                counter!("attricat_extension_export_pushes_total", "outcome" => mapping.status.clone())
+                counter!("attricat_extension_export_pushes_total", "outcome" => mapping.status.as_str())
                     .increment(1);
                 bounded_serialize(&json!({"mapping": mapping}))
             }

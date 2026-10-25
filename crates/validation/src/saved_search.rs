@@ -1,6 +1,7 @@
 //! The Explorer search state stored by named views, share links and saved
 //! searches that solution packs install. Every write path validates and
 //! normalizes the state here, so equal searches are stored identically.
+use attricat_domain::states::ExportStatus;
 use attricat_domain::value_type::ValueType;
 use serde_json::Value;
 
@@ -83,7 +84,7 @@ fn valid_export_status(filter: &Value) -> bool {
             && filter
                 .get("status")
                 .and_then(Value::as_str)
-                .is_some_and(|status| crate::EXPORT_STATUSES.contains(&status))
+                .is_some_and(|status| ExportStatus::parse(status).is_some())
     })
 }
 

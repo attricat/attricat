@@ -9,6 +9,7 @@
 //! that is not newer than the one already pushed, and leases the row so an
 //! event handler and a connector job never push the same record at once.
 
+use attricat_domain::states::ExportStatus;
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -38,8 +39,6 @@ pub(crate) fn current_destination(mapping: &str) -> String {
     )
 }
 
-/// The per-record export statuses, in the order the UI lists them.
-pub const EXPORT_STATUSES: &[&str] = attricat_validation::EXPORT_STATUSES;
 /// The most mapping rows one page returns.
 pub const MAX_EXPORT_MAPPING_PAGE: u32 = 100;
 /// The most records one retry request may select.
@@ -115,7 +114,8 @@ pub struct ExportMapping {
     pub external_ids: Value,
     pub content_hash: Option<String>,
     pub record_revision: i64,
-    pub status: String,
+    #[sqlx(try_from = "String")]
+    pub status: ExportStatus,
     pub error: Option<Value>,
     pub attempts: i32,
     pub retry_requested_at: Option<DateTime<Utc>>,
@@ -188,7 +188,8 @@ pub struct ExportConnectionLabel {
 pub struct ExportStatusCount {
     pub extension_id: String,
     pub connection: Option<String>,
-    pub status: String,
+    #[sqlx(try_from = "String")]
+    pub status: ExportStatus,
     pub count: i64,
 }
 
@@ -427,7 +428,7 @@ impl AttricatRepository {
                 "mapping page limit must be 1-{MAX_EXPORT_MAPPING_PAGE}"
             )));
         }
-        if status.is_some_and(|status| !EXPORT_STATUSES.contains(&status)) {
+        if status.is_some_and(|status| ExportStatus::parse(status).is_none()) {
             return Err(invalid("unknown export status"));
         }
         let mut rows: Vec<ExportMapping> = sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::text IS NULL OR status=$4) AND ($5::uuid IS NULL OR record_id>$5) AND (NOT $7 OR ((status='withdrawn' OR EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=extension_export_mappings.workspace_id AND r.id=extension_export_mappings.record_id AND r.deleted_at IS NULL)) AND {})) ORDER BY record_id LIMIT $6", connection_is("connection", "$3", connection), current_destination("extension_export_mappings")))
@@ -565,7 +566,10 @@ impl AttricatRepository {
         // because its commit would be refused after the push. A withdrawal
         // does not settle its own revision for a push: a record published
         // again unchanged comes back at the revision it was withdrawn at.
-        let settled = matches!(mapping.status.as_str(), "synced" | "rejected");
+        let settled = matches!(
+            mapping.status,
+            ExportStatus::Synced | ExportStatus::Rejected
+        );
         if mapping.record_revision > record_revision
             || (!force
                 && settled
@@ -648,9 +652,8 @@ impl AttricatRepository {
         update: ExportMappingUpdate,
     ) -> Result<(ExportMapping, ExportMapping), RepositoryError> {
         check_connection(connection)?;
-        if !EXPORT_STATUSES.contains(&update.status.as_str()) {
-            return Err(invalid("unknown export status"));
-        }
+        let status =
+            ExportStatus::parse(&update.status).ok_or_else(|| invalid("unknown export status"))?;
         if let Some(Some(external_id)) = &update.external_id
             && (external_id.is_empty() || external_id.len() > MAX_EXTERNAL_ID_BYTES)
         {
@@ -684,7 +687,7 @@ impl AttricatRepository {
         } = self
             .locked_mapping(&mut transaction, extension_id, connection, record_id)
             .await?;
-        if deleted && update.status != "withdrawn" {
+        if deleted && status != ExportStatus::Withdrawn {
             // A refused commit still ends the caller's own lease; a mapping
             // the lock created is not kept.
             let own = match lease {
@@ -765,7 +768,7 @@ impl AttricatRepository {
         // moves its settle time.
         if rejection
             && !holds_lease
-            && mapping.status == "rejected"
+            && mapping.status == ExportStatus::Rejected
             && mapping.lease_token.is_none()
             && mapping.record_revision >= revision
         {
@@ -773,10 +776,13 @@ impl AttricatRepository {
             return Ok((mapping.clone(), mapping));
         }
         let failed = matches!(
-            update.status.as_str(),
-            "rejected" | "retrying" | "uncertain"
+            status,
+            ExportStatus::Rejected | ExportStatus::Retrying | ExportStatus::Uncertain
         );
-        let settled = matches!(update.status.as_str(), "synced" | "withdrawn" | "rejected");
+        let settled = matches!(
+            status,
+            ExportStatus::Synced | ExportStatus::Withdrawn | ExportStatus::Rejected
+        );
         let committed: ExportMapping = sqlx::query_as(&format!(
             "UPDATE extension_export_mappings SET status=$5,record_revision=$6,\
              external_id=CASE WHEN $7 THEN $8 ELSE external_id END,\
@@ -795,14 +801,14 @@ impl AttricatRepository {
         .bind(extension_id)
         .bind(connection)
         .bind(record_id)
-        .bind(&update.status)
+        .bind(status.as_str())
         .bind(revision)
         .bind(update.external_id.is_some())
         .bind(update.external_id.clone().flatten())
         .bind(&update.external_ids)
         .bind(update.content_hash.is_some())
         .bind(update.content_hash.clone().flatten())
-        .bind(if update.status == "synced" { None } else { update.error.clone() })
+        .bind(if status == ExportStatus::Synced { None } else { update.error.clone() })
         .bind(failed)
         .bind(settled)
         // Only a leased result tells when its attempt began; an unleased
@@ -902,7 +908,7 @@ impl AttricatRepository {
     ) -> Result<RejectionRecord, RepositoryError> {
         let result = async {
             let update = ExportMappingUpdate {
-                status: "rejected".into(),
+                status: ExportStatus::Rejected.as_str().into(),
                 record_revision: record_revision.filter(|revision| *revision >= 0),
                 error: Some(json!({"code": code, "message": message})),
                 ..Default::default()
@@ -922,7 +928,7 @@ impl AttricatRepository {
             // A rejection the mapping already recorded unleased is a repeat;
             // `before` is the mapping as the commit found it under its lock.
             Ok(before) => Ok(
-                if before.status == "rejected"
+                if before.status == ExportStatus::Rejected
                     && before.lease_token.is_none()
                     && record_revision.is_none_or(|revision| before.record_revision >= revision)
                 {
@@ -1029,7 +1035,7 @@ impl AttricatRepository {
         limit: i64,
     ) -> Result<Option<Vec<Uuid>>, RepositoryError> {
         check_connection(connection)?;
-        if !EXPORT_STATUSES.contains(&status) {
+        if ExportStatus::parse(status).is_none() {
             return Err(invalid("unknown export status"));
         }
         let ids: Vec<Uuid> = sqlx::query_scalar(&format!("SELECT m.record_id FROM extension_export_mappings m JOIN records r ON r.workspace_id=m.workspace_id AND r.id=m.record_id WHERE m.workspace_id=$1 AND m.extension_id=$2 AND {} AND m.status=$4 AND r.blueprint_id=$5 AND r.deleted_at IS NULL AND {} ORDER BY m.record_id LIMIT $6", connection_is("m.connection", "$3", connection), current_destination("m")))
@@ -1135,7 +1141,7 @@ impl AttricatRepository {
     ) -> Result<Vec<Uuid>, RepositoryError> {
         check_connection(selection.connection.as_deref())?;
         if let Some(status) = &selection.status
-            && !EXPORT_STATUSES.contains(&status.as_str())
+            && ExportStatus::parse(status).is_none()
         {
             return Err(invalid("unknown export status"));
         }

@@ -36,6 +36,21 @@ crate::code_enum! {
 }
 
 crate::code_enum! {
+    /// Where a record's export to one destination stands, in the order the
+    /// UI lists them. Saved Explorer searches filter by them too.
+    pub enum ExportStatus (UnknownExportStatus: "export status") {
+        Pending => "pending",
+        Retrying => "retrying",
+        Uncertain => "uncertain",
+        Rejected => "rejected",
+        Synced => "synced",
+        /// The record was removed from the destination. A deleted record
+        /// accepts only this commit.
+        Withdrawn => "withdrawn",
+    }
+}
+
+crate::code_enum! {
     /// Where a leased workflow, rule or extension operation run stands.
     pub enum RunStatus (UnknownRunStatus: "run status") {
         Pending => "pending",
@@ -89,5 +104,10 @@ mod tests {
             RevisionStatus::parse,
         );
         crate::codes::assert_codes_round_trip(RunStatus::ALL, RunStatus::as_str, RunStatus::parse);
+        crate::codes::assert_codes_round_trip(
+            ExportStatus::ALL,
+            ExportStatus::as_str,
+            ExportStatus::parse,
+        );
     }
 }

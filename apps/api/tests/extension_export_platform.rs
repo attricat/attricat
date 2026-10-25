@@ -5,6 +5,7 @@
 
 mod support;
 
+use api::states::ExportStatus;
 use std::{sync::Arc, time::Duration};
 
 use api::{
@@ -502,7 +503,7 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(mapping.status, "retrying");
+    assert_eq!(mapping.status, ExportStatus::Retrying);
     assert!(mapping.lease_token.is_none());
     repository
         .export_mapping_commit(
