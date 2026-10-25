@@ -2642,7 +2642,7 @@ async fn plan_validates_prefix_and_reports_existing_code_conflicts(pool: PgPool)
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn apply_joins_actions_to_mappings_by_logical_key_not_position(pool: PgPool) {
+async fn apply_runs_reverse_declared_dependencies_in_dependency_order(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let plan = create_plan(
@@ -2654,34 +2654,19 @@ async fn apply_joins_actions_to_mappings_by_logical_key_not_position(pool: PgPoo
     .await;
     assert_eq!(plan.status(), StatusCode::CREATED);
     let plan = plan.json::<Value>().await.unwrap();
-    let plan_id = plan["id"].as_str().unwrap().parse::<Uuid>().unwrap();
-    assert_eq!(
-        plan["actions"]
+    let logical_keys = |entries: &Value| {
+        entries
             .as_array()
             .unwrap()
             .iter()
-            .map(|action| action["logical_key"].as_str().unwrap())
-            .collect::<Vec<_>>(),
+            .map(|entry| entry["logical_key"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    // The category is declared after the product that depends on it.
+    assert_eq!(
+        logical_keys(&plan["actions"]),
         ["blueprints/category", "blueprints/product"]
     );
-    // Simulate a legacy create-only plan, which predates the versioned digest.
-    // Its mappings preserve an independent position space; reverse that space
-    // to prove legacy apply joins evidence by logical key.
-    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_format=NULL,resource_evidence_sha256=NULL WHERE id=$1")
-        .bind(plan_id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("UPDATE solution_pack_plan_mappings SET position=position+10 WHERE plan_id=$1")
-        .bind(plan_id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("UPDATE solution_pack_plan_mappings SET position=11-position WHERE plan_id=$1")
-        .bind(plan_id)
-        .execute(&pool)
-        .await
-        .unwrap();
     assert_eq!(
         apply_plan(&client, &base_url, plan["id"].as_str().unwrap())
             .await
@@ -2793,7 +2778,7 @@ async fn mapped_plan_digest_rejects_kind_downgrade_and_resource_row_removal(pool
         .unwrap()
         .parse::<Uuid>()
         .unwrap();
-    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_format=NULL,resource_evidence_sha256=NULL WHERE id=$1")
+    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_sha256=NULL WHERE id=$1")
         .bind(missing_digest_id)
         .execute(&pool)
         .await
@@ -2861,39 +2846,6 @@ async fn mapped_plan_digest_rejects_kind_downgrade_and_resource_row_removal(pool
             .await
             .unwrap(),
         blueprint_count_before
-    );
-    server.abort();
-}
-
-#[sqlx::test(migrations = "./migrations")]
-async fn legacy_create_only_plan_without_resource_digest_still_applies(pool: PgPool) {
-    let (base_url, server) = start_server(pool.clone()).await;
-    let client = authenticated_client();
-    let plan = create_plan(&client, &base_url, valid_archive(), "legacy").await;
-    assert_eq!(plan.status(), StatusCode::CREATED);
-    let plan = plan.json::<Value>().await.unwrap();
-    let plan_id = plan["id"].as_str().unwrap().parse::<Uuid>().unwrap();
-    assert_eq!(
-        sqlx::query_as::<_, (Option<String>, Option<i16>)>(
-            "SELECT resource_evidence_sha256,resource_evidence_format FROM solution_pack_plans WHERE id=$1"
-        )
-        .bind(plan_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap()
-        .1,
-        Some(2)
-    );
-    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_format=NULL,resource_evidence_sha256=NULL WHERE id=$1")
-        .bind(plan_id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    assert_eq!(
-        apply_plan(&client, &base_url, &plan_id.to_string())
-            .await
-            .status(),
-        StatusCode::OK
     );
     server.abort();
 }
@@ -4256,37 +4208,33 @@ async fn satisfied_navigation_step_is_durable_and_visibility_change_is_stale(poo
         .execute(&pool)
         .await
         .unwrap();
-    let satisfied = create_plan_with_publication(
+    let satisfied = create_plan_with_maps(
         &client,
         &base_url,
         archive_with_explore_navigation(),
         "satisfied",
         "publish",
+        &[("blueprints/product", "satisfied_product")],
     )
     .await
     .json::<Value>()
     .await
     .unwrap();
+    assert_eq!(satisfied["ready"], true, "{satisfied}");
     assert_eq!(
         satisfied["actions"].as_array().unwrap().last().unwrap()["action"],
         "satisfied"
     );
-    // Simulate a legacy create/workspace-only plan without a versioned digest,
-    // then make only the persisted satisfied setting step executable to exercise
-    // its application/retry contract without existing-resource adoption.
-    sqlx::query("UPDATE solution_pack_plans SET ready=true,resource_evidence_format=NULL,resource_evidence_sha256=NULL WHERE id=$1")
-        .bind(satisfied["id"].as_str().unwrap().parse::<Uuid>().unwrap())
-        .execute(&pool)
-        .await
-        .unwrap();
     let applied = apply_plan(&client, &base_url, satisfied["id"].as_str().unwrap()).await;
     assert_eq!(applied.status(), StatusCode::OK);
     let applied = applied.json::<Value>().await.unwrap();
-    assert_eq!(applied["steps"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        applied["steps"][0]["result_snapshot"]["outcome"],
-        "satisfied"
-    );
+    let setting_step = applied["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|step| step["resource_kind"] == "workspace_setting")
+        .unwrap();
+    assert_eq!(setting_step["result_snapshot"]["outcome"], "satisfied");
 
     sqlx::query("UPDATE workspaces SET settings=jsonb_set(settings,'{explore_navigation}','[]'::jsonb,true) WHERE id=$1")
         .bind(workspace_id)
@@ -4791,28 +4739,15 @@ async fn failed_step_is_durable_and_retry_resumes_without_duplicate_completed_re
         .await
         .unwrap();
     let plan_id = plan["id"].as_str().unwrap().parse::<Uuid>().unwrap();
-    let original_payload: Value = sqlx::query_scalar(
-        "SELECT normalized_payload FROM solution_pack_plan_actions WHERE plan_id=$1 AND logical_key='blueprints/product'",
-    )
-    .bind(plan_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    // Exercise durable step failure compatibility through the legacy
-    // create-only path, which intentionally has no resource digest.
-    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_format=NULL,resource_evidence_sha256=NULL WHERE id=$1")
-        .bind(plan_id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("UPDATE solution_pack_plan_actions SET normalized_payload='{}'::jsonb WHERE plan_id=$1 AND logical_key='blueprints/product'")
-        .bind(plan_id)
+    // A constraint the product insert violates makes its step fail as an
+    // ordinary error without touching the reviewed plan evidence.
+    sqlx::query("ALTER TABLE blueprints ADD CONSTRAINT test_block_resume_product CHECK (code IS DISTINCT FROM 'resume_product') NOT VALID")
         .execute(&pool)
         .await
         .unwrap();
 
     let failed = apply_plan(&client, &base_url, &plan_id.to_string()).await;
-    assert_eq!(failed.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(failed.status(), StatusCode::INTERNAL_SERVER_ERROR);
     assert_eq!(
         sqlx::query_scalar::<_, String>(
             "SELECT state FROM solution_pack_applications WHERE plan_id=$1"
@@ -4843,9 +4778,7 @@ async fn failed_step_is_durable_and_retry_resumes_without_duplicate_completed_re
         .unwrap(),
         1
     );
-    sqlx::query("UPDATE solution_pack_plan_actions SET normalized_payload=$2 WHERE plan_id=$1 AND logical_key='blueprints/product'")
-        .bind(plan_id)
-        .bind(original_payload)
+    sqlx::query("ALTER TABLE blueprints DROP CONSTRAINT test_block_resume_product")
         .execute(&pool)
         .await
         .unwrap();

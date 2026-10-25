@@ -1549,28 +1549,7 @@ impl AttricatRepository {
                 .execute(&mut *tx)
                 .await?;
         }
-        let evidence_format = if !staged_sample_files.is_empty() {
-            5_i16
-        } else if include_sample_data {
-            4_i16
-        } else if manifest.resources.presentation_assets.is_empty() {
-            2_i16
-        } else {
-            3_i16
-        };
-        let evidence_sha256 = match evidence_format {
-            5 => plan_resource_evidence_sha256_v5(&mut tx, workspace_id, id).await?,
-            4 => plan_resource_evidence_sha256_v4(&mut tx, workspace_id, id).await?,
-            3 => plan_resource_evidence_sha256_v3(&mut tx, workspace_id, id).await?,
-            _ => plan_resource_evidence_sha256_v2(&mut tx, workspace_id, id).await?,
-        };
-        sqlx::query("UPDATE solution_pack_plans SET resource_evidence_sha256=$3,resource_evidence_format=$4 WHERE workspace_id=$1 AND id=$2")
-            .bind(workspace_id)
-            .bind(id)
-            .bind(evidence_sha256)
-            .bind(evidence_format)
-            .execute(&mut *tx)
-            .await?;
+        seal_plan_resource_evidence(&mut tx, workspace_id, id).await?;
         insert_plan_checks(&mut tx, workspace_id, id, pack.checks()).await?;
         let mut audit_repository = self.clone();
         if let Some(audit) = audit_repository.audit_context.as_mut() {
@@ -1657,21 +1636,7 @@ impl AttricatRepository {
                 .bind(draft.ready)
                 .execute(&mut *finalize)
                 .await?;
-            let evidence_format: Option<i16> = sqlx::query_scalar("SELECT resource_evidence_format FROM solution_pack_plans WHERE workspace_id=$1 AND id=$2")
-                .bind(workspace_id).bind(id).fetch_one(&mut *finalize).await?;
-            let evidence_sha256 = if evidence_format == Some(5) {
-                plan_resource_evidence_sha256_v5(&mut finalize, workspace_id, id).await?
-            } else if evidence_format == Some(4) {
-                plan_resource_evidence_sha256_v4(&mut finalize, workspace_id, id).await?
-            } else {
-                plan_resource_evidence_sha256_v3(&mut finalize, workspace_id, id).await?
-            };
-            sqlx::query("UPDATE solution_pack_plans SET resource_evidence_sha256=$3 WHERE workspace_id=$1 AND id=$2")
-                .bind(workspace_id)
-                .bind(id)
-                .bind(evidence_sha256)
-                .execute(&mut *finalize)
-                .await?;
+            seal_plan_resource_evidence(&mut finalize, workspace_id, id).await?;
             finalize.commit().await?;
         }
         self.get_solution_pack_plan(id)
@@ -2067,51 +2032,35 @@ async fn validate_sample_staging_integrity(
     Ok(())
 }
 
-/// Format 5 adds staged sample-file evidence to format 4.
-async fn plan_resource_evidence_sha256_v5(
+/// Stores the digest of a plan's persisted evidence once its rows are written.
+async fn seal_plan_resource_evidence(
     tx: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
     plan_id: Uuid,
-) -> Result<String, RepositoryError> {
-    let base = plan_resource_evidence_sha256_v4(tx, workspace_id, plan_id).await?;
-    let files: Value = sqlx::query_scalar(
-        "SELECT COALESCE(jsonb_agg(jsonb_build_object('path',path,'file_id',file_id,'object_key',object_key,'filename',filename,'media_type',media_type,'byte_size',byte_size,'sha256',sha256) ORDER BY path),'[]'::jsonb) FROM solution_pack_plan_sample_files WHERE workspace_id=$1 AND plan_id=$2",
+) -> Result<(), RepositoryError> {
+    let evidence_sha256 = plan_resource_evidence_sha256(tx, workspace_id, plan_id).await?;
+    sqlx::query(
+        "UPDATE solution_pack_plans SET resource_evidence_sha256=$3 WHERE workspace_id=$1 AND id=$2",
     )
     .bind(workspace_id)
     .bind(plan_id)
-    .fetch_one(&mut **tx)
+    .bind(evidence_sha256)
+    .execute(&mut **tx)
     .await?;
-    let encoded = serde_json::to_vec(&(base, files))
-        .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
-    Ok(format!("{:x}", Sha256::digest(encoded)))
+    Ok(())
 }
 
-async fn plan_resource_evidence_sha256_v4(
-    tx: &mut Transaction<'_, Postgres>,
-    workspace_id: Uuid,
-    plan_id: Uuid,
-) -> Result<String, RepositoryError> {
-    let base = plan_resource_evidence_sha256_v3(tx, workspace_id, plan_id).await?;
-    let sample_header: Value = sqlx::query_scalar(
-        "SELECT jsonb_build_object('sample_data_selected',sample_data_selected,'sample_declaration_sha256',sample_declaration_sha256,'sample_record_count',sample_record_count,'sample_automation_warning',sample_automation_warning) FROM solution_pack_plans WHERE workspace_id=$1 AND id=$2",
-    )
-    .bind(workspace_id).bind(plan_id).fetch_one(&mut **tx).await?;
-    let sample_records: Value = sqlx::query_scalar(
-        "SELECT COALESCE(jsonb_agg(jsonb_build_object('position',position,'logical_key',logical_key,'target_id',target_id,'blueprint_logical_key',blueprint_logical_key,'blueprint_id',blueprint_id,'blueprint_version',blueprint_version,'canonical_declaration_sha256',canonical_declaration_sha256,'scalar_count',scalar_count,'relationship_target_count',relationship_target_count) ORDER BY position),'[]'::jsonb) FROM solution_pack_plan_sample_evidence WHERE workspace_id=$1 AND plan_id=$2",
-    )
-    .bind(workspace_id).bind(plan_id).fetch_one(&mut **tx).await?;
-    let encoded = serde_json::to_vec(&(base, sample_header, sample_records))
-        .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
-    Ok(format!("{:x}", Sha256::digest(encoded)))
-}
-
-async fn plan_resource_evidence_sha256_v3(
+/// Digest of every persisted plan row apply trusts: the header, mappings,
+/// private actions, staged asset objects, extension requirements and pinned
+/// releases, and the selected sample evidence and staged sample files. Every
+/// section is always present, empty when the plan has none.
+async fn plan_resource_evidence_sha256(
     tx: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
     plan_id: Uuid,
 ) -> Result<String, RepositoryError> {
     let header: Value = sqlx::query_scalar(
-        "SELECT jsonb_build_object('format_version',2,'plan_id',p.id,'workspace_id',p.workspace_id,'archive_sha256',p.archive_sha256,'pack_id',p.pack_id,'pack_version',p.pack_version,'prefix',p.prefix,'blueprint_publication',p.blueprint_publication,'ready',p.ready) FROM solution_pack_plans p WHERE p.workspace_id=$1 AND p.id=$2",
+        "SELECT jsonb_build_object('plan_id',id,'workspace_id',workspace_id,'archive_sha256',archive_sha256,'pack_id',pack_id,'pack_version',pack_version,'prefix',prefix,'blueprint_publication',blueprint_publication,'ready',ready,'sample_data_selected',sample_data_selected,'sample_declaration_sha256',sample_declaration_sha256,'sample_record_count',sample_record_count,'sample_automation_warning',sample_automation_warning) FROM solution_pack_plans WHERE workspace_id=$1 AND id=$2",
     )
     .bind(workspace_id)
     .bind(plan_id)
@@ -2145,109 +2094,38 @@ async fn plan_resource_evidence_sha256_v3(
     .bind(plan_id)
     .fetch_all(&mut **tx)
     .await?;
-    let installs = extension_install_evidence(tx, workspace_id, plan_id).await?;
-    let encoded = if installs.is_empty() {
-        serde_json::to_vec(&(
-            header,
-            mappings,
-            actions,
-            asset_objects,
-            extension_requirements,
-        ))
-    } else {
-        serde_json::to_vec(&(
-            header,
-            mappings,
-            actions,
-            asset_objects,
-            extension_requirements,
-            installs,
-        ))
-    }
-    .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
-    Ok(format!("{:x}", Sha256::digest(encoded)))
-}
-
-async fn plan_resource_evidence_sha256_v2(
-    tx: &mut Transaction<'_, Postgres>,
-    workspace_id: Uuid,
-    plan_id: Uuid,
-) -> Result<String, RepositoryError> {
-    let header: Value = sqlx::query_scalar(
-        "SELECT jsonb_build_object('format_version',2,'plan_id',p.id,'workspace_id',p.workspace_id,'archive_sha256',p.archive_sha256,'pack_id',p.pack_id,'pack_version',p.pack_version,'prefix',p.prefix,'blueprint_publication',p.blueprint_publication,'ready',p.ready) FROM solution_pack_plans p WHERE p.workspace_id=$1 AND p.id=$2",
-    )
-    .bind(workspace_id)
-    .bind(plan_id)
-    .fetch_one(&mut **tx)
-    .await?;
-    let mappings = sqlx::query_as::<_, PlanEvidenceMapping>(
-        "SELECT position,resource_kind,logical_key,target_id,target_code,target_version,mapping_kind,snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
-    )
-    .bind(workspace_id)
-    .bind(plan_id)
-    .fetch_all(&mut **tx)
-    .await?;
-    let actions = sqlx::query_as::<_, PlanEvidenceAction>(
-        "SELECT position,resource_kind,logical_key,action,reason_code,summary,normalized_payload,preconditions FROM solution_pack_plan_actions WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
-    )
-    .bind(workspace_id)
-    .bind(plan_id)
-    .fetch_all(&mut **tx)
-    .await?;
-    let extension_requirements = sqlx::query_as::<_, PlanEvidenceExtensionRequirement>(
-        "SELECT position,logical_key,extension_id,version_requirement,required,configuration_template_path,configuration_template_sha256,status,reason_code,installed_release_id,installed_version,installed_state,configuration_matches,evaluation_template FROM solution_pack_plan_extension_requirements WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
-    )
-    .bind(workspace_id)
-    .bind(plan_id)
-    .fetch_all(&mut **tx)
-    .await?;
-    let installs = extension_install_evidence(tx, workspace_id, plan_id).await?;
-    let encoded = if installs.is_empty() {
-        serde_json::to_vec(&(header, mappings, actions, extension_requirements))
-    } else {
-        serde_json::to_vec(&(header, mappings, actions, extension_requirements, installs))
-    }
-    .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
-    Ok(format!("{:x}", Sha256::digest(encoded)))
-}
-
-/// Pinned official releases are evidence only when a plan installs any, so
-/// digests of plans without them keep their original encoding.
-async fn extension_install_evidence(
-    tx: &mut Transaction<'_, Postgres>,
-    workspace_id: Uuid,
-    plan_id: Uuid,
-) -> Result<Vec<PlanEvidenceExtensionInstall>, RepositoryError> {
-    Ok(sqlx::query_as::<_, PlanEvidenceExtensionInstall>(
+    let installs = sqlx::query_as::<_, PlanEvidenceExtensionInstall>(
         "SELECT position,logical_key,extension_id,version,installed_release_id,repository,release_id,tag_name,asset_id,asset_name,download_url,archive_sha256,manifest_sha256,configuration,required_grants FROM solution_pack_plan_extension_releases WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
     )
     .bind(workspace_id)
     .bind(plan_id)
     .fetch_all(&mut **tx)
-    .await?)
-}
-
-async fn legacy_plan_resource_evidence_sha256(
-    tx: &mut Transaction<'_, Postgres>,
-    workspace_id: Uuid,
-    plan_id: Uuid,
-) -> Result<String, RepositoryError> {
-    let mappings = sqlx::query_as::<_, PlanEvidenceMapping>(
-        "SELECT position,resource_kind,logical_key,target_id,target_code,target_version,mapping_kind,snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+    .await?;
+    let sample_records: Value = sqlx::query_scalar(
+        "SELECT COALESCE(jsonb_agg(jsonb_build_object('position',position,'logical_key',logical_key,'target_id',target_id,'blueprint_logical_key',blueprint_logical_key,'blueprint_id',blueprint_id,'blueprint_version',blueprint_version,'canonical_declaration_sha256',canonical_declaration_sha256,'scalar_count',scalar_count,'relationship_target_count',relationship_target_count) ORDER BY position),'[]'::jsonb) FROM solution_pack_plan_sample_evidence WHERE workspace_id=$1 AND plan_id=$2",
     )
     .bind(workspace_id)
     .bind(plan_id)
-    .fetch_all(&mut **tx)
+    .fetch_one(&mut **tx)
     .await?;
-    let actions = sqlx::query_as::<_, PlanEvidenceAction>(
-        "SELECT position,resource_kind,logical_key,action,reason_code,summary,normalized_payload,preconditions FROM solution_pack_plan_actions WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+    let sample_files: Value = sqlx::query_scalar(
+        "SELECT COALESCE(jsonb_agg(jsonb_build_object('path',path,'file_id',file_id,'object_key',object_key,'filename',filename,'media_type',media_type,'byte_size',byte_size,'sha256',sha256) ORDER BY path),'[]'::jsonb) FROM solution_pack_plan_sample_files WHERE workspace_id=$1 AND plan_id=$2",
     )
     .bind(workspace_id)
     .bind(plan_id)
-    .fetch_all(&mut **tx)
+    .fetch_one(&mut **tx)
     .await?;
-    let encoded = serde_json::to_vec(&(mappings, actions))
-        .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
+    let encoded = serde_json::to_vec(&(
+        header,
+        mappings,
+        actions,
+        asset_objects,
+        extension_requirements,
+        installs,
+        sample_records,
+        sample_files,
+    ))
+    .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
     Ok(format!("{:x}", Sha256::digest(encoded)))
 }
 
@@ -2687,65 +2565,28 @@ impl AttricatRepository {
         .bind(plan_id)
         .fetch_all(&mut **tx)
         .await?;
-        let (stored_evidence_sha256, evidence_format) = sqlx::query_as::<_, (Option<String>, Option<i16>)>(
-            "SELECT resource_evidence_sha256,resource_evidence_format FROM solution_pack_plans WHERE workspace_id=$1 AND id=$2",
+        let stored_evidence_sha256: Option<String> = sqlx::query_scalar(
+            "SELECT resource_evidence_sha256 FROM solution_pack_plans WHERE workspace_id=$1 AND id=$2",
         )
         .bind(workspace_id)
         .bind(plan_id)
         .fetch_one(&mut **tx)
         .await?;
-        if matches!(evidence_format, Some(2..=5)) && stored_evidence_sha256.is_none() {
-            return Err(RepositoryError::InvalidSolutionPackPlan(
+        let stored_evidence_sha256 = stored_evidence_sha256.ok_or_else(|| {
+            RepositoryError::InvalidSolutionPackPlan(
                 "persisted solution-pack resource evidence is missing".into(),
-            ));
-        }
-        if let Some(stored_evidence_sha256) = stored_evidence_sha256 {
-            // A persisted digest is authoritative even if every covered row or its
-            // mapping/action discriminator was modified after review.
-            let actual = match evidence_format {
-                Some(5) => plan_resource_evidence_sha256_v5(tx, workspace_id, plan_id).await?,
-                Some(4) => plan_resource_evidence_sha256_v4(tx, workspace_id, plan_id).await?,
-                Some(3) => plan_resource_evidence_sha256_v3(tx, workspace_id, plan_id).await?,
-                Some(2) => plan_resource_evidence_sha256_v2(tx, workspace_id, plan_id).await?,
-                _ => legacy_plan_resource_evidence_sha256(tx, workspace_id, plan_id).await?,
-            };
-            if stored_evidence_sha256 != actual {
-                return Err(RepositoryError::InvalidSolutionPackPlan(
-                    "persisted solution-pack resource evidence is inconsistent".into(),
-                ));
-            }
-            if matches!(evidence_format, Some(4 | 5)) {
-                validate_sample_staging_integrity(tx, workspace_id, plan_id).await?;
-            }
-        } else if mappings
-            .iter()
-            .any(|mapping| mapping.mapping_kind == "existing")
-        {
-            // Only legacy create/workspace-only plans predate this evidence column.
-            return Err(RepositoryError::InvalidSolutionPackPlan(
-                "persisted existing mapping is missing resource evidence".into(),
-            ));
-        }
-        // Seed resource kinds only exist in plans with a resource digest.
-        // Rows of these kinds without one are legacy context evidence from
-        // before contexts were pack resources, and must not be applied.
-        if evidence_format.is_none()
-            && mappings.iter().any(|mapping| {
-                matches!(
-                    mapping.resource_kind.as_str(),
-                    "prerequisite"
-                        | "context"
-                        | "publication_channel"
-                        | "rule"
-                        | "workflow"
-                        | "saved_search"
-                )
-            })
+            )
+        })?;
+        // The persisted digest is authoritative even if every covered row or its
+        // mapping/action discriminator was modified after review.
+        if stored_evidence_sha256
+            != plan_resource_evidence_sha256(tx, workspace_id, plan_id).await?
         {
             return Err(RepositoryError::InvalidSolutionPackPlan(
-                "unsupported persisted resource mapping".into(),
+                "persisted solution-pack resource evidence is inconsistent".into(),
             ));
         }
+        validate_sample_staging_integrity(tx, workspace_id, plan_id).await?;
         if mappings.len() != actions.len() {
             return Err(RepositoryError::InvalidSolutionPackPlan(
                 "persisted resource mappings and actions do not match".into(),
@@ -5807,139 +5648,6 @@ mod tests {
         );
     }
 
-    async fn insert_legacy_context_plan(
-        pool: &sqlx::PgPool,
-        action: &str,
-        with_application_step: bool,
-    ) -> (Uuid, Option<Uuid>) {
-        let workspace_id = AttricatRepository::DEFAULT_WORKSPACE_ID;
-        let plan_id = Uuid::new_v4();
-        sqlx::query("INSERT INTO solution_pack_plans (id,workspace_id,source_kind,source_metadata,archive_sha256,manifest_version,pack_id,pack_name,pack_version,pack_description,host_api,prefix,blueprint_publication,ready,expires_at) VALUES ($1,$2,'local_archive','{\"side_loaded\":true}'::jsonb,$3,1,$4,'Legacy context','1.0.0','Legacy context evidence','^1.0','legacy','draft',true,clock_timestamp() + interval '24 hours')")
-            .bind(plan_id)
-            .bind(workspace_id)
-            .bind("0".repeat(64))
-            .bind(format!("attricat.legacy-context.{plan_id}"))
-            .execute(pool)
-            .await
-            .unwrap();
-        let target_id = Uuid::new_v4();
-        sqlx::query("INSERT INTO solution_pack_plan_mappings (plan_id,workspace_id,position,resource_kind,logical_key,target_id,target_code,mapping_kind,snapshot) VALUES ($1,$2,0,'context','contexts/legacy',$3,'legacy_context','create','{}'::jsonb)")
-            .bind(plan_id)
-            .bind(workspace_id)
-            .bind(target_id)
-            .execute(pool)
-            .await
-            .unwrap();
-        let normalized_payload = (action == "create")
-            .then(|| serde_json::json!({"code":"legacy_context","data":{},"parent_id":Uuid::nil(),"parent_code":"default"}));
-        let preconditions = if action == "create" {
-            serde_json::json!([{"kind":"target_absent","resource_kind":"context","code":"legacy_context"}])
-        } else {
-            serde_json::json!([])
-        };
-        sqlx::query("INSERT INTO solution_pack_plan_actions (plan_id,workspace_id,position,resource_kind,logical_key,action,reason_code,summary,normalized_payload,preconditions) VALUES ($1,$2,0,'context','contexts/legacy',$3,'legacy_context','{}'::jsonb,$4,$5)")
-            .bind(plan_id)
-            .bind(workspace_id)
-            .bind(action)
-            .bind(normalized_payload)
-            .bind(preconditions)
-            .execute(pool)
-            .await
-            .unwrap();
-        if !with_application_step {
-            return (plan_id, None);
-        }
-        let application_id = Uuid::new_v4();
-        let request_id = Uuid::new_v4();
-        sqlx::query("INSERT INTO solution_pack_applications (id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,mapping_snapshot) VALUES ($1,$2,$3,$4,$4,'local_archive','{\"side_loaded\":true}'::jsonb,$5,$6,'1.0.0','draft','running','[]'::jsonb)")
-            .bind(application_id)
-            .bind(workspace_id)
-            .bind(plan_id)
-            .bind(request_id)
-            .bind("0".repeat(64))
-            .bind(format!("attricat.legacy-context.{plan_id}"))
-            .execute(pool)
-            .await
-            .unwrap();
-        sqlx::query("INSERT INTO solution_pack_application_steps (application_id,workspace_id,position,plan_id,resource_kind,logical_key,target_id,target_code,state) VALUES ($1,$2,0,$3,'context','contexts/legacy',$4,'legacy_context','pending')")
-            .bind(application_id)
-            .bind(workspace_id)
-            .bind(plan_id)
-            .bind(target_id)
-            .execute(pool)
-            .await
-            .unwrap();
-        (plan_id, Some(application_id))
-    }
-
-    #[sqlx::test(migrations = "../../apps/api/migrations")]
-    async fn legacy_context_actions_and_steps_fail_closed(pool: sqlx::PgPool) {
-        for constraint in [
-            "solution_pack_plan_mappings_resource_kind_check",
-            "solution_pack_plan_actions_resource_kind_check",
-            "solution_pack_application_steps_resource_kind_check",
-        ] {
-            let table = if constraint.starts_with("solution_pack_plan_mappings") {
-                "solution_pack_plan_mappings"
-            } else if constraint.starts_with("solution_pack_plan_actions") {
-                "solution_pack_plan_actions"
-            } else {
-                "solution_pack_application_steps"
-            };
-            sqlx::query(&format!("ALTER TABLE {table} DROP CONSTRAINT {constraint}"))
-                .execute(&pool)
-                .await
-                .unwrap();
-        }
-        let context_count: i64 = sqlx::query_scalar("SELECT count(*) FROM attribute_contexts")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        let repository =
-            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
-        let object_store = crate::storage::FakeObjectStore::available();
-        for (action, with_step) in [("skip", false), ("create", false), ("create", true)] {
-            let (plan_id, application_id) =
-                insert_legacy_context_plan(&pool, action, with_step).await;
-            assert!(matches!(
-                repository
-                    .apply_solution_pack_plan(plan_id, &object_store)
-                    .await,
-                Err(RepositoryError::InvalidSolutionPackPlan(_))
-            ));
-            if let Some(application_id) = application_id {
-                assert_eq!(
-                    sqlx::query_scalar::<_, String>(
-                        "SELECT state FROM solution_pack_applications WHERE id=$1"
-                    )
-                    .bind(application_id)
-                    .fetch_one(&pool)
-                    .await
-                    .unwrap(),
-                    "running"
-                );
-            } else {
-                assert_eq!(
-                    sqlx::query_scalar::<_, i64>(
-                        "SELECT count(*) FROM solution_pack_applications WHERE plan_id=$1"
-                    )
-                    .bind(plan_id)
-                    .fetch_one(&pool)
-                    .await
-                    .unwrap(),
-                    0
-                );
-            }
-        }
-        assert_eq!(
-            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM attribute_contexts")
-                .fetch_one(&pool)
-                .await
-                .unwrap(),
-            context_count
-        );
-    }
-
     #[sqlx::test(migrations = "../../apps/api/migrations")]
     async fn failed_navigation_step_revalidates_and_resumes(pool: sqlx::PgPool) {
         let workspace_id = AttricatRepository::DEFAULT_WORKSPACE_ID;
@@ -5989,6 +5697,11 @@ value_type = "string"
         }]});
         sqlx::query("INSERT INTO solution_pack_plan_actions (plan_id,workspace_id,position,resource_kind,logical_key,action,reason_code,summary,normalized_payload,preconditions) VALUES ($1,$2,0,'workspace_setting',$3,'append','target_absent','{\"setting\":\"explore_navigation\"}'::jsonb,$4,'[]'::jsonb)")
             .bind(plan_id).bind(workspace_id).bind(logical_key).bind(&payload).execute(&pool).await.unwrap();
+        let mut seal = pool.begin().await.unwrap();
+        seal_plan_resource_evidence(&mut seal, workspace_id, plan_id)
+            .await
+            .unwrap();
+        seal.commit().await.unwrap();
         let request_id = Uuid::new_v4();
         sqlx::query("INSERT INTO solution_pack_applications (id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,diagnostic_code,diagnostic_message,mapping_snapshot) VALUES ($1,$2,$3,$4,$4,'local_archive','{\"side_loaded\":true}'::jsonb,$5,'attricat.retry-navigation','1.0.0','publish','failed','step_failed','synthetic transient failure','[]'::jsonb)")
             .bind(application_id).bind(workspace_id).bind(plan_id).bind(request_id).bind("0".repeat(64)).execute(&pool).await.unwrap();
@@ -6251,8 +5964,30 @@ value_type = "string"
             },
             "effective_defaults": []
         });
-        sqlx::query("INSERT INTO solution_pack_plan_sample_records (plan_id,workspace_id,position,logical_key,target_id,blueprint_logical_key,blueprint_id,blueprint_version,canonical_declaration_sha256,scalar_count,relationship_target_count,canonical_input) VALUES ($1,$2,0,'sample-records/item',$3,'blueprints/item',$4,1,$5,1,0,$6)")
-            .bind(plan_id).bind(workspace_id).bind(target_id).bind(blueprint_id).bind("2".repeat(64)).bind(canonical_input).execute(pool).await.unwrap();
+        let digest = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&canonical_input).unwrap())
+        );
+        let mut tx = pool.begin().await.unwrap();
+        SampleRecordRows {
+            positions: vec![0],
+            logical_keys: vec!["sample-records/item".to_owned()],
+            target_ids: vec![target_id],
+            blueprint_logical_keys: vec!["blueprints/item".to_owned()],
+            blueprint_ids: vec![blueprint_id],
+            blueprint_versions: vec![1],
+            digests: vec![digest],
+            scalar_counts: vec![1],
+            relationship_target_counts: vec![0],
+            canonical_inputs: vec![canonical_input],
+        }
+        .insert(&mut tx, workspace_id, plan_id)
+        .await
+        .unwrap();
+        seal_plan_resource_evidence(&mut tx, workspace_id, plan_id)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
         sqlx::query("INSERT INTO solution_pack_applications (id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,mapping_snapshot,started_at,resumable_until) VALUES ($1,$2,$3,$4,$4,'local_archive','{}'::jsonb,$5,$6,'1.0.0','publish','running','[]'::jsonb,$7,$8)")
             .bind(application_id).bind(workspace_id).bind(plan_id).bind(Uuid::new_v4()).bind("0".repeat(64)).bind(format!("attricat.lifecycle.{plan_id}")).bind(started_at).bind(resumable_until).execute(pool).await.unwrap();
         sqlx::query("INSERT INTO solution_pack_application_steps (application_id,workspace_id,position,plan_id,resource_kind,logical_key,target_id,target_code,state) VALUES ($1,$2,0,$3,'sample_record','sample-records/item',$4,'sample_record','pending')")
@@ -6514,6 +6249,16 @@ value_type = "string"
                     .execute(&pool)
                     .await
                     .unwrap();
+                // Reviewed evidence: the drift is in the workspace, not the plan.
+                let mut seal = pool.begin().await.unwrap();
+                seal_plan_resource_evidence(
+                    &mut seal,
+                    AttricatRepository::DEFAULT_WORKSPACE_ID,
+                    plan_id,
+                )
+                .await
+                .unwrap();
+                seal.commit().await.unwrap();
             } else {
                 sqlx::query("UPDATE solution_pack_application_steps SET state='completed',result_snapshot='{}'::jsonb,completed_at=clock_timestamp() WHERE application_id=$1")
                     .bind(application_id).execute(&pool).await.unwrap();

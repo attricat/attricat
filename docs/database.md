@@ -88,10 +88,13 @@ contribution keys, outlets, placement flags, and exact installed release
 identity needed for private apply-time revalidation.
 `solution_pack_plan_extension_requirements` separately stores deterministic
 required/optional compatibility outcomes and the bounded template needed for
-private apply-time revalidation. A versioned digest covers the plan header,
-mappings, private actions, and extension evaluations. Public plan responses
-expose only requirement state and template path/digest metadata, never
-definitions, templates, or installed configuration values. Archive bytes are never retained, and there are no plan
+private apply-time revalidation. One evidence digest, stored as
+`resource_evidence_sha256`, covers the plan header, mappings, private actions,
+staged asset objects, extension evaluations and pinned releases, and sample
+evidence and staged sample files; apply refuses a plan whose digest is missing
+or no longer matches. Public plan responses expose only requirement state and
+template path/digest metadata, never definitions, templates, or installed
+configuration values. Archive bytes are never retained, and there are no plan
 update routes. Planning writes its audit event in the same explicit transaction
 and never mutates catalog resources or extension lifecycle state.
 
@@ -111,7 +114,7 @@ Before an application's steps run, apply installs, configures, grants, and
 enables each `install` requirement's pinned official release through the
 ordinary extension lifecycle, reusing the installed-release ID reserved at
 planning so reviewed contribution evidence stays exact. When a plan pins
-releases, the evidence digest also covers them. Upgrades, reconfiguration of
+releases, the evidence digest covers them. Upgrades, reconfiguration of
 existing installations, removal, and pack ownership remain outside
 solution-pack application. Generic settings beyond bounded Explore
 navigation and extension layout, and export, remain deferred. Optional
