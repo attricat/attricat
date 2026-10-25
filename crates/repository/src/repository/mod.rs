@@ -1083,6 +1083,38 @@ impl AttricatRepository {
         self
     }
 
+    /// Returns a copy that audits a domain-named workspace action. A request
+    /// context keeps its actor and request identifiers; without one, the event
+    /// is attributed to the system. `metadata` fields are merged over the
+    /// request's metadata.
+    pub(crate) fn with_workspace_audit_action(
+        &self,
+        action: &str,
+        target: Value,
+        metadata: Value,
+    ) -> Self {
+        let mut audit = self.audit_context.clone().unwrap_or_else(|| AuditContext {
+            actor_user_id: None,
+            actor_token_id: None,
+            request_id: Uuid::new_v4(),
+            correlation_id: Uuid::new_v4(),
+            action: String::new(),
+            authorization_scope: serde_json::json!({"type": "workspace"}),
+            target: Value::Null,
+            metadata: serde_json::json!({}),
+            agent: None,
+        });
+        audit.action = action.to_owned();
+        audit.target = target;
+        if let (Some(existing), Value::Object(fields)) = (audit.metadata.as_object_mut(), metadata)
+        {
+            existing.extend(fields);
+        }
+        let mut repository = self.clone();
+        repository.audit_context = Some(audit);
+        repository
+    }
+
     /// Bounds subsequent user-initiated operations and related-record reads
     /// by this principal's current grants and personal-token permissions.
     pub fn with_authorization_actor(mut self, actor: AuthorizationActor) -> Self {

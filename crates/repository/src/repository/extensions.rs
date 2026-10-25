@@ -418,19 +418,13 @@ impl AttricatRepository {
         let mut transaction = self.pool.begin().await?;
         sqlx::query("INSERT INTO workspace_extension_secrets (id, workspace_id, name, value) VALUES ($1, $2, $3, $4) ON CONFLICT (workspace_id, name) DO UPDATE SET value = EXCLUDED.value, updated_at = clock_timestamp()")
             .bind(Uuid::new_v4()).bind(self.extension_workspace()).bind(name).bind(value).execute(&mut *transaction).await?;
-        let mut audit_repository = self.clone();
-        audit_repository.audit_context = Some(AuditContext {
-            actor_user_id: None,
-            actor_token_id: None,
-            request_id: Uuid::new_v4(),
-            correlation_id: Uuid::new_v4(),
-            action: "workspace.extension_secret.put".into(),
-            authorization_scope: json!({"type":"workspace"}),
-            target: json!({"type":"workspace_secret","name":name}),
-            metadata: json!({"name":name}),
-            agent: None,
-        });
-        audit_repository.write_audit_event(&mut transaction).await?;
+        self.with_workspace_audit_action(
+            "workspace.extension_secret.put",
+            json!({"type":"workspace_secret","name":name}),
+            json!({"name":name}),
+        )
+        .write_audit_event(&mut transaction)
+        .await?;
         transaction.commit().await?;
         Ok(())
     }
@@ -450,19 +444,13 @@ impl AttricatRepository {
         .rows_affected()
             > 0;
         if deleted {
-            let mut audit_repository = self.clone();
-            audit_repository.audit_context = Some(AuditContext {
-                actor_user_id: None,
-                actor_token_id: None,
-                request_id: Uuid::new_v4(),
-                correlation_id: Uuid::new_v4(),
-                action: "workspace.extension_secret.delete".into(),
-                authorization_scope: json!({"type":"workspace"}),
-                target: json!({"type":"workspace_secret","name":name}),
-                metadata: json!({"name":name}),
-                agent: None,
-            });
-            audit_repository.write_audit_event(&mut transaction).await?;
+            self.with_workspace_audit_action(
+                "workspace.extension_secret.delete",
+                json!({"type":"workspace_secret","name":name}),
+                json!({"name":name}),
+            )
+            .write_audit_event(&mut transaction)
+            .await?;
         }
         transaction.commit().await?;
         Ok(deleted)
@@ -902,26 +890,15 @@ impl AttricatRepository {
             &layout,
         )
         .await?;
-        let mut audit_repository = self.clone();
-        let mut audit = audit_repository
-            .audit_context
-            .clone()
-            .unwrap_or_else(|| AuditContext {
-                actor_user_id: None,
-                actor_token_id: None,
-                request_id: Uuid::new_v4(),
-                correlation_id: Uuid::new_v4(),
-                action: "workspace.extension_layout.set".into(),
-                authorization_scope: json!({"type":"workspace"}),
-                target: json!({"type":"workspace", "id": self.extension_workspace()}),
-                metadata: json!({}),
-                agent: None,
-            });
-        audit.action = "workspace.extension_layout.set".into();
-        audit.metadata["extension_layout"] = layout;
-        audit_repository.audit_context = Some(audit);
-        audit_repository.write_audit_event(&mut transaction).await?;
-        self.commit_mutation(transaction).await
+        // commit_mutation writes the audit row, so it must run on the
+        // re-contextualized copy to produce exactly one event.
+        self.with_workspace_audit_action(
+            "workspace.extension_layout.set",
+            json!({"type":"workspace", "id": self.extension_workspace()}),
+            json!({"extension_layout": layout}),
+        )
+        .commit_mutation(transaction)
+        .await
     }
 
     /// Resolves an artifact only through an enabled declared client UI

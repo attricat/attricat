@@ -1077,6 +1077,77 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn workspace_extension_settings_audit_once_with_the_request_actor(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let actor = Uuid::new_v4();
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, 'extension-admin@example.test')")
+        .bind(actor)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let request_id = Uuid::new_v4();
+    let repository = AttricatRepository::new(pool.clone(), workspace).with_audit_context(
+        api::repository::AuditContext {
+            actor_user_id: Some(actor),
+            actor_token_id: None,
+            request_id,
+            correlation_id: Uuid::new_v4(),
+            action: "attricat.workspace.update".into(),
+            authorization_scope: json!({"permission": "extensions.manage"}),
+            target: json!({"type": "workspace"}),
+            metadata: json!({"method": "PUT"}),
+            agent: None,
+        },
+    );
+    repository
+        .update_workspace_extension_layout(json!({"version":1,"outlets":{}}))
+        .await
+        .unwrap();
+    repository
+        .put_workspace_extension_secret("client-secret", "s3cret")
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .delete_workspace_extension_secret("client-secret")
+            .await
+            .unwrap()
+    );
+
+    let audits: Vec<(String, Option<Uuid>, Value)> = sqlx::query_as(
+        "SELECT action, actor_user_id, metadata FROM audit_events WHERE request_id = $1 ORDER BY occurred_at, action",
+    )
+    .bind(request_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let actions: Vec<_> = audits.iter().map(|(action, ..)| action.as_str()).collect();
+    assert_eq!(
+        actions,
+        [
+            "workspace.extension_layout.set",
+            "workspace.extension_secret.put",
+            "workspace.extension_secret.delete",
+        ]
+    );
+    assert!(
+        audits
+            .iter()
+            .all(|(_, actor_user_id, _)| *actor_user_id == Some(actor))
+    );
+    assert!(
+        audits
+            .iter()
+            .all(|(.., metadata)| metadata["method"] == "PUT")
+    );
+    assert!(
+        audits
+            .iter()
+            .all(|(.., metadata)| !metadata.to_string().contains("s3cret"))
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn extension_layout_replacement_rejects_non_object_roots_and_repairs_malformed_layout(
     pool: sqlx::PgPool,
 ) {
