@@ -779,18 +779,7 @@ impl AttricatRepository {
     /// Request handlers and task handlers should use this constructor (or a
     /// scope derived with [`Self::for_workspace`]).
     pub fn new(pool: PgPool, workspace_id: Uuid) -> Self {
-        Self {
-            pool,
-            workspace_id: WorkspaceScope(workspace_id),
-            audit_context: None,
-            event_context: None,
-            task_fence: None,
-            extension_id: None,
-            authorization_actor: None,
-            status_unlock: None,
-            cache: QueryCache::default(),
-            generations: None,
-        }
+        AttricatRepository::system(pool).for_workspace(workspace_id)
     }
 
     /// Creates the deliberately unscoped session/maintenance repository.
@@ -1400,18 +1389,8 @@ impl AttricatRepository {
         user_id: Uuid,
         time_zone: Option<&str>,
     ) -> Result<(), RepositoryError> {
-        let mut transaction = self.pool.begin().await?;
-        let updated = sqlx::query(
-            "UPDATE users SET time_zone = $2, updated_at = clock_timestamp() WHERE id = $1 AND state = 'active'",
-        )
-        .bind(user_id)
-        .bind(time_zone)
-        .execute(&mut *transaction)
-        .await?;
-        if updated.rows_affected() == 0 {
-            return Err(RepositoryError::NotFound("user"));
-        }
-        self.commit_mutation(transaction).await
+        self.update_active_user(user_id, "time_zone", time_zone)
+            .await
     }
 
     /// Replaces the authenticated principal's display name. Callers validate
@@ -1421,14 +1400,27 @@ impl AttricatRepository {
         user_id: Uuid,
         display_name: &str,
     ) -> Result<(), RepositoryError> {
+        self.update_active_user(user_id, "display_name", Some(display_name))
+            .await
+    }
+
+    /// Sets one text `users` column for an active user, in an audited
+    /// mutation.
+    async fn update_active_user(
+        &self,
+        user_id: Uuid,
+        column: &'static str,
+        value: Option<&str>,
+    ) -> Result<(), RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let updated = sqlx::query(
-            "UPDATE users SET display_name = $2, updated_at = clock_timestamp() WHERE id = $1 AND state = 'active'",
-        )
-        .bind(user_id)
-        .bind(display_name)
-        .execute(&mut *transaction)
-        .await?;
+        let sql = format!(
+            "UPDATE users SET {column} = $2, updated_at = clock_timestamp() WHERE id = $1 AND state = 'active'"
+        );
+        let updated = sqlx::query(&sql)
+            .bind(user_id)
+            .bind(value)
+            .execute(&mut *transaction)
+            .await?;
         if updated.rows_affected() == 0 {
             return Err(RepositoryError::NotFound("user"));
         }
