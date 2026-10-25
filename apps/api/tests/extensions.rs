@@ -1104,6 +1104,10 @@ async fn workspace_extension_settings_audit_once_with_the_request_actor(pool: sq
         .await
         .unwrap();
     repository
+        .set_workspace_extensions_enabled(true)
+        .await
+        .unwrap();
+    repository
         .put_workspace_extension_secret("client-secret", "s3cret")
         .await
         .unwrap();
@@ -1126,6 +1130,7 @@ async fn workspace_extension_settings_audit_once_with_the_request_actor(pool: sq
         actions,
         [
             "workspace.extension_layout.set",
+            "workspace.extensions_mode.set",
             "workspace.extension_secret.put",
             "workspace.extension_secret.delete",
         ]

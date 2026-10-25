@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::generations::{Generation, advance_generation};
-use super::{AttricatRepository, AuditContext, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 
 /// `extension_grants.grant_kind` values.
 const GRANT_KIND_CAPABILITY: &str = "capability";
@@ -367,28 +367,13 @@ impl AttricatRepository {
             .bind(enabled)
             .execute(&mut *transaction)
             .await?;
-        if let Some(mut audit_context) = self.audit_context.clone() {
-            audit_context.metadata["extensions_enabled"] = json!(enabled);
-            let mut audit_repository = self.clone();
-            audit_repository.audit_context = Some(audit_context);
-            audit_repository.write_audit_event(&mut transaction).await?;
-        } else {
-            let mut system_repository = self.clone();
-            system_repository.audit_context = Some(AuditContext {
-                actor_user_id: None,
-                actor_token_id: None,
-                request_id: Uuid::new_v4(),
-                correlation_id: Uuid::new_v4(),
-                action: "workspace.extensions_mode.set".into(),
-                authorization_scope: json!({"type": "workspace"}),
-                target: json!({"type": "workspace", "id": self.extension_workspace()}),
-                metadata: json!({"extensions_enabled": enabled}),
-                agent: None,
-            });
-            system_repository
-                .write_audit_event(&mut transaction)
-                .await?;
-        }
+        self.with_workspace_audit_action(
+            "workspace.extensions_mode.set",
+            json!({"type": "workspace", "id": self.extension_workspace()}),
+            json!({"extensions_enabled": enabled}),
+        )
+        .write_audit_event(&mut transaction)
+        .await?;
         transaction.commit().await?;
         Ok(())
     }
@@ -1598,25 +1583,13 @@ impl AttricatRepository {
             Generation::Extensions,
         )
         .await?;
-        if self.audit_context.is_some() {
-            self.write_audit_event(&mut transaction).await?;
-        } else {
-            let mut system_repository = self.clone();
-            system_repository.audit_context = Some(AuditContext {
-                actor_user_id: None,
-                actor_token_id: None,
-                request_id: Uuid::new_v4(),
-                correlation_id: Uuid::new_v4(),
-                action: format!("extension.{operation}"),
-                authorization_scope: json!({"type": "workspace"}),
-                target: json!({"type": "extension", "id": extension_id}),
-                metadata: json!({"operation": operation}),
-                agent: None,
-            });
-            system_repository
-                .write_audit_event(&mut transaction)
-                .await?;
-        }
+        self.with_system_audit_fallback(
+            &format!("extension.{operation}"),
+            json!({"type": "extension", "id": extension_id}),
+            json!({"operation": operation}),
+        )
+        .write_audit_event(&mut transaction)
+        .await?;
         transaction.commit().await?;
         Ok(())
     }

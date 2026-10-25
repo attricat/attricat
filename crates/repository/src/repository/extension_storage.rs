@@ -3,7 +3,7 @@ use sqlx::{Postgres, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
-use super::{AttricatRepository, AuditContext};
+use super::AttricatRepository;
 use crate::extension_policy;
 
 pub const MAX_EXTENSION_STORAGE_KEY_BYTES: usize = 256;
@@ -217,28 +217,14 @@ impl AttricatRepository {
         extension_id: &str,
         key: &str,
     ) -> Result<(), ExtensionStorageError> {
-        if self.audit_context.is_some() {
-            self.write_audit_event(&mut transaction)
-                .await
-                .map_err(|error| ExtensionStorageError::Audit(error.to_string()))?;
-        } else {
-            let mut system_repository = self.clone();
-            system_repository.audit_context = Some(AuditContext {
-                actor_user_id: None,
-                actor_token_id: None,
-                request_id: Uuid::new_v4(),
-                correlation_id: Uuid::new_v4(),
-                action: format!("extension.storage.{operation}"),
-                authorization_scope: json!({"type": "workspace"}),
-                target: json!({"type": "extension_storage", "extension_id": extension_id, "key": key}),
-                metadata: json!({"operation": operation}),
-                agent: None,
-            });
-            system_repository
-                .write_audit_event(&mut transaction)
-                .await
-                .map_err(|error| ExtensionStorageError::Audit(error.to_string()))?;
-        }
+        self.with_system_audit_fallback(
+            &format!("extension.storage.{operation}"),
+            json!({"type": "extension_storage", "extension_id": extension_id, "key": key}),
+            json!({"operation": operation}),
+        )
+        .write_audit_event(&mut transaction)
+        .await
+        .map_err(|error| ExtensionStorageError::Audit(error.to_string()))?;
         transaction.commit().await?;
         Ok(())
     }

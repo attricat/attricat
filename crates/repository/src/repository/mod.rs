@@ -1054,6 +1054,20 @@ fn add_initiating_actor_metadata(metadata: &mut Value, audit: Option<&AuditConte
     }
 }
 
+fn system_audit_context(action: &str, target: Value, metadata: Value) -> AuditContext {
+    AuditContext {
+        actor_user_id: None,
+        actor_token_id: None,
+        request_id: Uuid::new_v4(),
+        correlation_id: Uuid::new_v4(),
+        action: action.to_owned(),
+        authorization_scope: serde_json::json!({"type": "workspace"}),
+        target,
+        metadata,
+        agent: None,
+    }
+}
+
 impl<S> AttricatRepository<S> {
     /// Uses `cache` for this repository and every repository derived from it.
     /// The composition root shares one cache across requests and workers.
@@ -1093,25 +1107,36 @@ impl AttricatRepository {
         target: Value,
         metadata: Value,
     ) -> Self {
-        let mut audit = self.audit_context.clone().unwrap_or_else(|| AuditContext {
-            actor_user_id: None,
-            actor_token_id: None,
-            request_id: Uuid::new_v4(),
-            correlation_id: Uuid::new_v4(),
-            action: String::new(),
-            authorization_scope: serde_json::json!({"type": "workspace"}),
-            target: Value::Null,
-            metadata: serde_json::json!({}),
-            agent: None,
-        });
-        audit.action = action.to_owned();
-        audit.target = target;
-        if let (Some(existing), Value::Object(fields)) = (audit.metadata.as_object_mut(), metadata)
-        {
-            existing.extend(fields);
-        }
+        let audit = match self.audit_context.clone() {
+            Some(mut audit) => {
+                audit.action = action.to_owned();
+                audit.target = target;
+                if let (Some(existing), Value::Object(fields)) =
+                    (audit.metadata.as_object_mut(), metadata)
+                {
+                    existing.extend(fields);
+                }
+                audit
+            }
+            None => system_audit_context(action, target, metadata),
+        };
         let mut repository = self.clone();
         repository.audit_context = Some(audit);
+        repository
+    }
+
+    /// Returns a copy that audits as-is under a request context, or as the
+    /// system with the given action when no request is attached.
+    pub(crate) fn with_system_audit_fallback(
+        &self,
+        action: &str,
+        target: Value,
+        metadata: Value,
+    ) -> Self {
+        let mut repository = self.clone();
+        if repository.audit_context.is_none() {
+            repository.audit_context = Some(system_audit_context(action, target, metadata));
+        }
         repository
     }
 
