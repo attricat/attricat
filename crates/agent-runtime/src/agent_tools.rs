@@ -25,9 +25,8 @@ use crate::{
     },
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
     repository::{
-        AttricatRepository, AuthorizationActor, MAX_SEARCH_FILTERS, RecordSearchScope,
-        RepositoryError, SearchScope, SearchScopeError, SearchScopeRequest,
-        table_relationship_targets, table_value_paths,
+        AttricatRepository, AuthorizationActor, MAX_SEARCH_FILTERS, RepositoryError,
+        SearchPageRequest, SearchScope, SearchScopeError, SearchScopeRequest,
     },
     search_filters::{check_selected_ids, resolve_agent_relationship_filter},
 };
@@ -74,7 +73,6 @@ const DATA_HEALTH_SECTIONS: [&str; 5] = [
 /// Matches the HTTP record label route.
 const MAX_RECORD_LABEL_IDS: usize = 100;
 /// Search totals stop counting here, as the Explorer's do.
-const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
 const DEFAULT_FIND_RECORDS_LIMIT: usize = 10;
 const MAX_FIND_RECORDS_LIMIT: usize = 25;
 /// Matches considered before ranking, so a common word stays cheap to name.
@@ -2122,14 +2120,7 @@ pub async fn execute_read(
                     "page.size must be between 1 and {DEFAULT_RECORD_PAGE_SIZE}"
                 )));
             }
-            let SearchScope {
-                current,
-                selected,
-                search_blueprint,
-                context,
-                explanations,
-                matching,
-            } = agent_search_scope(
+            let scope = agent_search_scope(
                 repository,
                 actor,
                 &input.blueprint,
@@ -2139,143 +2130,25 @@ pub async fn execute_read(
                 input.context_code.as_deref(),
             )
             .await?;
-            let scope = RecordSearchScope {
-                blueprint_id: current.blueprint.id,
-                blueprint_version: selected,
-                matching_record_ids: matching.as_deref(),
-                system_tags: &input.system_tags,
-                outdated: input.outdated,
-                export_status: None,
-                current_blueprint_version: current.blueprint.version,
-            };
             // Like the Explorer, count only for a first page, and only so far.
-            let (versions, total_count) = repository
-                .search_result_versions_and_count(
-                    scope,
-                    input
-                        .page
-                        .cursor
-                        .is_none()
-                        .then_some(SEARCH_TOTAL_COUNT_CAP + 1),
+            let response = repository
+                .search_page(
+                    &scope,
+                    SearchPageRequest {
+                        code: &input.blueprint.code,
+                        system_tags: &input.system_tags,
+                        outdated: input.outdated,
+                        export_status: None,
+                        sort: input.sort.as_ref(),
+                        cursor: input.page.cursor.as_deref(),
+                        limit: limit.into(),
+                        include_total: true,
+                        include_previews: true,
+                    },
+                    &|_| {},
                 )
                 .await?;
-            let relationship_sort = input
-                .sort
-                .as_ref()
-                .is_some_and(|sort| sort.field.contains('.'));
-            if selected.is_none() && relationship_sort && versions.len() != 1 {
-                return Err(ToolError::InvalidArguments(
-                    "relationship_path_sort_requires_single_result_version".to_owned(),
-                ));
-            }
-            let effective_source_version = match versions.as_slice() {
-                [version] => Some(*version),
-                _ => selected,
-            };
-            let sort_blueprint = match effective_source_version {
-                Some(version)
-                    if version != current.blueprint.version
-                        && version != search_blueprint.blueprint.version =>
-                {
-                    repository
-                        .get_published_blueprint_by_code_and_version(&input.blueprint.code, version)
-                        .await?
-                        .ok_or(RepositoryError::NotFound("blueprint"))?
-                }
-                _ => search_blueprint.clone(),
-            };
-            let sort = repository.resolve_search_sort(
-                &sort_blueprint,
-                input.sort.as_ref(),
-                relationship_sort
-                    .then_some(effective_source_version)
-                    .flatten(),
-                &context,
-            )
-            .await?;
-            let cursor = match (sort.is_some(), input.page.cursor.as_deref()) {
-                (true, _) => None,
-                (false, Some(cursor)) => Some(
-                    super::repository::decode_search_cursor(cursor).ok_or_else(|| {
-                        ToolError::InvalidArguments("page.cursor is invalid".to_owned())
-                    })?,
-                ),
-                (false, None) => None,
-            };
-            let (mut items, next_cursor) = match sort.as_ref() {
-                Some(sort) => {
-                    repository
-                        .search_record_previews_sorted(
-                            RecordSearchScope {
-                                blueprint_version: if relationship_sort {
-                                    effective_source_version
-                                } else {
-                                    selected
-                                },
-                                ..scope
-                            },
-                            limit.into(),
-                            input.page.cursor.as_deref(),
-                            sort,
-                        )
-                        .await?
-                }
-                None => {
-                    repository
-                        .search_record_previews(scope, limit.into(), cursor)
-                        .await?
-                }
-            };
-            for item in &mut items {
-                item.schema_outdated = item.blueprint_version != current.blueprint.version;
-                item.match_explanations =
-                    explanations.get(&item.id).cloned().unwrap_or_default();
-            }
-            let table_paths = table_value_paths(&sort_blueprint);
-            repository
-                .hydrate_table_values(
-                    &mut items,
-                    &table_paths,
-                    &table_relationship_targets(&sort_blueprint),
-                    &context,
-                )
-                .await?;
-            let result_version_scope = match versions.as_slice() {
-                [] => crate::model::SearchResultVersionScope::Empty,
-                [version] => crate::model::SearchResultVersionScope::Single { version: *version },
-                _ => crate::model::SearchResultVersionScope::Multiple,
-            };
-            let hidden_outdated_count =
-                if selected == Some(current.blueprint.version) && input.page.cursor.is_none() {
-                    Some(
-                        repository
-                            .count_record_previews(
-                                RecordSearchScope {
-                                    blueprint_version: None,
-                                    matching_record_ids: None,
-                                    system_tags: &[],
-                                    outdated: true,
-                                    ..scope
-                                },
-                                SEARCH_TOTAL_COUNT_CAP + 1,
-                            )
-                            .await?,
-                    )
-                } else {
-                    None
-                };
-            serde_json::to_value(crate::model::RecordSearchResponse {
-                blueprint: Some(sort_blueprint),
-                items,
-                next_cursor,
-                total_count: total_count.map(|count| count.min(SEARCH_TOTAL_COUNT_CAP)),
-                total_count_capped: total_count.is_some_and(|count| count > SEARCH_TOTAL_COUNT_CAP),
-                result_version_scope,
-                hidden_outdated_count: hidden_outdated_count
-                    .map(|count| count.min(SEARCH_TOTAL_COUNT_CAP)),
-                hidden_outdated_count_capped: hidden_outdated_count
-                    .is_some_and(|count| count > SEARCH_TOTAL_COUNT_CAP),
-            })
+            serde_json::to_value(response)
             .expect("models serialize")
         }
         _ => return Err(ToolError::UnknownTool(name.to_owned())),

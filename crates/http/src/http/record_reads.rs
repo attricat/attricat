@@ -6,14 +6,14 @@ use super::{
 use crate::{
     constants::{DEFAULT_PAGE_SIZE, DEFAULT_PREVIEW_RELATIONSHIP_ITEMS},
     model::{
-        Record, RecordIdentity, RecordPreviewPage, RecordPreviewResponse, RecordSearchResponse,
+        Record, RecordIdentity, RecordPreviewPage, RecordPreviewResponse,
         RelationshipTreeFacetChildrenRequest, RelationshipTreeFacetChildrenResponse,
-        ResolvedRecordPreviewResponse, SearchRecordsRequest, SearchResultVersionScope,
+        ResolvedRecordPreviewResponse, SearchRecordsRequest,
     },
     repository::{
-        EXPORT_STATUSES, MAX_SEARCH_FILTERS, RecordSearchScope, RelationshipFacetHop,
-        RepositoryError, SearchScope, SearchScopeError, SearchScopeRequest, decode_search_cursor,
-        intersect_record_ids, table_relationship_targets, table_value_paths, valid_connection_key,
+        EXPORT_STATUSES, MAX_SEARCH_FILTERS, RelationshipFacetHop, RepositoryError,
+        SearchPageRequest, SearchPhase, SearchScopeError, SearchScopeRequest, intersect_record_ids,
+        valid_connection_key,
     },
 };
 use attricat_validation::saved_search;
@@ -23,14 +23,9 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
-use std::{
-    collections::{HashMap, HashSet},
-    time::Instant,
-};
+use std::{collections::HashSet, time::Instant};
 use tracing::Instrument;
 use uuid::Uuid;
-
-const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
 
 fn map_search_error(error: RepositoryError) -> ApiError {
     match error {
@@ -211,14 +206,7 @@ pub(super) async fn search_record_previews(
         }
     }
     let candidate_started = Instant::now();
-    let SearchScope {
-        current,
-        selected,
-        search_blueprint,
-        context,
-        explanations,
-        mut matching,
-    } = repository
+    let mut scope = repository
         .resolve_search_scope(SearchScopeRequest {
             blueprint: &input.blueprint,
             query: input.query.as_deref(),
@@ -235,19 +223,20 @@ pub(super) async fn search_record_previews(
     for facet in input.relationship_tree_facets {
         let (target, source_path) = resolve_tree_facet_target(
             &repository,
-            &search_blueprint,
-            &current,
+            &scope.search_blueprint,
+            &scope.current,
             facet.source_relationship_field.as_deref(),
             facet.hierarchy_field.as_deref(),
             "relationship_tree_facets.",
         )
         .await?;
-        let facet_candidates = matching
+        let facet_candidates = scope
+            .matching
             .as_ref()
             .map(|ids| ids.iter().copied().collect::<HashSet<_>>());
         let facet_matching = repository
             .relationship_tree_facet_matches(
-                current.blueprint.id,
+                scope.current.blueprint.id,
                 &source_path,
                 target.blueprint.id,
                 facet.hierarchy_field.as_deref(),
@@ -261,179 +250,36 @@ pub(super) async fn search_record_previews(
             ))
             .await?;
         if let Some(facet_matching) = facet_matching {
-            matching = Some(intersect_record_ids(matching, facet_matching));
+            scope.matching = Some(intersect_record_ids(scope.matching.take(), facet_matching));
         }
     }
-    // Totals are intentionally limited and only calculated for a first page.
-    // Cursor pages retain the first response's total in the client cache.
-    let include_total = input.include_total && input.page.cursor.is_none();
-    let scope = RecordSearchScope {
-        blueprint_id: current.blueprint.id,
-        blueprint_version: selected,
-        matching_record_ids: matching.as_deref(),
-        system_tags: &input.system_tags,
-        outdated: input.outdated,
-        export_status: input.export_status.as_ref(),
-        current_blueprint_version: current.blueprint.version,
-    };
-    let (matching_versions, total_count) = repository
-        .search_result_versions_and_count(
-            scope,
-            include_total.then_some(SEARCH_TOTAL_COUNT_CAP + 1),
+    let mut response = repository
+        .search_page(
+            &scope,
+            SearchPageRequest {
+                code,
+                system_tags: &input.system_tags,
+                outdated: input.outdated,
+                export_status: input.export_status.as_ref(),
+                sort: input.sort.as_ref(),
+                cursor: input.page.cursor.as_deref(),
+                limit: limit.into(),
+                include_total: input.include_total,
+                include_previews: input.include_previews,
+            },
+            &|phase| match phase {
+                SearchPhase::Candidates => timing.record("candidate", candidate_started),
+                SearchPhase::Page(started) => timing.record("page", started),
+                SearchPhase::Related(started) => timing.record("related", started),
+            },
         )
-        .instrument(tracing::info_span!(
-            "sql.operation",
-            label = "result-version-scope"
-        ))
-        .await?;
-    let result_version_scope = match matching_versions.as_slice() {
-        [] => SearchResultVersionScope::Empty,
-        [version] => SearchResultVersionScope::Single { version: *version },
-        _ => SearchResultVersionScope::Multiple,
-    };
-    let effective_source_version = match matching_versions.as_slice() {
-        [version] => Some(*version),
-        _ => selected,
-    };
-    let sort_uses_relationship = input
-        .sort
-        .as_ref()
-        .is_some_and(|sort| sort.field.contains('.'));
-    if selected.is_none() && sort_uses_relationship && matching_versions.len() != 1 {
-        return Err(ApiError::relationship_sort_requires_single_version());
-    }
-    let result_blueprint = match effective_source_version {
-        Some(version)
-            if version != current.blueprint.version
-                && version != search_blueprint.blueprint.version =>
-        {
-            repository
-                .get_published_blueprint_by_code_and_version(code, version)
-                .await?
-                .ok_or_else(|| ApiError::not_found("blueprint"))?
-        }
-        _ => search_blueprint.clone(),
-    };
-    let sort = repository
-        .resolve_search_sort(
-            &result_blueprint,
-            input.sort.as_ref(),
-            sort_uses_relationship
-                .then_some(effective_source_version)
-                .flatten(),
-            &context,
-        )
-        .instrument(tracing::info_span!(
-            "sql.operation",
-            label = "table-sort-resolve"
-        ))
         .await
         .map_err(search_scope_error)?;
-    let cursor = match (sort.is_some(), input.page.cursor.as_deref()) {
-        (true, _) => None,
-        (false, Some(cursor)) => Some(
-            decode_search_cursor(cursor)
-                .ok_or_else(|| ApiError::invalid_input("page.cursor is invalid".to_owned()))?,
-        ),
-        (false, None) => None,
-    };
-    timing.record("candidate", candidate_started);
-    let page_blueprint_version = if sort_uses_relationship {
-        effective_source_version
-    } else {
-        selected
-    };
-    let page_started = Instant::now();
-    let page = async {
-        match sort.as_ref() {
-            Some(sort) => {
-                repository
-                    .search_record_previews_sorted(
-                        RecordSearchScope {
-                            blueprint_version: page_blueprint_version,
-                            ..scope
-                        },
-                        limit.into(),
-                        input.page.cursor.as_deref(),
-                        sort,
-                    )
-                    .instrument(tracing::info_span!("sql.operation", label = "records-page"))
-                    .await
-            }
-            None => {
-                repository
-                    .search_record_previews(scope, limit.into(), cursor)
-                    .instrument(tracing::info_span!("sql.operation", label = "records-page"))
-                    .await
-            }
-        }
-    };
-    let hidden_outdated = async {
-        if selected != Some(current.blueprint.version) || input.page.cursor.is_some() {
-            return Ok(None);
-        }
-        repository
-            .count_record_previews(
-                RecordSearchScope {
-                    blueprint_version: None,
-                    matching_record_ids: None,
-                    system_tags: &[],
-                    outdated: true,
-                    export_status: None,
-                    ..scope
-                },
-                SEARCH_TOTAL_COUNT_CAP + 1,
-            )
-            .await
-            .map(Some)
-    };
-    // The total was counted with the result versions.
-    let ((mut items, next_cursor), hidden_outdated_count) =
-        tokio::try_join!(page, hidden_outdated)?;
-    timing.record("page", page_started);
-    let total_count_capped = total_count.is_some_and(|count| count > SEARCH_TOTAL_COUNT_CAP);
-    let total_count = total_count.map(|count| count.min(SEARCH_TOTAL_COUNT_CAP));
-    let hidden_outdated_count_capped =
-        hidden_outdated_count.is_some_and(|count| count > SEARCH_TOTAL_COUNT_CAP);
-    let hidden_outdated_count =
-        hidden_outdated_count.map(|count| count.min(SEARCH_TOTAL_COUNT_CAP));
-    for item in &mut items {
-        item.schema_outdated = item.blueprint_version != current.blueprint.version;
-        item.match_explanations = explanations.get(&item.id).cloned().unwrap_or_default();
-    }
-    let related_started = Instant::now();
-    let table_paths = table_value_paths(&result_blueprint);
-    let previews = input.include_previews || has_extension_table_renderer(&result_blueprint);
-    let relationships = if previews {
-        table_relationship_targets(&result_blueprint)
-    } else {
-        HashMap::new()
-    };
-    repository
-        .hydrate_table_values(&mut items, &table_paths, &relationships, &context)
-        .instrument(tracing::info_span!(
-            "sql.operation",
-            label = "table-values-hydrate"
-        ))
-        .await?;
-    timing.record("related", related_started);
-    if !previews {
-        for item in &mut items {
-            item.preview = serde_json::Value::Null;
-        }
+    if !input.include_blueprint {
+        response.blueprint = None;
     }
     let serialization_started = Instant::now();
-    let response = Json(RecordSearchResponse {
-        blueprint: input.include_blueprint.then_some(result_blueprint),
-        items,
-        next_cursor,
-        total_count,
-        total_count_capped,
-        result_version_scope,
-        hidden_outdated_count,
-        hidden_outdated_count_capped,
-    })
-    .into_response();
+    let response = Json(response).into_response();
     timing.record("serialize", serialization_started);
     Ok(response)
 }
@@ -443,6 +289,9 @@ fn search_scope_error(error: SearchScopeError) -> ApiError {
         SearchScopeError::UnknownBlueprint => ApiError::not_found("blueprint"),
         SearchScopeError::Invalid { message, .. } => ApiError::invalid_input(message),
         SearchScopeError::Query { error, .. } => map_search_error(error),
+        SearchScopeError::RelationshipSortRequiresSingleVersion => {
+            ApiError::relationship_sort_requires_single_version()
+        }
         SearchScopeError::Repository(error) => error.into(),
     }
 }
@@ -539,27 +388,6 @@ async fn resolve_tree_facet_target(
         }
     }
     Ok((target, source_path))
-}
-
-/// Only direct relationship hops used by legacy rich table columns need hydration.
-/// Whether a table column renders through an extension, whose cell context
-/// carries the row's preview and related records.
-fn has_extension_table_renderer(blueprint: &crate::model::BlueprintWithAttributes) -> bool {
-    blueprint
-        .blueprint
-        .views
-        .get("table")
-        .and_then(|table| table.get("columns"))
-        .and_then(serde_json::Value::as_array)
-        .is_some_and(|columns| {
-            columns.iter().any(|column| {
-                column
-                    .get("renderer")
-                    .and_then(|renderer| renderer.get("id"))
-                    .and_then(serde_json::Value::as_str)
-                    .is_some_and(|id| !id.starts_with("attricat."))
-            })
-        })
 }
 
 pub(super) async fn relationship_tree_facet_children(

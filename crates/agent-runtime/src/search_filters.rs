@@ -61,6 +61,9 @@ impl From<SearchScopeError> for ToolError {
                 invalid(format!("{error}. {}", search_fields_hint(&blueprint)))
             }
             SearchScopeError::UnknownBlueprint => invalid("blueprint does not exist"),
+            SearchScopeError::RelationshipSortRequiresSingleVersion => {
+                invalid("relationship_path_sort_requires_single_result_version")
+            }
             SearchScopeError::Repository(error) => ToolError::Repository(error),
         }
     }

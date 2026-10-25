@@ -32,6 +32,10 @@ pub enum SearchScopeError {
         message: String,
         blueprint: Option<Box<BlueprintWithAttributes>>,
     },
+    /// A related-value sort over every version matched records of several
+    /// versions, whose relationship paths may differ.
+    #[error("related-value sorting requires results from one blueprint version")]
+    RelationshipSortRequiresSingleVersion,
     /// The text query failed against the searched blueprint.
     #[error("{error}")]
     Query {
@@ -640,6 +644,26 @@ pub fn table_relationship_targets(blueprint: &BlueprintWithAttributes) -> HashMa
                 })
         })
         .collect()
+}
+
+/// Whether a table column renders through an extension, whose cell context
+/// carries the row's preview and related records.
+pub(super) fn has_extension_table_renderer(blueprint: &BlueprintWithAttributes) -> bool {
+    blueprint
+        .blueprint
+        .views
+        .get("table")
+        .and_then(|table| table.get("columns"))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|columns| {
+            columns.iter().any(|column| {
+                column
+                    .get("renderer")
+                    .and_then(|renderer| renderer.get("id"))
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|id| !id.starts_with("attricat."))
+            })
+        })
 }
 
 #[cfg(test)]
