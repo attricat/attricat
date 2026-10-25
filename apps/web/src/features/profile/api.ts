@@ -2,33 +2,8 @@ import { z } from 'zod';
 import i18n from 'i18next';
 import { request, requestNoContent } from '../../api/request';
 import { uuidSegment } from '../../api/pathSegments';
-
-const uuid = z.uuid();
-const tokenSchema = z.object({
-  id: uuid,
-  label: z.string(),
-  permissions: z.array(z.string()),
-  expires_at: z.string().nullable(),
-  revoked_at: z.string().nullable(),
-  last_used_at: z.string().nullable(),
-  created_at: z.string(),
-});
-export type PersonalToken = z.infer<typeof tokenSchema>;
-const permissionSchema = z.object({
-  code: z.string(),
-  description: z.string(),
-});
-const permissionCodesSchema = z
-  .array(z.string())
-  .refine((permissions) => new Set(permissions).size === permissions.length, {
-    error: () => i18n.t('errors.permissionsUnique'),
-  })
-  .min(1);
-const tokenInputSchema = z.object({
-  label: z.string().trim().min(1).max(120),
-  permissions: permissionCodesSchema,
-  expires_at: z.string().datetime({ offset: true }).optional(),
-});
+import { tokenSchema, permissionSchema, tokenInputSchema } from './schemas';
+export type { PersonalToken } from './schemas';
 
 const json = (method: string, value: unknown): RequestInit => ({
   method,

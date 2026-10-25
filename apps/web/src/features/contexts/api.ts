@@ -1,25 +1,12 @@
 import { z } from 'zod';
 import { request } from '../../api/request';
-import i18n from '../../i18n';
-import { contextCodePattern } from './constants';
-
-const contextCodeSchema = z.string().regex(contextCodePattern, {
-  // Resolve lazily so the message follows the language active at validation.
-  error: () => i18n.t('contexts.invalidCode'),
-});
-export const attributeContextSchema = z.object({
-  id: z.uuid(),
-  code: contextCodeSchema,
-  data: z.record(z.string(), z.unknown()),
-  parent_id: z.uuid().nullable(),
-});
-const createAttributeContextSchema = z.object({
-  code: contextCodeSchema,
-  data: z.record(z.string(), z.unknown()),
-  parent_id: z.uuid(),
-});
-
-export type AttributeContext = z.infer<typeof attributeContextSchema>;
+import {
+  attributeContextSchema,
+  createAttributeContextSchema,
+  type AttributeContext,
+} from './schemas';
+export { attributeContextSchema } from './schemas';
+export type { AttributeContext } from './schemas';
 
 export const listContexts = (
   signal?: AbortSignal,
