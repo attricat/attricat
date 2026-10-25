@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     domain_events::{DomainEvent, NewDomainEvent},
-    task_queue::{TaskInsert, TaskKind},
+    task_queue::TaskKind,
 };
 
 use super::{AttricatRepository, RepositoryError};
@@ -70,16 +70,6 @@ struct EventDeliveryRow {
     source_name: String,
     metadata: serde_json::Value,
     payload: serde_json::Value,
-}
-
-#[derive(sqlx::FromRow)]
-struct DeliveryBackfillRow {
-    consumer_id: Uuid,
-    event_id: Uuid,
-    workspace_id: Uuid,
-    correlation_id: Uuid,
-    causation_id: Option<Uuid>,
-    status: String,
 }
 
 #[derive(sqlx::FromRow)]
@@ -440,50 +430,6 @@ impl AttricatRepository {
             }
         }
         let mut transaction = self.pool.begin().await?;
-        if scope == MaterializeScope::Full {
-            // Migrations intentionally contain no data backfill. Assign every old
-            // delivery a stable subject and a task in this transaction. A legacy
-            // lease becomes queued because no legacy executor is started after the
-            // extension cutover.
-            let legacy: Vec<DeliveryBackfillRow> = sqlx::query_as(
-            "SELECT d.consumer_id, d.event_id, c.workspace_id, e.correlation_id, e.causation_id, d.status FROM event_deliveries d JOIN event_consumers c ON c.id = d.consumer_id JOIN domain_events e ON e.id = d.event_id WHERE c.workspace_id = $1 AND c.name = $2 AND d.id IS NULL FOR UPDATE OF d",
-        )
-        .bind(workspace_id)
-        .bind(consumer_name)
-        .fetch_all(&mut *transaction)
-        .await?;
-            for row in legacy {
-                let delivery_id = Uuid::new_v4();
-                let task_id = self.enqueue_task(&mut transaction, TaskInsert {
-                workspace_id: row.workspace_id,
-                kind: TaskKind::EventDeliveryV1,
-                subject_id: delivery_id,
-                generation: 0,
-                payload: serde_json::json!({"consumer_id": row.consumer_id.to_string(), "event_id": row.event_id.to_string()}),
-                correlation_id: Some(row.correlation_id),
-                causation_id: row.causation_id,
-            }).await?.expect("a new delivery subject has no task conflict");
-                sqlx::query("UPDATE event_deliveries SET id = $3, task_id = $4, status = CASE WHEN status = 'leased' THEN 'pending' ELSE status END, lease_owner = NULL, lease_until = NULL WHERE consumer_id = $1 AND event_id = $2")
-                .bind(row.consumer_id).bind(row.event_id).bind(delivery_id).bind(task_id)
-                .execute(&mut *transaction).await?;
-                match row.status.as_str() {
-                    "completed" => {
-                        sqlx::query(
-                        "UPDATE tasks SET status = 'succeeded', completed_at = now() WHERE id = $1",
-                    )
-                    .bind(task_id)
-                    .execute(&mut *transaction)
-                    .await?;
-                    }
-                    "dead_letter" => {
-                        sqlx::query("UPDATE tasks SET status = 'dead_letter', failures = max_failures, failed_at = now() WHERE id = $1")
-                        .bind(task_id).execute(&mut *transaction).await?;
-                    }
-                    _ => {}
-                }
-            }
-        }
-
         let consumer: EventConsumer = sqlx::query_as(
             "SELECT id, workspace_id, name, watermark FROM event_consumers WHERE workspace_id = $1 AND name = $2 FOR UPDATE",
         )

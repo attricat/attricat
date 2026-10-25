@@ -169,11 +169,11 @@ pub fn start_schedule_coordinator(
                 };
                 for workspace in workspaces {
                     let scoped = repository.for_workspace(workspace);
-                        // Pre-cutover rows get task envelopes once per
-                        // workspace; afterwards an idle tick only checks
+                        // A full pass schedules every workflow of a
+                        // workspace; between them an idle tick only checks
                         // whether any schedule cursor is due.
                         // A workspace counts as prepared, and a full pass
-                        // as done, only once they succeed; a failure is
+                        // as done, only once it succeeds; a failure is
                         // retried after a per-workspace backoff, during
                         // which a prepared workspace still runs due
                         // schedules and an unprepared one is skipped.
@@ -182,14 +182,6 @@ pub fn start_schedule_coordinator(
                         if last_full.is_none() && !retry_ready {
                             continue;
                         }
-                        let backfilled = last_full.is_some()
-                            || match scoped.backfill_workflow_tasks().await {
-                                Ok(_) => true,
-                                Err(error) => {
-                                    tracing::error!(%error, "workflow task backfill failed");
-                                    false
-                                }
-                            };
                         // A full pass also creates cursors for schedules
                         // enabled before cursors were created on enable.
                         let full = retry_ready
@@ -208,7 +200,7 @@ pub fn start_schedule_coordinator(
                             tracing::error!(%error, "workflow schedule poll failed");
                         }
                         if full {
-                            if result.is_ok() && backfilled {
+                            if result.is_ok() {
                                 backoff.succeeded(workspace);
                                 prepared.insert(workspace, Instant::now());
                             } else {

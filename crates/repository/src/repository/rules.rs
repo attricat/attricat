@@ -986,29 +986,6 @@ impl AttricatRepository {
         Ok(terminal)
     }
 
-    /// Backfills envelopes for rows created before the task cutover. No legacy
-    /// claimer is started with this binary, so normalising its stale leases is
-    /// safe and avoids stranding work after deployment or restart.
-    pub async fn backfill_rule_tasks(&self) -> Result<u64, RepositoryError> {
-        let ws = self.workspace_id.0;
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("UPDATE rule_runs rr SET status='pending',lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE rr.workspace_id=$1 AND rr.status='leased' AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.workspace_id=rr.workspace_id AND t.kind='rule_run.v1' AND t.subject_id=rr.id AND t.status='leased' AND t.lease_until>clock_timestamp())")
-            .bind(ws).execute(&mut *tx).await?;
-        let rows: Vec<Uuid> = sqlx::query_scalar(
-            "SELECT id FROM rule_runs WHERE workspace_id=$1 AND status='pending' FOR UPDATE",
-        )
-        .bind(ws)
-        .fetch_all(&mut *tx)
-        .await?;
-        let count = rows.len() as u64;
-        for run_id in rows {
-            self.enqueue_rule_task(&mut tx, ws, run_id, None, None)
-                .await?;
-        }
-        tx.commit().await?;
-        Ok(count)
-    }
-
     /// Replays a dead-lettered rule run through a fresh task generation while
     /// keeping finding idempotency and the candidate cursor durable.
     pub async fn replay_rule_run(&self, id: Uuid) -> Result<bool, RepositoryError> {

@@ -100,8 +100,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .ensure_builtin_permissions()
         .await?;
     let bootstrap_repository = AttricatRepository::system(maintenance_pool.clone());
-    // Repair pre-existing workspaces once at startup; scope derivation and
-    // request reads never provision data or acquire an extra connection.
+    // Give every workspace its default context and system user at startup,
+    // including the bootstrap workspace a migration inserts. Scope derivation
+    // and request reads never provision data.
     for id in bootstrap_repository.active_workspace_ids().await? {
         bootstrap_repository.initialize_workspace(id).await?;
     }
@@ -287,11 +288,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             blueprint_migration_config,
         ),
     ));
-    // Reconcile only batches created before this deployment. New batches and
-    // their task envelopes commit atomically in the repository.
-    task_repository
-        .backfill_safe_blueprint_migration_tasks()
-        .await?;
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
     let maintenance_worker = maintenance::start(

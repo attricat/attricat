@@ -256,24 +256,15 @@ pub fn start_schedule_coordinator(
                 };
                 for workspace in workspaces {
                     let scoped = repository.for_workspace(workspace);
-                    // Pre-cutover rows get task envelopes once per
-                    // workspace; afterwards an idle tick only checks
-                    // whether any schedule cursor is due.
-                    // A workspace counts as prepared only once its
-                    // backfill and first full pass succeed; a failure
-                    // is retried after a per-workspace backoff.
+                    // The first pass schedules every rule of a workspace;
+                    // afterwards an idle tick only checks whether any
+                    // schedule cursor is due. A workspace counts as prepared
+                    // once that first full pass succeeds; a failure is
+                    // retried after a per-workspace backoff.
                     let first = !prepared.contains_key(&workspace);
                     if first && !backoff.ready(workspace, Instant::now()) {
                         continue;
                     }
-                    let backfilled = !first
-                        || match scoped.backfill_rule_tasks().await {
-                            Ok(_) => true,
-                            Err(error) => {
-                                tracing::error!(%error, "rule task backfill failed");
-                                false
-                            }
-                        };
                     let run = if first {
                         Ok(true)
                     } else {
@@ -288,7 +279,7 @@ pub fn start_schedule_coordinator(
                         tracing::error!(%error, "rule schedule poll failed");
                     }
                     if first {
-                        if result.is_ok() && backfilled {
+                        if result.is_ok() {
                             backoff.succeeded(workspace);
                             prepared.insert(workspace, Instant::now());
                         } else {
