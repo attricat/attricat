@@ -10,6 +10,7 @@ publish.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 chrono.workspace = true
+chrono-tz.workspace = true
 attricat-blueprint = { path = "../blueprint" }
 attricat-domain = { path = "../domain" }
 attricat-repository = { path = "../repository" }

@@ -20,3 +20,4 @@ pub mod bulk_edits;
 pub mod conversation_title;
 pub mod provider_config;
 mod search_filters;
+pub mod smart_fill;
