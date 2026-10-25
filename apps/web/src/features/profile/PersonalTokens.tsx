@@ -27,6 +27,7 @@ import { tokenSkeletonCount, tokenSkeletonHeight } from './constants';
 import { profileQueryKeys } from './queryKeys';
 import { RevokeTokenDialog } from './RevokeTokenDialog';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { StatusChip } from '../../components/StatusChip';
 
 type TokenStatus = 'active' | 'expired' | 'revoked';
 
@@ -124,12 +125,7 @@ const TokenCard = ({
         >
           {token.label}
         </Typography>
-        <Chip
-          color={chip.color}
-          icon={<chip.icon />}
-          label={t(chip.label)}
-          variant="outlined"
-        />
+        <StatusChip label={t(chip.label)} style={chip} />
       </Stack>
       <Box
         aria-label={t('profile.permissions')}

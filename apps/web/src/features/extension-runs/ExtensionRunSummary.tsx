@@ -1,4 +1,4 @@
-import { Box, Chip, LinearProgress, Stack, Typography } from '@mui/material';
+import { Box, LinearProgress, Stack, Typography } from '@mui/material';
 import {
   BanIcon,
   CircleCheckIcon,
@@ -16,6 +16,7 @@ import {
   runProgressCountsSchema,
   type ExtensionRun,
 } from './schemas';
+import { StatusChip, type StatusChipStyle } from '../../components/StatusChip';
 
 const statusChips = {
   queued: { color: 'default', icon: ClockIcon },
@@ -24,7 +25,7 @@ const statusChips = {
   cancelled: { color: 'default', icon: BanIcon },
   completed: { color: 'success', icon: CircleCheckIcon },
   failed: { color: 'error', icon: CircleXIcon },
-} as const satisfies Record<ExtensionRunStatus, unknown>;
+} as const satisfies Record<ExtensionRunStatus, StatusChipStyle>;
 
 /** Execution status; never infers the extension's domain outcome. */
 export const ExtensionRunStatusChip = ({
@@ -33,13 +34,10 @@ export const ExtensionRunStatusChip = ({
   status: ExtensionRunStatus;
 }) => {
   const { t } = useTranslation();
-  const chip = statusChips[status];
   return (
-    <Chip
-      color={chip.color}
-      icon={<chip.icon />}
+    <StatusChip
       label={t(`extensionRuns.status.${status}`)}
-      variant="outlined"
+      style={statusChips[status]}
     />
   );
 };

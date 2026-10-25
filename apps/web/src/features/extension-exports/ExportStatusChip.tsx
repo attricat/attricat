@@ -1,4 +1,3 @@
-import { Chip } from '@mui/material';
 import {
   CircleCheckIcon,
   CircleHelpIcon,
@@ -9,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ExportStatus } from './constants';
+import { StatusChip, type StatusChipStyle } from '../../components/StatusChip';
 
 const statusChips = {
   pending: { color: 'default', icon: ClockIcon },
@@ -17,7 +17,7 @@ const statusChips = {
   rejected: { color: 'error', icon: CircleXIcon },
   synced: { color: 'success', icon: CircleCheckIcon },
   withdrawn: { color: 'default', icon: UndoIcon },
-} as const satisfies Record<ExportStatus, unknown>;
+} as const satisfies Record<ExportStatus, StatusChipStyle>;
 
 /** A record's export status at one destination. */
 export const ExportStatusChip = ({
@@ -28,14 +28,11 @@ export const ExportStatusChip = ({
   size?: 'small' | 'medium';
 }) => {
   const { t } = useTranslation();
-  const chip = statusChips[status];
   return (
-    <Chip
-      color={chip.color}
-      icon={<chip.icon />}
+    <StatusChip
       label={t(`extensionExports.status.${status}`)}
       size={size}
-      variant="outlined"
+      style={statusChips[status]}
     />
   );
 };
