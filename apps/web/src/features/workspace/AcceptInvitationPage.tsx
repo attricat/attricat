@@ -1,13 +1,13 @@
-import { Alert, Button, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Button, Stack, TextField } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
-import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { NarrowPage } from '../../components/CenteredPage';
-import { acceptInvitation } from './api';
 import { useInitialFocus } from '../../components/initialFocus';
-
-type Notice = { severity: 'error' | 'success'; text: string };
+import { PageHeader } from '../../components/PageHeader';
+import { InvitationIcon } from '../../components/systemIcons';
+import { acceptInvitation } from './api';
 
 export const AcceptInvitationPage = ({
   secret: initialSecret = '',
@@ -16,31 +16,17 @@ export const AcceptInvitationPage = ({
 }) => {
   const { t } = useTranslation();
   const formRef = useInitialFocus<HTMLFormElement>();
-  const [notice, setNotice] = useState<Notice>();
+  const accept = useMutation({
+    mutationFn: acceptInvitation,
+    onSuccess: () => form.reset({ secret: '' }),
+  });
   const form = useForm({
     defaultValues: { secret: initialSecret },
-    onSubmit: async ({ value }) => {
-      try {
-        await acceptInvitation(value.secret);
-        form.reset({ secret: '' });
-        setNotice({
-          severity: 'success',
-          text: t('workspace.invitationAccepted'),
-        });
-      } catch (reason) {
-        setNotice({
-          severity: 'error',
-          text:
-            reason instanceof Error
-              ? errorMessage(reason)
-              : t('workspace.acceptInvitationFailed'),
-        });
-      }
-    },
+    onSubmit: ({ value }) => accept.mutate(value.secret),
   });
   return (
     <NarrowPage>
-      <Typography variant="h4">{t('workspace.acceptTitle')}</Typography>
+      <PageHeader icon={InvitationIcon} title={t('workspace.acceptTitle')} />
       <Stack
         ref={formRef}
         component="form"
@@ -62,8 +48,11 @@ export const AcceptInvitationPage = ({
             />
           )}
         </form.Field>
-        {notice && <Alert severity={notice.severity}>{notice.text}</Alert>}
-        <Button type="submit" variant="contained">
+        <ApiErrorAlert error={accept.error} />
+        {accept.isSuccess && (
+          <Alert severity="success">{t('workspace.invitationAccepted')}</Alert>
+        )}
+        <Button disabled={accept.isPending} type="submit" variant="contained">
           {t('workspace.acceptInvitation')}
         </Button>
       </Stack>
