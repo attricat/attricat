@@ -2,13 +2,13 @@
 
 use serde_json::Value;
 
-pub const PATTERN_HINT_KEY: &str = "x-attricat-pattern-hint";
-pub const MAX_HINT_CHARS: usize = 200;
+pub(crate) const PATTERN_HINT_KEY: &str = "x-attricat-pattern-hint";
+pub(crate) const MAX_HINT_CHARS: usize = 200;
 
 /// Checks an `x-attricat-pattern-hint`: 1 to [`MAX_HINT_CHARS`] characters of
 /// text describing the `pattern` beside it, which forms show in place of the
 /// regular expression.
-pub fn validate_pattern_hint_definition(schema: &Value) -> Result<(), String> {
+pub(crate) fn validate_pattern_hint_definition(schema: &Value) -> Result<(), String> {
     let Some(hint) = schema.get(PATTERN_HINT_KEY) else {
         return Ok(());
     };

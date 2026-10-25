@@ -120,7 +120,7 @@ pub fn transition_requirements(
         .unwrap_or_default()
 }
 
-pub fn status_configuration_schema() -> Value {
+pub(crate) fn status_configuration_schema() -> Value {
     let code = serde_json::json!({"type": "string", "minLength": 1, "maxLength": 128, "pattern": super::CODE_PATTERN});
     let coverage = serde_json::json!({"oneOf": [
         {"const": "all"},
@@ -197,7 +197,7 @@ struct ApprovalConfig {
     void_to: String,
 }
 
-pub fn validate_status_definition(schema: &Value) -> Result<(), String> {
+pub(crate) fn validate_status_definition(schema: &Value) -> Result<(), String> {
     let Some(config) = schema.get(STATUS_KEY) else {
         return Ok(());
     };
@@ -368,7 +368,7 @@ pub fn transition_edges(schema: &Value) -> Option<Vec<TransitionEdge>> {
 
 /// The declared edge from `before` to `after`. Unchanged values, undeclared
 /// edges and unrestricted graphs have none.
-pub fn find_edge(schema: &Value, before: &Value, after: &Value) -> Option<TransitionEdge> {
+pub(crate) fn find_edge(schema: &Value, before: &Value, after: &Value) -> Option<TransitionEdge> {
     if before == after {
         return None;
     }

@@ -7,4 +7,4 @@ pub const STANDBY_POLL: Duration = Duration::from_secs(1);
 /// The pause between a leader's coordination passes.
 pub const IDLE_POLL: Duration = Duration::from_millis(250);
 /// The pause after a leader cannot discover the workspaces to coordinate.
-pub const DISCOVERY_ERROR_BACKOFF: Duration = Duration::from_secs(5);
+pub(crate) const DISCOVERY_ERROR_BACKOFF: Duration = Duration::from_secs(5);

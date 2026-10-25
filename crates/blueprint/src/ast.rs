@@ -127,9 +127,9 @@ pub const CONNECTOR_JOB_DIRECTIONS: &[&str] = &["import", "export"];
 /// that changes a record's content revision.
 pub const CONNECTOR_TRIGGER_EVENTS: &[&str] = attricat_events::RECORD_CONTENT_EVENT_TYPES_V1;
 /// Shortest connector job run interval, in seconds.
-pub const MIN_CONNECTOR_INTERVAL_SECONDS: i32 = 60;
+pub(crate) const MIN_CONNECTOR_INTERVAL_SECONDS: i32 = 60;
 /// Longest connector job run interval, in seconds (30 days).
-pub const MAX_CONNECTOR_INTERVAL_SECONDS: i32 = 30 * 24 * 60 * 60;
+pub(crate) const MAX_CONNECTOR_INTERVAL_SECONDS: i32 = 30 * 24 * 60 * 60;
 
 fn default_connector_enabled() -> bool {
     true

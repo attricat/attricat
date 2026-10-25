@@ -11,28 +11,28 @@ use serde_json::{Map, Value, json};
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 /// Record-schema keyword holding the blueprint's declarative checks.
-pub const CHECKS_KEY: &str = "x-attricat-checks";
+pub(crate) const CHECKS_KEY: &str = "x-attricat-checks";
 pub const MAX_RECORD_CHECKS: usize = 32;
 pub const MAX_TRANSITION_CONDITIONS: usize = 16;
-pub const MAX_DEPTH: usize = 4;
-pub const MAX_NODES: usize = 32;
-pub const MAX_BRANCHES: usize = 16;
+pub(crate) const MAX_DEPTH: usize = 4;
+pub(crate) const MAX_NODES: usize = 32;
+pub(crate) const MAX_BRANCHES: usize = 16;
 /// Linked records loaded per relationship for one subject and context.
 pub const MAX_LINKED_RECORDS: usize = 200;
 /// Referencing records loaded per `referenced_by` predicate.
 pub const MAX_REFERENCING_RECORDS: usize = 1_000;
 /// Records visited while following a relationship for `acyclic`.
 pub const MAX_CYCLE_VISITS: usize = 1_000;
-pub const MAX_ONE_OF_VALUES: usize = 100;
-pub const MAX_UNIQUE_ATTRIBUTES: usize = 4;
-pub const MAX_OFFSET_DAYS: i64 = 36_500;
-pub const MAX_MESSAGE_LENGTH: usize = 500;
+pub(crate) const MAX_ONE_OF_VALUES: usize = 100;
+pub(crate) const MAX_UNIQUE_ATTRIBUTES: usize = 4;
+pub(crate) const MAX_OFFSET_DAYS: i64 = 36_500;
+pub(crate) const MAX_MESSAGE_LENGTH: usize = 500;
 /// Longest system tag, in bytes.
 pub const MAX_TAG_LENGTH: usize = 128;
 /// Longest check code, in bytes.
-pub const MAX_CHECK_CODE_LENGTH: usize = 128;
+pub(crate) const MAX_CHECK_CODE_LENGTH: usize = 128;
 /// Longest `stale` age: one year.
-pub const MAX_STALE_AGE_SECONDS: u64 = 31_536_000;
+pub(crate) const MAX_STALE_AGE_SECONDS: u64 = 31_536_000;
 
 /// Comparison operator. `lt`–`gte` order numbers, dates and datetimes;
 /// `eq`/`ne` compare any scalar or relationship target set; `disjoint`

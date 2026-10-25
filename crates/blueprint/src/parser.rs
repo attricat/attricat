@@ -31,7 +31,7 @@ pub const DIRECTIONAL_CARDINALITIES: &[&str] = &["one", "many"];
 pub const CONTEXT_FALLBACKS: &[&str] = &["default", "none"];
 pub const CONTEXT_EDITABLE_SCOPES: &[&str] = &["all", "default"];
 /// Longest blueprint or attribute description, in characters.
-pub const MAX_DESCRIPTION_CHARS: usize = 500;
+pub(crate) const MAX_DESCRIPTION_CHARS: usize = 500;
 
 /// An Attricat blueprint: a versioned record type or an includable mixin.
 #[derive(Deserialize, JsonSchema)]

@@ -2,13 +2,13 @@
 
 use serde_json::Value;
 
-pub const ENUM_LABELS_KEY: &str = "x-attricat-enum-labels";
-pub const MAX_LABEL_CHARS: usize = 200;
+pub(crate) const ENUM_LABELS_KEY: &str = "x-attricat-enum-labels";
+pub(crate) const MAX_LABEL_CHARS: usize = 200;
 
 /// Checks an `x-attricat-enum-labels` map: it labels some or all string values
 /// of the schema's `enum`, and nothing else. Statuses label their options in
 /// `x-attricat-status` instead.
-pub fn validate_enum_labels_definition(schema: &Value) -> Result<(), String> {
+pub(crate) fn validate_enum_labels_definition(schema: &Value) -> Result<(), String> {
     let Some(labels) = schema.get(ENUM_LABELS_KEY) else {
         return Ok(());
     };

@@ -9,9 +9,9 @@ use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;
 
-pub const MAX_TASK_PAYLOAD_BYTES: usize = 4096;
-pub const MAX_TASK_PAYLOAD_KEYS: usize = 16;
-pub const MAX_TASK_PAYLOAD_KEY_BYTES: usize = 128;
+pub(crate) const MAX_TASK_PAYLOAD_BYTES: usize = 4096;
+pub(crate) const MAX_TASK_PAYLOAD_KEYS: usize = 16;
+pub(crate) const MAX_TASK_PAYLOAD_KEY_BYTES: usize = 128;
 /// The longest error code stored on a task.
 pub const MAX_TASK_ERROR_CODE_BYTES: usize = 128;
 /// The longest error message stored on a task.

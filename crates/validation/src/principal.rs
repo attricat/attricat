@@ -65,7 +65,7 @@ impl fmt::Display for PrincipalRef {
     }
 }
 
-pub fn principal_configuration_schema() -> Value {
+pub(crate) fn principal_configuration_schema() -> Value {
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "Attricat user or team assignment v1",
@@ -99,7 +99,7 @@ pub fn principal_kinds(schema: &Value) -> Option<Vec<PrincipalKind>> {
     )
 }
 
-pub fn validate_principal_definition(schema: &Value) -> Result<(), String> {
+pub(crate) fn validate_principal_definition(schema: &Value) -> Result<(), String> {
     let Some(config) = schema.get(PRINCIPAL_KEY) else {
         return Ok(());
     };

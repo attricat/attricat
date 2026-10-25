@@ -104,7 +104,7 @@ pub struct TransitionSelector {
 }
 
 /// Most status transitions one enforcing rule can guard.
-pub const MAX_ENFORCED_TRANSITIONS: usize = 16;
+pub(crate) const MAX_ENFORCED_TRANSITIONS: usize = 16;
 
 impl Enforcement {
     /// Enforcing rules run inside write transactions, so their predicates must

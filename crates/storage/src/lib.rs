@@ -133,7 +133,8 @@ pub struct StoredObject {
     pub content_type: Option<String>,
 }
 
-pub type ObjectByteStream = Pin<Box<dyn Stream<Item = Result<Bytes, ObjectStoreError>> + Send>>;
+pub(crate) type ObjectByteStream =
+    Pin<Box<dyn Stream<Item = Result<Bytes, ObjectStoreError>> + Send>>;
 
 /// A provider response whose bytes remain streamed until the HTTP consumer
 /// writes them to the client.

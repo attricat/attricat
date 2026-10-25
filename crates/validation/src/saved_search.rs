@@ -5,15 +5,15 @@ use serde_json::Value;
 
 pub const EXPLORER_SEARCH_KIND: &str = "explorer_search";
 pub const MAX_STATE_BYTES: usize = 32 * 1024;
-pub const MAX_FILTERS: usize = 20;
+pub(crate) const MAX_FILTERS: usize = 20;
 pub const MAX_SELECTED_IDS: usize = 100;
 pub const MAX_BLUEPRINT_BYTES: usize = 256;
 /// Longest Explorer field path, in bytes.
-pub const MAX_FIELD_PATH_BYTES: usize = 512;
+pub(crate) const MAX_FIELD_PATH_BYTES: usize = 512;
 /// Explorer follows at most three relationship hops before the leaf field.
 pub const MAX_RELATIONSHIP_HOPS: usize = 3;
 /// Top-level state fields, named like the Explorer URL keys.
-pub const STATE_KEYS: &[&str] = &[
+pub(crate) const STATE_KEYS: &[&str] = &[
     "blueprint",
     "version",
     "allVersions",

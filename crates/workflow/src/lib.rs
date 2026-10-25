@@ -165,8 +165,8 @@ enum RawAction {
 }
 
 /// Default and hard upper bound for `referencing_records_update` targets.
-pub const DEFAULT_REFERENCING_TARGETS: u32 = 100;
-pub const MAX_REFERENCING_TARGETS: u32 = 500;
+pub(crate) const DEFAULT_REFERENCING_TARGETS: u32 = 100;
+pub(crate) const MAX_REFERENCING_TARGETS: u32 = 500;
 const MAX_NESTED_ACTIONS: usize = 20;
 const MAX_TRIGGER_ATTRIBUTES: usize = 100;
 const MAX_EXTENSION_PROVIDER_BYTES: usize = 128;

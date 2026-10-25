@@ -25,7 +25,7 @@ const MAX_CAUSAL_DEPTH: usize = 8;
 /// The task error code of a failed workflow run.
 const TASK_ERROR_CODE: &str = "workflow_run";
 
-pub struct WorkflowIntakeHandler;
+pub(crate) struct WorkflowIntakeHandler;
 #[async_trait]
 impl EventHandler for WorkflowIntakeHandler {
     fn name(&self) -> &'static str {
@@ -52,7 +52,7 @@ pub fn add_to_registry(
         .expect("workflow handler name is unique")
 }
 
-pub struct WorkflowTaskHandler {
+pub(crate) struct WorkflowTaskHandler {
     repository: SystemRepository,
 }
 

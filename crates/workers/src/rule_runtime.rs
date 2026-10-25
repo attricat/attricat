@@ -23,7 +23,7 @@ const PAGE_SIZE: i64 = attricat_rules::MAX_PAGE_SIZE as i64;
 /// The task error code of a failed rule run.
 const TASK_ERROR_CODE: &str = "rule_run";
 
-pub struct RuleIntakeHandler;
+pub(crate) struct RuleIntakeHandler;
 #[async_trait]
 impl EventHandler for RuleIntakeHandler {
     fn name(&self) -> &'static str {
@@ -52,7 +52,7 @@ pub fn add_to_registry(
         .expect("rule handler name is unique")
 }
 
-pub struct RuleTaskHandler {
+pub(crate) struct RuleTaskHandler {
     repository: SystemRepository,
 }
 
