@@ -164,8 +164,9 @@ async fn evaluate_page(
     repo: &AttricatRepository,
     run: &ClaimedRuleRun,
 ) -> Result<EvaluatedPage, RepositoryError> {
-    let compiled: attricat_rules::CompiledRule = serde_json::from_value(run.compiled_plan.clone())
-        .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
+    let compiled: attricat_rules::CompiledRule =
+        serde::Deserialize::deserialize(&run.compiled_plan)
+            .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
     let remaining =
         (attricat_rules::MAX_CANDIDATES_PER_RUN as i64 - run.candidates_evaluated).max(0);
     if remaining == 0 {

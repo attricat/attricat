@@ -239,7 +239,7 @@ async fn execute(
     run: &crate::repository::ClaimedWorkflowRun,
     task: &ClaimedTask,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let event: DomainEvent = serde_json::from_value(run.trigger_event.clone())?;
+    let event: DomainEvent = serde::Deserialize::deserialize(&run.trigger_event)?;
     if event.aggregate_kind != "record"
         || (run.run.source == "event" && event.source_name.starts_with("workflow:"))
         || (run.run.source == "event" && causal_depth(&event) >= MAX_CAUSAL_DEPTH)
@@ -248,7 +248,7 @@ async fn execute(
         return Ok(());
     }
     let plan: attricat_workflow::CompiledWorkflow =
-        serde_json::from_value(run.compiled_plan.clone())?;
+        serde::Deserialize::deserialize(&run.compiled_plan)?;
     let worker = repository
         .for_event_handler(&event, &format!("workflow:{}", run.run.workflow_id))
         .for_workflow_task(task);

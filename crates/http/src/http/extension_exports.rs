@@ -44,7 +44,7 @@ const MAX_SECRET_INPUT_BYTES: usize = 8 * 1024;
 const MAX_CONNECTION_PARAMETERS_BYTES: usize = 16 * 1024;
 
 fn installed_manifest(value: &Value) -> Result<Manifest, ApiError> {
-    serde_json::from_value(value.clone())
+    serde::Deserialize::deserialize(value)
         .map_err(|_| ApiError::internal("installed extension manifest is invalid"))
 }
 

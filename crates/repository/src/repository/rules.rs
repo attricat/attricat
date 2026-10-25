@@ -511,7 +511,7 @@ impl AttricatRepository {
         let mut rules = Vec::with_capacity(rows.len());
         for row in rows {
             let compiled: attricat_rules::CompiledRule =
-                serde_json::from_value(row.compiled_plan.clone())
+                serde::Deserialize::deserialize(&row.compiled_plan)
                     .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
             let triggered = compiled.triggers.iter().any(|trigger| matches!(trigger, attricat_rules::Trigger::Event { event_type } if event_type == &event.event_type));
             if row.direct && (triggered || record_changed) {

@@ -369,7 +369,7 @@ pub fn record_checks(schema: &Value) -> Result<Vec<Check>, String> {
     let Some(value) = schema.get(CHECKS_KEY) else {
         return Ok(Vec::new());
     };
-    let checks: Vec<Check> = serde_json::from_value(value.clone())
+    let checks: Vec<Check> = serde::Deserialize::deserialize(value)
         .map_err(|error| format!("invalid {CHECKS_KEY}: {error}"))?;
     validate_checks(&checks, None, Usage::Enforced, MAX_RECORD_CHECKS)
         .map_err(|message| format!("invalid {CHECKS_KEY}: {message}"))?;

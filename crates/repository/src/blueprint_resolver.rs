@@ -182,7 +182,7 @@ async fn resolve_extension_attribute_types(
                 "extension attribute type '{reference}' has no enabled provider"
             )));
         };
-        let manifest: Manifest = serde_json::from_value(manifest.clone()).map_err(|_| {
+        let manifest: Manifest = serde::Deserialize::deserialize(manifest).map_err(|_| {
             RepositoryError::InvalidBlueprintDefinition(format!(
                 "extension attribute type '{reference}' provider manifest is invalid"
             ))

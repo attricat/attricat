@@ -348,7 +348,7 @@ fn edge_conditions(edge: &Value) -> Result<Vec<Check>, String> {
     let Some(conditions) = edge.get("conditions") else {
         return Ok(Vec::new());
     };
-    let conditions: Vec<Check> = serde_json::from_value(conditions.clone())
+    let conditions: Vec<Check> = serde::Deserialize::deserialize(conditions)
         .map_err(|error| format!("invalid status transition conditions: {error}"))?;
     validate_checks(
         &conditions,

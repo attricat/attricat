@@ -161,7 +161,7 @@ impl AttricatRepository {
         let mut inserted = 0;
         for (workflow_id, version, plan) in rows {
             let compiled: attricat_workflow::CompiledWorkflow =
-                serde_json::from_value(plan.clone()).map_err(|e| {
+                serde::Deserialize::deserialize(&plan).map_err(|e| {
                     RepositoryError::InvalidWorkflowDefinition(format!(
                         "stored compiled workflow is invalid: {e}"
                     ))
@@ -341,7 +341,7 @@ impl AttricatRepository {
                 RepositoryError::WorkflowNotPublished
             });
         };
-        let compiled: attricat_workflow::CompiledWorkflow = serde_json::from_value(plan.clone())
+        let compiled: attricat_workflow::CompiledWorkflow = serde::Deserialize::deserialize(&plan)
             .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
         if !compiled
             .triggers
@@ -397,7 +397,7 @@ impl AttricatRepository {
         let rows: Vec<(Uuid,i64,Value)>=sqlx::query_as("SELECT w.id,w.version,w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.status='published' AND l.enabled_version=w.version FOR SHARE OF l").bind(ws).fetch_all(&mut *tx).await?;
         for (workflow_id, version, plan) in rows {
             let compiled: attricat_workflow::CompiledWorkflow =
-                serde_json::from_value(plan.clone())
+                serde::Deserialize::deserialize(&plan)
                     .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
             // Whether the workflow has a pending run; read on first need and
             // kept current as this pass creates runs.

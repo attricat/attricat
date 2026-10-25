@@ -4059,7 +4059,7 @@ impl AttricatRepository {
                     ));
                 }
                 let preconditions: Vec<ExistingAssetEvidence> =
-                    serde_json::from_value(action.preconditions.clone()).map_err(|_| {
+                    serde::Deserialize::deserialize(&action.preconditions).map_err(|_| {
                         RepositoryError::InvalidSolutionPackPlan(
                             "persisted asset map preconditions are invalid".into(),
                         )
@@ -4095,7 +4095,7 @@ impl AttricatRepository {
                     ));
                 }
                 let preconditions: Vec<ExistingBlueprintPrecondition> =
-                    serde_json::from_value(action.preconditions.clone()).map_err(|_| {
+                    serde::Deserialize::deserialize(&action.preconditions).map_err(|_| {
                         RepositoryError::InvalidSolutionPackPlan(
                             "persisted map preconditions are invalid".into(),
                         )
@@ -4918,7 +4918,7 @@ impl AttricatRepository {
         let (result_snapshot, events) = if step.action == "map" {
             if step.resource_kind == "presentation_asset" {
                 let expected: Vec<ExistingAssetEvidence> =
-                    serde_json::from_value(step.preconditions.clone()).map_err(|_| {
+                    serde::Deserialize::deserialize(&step.preconditions).map_err(|_| {
                         RepositoryError::InvalidSolutionPackPlan(
                             "invalid existing-asset preconditions".into(),
                         )

@@ -465,7 +465,7 @@ impl AttricatRepository {
                         .filter_map(serde_json::Value::as_str)
                         .map(str::to_owned)
                         .collect(),
-                    removal_policy: serde_json::from_value(batch.removal_policy.clone()).ok(),
+                    removal_policy: serde::Deserialize::deserialize(&batch.removal_policy).ok(),
                 },
             )
             .await

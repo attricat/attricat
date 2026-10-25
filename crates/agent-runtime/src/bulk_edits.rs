@@ -469,7 +469,7 @@ async fn select_filter(
 
 /// "Set Brand, Season on 412 Product records."
 pub fn change_summary(arguments: &Value) -> Result<String, ToolError> {
-    let edit: ResolvedBulkEdit = serde_json::from_value(arguments.clone())
+    let edit: ResolvedBulkEdit = serde::Deserialize::deserialize(arguments)
         .map_err(|error| invalid(format!("unresolved bulk edit: {error}")))?;
     let names = edit
         .attributes
@@ -511,7 +511,7 @@ pub async fn execute(
     call: &AgentToolCall,
     audit: impl Fn(Uuid) -> crate::repository::AuditContext,
 ) -> Result<Value, Value> {
-    let edit: ResolvedBulkEdit = serde_json::from_value(call.arguments.clone()).map_err(
+    let edit: ResolvedBulkEdit = serde::Deserialize::deserialize(&call.arguments).map_err(
         |_| json!({"code":"tool_error","message":"The approved bulk edit could not be read."}),
     )?;
     let total = edit.records.len();
