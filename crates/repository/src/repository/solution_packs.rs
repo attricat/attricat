@@ -1,4 +1,6 @@
-use attricat_domain::states::{SolutionPackApplicationState, SolutionPackStepState};
+use attricat_domain::states::{
+    RevisionStatus, SolutionPackApplicationState, SolutionPackStepState,
+};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -107,7 +109,8 @@ pub struct SolutionPackPlan {
     pub pack_description: String,
     pub host_api: String,
     pub prefix: String,
-    pub blueprint_publication: String,
+    #[sqlx(try_from = "String")]
+    pub blueprint_publication: BlueprintPublication,
     pub ready: bool,
     pub sample_data_selected: bool,
     pub sample_declaration_sha256: Option<String>,
@@ -1816,7 +1819,7 @@ fn materialize_plan(
         pack_description: manifest.description.clone(),
         host_api: manifest.attricat.host_api.clone(),
         prefix: prefix.to_owned(),
-        blueprint_publication: publication.as_str().to_owned(),
+        blueprint_publication: publication,
         ready: draft.ready,
         sample_data_selected: include_sample_data,
         sample_declaration_sha256: include_sample_data.then(|| {
@@ -2368,7 +2371,8 @@ pub struct SolutionPackApplication {
     pub archive_sha256: String,
     pub pack_id: String,
     pub pack_version: String,
-    pub blueprint_publication: String,
+    #[sqlx(try_from = "String")]
+    pub blueprint_publication: BlueprintPublication,
     #[sqlx(try_from = "String")]
     pub state: SolutionPackApplicationState,
     pub diagnostic_code: Option<String>,
@@ -2437,7 +2441,8 @@ pub struct SolutionPackApplicationSummary {
     pub archive_sha256: String,
     pub pack_id: String,
     pub pack_version: String,
-    pub blueprint_publication: String,
+    #[sqlx(try_from = "String")]
+    pub blueprint_publication: BlueprintPublication,
     #[sqlx(try_from = "String")]
     pub state: SolutionPackApplicationState,
     pub diagnostic_code: Option<String>,
@@ -2555,7 +2560,7 @@ struct PresentationAssetPayload {
 struct BlueprintPayload {
     definition: String,
     version: i64,
-    publication: String,
+    publication: BlueprintPublication,
     #[serde(default)]
     extension_contributions: Vec<ExtensionContributionSnapshotPayload>,
 }
@@ -2894,7 +2899,7 @@ impl AttricatRepository {
                     || !matches!(snapshot.kind.as_str(), "record" | "mixin")
                     || !is_lowercase_sha256_hex(&snapshot.definition_hash)
                     || !is_lowercase_sha256_hex(&snapshot.canonical_definition_hash)
-                    || snapshot.status != "published"
+                    || snapshot.status != RevisionStatus::Published.as_str()
                     || snapshot.deleted
                 {
                     return Err(RepositoryError::InvalidSolutionPackPlan(
@@ -3236,7 +3241,7 @@ impl AttricatRepository {
         .bind(&plan.archive_sha256)
         .bind(&plan.pack_id)
         .bind(&plan.pack_version)
-        .bind(&plan.blueprint_publication)
+        .bind(plan.blueprint_publication.as_str())
         .bind(mapping_snapshot)
         .bind(&plan.readme_markdown)
         .bind(&plan.release_notes_markdown)
@@ -3733,7 +3738,7 @@ impl AttricatRepository {
             || expected.code != target_code
             || Some(expected.version) != target_version
             || !matches!(expected.blueprint_kind.as_str(), "record" | "mixin")
-            || expected.status != "published"
+            || expected.status != RevisionStatus::Published.as_str()
             || expected.deleted
         {
             return Err(RepositoryError::InvalidSolutionPackPlan(
@@ -3765,7 +3770,7 @@ impl AttricatRepository {
         let latest_published_version = revisions
             .iter()
             .filter(|(_, _, _, _, status, deleted_at, _)| {
-                status == "published" && deleted_at.is_none()
+                status == RevisionStatus::Published.as_str() && deleted_at.is_none()
             })
             .map(|(_, version, _, _, _, _, _)| *version)
             .max();
@@ -4268,19 +4273,14 @@ impl AttricatRepository {
                         BLUEPRINT_CREATED_V1,
                         &created.blueprint,
                     )];
-                    let blueprint = match payload.publication.as_str() {
-                        "draft" => created.blueprint,
-                        "publish" => {
+                    let blueprint = match payload.publication {
+                        BlueprintPublication::Draft => created.blueprint,
+                        BlueprintPublication::Publish => {
                             let published = self
                                 .publish_blueprint_in_transaction(&mut tx, step.target_id, 1)
                                 .await?;
                             events.push(blueprint_event(self, BLUEPRINT_PUBLISHED_V1, &published));
                             published
-                        }
-                        _ => {
-                            return Err(RepositoryError::InvalidSolutionPackPlan(
-                                "persisted blueprint publication is invalid".into(),
-                            ));
                         }
                     };
                     (

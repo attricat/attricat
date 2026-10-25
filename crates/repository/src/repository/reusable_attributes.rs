@@ -1,6 +1,7 @@
 use super::*;
 use crate::persistence_rows::{Db, IntoDomain};
 use attricat_blueprint::{CONTEXT_EDITABLE_SCOPES, CONTEXT_FALLBACKS, DIRECTIONAL_CARDINALITIES};
+use attricat_domain::states::RevisionStatus;
 use attricat_validation::{CODE_PATTERN, is_valid_code};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -391,7 +392,7 @@ impl AttricatRepository {
         let status = if include_drafts {
             None
         } else {
-            Some("published")
+            Some(RevisionStatus::Published.as_str())
         };
         Ok(sqlx::query_as::<_, Db<ReusableAttribute>>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at, r.definition
             FROM reusable_attribute_revisions r JOIN reusable_attribute_definitions d ON d.id = r.definition_id
@@ -612,7 +613,7 @@ impl AttricatRepository {
             .reusable_attribute_revision_in_transaction(transaction, revision_id)
             .await?
             .ok_or(RepositoryError::NotFound("reusable attribute revision"))?;
-        if revision.status != "published" {
+        if revision.status != RevisionStatus::Published {
             return Err(RepositoryError::ReusableAttributeNotPublished);
         }
         let position: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(position), -1) + 1 FROM record_reusable_attribute_attachments WHERE workspace_id = $1 AND record_id = $2")

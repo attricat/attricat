@@ -27,19 +27,12 @@ use crate::{
     },
 };
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum BlueprintPublication {
-    Draft,
-    Publish,
-}
-
-impl BlueprintPublication {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Draft => "draft",
-            Self::Publish => "publish",
-        }
+attricat_domain::code_enum! {
+    /// Whether applying a plan leaves its blueprints as drafts or publishes
+    /// them.
+    pub enum BlueprintPublication (UnknownBlueprintPublication: "blueprint publication") {
+        Draft => "draft",
+        Publish => "publish",
     }
 }
 

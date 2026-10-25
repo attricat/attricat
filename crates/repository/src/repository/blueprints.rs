@@ -9,6 +9,7 @@ use crate::model::TablePathAttribute;
 use crate::persistence_rows::{Db, IntoDomain};
 use attricat_blueprint::{AttributeDeclaration, ViewDefinition, parse};
 use attricat_cache::{CacheKey, Policy};
+use attricat_domain::states::RevisionStatus;
 use attricat_validation::validate_json_schema;
 use serde_json::json;
 use std::collections::HashMap;
@@ -527,7 +528,7 @@ impl AttricatRepository {
         .await?
         .into_domain()
         .ok_or(RepositoryError::NotFound("blueprint version"))?;
-        if blueprint.status == "draft" {
+        if blueprint.status == RevisionStatus::Draft {
             // Installed renderers and target revisions can change after a draft
             // is saved, so repeat resolution at the publication boundary.
             let compiled = crate::blueprint_resolver::compile_definition(
@@ -644,7 +645,7 @@ impl AttricatRepository {
         .await?
         .into_domain()
         .ok_or(RepositoryError::NotFound("blueprint version"))?;
-        if blueprint.status == "draft" {
+        if blueprint.status == RevisionStatus::Draft {
             compile_definition(transaction, self.workspace_id.0, &blueprint.definition).await?;
             self.validate_publication_roles(transaction, &blueprint.definition)
                 .await?;
@@ -805,7 +806,7 @@ impl AttricatRepository {
     ) -> Result<Vec<TablePathAttribute>, RepositoryError> {
         let generations = self
             .generations()
-            .filter(|_| blueprint.status == "published");
+            .filter(|_| blueprint.status == RevisionStatus::Published);
         let Some(generations) = generations else {
             return self
                 .resolve_table_path_attributes(blueprint, attributes)
@@ -1008,7 +1009,7 @@ impl AttricatRepository {
         &self,
         blueprint: &Blueprint,
     ) -> Result<Vec<Attribute>, RepositoryError> {
-        if blueprint.status != "published" {
+        if blueprint.status != RevisionStatus::Published {
             return self.list_attributes(blueprint.id, blueprint.version).await;
         }
         let key = self.revision_key(blueprint.id, blueprint.version);

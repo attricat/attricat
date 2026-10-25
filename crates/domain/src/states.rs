@@ -35,6 +35,15 @@ crate::code_enum! {
     }
 }
 
+crate::code_enum! {
+    /// Whether a blueprint, reusable attribute, workflow or rule revision is
+    /// still editable or published.
+    pub enum RevisionStatus (UnknownRevisionStatus: "revision status") {
+        Draft => "draft",
+        Published => "published",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -55,6 +64,11 @@ mod tests {
             SolutionPackStepState::ALL,
             SolutionPackStepState::as_str,
             SolutionPackStepState::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            RevisionStatus::ALL,
+            RevisionStatus::as_str,
+            RevisionStatus::parse,
         );
     }
 }

@@ -7,6 +7,7 @@ use crate::{
     },
     task_queue::{TaskInsert, TaskKind},
 };
+use attricat_domain::states::RevisionStatus;
 use chrono::{DateTime, Utc};
 use futures_util::{StreamExt, stream};
 use serde_json::json;
@@ -196,20 +197,18 @@ impl AttricatRepository {
         target: &crate::model::BlueprintWithAttributes,
     ) -> Result<Vec<String>, RepositoryError> {
         let revisions = self.list_blueprint_revisions(blueprint_id).await?;
-        if !revisions
-            .iter()
-            .any(|revision| revision.version < target_version && revision.status == "published")
-        {
+        if !revisions.iter().any(|revision| {
+            revision.version < target_version && revision.status == RevisionStatus::Published
+        }) {
             return Err(RepositoryError::BlueprintMigrationNotSafe);
         }
         // Draft revisions cannot have records, so use the nearest published
         // ancestor and every earlier published revision as migration sources.
         // Aggregate removal requirements across all possible sources.
         let mut removed = std::collections::BTreeSet::new();
-        for revision in revisions
-            .iter()
-            .filter(|revision| revision.version < target_version && revision.status == "published")
-        {
+        for revision in revisions.iter().filter(|revision| {
+            revision.version < target_version && revision.status == RevisionStatus::Published
+        }) {
             let source = self
                 .get_blueprint_revision(blueprint_id, revision.version)
                 .await?
