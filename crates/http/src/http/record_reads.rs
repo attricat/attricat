@@ -377,8 +377,6 @@ pub(super) async fn search_record_previews(
             }
         }
     };
-    // The total was counted with the result versions.
-    let total = async { Ok::<_, crate::repository::RepositoryError>(total_count) };
     let hidden_outdated = async {
         if selected != Some(current.blueprint.version) || input.page.cursor.is_some() {
             return Ok(None);
@@ -397,8 +395,9 @@ pub(super) async fn search_record_previews(
             .await
             .map(Some)
     };
-    let ((mut items, next_cursor), total_count, hidden_outdated_count) =
-        tokio::try_join!(page, total, hidden_outdated)?;
+    // The total was counted with the result versions.
+    let ((mut items, next_cursor), hidden_outdated_count) =
+        tokio::try_join!(page, hidden_outdated)?;
     timing.record("page", page_started);
     let total_count_capped = total_count.is_some_and(|count| count > SEARCH_TOTAL_COUNT_CAP);
     let total_count = total_count.map(|count| count.min(SEARCH_TOTAL_COUNT_CAP));
