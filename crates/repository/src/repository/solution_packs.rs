@@ -296,6 +296,12 @@ struct InstalledExtensionRow {
     manifest: Value,
 }
 
+/// The `solution_pack_plans` columns a plan row is read from.
+const PLAN_COLUMNS: &str = "id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, sample_data_selected, sample_declaration_sha256, sample_record_count, sample_automation_warning, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at";
+/// A plan mapping's columns before its snapshot, which readers select or mask.
+const PLAN_MAPPING_COLUMNS: &str =
+    "position,resource_kind,logical_key,target_id,target_code,target_version,mapping_kind";
+
 /// Whether a stored object has exactly `size` bytes with SHA-256 `sha256`.
 fn object_matches(stored: &StoredObject, size: usize, sha256: &str) -> bool {
     stored.bytes.len() == size && format!("{:x}", Sha256::digest(&stored.bytes)) == sha256
@@ -1679,9 +1685,9 @@ impl AttricatRepository {
         plan_id: Uuid,
     ) -> Result<Option<SolutionPackPlan>, RepositoryError> {
         let workspace_id = self.workspace_id.0;
-        let Some(mut plan) = sqlx::query_as::<_, SolutionPackPlan>(
-            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, sample_data_selected, sample_declaration_sha256, sample_record_count, sample_automation_warning, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2",
-        )
+        let Some(mut plan) = sqlx::query_as::<_, SolutionPackPlan>(&format!(
+            "SELECT {PLAN_COLUMNS} FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2"
+        ))
         .bind(workspace_id)
         .bind(plan_id)
         .fetch_optional(&self.pool)
@@ -1690,7 +1696,7 @@ impl AttricatRepository {
             return Ok(None);
         };
         plan.mappings = sqlx::query_as::<_, SolutionPackPlanMapping>(
-            "SELECT position, resource_kind, logical_key, target_id, target_code, target_version, mapping_kind, CASE WHEN mapping_kind='existing' THEN snapshot END AS snapshot FROM solution_pack_plan_mappings WHERE workspace_id = $1 AND plan_id = $2 ORDER BY position",
+            &format!("SELECT {PLAN_MAPPING_COLUMNS}, CASE WHEN mapping_kind='existing' THEN snapshot END AS snapshot FROM solution_pack_plan_mappings WHERE workspace_id = $1 AND plan_id = $2 ORDER BY position"),
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -2097,7 +2103,7 @@ async fn plan_resource_evidence_sha256(
     .fetch_one(&mut **tx)
     .await?;
     let mappings = sqlx::query_as::<_, PlanEvidenceMapping>(
-        "SELECT position,resource_kind,logical_key,target_id,target_code,target_version,mapping_kind,snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+        &format!("SELECT {PLAN_MAPPING_COLUMNS},snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position"),
     )
     .bind(workspace_id)
     .bind(plan_id)
@@ -2582,7 +2588,7 @@ impl AttricatRepository {
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let mappings = sqlx::query_as::<_, SolutionPackPlanMapping>(
-            "SELECT position,resource_kind,logical_key,target_id,target_code,target_version,mapping_kind,snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+            &format!("SELECT {PLAN_MAPPING_COLUMNS},snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position"),
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -2916,7 +2922,7 @@ impl AttricatRepository {
         let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let plan = sqlx::query_as::<_, SolutionPackPlan>(
-            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, sample_data_selected, sample_declaration_sha256, sample_record_count, sample_automation_warning, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2 FOR UPDATE",
+            &format!("SELECT {PLAN_COLUMNS} FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2 FOR UPDATE"),
         )
         .bind(workspace_id)
         .bind(plan_id)
