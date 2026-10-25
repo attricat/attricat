@@ -1,3 +1,4 @@
+use attricat_domain::states::{SolutionPackApplicationState, SolutionPackStepState};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -28,7 +29,7 @@ use crate::{
         MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES, MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
         MAX_SOLUTION_PACK_PRESENTATION_ASSET_BYTES, MappingKind, PlanActionKind, PlanResourceKind,
         PlannedAction, PlannedMapping, PlanningExploreNavigationEntry, PlanningWorkspaceSnapshot,
-        PresentationAssetMappingRequest, SOLUTION_PACK_PLAN_EXPIRY_HOURS,
+        PresentationAssetMappingRequest, RequirementStatus, SOLUTION_PACK_PLAN_EXPIRY_HOURS,
         SolutionPackCheckDefinition, SolutionPackCheckPredicate, SolutionPackExtensionRequirement,
         SolutionPackPlanDraft, ValidatedSolutionPack, build_solution_pack_plan,
         evaluate_extension_requirement, json_deep_contains, parse_version_req, physical_code,
@@ -40,7 +41,7 @@ use crate::{
 use super::{
     AttricatRepository, EventPublisher, ExploreNavigationEntry, ExtensionState, RepositoryError,
     SAMPLE_SYSTEM_TAG, blueprints::blueprint_event, extensions::empty_workspace_extension_layout,
-    record_commands::ChosenIdRecordCreate,
+    record_commands::ChosenIdRecordCreate, stored_code,
 };
 
 /// Length of a hex-encoded SHA-256 digest.
@@ -244,7 +245,8 @@ struct PlanEvidenceExtensionRequirement {
     required: bool,
     configuration_template_path: Option<String>,
     configuration_template_sha256: Option<String>,
-    status: String,
+    #[sqlx(try_from = "String")]
+    status: RequirementStatus,
     reason_code: String,
     installed_release_id: Option<Uuid>,
     installed_version: Option<String>,
@@ -271,7 +273,8 @@ pub struct SolutionPackPlanExtensionRequirement {
     pub required: bool,
     pub configuration_template_path: Option<String>,
     pub configuration_template_sha256: Option<String>,
-    pub status: String,
+    #[sqlx(try_from = "String")]
+    pub status: RequirementStatus,
     pub reason_code: String,
     pub installed_release_id: Option<Uuid>,
     pub installed_version: Option<String>,
@@ -290,7 +293,8 @@ struct PrivatePlanExtensionRequirement {
     required: bool,
     configuration_template_path: Option<String>,
     configuration_template_sha256: Option<String>,
-    status: String,
+    #[sqlx(try_from = "String")]
+    status: RequirementStatus,
     installed_release_id: Option<Uuid>,
     installed_version: Option<String>,
     evaluation_template: Value,
@@ -1578,7 +1582,7 @@ impl AttricatRepository {
             &draft,
         );
         for requirement in &mut plan.extension_requirements {
-            if requirement.status == "install" {
+            if requirement.status == RequirementStatus::Install {
                 requirement.install = official_extensions
                     .iter()
                     .find(|release| release.extension_id == requirement.extension_id)
@@ -1787,7 +1791,7 @@ fn materialize_plan(
                 required: requirement.required,
                 configuration_template_path: requirement.configuration_template_path.clone(),
                 configuration_template_sha256: requirement.configuration_template_sha256.clone(),
-                status: requirement.status.to_owned(),
+                status: requirement.status,
                 reason_code: requirement.reason_code.to_owned(),
                 installed_release_id: requirement.installed_release_id,
                 installed_version: requirement.installed_version.clone(),
@@ -2043,7 +2047,7 @@ async fn insert_plan_rows(
             .bind(requirement.required)
             .bind(&requirement.configuration_template_path)
             .bind(&requirement.configuration_template_sha256)
-            .bind(requirement.status)
+            .bind(requirement.status.as_str())
             .bind(requirement.reason_code)
             .bind(requirement.installed_release_id)
             .bind(&requirement.installed_version)
@@ -2088,7 +2092,7 @@ async fn insert_extension_installs(
             .extension_requirements
             .iter()
             .find(|requirement| requirement.extension_id == release.extension_id)
-            .filter(|requirement| requirement.status == "install")
+            .filter(|requirement| requirement.status == RequirementStatus::Install)
         else {
             continue;
         };
@@ -2365,7 +2369,8 @@ pub struct SolutionPackApplication {
     pub pack_id: String,
     pub pack_version: String,
     pub blueprint_publication: String,
-    pub state: String,
+    #[sqlx(try_from = "String")]
+    pub state: SolutionPackApplicationState,
     pub diagnostic_code: Option<String>,
     pub diagnostic_message: Option<String>,
     pub mapping_snapshot: Value,
@@ -2433,7 +2438,8 @@ pub struct SolutionPackApplicationSummary {
     pub pack_id: String,
     pub pack_version: String,
     pub blueprint_publication: String,
-    pub state: String,
+    #[sqlx(try_from = "String")]
+    pub state: SolutionPackApplicationState,
     pub diagnostic_code: Option<String>,
     pub diagnostic_message: Option<String>,
     pub started_at: DateTime<Utc>,
@@ -2452,7 +2458,8 @@ pub struct SolutionPackApplicationStep {
     pub target_id: Uuid,
     pub target_code: String,
     pub target_version: Option<i64>,
-    pub state: String,
+    #[sqlx(try_from = "String")]
+    pub state: SolutionPackStepState,
     pub diagnostic_code: Option<String>,
     pub diagnostic_message: Option<String>,
     pub result_snapshot: Option<Value>,
@@ -2467,7 +2474,8 @@ struct RevalidationStep {
     resource_kind: PlanResourceKind,
     target_id: Uuid,
     target_code: String,
-    state: String,
+    #[sqlx(try_from = "String")]
+    state: SolutionPackStepState,
     #[sqlx(try_from = "String")]
     action: PlanActionKind,
     normalized_payload: Option<Value>,
@@ -3144,11 +3152,15 @@ impl AttricatRepository {
         .fetch_optional(&mut *tx)
         .await?;
         if let Some((application_id, state)) = &existing_application {
-            if state == "completed" {
+            let state: SolutionPackApplicationState = stored_code(state.clone())?;
+            if state == SolutionPackApplicationState::Completed {
                 tx.commit().await?;
                 return Ok(*application_id);
             }
-            if matches!(state.as_str(), "invalid" | "abandoned") {
+            if matches!(
+                state,
+                SolutionPackApplicationState::Invalid | SolutionPackApplicationState::Abandoned
+            ) {
                 return Err(RepositoryError::SolutionPackApplicationInvalid);
             }
         } else {
@@ -3276,11 +3288,13 @@ impl AttricatRepository {
         .bind(workspace_id)
         .bind(application_id)
         .fetch_one(&mut *tx)
-        .await?;
-        if state == "invalid" {
+        .await
+        .map_err(RepositoryError::from)
+        .and_then(stored_code::<SolutionPackApplicationState>)?;
+        if state == SolutionPackApplicationState::Invalid {
             return Err(RepositoryError::SolutionPackApplicationInvalid);
         }
-        if state != "completed" {
+        if state != SolutionPackApplicationState::Completed {
             if let Err(error) = self
                 .revalidate_application_steps(&mut tx, application_id)
                 .await
@@ -3346,7 +3360,11 @@ impl AttricatRepository {
         .map(installed_extension_snapshot)
         .collect::<std::collections::BTreeMap<_, _>>();
         for persisted in requirements {
-            if !persisted.required || !matches!(persisted.status.as_str(), "satisfied" | "install")
+            if !persisted.required
+                || !matches!(
+                    persisted.status,
+                    RequirementStatus::Satisfied | RequirementStatus::Install
+                )
             {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
                     "invalid persisted required extension requirement".into(),
@@ -3382,7 +3400,7 @@ impl AttricatRepository {
                     .map(|_| &persisted.evaluation_template),
                 installed,
             );
-            if evaluated.status != "satisfied"
+            if evaluated.status != RequirementStatus::Satisfied
                 || installed.map(|value| value.installed_release_id)
                     != persisted.installed_release_id
                 || installed.map(|value| value.version.as_str())
@@ -3540,7 +3558,9 @@ impl AttricatRepository {
                     let current = self
                         .lock_explore_navigation_in_transaction(tx, workspace_id)
                         .await?;
-                    if step.state == "completed" || step.action == PlanActionKind::Satisfied {
+                    if step.state == SolutionPackStepState::Completed
+                        || step.action == PlanActionKind::Satisfied
+                    {
                         self.validate_explore_navigation_entries_in_transaction(
                             tx,
                             workspace_id,
@@ -3551,12 +3571,13 @@ impl AttricatRepository {
                     }
                     let all_exact = navigation_entries_all_exact(&current, &payload);
                     let appendable = navigation_entries_appendable(&current, &payload);
-                    let valid =
-                        if step.state == "completed" || step.action == PlanActionKind::Satisfied {
-                            all_exact
-                        } else {
-                            step.action == PlanActionKind::Append && appendable
-                        };
+                    let valid = if step.state == SolutionPackStepState::Completed
+                        || step.action == PlanActionKind::Satisfied
+                    {
+                        all_exact
+                    } else {
+                        step.action == PlanActionKind::Append && appendable
+                    };
                     if !valid {
                         return Err(RepositoryError::SolutionPackPlanStale);
                     }
@@ -3587,12 +3608,13 @@ impl AttricatRepository {
                         .map_err(solution_pack_layout_error)?;
                     let all_exact = extension_layout_entries_all_exact(&current, &payload);
                     let appendable = extension_layout_entries_appendable(&current, &payload);
-                    let valid =
-                        if step.state == "completed" || step.action == PlanActionKind::Satisfied {
-                            all_exact
-                        } else {
-                            step.action == PlanActionKind::Append && appendable
-                        };
+                    let valid = if step.state == SolutionPackStepState::Completed
+                        || step.action == PlanActionKind::Satisfied
+                    {
+                        all_exact
+                    } else {
+                        step.action == PlanActionKind::Append && appendable
+                    };
                     if !valid {
                         return Err(RepositoryError::SolutionPackPlanStale);
                     }
@@ -3626,7 +3648,7 @@ impl AttricatRepository {
                 .bind(step.target_id)
                 .fetch_one(&mut **tx)
                 .await?;
-                if (step.state == "completed") != exists {
+                if (step.state == SolutionPackStepState::Completed) != exists {
                     return Err(RepositoryError::SolutionPackPlanStale);
                 }
                 continue;
@@ -3639,7 +3661,7 @@ impl AttricatRepository {
                 .bind(step.target_id)
                 .fetch_one(&mut **tx)
                 .await?;
-                if (step.state == "completed") != exists {
+                if (step.state == SolutionPackStepState::Completed) != exists {
                     return Err(RepositoryError::SolutionPackPlanStale);
                 }
                 continue;
@@ -3654,7 +3676,7 @@ impl AttricatRepository {
                 let (exists, code_taken) = self
                     .seed_target_state(tx, step.resource_kind, step.target_id, &step.target_code)
                     .await?;
-                let valid = if step.state == "completed" {
+                let valid = if step.state == SolutionPackStepState::Completed {
                     exists
                 } else {
                     !exists && !code_taken
@@ -3674,7 +3696,7 @@ impl AttricatRepository {
             }
             let matches =
                 super::workspace_resource_code_matches(tx, workspace_id, &step.target_code).await?;
-            let valid = if step.state == "completed" {
+            let valid = if step.state == SolutionPackStepState::Completed {
                 matches.as_slice() == [(step.resource_kind.as_str().to_owned(), step.target_id)]
             } else {
                 matches.is_empty()
@@ -4096,14 +4118,18 @@ impl AttricatRepository {
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(RepositoryError::NotFound("solution-pack application"))?;
-        if state == "completed" {
+        let state: SolutionPackApplicationState = stored_code(state)?;
+        if state == SolutionPackApplicationState::Completed {
             tx.commit().await?;
             return Ok(false);
         }
-        if matches!(state.as_str(), "invalid" | "abandoned") {
+        if matches!(
+            state,
+            SolutionPackApplicationState::Invalid | SolutionPackApplicationState::Abandoned
+        ) {
             return Err(RepositoryError::SolutionPackApplicationInvalid);
         }
-        if state == "failed" {
+        if state == SolutionPackApplicationState::Failed {
             return Err(RepositoryError::SolutionPackApplicationFailed(
                 "retry must revalidate the application before continuing".to_owned(),
             ));
@@ -4492,7 +4518,9 @@ impl AttricatRepository {
         .bind(application_id)
         .fetch_one(&mut *tx)
         .await?;
-        if application_state == "completed" {
+        if stored_code::<SolutionPackApplicationState>(application_state)?
+            == SolutionPackApplicationState::Completed
+        {
             tx.commit().await?;
             return Ok(true);
         }
@@ -4525,15 +4553,20 @@ impl AttricatRepository {
             }
         }
         let (state, code) = match error {
-            RepositoryError::SolutionPackPlanStale => ("invalid", "plan_stale"),
-            RepositoryError::SolutionPackApplicationInvalid => ("invalid", "application_invalid"),
-            RepositoryError::SolutionPackAssetObjectIntegrityFailed => {
-                ("invalid", "asset_object_integrity_failed")
+            RepositoryError::SolutionPackPlanStale => {
+                (SolutionPackApplicationState::Invalid, "plan_stale")
             }
-            _ => ("failed", "step_failed"),
+            RepositoryError::SolutionPackApplicationInvalid => {
+                (SolutionPackApplicationState::Invalid, "application_invalid")
+            }
+            RepositoryError::SolutionPackAssetObjectIntegrityFailed => (
+                SolutionPackApplicationState::Invalid,
+                "asset_object_integrity_failed",
+            ),
+            _ => (SolutionPackApplicationState::Failed, "step_failed"),
         };
         let message = bounded_diagnostic(&error.to_string());
-        if state == "invalid" {
+        if state == SolutionPackApplicationState::Invalid {
             invalidate_solution_pack_application(
                 &mut tx,
                 workspace_id,
@@ -4545,7 +4578,7 @@ impl AttricatRepository {
             .await?;
         } else {
             sqlx::query("UPDATE solution_pack_applications SET state=$3, diagnostic_code=$4, diagnostic_message=$5, updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND state <> 'completed'")
-                .bind(workspace_id).bind(application_id).bind(state).bind(code).bind(&message).execute(&mut *tx).await?;
+                .bind(workspace_id).bind(application_id).bind(state.as_str()).bind(code).bind(&message).execute(&mut *tx).await?;
         }
         if let Some(position) = attempted_position {
             sqlx::query("UPDATE solution_pack_application_steps SET state='failed', diagnostic_code=$4, diagnostic_message=$5, updated_at=clock_timestamp() WHERE workspace_id=$1 AND application_id=$2 AND position=$3 AND state='pending'")
@@ -5555,7 +5588,7 @@ impl AttricatRepository {
         let Some((state, pack_id, pack_version)) = actual else {
             return Err(RepositoryError::SolutionPackPlanStale);
         };
-        if state != "completed"
+        if state != SolutionPackApplicationState::Completed.as_str()
             || expected.get("pack_id").and_then(Value::as_str) != Some(pack_id.as_str())
             || expected.get("pack_version").and_then(Value::as_str) != Some(pack_version.as_str())
         {
@@ -5924,8 +5957,8 @@ mod tests {
             .apply_solution_pack_plan(plan_id, &object_store)
             .await
             .unwrap();
-        assert_eq!(application.state, "completed");
-        assert_eq!(application.steps[0].state, "completed");
+        assert_eq!(application.state, SolutionPackApplicationState::Completed);
+        assert_eq!(application.steps[0].state, SolutionPackStepState::Completed);
         assert_eq!(
             application.steps[0].result_snapshot.as_ref().unwrap()["outcome"],
             "appended"
@@ -6267,12 +6300,12 @@ value_type = "string"
             .apply_solution_pack_plan(plan_id, &object_store)
             .await
             .unwrap();
-        assert_eq!(application.state, "completed");
+        assert_eq!(application.state, SolutionPackApplicationState::Completed);
         let retried = repository
             .apply_solution_pack_plan(plan_id, &object_store)
             .await
             .unwrap();
-        assert_eq!(retried.state, "completed");
+        assert_eq!(retried.state, SolutionPackApplicationState::Completed);
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM records WHERE id=$1")
                 .bind(target_id)
@@ -6347,8 +6380,8 @@ value_type = "string"
             .apply_solution_pack_plan(plan_id, &object_store)
             .await
             .unwrap();
-        assert_eq!(application.state, "completed");
-        assert_eq!(application.steps[0].state, "completed");
+        assert_eq!(application.state, SolutionPackApplicationState::Completed);
+        assert_eq!(application.steps[0].state, SolutionPackStepState::Completed);
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM records WHERE id=$1")
                 .bind(target_id)
@@ -6388,8 +6421,8 @@ value_type = "string"
             .abandon_solution_pack_application(application_id)
             .await
             .unwrap();
-        assert_eq!(application.state, "abandoned");
-        assert_eq!(application.steps[0].state, "pending");
+        assert_eq!(application.state, SolutionPackApplicationState::Abandoned);
+        assert_eq!(application.steps[0].state, SolutionPackStepState::Pending);
         assert!(application.abandoned_at.is_some());
         let staged: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM solution_pack_plan_sample_records WHERE plan_id=$1",
@@ -6409,7 +6442,7 @@ value_type = "string"
                 .await
                 .unwrap()
                 .state,
-            "abandoned"
+            SolutionPackApplicationState::Abandoned
         );
     }
 
@@ -6600,6 +6633,9 @@ value_type = "string"
             "abandonment bypassed the application lock"
         );
         active_step.rollback().await.unwrap();
-        assert_eq!(abandon.await.unwrap().unwrap().state, "abandoned");
+        assert_eq!(
+            abandon.await.unwrap().unwrap().state,
+            SolutionPackApplicationState::Abandoned
+        );
     }
 }

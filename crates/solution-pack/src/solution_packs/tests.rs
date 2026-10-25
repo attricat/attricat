@@ -884,7 +884,10 @@ hidden = []
                         "extension_contribution_unavailable"
                     )
                 );
-                assert_eq!(mapped.extension_requirements[0].status, "satisfied");
+                assert_eq!(
+                    mapped.extension_requirements[0].status,
+                    RequirementStatus::Satisfied
+                );
                 assert!(!mapped.ready);
             }
         }
@@ -1319,7 +1322,7 @@ fn extension_requirement_evaluation_is_deterministic_and_does_not_require_enable
     };
     let template = json!({"endpoint":"https://example.test"});
     let satisfied = evaluate_extension_requirement(&requirement, Some(&template), Some(&installed));
-    assert_eq!(satisfied.status, "satisfied");
+    assert_eq!(satisfied.status, RequirementStatus::Satisfied);
     assert_eq!(satisfied.reason_code, "satisfied");
 
     let mismatch = evaluate_extension_requirement(
@@ -1327,7 +1330,7 @@ fn extension_requirement_evaluation_is_deterministic_and_does_not_require_enable
         Some(&json!({"endpoint":"https://other.test"})),
         Some(&installed),
     );
-    assert_eq!(mismatch.status, "blocked");
+    assert_eq!(mismatch.status, RequirementStatus::Blocked);
     assert_eq!(mismatch.reason_code, "configuration_mismatch");
 
     let incompatible = InstalledExtensionSnapshot {
@@ -1335,27 +1338,27 @@ fn extension_requirement_evaluation_is_deterministic_and_does_not_require_enable
         ..installed.clone()
     };
     let blocked = evaluate_extension_requirement(&requirement, None, Some(&incompatible));
-    assert_eq!(blocked.status, "blocked");
+    assert_eq!(blocked.status, RequirementStatus::Blocked);
     assert_eq!(blocked.reason_code, "incompatible_version");
 
     let mut optional = requirement.clone();
     optional.required = false;
     let missing = evaluate_extension_requirement(&optional, None, None);
-    assert_eq!(missing.status, "skipped");
+    assert_eq!(missing.status, RequirementStatus::Skipped);
     assert_eq!(missing.reason_code, "missing");
     let incompatible = evaluate_extension_requirement(&optional, None, Some(&incompatible));
-    assert_eq!(incompatible.status, "skipped");
+    assert_eq!(incompatible.status, RequirementStatus::Skipped);
     assert_eq!(incompatible.reason_code, "incompatible_version");
     let optional_mismatch = evaluate_extension_requirement(
         &optional,
         Some(&json!({"endpoint":"https://other.test"})),
         Some(&installed),
     );
-    assert_eq!(optional_mismatch.status, "skipped");
+    assert_eq!(optional_mismatch.status, RequirementStatus::Skipped);
     assert_eq!(optional_mismatch.reason_code, "configuration_mismatch");
     let optional_satisfied =
         evaluate_extension_requirement(&optional, Some(&template), Some(&installed));
-    assert_eq!(optional_satisfied.status, "satisfied");
+    assert_eq!(optional_satisfied.status, RequirementStatus::Satisfied);
 
     let quarantined = InstalledExtensionSnapshot {
         state: ExtensionState::Quarantined,
@@ -1364,7 +1367,7 @@ fn extension_requirement_evaluation_is_deterministic_and_does_not_require_enable
     let blocked = evaluate_extension_requirement(&requirement, None, Some(&quarantined));
     assert_eq!(blocked.reason_code, "quarantined");
     let skipped = evaluate_extension_requirement(&optional, None, Some(&quarantined));
-    assert_eq!(skipped.status, "skipped");
+    assert_eq!(skipped.status, RequirementStatus::Skipped);
     assert_eq!(skipped.reason_code, "quarantined");
 }
 
@@ -1387,7 +1390,7 @@ fn pending_official_release_is_planned_as_an_install_without_installed_state() {
         pending_install: true,
     };
     let planned = evaluate_extension_requirement(&requirement, None, Some(&pending));
-    assert_eq!(planned.status, "install");
+    assert_eq!(planned.status, RequirementStatus::Install);
     assert_eq!(planned.reason_code, "install");
     assert_eq!(planned.installed_release_id, None);
     assert_eq!(planned.installed_version, None);
@@ -1399,7 +1402,7 @@ fn pending_official_release_is_planned_as_an_install_without_installed_state() {
         ..pending
     };
     let blocked = evaluate_extension_requirement(&requirement, None, Some(&denied));
-    assert_eq!(blocked.status, "blocked");
+    assert_eq!(blocked.status, RequirementStatus::Blocked);
     assert_eq!(blocked.reason_code, "policy_incompatible");
     assert_eq!(blocked.installed_release_id, None);
 }

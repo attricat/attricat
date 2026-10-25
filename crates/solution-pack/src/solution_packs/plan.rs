@@ -268,6 +268,19 @@ impl TryFrom<String> for PlanActionKind {
     }
 }
 
+attricat_domain::code_enum! {
+    /// Whether a plan's extension requirement is met.
+    pub enum RequirementStatus (UnknownRequirementStatus: "extension requirement status") {
+        Satisfied => "satisfied",
+        /// Met once applying the plan installs a registry release.
+        Install => "install",
+        /// A required extension is missing or unusable; the plan cannot apply.
+        Blocked => "blocked",
+        /// An optional extension is missing or unusable.
+        Skipped => "skipped",
+    }
+}
+
 /// A planned action and its reason code.
 pub(crate) type Outcome = (PlanActionKind, &'static str);
 
@@ -301,7 +314,7 @@ pub struct PlannedExtensionRequirement {
     pub required: bool,
     pub configuration_template_path: Option<String>,
     pub configuration_template_sha256: Option<String>,
-    pub status: &'static str,
+    pub status: RequirementStatus,
     pub reason_code: &'static str,
     pub installed_release_id: Option<uuid::Uuid>,
     pub installed_version: Option<String>,
@@ -331,7 +344,7 @@ impl SolutionPackPlanDraft {
             && self
                 .extension_requirements
                 .iter()
-                .all(|requirement| requirement.status != "blocked")
+                .all(|requirement| requirement.status != RequirementStatus::Blocked)
     }
 }
 
@@ -372,12 +385,11 @@ pub fn evaluate_extension_requirement(
     } else {
         configuration_matches
     };
-    let status = if matches!(reason_code, "satisfied" | "install") {
-        reason_code
-    } else if requirement.required {
-        "blocked"
-    } else {
-        "skipped"
+    let status = match reason_code {
+        "satisfied" => RequirementStatus::Satisfied,
+        "install" => RequirementStatus::Install,
+        _ if requirement.required => RequirementStatus::Blocked,
+        _ => RequirementStatus::Skipped,
     };
     PlannedExtensionRequirement {
         logical_key: requirement.key.clone(),

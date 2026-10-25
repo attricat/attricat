@@ -12,6 +12,29 @@ crate::code_enum! {
     }
 }
 
+crate::code_enum! {
+    /// Where applying a solution-pack plan stands.
+    pub enum SolutionPackApplicationState (UnknownSolutionPackApplicationState: "solution pack application state") {
+        Running => "running",
+        Completed => "completed",
+        Failed => "failed",
+        /// Permanently invalidated; it cannot resume.
+        Invalid => "invalid",
+        /// A resumable sample-data application stopped by an operator or at
+        /// its resumability deadline.
+        Abandoned => "abandoned",
+    }
+}
+
+crate::code_enum! {
+    /// Where one step of a solution-pack application stands.
+    pub enum SolutionPackStepState (UnknownSolutionPackStepState: "solution pack step state") {
+        Pending => "pending",
+        Completed => "completed",
+        Failed => "failed",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -22,6 +45,16 @@ mod tests {
             ExtensionState::ALL,
             ExtensionState::as_str,
             ExtensionState::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            SolutionPackApplicationState::ALL,
+            SolutionPackApplicationState::as_str,
+            SolutionPackApplicationState::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            SolutionPackStepState::ALL,
+            SolutionPackStepState::as_str,
+            SolutionPackStepState::parse,
         );
     }
 }

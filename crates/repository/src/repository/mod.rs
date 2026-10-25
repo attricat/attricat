@@ -65,6 +65,16 @@ use crate::{
 use attricat_domain::permissions::Permission;
 use attricat_domain::value_type::ValueType;
 
+/// Decodes a stored code read through a scalar or tuple query, where
+/// `#[sqlx(try_from = "String")]` is not available.
+pub(crate) fn stored_code<T>(code: String) -> Result<T, RepositoryError>
+where
+    T: TryFrom<String>,
+    T::Error: std::error::Error + Send + Sync + 'static,
+{
+    T::try_from(code).map_err(|error| sqlx::Error::Decode(Box::new(error)).into())
+}
+
 mod agent_settings;
 mod agents;
 mod audit_events;
