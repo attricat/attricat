@@ -286,23 +286,7 @@ pub(super) async fn authorize(
         {
             return Err(ApiError::forbidden());
         }
-    } else if matches!(
-        matched,
-        "/auth/session"
-            // Reports only the caller's own access to the targets it names.
-            | "/auth/access"
-            | "/auth/preferences"
-            | "/auth/display-name"
-            | "/auth/avatar"
-            | "/auth/logout"
-            | "/auth/renew"
-            // Each member's own inbox: handlers only ever read and change
-            // the caller's notifications, so no catalog permission applies.
-            | "/notifications"
-            | "/notifications/unread-count"
-            | "/notifications/read-all"
-            | "/notifications/{notification_id}"
-    ) {
+    } else if is_self_service_route(matched) {
         if !is_active_principal().await? {
             return Err(ApiError::forbidden());
         }
@@ -332,6 +316,28 @@ pub(super) async fn authorize(
             .insert(AuthenticatedSession(session_digest));
     }
     Ok(next.run(request).await)
+}
+
+/// Routes that read or change only the caller's own session, account or
+/// inbox, so they need an active membership but no catalog permission.
+fn is_self_service_route(route: &str) -> bool {
+    matches!(
+        route,
+        "/auth/session"
+            // Reports only the caller's own access to the targets it names.
+            | "/auth/access"
+            | "/auth/preferences"
+            | "/auth/display-name"
+            | "/auth/avatar"
+            | "/auth/logout"
+            | "/auth/renew"
+            // Each member's own inbox: handlers only ever read and change
+            // the caller's notifications, so no catalog permission applies.
+            | "/notifications"
+            | "/notifications/unread-count"
+            | "/notifications/read-all"
+            | "/notifications/{notification_id}"
+    )
 }
 
 fn is_public_route(path: &str) -> bool {
@@ -378,6 +384,72 @@ fn cookie_value(header: Option<&str>, name: &str) -> Option<String> {
 #[cfg(test)]
 mod route_tests {
     use super::*;
+
+    /// Every `(route, method)` the API router registers, read from its source.
+    fn registered_routes() -> Vec<(String, Method)> {
+        let source = include_str!("../mod.rs");
+        let mut routes = Vec::new();
+        for call in source.split(".route(").skip(1) {
+            let Some(rest) = call.trim_start().strip_prefix('"') else {
+                continue;
+            };
+            let Some((path, handlers)) = rest.split_once('"') else {
+                continue;
+            };
+            // The method router runs to the call's closing parenthesis.
+            let mut depth = 1;
+            let end = handlers
+                .char_indices()
+                .find(|&(_, ch)| {
+                    match ch {
+                        '(' => depth += 1,
+                        ')' => depth -= 1,
+                        _ => {}
+                    }
+                    depth == 0
+                })
+                .map_or(handlers.len(), |(index, _)| index);
+            let handlers = &handlers[..end];
+            for (name, method) in [
+                ("get(", Method::GET),
+                ("post(", Method::POST),
+                ("put(", Method::PUT),
+                ("patch(", Method::PATCH),
+                ("delete(", Method::DELETE),
+            ] {
+                let called = handlers.match_indices(name).any(|(index, _)| {
+                    index == 0
+                        || !handlers[..index]
+                            .ends_with(|ch: char| ch.is_alphanumeric() || ch == '_')
+                });
+                if called {
+                    routes.push((path.to_owned(), method));
+                }
+            }
+        }
+        routes
+    }
+
+    #[test]
+    fn every_registered_route_is_authorized_explicitly() {
+        let routes = registered_routes();
+        assert!(routes.len() > 100, "found only {} routes", routes.len());
+        let unauthorized: Vec<_> = routes
+            .iter()
+            .filter(|(route, method)| {
+                // Health probes are mounted outside the authorization layer.
+                !route.starts_with("/health")
+                    && !is_public_route(route)
+                    && !is_self_service_route(route)
+                    && route != "/workspace/invitations/accept"
+                    && policy::policy(method, route).is_none()
+            })
+            .collect();
+        assert!(
+            unauthorized.is_empty(),
+            "routes without a policy are always forbidden: {unauthorized:?}"
+        );
+    }
 
     #[test]
     fn public_and_scoped_policy_paths_ignore_the_api_prefix() {
