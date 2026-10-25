@@ -111,6 +111,14 @@ pub struct FileObject {
     pub sha256: String,
 }
 
+/// A record's file attribute, checked to accept uploads in `context_id`.
+struct FileUploadTarget {
+    record: Record,
+    attribute_id: Uuid,
+    policy: FilePolicy,
+    context_id: Uuid,
+}
+
 /// Who may attach an uploaded file that no attribute references yet.
 pub(super) enum UploadClaim<'a> {
     /// The upload transaction references the file itself.
@@ -144,19 +152,37 @@ impl AttricatRepository {
         context_id: Option<Uuid>,
     ) -> Result<FilePolicy, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let record = self.lock_record(&mut transaction, record_id).await?;
-        let (_, policy, context_editable) = self
-            .file_upload_attribute(&mut transaction, &record, attribute_code)
-            .await?;
-        let context_id = self
-            .file_upload_context(&mut transaction, context_id)
-            .await?;
-        self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
-            .await?;
-        self.ensure_attribute_unlocked(&mut transaction, &record, attribute_code, context_id)
+        let target = self
+            .lock_file_upload_target(&mut transaction, record_id, attribute_code, context_id)
             .await?;
         transaction.commit().await?;
-        Ok(policy)
+        Ok(target.policy)
+    }
+
+    /// Locks the record and checks that `attribute_code` accepts files in an
+    /// editable, unlocked context.
+    async fn lock_file_upload_target(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+        attribute_code: &str,
+        context_id: Option<Uuid>,
+    ) -> Result<FileUploadTarget, RepositoryError> {
+        let record = self.lock_record(transaction, record_id).await?;
+        let (attribute_id, policy, context_editable) = self
+            .file_upload_attribute(transaction, &record, attribute_code)
+            .await?;
+        let context_id = self.file_upload_context(transaction, context_id).await?;
+        self.validate_context_editable(transaction, Some(context_id), &context_editable)
+            .await?;
+        self.ensure_attribute_unlocked(transaction, &record, attribute_code, context_id)
+            .await?;
+        Ok(FileUploadTarget {
+            record,
+            attribute_id,
+            policy,
+            context_id,
+        })
     }
 
     pub async fn persist_uploaded_files(
@@ -167,16 +193,13 @@ impl AttricatRepository {
         files: Vec<NewUploadedFile>,
     ) -> Result<FileUploadResult, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let record = self.lock_record(&mut transaction, record_id).await?;
-        let (attribute_id, policy, context_editable) = self
-            .file_upload_attribute(&mut transaction, &record, attribute_code)
-            .await?;
-        let context_id = self
-            .file_upload_context(&mut transaction, context_id)
-            .await?;
-        self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
-            .await?;
-        self.ensure_attribute_unlocked(&mut transaction, &record, attribute_code, context_id)
+        let FileUploadTarget {
+            record,
+            attribute_id,
+            policy,
+            context_id,
+        } = self
+            .lock_file_upload_target(&mut transaction, record_id, attribute_code, context_id)
             .await?;
 
         let current = self
@@ -346,16 +369,13 @@ impl AttricatRepository {
         file_ids: &[Uuid],
     ) -> Result<DateTime<Utc>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let record = self.lock_record(&mut transaction, record_id).await?;
-        let (attribute_id, policy, context_editable) = self
-            .file_upload_attribute(&mut transaction, &record, attribute_code)
-            .await?;
-        let context_id = self
-            .file_upload_context(&mut transaction, context_id)
-            .await?;
-        self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
-            .await?;
-        self.ensure_attribute_unlocked(&mut transaction, &record, attribute_code, context_id)
+        let FileUploadTarget {
+            record,
+            attribute_id,
+            policy,
+            context_id,
+        } = self
+            .lock_file_upload_target(&mut transaction, record_id, attribute_code, context_id)
             .await?;
         let current = self
             .current_file_ids(&mut transaction, record_id, attribute_id, context_id)
