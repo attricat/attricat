@@ -366,7 +366,6 @@ pub(super) async fn search_record_previews(
                     .search_record_previews(
                         current.blueprint.id,
                         selected,
-                        None,
                         limit.into(),
                         cursor,
                         matching.as_deref(),

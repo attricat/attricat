@@ -970,7 +970,6 @@ impl AttricatRepository {
         &self,
         blueprint_id: Uuid,
         blueprint_version: Option<i64>,
-        query: Option<&str>,
         limit: i64,
         cursor: Option<(DateTime<Utc>, Uuid)>,
         matching_record_ids: Option<&[Uuid]>,
@@ -980,7 +979,7 @@ impl AttricatRepository {
         current_blueprint_version: i64,
     ) -> Result<(Vec<RecordPreview>, Option<String>), RepositoryError> {
         validate_system_tags(system_tags)?;
-        let export_status_sql = export_status_clause(12, export_status);
+        let export_status_sql = export_status_clause(11, export_status);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
@@ -991,47 +990,25 @@ impl AttricatRepository {
                           AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
                 FROM records e
                 JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
-                WHERE e.workspace_id = $11
+                WHERE e.workspace_id = $10
                   AND e.blueprint_id = $1
                   AND ($2::bigint IS NULL OR e.blueprint_version = $2)
                  AND e.deleted_at IS NULL
-                 AND (
-                    $3::text IS NULL
-                     OR EXISTS (
-                        SELECT 1
-                        FROM attribute_values av
-                        JOIN attributes search_attribute ON search_attribute.id = av.attribute_id
-                        LEFT JOIN reusable_attribute_revisions reusable_revision ON reusable_revision.id = search_attribute.reusable_attribute_revision_id
-                        WHERE av.record_id = e.id
-                          AND av.relationship_target_record_id IS NULL
-                          AND (search_attribute.record_id IS NULL OR reusable_revision.searchable)
-                            AND COALESCE(
-                             av.value_text,
-                             av.value_number::text,
-                             av.value_integer::text,
-                             av.value_boolean::text,
-                             av.value_date::text,
-                             av.value_datetime::text,
-                             av.value_time::text
-                           ) ILIKE '%' || $3 || '%'
-                    )
-                 )
                   AND (
-                      $4::timestamptz IS NULL
-                      OR (e.created_at, e.id) > ($4, $5)
+                      $3::timestamptz IS NULL
+                      OR (e.created_at, e.id) > ($3, $4)
                    )
-                  AND ($6::uuid[] IS NULL OR e.id = ANY($6))
-                  AND ($7::text[] IS NULL OR e.system_tags @> $7)
+                  AND ($5::uuid[] IS NULL OR e.id = ANY($5))
+                  AND ($6::text[] IS NULL OR e.system_tags @> $6)
                   {export_status_sql}
-                  AND (NOT $8 OR e.blueprint_version <> $9)
+                  AND (NOT $7 OR e.blueprint_version <> $8)
                  ORDER BY e.created_at, e.id
-                 LIMIT $10"#
+                 LIMIT $9"#
         );
         let (cursor_created_at, cursor_id) = cursor.unzip();
         let rows = sqlx::query_as::<_, RecordPreviewRow>(&sql)
             .bind(blueprint_id)
             .bind(blueprint_version)
-            .bind(query)
             .bind(cursor_created_at)
             .bind(cursor_id)
             .bind(matching_record_ids)
@@ -1289,60 +1266,21 @@ impl AttricatRepository {
         let direction = if sort.descending { "DESC" } else { "ASC" };
         let null_order = if sort.descending { "LAST" } else { "FIRST" };
         let nulls_first = !sort.descending;
-        let joins = if sort.relationship_path.is_empty() {
+        let joins =
             "LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = e.blueprint_id
                     AND sort_attribute.blueprint_version = e.blueprint_version
-                    AND sort_attribute.workspace_id = $14
-                    AND sort_attribute.code = $11 AND sort_attribute.value_type = $12
+                    AND sort_attribute.workspace_id = $13
+                    AND sort_attribute.code = $10 AND sort_attribute.value_type = $11
                  LEFT JOIN attribute_values sort_value ON sort_value.record_id = e.id
-                    AND sort_value.workspace_id = $14
+                    AND sort_value.workspace_id = $13
                     AND sort_value.attribute_id = sort_attribute.id
                     AND {value_context}
                     AND sort_value.relationship_target_record_id IS NULL AND sort_value.active"
-                .to_owned()
-        } else {
-            "LEFT JOIN LATERAL (
-                    WITH RECURSIVE reached(current_id, depth) AS (
-                        SELECT e.id, 0
-                        UNION ALL
-                        SELECT edge.relationship_target_record_id, reached.depth + 1
-                        FROM reached
-                        JOIN records path_source ON path_source.id = reached.current_id
-                         AND path_source.workspace_id = $14 AND path_source.deleted_at IS NULL
-                        JOIN attributes path_attribute ON path_attribute.blueprint_id = path_source.blueprint_id
-                         AND path_attribute.blueprint_version = path_source.blueprint_version
-                         AND path_attribute.workspace_id = $14
-                         AND path_attribute.code = $10[reached.depth + 1]
-                         AND path_attribute.value_type = 'relationship'
-                         AND path_attribute.cardinality = 'one'
-                        JOIN attribute_values edge ON edge.record_id = path_source.id
-                         AND edge.workspace_id = $14
-                         AND edge.attribute_id = path_attribute.id AND edge.active
-                         AND {edge_context}
-                         AND edge.relationship_target_record_id IS NOT NULL
-                        WHERE reached.depth < cardinality($10)
-                    )
-                    SELECT current_id FROM reached WHERE depth = cardinality($10) LIMIT 1
-                 ) resolved_path ON true
-                 LEFT JOIN records target ON target.id = resolved_path.current_id
-                    AND target.workspace_id = $14 AND target.deleted_at IS NULL
-                 LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = target.blueprint_id
-                    AND sort_attribute.blueprint_version = target.blueprint_version
-                    AND sort_attribute.workspace_id = $14
-                    AND sort_attribute.code = $11 AND sort_attribute.value_type = $12
-                 LEFT JOIN attribute_values sort_value ON sort_value.record_id = target.id
-                    AND sort_value.workspace_id = $14
-                    AND sort_value.attribute_id = sort_attribute.id
-                    AND {value_context}
-                    AND sort_value.relationship_target_record_id IS NULL AND sort_value.active"
-                .to_owned()
-        }
-        .replace(
-            "{value_context}",
-            &resolved_context("sort_value", "sort_attribute", "$15"),
-        )
-        .replace("{edge_context}", &resolved_context("edge", "path_attribute", "$15"));
-        let export_status_sql = export_status_clause(16, export_status);
+                .replace(
+                    "{value_context}",
+                    &resolved_context("sort_value", "sort_attribute", "$14"),
+                );
+        let export_status_sql = export_status_clause(15, export_status);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
@@ -1355,7 +1293,7 @@ impl AttricatRepository {
                 JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
                 {joins}
                 WHERE e.blueprint_id = $1 AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                  AND e.workspace_id = $14 AND e.deleted_at IS NULL
+                  AND e.workspace_id = $13 AND e.deleted_at IS NULL
                   AND ($3::uuid[] IS NULL OR e.id = ANY($3))
                   AND ($4::text[] IS NULL OR e.system_tags @> $4)
                   {export_status_sql}
@@ -1374,7 +1312,7 @@ impl AttricatRepository {
                       OR (sort_value.{column} IS NULL AND $8 AND e.id > $9)
                     )))
                 ORDER BY sort_value.{column} {direction} NULLS {null_order}, e.id ASC
-                LIMIT $13"#,
+                LIMIT $12"#,
             column = column,
             column_type = native_sort_cast(&sort.value_type)?,
             nulls_first = nulls_first,
@@ -1390,7 +1328,6 @@ impl AttricatRepository {
             .bind(cursor_value)
             .bind(cursor_is_null)
             .bind(cursor_id)
-            .bind(&sort.relationship_path)
             .bind(&sort.leaf_field)
             .bind(sort.value_type.as_str())
             .bind(limit + 1)

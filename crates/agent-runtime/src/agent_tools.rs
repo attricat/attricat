@@ -2225,7 +2225,6 @@ pub async fn execute_read(
                         .search_record_previews(
                             current.blueprint.id,
                             selected,
-                            None,
                             limit.into(),
                             cursor,
                             matching.as_deref(),
