@@ -186,6 +186,3 @@ export const filesForAttribute = (
       item.attribute_code === attributeCode &&
       inContext(item, contextId),
   )?.files ?? [];
-
-export const formatResolvedValue = (value: unknown) =>
-  typeof value === 'object' ? JSON.stringify(value) : String(value);

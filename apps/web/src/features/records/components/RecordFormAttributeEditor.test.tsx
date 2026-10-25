@@ -73,6 +73,24 @@ describe('RecordFormAttributeEditor', () => {
     ).toBeNull();
   });
 
+  it('shows an inherited value the way the field displays it', () => {
+    renderEditor({
+      attribute: { code: 'title', value_type: 'boolean' },
+      existingValues: [],
+      resolvedValues: {
+        title: {
+          value: true,
+          source_context: { id: defaultContextId, code: 'default' },
+        },
+      },
+    });
+    expect(
+      screen.getByText('Inherited from default context: Yes.', {
+        exact: false,
+      }),
+    ).toBeDefined();
+  });
+
   it('discards a stored value a migration cannot carry over, and undoes it', () => {
     const onDiscardChange = vi.fn();
     const review = {

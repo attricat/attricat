@@ -10,7 +10,6 @@ import type {
 } from '../api';
 import {
   filesForAttribute,
-  formatResolvedValue,
   hasLocalFormValue,
   isDefaultContextOnly,
   type ResolvedFormValues,
@@ -21,6 +20,8 @@ import { RecordAttributeEditor } from './RecordAttributeEditor';
 import { AttributeValue } from '../../views/components/values/AttributeValue';
 import type { MigrationFieldReview } from '../migrationReview';
 import { attributeHint } from '../attributeHints';
+import { formatAttributeValue } from '../../views/components/values/formatAttributeValue';
+import { useInstantFormat } from '../../../time/useInstantFormat';
 
 /**
  * A value that cannot be changed here is still content: show it in secondary
@@ -84,6 +85,7 @@ export const RecordFormAttributeEditor = ({
   value,
 }: Props) => {
   const { t } = useTranslation();
+  const { format: formatInstant } = useInstantFormat();
   const resolvedValue = resolvedValues[attribute.code];
   const inherited =
     !hasLocalFormValue(existingValues, attribute.code, contextId) &&
@@ -122,7 +124,11 @@ export const RecordFormAttributeEditor = ({
       ? t('records.inheritedFromContext', { context })
       : t('records.inheritedValue', {
           context,
-          value: formatResolvedValue(resolvedValue.value),
+          value:
+            attribute.value_type === attributeValueTypes.datetime &&
+            typeof resolvedValue.value === 'string'
+              ? formatInstant(resolvedValue.value)
+              : formatAttributeValue(attribute, resolvedValue.value),
         });
   };
   // Why the field cannot be changed here, or where its value comes from,
