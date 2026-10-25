@@ -5642,34 +5642,14 @@ mod tests {
         let repository =
             AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
         let blueprint_id = Uuid::new_v4();
-        let mut blueprint_tx = pool.begin().await.unwrap();
-        repository
-            .create_blueprint_in_transaction(
-                &mut blueprint_tx,
-                blueprint_id,
-                CreateBlueprint {
-                    definition: r#"
-format_version = 1
-code = "retry_product"
-name = "Retry product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-"#
-                    .to_owned(),
-                },
-            )
-            .await
-            .unwrap();
-        repository
-            .publish_blueprint_in_transaction(&mut blueprint_tx, blueprint_id, 1)
-            .await
-            .unwrap();
-        blueprint_tx.commit().await.unwrap();
+        publish_name_blueprint(
+            &repository,
+            &pool,
+            blueprint_id,
+            "retry_product",
+            "Retry product",
+        )
+        .await;
 
         let plan_id = Uuid::new_v4();
         let application_id = Uuid::new_v4();
@@ -5893,26 +5873,26 @@ value_type = "string"
         );
     }
 
-    async fn insert_sample_lifecycle_fixture(pool: &PgPool, expired: bool) -> (Uuid, Uuid, Uuid) {
-        let workspace_id = AttricatRepository::DEFAULT_WORKSPACE_ID;
-        let plan_id = Uuid::new_v4();
-        let application_id = Uuid::new_v4();
-        let target_id = Uuid::new_v4();
-        let blueprint_id = Uuid::new_v4();
-        let blueprint_code = format!("lifecycle_{}", plan_id.simple());
-        let repository =
-            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
-        let mut blueprint_tx = pool.begin().await.unwrap();
+    /// Creates and publishes version 1 of a record blueprint with one string
+    /// `name` attribute.
+    async fn publish_name_blueprint(
+        repository: &AttricatRepository,
+        pool: &PgPool,
+        blueprint_id: Uuid,
+        code: &str,
+        name: &str,
+    ) {
+        let mut tx = pool.begin().await.unwrap();
         repository
             .create_blueprint_in_transaction(
-                &mut blueprint_tx,
+                &mut tx,
                 blueprint_id,
                 CreateBlueprint {
                     definition: format!(
                         r#"
 format_version = 1
-code = "{blueprint_code}"
-name = "Lifecycle fixture"
+code = "{code}"
+name = "{name}"
 kind = "record"
 [views.dropdown_option]
 type = "dropdown_option"
@@ -5927,10 +5907,29 @@ value_type = "string"
             .await
             .unwrap();
         repository
-            .publish_blueprint_in_transaction(&mut blueprint_tx, blueprint_id, 1)
+            .publish_blueprint_in_transaction(&mut tx, blueprint_id, 1)
             .await
             .unwrap();
-        blueprint_tx.commit().await.unwrap();
+        tx.commit().await.unwrap();
+    }
+
+    async fn insert_sample_lifecycle_fixture(pool: &PgPool, expired: bool) -> (Uuid, Uuid, Uuid) {
+        let workspace_id = AttricatRepository::DEFAULT_WORKSPACE_ID;
+        let plan_id = Uuid::new_v4();
+        let application_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+        let blueprint_id = Uuid::new_v4();
+        let blueprint_code = format!("lifecycle_{}", plan_id.simple());
+        let repository =
+            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
+        publish_name_blueprint(
+            &repository,
+            pool,
+            blueprint_id,
+            &blueprint_code,
+            "Lifecycle fixture",
+        )
+        .await;
         let started_at = if expired {
             Utc::now() - Duration::days(31)
         } else {
