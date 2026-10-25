@@ -27,6 +27,12 @@ macro_rules! code_enum {
             /// Every variant, in declaration order.
             pub const ALL: &'static [$name] = &[$(Self::$variant),+];
 
+            /// Every code, in declaration order, as JSON Schema `enum` lists
+            /// take them.
+            pub fn codes() -> Vec<&'static str> {
+                vec![$($code),+]
+            }
+
             /// The stored code.
             pub const fn as_str(self) -> &'static str {
                 match self {

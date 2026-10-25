@@ -3,6 +3,7 @@ use crate::constants::{CONVERSATION_ATTACHMENT_LIFETIME_SECONDS, STAGED_UPLOAD_L
 use crate::domain_events::{ATTRIBUTE_VALUE_CHANGED_V1, AttributeValueMutationV1};
 use crate::model::NewFileAttributeValue;
 use crate::persistence_rows::{Db, IntoDomain};
+use attricat_domain::attribute_options::{Cardinality, ContextEditable};
 use attricat_domain::states::FileStatus;
 use chrono::Utc;
 use serde::Serialize;
@@ -153,7 +154,7 @@ impl AttricatRepository {
             .file_upload_attribute(transaction, &record, attribute_code)
             .await?;
         let context_id = self.file_upload_context(transaction, context_id).await?;
-        self.validate_context_editable(transaction, Some(context_id), &context_editable)
+        self.validate_context_editable(transaction, Some(context_id), context_editable)
             .await?;
         self.ensure_attribute_unlocked(transaction, &record, attribute_code, context_id)
             .await?;
@@ -185,14 +186,16 @@ impl AttricatRepository {
         let current = self
             .current_file_ids(&mut transaction, record_id, attribute_id, context_id)
             .await?;
-        if policy.cardinality == "one" && files.len() != 1 {
+        if policy.cardinality == Cardinality::One && files.len() != 1 {
             return Err(RepositoryError::FileCardinality);
         }
-        if policy.cardinality == "many" && current.len() + files.len() > i32::MAX as usize {
+        if policy.cardinality == Cardinality::Many
+            && current.len() + files.len() > i32::MAX as usize
+        {
             return Err(RepositoryError::FileCardinality);
         }
 
-        let mut file_ids = if policy.cardinality == "many" {
+        let mut file_ids = if policy.cardinality == Cardinality::Many {
             current.clone()
         } else {
             Vec::new()
@@ -378,7 +381,7 @@ impl AttricatRepository {
         {
             return Err(RepositoryError::InvalidFileReferences);
         }
-        if policy.cardinality == "one" && file_ids.len() > 1 {
+        if policy.cardinality == Cardinality::One && file_ids.len() > 1 {
             return Err(RepositoryError::FileCardinality);
         }
         if current == file_ids {
@@ -606,7 +609,7 @@ impl AttricatRepository {
             .file_upload_attribute(transaction, record, attribute_code)
             .await?;
         let context_id = self.file_upload_context(transaction, context_id).await?;
-        self.validate_context_editable(transaction, Some(context_id), &context_editable)
+        self.validate_context_editable(transaction, Some(context_id), context_editable)
             .await?;
         self.ensure_attribute_unlocked(transaction, record, attribute_code, context_id)
             .await?;
@@ -630,13 +633,15 @@ impl AttricatRepository {
         let current = self
             .current_file_ids(transaction, record.id, attribute_id, context_id)
             .await?;
-        let mut linked = if policy.cardinality == "many" {
+        let mut linked = if policy.cardinality == Cardinality::Many {
             current.clone()
         } else {
             Vec::new()
         };
         linked.extend_from_slice(file_ids);
-        if linked.len() > i32::MAX as usize || (policy.cardinality == "one" && linked.len() > 1) {
+        if linked.len() > i32::MAX as usize
+            || (policy.cardinality == Cardinality::One && linked.len() > 1)
+        {
             return Err(RepositoryError::FileCardinality);
         }
         Ok((
@@ -697,6 +702,7 @@ impl AttricatRepository {
         .await?
         .ok_or(RepositoryError::AttributeNotApplicable)?;
         let (file_policy, context_editable, readonly) = row;
+        let context_editable: ContextEditable = stored_code(context_editable)?;
         if readonly {
             return Err(RepositoryError::FileAttributeReadonly);
         }
@@ -704,7 +710,7 @@ impl AttricatRepository {
             .and_then(|value| serde_json::from_value(value).ok())
             .ok_or(RepositoryError::InvalidFilePolicy)?;
         let context_id = self.file_upload_context(transaction, context_id).await?;
-        self.validate_context_editable(transaction, Some(context_id), &context_editable)
+        self.validate_context_editable(transaction, Some(context_id), context_editable)
             .await?;
         Ok((policy, context_id))
     }
@@ -726,7 +732,7 @@ impl AttricatRepository {
         let (policy, context_id) = self
             .staged_upload_attribute(&mut transaction, blueprint_id, attribute_code, context_id)
             .await?;
-        if policy.cardinality == "one" && files.len() != 1 {
+        if policy.cardinality == Cardinality::One && files.len() != 1 {
             return Err(RepositoryError::FileCardinality);
         }
         let expires_at =
@@ -985,7 +991,7 @@ impl AttricatRepository {
         transaction: &mut Transaction<'_, Postgres>,
         record: &Record,
         attribute_code: &str,
-    ) -> Result<(Uuid, FilePolicy, String), RepositoryError> {
+    ) -> Result<(Uuid, FilePolicy, ContextEditable), RepositoryError> {
         let row = sqlx::query_as::<_, (Uuid, String, Option<Value>, String, bool)>(
             "SELECT id, value_type, file_policy, context_editable, readonly FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR record_id = $4) AND workspace_id = $5 AND deleted_at IS NULL",
         )
@@ -1003,7 +1009,7 @@ impl AttricatRepository {
             .2
             .and_then(|value| serde_json::from_value(value).ok())
             .ok_or(RepositoryError::InvalidFilePolicy)?;
-        Ok((row.0, policy, row.3))
+        Ok((row.0, policy, stored_code(row.3)?))
     }
 
     async fn file_upload_context(

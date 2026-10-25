@@ -915,7 +915,7 @@ fn validate_browse_path(
         if !saved_search::browse_path_hop(
             attribute.value_type,
             attribute.target_blueprint.as_deref(),
-            attribute.cardinality.as_deref(),
+            attribute.cardinality,
             segments.len(),
         ) {
             return Err(format!(

@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use attricat_domain::attribute_options::{Cardinality, ContextEditable, ContextFallback};
 use attricat_domain::value_type::ValueType;
 use attricat_validation::{CODE_PATTERN, is_valid_code, validate_json_schema_definition};
 use schemars::{JsonSchema, generate::SchemaSettings};
@@ -14,11 +15,16 @@ use crate::{
 };
 
 /// `one_to_one` is relationship shorthand for both directions set to `one`.
-pub const ATTRIBUTE_CARDINALITIES: &[&str] = &["one", "many", "one_to_one"];
-/// Per-direction relationship cardinalities, also the file cardinalities.
-pub const DIRECTIONAL_CARDINALITIES: &[&str] = &["one", "many"];
-pub const CONTEXT_FALLBACKS: &[&str] = &["default", "none"];
-pub const CONTEXT_EDITABLE_SCOPES: &[&str] = &["all", "default"];
+/// Relationship shorthand for both directions set to `one`. Parsing expands
+/// it, so it is never stored.
+pub const ONE_TO_ONE_CARDINALITY: &str = "one_to_one";
+
+/// The cardinalities a relationship or file attribute may declare.
+fn attribute_cardinality_codes() -> Vec<&'static str> {
+    let mut codes = Cardinality::codes();
+    codes.push(ONE_TO_ONE_CARDINALITY);
+    codes
+}
 /// Longest blueprint or attribute description, in characters.
 pub(crate) const MAX_DESCRIPTION_CHARS: usize = 500;
 
@@ -113,13 +119,13 @@ struct RawAttributeDeclaration {
     /// Relationships: `one`, `many` (default), or `one_to_one`.
     /// Files: `one` (default) or `many`.
     #[schemars(extend(
-        "enum" = ATTRIBUTE_CARDINALITIES,
+        "enum" = attribute_cardinality_codes(),
         "x-attricat-value-types" = ["relationship", "file"]
     ))]
     cardinality: Option<String>,
     /// How many sources may link to one target. Defaults to `many`.
     #[schemars(extend(
-        "enum" = DIRECTIONAL_CARDINALITIES,
+        "enum" = Cardinality::codes(),
         "x-attricat-value-types" = ["relationship"]
     ))]
     target_cardinality: Option<String>,
@@ -186,11 +192,11 @@ struct RawAttributeDeclaration {
     /// Missing values in a non-default context: `default` inherits from the
     /// nearest ancestor context; `none` leaves the attribute absent.
     #[serde(default = "default_context_fallback")]
-    #[schemars(extend("enum" = CONTEXT_FALLBACKS))]
+    #[schemars(extend("enum" = ContextFallback::codes()))]
     context_fallback: String,
     /// Contexts that accept writes: `all`, or only the `default` context.
     #[serde(default = "default_context_editable")]
-    #[schemars(extend("enum" = CONTEXT_EDITABLE_SCOPES))]
+    #[schemars(extend("enum" = ContextEditable::codes()))]
     context_editable: String,
     /// Preview-only in the Attricat web app. API writes remain allowed.
     #[serde(default)]
@@ -212,11 +218,11 @@ pub fn definition_json_schema() -> serde_json::Value {
 }
 
 fn default_context_fallback() -> String {
-    "default".to_owned()
+    ContextFallback::Default.as_str().to_owned()
 }
 
 fn default_context_editable() -> String {
-    "all".to_owned()
+    ContextEditable::All.as_str().to_owned()
 }
 
 pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
@@ -376,38 +382,40 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                     }
                     let (cardinality, target_cardinality) = if value_type == ValueType::Relationship {
-                        // A tree gives every record at most one parent.
-                        let cardinality = attribute.cardinality.clone().unwrap_or_else(|| {
-                            if hierarchy.as_deref() == Some("tree") {
-                                "one".to_owned()
-                            } else {
-                                "many".to_owned()
-                            }
-                        });
-                        let (cardinality, target_cardinality) = if cardinality == "one_to_one" {
+                        let (cardinality, target_cardinality) = if attribute.cardinality.as_deref()
+                            == Some(ONE_TO_ONE_CARDINALITY)
+                        {
                             if attribute.target_cardinality.is_some() {
                                 return Err(BlueprintError::InvalidRelationshipCardinality(
                                     attribute.code,
                                 ));
                             }
-                            ("one".to_owned(), "one".to_owned())
+                            (Cardinality::One, Cardinality::One)
                         } else {
-                            (
-                                cardinality,
-                                attribute
-                                    .target_cardinality
-                                    .clone()
-                                    .unwrap_or_else(|| "many".to_owned()),
-                            )
+                            let declared = |code: Option<&str>, default| {
+                                code.map_or(Some(default), Cardinality::parse)
+                            };
+                            // A tree gives every record at most one parent.
+                            let default = if hierarchy.as_deref() == Some("tree") {
+                                Cardinality::One
+                            } else {
+                                Cardinality::Many
+                            };
+                            match (
+                                declared(attribute.cardinality.as_deref(), default),
+                                declared(attribute.target_cardinality.as_deref(), Cardinality::Many),
+                            ) {
+                                (Some(cardinality), Some(target_cardinality)) => {
+                                    (cardinality, target_cardinality)
+                                }
+                                _ => {
+                                    return Err(BlueprintError::InvalidRelationshipCardinality(
+                                        attribute.code,
+                                    ));
+                                }
+                            }
                         };
-                        if !DIRECTIONAL_CARDINALITIES.contains(&cardinality.as_str())
-                            || !DIRECTIONAL_CARDINALITIES.contains(&target_cardinality.as_str())
-                        {
-                            return Err(BlueprintError::InvalidRelationshipCardinality(
-                                attribute.code,
-                            ));
-                        }
-                        if hierarchy.as_deref() == Some("tree") && cardinality != "one" {
+                        if hierarchy.as_deref() == Some("tree") && cardinality != Cardinality::One {
                             return Err(BlueprintError::InvalidRelationshipHierarchy {
                                 code: attribute.code,
                                 message: "a tree allows at most one target per record; use cardinality = \"one\"".into(),
@@ -471,18 +479,20 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                             }
                         })?;
                     }
-                    if !CONTEXT_FALLBACKS.contains(&attribute.context_fallback.as_str()) {
+                    let Some(context_fallback) = ContextFallback::parse(&attribute.context_fallback)
+                    else {
                         return Err(BlueprintError::InvalidContextFallback {
                             code: attribute.code,
                             context_fallback: attribute.context_fallback,
                         });
-                    }
-                    if !CONTEXT_EDITABLE_SCOPES.contains(&attribute.context_editable.as_str()) {
+                    };
+                    let Some(context_editable) = ContextEditable::parse(&attribute.context_editable)
+                    else {
                         return Err(BlueprintError::InvalidContextEditable {
                             code: attribute.code,
                             context_editable: attribute.context_editable,
                         });
-                    }
+                    };
                     let mut tags = HashSet::new();
                     for tag in &attribute.tags {
                         if tag.trim().is_empty() || !tags.insert(tag.as_str()) {
@@ -505,8 +515,8 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         target_cardinality,
                         hierarchy,
                         tags: attribute.tags,
-                        context_fallback: attribute.context_fallback,
-                        context_editable: attribute.context_editable,
+                        context_fallback,
+                        context_editable,
                         readonly: attribute.readonly,
                     }))
                 }
@@ -538,18 +548,20 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     {
                         return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                     }
-                    if !CONTEXT_FALLBACKS.contains(&attribute.context_fallback.as_str()) {
+                    let Some(context_fallback) = ContextFallback::parse(&attribute.context_fallback)
+                    else {
                         return Err(BlueprintError::InvalidContextFallback {
                             code: attribute.code,
                             context_fallback: attribute.context_fallback,
                         });
-                    }
-                    if !CONTEXT_EDITABLE_SCOPES.contains(&attribute.context_editable.as_str()) {
+                    };
+                    let Some(context_editable) = ContextEditable::parse(&attribute.context_editable)
+                    else {
                         return Err(BlueprintError::InvalidContextEditable {
                             code: attribute.code,
                             context_editable: attribute.context_editable,
                         });
-                    }
+                    };
                     let extension_configuration = parse_json_value(
                         attribute.extension_configuration,
                         &format!("attribute '{}'.extension_configuration", attribute.code),
@@ -572,8 +584,8 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         target_cardinality: None,
                         hierarchy: None,
                         tags: attribute.tags,
-                        context_fallback: attribute.context_fallback,
-                        context_editable: attribute.context_editable,
+                        context_fallback,
+                        context_editable,
                         readonly: attribute.readonly,
                     }))
                 }
@@ -698,7 +710,7 @@ fn parse_relationship_hierarchy(
     };
     // Cycle checks follow direct default-context edges. Contextual overrides
     // would let inherited values combine into a cycle no single write closes.
-    if attribute.context_editable != "default" {
+    if attribute.context_editable != ContextEditable::Default.as_str() {
         return Err(invalid(
             "hierarchies are shared by every context; set context_editable = \"default\"",
         ));
@@ -761,13 +773,13 @@ fn parse_file_policy(
 ) -> Result<FilePolicy, BlueprintError> {
     let cardinality = attribute
         .cardinality
-        .clone()
-        .unwrap_or_else(|| "one".to_owned());
-    if !DIRECTIONAL_CARDINALITIES.contains(&cardinality.as_str()) {
-        return Err(BlueprintError::InvalidFilePolicy(code.to_owned()));
-    }
-    let ordered = attribute.ordered.unwrap_or(cardinality == "many");
-    if cardinality == "one" && ordered {
+        .as_deref()
+        .map_or(Some(Cardinality::One), Cardinality::parse)
+        .ok_or_else(|| BlueprintError::InvalidFilePolicy(code.to_owned()))?;
+    let ordered = attribute
+        .ordered
+        .unwrap_or(cardinality == Cardinality::Many);
+    if cardinality == Cardinality::One && ordered {
         return Err(BlueprintError::InvalidFilePolicy(code.to_owned()));
     }
     let validate_unique_non_empty = |values: &[String]| {

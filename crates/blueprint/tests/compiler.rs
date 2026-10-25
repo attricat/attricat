@@ -2,6 +2,9 @@ use attricat_blueprint::{
     BlueprintError, BrowseBy, EffectiveAttribute, ResolvedInclude, ViewDefinition, compile, parse,
     raw_hash,
 };
+use attricat_domain::attribute_options::Cardinality;
+use attricat_domain::attribute_options::ContextEditable;
+use attricat_domain::attribute_options::ContextFallback;
 use attricat_domain::value_type::ValueType;
 
 #[test]
@@ -53,8 +56,8 @@ from = "seo.meta_title"
                     target_cardinality: None,
                     hierarchy: None,
                     tags: vec![],
-                    context_fallback: "default".to_owned(),
-                    context_editable: "all".to_owned(),
+                    context_fallback: ContextFallback::Default,
+                    context_editable: ContextEditable::All,
                     readonly: false,
                     position: 0,
                 },
@@ -72,8 +75,8 @@ from = "seo.meta_title"
                     target_cardinality: None,
                     hierarchy: None,
                     tags: vec![],
-                    context_fallback: "default".to_owned(),
-                    context_editable: "all".to_owned(),
+                    context_fallback: ContextFallback::Default,
+                    context_editable: ContextEditable::All,
                     readonly: false,
                     position: 1,
                 },
@@ -86,8 +89,14 @@ from = "seo.meta_title"
     assert_eq!(compiled.attributes.len(), 2);
     assert_eq!(compiled.attributes[0].code, "title");
     assert_eq!(compiled.attributes[0].name, None);
-    assert_eq!(compiled.attributes[0].context_fallback, "default");
-    assert_eq!(compiled.attributes[0].context_editable, "all");
+    assert_eq!(
+        compiled.attributes[0].context_fallback,
+        ContextFallback::Default
+    );
+    assert_eq!(
+        compiled.attributes[0].context_editable,
+        ContextEditable::All
+    );
     assert_eq!(compiled.attributes[0].position, 0);
     assert_eq!(compiled.attributes[1].code, "meta_title");
     assert_eq!(compiled.attributes[1].name.as_deref(), Some("SEO title"));
@@ -316,7 +325,7 @@ context_fallback = "none"
         compiled
             .attributes
             .iter()
-            .all(|attribute| attribute.context_fallback == "none")
+            .all(|attribute| attribute.context_fallback == ContextFallback::None)
     );
 }
 
@@ -368,8 +377,14 @@ value_type = "integer"
 context_editable = "default"
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
-    assert_eq!(compiled.attributes[0].context_editable, "all");
-    assert_eq!(compiled.attributes[1].context_editable, "default");
+    assert_eq!(
+        compiled.attributes[0].context_editable,
+        ContextEditable::All
+    );
+    assert_eq!(
+        compiled.attributes[1].context_editable,
+        ContextEditable::Default
+    );
 }
 
 #[test]
@@ -1363,10 +1378,10 @@ target_blueprint = "category"
 cardinality = "one"
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
-    assert_eq!(compiled.attributes[1].cardinality.as_deref(), Some("one"));
+    assert_eq!(compiled.attributes[1].cardinality, Some(Cardinality::One));
     assert_eq!(
-        compiled.attributes[1].target_cardinality.as_deref(),
-        Some("many")
+        compiled.attributes[1].target_cardinality,
+        Some(Cardinality::Many)
     );
     let legacy = compile(
         parse(&source.replace("cardinality = \"one\"", "cardinality = \"one_to_one\"")).unwrap(),
@@ -1374,10 +1389,10 @@ cardinality = "one"
         source,
     )
     .unwrap();
-    assert_eq!(legacy.attributes[1].cardinality.as_deref(), Some("one"));
+    assert_eq!(legacy.attributes[1].cardinality, Some(Cardinality::One));
     assert_eq!(
-        legacy.attributes[1].target_cardinality.as_deref(),
-        Some("one")
+        legacy.attributes[1].target_cardinality,
+        Some(Cardinality::One)
     );
     assert!(
         compile(
@@ -1554,10 +1569,10 @@ fn compiles_unique_keys_target_sets_and_hierarchies() {
     assert_eq!(manufacturer.target_blueprints, ["manufacturer"]);
     let parent = attribute("parent");
     assert_eq!(parent.hierarchy.as_deref(), Some("tree"));
-    assert_eq!(parent.cardinality.as_deref(), Some("one"));
+    assert_eq!(parent.cardinality, Some(Cardinality::One));
     let predecessors = attribute("predecessors");
     assert_eq!(predecessors.hierarchy.as_deref(), Some("acyclic"));
-    assert_eq!(predecessors.cardinality.as_deref(), Some("many"));
+    assert_eq!(predecessors.cardinality, Some(Cardinality::Many));
     // A one-element list is the single-target form.
     assert_eq!(predecessors.target_blueprint.as_deref(), Some("part"));
 }

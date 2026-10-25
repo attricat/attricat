@@ -3,6 +3,7 @@ use super::values::{ProjectionNativeValueRow, native_value_json};
 use super::*;
 use crate::constants::DEFAULT_PREVIEW_RELATIONSHIP_ITEMS;
 use crate::persistence_rows::{Db, IntoDomain};
+use attricat_domain::attribute_options::ContextFallback;
 use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -115,7 +116,7 @@ impl AttricatRepository {
                 resolved_value(
                     tree,
                     &path,
-                    attribute.context_fallback != "none",
+                    attribute.context_fallback.inherits(),
                     |context| {
                         preview
                             .get(&context.code)
@@ -135,7 +136,7 @@ impl AttricatRepository {
             if let Some(value) = resolved_value(
                 tree,
                 &path,
-                attribute.context_fallback != "none",
+                attribute.context_fallback.inherits(),
                 |context| {
                     file_values.iter().find_map(|value| match value {
                         FormAttributeValue::File {
@@ -170,7 +171,7 @@ impl AttricatRepository {
                 resolved_value(
                     tree,
                     &path,
-                    attribute.context_fallback != "none",
+                    attribute.context_fallback.inherits(),
                     |context| {
                         enriched_preview
                             .get(&context.code)
@@ -192,7 +193,7 @@ impl AttricatRepository {
                 resolved_value(
                     tree,
                     &path,
-                    attribute.context_fallback != "none",
+                    attribute.context_fallback.inherits(),
                     |context| {
                         reusable_form_values.iter().find_map(|value| match value {
                             FormAttributeValue::Scalar {
@@ -694,7 +695,8 @@ pub(super) fn display_label(
             .filter_map(|field| {
                 current.and_then(|values| values.get(field)).or_else(|| {
                     (context_code == DEFAULT_CONTEXT_CODE
-                        || context_fallback.get(field).and_then(Value::as_str) != Some("none"))
+                        || context_fallback.get(field).and_then(Value::as_str)
+                            != Some(ContextFallback::None.as_str()))
                     .then(|| default.and_then(|values| values.get(field)))
                     .flatten()
                 })

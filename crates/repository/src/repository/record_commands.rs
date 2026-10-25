@@ -15,6 +15,7 @@ use crate::domain_events::{
 };
 use crate::model::{NewFileAttributeValue, UpdateRecordFormRequest};
 use crate::persistence_rows::{Db, IntoDomain};
+use attricat_domain::attribute_options::{Cardinality, ContextEditable};
 use attricat_validation::validate_json_schema;
 use chrono::Utc;
 use serde_json::{Map, Value};
@@ -44,8 +45,8 @@ struct PreparedValue {
 struct PreparedRelationship {
     target_record_id: Uuid,
     target_blueprint_codes: Vec<String>,
-    cardinality: String,
-    target_cardinality: String,
+    cardinality: Cardinality,
+    target_cardinality: Cardinality,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,8 +92,8 @@ struct CardinalityCheck<'a> {
     record: &'a Record,
     attribute_id: Uuid,
     attribute_code: &'a str,
-    cardinality: &'a str,
-    target_cardinality: &'a str,
+    cardinality: Cardinality,
+    target_cardinality: Cardinality,
     context_id: Option<Uuid>,
     target_record_id: Uuid,
 }
@@ -947,7 +948,7 @@ impl AttricatRepository {
             let context_id = Some(write.resolve_context(relationship.context_id)?);
             let (attribute_id, target_blueprint_codes, context_editable) =
                 Self::relationship_attribute(&write, &relationship)?;
-            write.ensure_editable(context_id, &context_editable)?;
+            write.ensure_editable(context_id, context_editable)?;
             // Relationship writes are set operations; sorting target IDs gives
             // every concurrent writer the same target-lock order.
             let targets: BTreeSet<_> = relationship.target_record_ids.into_iter().collect();
@@ -1026,7 +1027,7 @@ impl AttricatRepository {
             let context_id = Some(write.resolve_context(relationship.context_id)?);
             let (attribute_id, target_blueprint_codes, context_editable) =
                 Self::relationship_attribute(write, &relationship)?;
-            write.ensure_editable(context_id, &context_editable)?;
+            write.ensure_editable(context_id, context_editable)?;
             let targets: BTreeSet<_> = relationship.target_record_ids.into_iter().collect();
             self.validate_relationship_targets(transaction, &targets, &target_blueprint_codes)
                 .await?;
@@ -1169,12 +1170,13 @@ impl AttricatRepository {
         let context_id = write.resolve_context(context_id)?;
         let attribute_label = attribute_code.clone();
         let attribute = write.attribute(attribute_id, attribute_code.as_deref())?;
-        write.ensure_editable(Some(context_id), &attribute.context_editable)?;
+        write.ensure_editable(Some(context_id), attribute.context_editable)?;
         if (attribute.value_type == ValueType::Relationship) != target_record_id.is_some() {
             return Err(RepositoryError::AttributeKindMismatch);
         }
         let attribute_id = attribute.id;
         if let Some(target_record_id) = target_record_id {
+            let (cardinality, target_cardinality) = attribute.relationship_cardinalities()?;
             return Ok(PreparedValue {
                 attribute_id,
                 attribute_code: attribute.code.clone(),
@@ -1182,14 +1184,8 @@ impl AttricatRepository {
                 relationship: Some(PreparedRelationship {
                     target_record_id,
                     target_blueprint_codes: attribute.target_blueprint_codes.clone(),
-                    cardinality: attribute
-                        .cardinality
-                        .clone()
-                        .unwrap_or_else(|| "many".to_owned()),
-                    target_cardinality: attribute
-                        .target_cardinality
-                        .clone()
-                        .unwrap_or_else(|| "many".to_owned()),
+                    cardinality,
+                    target_cardinality,
                 }),
                 native: None,
             });
@@ -1256,8 +1252,8 @@ impl AttricatRepository {
                     record,
                     attribute_id,
                     attribute_code: &attribute_code,
-                    cardinality: &relationship.cardinality,
-                    target_cardinality: &relationship.target_cardinality,
+                    cardinality: relationship.cardinality,
+                    target_cardinality: relationship.target_cardinality,
                     context_id: Some(context_id),
                     target_record_id: relationship.target_record_id,
                 },
@@ -1400,7 +1396,7 @@ impl AttricatRepository {
         if attribute.value_type == ValueType::Relationship {
             return Err(RepositoryError::AttributeKindMismatch);
         }
-        write.ensure_editable(context_id, &attribute.context_editable)?;
+        write.ensure_editable(context_id, attribute.context_editable)?;
         write.values_changed();
         self.archive_current_value(transaction, record.id, attribute.id, context_id, None)
             .await?;
@@ -1440,9 +1436,9 @@ impl AttricatRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         context_id: Option<Uuid>,
-        context_editable: &str,
+        context_editable: ContextEditable,
     ) -> Result<(), RepositoryError> {
-        if context_editable == "default" {
+        if context_editable == ContextEditable::Default {
             let is_default = sqlx::query_scalar::<_, bool>(
                 "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2 AND code = 'default')",
             )
@@ -1634,7 +1630,7 @@ impl AttricatRepository {
     fn relationship_attribute(
         write: &WriteContext,
         relationship: &RelationshipTargets,
-    ) -> Result<(Uuid, Vec<String>, String), RepositoryError> {
+    ) -> Result<(Uuid, Vec<String>, ContextEditable), RepositoryError> {
         let attribute = write.attribute(
             relationship.attribute_id,
             relationship.attribute_code.as_deref(),
@@ -1645,7 +1641,7 @@ impl AttricatRepository {
         Ok((
             attribute.id,
             attribute.target_blueprint_codes.clone(),
-            attribute.context_editable.clone(),
+            attribute.context_editable,
         ))
     }
 
@@ -1771,17 +1767,17 @@ impl AttricatRepository {
             target_record_id,
         )
         .await?;
-        let target_is_one = target_cardinality == "one"
+        let target_is_one = target_cardinality == Cardinality::One
             || write
                 .family_constraints(transaction, self.workspace_id.0, record.blueprint_id)
                 .await?
                 .target_one_codes
                 .contains(attribute_code);
-        if cardinality != "one" && !target_is_one {
+        if cardinality != Cardinality::One && !target_is_one {
             return Ok(());
         }
 
-        let source_conflict = if cardinality == "one" {
+        let source_conflict = if cardinality == Cardinality::One {
             sqlx::query_scalar::<_, Uuid>(
                 r#"SELECT relationship_target_record_id
                FROM attribute_values
@@ -1870,6 +1866,7 @@ impl AttricatRepository {
                 .by_id(attribute_id)
                 .filter(|attribute| attribute.value_type == ValueType::Relationship)
                 .ok_or(RepositoryError::AttributeNotApplicable)?;
+            let (cardinality, target_cardinality) = attribute.relationship_cardinalities()?;
             self.validate_relationship_cardinality(
                 transaction,
                 write,
@@ -1877,8 +1874,8 @@ impl AttricatRepository {
                     record,
                     attribute_id,
                     attribute_code: &attribute.code,
-                    cardinality: attribute.cardinality.as_deref().unwrap_or("many"),
-                    target_cardinality: attribute.target_cardinality.as_deref().unwrap_or("many"),
+                    cardinality,
+                    target_cardinality,
                     context_id,
                     target_record_id,
                 },

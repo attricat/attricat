@@ -1,6 +1,7 @@
 //! The Explorer search state stored by named views, share links and saved
 //! searches that solution packs install. Every write path validates and
 //! normalizes the state here, so equal searches are stored identically.
+use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_domain::states::ExportStatus;
 use attricat_domain::value_type::ValueType;
@@ -245,12 +246,12 @@ pub fn normalize_state(state: &Value) -> Value {
 pub fn browse_path_hop(
     value_type: ValueType,
     target_blueprint: Option<&str>,
-    cardinality: Option<&str>,
+    cardinality: Option<Cardinality>,
     hops: usize,
 ) -> bool {
     value_type == ValueType::Relationship
         && target_blueprint.is_some()
-        && (hops == 1 || cardinality == Some("one"))
+        && (hops == 1 || cardinality == Some(Cardinality::One))
 }
 
 /// Splits an Explorer field path into relationship hops and the leaf, and

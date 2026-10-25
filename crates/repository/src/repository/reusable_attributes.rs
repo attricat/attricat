@@ -1,6 +1,6 @@
 use super::*;
 use crate::persistence_rows::{Db, IntoDomain};
-use attricat_blueprint::{CONTEXT_EDITABLE_SCOPES, CONTEXT_FALLBACKS, DIRECTIONAL_CARDINALITIES};
+use attricat_domain::attribute_options::{Cardinality, ContextEditable, ContextFallback};
 use attricat_domain::states::RevisionStatus;
 use attricat_validation::{CODE_PATTERN, is_valid_code};
 use schemars::JsonSchema;
@@ -10,11 +10,11 @@ use std::collections::HashSet;
 use uuid::Uuid;
 
 fn default_context_fallback() -> String {
-    "default".to_owned()
+    ContextFallback::Default.as_str().to_owned()
 }
 
 fn default_context_editable() -> String {
-    "all".to_owned()
+    ContextEditable::All.as_str().to_owned()
 }
 
 /// Every value type except `json`.
@@ -78,14 +78,14 @@ struct ReusableAttributeDefinition {
     /// How many targets one source may link to.
     #[serde(default)]
     #[schemars(extend(
-        "x-attricat-suggestions" = DIRECTIONAL_CARDINALITIES,
+        "x-attricat-suggestions" = Cardinality::codes(),
         "x-attricat-value-types" = ["relationship", "file"]
     ))]
     cardinality: Option<String>,
     /// How many sources may link to one target.
     #[serde(default)]
     #[schemars(extend(
-        "x-attricat-suggestions" = DIRECTIONAL_CARDINALITIES,
+        "x-attricat-suggestions" = Cardinality::codes(),
         "x-attricat-value-types" = ["relationship"]
     ))]
     target_cardinality: Option<String>,
@@ -103,11 +103,11 @@ struct ReusableAttributeDefinition {
     /// Missing values in a non-default context: `default` inherits from the
     /// nearest ancestor context; `none` leaves the attribute absent.
     #[serde(default = "default_context_fallback")]
-    #[schemars(extend("enum" = CONTEXT_FALLBACKS))]
+    #[schemars(extend("enum" = ContextFallback::codes()))]
     context_fallback: String,
     /// Contexts that accept writes: `all`, or only the `default` context.
     #[serde(default = "default_context_editable")]
-    #[schemars(extend("enum" = CONTEXT_EDITABLE_SCOPES))]
+    #[schemars(extend("enum" = ContextEditable::codes()))]
     context_editable: String,
     /// Preview-only in the Attricat web app. API writes remain allowed.
     #[serde(default)]
@@ -161,13 +161,13 @@ fn parse_definition(
             "attribute '{code}' can only define a default value for scalar values"
         ));
     }
-    if !CONTEXT_FALLBACKS.contains(&definition.context_fallback.as_str()) {
+    if ContextFallback::parse(&definition.context_fallback).is_none() {
         return invalid(format!(
             "attribute '{code}' has invalid context_fallback '{}'",
             definition.context_fallback
         ));
     }
-    if !CONTEXT_EDITABLE_SCOPES.contains(&definition.context_editable.as_str()) {
+    if ContextEditable::parse(&definition.context_editable).is_none() {
         return invalid(format!(
             "attribute '{code}' has invalid context_editable '{}'",
             definition.context_editable
@@ -629,8 +629,8 @@ impl AttricatRepository {
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)"#)
             .bind(attribute_id).bind(ws).bind(record.id).bind(revision.id).bind(format!("{}:{}", revision.namespace, revision.code))
             .bind(revision.value_type.as_str()).bind(&revision.value_schema).bind(&revision.default_value).bind(&revision.file_policy)
-            .bind(&revision.target_blueprint_code).bind(&revision.cardinality).bind(&revision.target_cardinality).bind(&revision.tags)
-            .bind(&revision.context_fallback).bind(&revision.context_editable).bind(revision.readonly).bind(position).execute(&mut **transaction).await?;
+            .bind(&revision.target_blueprint_code).bind(revision.cardinality.map(Cardinality::as_str)).bind(revision.target_cardinality.map(Cardinality::as_str)).bind(&revision.tags)
+            .bind(revision.context_fallback.as_str()).bind(revision.context_editable.as_str()).bind(revision.readonly).bind(position).execute(&mut **transaction).await?;
         if let Some(default_value) = revision.default_value {
             let context_id = self.resolve_context_id(transaction, None).await?;
             self.insert_value(

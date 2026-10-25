@@ -345,7 +345,7 @@ async fn resolve_tree_facet_target(
                 if !saved_search::browse_path_hop(
                     relationship.value_type,
                     Some(&target_code),
-                    relationship.cardinality.as_deref(),
+                    relationship.cardinality,
                     hops.len(),
                 ) {
                     return Err(invalid(

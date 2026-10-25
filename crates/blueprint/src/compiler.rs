@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::value_type::ValueType;
 use sha2::{Digest, Sha256};
 
@@ -69,12 +70,12 @@ pub fn compile(
                 local.file_policy.clone(),
                 local.target_blueprint.clone(),
                 local.target_blueprints.clone(),
-                local.cardinality.clone(),
-                local.target_cardinality.clone(),
+                local.cardinality,
+                local.target_cardinality,
                 local.hierarchy.clone(),
                 local.tags.clone(),
-                local.context_fallback.clone(),
-                local.context_editable.clone(),
+                local.context_fallback,
+                local.context_editable,
                 local.readonly,
             ),
             AttributeDeclaration::Selection {
@@ -103,12 +104,12 @@ pub fn compile(
                     attribute.file_policy.clone(),
                     attribute.target_blueprint.clone(),
                     attribute.target_blueprints.clone(),
-                    attribute.cardinality.clone(),
-                    attribute.target_cardinality.clone(),
+                    attribute.cardinality,
+                    attribute.target_cardinality,
                     attribute.hierarchy.clone(),
                     attribute.tags.clone(),
-                    attribute.context_fallback.clone(),
-                    attribute.context_editable.clone(),
+                    attribute.context_fallback,
+                    attribute.context_editable,
                     attribute.readonly,
                 )
             }
@@ -268,7 +269,7 @@ fn validate_unique_key_attributes(
                 })?;
             let supported = match attribute.value_type {
                 ValueType::Json | ValueType::File => false,
-                ValueType::Relationship => attribute.cardinality.as_deref() == Some("one"),
+                ValueType::Relationship => attribute.cardinality == Some(Cardinality::One),
                 ValueType::String
                 | ValueType::Number
                 | ValueType::Integer

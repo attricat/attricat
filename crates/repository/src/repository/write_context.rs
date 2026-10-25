@@ -9,6 +9,7 @@
 //! Published blueprint attributes are immutable, and record-scoped attributes
 //! change only under the record lock the writer already holds.
 
+use attricat_domain::attribute_options::{Cardinality, ContextEditable, ContextFallback};
 use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_domain::value_type::ValueType;
 use std::{
@@ -43,14 +44,31 @@ pub(super) struct WriteAttribute {
     pub target_blueprint_codes: Vec<String>,
     pub cardinality: Option<String>,
     pub target_cardinality: Option<String>,
-    pub context_editable: String,
-    pub context_fallback: String,
+    #[sqlx(try_from = "String")]
+    pub context_editable: ContextEditable,
+    #[sqlx(try_from = "String")]
+    pub context_fallback: ContextFallback,
     pub default_value: Option<Value>,
     /// Attached to the record itself rather than a blueprint column.
     pub record_scoped: bool,
 }
 
 impl WriteAttribute {
+    /// The relationship's source and target cardinalities; an unset one is
+    /// `many`.
+    pub(super) fn relationship_cardinalities(
+        &self,
+    ) -> Result<(Cardinality, Cardinality), RepositoryError> {
+        let decode = |code: Option<&str>| {
+            code.map_or(Some(Cardinality::Many), Cardinality::parse)
+                .ok_or(RepositoryError::InvalidStoredAttributeValue)
+        };
+        Ok((
+            decode(self.cardinality.as_deref())?,
+            decode(self.target_cardinality.as_deref())?,
+        ))
+    }
+
     fn declares(&self, key: &str) -> bool {
         self.value_schema
             .as_ref()
@@ -290,9 +308,9 @@ impl WriteContext {
     pub(super) fn ensure_editable(
         &self,
         context_id: Option<Uuid>,
-        context_editable: &str,
+        context_editable: ContextEditable,
     ) -> Result<(), RepositoryError> {
-        if context_editable == "default" {
+        if context_editable == ContextEditable::Default {
             let context_id = context_id.ok_or(RepositoryError::InvalidContext)?;
             if self
                 .tree
@@ -306,7 +324,7 @@ impl WriteContext {
     }
 
     /// `(id, code, value_schema, context_fallback)` of status attributes.
-    pub(super) fn status_attributes(&self) -> Vec<(Uuid, String, Value, String)> {
+    pub(super) fn status_attributes(&self) -> Vec<(Uuid, String, Value, ContextFallback)> {
         self.attributes
             .iter()
             .filter(|attribute| attribute.declares(attricat_validation::status::STATUS_KEY))
@@ -315,7 +333,7 @@ impl WriteContext {
                     attribute.id,
                     attribute.code.clone(),
                     attribute.value_schema.clone().unwrap_or(Value::Null),
-                    attribute.context_fallback.clone(),
+                    attribute.context_fallback,
                 )
             })
             .collect()

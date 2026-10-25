@@ -79,7 +79,7 @@ fn resolve_values(
 ) -> ResolvedValues {
     let mut resolved = ResolvedValues::default();
     for attribute in attributes {
-        let inherit = attribute.context_fallback != "none";
+        let inherit = attribute.context_fallback.inherits();
         match attribute.value_type {
             ValueType::Relationship => {
                 if let Some((_, targets)) = resolve_on_path(path, inherit, |context| {
@@ -608,8 +608,9 @@ impl AttricatRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use attricat_domain::attribute_options::{ContextEditable, ContextFallback};
 
-    fn attribute(code: &str, value_type: ValueType, fallback: &str) -> Attribute {
+    fn attribute(code: &str, value_type: ValueType, fallback: ContextFallback) -> Attribute {
         Attribute {
             id: Uuid::new_v4(),
             blueprint_id: Uuid::nil(),
@@ -628,8 +629,8 @@ mod tests {
             target_cardinality: None,
             hierarchy: None,
             tags: json!([]),
-            context_fallback: fallback.into(),
-            context_editable: "all".into(),
+            context_fallback: fallback,
+            context_editable: ContextEditable::All,
             readonly: false,
             position: 0,
             created_at: Utc::now(),
@@ -641,8 +642,8 @@ mod tests {
     #[test]
     fn values_resolve_through_the_context_path() {
         let (child, parent) = (Uuid::new_v4(), Uuid::new_v4());
-        let title = attribute("title", ValueType::String, "parent");
-        let local = attribute("sku", ValueType::String, "none");
+        let title = attribute("title", ValueType::String, ContextFallback::Default);
+        let local = attribute("sku", ValueType::String, ContextFallback::None);
         let value = |attribute: &Attribute, context: Uuid, value: Value| AttributeValue {
             id: Uuid::new_v4(),
             record_id: Uuid::nil(),

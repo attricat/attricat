@@ -7,6 +7,7 @@ use crate::domain_events::{
     RECORD_MIGRATED_V1, RecordMigratedV1, ReleasedRelationshipV1,
 };
 use crate::persistence_rows::Db;
+use attricat_domain::attribute_options::{Cardinality, ContextEditable};
 use attricat_domain::states::RecordMigrationStatus;
 use attricat_validation::validate_json_schema;
 use serde_json::{Map, Value};
@@ -238,7 +239,7 @@ impl AttricatRepository {
                     });
                 }
                 Some(target)
-                    if target.context_editable == "default"
+                    if target.context_editable == ContextEditable::Default
                         && *context_id != Some(default_context_id) =>
                 {
                     issues.push(MigrationIssue {
@@ -275,7 +276,7 @@ impl AttricatRepository {
             } = value
                 && target_attributes
                     .get(attribute_code.as_str())
-                    .is_some_and(|attribute| attribute.cardinality.as_deref() == Some("one"))
+                    .is_some_and(|attribute| attribute.cardinality == Some(Cardinality::One))
             {
                 relationship_targets
                     .entry((attribute_code.clone(), *context_id))
@@ -1011,7 +1012,7 @@ fn migration_contract_compatible(
     default_context_id: Option<Uuid>,
 ) -> bool {
     if target.value_type != source.value_type
-        || target.context_editable == "default" && context_id != default_context_id
+        || target.context_editable == ContextEditable::Default && context_id != default_context_id
     {
         return false;
     }

@@ -5,6 +5,7 @@ use super::record_values::{
 };
 use super::write_context::WriteContext;
 use super::*;
+use attricat_domain::attribute_options::ContextFallback;
 use attricat_domain::permissions::Permission;
 use attricat_validation::status::{
     STATUS_KEY, StatusCoverage, TransitionRequirements, has_record_controls, status_approval,
@@ -269,7 +270,7 @@ fn write_status_attributes(write: &WriteContext) -> Vec<StatusAttribute> {
             id,
             code,
             schema,
-            inherit: fallback != "none",
+            inherit: fallback.inherits(),
         })
         .collect()
 }
@@ -669,7 +670,7 @@ impl AttricatRepository {
         .bind(attribute_code)
         .fetch_optional(&mut **transaction)
         .await?
-        .is_none_or(|fallback| fallback != "none");
+        .is_none_or(|fallback| fallback != ContextFallback::None.as_str());
         if tree.get(context_id).is_none() {
             return Err(RepositoryError::InvalidContext);
         }

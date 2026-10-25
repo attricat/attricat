@@ -11,6 +11,7 @@ use crate::{
     },
     storage::ObjectStoreError,
 };
+use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::states::FileStatus;
 use axum::{
     Json,
@@ -337,7 +338,7 @@ fn attribute_upload_mimes(
     staged: &[StagedFile],
     policy: &FilePolicy,
 ) -> Result<Vec<String>, ApiError> {
-    if policy.cardinality == "one" && staged.len() != 1 {
+    if policy.cardinality == Cardinality::One && staged.len() != 1 {
         return Err(ApiError::invalid_file(
             "single-file attributes accept exactly one file",
         ));
@@ -921,7 +922,7 @@ mod tests {
 
     fn policy() -> FilePolicy {
         FilePolicy {
-            cardinality: "many".to_owned(),
+            cardinality: Cardinality::Many,
             ordered: true,
             allowed_mime_groups: vec!["image/*".to_owned()],
             allowed_extensions: vec!["png".to_owned()],
@@ -978,7 +979,7 @@ mod tests {
     #[test]
     fn standalone_and_unrestricted_attribute_uploads_share_mime_boundaries() {
         let unrestricted = FilePolicy {
-            cardinality: "many".to_owned(),
+            cardinality: Cardinality::Many,
             ordered: true,
             allowed_mime_groups: vec![],
             allowed_extensions: vec![],

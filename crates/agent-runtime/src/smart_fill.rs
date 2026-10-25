@@ -1,6 +1,7 @@
 //! Draft-only record form proposals ("smart fill"): the agent provider
 //! suggests values for a record's editable scalar fields from the user's
 //! request, the unsaved draft, attachments and conversation history.
+use attricat_domain::attribute_options::ContextEditable;
 use std::collections::{BTreeMap, HashSet};
 
 use attricat_domain::value_type::ValueType;
@@ -166,7 +167,7 @@ pub async fn propose_record_form_values(
         if smart_fill_editable(
             attribute.readonly,
             attribute.value_type,
-            &attribute.context_editable,
+            attribute.context_editable,
             is_default_context,
         ) {
             editable.push(SmartFillField {
@@ -181,7 +182,7 @@ pub async fn propose_record_form_values(
         if smart_fill_editable(
             attribute.readonly,
             attribute.value_type,
-            &attribute.context_editable,
+            attribute.context_editable,
             is_default_context,
         ) {
             editable.push(SmartFillField {
@@ -401,13 +402,13 @@ pub async fn propose_record_form_values(
 fn smart_fill_editable(
     readonly: bool,
     value_type: ValueType,
-    context_editable: &str,
+    context_editable: ContextEditable,
     is_default_context: bool,
 ) -> bool {
     !readonly
         && value_type != ValueType::Relationship
         && value_type != ValueType::File
-        && (is_default_context || context_editable != "default")
+        && (is_default_context || context_editable != ContextEditable::Default)
 }
 
 /// Parse a suggestion exactly as the browser will parse a scalar form field,

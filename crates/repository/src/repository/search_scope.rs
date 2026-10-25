@@ -1,6 +1,7 @@
 //! Resolves a record search request into the blueprint, context and matching
 //! records it covers. The records API and the agent's search tools share it so
 //! filters, relationship paths and `@me` mean the same thing in both.
+use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::value_type::ValueType;
 use std::collections::{HashMap, HashSet};
 
@@ -552,7 +553,7 @@ impl AttricatRepository {
                         && attribute.value_type == ValueType::Relationship
                 })
                 .ok_or_else(|| invalid("sort.field relationship is invalid".to_owned()))?;
-            if relationship.cardinality.as_deref() != Some("one") {
+            if relationship.cardinality != Some(Cardinality::One) {
                 return Err(invalid(
                     "sort.field relationship path must be single-valued".to_owned(),
                 ));

@@ -465,7 +465,7 @@ pub struct IncludeRef {
 /// Stored as JSON on the attribute row and read back by the repository.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FilePolicy {
-    pub cardinality: String,
+    pub cardinality: attricat_domain::attribute_options::Cardinality,
     #[serde(default)]
     pub ordered: bool,
     pub allowed_mime_groups: Vec<String>,
@@ -507,13 +507,13 @@ pub struct LocalAttributeDeclaration {
     /// Every allowed target blueprint. A single target is also kept in
     /// `target_blueprint`; empty means any record blueprint.
     pub target_blueprints: Vec<String>,
-    pub cardinality: Option<String>,
-    pub target_cardinality: Option<String>,
+    pub cardinality: Option<attricat_domain::attribute_options::Cardinality>,
+    pub target_cardinality: Option<attricat_domain::attribute_options::Cardinality>,
     /// `acyclic` or `tree` for self-referencing relationships.
     pub hierarchy: Option<String>,
     pub tags: Vec<String>,
-    pub context_fallback: String,
-    pub context_editable: String,
+    pub context_fallback: attricat_domain::attribute_options::ContextFallback,
+    pub context_editable: attricat_domain::attribute_options::ContextEditable,
     pub readonly: bool,
 }
 
@@ -550,13 +550,13 @@ pub struct EffectiveAttribute {
     pub target_blueprint: Option<String>,
     /// Every allowed target blueprint; empty means any record blueprint.
     pub target_blueprints: Vec<String>,
-    pub cardinality: Option<String>,
-    pub target_cardinality: Option<String>,
+    pub cardinality: Option<attricat_domain::attribute_options::Cardinality>,
+    pub target_cardinality: Option<attricat_domain::attribute_options::Cardinality>,
     /// `acyclic` or `tree` for self-referencing relationships.
     pub hierarchy: Option<String>,
     pub tags: Vec<String>,
-    pub context_fallback: String,
-    pub context_editable: String,
+    pub context_fallback: attricat_domain::attribute_options::ContextFallback,
+    pub context_editable: attricat_domain::attribute_options::ContextEditable,
     pub readonly: bool,
     pub position: i64,
 }

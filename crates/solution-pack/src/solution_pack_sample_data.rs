@@ -906,7 +906,7 @@ fn context_path_value(
     values: &HashMap<(&str, Option<&str>), Value>,
     path: &[Option<&str>],
 ) -> Option<Value> {
-    let falls_back = attribute.context_fallback != "none";
+    let falls_back = attribute.context_fallback.inherits();
     let nearest = path.iter().enumerate().find_map(|(index, source)| {
         values
             .get(&(attribute.code.as_str(), *source))

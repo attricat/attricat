@@ -3,6 +3,7 @@
 //! A validated pack is still only portable input to a future workspace plan. This
 //! module neither persists a pack nor applies its resources.
 
+use attricat_domain::attribute_options::{Cardinality, ContextEditable};
 use attricat_domain::value_type::ValueType;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -1300,7 +1301,7 @@ fn validate_effective_sample_facts(
                     record.key, relationship.attribute
                 ));
             }
-            if attribute.cardinality.as_deref() == Some("one") && relationship.targets.len() != 1 {
+            if attribute.cardinality == Some(Cardinality::One) && relationship.targets.len() != 1 {
                 return invalid(format!(
                     "sample record '{}' relationship '{}' exceeds cardinality one",
                     record.key, relationship.attribute
@@ -1334,7 +1335,7 @@ fn validate_effective_sample_facts(
                         record.key, value.attribute
                     ))
                 })?;
-            if policy.cardinality == "one" && value.files.len() != 1 {
+            if policy.cardinality == Cardinality::One && value.files.len() != 1 {
                 return invalid(format!(
                     "sample record '{}' file attribute '{}' accepts one file",
                     record.key, value.attribute
@@ -1363,7 +1364,7 @@ fn validate_sample_context_editable(
     context: Option<&String>,
     attribute: &attricat_blueprint::EffectiveAttribute,
 ) -> Result<(), SolutionPackError> {
-    if context.is_some() && attribute.context_editable == "default" {
+    if context.is_some() && attribute.context_editable == ContextEditable::Default {
         return invalid(format!(
             "sample record '{record}' sets attribute '{}' outside the default context",
             attribute.code

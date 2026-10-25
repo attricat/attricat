@@ -35,14 +35,6 @@ impl ValueType {
             Self::Json | Self::Relationship | Self::File => false,
         }
     }
-
-    /// Every value type code, in declaration order, for JSON Schema enums.
-    pub fn codes() -> Vec<&'static str> {
-        Self::ALL
-            .iter()
-            .map(|value_type| value_type.as_str())
-            .collect()
-    }
 }
 
 #[cfg(test)]

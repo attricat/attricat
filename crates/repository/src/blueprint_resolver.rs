@@ -1,3 +1,4 @@
+use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::value_type::ValueType;
 use std::collections::HashSet;
 
@@ -335,7 +336,7 @@ async fn validate_browse_by(
                 browse_path_hop(
                     segment.value_type,
                     segment.target_blueprint.as_deref(),
-                    segment.cardinality.as_deref(),
+                    segment.cardinality.as_deref().and_then(Cardinality::parse),
                     hops.len(),
                 )
             })
@@ -437,7 +438,7 @@ async fn validate_table_columns(
                     let valid_image_column = image_attribute.is_some_and(|attribute| {
                         attribute.value_type == ValueType::File
                             && attribute.file_policy.as_ref().is_some_and(|policy| {
-                                policy.image_only && policy.cardinality == "one"
+                                policy.image_only && policy.cardinality == Cardinality::One
                             })
                     });
                     if !valid_image_column {

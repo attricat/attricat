@@ -84,14 +84,34 @@ where
     })
 }
 
+/// Decodes a nullable text column holding a stored code.
+fn decode_optional_code<T>(row: &PgRow, column: &str) -> Result<Option<T>, sqlx::Error>
+where
+    T: TryFrom<String>,
+    T::Error: std::error::Error + Send + Sync + 'static,
+{
+    let code: Option<String> = row.try_get(column)?;
+    code.map(|code| {
+        T::try_from(code).map_err(|error| sqlx::Error::ColumnDecode {
+            index: column.to_owned(),
+            source: Box::new(error),
+        })
+    })
+    .transpose()
+}
+
 /// Implements [`DomainRow`] by reading each field from the column of the same
-/// name; `field as code` decodes a stored code with [`decode_code`].
+/// name; `field as code` decodes a stored code with [`decode_code`], and
+/// `field as optional_code` a nullable one.
 macro_rules! domain_row {
     (@get $row:ident, $field:ident) => {
         $row.try_get(stringify!($field))?
     };
     (@get $row:ident, $field:ident, code) => {
         decode_code($row, stringify!($field))?
+    };
+    (@get $row:ident, $field:ident, optional_code) => {
+        decode_optional_code($row, stringify!($field))?
     };
     ($type:ty { $($field:ident $(as $decode:ident)?),+ $(,)? }) => {
         impl DomainRow for $type {
@@ -162,12 +182,12 @@ impl DomainRow for Attribute {
             file_policy: row.try_get("file_policy")?,
             target_blueprint_code,
             target_blueprint_codes,
-            cardinality: row.try_get("cardinality")?,
-            target_cardinality: row.try_get("target_cardinality")?,
+            cardinality: decode_optional_code(row, "cardinality")?,
+            target_cardinality: decode_optional_code(row, "target_cardinality")?,
             hierarchy: row.try_get("hierarchy")?,
             tags: row.try_get("tags")?,
-            context_fallback: row.try_get("context_fallback")?,
-            context_editable: row.try_get("context_editable")?,
+            context_fallback: decode_code(row, "context_fallback")?,
+            context_editable: decode_code(row, "context_editable")?,
             readonly: row.try_get("readonly")?,
             position: row.try_get("position")?,
             created_at: row.try_get("created_at")?,
@@ -188,11 +208,11 @@ domain_row!(ReusableAttribute {
     default_value,
     file_policy,
     target_blueprint_code,
-    cardinality,
-    target_cardinality,
+    cardinality as optional_code,
+    target_cardinality as optional_code,
     tags,
-    context_fallback,
-    context_editable,
+    context_fallback as code,
+    context_editable as code,
     readonly,
     searchable,
     facetable,
@@ -214,11 +234,11 @@ domain_row!(RecordReusableAttribute {
     default_value,
     file_policy,
     target_blueprint_code,
-    cardinality,
-    target_cardinality,
+    cardinality as optional_code,
+    target_cardinality as optional_code,
     tags,
-    context_fallback,
-    context_editable,
+    context_fallback as code,
+    context_editable as code,
     readonly,
     searchable,
     facetable,

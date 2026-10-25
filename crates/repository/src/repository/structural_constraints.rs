@@ -540,7 +540,7 @@ impl AttricatRepository {
         let Some(context_fallback) = write
             .by_id(attribute_id)
             .filter(|attribute| !attribute.record_scoped)
-            .map(|attribute| attribute.context_fallback.clone())
+            .map(|attribute| attribute.context_fallback)
         else {
             return Ok(());
         };
@@ -605,7 +605,7 @@ impl AttricatRepository {
             .get(&record.id)
             .map(|edges| edges.by_context.keys().copied().collect())
             .unwrap_or_default();
-        let inherit = context_fallback != "none";
+        let inherit = context_fallback.inherits();
         // Without edges outside the default context every context resolves
         // the default graph or, without fallback, a subgraph of it, so the
         // default walk decides for all of them.

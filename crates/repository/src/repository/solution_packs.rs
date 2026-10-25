@@ -5513,7 +5513,7 @@ impl AttricatRepository {
                 .context
                 .as_ref()
                 .map_or(default_context, |context| contexts[context]);
-            self.validate_context_editable(tx, Some(context_id), &context_editable)
+            self.validate_context_editable(tx, Some(context_id), context_editable)
                 .await?;
             self.ensure_attribute_unlocked(tx, &record, code, context_id)
                 .await?;

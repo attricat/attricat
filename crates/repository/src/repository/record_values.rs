@@ -19,6 +19,7 @@
 //! `context_fallback = "none"` only looks at the requested context.
 use super::RepositoryError;
 use super::values::{NativeValueRow, native_value_json};
+use attricat_domain::attribute_options::ContextFallback;
 use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_domain::value_type::ValueType;
 use attricat_validation::predicate::ResolvedRecord;
@@ -257,7 +258,8 @@ pub(crate) enum Selection<'a> {
 struct ValueRow {
     record_id: Uuid,
     attribute_code: String,
-    context_fallback: String,
+    #[sqlx(try_from = "String")]
+    context_fallback: ContextFallback,
     record_scoped: bool,
     context_id: Uuid,
     relationship_target_record_id: Option<Uuid>,
@@ -373,7 +375,7 @@ fn add_row(record: &mut RecordValues, row: ValueRow) -> Result<(), RepositoryErr
         .entry(row.attribute_code)
         .or_insert_with(|| AttributeValues {
             value_type: row.native.value_type,
-            inherit: row.context_fallback != "none",
+            inherit: row.context_fallback.inherits(),
             record_scoped: row.record_scoped,
             by_context: HashMap::new(),
         });
@@ -563,7 +565,7 @@ mod tests {
         let row = |target: u128, context: u128, active: bool| ValueRow {
             record_id: Uuid::from_u128(10),
             attribute_code: "parts".into(),
-            context_fallback: "inherit".into(),
+            context_fallback: ContextFallback::Default,
             record_scoped: false,
             context_id: Uuid::from_u128(context),
             relationship_target_record_id: Some(Uuid::from_u128(target)),

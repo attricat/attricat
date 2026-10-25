@@ -358,7 +358,7 @@ fn validate_browse_by_path(
     if !browse_path_hop(
         first.value_type,
         first.target_blueprint.as_deref(),
-        first.cardinality.as_deref(),
+        first.cardinality,
         hops.len(),
     ) {
         return Err(invalid());

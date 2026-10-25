@@ -1,4 +1,5 @@
 use attricat_blueprint::{BlueprintError, compile, parse};
+use attricat_domain::attribute_options::Cardinality;
 
 fn source(attribute: &str) -> String {
     format!(
@@ -32,7 +33,7 @@ image_only = true"#,
     .unwrap();
     let compiled = compile(definition, &[], "source").unwrap();
     let policy = compiled.attributes[0].file_policy.as_ref().unwrap();
-    assert_eq!(policy.cardinality, "many");
+    assert_eq!(policy.cardinality, Cardinality::Many);
     assert!(policy.ordered);
     assert_eq!(policy.allowed_extensions, ["jpg", "png"]);
 }

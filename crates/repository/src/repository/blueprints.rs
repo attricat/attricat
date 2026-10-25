@@ -9,6 +9,7 @@ use crate::model::TablePathAttribute;
 use crate::persistence_rows::{Db, IntoDomain};
 use attricat_blueprint::{AttributeDeclaration, ViewDefinition, parse};
 use attricat_cache::{CacheKey, Policy};
+use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::states::RevisionStatus;
 use attricat_validation::validate_json_schema;
 use serde_json::json;
@@ -327,11 +328,11 @@ impl AttricatRepository {
                 .bind(attribute.default_value)
                 .bind(attribute.file_policy.map(|policy| serde_json::to_value(policy).expect("file policy serializes")))
                 .bind(attribute.target_blueprint)
-                .bind(attribute.cardinality)
-                .bind(attribute.target_cardinality)
+                .bind(attribute.cardinality.map(Cardinality::as_str))
+                .bind(attribute.target_cardinality.map(Cardinality::as_str))
                 .bind(serde_json::to_value(attribute.tags).expect("attribute tags serialize"))
-                .bind(attribute.context_fallback)
-                .bind(attribute.context_editable)
+                .bind(attribute.context_fallback.as_str())
+                .bind(attribute.context_editable.as_str())
                 .bind(attribute.readonly)
                 .bind(attribute.position)
                 .bind(if attribute.target_blueprints.len() > 1 {
@@ -871,7 +872,7 @@ impl AttricatRepository {
                 if attribute.value_type != ValueType::Relationship {
                     break;
                 }
-                sortable &= attribute.cardinality.as_deref() == Some("one");
+                sortable &= attribute.cardinality == Some(Cardinality::One);
                 let Some(target) = attribute.target_blueprint_code.as_deref() else {
                     break;
                 };

@@ -634,7 +634,7 @@ fn validate_table_paths(
                         browse_path_hop(
                             attribute.value_type,
                             attribute.target_blueprint.as_deref(),
-                            attribute.cardinality.as_deref(),
+                            attribute.cardinality,
                             hops.len(),
                         )
                     })
