@@ -1,6 +1,7 @@
 mod support;
 
 use api::permissions::Permission;
+use api::states::MembershipState;
 
 use std::time::Duration;
 
@@ -196,7 +197,7 @@ async fn acceptance_waiting_behind_deactivation_cannot_restore_membership(pool: 
                 membership,
                 BOOTSTRAP_OWNER_ID.parse().unwrap(),
                 bootstrap_workspace_id(),
-                "inactive",
+                MembershipState::Inactive,
             )
             .await
     });

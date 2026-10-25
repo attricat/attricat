@@ -1,3 +1,4 @@
+use attricat_domain::states::MembershipState;
 use axum::{Json, extract::State, http::StatusCode, response::Response};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
@@ -15,7 +16,7 @@ use super::{
 };
 use crate::{
     account::validate_password,
-    repository::{WorkspaceInvitation, WorkspaceMember},
+    repository::{RepositoryError, WorkspaceInvitation, WorkspaceMember},
 };
 
 #[derive(Deserialize)]
@@ -295,8 +296,10 @@ pub(super) async fn update_member(
     ApiJson(input): ApiJson<UpdateMemberRequest>,
 ) -> Result<StatusCode, ApiError> {
     reject_in_demo(&state)?;
+    let membership_state = MembershipState::parse(&input.state)
+        .ok_or(RepositoryError::NotFound("membership state"))?;
     if repository
-        .set_workspace_membership_state(id, actor, workspace, &input.state)
+        .set_workspace_membership_state(id, actor, workspace, membership_state)
         .await?
     {
         Ok(StatusCode::NO_CONTENT)

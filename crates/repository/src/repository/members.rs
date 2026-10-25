@@ -1,3 +1,4 @@
+use attricat_domain::states::MembershipState;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
@@ -23,7 +24,8 @@ pub struct WorkspaceMember {
     pub display_name: Option<String>,
     /// The member's ready avatar in this workspace.
     pub avatar_file_id: Option<Uuid>,
-    pub state: String,
+    #[sqlx(try_from = "String")]
+    pub state: MembershipState,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub grants: Value,
@@ -332,11 +334,8 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         id: Uuid,
         actor_id: Uuid,
         workspace_id: Uuid,
-        state: &str,
+        state: MembershipState,
     ) -> Result<bool, RepositoryError> {
-        if !matches!(state, "active" | "inactive") {
-            return Err(RepositoryError::NotFound("membership state"));
-        }
         self.require_member_permission(actor_id, workspace_id, Permission::MembersManage)
             .await?;
         let mut tx = self.pool.begin().await?;
@@ -354,7 +353,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .bind(workspace_id)
         .execute(&mut *tx)
         .await?;
-        if state == "inactive" {
+        if state == MembershipState::Inactive {
             let is_owner: bool = sqlx::query_scalar(
                 "SELECT EXISTS (SELECT 1 FROM role_grants WHERE workspace_id = $1 AND membership_id = $2 AND role_id = $3 AND scope_type = 'workspace' AND scope_target_id = $1)",
             )
@@ -376,9 +375,9 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
                 }
             }
         }
-        let user = sqlx::query("UPDATE workspace_memberships SET state = $1, updated_at = clock_timestamp() WHERE id = $2 AND workspace_id = $3 RETURNING user_id").bind(state).bind(id).bind(workspace_id).fetch_optional(&mut *tx).await?;
+        let user = sqlx::query("UPDATE workspace_memberships SET state = $1, updated_at = clock_timestamp() WHERE id = $2 AND workspace_id = $3 RETURNING user_id").bind(state.as_str()).bind(id).bind(workspace_id).fetch_optional(&mut *tx).await?;
         if let Some(user) = user {
-            if state == "inactive" {
+            if state == MembershipState::Inactive {
                 self.revoke_user_access(&mut tx, user.try_get("user_id")?, workspace_id)
                     .await?;
             }

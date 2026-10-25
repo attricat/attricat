@@ -1,5 +1,7 @@
 mod support;
 
+use api::states::MembershipState;
+
 use api::repository::AttricatRepository;
 use chrono::{Duration, Utc};
 use support::*;
@@ -200,7 +202,7 @@ async fn revoking_workspace_access_keeps_other_workspaces_and_account_tokens(poo
 
     assert!(
         repository
-            .set_workspace_membership_state(membership_id, owner, first, "inactive",)
+            .set_workspace_membership_state(membership_id, owner, first, MembershipState::Inactive)
             .await
             .unwrap()
     );

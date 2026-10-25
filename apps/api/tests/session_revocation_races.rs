@@ -1,5 +1,7 @@
 mod support;
 
+use api::states::MembershipState;
+
 use std::time::Duration;
 
 use api::{
@@ -86,7 +88,7 @@ async fn renewal_cannot_escape_revocation(pool: PgPool, deactivate: bool) {
                     membership,
                     BOOTSTRAP_OWNER_ID.parse().unwrap(),
                     bootstrap_workspace_id(),
-                    "inactive",
+                    MembershipState::Inactive,
                 )
                 .await
                 .map(|_| ())
@@ -123,7 +125,7 @@ async fn renewal_cannot_escape_revocation(pool: PgPool, deactivate: bool) {
                 membership,
                 BOOTSTRAP_OWNER_ID.parse().unwrap(),
                 bootstrap_workspace_id(),
-                "active",
+                MembershipState::Active,
             )
             .await
             .unwrap();

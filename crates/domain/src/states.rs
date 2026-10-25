@@ -36,6 +36,15 @@ crate::code_enum! {
 }
 
 crate::code_enum! {
+    /// Whether a workspace membership grants access. Only active memberships
+    /// are authorized.
+    pub enum MembershipState (UnknownMembershipState: "membership state") {
+        Active => "active",
+        Inactive => "inactive",
+    }
+}
+
+crate::code_enum! {
     /// Where an agent run stands.
     pub enum AgentRunStatus (UnknownAgentRunStatus: "agent run status") {
         Queued => "queued",
@@ -139,6 +148,11 @@ mod tests {
             RevisionStatus::parse,
         );
         crate::codes::assert_codes_round_trip(RunStatus::ALL, RunStatus::as_str, RunStatus::parse);
+        crate::codes::assert_codes_round_trip(
+            MembershipState::ALL,
+            MembershipState::as_str,
+            MembershipState::parse,
+        );
         crate::codes::assert_codes_round_trip(
             AgentRunStatus::ALL,
             AgentRunStatus::as_str,

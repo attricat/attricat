@@ -1,5 +1,6 @@
 mod support;
 
+use api::states::MembershipState;
 use std::collections::BTreeSet;
 
 use api::repository::AttricatRepository;
@@ -209,7 +210,12 @@ async fn identity_memberships_seeded_roles_and_scoped_grants(pool: PgPool) {
         .unwrap();
     assert!(
         AttricatRepository::system(pool.clone())
-            .set_workspace_membership_state(bootstrap_membership, user, workspace, "inactive")
+            .set_workspace_membership_state(
+                bootstrap_membership,
+                user,
+                workspace,
+                MembershipState::Inactive
+            )
             .await
             .is_err()
     );
