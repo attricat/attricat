@@ -386,11 +386,10 @@ impl AttricatRepository {
     pub async fn migrate_record_to_latest_checked(
         &self,
         record_id: Uuid,
-        input: MigrateRecordRequest,
+        mut input: MigrateRecordRequest,
         expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<Record, RepositoryError> {
         let migration_input = serde_json::to_value(&input).expect("migration input serializes");
-        let mut input = input;
         let mut transaction = self.pool.begin().await?;
         let transaction_started = std::time::Instant::now();
         let input_has_relationships = !input.relationships.is_empty()
