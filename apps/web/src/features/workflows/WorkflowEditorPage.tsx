@@ -32,16 +32,23 @@ export const WorkflowEditorPage = ({
     enabled: Boolean(workflowId && sourceVersion && canManage),
   });
 
-  if (session.isPending || (workflowId && source.isPending))
+  if (session.isPending)
     return (
       <PageContainer>
         <Typography>{t('workflows.loading')}</Typography>
       </PageContainer>
     );
+  // The source query stays pending while disabled, so check access first.
   if (!canManage)
     return (
       <PageContainer>
         <Alert severity="error">{t('workflows.notAuthorizedManage')}</Alert>
+      </PageContainer>
+    );
+  if (workflowId && source.isPending)
+    return (
+      <PageContainer>
+        <Typography>{t('workflows.loading')}</Typography>
       </PageContainer>
     );
 

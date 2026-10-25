@@ -77,6 +77,26 @@ describe('WorkflowEditorPage', () => {
     ).toBe(true);
   });
 
+  it('refuses a new revision to a user who cannot manage workflows', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { workflows_manage: false },
+    } as Awaited<ReturnType<typeof currentSession>>);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <WorkflowEditorPage workflowId="workflow-1" sourceVersion={1} />
+      </QueryClientProvider>,
+    );
+    expect(
+      await screen.findByText(
+        'You are not authorized to manage workflows in this workspace.',
+      ),
+    ).toBeDefined();
+    expect(getWorkflowRevision).not.toHaveBeenCalled();
+  });
+
   it('does not replace an edited revision with a background refetch', async () => {
     vi.mocked(currentSession).mockResolvedValue({
       capabilities: { workflows_manage: true },
