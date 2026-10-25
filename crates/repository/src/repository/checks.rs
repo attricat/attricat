@@ -818,7 +818,7 @@ fn transition_condition_jobs<'a>(
 /// that guard a change's transition apply in the change's context.
 fn enforcing_rule_jobs<'a>(
     contexts: &[Uuid],
-    rules: &'a [EnabledRule],
+    rules: &[&'a EnabledRule],
     changes: &[StatusChange],
 ) -> JobsByContext<'a> {
     let mut jobs = JobsByContext::new();
@@ -958,38 +958,10 @@ impl AttricatRepository {
     /// [`Self::enforce_tag_checks`].
     ///
     /// The three kinds are evaluated in that order and the first kind with a
-    /// failure is reported with its own error.
+    /// failure is reported with its own error. `rules` are the revision's
+    /// enabled rules when the caller already has them; otherwise they are
+    /// loaded here.
     pub(super) async fn enforce_declarative_checks(
-        &self,
-        transaction: &mut Transaction<'_, Postgres>,
-        record_schema: Option<&Value>,
-        tree: &ContextTree,
-        subject: &RecordValues,
-        changes: &[StatusChange],
-    ) -> Result<(), RepositoryError> {
-        // A malformed record check is reported before a malformed rule.
-        record_checks(record_schema)?;
-        let rules = enabled_rules(
-            transaction,
-            self.workspace_id.0,
-            subject.blueprint_id,
-            subject.blueprint_version,
-        )
-        .await?;
-        self.enforce_declarative_checks_with(
-            transaction,
-            record_schema,
-            tree,
-            subject,
-            changes,
-            &rules,
-        )
-        .await
-    }
-
-    /// [`Self::enforce_declarative_checks`] with the revision's enabled rules
-    /// when the caller already has them.
-    pub(super) async fn enforce_declarative_checks_using(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         record_schema: Option<&Value>,
@@ -998,41 +970,38 @@ impl AttricatRepository {
         subject: &RecordValues,
         changes: &[StatusChange],
     ) -> Result<(), RepositoryError> {
-        match rules {
-            Some(rules) => {
-                self.enforce_declarative_checks_with(
-                    transaction,
-                    record_schema,
-                    tree,
-                    subject,
-                    changes,
-                    rules,
-                )
-                .await
-            }
+        // A malformed record check is reported before a malformed rule.
+        let checks = record_checks(record_schema)?;
+        let loaded;
+        let rules = match rules {
+            Some(rules) => rules,
             None => {
-                self.enforce_declarative_checks(transaction, record_schema, tree, subject, changes)
-                    .await
+                loaded = enabled_rules(
+                    transaction,
+                    self.workspace_id.0,
+                    subject.blueprint_id,
+                    subject.blueprint_version,
+                )
+                .await?;
+                &loaded
             }
-        }
+        };
+        self.enforce_parsed_checks(transaction, &checks, tree, subject, changes, rules)
+            .await
     }
 
-    /// [`Self::enforce_declarative_checks`] with the revision's enabled rules
-    /// already loaded.
-    async fn enforce_declarative_checks_with(
+    async fn enforce_parsed_checks(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        record_schema: Option<&Value>,
+        checks: &[Check],
         tree: &ContextTree,
         subject: &RecordValues,
         changes: &[StatusChange],
         rules: &[EnabledRule],
     ) -> Result<(), RepositoryError> {
-        let checks = record_checks(record_schema)?;
-        let rules: Vec<EnabledRule> = rules
+        let rules: Vec<&EnabledRule> = rules
             .iter()
             .filter(|rule| rule.compiled.enforcement.is_some())
-            .cloned()
             .collect();
         let mut conditions = Vec::new();
         for change in changes {
@@ -1053,7 +1022,7 @@ impl AttricatRepository {
             &scope,
             subject,
             [
-                &record_check_jobs(&contexts, &checks),
+                &record_check_jobs(&contexts, checks),
                 &transition_condition_jobs(&conditions),
                 &enforcing_rule_jobs(&contexts, &rules, changes),
             ],
@@ -1115,15 +1084,8 @@ impl AttricatRepository {
         )
         .await?
         .ok_or(RepositoryError::NotFound("record"))?;
-        self.enforce_declarative_checks_with(
-            transaction,
-            record_schema.as_ref(),
-            &tree,
-            &record,
-            &[],
-            &rules,
-        )
-        .await
+        self.enforce_parsed_checks(transaction, &checks, &tree, &record, &[], &rules)
+            .await
     }
 }
 

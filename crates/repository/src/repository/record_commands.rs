@@ -1625,7 +1625,7 @@ impl AttricatRepository {
         if let Some(record_schema) = &record_schema {
             validate_json_record_schema(tree, &record, record_schema)?;
         }
-        self.enforce_declarative_checks_using(
+        self.enforce_declarative_checks(
             transaction,
             record_schema.as_ref(),
             write.enabled_rules.as_deref(),
