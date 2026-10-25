@@ -3,6 +3,7 @@ use crate::constants::{CONVERSATION_ATTACHMENT_LIFETIME_SECONDS, STAGED_UPLOAD_L
 use crate::domain_events::{ATTRIBUTE_VALUE_CHANGED_V1, AttributeValueMutationV1};
 use crate::model::NewFileAttributeValue;
 use crate::persistence_rows::{Db, IntoDomain};
+use attricat_domain::states::FileStatus;
 use chrono::Utc;
 use serde::Serialize;
 use sqlx::Transaction;
@@ -36,7 +37,7 @@ pub struct UploadedFile {
     pub mime_type: String,
     pub byte_size: i64,
     pub sha256: String,
-    pub status: String,
+    pub status: FileStatus,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -84,7 +85,8 @@ pub struct FileObject {
     pub byte_size: i64,
     pub display_filename: String,
     pub object_key: String,
-    pub status: String,
+    #[sqlx(try_from = "String")]
+    pub status: FileStatus,
     /// Digest of the stored bytes; a file and its variants never change.
     pub sha256: String,
 }
@@ -285,7 +287,7 @@ impl AttricatRepository {
             mime_type: file.mime_type,
             byte_size: file.byte_size as i64,
             sha256: file.sha256,
-            status: "queued".to_owned(),
+            status: FileStatus::Queued,
         })
     }
 
@@ -835,7 +837,7 @@ impl AttricatRepository {
             mime_type: row.2,
             byte_size: row.3,
             sha256: row.4,
-            status: row.5,
+            status: stored_code(row.5)?,
             variants,
         })
     }

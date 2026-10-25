@@ -11,6 +11,7 @@ use crate::{
     },
     storage::ObjectStoreError,
 };
+use attricat_domain::states::FileStatus;
 use axum::{
     Json,
     body::Body,
@@ -630,7 +631,7 @@ pub(super) async fn download(
 ) -> Result<Response, ApiError> {
     let span = info_span!("file.download");
     async {
-        if file.status != "ready" {
+        if file.status != FileStatus::Ready {
             return Err(ApiError::file_processing());
         }
         let etag = conditional::entity_tag(&file.sha256);

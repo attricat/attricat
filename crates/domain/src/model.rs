@@ -884,7 +884,7 @@ pub struct FileMetadata {
     pub mime_type: String,
     pub byte_size: i64,
     pub sha256: String,
-    pub status: String,
+    pub status: crate::states::FileStatus,
     pub variants: Vec<FileVariantMetadata>,
 }
 

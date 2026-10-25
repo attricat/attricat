@@ -11,6 +11,7 @@
 use super::network_v2::{admit_request, granted_rule, https_url};
 use super::*;
 use crate::extension_runtime::connections;
+use attricat_domain::states::FileStatus;
 
 /// Headers a caller may not set on a v2 transfer: the host owns them.
 const HOST_TRANSFER_HEADERS: [&str; 2] = ["range", "if-match"];
@@ -994,7 +995,7 @@ impl OperationState {
             .file_object(input.file_id, input.variant.as_deref())
             .await
             .map_err(|error| error.to_string())?;
-        if file.status != "ready" {
+        if file.status != FileStatus::Ready {
             return Err("the file is not ready".into());
         }
         if file.byte_size <= 0 || file.byte_size > MAX_RECORD_FILE_BYTES {

@@ -36,6 +36,20 @@ crate::code_enum! {
 }
 
 crate::code_enum! {
+    /// Where an uploaded file stands. Only ready files are served.
+    pub enum FileStatus (UnknownFileStatus: "file status") {
+        Uploading => "uploading",
+        /// Accepted and waiting for the file worker, which renders image
+        /// variants.
+        Queued => "queued",
+        Processing => "processing",
+        Ready => "ready",
+        Failed => "failed",
+        Deleted => "deleted",
+    }
+}
+
+crate::code_enum! {
     /// Whether a workspace membership grants access. Only active memberships
     /// are authorized.
     pub enum MembershipState (UnknownMembershipState: "membership state") {
@@ -148,6 +162,11 @@ mod tests {
             RevisionStatus::parse,
         );
         crate::codes::assert_codes_round_trip(RunStatus::ALL, RunStatus::as_str, RunStatus::parse);
+        crate::codes::assert_codes_round_trip(
+            FileStatus::ALL,
+            FileStatus::as_str,
+            FileStatus::parse,
+        );
         crate::codes::assert_codes_round_trip(
             MembershipState::ALL,
             MembershipState::as_str,
