@@ -20,7 +20,7 @@ import {
 } from '@mui/material';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { SearchIcon, Trash2Icon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { smallIconSize } from '../../components/iconSizes';
 import type { ExplorerSearch } from '../explorer/search';
@@ -32,6 +32,7 @@ import {
 import { savedViewQueryKeys } from './queryKeys';
 import type { SavedSearchActions } from './useSavedSearchActions';
 import { errorMessage } from '../../api/errors';
+import { useDebouncedValue } from '../../components/useDebouncedValue';
 
 export const SavedSearchesDialog = ({
   actions,
@@ -47,14 +48,10 @@ export const SavedSearchesDialog = ({
   const { t } = useTranslation();
   const { busy, canDelete, canEdit, isDraft } = actions;
   const [filter, setFilter] = useState('');
-  const [searchText, setSearchText] = useState('');
-  useEffect(() => {
-    const timeout = window.setTimeout(
-      () => setSearchText(filter.trim()),
-      SAVED_VIEW_SEARCH_DEBOUNCE_MS,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [filter]);
+  const searchText = useDebouncedValue(
+    filter.trim(),
+    SAVED_VIEW_SEARCH_DEBOUNCE_MS,
+  );
   const list = useQuery({
     queryKey: savedViewQueryKeys.list(searchText),
     queryFn: ({ signal }) => listSavedViews(searchText, signal),

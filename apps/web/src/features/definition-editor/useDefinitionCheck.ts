@@ -1,8 +1,9 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { checkDelayMs, type DefinitionKind } from './constants';
 import { definitionQueryKeys } from './queryKeys';
 import { errorMessage } from '../../api/errors';
+import { useDebouncedValue } from '../../components/useDebouncedValue';
 
 export const checkStatuses = {
   checking: 'checking',
@@ -43,14 +44,7 @@ export const useDefinitionCheck = <T>({
     signal: AbortSignal,
   ) => Promise<T>;
 }): DefinitionCheck<T> => {
-  const [checked, setChecked] = useState(definition);
-  useEffect(() => {
-    const timeout = window.setTimeout(
-      () => setChecked(definition),
-      checkDelayMs,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [definition]);
+  const checked = useDebouncedValue(definition, checkDelayMs);
   const empty = !checked.trim();
   const query = useQuery({
     enabled: !empty,
