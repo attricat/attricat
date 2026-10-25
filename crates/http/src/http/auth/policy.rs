@@ -485,36 +485,32 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     None
 }
 
-pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<String>) {
-    let segments: Vec<_> = path
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .collect();
+/// The target a route authorizes against, read from the concrete `path` at
+/// the position of the target's named parameter in the matched `route`
+/// template.
+pub(super) fn target(route: &str, path: &str, kind: TargetKind) -> (Option<Uuid>, Option<String>) {
+    let parameter = |name: &str| {
+        let placeholder = format!("{{{name}}}");
+        let position = route
+            .split('/')
+            .position(|segment| segment == placeholder)?;
+        path.split('/').nth(position)
+    };
+    let id = |name| parameter(name).and_then(|value| value.parse().ok());
+    let code = |name| parameter(name).map(str::to_owned);
     match kind {
-        TargetKind::None => (None, None),
-        TargetKind::BlueprintId => (segments.get(1).and_then(|value| value.parse().ok()), None),
-        TargetKind::BlueprintCode => (None, segments.get(2).map(|value| (*value).to_owned())),
-        TargetKind::FileRead
+        TargetKind::None
+        | TargetKind::FileRead
         | TargetKind::WorkspaceNavigation
         | TargetKind::ExtensionRun
         | TargetKind::RecordBatch
         | TargetKind::RecordList => (None, None),
-        TargetKind::RecordId => {
-            let index = if segments.first() == Some(&"v1") {
-                2
-            } else {
-                1
-            };
-            (
-                segments.get(index).and_then(|value| value.parse().ok()),
-                None,
-            )
-        }
-        TargetKind::ContextId => (segments.get(2).and_then(|value| value.parse().ok()), None),
-        TargetKind::PublicationChannelContext => {
-            (segments.get(1).and_then(|value| value.parse().ok()), None)
-        }
-        TargetKind::ContextCode => (None, segments.get(1).map(|value| (*value).to_owned())),
+        TargetKind::BlueprintId => (id("blueprint_id"), None),
+        TargetKind::BlueprintCode => (None, code("code")),
+        TargetKind::RecordId => (id("record_id"), None),
+        TargetKind::ContextId => (id("id"), None),
+        TargetKind::PublicationChannelContext => (id("context_id"), None),
+        TargetKind::ContextCode => (None, code("code")),
         TargetKind::ContextList => (None, Some("__context_list__".to_owned())),
     }
 }
@@ -547,7 +543,11 @@ mod tests {
         assert_eq!(labels.permission, "records.read");
         assert!(matches!(labels.target, TargetKind::RecordList));
         assert_eq!(
-            target("/v1/records/labels", TargetKind::RecordList),
+            target(
+                "/v1/records/labels",
+                "/v1/records/labels",
+                TargetKind::RecordList
+            ),
             (None, None)
         );
     }
@@ -636,6 +636,7 @@ mod tests {
         ));
         assert_eq!(
             target(
+                route,
                 &format!("/publication-channels/{context_id}"),
                 policy.target
             ),
@@ -649,7 +650,11 @@ mod tests {
         assert_eq!(batch.permission, "records.write");
         assert!(matches!(batch.target, TargetKind::RecordBatch));
         assert_eq!(
-            target("/v1/records/batch", TargetKind::RecordBatch),
+            target(
+                "/v1/records/batch",
+                "/v1/records/batch",
+                TargetKind::RecordBatch
+            ),
             (None, None)
         );
     }

@@ -236,7 +236,7 @@ pub(super) async fn authorize(
     // the active-membership policy while retaining normal credential validation.
     let accepting_invitation = matched == "/workspace/invitations/accept";
     if let Some(policy) = policy::policy(request.method(), matched) {
-        let (target_id, target_code) = policy::target(path, policy.target);
+        let (target_id, target_code) = policy::target(matched, path, policy.target);
         // File reads are authorized in their handlers after resolving active
         // file-to-record references. Other routes can authorize from the path.
         let handler_authorized = matches!(
@@ -394,15 +394,12 @@ mod route_tests {
             ))));
         }
         let record = Uuid::new_v4();
-        let path = format!("/records/{record}");
-        let alias = format!("/api{path}");
-        assert_eq!(
-            policy::target(
-                super::super::canonical_route(&alias),
-                policy::TargetKind::RecordId
-            )
-            .0,
-            Some(record)
-        );
+        for route in ["/records/{record_id}", "/v1/records/{record_id}/values"] {
+            let path = route.replace("{record_id}", &record.to_string());
+            assert_eq!(
+                policy::target(route, &path, policy::TargetKind::RecordId).0,
+                Some(record)
+            );
+        }
     }
 }
