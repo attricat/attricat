@@ -13,6 +13,7 @@ use super::*;
 use crate::extension_runtime::connections;
 use attricat_domain::states::ArtifactState;
 use attricat_domain::states::FileStatus;
+use reqwest::StatusCode;
 
 /// Headers a caller may not set on a v2 transfer: the host owns them.
 const HOST_TRANSFER_HEADERS: [&str; 2] = ["range", "if-match"];
@@ -257,7 +258,7 @@ impl OperationState {
         status: u16,
         connection: Option<&(String, String)>,
     ) {
-        if status == 401
+        if status == StatusCode::UNAUTHORIZED.as_u16()
             && let Some((connection, token)) = connection
         {
             let _ = repository
@@ -432,7 +433,7 @@ impl OperationState {
         .await;
         // A connection's rejected token was discarded above, so the
         // component may retry with a fresh one, as after a delivery.
-        if status == 401 && connection.is_some() {
+        if status == StatusCode::UNAUTHORIZED.as_u16() && connection.is_some() {
             return bounded_serialize(&json!({"outcome":"failed","status":status}));
         }
         if response
@@ -442,13 +443,13 @@ impl OperationState {
         {
             return Err("compressed range responses are not supported".into());
         }
-        if status != 200 && status != 206 {
+        if status != StatusCode::OK.as_u16() && status != StatusCode::PARTIAL_CONTENT.as_u16() {
             return Err(format!("source returned HTTP {status}"));
         }
-        if offset > 0 && status != 206 {
+        if offset > 0 && status != StatusCode::PARTIAL_CONTENT.as_u16() {
             return Err("source ignored range request".into());
         }
-        if status == 206 {
+        if status == StatusCode::PARTIAL_CONTENT.as_u16() {
             let expected = format!("bytes {offset}-");
             if !response
                 .headers()
@@ -944,7 +945,7 @@ impl OperationState {
         .await;
         // A 401 with a connection's token applied nothing; the same key is
         // sent again once the token is refreshed.
-        if status == 401 && connection.is_some() {
+        if status == StatusCode::UNAUTHORIZED.as_u16() && connection.is_some() {
             self.repository
                 .forget_extension_http_delivery(id)
                 .await

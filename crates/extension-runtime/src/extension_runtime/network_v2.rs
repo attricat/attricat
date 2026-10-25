@@ -10,6 +10,7 @@
 //! bodies and secrets never reach logs, traces, metrics or errors.
 
 use attricat_extension_manifest::extensions::{HostPermission, RateLimit};
+use reqwest::StatusCode;
 
 use super::*;
 use crate::extension_runtime::connections::{self, TokenError};
@@ -465,7 +466,7 @@ impl HostState {
         // so a component may request its Location through a granted rule
         // (Allegro answers finished commands with 303 See Other).
         let status = response.status().as_u16();
-        if status == 401
+        if status == StatusCode::UNAUTHORIZED.as_u16()
             && let (Some(connection), Some(token)) = (&input.connection, &sent_token)
         {
             // The destination rejected the token; refresh it on the next call.

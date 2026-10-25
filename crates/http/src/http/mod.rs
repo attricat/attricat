@@ -335,13 +335,14 @@ async fn server_timing(
         next.run(request).instrument(span.clone()),
     )
     .await;
-    let status = response.status().as_u16();
+    let status_code = response.status();
+    let status = status_code.as_u16();
     let duration_ms = elapsed_ms(started_at);
     span.record("status", status)
         .record("duration_ms", duration_ms);
     metrics::counter!("attricat_http_requests_total", "method" => method.clone(), "route" => route.clone(), "status" => status.to_string()).increment(1);
     metrics::histogram!("attricat_http_request_duration_seconds", "method" => method, "route" => route).record(duration_ms / MILLIS_PER_SECOND);
-    if status >= 500 {
+    if status_code.is_server_error() {
         tracing::error!(parent: &span, status, duration_ms, "request failed");
     } else {
         tracing::info!(parent: &span, status, duration_ms, "request completed");

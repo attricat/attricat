@@ -14,6 +14,7 @@
 //! mediated request. Tokens never reach a component, a log or an error.
 
 use attricat_domain::states::ConnectionStatus;
+use reqwest::StatusCode;
 use std::sync::OnceLock;
 
 use attricat_extension_manifest::extensions::{ClientAuthentication, ConnectionKind};
@@ -705,10 +706,10 @@ async fn token_endpoint_call(
         | "expired_token" => {
             TokenError::Rejected(format!("the token endpoint rejected the grant ({code})"))
         }
-        _ if status.as_u16() == 429 || status.is_server_error() => {
+        _ if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() => {
             TokenError::Temporary(format!("token endpoint returned HTTP {}", status.as_u16()))
         }
-        _ if status.as_u16() == 401 => {
+        _ if status == StatusCode::UNAUTHORIZED => {
             TokenError::Rejected("the token endpoint rejected the client".into())
         }
         _ => TokenError::Temporary(format!("token endpoint returned HTTP {}", status.as_u16())),

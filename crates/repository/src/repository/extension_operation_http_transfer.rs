@@ -202,7 +202,7 @@ impl AttricatRepository {
         let mut tx = self.pool.begin().await?;
         self.ensure_task_fence(&mut tx).await?;
         sqlx::query("UPDATE extension_operation_http_deliveries SET state=$3,http_status=$4,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND state='uncertain'")
-            .bind(id).bind(self.workspace_id()).bind(if (200..300).contains(&status) { "succeeded" } else { "failed" }).bind(i32::from(status)).execute(&mut *tx).await?;
+            .bind(id).bind(self.workspace_id()).bind(if reqwest::StatusCode::from_u16(status).is_ok_and(|status| status.is_success()) { "succeeded" } else { "failed" }).bind(i32::from(status)).execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(())
     }

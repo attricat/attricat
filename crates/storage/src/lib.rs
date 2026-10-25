@@ -237,8 +237,12 @@ impl S3ObjectStore {
     }
 }
 
+/// HTTP 404, which an S3-compatible store may answer for a missing key
+/// without the modeled `NoSuchKey` error.
+const HTTP_NOT_FOUND: u16 = 404;
+
 fn classify_download_failure(modeled_no_such_key: bool, status: Option<u16>) -> ObjectStoreError {
-    if modeled_no_such_key || status == Some(404) {
+    if modeled_no_such_key || status == Some(HTTP_NOT_FOUND) {
         ObjectStoreError::NotFound
     } else {
         ObjectStoreError::Operation(DOWNLOAD_OPERATION)
