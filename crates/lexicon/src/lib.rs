@@ -14,7 +14,6 @@ pub use entry::{
 };
 pub use plural::{
     DEFAULT_PLURAL_CATEGORY, PLURAL_CATEGORIES, canonical_language, plural_categories,
-    supported_languages,
 };
 pub use reference::{Reference, ReferenceError, Segment, normalize, parse, references, resolve};
 pub use report::{

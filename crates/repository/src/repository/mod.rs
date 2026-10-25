@@ -663,8 +663,6 @@ pub enum RepositoryError {
     RelationshipSearchBudgetExceeded { dimension: &'static str },
     #[error("global relationship search exceeded its PostgreSQL statement timeout")]
     RelationshipSearchTimedOut,
-    #[error("blueprint code is already owned by another blueprint")]
-    BlueprintCodeTaken,
     #[error("the definition is identical to version {version} of this blueprint")]
     BlueprintRevisionUnchanged { version: i64 },
     #[error("catalog code is already in use")]
@@ -1640,7 +1638,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             .map_err(RepositoryError::from)
     }
 
-    /// [`Self::is_active_user`] and the workspace's cache generations, in
+    /// Whether the user is active, and the workspace's cache generations, in
     /// one query.
     pub async fn active_user_generations(
         &self,
@@ -1659,15 +1657,6 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         let generations =
             WorkspaceGenerations::from_columns(attricat, contexts, extensions, access);
         Ok((active, generations))
-    }
-
-    pub async fn is_active_user(&self, user_id: Uuid) -> Result<bool, RepositoryError> {
-        Ok(sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND state = 'active')",
-        )
-        .bind(user_id)
-        .fetch_one(&self.pool)
-        .await?)
     }
 
     pub async fn is_active_principal(

@@ -416,21 +416,6 @@ impl AttricatRepository {
         .into_domain())
     }
 
-    pub async fn reusable_attribute_by_qualified_code(
-        &self,
-        qualified_code: &str,
-    ) -> Result<Option<ReusableAttribute>, RepositoryError> {
-        let Some((namespace, code)) = qualified_code.split_once(':') else {
-            return Ok(None);
-        };
-        Ok(sqlx::query_as::<_, Db<ReusableAttribute>>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at, r.definition
-            FROM reusable_attribute_revisions r JOIN reusable_attribute_definitions d ON d.id = r.definition_id
-            WHERE r.workspace_id = $1 AND d.namespace = $2 AND d.code = $3 AND r.status = 'published'
-            ORDER BY r.version DESC LIMIT 1"#)
-            .bind(workspace(self)).bind(namespace).bind(code).fetch_optional(&self.pool).await?
-        .into_domain())
-    }
-
     pub async fn reusable_attribute_revision(
         &self,
         revision_id: Uuid,

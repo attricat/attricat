@@ -23,8 +23,6 @@ pub struct BlueprintDefinition {
 /// Unique-key scopes: `workspace` compares default-context values across the
 /// blueprint family; `context` compares resolved values within each context.
 pub const UNIQUE_KEY_SCOPES: &[&str] = &["workspace", "context"];
-/// Hierarchy constraints a self-referencing relationship can declare.
-pub const RELATIONSHIP_HIERARCHIES: &[&str] = &["acyclic", "tree"];
 /// Attributes a unique key may combine.
 pub const MAX_UNIQUE_KEY_ATTRIBUTES: usize = 8;
 

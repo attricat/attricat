@@ -200,9 +200,6 @@ pub struct ContextCreatedV1 {
     pub parent_id: Option<Uuid>,
 }
 
-pub type ContextUpdatedV1 = ContextCreatedV1;
-pub type ContextDeletedV1 = ContextCreatedV1;
-
 /// A normalized catalog fact affected by a record mutation. This deliberately
 /// excludes record projections and other snapshots so consumers can update
 /// their own state from the smallest useful before/after representation.

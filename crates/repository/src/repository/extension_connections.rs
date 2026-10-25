@@ -700,21 +700,6 @@ impl AttricatRepository {
         Ok(deleted)
     }
 
-    /// Decrypted credentials, without a lock. Use them to inject a still
-    /// valid access token; refresh through
-    /// [`Self::claim_extension_connection_refresh`].
-    pub async fn extension_connection_credentials(
-        &self,
-        extension_id: &str,
-        connection: &str,
-    ) -> Result<ConnectionCredentials, RepositoryError> {
-        let row: CredentialRow = sqlx::query_as(&format!("SELECT {CREDENTIAL_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3"))
-            .bind(self.extension_workspace()).bind(extension_id).bind(connection)
-            .fetch_optional(&self.pool).await?
-            .ok_or(RepositoryError::NotFound("extension connection"))?;
-        row.decrypt()
-    }
-
     /// The cached access token of a connection with its kind and status. Only
     /// the access token is decrypted, so a mediated request that reuses a
     /// valid token does not open the connection's other secrets.

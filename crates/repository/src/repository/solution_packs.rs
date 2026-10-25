@@ -6387,9 +6387,7 @@ fn solution_pack_layout_error(error: RepositoryError) -> RepositoryError {
 
 fn solution_pack_mutation_error(error: RepositoryError) -> RepositoryError {
     match error {
-        RepositoryError::BlueprintCodeTaken | RepositoryError::AttricatCodeTaken => {
-            RepositoryError::SolutionPackPlanStale
-        }
+        RepositoryError::AttricatCodeTaken => RepositoryError::SolutionPackPlanStale,
         RepositoryError::Database(sqlx::Error::Database(database_error))
             if database_error.is_unique_violation() =>
         {

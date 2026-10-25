@@ -985,16 +985,6 @@ pub struct Failure {
     pub evidence: Value,
 }
 
-/// Evaluates a check, applying its custom message.
-pub fn evaluate_check(check: &Check, input: &Evaluation<'_>) -> Result<(), Failure> {
-    evaluate(&check.predicate, input).map_err(|mut failure| {
-        if let Some(message) = &check.message {
-            failure.message = message.clone();
-        }
-        failure
-    })
-}
-
 /// Evaluates a predicate against the subject record.
 pub fn evaluate(predicate: &Predicate, input: &Evaluation<'_>) -> Result<(), Failure> {
     evaluate_on(predicate, input.subject, input).map_err(|(message, evidence)| Failure {

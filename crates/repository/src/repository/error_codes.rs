@@ -449,7 +449,6 @@ impl RepositoryError {
             }
             Self::ApprovalAlreadyDecided => plain(Conflict, Code::ApprovalAlreadyDecided),
             Self::ReusableAttributeAlreadyAttached
-            | Self::BlueprintCodeTaken
             | Self::BlueprintRevisionUnchanged { .. }
             | Self::AttricatCodeTaken
             | Self::WorkflowCodeTaken

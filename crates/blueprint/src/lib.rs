@@ -11,9 +11,8 @@ pub use ast::{
     CONNECTOR_TRIGGER_EVENTS, CompiledBlueprint, ComponentReference, ConnectorJobDefinition,
     ConnectorJobTrigger, EXTENSION_LAYOUT_OUTLETS, EffectiveAttribute, ExtensionOutletLayout,
     FilePolicy, IncludeRef, IncomingRelationship, KNOWN_VIEW_NAMES, LocalAttributeDeclaration,
-    MAX_UNIQUE_KEY_ATTRIBUTES, PublicationPolicy, RELATIONSHIP_HIERARCHIES, ResolvedInclude,
-    TableColumn, UNIQUE_KEY_SCOPES, UniqueKeyDefinition, ViewDefinition, ViewNode, ViewSection,
-    ViewTab,
+    MAX_UNIQUE_KEY_ATTRIBUTES, PublicationPolicy, ResolvedInclude, TableColumn, UNIQUE_KEY_SCOPES,
+    UniqueKeyDefinition, ViewDefinition, ViewNode, ViewSection, ViewTab,
 };
 pub use compiler::{compile, raw_hash};
 pub use component_manifest::validate_table_renderer;

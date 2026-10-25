@@ -97,11 +97,6 @@ pub fn plural_categories(language: &str) -> Option<&'static [&'static str]> {
         .map(|(_, categories)| *categories)
 }
 
-/// Supported primary language subtags, for error messages and docs.
-pub fn supported_languages() -> impl Iterator<Item = &'static str> {
-    LANGUAGES.iter().map(|(code, _)| *code)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
