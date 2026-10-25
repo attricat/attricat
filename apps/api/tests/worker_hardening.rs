@@ -95,7 +95,7 @@ async fn reclaimed_agent_tasks_cannot_commit_comments_saved_views_or_publication
         .await
         .unwrap();
     let task = agent_task(&repository).await;
-    let stale = repository.for_agent_task(&task);
+    let stale = repository.for_task(&task);
     sqlx::query("UPDATE tasks SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1")
         .bind(task.id)
         .execute(&pool)
@@ -169,7 +169,7 @@ async fn reclaimed_agent_tasks_cannot_commit_comments_saved_views_or_publication
     );
     // A current lease must still succeed, including its audit evidence.
     repository
-        .for_agent_task(&replacement)
+        .for_task(&replacement)
         .create_record_comment(id, owner, "Current")
         .await
         .unwrap();
@@ -191,7 +191,7 @@ async fn sibling_agent_decisions_queue_one_resume_only_after_the_wave_is_resolve
     let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let task = agent_task(&repository).await;
     let run_id = task.subject_id;
-    let worker = repository.for_agent_task(&task);
+    let worker = repository.for_task(&task);
     worker
         .claim_queued_agent_run(run_id)
         .await
@@ -268,7 +268,7 @@ async fn sibling_agent_decisions_queue_one_resume_only_after_the_wave_is_resolve
         .unwrap();
     assert!(
         repository
-            .for_agent_task(&resume)
+            .for_task(&resume)
             .claim_queued_agent_run(run_id)
             .await
             .unwrap()
@@ -296,7 +296,7 @@ async fn decisions_during_provider_delivery_are_not_lost_and_terminal_runs_canno
     let (_, server) = start_server(pool.clone()).await;
     let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let task = agent_task(&repository).await;
-    let worker = repository.for_agent_task(&task);
+    let worker = repository.for_task(&task);
     let run_id = task.subject_id;
     worker
         .claim_queued_agent_run(run_id)
@@ -404,7 +404,7 @@ async fn task_fences_use_wall_clock_after_waiting_for_a_domain_lock(pool: PgPool
     let id = record(&authenticated_client(), &base).await;
     let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let task = agent_task(&repository).await;
-    let fenced = repository.for_agent_task(&task);
+    let fenced = repository.for_task(&task);
     let mut blocker = pool.begin().await.unwrap();
     let blocker_pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
         .fetch_one(&mut *blocker)

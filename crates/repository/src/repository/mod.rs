@@ -867,67 +867,14 @@ impl AttricatRepository {
         handler_name: &str,
         task: &ClaimedTask,
     ) -> Self {
-        let mut repository = self.for_event_handler(event, handler_name);
-        repository.task_fence = Some(TaskFence {
-            task_id: task.id,
-            lease_owner: task.lease_owner.clone(),
-            lease_token: task.lease_token,
-        });
-        repository
+        self.for_event_handler(event, handler_name).for_task(task)
     }
 
-    /// Attaches an agent task lease to all run lifecycle and durable runner
-    /// writes. A provider response from a reclaimed execution cannot be
-    /// persisted after this token is lost.
-    pub fn for_agent_task(&self, task: &ClaimedTask) -> Self {
-        let mut repository = self.clone();
-        repository.task_fence = Some(TaskFence {
-            task_id: task.id,
-            lease_owner: task.lease_owner.clone(),
-            lease_token: task.lease_token,
-        });
-        repository
-    }
-
-    /// Attaches a workflow task lease to all action writes. The action marker,
-    /// catalog effect, outbox event, and audit row are committed only while this
-    /// exact task token remains current.
-    pub fn for_workflow_task(&self, task: &ClaimedTask) -> Self {
-        let mut repository = self.clone();
-        repository.task_fence = Some(TaskFence {
-            task_id: task.id,
-            lease_owner: task.lease_owner.clone(),
-            lease_token: task.lease_token,
-        });
-        repository
-    }
-
-    /// Attaches a rule task lease to a run checkpoint. Rule findings and cursor
-    /// updates use this exact fence rather than the legacy rule-run lease.
-    pub fn for_rule_task(&self, task: &ClaimedTask) -> Self {
-        let mut repository = self.clone();
-        repository.task_fence = Some(TaskFence {
-            task_id: task.id,
-            lease_owner: task.lease_owner.clone(),
-            lease_token: task.lease_token,
-        });
-        repository
-    }
-
-    /// Attaches a blueprint migration task lease to batch and per-record
-    /// checkpoints. A reclaimed task cannot advance an old batch execution.
-    /// Fences extension operation checkpoints with the shared envelope token.
-    pub fn for_extension_operation_task(&self, task: &ClaimedTask) -> Self {
-        let mut repository = self.clone();
-        repository.task_fence = Some(TaskFence {
-            task_id: task.id,
-            lease_owner: task.lease_owner.clone(),
-            lease_token: task.lease_token,
-        });
-        repository
-    }
-
-    pub fn for_blueprint_migration_task(&self, task: &ClaimedTask) -> Self {
+    /// Attaches a claimed task's lease to every subsequent write. Each commit
+    /// re-checks the exact token in its own transaction, so a reclaimed
+    /// execution (agent run, workflow action, rule checkpoint, extension
+    /// operation, blueprint migration batch) cannot persist anything.
+    pub fn for_task(&self, task: &ClaimedTask) -> Self {
         let mut repository = self.clone();
         repository.task_fence = Some(TaskFence {
             task_id: task.id,

@@ -530,7 +530,7 @@ async fn revoked_initiator_dead_letters_the_envelope_through_the_shared_helper(p
         .unwrap();
 
     AttricatRepository::new(pool.clone(), workspace_id)
-        .for_extension_operation_task(&task)
+        .for_task(&task)
         .fail_extension_operation_for_revoked_initiator(&task)
         .await
         .unwrap();

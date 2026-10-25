@@ -798,7 +798,7 @@ impl AttricatRepository {
             ));
         }
         let mut tx = self.pool.begin().await?;
-        let fenced = self.for_rule_task(task);
+        let fenced = self.for_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
         let row: Option<RuleRunTaskRow> = sqlx::query_as(
             "SELECT rr.status,rr.id,rr.rule_id,rr.rule_version,rr.dry_run,rr.scope_record_id,rr.candidate_cursor,rr.candidates_evaluated,r.blueprint_id,r.blueprint_version,r.context_id,r.compiled_plan FROM rule_runs rr JOIN rules r ON r.id=rr.rule_id AND r.version=rr.rule_version AND r.workspace_id=rr.workspace_id WHERE rr.id=$1 AND rr.workspace_id=$2 FOR UPDATE OF rr",
@@ -878,7 +878,7 @@ impl AttricatRepository {
     ) -> Result<bool, RepositoryError> {
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        let fenced = self.for_rule_task(task);
+        let fenced = self.for_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
         let status: Option<String> = sqlx::query_scalar(
             "SELECT status FROM rule_runs WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
@@ -969,7 +969,7 @@ impl AttricatRepository {
         let ws = self.workspace_id.0;
         let terminal = task.failures + 1 >= task.max_failures;
         let mut tx = self.pool.begin().await?;
-        let fenced = self.for_rule_task(task);
+        let fenced = self.for_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
         let changed = sqlx::query("UPDATE rule_runs SET status=CASE WHEN $3 THEN 'dead_letter' ELSE 'pending' END,last_error=$4,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status IN ('pending','leased')")
             .bind(task.subject_id).bind(ws).bind(terminal).bind(error).execute(&mut *tx).await?.rows_affected();

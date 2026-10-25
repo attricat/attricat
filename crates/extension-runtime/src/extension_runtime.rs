@@ -1458,7 +1458,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
     }
     async fn handle(&self, task: ClaimedTask) -> Result<TaskOutcome, TaskHandlerError> {
         let repository = self.repository.for_workspace(task.workspace_id);
-        let repository = repository.for_extension_operation_task(&task);
+        let repository = repository.for_task(&task);
         // Abandoned streams are aborted by the workspace coordinator's
         // periodic sweep; a run does not repeat that workspace-wide sweep.
         let Some(run) = repository

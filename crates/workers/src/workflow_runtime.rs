@@ -241,7 +241,7 @@ async fn execute(
         serde::Deserialize::deserialize(&run.compiled_plan)?;
     let worker = repository
         .for_event_handler(&event, &format!("workflow:{}", run.run.workflow_id))
-        .for_workflow_task(task);
+        .for_task(task);
     for (index, action) in plan.actions.iter().enumerate() {
         let action_worker = worker.for_workflow_run(
             run.run.workflow_id,

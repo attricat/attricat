@@ -41,7 +41,7 @@ impl TaskHandler for AgentTaskHandler {
 
     async fn handle(&self, task: ClaimedTask) -> Result<TaskOutcome, TaskHandlerError> {
         let repository = self.repository.for_workspace(task.workspace_id);
-        let repository = repository.for_agent_task(&task);
+        let repository = repository.for_task(&task);
         let Some(run) = repository
             .claim_queued_agent_run(task.subject_id)
             .await

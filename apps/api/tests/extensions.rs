@@ -3009,7 +3009,7 @@ async fn delivery_attempt_is_uncertain_until_confirmed_and_never_auto_resends(po
         .begin_extension_operation_task(&task)
         .await
         .unwrap();
-    let scoped = repository.for_extension_operation_task(&task);
+    let scoped = repository.for_task(&task);
     let artifact = scoped
         .create_extension_operation_output_artifact(run, "acme.delivery", release, "text/plain")
         .await

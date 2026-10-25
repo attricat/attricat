@@ -312,7 +312,7 @@ impl AttricatRepository {
             ));
         }
         let mut transaction = self.pool.begin().await?;
-        self.for_extension_operation_task(task)
+        self.for_task(task)
             .ensure_task_fence(&mut transaction)
             .await?;
         let row: Option<ClaimedOperationRunRow> = sqlx::query_as(
@@ -406,7 +406,7 @@ impl AttricatRepository {
         task: &ClaimedTask,
     ) -> Result<(), RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        self.for_extension_operation_task(task)
+        self.for_task(task)
             .ensure_task_fence(&mut transaction)
             .await?;
         let changed = sqlx::query(
@@ -455,7 +455,7 @@ impl AttricatRepository {
         bounded_object(&checkpoint, "checkpoint")?;
         bounded_object(&progress, "progress")?;
         let mut transaction = self.pool.begin().await?;
-        self.for_extension_operation_task(task)
+        self.for_task(task)
             .ensure_task_fence(&mut transaction)
             .await?;
         let changed: Option<String> = sqlx::query_scalar(
@@ -490,7 +490,7 @@ impl AttricatRepository {
         task: &ClaimedTask,
     ) -> Result<(), RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        self.for_extension_operation_task(task)
+        self.for_task(task)
             .ensure_task_fence(&mut transaction)
             .await?;
         let changed = sqlx::query(
@@ -518,7 +518,7 @@ impl AttricatRepository {
         task: &ClaimedTask,
     ) -> Result<bool, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        self.for_extension_operation_task(task)
+        self.for_task(task)
             .ensure_task_fence(&mut transaction)
             .await?;
         let requested: Option<bool> = sqlx::query_scalar(
@@ -556,7 +556,7 @@ impl AttricatRepository {
     ) -> Result<bool, RepositoryError> {
         let error = bounded_message(error);
         let mut transaction = self.pool.begin().await?;
-        self.for_extension_operation_task(task)
+        self.for_task(task)
             .ensure_task_fence(&mut transaction)
             .await?;
         let terminal = self
@@ -609,7 +609,7 @@ impl AttricatRepository {
     ) -> Result<bool, RepositoryError> {
         let message = bounded_message(message);
         let mut transaction = self.pool.begin().await?;
-        self.for_extension_operation_task(task)
+        self.for_task(task)
             .ensure_task_fence(&mut transaction)
             .await?;
         let deferrals: Option<i32> = sqlx::query_scalar("SELECT deferrals FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$3 FOR UPDATE")
@@ -648,7 +648,7 @@ impl AttricatRepository {
     ) -> Result<(), RepositoryError> {
         let error = bounded_message(error);
         let mut transaction = self.pool.begin().await?;
-        self.for_extension_operation_task(task)
+        self.for_task(task)
             .ensure_task_fence(&mut transaction)
             .await?;
         let changed = sqlx::query(

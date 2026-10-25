@@ -231,7 +231,7 @@ impl AttricatRepository {
     ) -> Result<(), RepositoryError> {
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        let fenced = self.for_workflow_task(task);
+        let fenced = self.for_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
         sqlx::query("UPDATE workflow_runs SET status='completed',completed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='pending'")
             .bind(task.subject_id).bind(ws).execute(&mut *tx).await?;
@@ -246,7 +246,7 @@ impl AttricatRepository {
     ) -> Result<(), RepositoryError> {
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        let fenced = self.for_workflow_task(task);
+        let fenced = self.for_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
         let run_changed = sqlx::query("UPDATE workflow_runs SET status='dead_letter',failed_at=clock_timestamp(),last_error=$3,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='pending'")
             .bind(task.subject_id).bind(ws).bind(error).execute(&mut *tx).await?.rows_affected();
