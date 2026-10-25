@@ -9,8 +9,7 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { CopyIcon } from 'lucide-react';
-import { copyToClipboard } from '../../components/clipboard';
-import { useToast } from '../../components/useToast';
+import { useCopyToClipboard } from '../../components/useCopyToClipboard';
 import { secretDialogMinWidth } from './constants';
 
 export const SecretDialog = ({
@@ -21,15 +20,8 @@ export const SecretDialog = ({
   onClose: () => void;
 }) => {
   const { t } = useTranslation();
-  const { show } = useToast();
-  const copySecret = async () => {
-    try {
-      await copyToClipboard(secret ?? '');
-      show({ message: t('common.copied'), severity: 'success' });
-    } catch {
-      show({ message: t('common.copyFailed'), severity: 'error' });
-    }
-  };
+  const copyText = useCopyToClipboard();
+  const copySecret = () => copyText(secret ?? '');
 
   return (
     <Dialog onClose={onClose} open={Boolean(secret)}>

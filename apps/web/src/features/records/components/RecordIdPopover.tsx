@@ -3,22 +3,14 @@ import { CopyIcon, HashIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { monoFontFamily } from '../../../app/theme';
-import { copyToClipboard } from '../../../components/clipboard';
-import { useToast } from '../../../components/useToast';
+import { useCopyToClipboard } from '../../../components/useCopyToClipboard';
 import { compactIconSize } from '../../../components/iconSizes';
 
 export const RecordIdPopover = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
-  const { show } = useToast();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const copyRecordId = async () => {
-    try {
-      await copyToClipboard(recordId);
-      show({ message: t('common.copied'), severity: 'success' });
-    } catch {
-      show({ message: t('common.copyFailed'), severity: 'error' });
-    }
-  };
+  const copyText = useCopyToClipboard();
+  const copyRecordId = () => copyText(recordId);
   const label = t('records.viewRecordIdWithId', { recordId });
   return (
     <>

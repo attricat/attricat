@@ -1,7 +1,6 @@
 import { ButtonBase, Tooltip, type SxProps, type Theme } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { copyToClipboard } from '../../../components/clipboard';
-import { useToast } from '../../../components/useToast';
+import { useCopyToClipboard } from '../../../components/useCopyToClipboard';
 
 /**
  * A value shown as text that copies itself when clicked. It works in
@@ -15,15 +14,8 @@ export const CopyableText = ({
   sx?: SxProps<Theme>;
 }) => {
   const { t } = useTranslation();
-  const { show } = useToast();
-  const copy = async () => {
-    try {
-      await copyToClipboard(value);
-      show({ message: t('common.copied'), severity: 'success' });
-    } catch {
-      show({ message: t('common.copyFailed'), severity: 'error' });
-    }
-  };
+  const copyText = useCopyToClipboard();
+  const copy = () => copyText(value);
   return (
     <Tooltip title={t('views.copyValue')}>
       <ButtonBase

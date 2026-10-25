@@ -29,8 +29,7 @@ import {
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterMenuItem } from '../../../components/RouterLink';
-import { copyToClipboard } from '../../../components/clipboard';
-import { useToast } from '../../../components/useToast';
+import { useCopyToClipboard } from '../../../components/useCopyToClipboard';
 import { RecordToolbar } from './RecordToolbar';
 import type {
   RecordPublicationReadiness,
@@ -101,21 +100,14 @@ export const RecordPreviewToolbar = ({
   publicationPending,
 }: Props) => {
   const { t } = useTranslation();
-  const { show } = useToast();
   // A tooltip cannot host another tooltip, so the UTC value is inline.
   const { formatWithUtc } = useInstantFormat();
   const actionsMenuId = useId();
   const [actionsMenuAnchor, setActionsMenuAnchor] =
     useState<HTMLElement | null>(null);
   const closeActionsMenu = () => setActionsMenuAnchor(null);
-  const copyRecordId = async () => {
-    try {
-      await copyToClipboard(recordId);
-      show({ message: t('common.copied'), severity: 'success' });
-    } catch {
-      show({ message: t('common.copyFailed'), severity: 'error' });
-    }
-  };
+  const copyText = useCopyToClipboard();
+  const copyRecordId = () => copyText(recordId);
   const publishMenuId = useId();
   const [publishMenuAnchor, setPublishMenuAnchor] =
     useState<HTMLElement | null>(null);

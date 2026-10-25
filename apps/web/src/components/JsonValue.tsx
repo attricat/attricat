@@ -3,7 +3,7 @@ import { ChevronDownIcon, ChevronRightIcon, CopyIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { codeTypography } from '../app/theme';
-import { copyToClipboard } from './clipboard';
+import { useCopyToClipboard } from './useCopyToClipboard';
 import { captionIconSize, compactIconSize } from './iconSizes';
 import {
   formatJson,
@@ -16,7 +16,6 @@ import {
   type JsonToken,
   type JsonTokenKind,
 } from './jsonTokens';
-import { useToast } from './useToast';
 
 /** Characters rendered on a line that does not wrap, such as a table cell. */
 const noWrapLength = 200;
@@ -79,15 +78,8 @@ export const JsonInline = ({
 
 const CopyJsonButton = ({ value }: { value: unknown }) => {
   const { t } = useTranslation();
-  const { show } = useToast();
-  const copy = async () => {
-    try {
-      await copyToClipboard(formatJson(value));
-      show({ message: t('common.copied'), severity: 'success' });
-    } catch {
-      show({ message: t('common.copyFailed'), severity: 'error' });
-    }
-  };
+  const copyText = useCopyToClipboard();
+  const copy = () => copyText(formatJson(value));
   return (
     <Tooltip title={t('json.copy')}>
       <IconButton
