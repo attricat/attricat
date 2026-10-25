@@ -442,6 +442,200 @@ fn canonical_sample_input(pack: &ValidatedSolutionPack, record: &SampleRecord) -
     (canonical_input, digest)
 }
 
+/// What a plan validates against beyond its mapped resources: the codes in
+/// use, Explore navigation, extension layout, roles and published record
+/// blueprints. A stored setting that does not parse is reported as invalid
+/// rather than failing the plan.
+struct WorkspacePlanningState {
+    physical_codes: std::collections::BTreeSet<String>,
+    explore_navigation: Vec<PlanningExploreNavigationEntry>,
+    explore_navigation_valid: bool,
+    extension_layout: Value,
+    extension_layout_valid: bool,
+    role_codes: std::collections::BTreeSet<String>,
+    published_record_codes: std::collections::BTreeSet<String>,
+}
+
+async fn workspace_planning_state(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+) -> Result<WorkspacePlanningState, RepositoryError> {
+    let physical_codes = sqlx::query_scalar::<_, String>(
+        "SELECT code FROM blueprints WHERE workspace_id = $1 AND code IS NOT NULL UNION SELECT code FROM attribute_contexts WHERE workspace_id = $1",
+    )
+    .bind(workspace_id)
+    .fetch_all(&mut **tx)
+    .await?
+    .into_iter()
+    .collect();
+    let settings: Value =
+        sqlx::query_scalar("SELECT settings FROM workspaces WHERE id = $1 AND deleted_at IS NULL")
+            .bind(workspace_id)
+            .fetch_one(&mut **tx)
+            .await?;
+    let settings_object = settings.as_object();
+    let navigation_value = settings_object
+        .and_then(|settings| settings.get("explore_navigation"))
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!([]));
+    let extension_layout = settings_object
+        .and_then(|settings| settings.get("extension_layout"))
+        .cloned()
+        .unwrap_or_else(empty_workspace_extension_layout);
+    let extension_layout_valid = settings_object.is_some()
+        && super::extensions::validate_workspace_extension_layout(&extension_layout).is_ok();
+    let (explore_navigation, explore_navigation_valid) = match settings_object.and_then(|_| {
+        super::workspace_navigation::parse_stored_explore_navigation(navigation_value).ok()
+    }) {
+        Some(entries) => (
+            entries
+                .into_iter()
+                .map(|entry| PlanningExploreNavigationEntry {
+                    blueprint_code: entry.blueprint_code,
+                    visible_to_role_codes: entry.visible_to_role_codes,
+                })
+                .collect(),
+            true,
+        ),
+        None => (Vec::new(), false),
+    };
+    let role_codes = sqlx::query_scalar::<_, String>(
+        "SELECT code FROM roles WHERE is_system OR workspace_id = $1 ORDER BY code",
+    )
+    .bind(workspace_id)
+    .fetch_all(&mut **tx)
+    .await?
+    .into_iter()
+    .collect();
+    let published_record_codes = sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT code FROM blueprints WHERE workspace_id = $1 AND kind = 'record' AND status = 'published' AND deleted_at IS NULL AND code IS NOT NULL ORDER BY code",
+    )
+    .bind(workspace_id)
+    .fetch_all(&mut **tx)
+    .await?
+    .into_iter()
+    .collect();
+    Ok(WorkspacePlanningState {
+        physical_codes,
+        explore_navigation,
+        explore_navigation_valid,
+        extension_layout,
+        extension_layout_valid,
+        role_codes,
+        published_record_codes,
+    })
+}
+
+/// The existing presentation assets a plan maps pack assets to, each
+/// checked against its stored object.
+async fn existing_presentation_assets(
+    tx: &mut Transaction<'_, Postgres>,
+    object_store: &dyn ObjectStore,
+    workspace_id: Uuid,
+    requested: &[PresentationAssetMappingRequest],
+) -> Result<std::collections::BTreeMap<String, ExistingPresentationAssetSnapshot>, RepositoryError>
+{
+    let mut existing_presentation_assets = std::collections::BTreeMap::new();
+    for requested in requested {
+        let existing = sqlx::query_as::<_, (Uuid, String, String, i64, String, String)>(
+            "SELECT id,purpose,media_type,byte_size,sha256,object_key FROM presentation_assets WHERE workspace_id=$1 AND id=$2",
+        )
+        .bind(workspace_id)
+        .bind(requested.id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(|| {
+            RepositoryError::InvalidSolutionPackPlan(format!(
+                "existing presentation asset '{}' was not found",
+                requested.id
+            ))
+        })?;
+        let expected_size = usize::try_from(existing.3).map_err(|_| {
+            RepositoryError::InvalidSolutionPackPlan(
+                "existing presentation asset size is invalid".into(),
+            )
+        })?;
+        let object = get_object_for_integrity(object_store, &existing.5, expected_size)
+            .await
+            .map_err(|error| match error {
+                ObjectStoreError::Unavailable
+                | ObjectStoreError::TimedOut(_)
+                | ObjectStoreError::Operation(_) => {
+                    RepositoryError::SolutionPackAssetStorageUnavailable
+                }
+                ObjectStoreError::NotFound => RepositoryError::InvalidSolutionPackPlan(format!(
+                    "existing presentation asset '{}' object is missing",
+                    requested.id
+                )),
+            })?;
+        if !usize::try_from(existing.3).is_ok_and(|size| object_matches(&object, size, &existing.4))
+        {
+            return Err(RepositoryError::InvalidSolutionPackPlan(format!(
+                "existing presentation asset '{}' object integrity failed",
+                requested.id
+            )));
+        }
+        existing_presentation_assets.insert(
+            requested.key.clone(),
+            ExistingPresentationAssetSnapshot {
+                id: existing.0,
+                purpose: existing.1,
+                media_type: existing.2,
+                byte_size: existing.3,
+                sha256: existing.4,
+            },
+        );
+    }
+    Ok(existing_presentation_assets)
+}
+
+/// The installed extensions a pack requires, plus the official releases the
+/// plan would install for the missing ones, and those releases.
+async fn planned_extension_snapshots<'r>(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    pack: &ValidatedSolutionPack,
+    official_extensions: &'r [ResolvedExtensionRelease],
+) -> Result<
+    (
+        std::collections::BTreeMap<String, InstalledExtensionSnapshot>,
+        Vec<&'r ResolvedExtensionRelease>,
+    ),
+    RepositoryError,
+> {
+    let extension_ids = pack
+        .manifest()
+        .extensions
+        .iter()
+        .map(|requirement| requirement.id.clone())
+        .collect::<Vec<_>>();
+    let mut installed_extensions: std::collections::BTreeMap<_, _> = if extension_ids.is_empty() {
+        Default::default()
+    } else {
+        sqlx::query_as::<_, InstalledExtensionRow>(
+            "SELECT i.extension_id, i.installed_release_id, r.version, i.state, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id AND r.workspace_id = i.workspace_id WHERE i.workspace_id = $1 AND i.extension_id = ANY($2) ORDER BY i.extension_id",
+        )
+        .bind(workspace_id)
+        .bind(&extension_ids)
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .map(installed_extension_snapshot)
+        .collect()
+    };
+    let official_extensions = official_extensions
+        .iter()
+        .filter(|release| !installed_extensions.contains_key(&release.extension_id))
+        .collect::<Vec<_>>();
+    for release in &official_extensions {
+        installed_extensions.insert(
+            release.extension_id.clone(),
+            pending_extension_snapshot(release),
+        );
+    }
+    Ok((installed_extensions, official_extensions))
+}
+
 /// The latest published revision of a blueprint code, with the canonical
 /// definition hash used to compare it with a pack definition.
 async fn latest_published_blueprint(
@@ -1110,62 +1304,15 @@ impl AttricatRepository {
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             .execute(&mut *tx)
             .await?;
-        let physical_codes = sqlx::query_scalar::<_, String>(
-            "SELECT code FROM blueprints WHERE workspace_id = $1 AND code IS NOT NULL UNION SELECT code FROM attribute_contexts WHERE workspace_id = $1",
-        )
-        .bind(workspace_id)
-        .fetch_all(&mut *tx)
-        .await?
-        .into_iter()
-        .collect();
-        let settings: Value = sqlx::query_scalar(
-            "SELECT settings FROM workspaces WHERE id = $1 AND deleted_at IS NULL",
-        )
-        .bind(workspace_id)
-        .fetch_one(&mut *tx)
-        .await?;
-        let settings_object = settings.as_object();
-        let navigation_value = settings_object
-            .and_then(|settings| settings.get("explore_navigation"))
-            .cloned()
-            .unwrap_or_else(|| serde_json::json!([]));
-        let extension_layout = settings_object
-            .and_then(|settings| settings.get("extension_layout"))
-            .cloned()
-            .unwrap_or_else(empty_workspace_extension_layout);
-        let extension_layout_valid = settings_object.is_some()
-            && super::extensions::validate_workspace_extension_layout(&extension_layout).is_ok();
-        let (explore_navigation, explore_navigation_valid) = match settings_object.and_then(|_| {
-            super::workspace_navigation::parse_stored_explore_navigation(navigation_value).ok()
-        }) {
-            Some(entries) => (
-                entries
-                    .into_iter()
-                    .map(|entry| PlanningExploreNavigationEntry {
-                        blueprint_code: entry.blueprint_code,
-                        visible_to_role_codes: entry.visible_to_role_codes,
-                    })
-                    .collect(),
-                true,
-            ),
-            None => (Vec::new(), false),
-        };
-        let role_codes = sqlx::query_scalar::<_, String>(
-            "SELECT code FROM roles WHERE is_system OR workspace_id = $1 ORDER BY code",
-        )
-        .bind(workspace_id)
-        .fetch_all(&mut *tx)
-        .await?
-        .into_iter()
-        .collect();
-        let published_record_codes = sqlx::query_scalar::<_, String>(
-            "SELECT DISTINCT code FROM blueprints WHERE workspace_id = $1 AND kind = 'record' AND status = 'published' AND deleted_at IS NULL AND code IS NOT NULL ORDER BY code",
-        )
-        .bind(workspace_id)
-        .fetch_all(&mut *tx)
-        .await?
-        .into_iter()
-        .collect();
+        let WorkspacePlanningState {
+            physical_codes,
+            explore_navigation,
+            explore_navigation_valid,
+            extension_layout,
+            extension_layout_valid,
+            role_codes,
+            published_record_codes,
+        } = workspace_planning_state(&mut tx, workspace_id).await?;
         let mut existing_blueprints = std::collections::BTreeMap::new();
         for requested in requested_mappings {
             let existing = latest_published_blueprint(&mut tx, workspace_id, &requested.code)
@@ -1178,92 +1325,16 @@ impl AttricatRepository {
                 })?;
             existing_blueprints.insert(requested.key.clone(), existing);
         }
-        let mut existing_presentation_assets = std::collections::BTreeMap::new();
-        for requested in requested_asset_mappings {
-            let existing = sqlx::query_as::<_, (Uuid, String, String, i64, String, String)>(
-                "SELECT id,purpose,media_type,byte_size,sha256,object_key FROM presentation_assets WHERE workspace_id=$1 AND id=$2",
-            )
-            .bind(workspace_id)
-            .bind(requested.id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or_else(|| {
-                RepositoryError::InvalidSolutionPackPlan(format!(
-                    "existing presentation asset '{}' was not found",
-                    requested.id
-                ))
-            })?;
-            let expected_size = usize::try_from(existing.3).map_err(|_| {
-                RepositoryError::InvalidSolutionPackPlan(
-                    "existing presentation asset size is invalid".into(),
-                )
-            })?;
-            let object = get_object_for_integrity(object_store, &existing.5, expected_size)
-                .await
-                .map_err(|error| match error {
-                    ObjectStoreError::Unavailable
-                    | ObjectStoreError::TimedOut(_)
-                    | ObjectStoreError::Operation(_) => {
-                        RepositoryError::SolutionPackAssetStorageUnavailable
-                    }
-                    ObjectStoreError::NotFound => {
-                        RepositoryError::InvalidSolutionPackPlan(format!(
-                            "existing presentation asset '{}' object is missing",
-                            requested.id
-                        ))
-                    }
-                })?;
-            if !usize::try_from(existing.3)
-                .is_ok_and(|size| object_matches(&object, size, &existing.4))
-            {
-                return Err(RepositoryError::InvalidSolutionPackPlan(format!(
-                    "existing presentation asset '{}' object integrity failed",
-                    requested.id
-                )));
-            }
-            existing_presentation_assets.insert(
-                requested.key.clone(),
-                ExistingPresentationAssetSnapshot {
-                    id: existing.0,
-                    purpose: existing.1,
-                    media_type: existing.2,
-                    byte_size: existing.3,
-                    sha256: existing.4,
-                },
-            );
-        }
-        let extension_ids = pack
-            .manifest()
-            .extensions
-            .iter()
-            .map(|requirement| requirement.id.clone())
-            .collect::<Vec<_>>();
-        let mut installed_extensions: std::collections::BTreeMap<_, _> = if extension_ids.is_empty()
-        {
-            Default::default()
-        } else {
-            sqlx::query_as::<_, InstalledExtensionRow>(
-                "SELECT i.extension_id, i.installed_release_id, r.version, i.state, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id AND r.workspace_id = i.workspace_id WHERE i.workspace_id = $1 AND i.extension_id = ANY($2) ORDER BY i.extension_id",
-            )
-            .bind(workspace_id)
-            .bind(&extension_ids)
-            .fetch_all(&mut *tx)
-            .await?
-            .into_iter()
-            .map(installed_extension_snapshot)
-            .collect()
-        };
+        let existing_presentation_assets = existing_presentation_assets(
+            &mut tx,
+            object_store,
+            workspace_id,
+            requested_asset_mappings,
+        )
+        .await?;
         // An extension installed since resolution is evaluated as installed.
-        let official_extensions = official_extensions
-            .iter()
-            .filter(|release| !installed_extensions.contains_key(&release.extension_id))
-            .collect::<Vec<_>>();
-        for release in &official_extensions {
-            installed_extensions.insert(
-                release.extension_id.clone(),
-                pending_extension_snapshot(release),
-            );
-        }
+        let (installed_extensions, official_extensions) =
+            planned_extension_snapshots(&mut tx, workspace_id, pack, official_extensions).await?;
         let seed = self
             .seed_workspace_snapshot(
                 &mut tx,
@@ -1451,110 +1522,16 @@ impl AttricatRepository {
         .execute(&mut *tx)
         .await?;
         if include_sample_data {
-            let sample = pack.sample_data().expect("selected sample exists");
-            let reservation = sqlx::query("INSERT INTO solution_pack_sample_dataset_reservations (workspace_id,pack_id,pack_version,archive_sha256,sample_declaration_sha256,plan_id) VALUES ($1,$2,$3,$4,$5,$6)")
-                .bind(workspace_id)
-                .bind(&manifest.id)
-                .bind(&manifest.version)
-                .bind(pack.archive_sha256())
-                .bind(&sample.canonical_sha256)
-                .bind(id)
-                .execute(&mut *tx)
-                .await;
-            if let Err(error) = reservation {
-                if error
-                    .as_database_error()
-                    .is_some_and(|database| database.is_unique_violation())
-                {
-                    return Err(RepositoryError::InvalidSolutionPackPlan(
-                        "this exact sample dataset identity is permanently reserved by its original plan; retry that plan instead".into(),
-                    ));
-                }
-                return Err(error.into());
-            }
-            let mut sample_rows = SampleRecordRows::default();
-            for (position, record_index) in sample.target_first_order.iter().copied().enumerate() {
-                let record = &sample.declaration.records[record_index];
-                let mapping = draft
-                    .mappings
-                    .iter()
-                    .find(|mapping| mapping.logical_key == record.blueprint)
-                    .ok_or_else(|| {
-                        RepositoryError::InvalidSolutionPackPlan(format!(
-                            "sample record '{}' blueprint mapping is missing",
-                            record.key
-                        ))
-                    })?;
-                let action = draft
-                    .actions
-                    .iter()
-                    .find(|action| action.logical_key == record.blueprint)
-                    .ok_or_else(|| {
-                        RepositoryError::InvalidSolutionPackPlan(format!(
-                            "sample record '{}' blueprint action is missing",
-                            record.key
-                        ))
-                    })?;
-                if !action.action.provides_target() || mapping.target_version.is_none() {
-                    return Err(RepositoryError::InvalidSolutionPackPlan(format!(
-                        "sample record '{}' requires a published mapped or created blueprint",
-                        record.key
-                    )));
-                }
-                let sample_mapping = draft
-                    .mappings
-                    .iter()
-                    .find(|candidate| candidate.logical_key == record.key)
-                    .expect("selected sample mapping exists");
-                let (canonical_input, record_digest) = canonical_sample_input(pack, record);
-                sample_rows.positions.push(position as i32);
-                sample_rows.logical_keys.push(record.key.clone());
-                sample_rows.target_ids.push(sample_mapping.target_id);
-                sample_rows
-                    .blueprint_logical_keys
-                    .push(record.blueprint.clone());
-                sample_rows.blueprint_ids.push(mapping.target_id);
-                sample_rows
-                    .blueprint_versions
-                    .push(mapping.target_version.expect("checked"));
-                sample_rows.digests.push(record_digest);
-                sample_rows.scalar_counts.push(record.facts.len() as i32);
-                sample_rows.relationship_target_counts.push(
-                    record
-                        .relationships
-                        .iter()
-                        .map(|relationship| relationship.targets.len() as i32)
-                        .sum::<i32>(),
-                );
-                sample_rows.canonical_inputs.push(canonical_input);
-            }
-            sample_rows.insert(&mut tx, workspace_id, id).await?;
-            if !staged_sample_files.is_empty() {
-                sqlx::query("INSERT INTO solution_pack_plan_sample_files (plan_id,workspace_id,path,file_id,object_key,filename,media_type,byte_size,sha256) SELECT $1,$2,f.path,f.file_id,f.object_key,f.filename,f.media_type,f.byte_size,f.sha256 FROM unnest($3::text[],$4::uuid[],$5::text[],$6::text[],$7::text[],$8::bigint[],$9::text[]) WITH ORDINALITY AS f(path,file_id,object_key,filename,media_type,byte_size,sha256,position) ORDER BY f.position")
-                    .bind(id)
-                    .bind(workspace_id)
-                    .bind(staged_sample_files.iter().map(|file| file.path.as_str()).collect::<Vec<_>>())
-                    .bind(staged_sample_files.iter().map(|file| file.file_id).collect::<Vec<_>>())
-                    .bind(staged_sample_files.iter().map(|file| file.object_key.as_str()).collect::<Vec<_>>())
-                    .bind(staged_sample_files.iter().map(|file| file.filename.as_str()).collect::<Vec<_>>())
-                    .bind(staged_sample_files.iter().map(|file| file.media_type.as_str()).collect::<Vec<_>>())
-                    .bind(staged_sample_files.iter().map(|file| file.byte_size).collect::<Vec<_>>())
-                    .bind(staged_sample_files.iter().map(|file| file.sha256.as_str()).collect::<Vec<_>>())
-                    .execute(&mut *tx)
-                    .await?;
-            }
-            // Staged files stay claimable for the plan lifetime and the
-            // sample application's resumability window.
-            sqlx::query("UPDATE file_upload_intents SET cleanup_after=$3 WHERE workspace_id=$1 AND object_key=ANY($2) AND state='pending'")
-                .bind(workspace_id)
-                .bind(staged_sample_files.iter().map(|file| file.object_key.clone()).collect::<Vec<_>>())
-                .bind(
-                    expires_at
-                        + Duration::days(SAMPLE_APPLICATION_RESUMABLE_DAYS)
-                        + Duration::hours(SAMPLE_FILE_CLEANUP_MARGIN_HOURS),
-                )
-                .execute(&mut *tx)
-                .await?;
+            insert_plan_sample_staging(
+                &mut tx,
+                workspace_id,
+                id,
+                pack,
+                &draft,
+                &staged_sample_files,
+                expires_at,
+            )
+            .await?;
         }
         insert_plan_rows(&mut tx, workspace_id, id, &draft).await?;
         insert_extension_installs(&mut tx, workspace_id, id, &draft, &official_extensions).await?;
@@ -1858,6 +1835,126 @@ fn conflict_summaries(actions: &[SolutionPackPlanAction]) -> Vec<SolutionPackPla
             reason_code: action.reason_code.clone(),
         })
         .collect()
+}
+
+/// Reserves a plan's sample dataset identity and records its sample records
+/// and staged files. Staged files stay claimable for the plan lifetime and
+/// the sample application's resumability window.
+async fn insert_plan_sample_staging(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    plan_id: Uuid,
+    pack: &ValidatedSolutionPack,
+    draft: &SolutionPackPlanDraft,
+    staged_sample_files: &[StagedSampleFile],
+    expires_at: DateTime<Utc>,
+) -> Result<(), RepositoryError> {
+    let sample = pack.sample_data().expect("selected sample exists");
+    let manifest = pack.manifest();
+    let reservation = sqlx::query("INSERT INTO solution_pack_sample_dataset_reservations (workspace_id,pack_id,pack_version,archive_sha256,sample_declaration_sha256,plan_id) VALUES ($1,$2,$3,$4,$5,$6)")
+        .bind(workspace_id)
+        .bind(&manifest.id)
+        .bind(&manifest.version)
+        .bind(pack.archive_sha256())
+        .bind(&sample.canonical_sha256)
+        .bind(plan_id)
+        .execute(&mut **tx)
+        .await;
+    if let Err(error) = reservation {
+        if error
+            .as_database_error()
+            .is_some_and(|database| database.is_unique_violation())
+        {
+            return Err(RepositoryError::InvalidSolutionPackPlan(
+                "this exact sample dataset identity is permanently reserved by its original plan; retry that plan instead".into(),
+            ));
+        }
+        return Err(error.into());
+    }
+    let mut sample_rows = SampleRecordRows::default();
+    for (position, record_index) in sample.target_first_order.iter().copied().enumerate() {
+        let record = &sample.declaration.records[record_index];
+        let mapping = draft
+            .mappings
+            .iter()
+            .find(|mapping| mapping.logical_key == record.blueprint)
+            .ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(format!(
+                    "sample record '{}' blueprint mapping is missing",
+                    record.key
+                ))
+            })?;
+        let action = draft
+            .actions
+            .iter()
+            .find(|action| action.logical_key == record.blueprint)
+            .ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(format!(
+                    "sample record '{}' blueprint action is missing",
+                    record.key
+                ))
+            })?;
+        if !action.action.provides_target() || mapping.target_version.is_none() {
+            return Err(RepositoryError::InvalidSolutionPackPlan(format!(
+                "sample record '{}' requires a published mapped or created blueprint",
+                record.key
+            )));
+        }
+        let sample_mapping = draft
+            .mappings
+            .iter()
+            .find(|candidate| candidate.logical_key == record.key)
+            .expect("selected sample mapping exists");
+        let (canonical_input, record_digest) = canonical_sample_input(pack, record);
+        sample_rows.positions.push(position as i32);
+        sample_rows.logical_keys.push(record.key.clone());
+        sample_rows.target_ids.push(sample_mapping.target_id);
+        sample_rows
+            .blueprint_logical_keys
+            .push(record.blueprint.clone());
+        sample_rows.blueprint_ids.push(mapping.target_id);
+        sample_rows
+            .blueprint_versions
+            .push(mapping.target_version.expect("checked"));
+        sample_rows.digests.push(record_digest);
+        sample_rows.scalar_counts.push(record.facts.len() as i32);
+        sample_rows.relationship_target_counts.push(
+            record
+                .relationships
+                .iter()
+                .map(|relationship| relationship.targets.len() as i32)
+                .sum::<i32>(),
+        );
+        sample_rows.canonical_inputs.push(canonical_input);
+    }
+    sample_rows.insert(tx, workspace_id, plan_id).await?;
+    if !staged_sample_files.is_empty() {
+        sqlx::query("INSERT INTO solution_pack_plan_sample_files (plan_id,workspace_id,path,file_id,object_key,filename,media_type,byte_size,sha256) SELECT $1,$2,f.path,f.file_id,f.object_key,f.filename,f.media_type,f.byte_size,f.sha256 FROM unnest($3::text[],$4::uuid[],$5::text[],$6::text[],$7::text[],$8::bigint[],$9::text[]) WITH ORDINALITY AS f(path,file_id,object_key,filename,media_type,byte_size,sha256,position) ORDER BY f.position")
+            .bind(plan_id)
+            .bind(workspace_id)
+            .bind(staged_sample_files.iter().map(|file| file.path.as_str()).collect::<Vec<_>>())
+            .bind(staged_sample_files.iter().map(|file| file.file_id).collect::<Vec<_>>())
+            .bind(staged_sample_files.iter().map(|file| file.object_key.as_str()).collect::<Vec<_>>())
+            .bind(staged_sample_files.iter().map(|file| file.filename.as_str()).collect::<Vec<_>>())
+            .bind(staged_sample_files.iter().map(|file| file.media_type.as_str()).collect::<Vec<_>>())
+            .bind(staged_sample_files.iter().map(|file| file.byte_size).collect::<Vec<_>>())
+            .bind(staged_sample_files.iter().map(|file| file.sha256.as_str()).collect::<Vec<_>>())
+            .execute(&mut **tx)
+            .await?;
+    }
+    // Staged files stay claimable for the plan lifetime and the
+    // sample application's resumability window.
+    sqlx::query("UPDATE file_upload_intents SET cleanup_after=$3 WHERE workspace_id=$1 AND object_key=ANY($2) AND state='pending'")
+        .bind(workspace_id)
+        .bind(staged_sample_files.iter().map(|file| file.object_key.clone()).collect::<Vec<_>>())
+        .bind(
+            expires_at
+                + Duration::days(SAMPLE_APPLICATION_RESUMABLE_DAYS)
+                + Duration::hours(SAMPLE_FILE_CLEANUP_MARGIN_HOURS),
+        )
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
 }
 
 async fn insert_plan_rows(
