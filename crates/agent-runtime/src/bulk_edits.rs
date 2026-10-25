@@ -23,6 +23,7 @@ use crate::{
     repository::{AgentRun, AgentToolCall, AttricatRepository, RepositoryError},
 };
 use attricat_domain::permissions::Permission;
+use attricat_domain::value_type::ValueType;
 
 pub const TOOL: &str = "bulk_set_record_values";
 
@@ -262,7 +263,7 @@ pub async fn resolve(
             {
                 Some(attribute) => (
                     attribute.name.clone(),
-                    attribute.value_type.clone(),
+                    attribute.value_type,
                     attribute.value_schema.clone(),
                 ),
                 None => match reusable
@@ -271,7 +272,7 @@ pub async fn resolve(
                 {
                     Some(attribute) => (
                         Some(attribute.name.clone()),
-                        attribute.value_type.clone(),
+                        attribute.value_type,
                         attribute.value_schema.clone(),
                     ),
                     None => {
@@ -295,7 +296,7 @@ pub async fn resolve(
                     ),
                 });
             }
-            if matches!(value_type.as_str(), "relationship" | "file") {
+            if matches!(value_type, ValueType::Relationship | ValueType::File) {
                 return Err(invalid(format!(
                     "'{}' is a {value_type} attribute; bulk_set_record_values sets scalar values only",
                     value.attribute_code

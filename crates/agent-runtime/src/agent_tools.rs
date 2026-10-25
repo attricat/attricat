@@ -4,6 +4,7 @@
 //! context in the repository boundary and avoids granting the model a network
 //! capability.
 
+use attricat_domain::value_type::ValueType;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -1922,7 +1923,7 @@ pub async fn execute_read(
             let relationship_fields = search_blueprint
                 .attributes
                 .iter()
-                .filter(|attribute| attribute.value_type == "relationship")
+                .filter(|attribute| attribute.value_type == ValueType::Relationship)
                 .collect::<Vec<_>>();
             let Some(attribute) = relationship_fields
                 .iter()

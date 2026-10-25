@@ -63,6 +63,7 @@ use crate::{
     },
 };
 use attricat_domain::permissions::Permission;
+use attricat_domain::value_type::ValueType;
 
 mod agent_settings;
 mod agents;

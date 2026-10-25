@@ -3,6 +3,7 @@
 //! request, the unsaved draft, attachments and conversation history.
 use std::collections::{BTreeMap, HashSet};
 
+use attricat_domain::value_type::ValueType;
 use attricat_validation::validate_json_schema;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{DateTime, NaiveDate, NaiveTime};
@@ -67,7 +68,7 @@ pub enum SmartFillError {
 struct SmartFillField {
     code: String,
     name: String,
-    value_type: String,
+    value_type: ValueType,
     value_schema: Option<Value>,
 }
 
@@ -164,14 +165,14 @@ pub async fn propose_record_form_values(
     for attribute in &blueprint.attributes {
         if smart_fill_editable(
             attribute.readonly,
-            &attribute.value_type,
+            attribute.value_type,
             &attribute.context_editable,
             is_default_context,
         ) {
             editable.push(SmartFillField {
                 code: attribute.code.clone(),
                 name: attribute.code.clone(),
-                value_type: attribute.value_type.clone(),
+                value_type: attribute.value_type,
                 value_schema: attribute.value_schema.clone(),
             });
         }
@@ -179,14 +180,14 @@ pub async fn propose_record_form_values(
     for attribute in &reusable_attributes {
         if smart_fill_editable(
             attribute.readonly,
-            &attribute.value_type,
+            attribute.value_type,
             &attribute.context_editable,
             is_default_context,
         ) {
             editable.push(SmartFillField {
                 code: attribute.code.clone(),
                 name: attribute.name.clone(),
-                value_type: attribute.value_type.clone(),
+                value_type: attribute.value_type,
                 value_schema: attribute.value_schema.clone(),
             });
         }
@@ -399,13 +400,13 @@ pub async fn propose_record_form_values(
 /// change only attributes that are editable outside the default context.
 fn smart_fill_editable(
     readonly: bool,
-    value_type: &str,
+    value_type: ValueType,
     context_editable: &str,
     is_default_context: bool,
 ) -> bool {
     !readonly
-        && value_type != "relationship"
-        && value_type != "file"
+        && value_type != ValueType::Relationship
+        && value_type != ValueType::File
         && (is_default_context || context_editable != "default")
 }
 
@@ -416,32 +417,32 @@ fn smart_fill_value_is_valid(field: &SmartFillField, proposed: &str) -> bool {
     if value.is_empty() {
         return false;
     }
-    let native = match field.value_type.as_str() {
-        "string" => Some(Value::String(value.to_owned())),
-        "number" => value
+    let native = match field.value_type {
+        ValueType::String => Some(Value::String(value.to_owned())),
+        ValueType::Number => value
             .parse::<f64>()
             .ok()
             .and_then(serde_json::Number::from_f64)
             .map(Value::Number),
-        "integer" => value
+        ValueType::Integer => value
             .parse::<i64>()
             .ok()
             .filter(|value| (-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(value))
             .map(|value| json!(value)),
-        "boolean" => value.parse::<bool>().ok().map(|value| json!(value)),
-        "date" => NaiveDate::parse_from_str(value, "%Y-%m-%d")
+        ValueType::Boolean => value.parse::<bool>().ok().map(|value| json!(value)),
+        ValueType::Date => NaiveDate::parse_from_str(value, "%Y-%m-%d")
             .ok()
             .filter(|_| value.len() == ISO_DATE_LEN)
             .map(|_| json!(value)),
-        "datetime" => DateTime::parse_from_rfc3339(value)
+        ValueType::Datetime => DateTime::parse_from_rfc3339(value)
             .ok()
             .map(|_| json!(value)),
-        "time" => value.split_once(' ').and_then(|(time, zone)| {
+        ValueType::Time => value.split_once(' ').and_then(|(time, zone)| {
             NaiveTime::parse_from_str(time, "%H:%M:%S%.f").ok()?;
             zone.parse::<chrono_tz::Tz>().ok()?;
             Some(json!({"time": time, "time_zone": zone}))
         }),
-        "json" => serde_json::from_str(value).ok(),
+        ValueType::Json => serde_json::from_str(value).ok(),
         _ => None,
     };
     let Some(native) = native else { return false };
@@ -496,13 +497,13 @@ mod tests {
         let field = SmartFillField {
             code: "state".into(),
             name: "State".into(),
-            value_type: "string".into(),
+            value_type: ValueType::String,
             value_schema: Some(json!({"type": "string", "enum": ["active", "inactive"]})),
         };
         assert!(smart_fill_value_is_valid(&field, "active"));
         assert!(!smart_fill_value_is_valid(&field, "discontinued"));
         let integer = SmartFillField {
-            value_type: "integer".into(),
+            value_type: ValueType::Integer,
             value_schema: None,
             ..field
         };
@@ -511,7 +512,7 @@ mod tests {
         assert!(!smart_fill_value_is_valid(&integer, "9223372036854775808"));
         assert!(!smart_fill_value_is_valid(&integer, "-9223372036854775808"));
         let date = SmartFillField {
-            value_type: "date".into(),
+            value_type: ValueType::Date,
             value_schema: None,
             ..integer
         };

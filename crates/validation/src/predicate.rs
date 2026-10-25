@@ -4,6 +4,7 @@
 //! Predicates are inert data. Validation is strict and type-aware when the
 //! attribute types are known. Evaluation is pure: the host loads a bounded
 //! [`Related`] snapshot described by [`Requirements`], then [`evaluate`] decides.
+use attricat_domain::value_type::ValueType;
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -258,18 +259,18 @@ pub enum Usage {
 pub trait AttributeTypes {
     /// `None` when the attribute is not declared; `Some(None)` when it is
     /// declared but its value type is not known yet.
-    fn attribute_type(&self, code: &str) -> Option<Option<&str>>;
+    fn attribute_type(&self, code: &str) -> Option<Option<ValueType>>;
 }
 
-impl AttributeTypes for HashMap<String, Option<String>> {
-    fn attribute_type(&self, code: &str) -> Option<Option<&str>> {
-        self.get(code).map(Option::as_deref)
+impl AttributeTypes for HashMap<String, Option<ValueType>> {
+    fn attribute_type(&self, code: &str) -> Option<Option<ValueType>> {
+        self.get(code).copied()
     }
 }
 
-impl AttributeTypes for HashMap<String, String> {
-    fn attribute_type(&self, code: &str) -> Option<Option<&str>> {
-        self.get(code).map(|value| Some(value.as_str()))
+impl AttributeTypes for HashMap<String, ValueType> {
+    fn attribute_type(&self, code: &str) -> Option<Option<ValueType>> {
+        self.get(code).copied().map(Some)
     }
 }
 
@@ -293,16 +294,16 @@ enum Category {
 }
 
 impl Category {
-    fn of(value_type: &str) -> Self {
+    fn of(value_type: ValueType) -> Self {
         match value_type {
-            "number" | "integer" => Self::Number,
-            "date" => Self::Date,
-            "datetime" => Self::Datetime,
-            "relationship" => Self::Set,
-            "string" => Self::Text,
-            "boolean" => Self::Boolean,
-            "file" => Self::File,
-            _ => Self::Other,
+            ValueType::Number | ValueType::Integer => Self::Number,
+            ValueType::Date => Self::Date,
+            ValueType::Datetime => Self::Datetime,
+            ValueType::Relationship => Self::Set,
+            ValueType::String => Self::Text,
+            ValueType::Boolean => Self::Boolean,
+            ValueType::File => Self::File,
+            ValueType::Time | ValueType::Json => Self::Other,
         }
     }
 
@@ -648,10 +649,10 @@ fn walk_nested(
     )
 }
 
-fn attribute<'a>(
-    types: Option<&'a dyn AttributeTypes>,
+fn attribute(
+    types: Option<&dyn AttributeTypes>,
     code: &str,
-) -> Result<Option<&'a str>, PredicateError> {
+) -> Result<Option<ValueType>, PredicateError> {
     if !crate::is_valid_code(code) {
         return Err(format!("invalid attribute code '{code}'").into());
     }
@@ -665,7 +666,7 @@ fn attribute<'a>(
 
 fn relationship(types: Option<&dyn AttributeTypes>, code: &str) -> Result<(), PredicateError> {
     match attribute(types, code)? {
-        Some(value_type) if value_type != "relationship" => {
+        Some(value_type) if value_type != ValueType::Relationship => {
             Err(format!("'{code}' is not a relationship attribute").into())
         }
         _ => Ok(()),
@@ -1479,23 +1480,23 @@ fn compare(op: CompareOp, left: &Value, right: &Value) -> Option<bool> {
 mod tests {
     use super::*;
 
-    fn types() -> HashMap<String, String> {
+    fn types() -> HashMap<String, ValueType> {
         [
-            ("valid_from", "date"),
-            ("valid_until", "date"),
-            ("lower", "number"),
-            ("upper", "integer"),
-            ("title", "string"),
-            ("source", "relationship"),
-            ("target", "relationship"),
-            ("facility", "relationship"),
-            ("supplier", "relationship"),
-            ("status", "string"),
-            ("expires_at", "datetime"),
-            ("photo", "file"),
+            ("valid_from", ValueType::Date),
+            ("valid_until", ValueType::Date),
+            ("lower", ValueType::Number),
+            ("upper", ValueType::Integer),
+            ("title", ValueType::String),
+            ("source", ValueType::Relationship),
+            ("target", ValueType::Relationship),
+            ("facility", ValueType::Relationship),
+            ("supplier", ValueType::Relationship),
+            ("status", ValueType::String),
+            ("expires_at", ValueType::Datetime),
+            ("photo", ValueType::File),
         ]
         .into_iter()
-        .map(|(code, kind)| (code.to_owned(), kind.to_owned()))
+        .map(|(code, kind)| (code.to_owned(), kind))
         .collect()
     }
 

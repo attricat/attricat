@@ -1045,7 +1045,8 @@ impl AttricatRepository {
             .attributes
             .iter()
             .filter(|(code, attribute)| {
-                attribute.value_type == "file" && coverage.covers(code, &change.attribute_code)
+                attribute.value_type == ValueType::File
+                    && coverage.covers(code, &change.attribute_code)
             })
             .flat_map(|(code, _)| {
                 effective(content, &path, code)

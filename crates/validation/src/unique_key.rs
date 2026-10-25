@@ -1,5 +1,6 @@
 //! Normalization of business-key values, shared by blueprint `[[unique_keys]]`
 //! and the rules-only `unique` predicate so both decide "same value" alike.
+use attricat_domain::value_type::ValueType;
 use serde_json::Value;
 
 /// Whether the `unique` predicate compares strings case-sensitively. It uses
@@ -19,19 +20,19 @@ pub const UNIQUE_PREDICATE_CASE_SENSITIVE: bool = false;
 /// - Date-times are expected in one canonical form (UTC), so they compare by
 ///   instant; other types compare by their JSON value. `null` is missing.
 pub fn normalize_key_component(
-    value_type: &str,
+    value_type: ValueType,
     value: &Value,
     case_sensitive: bool,
 ) -> Option<Value> {
     match (value_type, value) {
         (_, Value::Null) => None,
-        ("relationship", Value::Array(targets)) => targets
+        (ValueType::Relationship, Value::Array(targets)) => targets
             .iter()
             .filter_map(Value::as_str)
             .min()
             .map(|target| Value::String(target.to_owned())),
-        ("relationship", Value::String(target)) => Some(Value::String(target.clone())),
-        ("string", Value::String(text)) => {
+        (ValueType::Relationship, Value::String(target)) => Some(Value::String(target.clone())),
+        (ValueType::String, Value::String(text)) => {
             let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
             if normalized.is_empty() {
                 return None;
@@ -42,7 +43,7 @@ pub fn normalize_key_component(
                 normalized.to_lowercase()
             }))
         }
-        ("number", value) => decimal_text(value)
+        (ValueType::Number, value) => decimal_text(value)
             .and_then(|text| normalize_decimal(&text))
             .map(Value::String),
         (_, Value::Array(items)) if items.is_empty() => None,
@@ -113,18 +114,21 @@ mod tests {
     #[test]
     fn strings_are_trimmed_collapsed_and_case_folded_unless_case_sensitive() {
         assert_eq!(
-            normalize_key_component("string", &json!("  ab-1\t  X "), false),
+            normalize_key_component(ValueType::String, &json!("  ab-1\t  X "), false),
             Some(json!("ab-1 x"))
         );
         assert_eq!(
-            normalize_key_component("string", &json!("AB-1  x"), true),
+            normalize_key_component(ValueType::String, &json!("AB-1  x"), true),
             Some(json!("AB-1 x"))
         );
         assert_eq!(
-            normalize_key_component("string", &json!("   "), false),
+            normalize_key_component(ValueType::String, &json!("   "), false),
             None
         );
-        assert_eq!(normalize_key_component("string", &Value::Null, false), None);
+        assert_eq!(
+            normalize_key_component(ValueType::String, &Value::Null, false),
+            None
+        );
     }
 
     #[test]
@@ -144,13 +148,13 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                normalize_key_component("number", &input, false),
+                normalize_key_component(ValueType::Number, &input, false),
                 Some(json!(expected)),
                 "{input}"
             );
         }
         assert_eq!(
-            normalize_key_component("number", &json!("1e3"), false),
+            normalize_key_component(ValueType::Number, &json!("1e3"), false),
             None
         );
     }
@@ -158,23 +162,23 @@ mod tests {
     #[test]
     fn relationships_use_the_smallest_target_and_other_types_their_value() {
         assert_eq!(
-            normalize_key_component("relationship", &json!(["b", "a"]), false),
+            normalize_key_component(ValueType::Relationship, &json!(["b", "a"]), false),
             Some(json!("a"))
         );
         assert_eq!(
-            normalize_key_component("relationship", &json!([]), false),
+            normalize_key_component(ValueType::Relationship, &json!([]), false),
             None
         );
         assert_eq!(
-            normalize_key_component("integer", &json!(7), false),
+            normalize_key_component(ValueType::Integer, &json!(7), false),
             Some(json!(7))
         );
         assert_eq!(
-            normalize_key_component("date", &json!("2026-01-31"), false),
+            normalize_key_component(ValueType::Date, &json!("2026-01-31"), false),
             Some(json!("2026-01-31"))
         );
         assert_eq!(
-            normalize_key_component("boolean", &json!(false), false),
+            normalize_key_component(ValueType::Boolean, &json!(false), false),
             Some(json!(false))
         );
     }

@@ -1,3 +1,4 @@
+use attricat_domain::value_type::ValueType;
 use std::collections::HashSet;
 
 use crate::extensions::Manifest;
@@ -233,7 +234,12 @@ async fn resolve_extension_attribute_types(
             }
             None => {}
         }
-        attribute.value_type = declaration.primitive.clone();
+        attribute.value_type = ValueType::parse(&declaration.primitive).ok_or_else(|| {
+            RepositoryError::InvalidBlueprintDefinition(format!(
+                "extension attribute type '{reference}' has unsupported primitive '{}'",
+                declaration.primitive
+            ))
+        })?;
         attribute.value_schema = declaration.value_schema.clone();
         attribute.extension_type = Some(json!({
             "provider": provider,
@@ -280,7 +286,8 @@ fn parse_extension_type_reference(
 /// relationship path following it from another blueprint sees it.
 #[derive(sqlx::FromRow)]
 struct PathSegment {
-    value_type: String,
+    #[sqlx(try_from = "String")]
+    value_type: ValueType,
     target_blueprint: Option<String>,
     cardinality: Option<String>,
 }
@@ -326,7 +333,7 @@ async fn validate_browse_by(
             .await?
             .filter(|segment| {
                 browse_path_hop(
-                    &segment.value_type,
+                    segment.value_type,
                     segment.target_blueprint.as_deref(),
                     segment.cardinality.as_deref(),
                     hops.len(),
@@ -366,7 +373,6 @@ async fn validate_table_columns(
                     .find(|attribute| attribute.code == column.field)
                     .expect("compiler validated table field")
                     .value_type
-                    .clone()
             } else {
                 let source = compiled
                     .attributes
@@ -395,14 +401,14 @@ async fn validate_table_columns(
                         })?;
                     let is_leaf = index + 1 == parts.len() - 1;
                     if is_leaf {
-                        if value_type == "relationship" || value_type == "file" {
+                        if value_type == ValueType::Relationship || value_type == ValueType::File {
                             return Err(RepositoryError::InvalidBlueprintDefinition(format!(
                                 "table column '{}' leaf must be scalar",
                                 column.field
                             )));
                         }
                         leaf_type = Some(value_type);
-                    } else if value_type != "relationship" {
+                    } else if value_type != ValueType::Relationship {
                         return Err(RepositoryError::InvalidBlueprintDefinition(format!(
                             "table column '{}' segment '{}' must be a relationship",
                             column.field, field
@@ -429,7 +435,7 @@ async fn validate_table_columns(
                         })
                         .flatten();
                     let valid_image_column = image_attribute.is_some_and(|attribute| {
-                        attribute.value_type == "file"
+                        attribute.value_type == ValueType::File
                             && attribute.file_policy.as_ref().is_some_and(|policy| {
                                 policy.image_only && policy.cardinality == "one"
                             })
@@ -441,7 +447,7 @@ async fn validate_table_columns(
                         )));
                     }
                 }
-                validate_renderer(transaction, workspace_id, renderer, &value_type).await?;
+                validate_renderer(transaction, workspace_id, renderer, value_type).await?;
             }
         }
     }
@@ -452,7 +458,7 @@ async fn validate_renderer(
     transaction: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
     renderer: &attricat_blueprint::ComponentReference,
-    value_type: &str,
+    value_type: ValueType,
 ) -> Result<(), RepositoryError> {
     if renderer.id.starts_with("attricat.") {
         return validate_table_renderer(renderer, value_type)
@@ -471,7 +477,10 @@ async fn validate_renderer(
         .any(|candidate| {
             candidate.id == renderer.id
                 && candidate.version == renderer.version
-                && candidate.value_types.iter().any(|item| item == value_type)
+                && candidate
+                    .value_types
+                    .iter()
+                    .any(|item| item == value_type.as_str())
                 && (renderer.props.is_null()
                     || renderer.props.as_object().is_some_and(|props| {
                         props

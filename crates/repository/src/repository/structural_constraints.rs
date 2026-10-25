@@ -995,7 +995,7 @@ fn key_rows(
                         .and_then(|attribute| {
                             attribute.resolve(path).and_then(|direct| {
                                 normalize_key_component(
-                                    &attribute.value_type,
+                                    attribute.value_type,
                                     &direct.key_input(),
                                     key.case_sensitive,
                                 )
@@ -1074,6 +1074,7 @@ fn find_cycles(graph: &BTreeMap<Uuid, Vec<Uuid>>) -> Vec<Vec<Uuid>> {
 mod tests {
     use super::super::record_values::{AttributeValues, ContextNode, DirectValue};
     use super::*;
+    use attricat_domain::value_type::ValueType;
 
     fn contexts(nodes: &[(u128, &str, Option<u128>)]) -> ContextTree {
         ContextTree::new(
@@ -1102,9 +1103,10 @@ mod tests {
                 .attributes
                 .entry((*attribute).to_owned())
                 .or_insert_with(|| AttributeValues {
-                    value_type: "string".to_owned(),
+                    value_type: ValueType::String,
                     inherit: !no_fallback.contains(attribute),
-                    ..AttributeValues::default()
+                    record_scoped: false,
+                    by_context: HashMap::new(),
                 })
                 .by_context
                 .insert(
@@ -1168,7 +1170,7 @@ mod tests {
                 .attributes
                 .get_mut("price")
                 .unwrap();
-            attribute.value_type = "number".to_owned();
+            attribute.value_type = ValueType::Number;
             let direct = attribute.by_context.get_mut(&Uuid::from_u128(1)).unwrap();
             direct.value = serde_json::json!(json);
             direct.exact = Some(exact.to_owned());

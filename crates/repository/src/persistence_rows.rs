@@ -71,12 +71,33 @@ impl<'r, T: DomainRow> FromRow<'r, PgRow> for Db<T> {
     }
 }
 
+/// Decodes a text column holding a stored code, such as a value type.
+fn decode_code<T>(row: &PgRow, column: &str) -> Result<T, sqlx::Error>
+where
+    T: TryFrom<String>,
+    T::Error: std::error::Error + Send + Sync + 'static,
+{
+    let code: String = row.try_get(column)?;
+    T::try_from(code).map_err(|error| sqlx::Error::ColumnDecode {
+        index: column.to_owned(),
+        source: Box::new(error),
+    })
+}
+
+/// Implements [`DomainRow`] by reading each field from the column of the same
+/// name; `field as code` decodes a stored code with [`decode_code`].
 macro_rules! domain_row {
-    ($type:ty { $($field:ident),+ $(,)? }) => {
+    (@get $row:ident, $field:ident) => {
+        $row.try_get(stringify!($field))?
+    };
+    (@get $row:ident, $field:ident, code) => {
+        decode_code($row, stringify!($field))?
+    };
+    ($type:ty { $($field:ident $(as $decode:ident)?),+ $(,)? }) => {
         impl DomainRow for $type {
             fn from_pg_row(row: &PgRow) -> Result<Self, sqlx::Error> {
                 Ok(Self {
-                    $($field: row.try_get(stringify!($field))?,)+
+                    $($field: domain_row!(@get row, $field $(, $decode)?),)+
                 })
             }
         }
@@ -134,7 +155,7 @@ impl DomainRow for Attribute {
             code: row.try_get("code")?,
             name: row.try_get("name")?,
             description: None,
-            value_type: row.try_get("value_type")?,
+            value_type: decode_code(row, "value_type")?,
             value_schema: row.try_get("value_schema")?,
             extension_type: row.try_get("extension_type")?,
             default_value: row.try_get("default_value")?,
@@ -162,7 +183,7 @@ domain_row!(ReusableAttribute {
     code,
     name,
     version,
-    value_type,
+    value_type as code,
     value_schema,
     default_value,
     file_policy,
@@ -188,7 +209,7 @@ domain_row!(RecordReusableAttribute {
     code,
     name,
     version,
-    value_type,
+    value_type as code,
     value_schema,
     default_value,
     file_policy,

@@ -1,6 +1,7 @@
 //! Strict format-1 solution-pack sample declarations and the immutable
 //! `solution-pack-sample-prohibited-v1` lexical matcher.
 
+use attricat_domain::value_type::ValueType;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     net::{Ipv4Addr, Ipv6Addr},
@@ -778,9 +779,13 @@ fn contains_encoded_blob(value: &str) -> bool {
 /// ([`attricat_validation::unique_key::normalize_key_component`]). Stored
 /// date-times are already canonical UTC, so sample date-times are converted
 /// to that form first.
-fn sample_key_component(value: &Value, value_type: &str, case_sensitive: bool) -> Option<Value> {
+fn sample_key_component(
+    value: &Value,
+    value_type: ValueType,
+    case_sensitive: bool,
+) -> Option<Value> {
     let canonical = match (value_type, value) {
-        ("datetime", Value::String(text)) => chrono::DateTime::parse_from_rfc3339(text)
+        (ValueType::Datetime, Value::String(text)) => chrono::DateTime::parse_from_rfc3339(text)
             .map(|instant| Value::String(instant.with_timezone(&chrono::Utc).to_rfc3339()))
             .ok(),
         _ => None,
@@ -888,7 +893,7 @@ fn unique_key_components(
         .map(|code| {
             let attribute = attributes.get(code.as_str())?;
             let value = context_path_value(attribute, values, path)?;
-            sample_key_component(&value, &attribute.value_type, key.case_sensitive)
+            sample_key_component(&value, attribute.value_type, key.case_sensitive)
         })
         .collect()
 }

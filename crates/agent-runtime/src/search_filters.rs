@@ -1,5 +1,6 @@
 //! Agent-facing errors and bounds around the repository's search scope, which
 //! resolves filters with the same semantics as Explorer.
+use attricat_domain::value_type::ValueType;
 use attricat_validation::saved_search::MAX_SELECTED_IDS;
 
 use crate::agent_tools::ToolError;
@@ -18,7 +19,7 @@ fn search_fields_hint(blueprint: &BlueprintWithAttributes) -> String {
     let (relationships, attributes): (Vec<_>, Vec<_>) = blueprint
         .attributes
         .iter()
-        .partition(|attribute| attribute.value_type == "relationship");
+        .partition(|attribute| attribute.value_type == ValueType::Relationship);
     let relationships = relationships
         .iter()
         .map(|attribute| {

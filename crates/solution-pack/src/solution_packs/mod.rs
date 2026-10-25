@@ -3,6 +3,7 @@
 //! A validated pack is still only portable input to a future workspace plan. This
 //! module neither persists a pack nor applies its resources.
 
+use attricat_domain::value_type::ValueType;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     io::{Cursor, Read},
@@ -1253,7 +1254,10 @@ fn validate_effective_sample_facts(
                 ))
             })?;
             if attribute.readonly
-                || matches!(attribute.value_type.as_str(), "relationship" | "file")
+                || matches!(
+                    attribute.value_type,
+                    ValueType::Relationship | ValueType::File
+                )
             {
                 return invalid(format!(
                     "sample record '{}' fact '{}' is read-only or non-scalar",
@@ -1290,7 +1294,7 @@ fn validate_effective_sample_facts(
                     record.key, relationship.attribute
                 ))
             })?;
-            if attribute.readonly || attribute.value_type != "relationship" {
+            if attribute.readonly || attribute.value_type != ValueType::Relationship {
                 return invalid(format!(
                     "sample record '{}' relationship '{}' is not writable relationship data",
                     record.key, relationship.attribute
@@ -1323,7 +1327,7 @@ fn validate_effective_sample_facts(
             let policy = attribute
                 .file_policy
                 .as_ref()
-                .filter(|_| attribute.value_type == "file" && !attribute.readonly)
+                .filter(|_| attribute.value_type == ValueType::File && !attribute.readonly)
                 .ok_or_else(|| {
                     SolutionPackError::Invalid(format!(
                         "sample record '{}' attribute '{}' is not a writable file attribute",
@@ -1381,9 +1385,9 @@ fn validate_sample_value_for_attribute(
             )
         })
     });
-    let valid_type = validates_native_value(&attribute.value_type, value)
+    let valid_type = validates_native_value(attribute.value_type, value)
         && (value.is_object()
-            == (attribute.value_type == "time"
+            == (attribute.value_type == ValueType::Time
                 && exact_time
                     .is_some_and(|(time, time_zone)| time.is_some() && time_zone.is_some())));
     if !valid_type {
@@ -1395,7 +1399,9 @@ fn validate_sample_value_for_attribute(
     }
     prohibited_attribute_code(&attribute.code).map_err(SolutionPackError::Invalid)?;
     match value {
-        Value::String(value) if matches!(attribute.value_type.as_str(), "date" | "datetime") => {
+        Value::String(value)
+            if matches!(attribute.value_type, ValueType::Date | ValueType::Datetime) =>
+        {
             crate::solution_pack_sample_data::prohibited_temporal_scalar(&attribute.code, value)
                 .map_err(SolutionPackError::Invalid)
         }
@@ -1418,21 +1424,21 @@ fn validate_sample_value_for_attribute(
     }
 }
 
-fn validates_native_value(value_type: &str, value: &Value) -> bool {
+fn validates_native_value(value_type: ValueType, value: &Value) -> bool {
     match value_type {
-        "string" => value.is_string(),
-        "number" => value
+        ValueType::String => value.is_string(),
+        ValueType::Number => value
             .as_number()
             .is_some_and(|value| value.to_string().parse::<rust_decimal::Decimal>().is_ok()),
-        "integer" => value.as_i64().is_some(),
-        "boolean" => value.is_boolean(),
-        "date" => value
+        ValueType::Integer => value.as_i64().is_some(),
+        ValueType::Boolean => value.is_boolean(),
+        ValueType::Date => value
             .as_str()
             .is_some_and(|value| value.parse::<chrono::NaiveDate>().is_ok()),
-        "datetime" => value
+        ValueType::Datetime => value
             .as_str()
             .is_some_and(|value| value.parse::<chrono::DateTime<chrono::Utc>>().is_ok()),
-        "time" => value.as_object().is_some_and(|value| {
+        ValueType::Time => value.as_object().is_some_and(|value| {
             value
                 .get("time")
                 .and_then(Value::as_str)
@@ -1442,9 +1448,8 @@ fn validates_native_value(value_type: &str, value: &Value) -> bool {
                     .and_then(Value::as_str)
                     .is_some_and(|value| value.parse::<chrono_tz::Tz>().is_ok())
         }),
-        "json" => true,
-        "file" | "relationship" => false,
-        _ => false,
+        ValueType::Json => true,
+        ValueType::File | ValueType::Relationship => false,
     }
 }
 

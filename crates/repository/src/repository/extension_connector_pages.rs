@@ -8,6 +8,7 @@
 //! The withdrawn feed lists records unpublished from, or deleted in, the run's
 //! channel since a cursor, so an exporter can close them out on the destination.
 
+use attricat_domain::value_type::ValueType;
 use std::collections::{HashMap, HashSet};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -79,8 +80,8 @@ fn resolve_values(
     let mut resolved = ResolvedValues::default();
     for attribute in attributes {
         let inherit = attribute.context_fallback != "none";
-        match attribute.value_type.as_str() {
-            "relationship" => {
+        match attribute.value_type {
+            ValueType::Relationship => {
                 if let Some((_, targets)) = resolve_on_path(path, inherit, |context| {
                     let targets: Vec<Value> = values
                         .iter()
@@ -99,7 +100,7 @@ fn resolve_values(
                         .insert(attribute.code.clone(), Value::Array(targets));
                 }
             }
-            "file" => {
+            ValueType::File => {
                 if let Some((_, references)) = resolve_on_path(path, inherit, |context| {
                     files
                         .get(&(attribute.code.clone(), Some(context)))
@@ -297,10 +298,9 @@ impl AttricatRepository {
             .list_attributes(request.blueprint_id, request.blueprint_version)
             .await?;
         for code in &request.expand {
-            if !attributes
-                .iter()
-                .any(|attribute| &attribute.code == code && attribute.value_type == "relationship")
-            {
+            if !attributes.iter().any(|attribute| {
+                &attribute.code == code && attribute.value_type == ValueType::Relationship
+            }) {
                 return Err(RepositoryError::InvalidExtension(format!(
                     "'{code}' is not a relationship attribute of the blueprint"
                 )));
@@ -609,7 +609,7 @@ impl AttricatRepository {
 mod tests {
     use super::*;
 
-    fn attribute(code: &str, value_type: &str, fallback: &str) -> Attribute {
+    fn attribute(code: &str, value_type: ValueType, fallback: &str) -> Attribute {
         Attribute {
             id: Uuid::new_v4(),
             blueprint_id: Uuid::nil(),
@@ -617,7 +617,7 @@ mod tests {
             code: code.into(),
             name: None,
             description: None,
-            value_type: value_type.into(),
+            value_type,
             value_schema: None,
             extension_type: None,
             default_value: None,
@@ -641,8 +641,8 @@ mod tests {
     #[test]
     fn values_resolve_through_the_context_path() {
         let (child, parent) = (Uuid::new_v4(), Uuid::new_v4());
-        let title = attribute("title", "string", "parent");
-        let local = attribute("sku", "string", "none");
+        let title = attribute("title", ValueType::String, "parent");
+        let local = attribute("sku", ValueType::String, "none");
         let value = |attribute: &Attribute, context: Uuid, value: Value| AttributeValue {
             id: Uuid::new_v4(),
             record_id: Uuid::nil(),

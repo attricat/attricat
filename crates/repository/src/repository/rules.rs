@@ -258,15 +258,23 @@ impl AttricatRepository {
         blueprint_id: Uuid,
         blueprint_version: i64,
     ) -> Result<(), RepositoryError> {
-        let types: std::collections::HashMap<String, String> = sqlx::query_as(
-            "SELECT code, value_type FROM attributes WHERE blueprint_id=$1 AND blueprint_version=$2 AND deleted_at IS NULL",
-        )
-        .bind(blueprint_id)
-        .bind(blueprint_version)
-        .fetch_all(&mut **tx)
-        .await?
-        .into_iter()
-        .collect();
+        #[derive(sqlx::FromRow)]
+        struct AttributeTypeRow {
+            code: String,
+            #[sqlx(try_from = "String")]
+            value_type: ValueType,
+        }
+        let types: std::collections::HashMap<String, ValueType> =
+            sqlx::query_as::<_, AttributeTypeRow>(
+                "SELECT code, value_type FROM attributes WHERE blueprint_id=$1 AND blueprint_version=$2 AND deleted_at IS NULL",
+            )
+            .bind(blueprint_id)
+            .bind(blueprint_version)
+            .fetch_all(&mut **tx)
+            .await?
+            .into_iter()
+            .map(|row| (row.code, row.value_type))
+            .collect();
         attricat_rules::validate_against_attributes(compiled, &types)
             .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))
     }

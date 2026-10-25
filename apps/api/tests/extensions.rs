@@ -1,5 +1,6 @@
 mod support;
 
+use api::value_type::ValueType;
 use std::{io::Cursor, path::Path, sync::Arc};
 
 use api::{
@@ -1793,7 +1794,7 @@ extension_configuration = '{"currency":"USD"}'
         .await
         .unwrap();
     let attribute = &blueprint.attributes[0];
-    assert_eq!(attribute.value_type, "number");
+    assert_eq!(attribute.value_type, ValueType::Number);
     assert_eq!(attribute.value_schema.as_ref().unwrap()["minimum"], 0);
     assert_eq!(
         attribute.extension_type.as_ref().unwrap()["provider"],
@@ -1813,7 +1814,7 @@ extension_configuration = '{"currency":"USD"}'
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(stored.attributes[0].value_type, "number");
+    assert_eq!(stored.attributes[0].value_type, ValueType::Number);
     assert_eq!(
         stored.attributes[0].extension_type.as_ref().unwrap()["type"],
         "money"

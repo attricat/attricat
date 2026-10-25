@@ -109,7 +109,7 @@ impl AttricatRepository {
         let path = tree.path(requested_context.id, true)?;
         let mut values = attributes
             .iter()
-            .filter(|attribute| attribute.value_type != "file")
+            .filter(|attribute| attribute.value_type != ValueType::File)
             .filter_map(|attribute| {
                 resolved_value(
                     tree,
@@ -129,7 +129,7 @@ impl AttricatRepository {
         let file_values = self.file_form_values(record_id).await?;
         for attribute in attributes
             .iter()
-            .filter(|attribute| attribute.value_type == "file")
+            .filter(|attribute| attribute.value_type == ValueType::File)
         {
             if let Some(value) = resolved_value(
                 tree,
@@ -164,7 +164,7 @@ impl AttricatRepository {
             .await?;
         let relationships = attributes
             .iter()
-            .filter(|attribute| attribute.value_type == "relationship")
+            .filter(|attribute| attribute.value_type == ValueType::Relationship)
             .filter_map(|attribute| {
                 resolved_value(
                     tree,
@@ -261,7 +261,7 @@ impl AttricatRepository {
             .iter()
             .find(|attribute| attribute.code == field)
             .ok_or(RepositoryError::AttributeNotApplicable)?;
-        if attribute.value_type != "relationship"
+        if attribute.value_type != ValueType::Relationship
             || attribute.target_blueprint_code.as_deref() != Some(&blueprint.blueprint.code)
         {
             return Err(RepositoryError::InvalidHierarchyRelationship);

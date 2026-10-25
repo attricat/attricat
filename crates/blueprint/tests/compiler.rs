@@ -2,6 +2,7 @@ use attricat_blueprint::{
     BlueprintError, BrowseBy, EffectiveAttribute, ResolvedInclude, ViewDefinition, compile, parse,
     raw_hash,
 };
+use attricat_domain::value_type::ValueType;
 
 #[test]
 fn compiles_only_explicitly_selected_mixin_attributes_in_local_order() {
@@ -41,7 +42,7 @@ from = "seo.meta_title"
                 EffectiveAttribute {
                     code: "meta_title".to_owned(),
                     name: Some("SEO title".to_owned()),
-                    value_type: "string".to_owned(),
+                    value_type: ValueType::String,
                     value_schema: None,
                     extension_type: None,
                     default_value: None,
@@ -60,7 +61,7 @@ from = "seo.meta_title"
                 EffectiveAttribute {
                     code: "meta_description".to_owned(),
                     name: None,
-                    value_type: "string".to_owned(),
+                    value_type: ValueType::String,
                     value_schema: None,
                     extension_type: None,
                     default_value: None,
@@ -1428,12 +1429,12 @@ code = "metadata"
 value_type = "json"
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
-    assert_eq!(compiled.attributes[0].value_type, "string");
+    assert_eq!(compiled.attributes[0].value_type, ValueType::String);
     assert_eq!(
         compiled.attributes[0].extension_type.as_ref().unwrap()["reference"],
         "com.acme.commerce:money@^1"
     );
-    assert_eq!(compiled.attributes[1].value_type, "json");
+    assert_eq!(compiled.attributes[1].value_type, ValueType::Json);
 }
 
 #[test]

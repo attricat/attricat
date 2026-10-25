@@ -336,31 +336,31 @@ impl AttricatRepository {
             // The record-writer lock comes before any record row lock.
             super::record_commands::lock_record_writes(transaction, workspace_id, false).await?;
         }
-        let attribute: Option<(String, String)> = sqlx::query_as(
-            "SELECT code, value_type FROM attributes WHERE id = $1 AND workspace_id = $2 AND blueprint_id = $3 AND blueprint_version = $4 AND deleted_at IS NULL",
+        // Only a string attribute can be looked up by a unique key.
+        let string_attribute: Option<String> = sqlx::query_scalar(
+            "SELECT code FROM attributes WHERE id = $1 AND workspace_id = $2 AND blueprint_id = $3 AND blueprint_version = $4 AND value_type = $5 AND deleted_at IS NULL",
         )
         .bind(lookup_attribute_id)
         .bind(workspace_id)
         .bind(blueprint_id)
         .bind(blueprint_version)
+        .bind(ValueType::String.as_str())
         .fetch_optional(&mut **transaction)
         .await?;
-        let unique_key = match &attribute {
-            Some((code, value_type)) if value_type == "string" => {
-                super::structural_constraints::enforced_unique_keys(
-                    transaction,
-                    workspace_id,
-                    blueprint_id,
-                )
-                .await?
-                .into_iter()
-                .find(|key| key.attributes.len() == 1 && &key.attributes[0] == code)
-            }
+        let unique_key = match &string_attribute {
+            Some(code) => super::structural_constraints::enforced_unique_keys(
+                transaction,
+                workspace_id,
+                blueprint_id,
+            )
+            .await?
+            .into_iter()
+            .find(|key| key.attributes.len() == 1 && &key.attributes[0] == code),
             _ => None,
         };
         let matches: Vec<Uuid> = if let Some(key) = unique_key {
             let Some(component) = attricat_validation::unique_key::normalize_key_component(
-                "string",
+                ValueType::String,
                 &Value::String(lookup_value.to_owned()),
                 key.case_sensitive,
             ) else {

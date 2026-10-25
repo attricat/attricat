@@ -1,5 +1,6 @@
 use std::sync::LazyLock;
 
+use attricat_domain::value_type::ValueType;
 use serde::Deserialize;
 
 use crate::{BlueprintError, ComponentReference};
@@ -15,7 +16,7 @@ struct ComponentManifestEntry {
     version: u32,
     capabilities: Vec<String>,
     placements: Vec<String>,
-    value_types: Vec<String>,
+    value_types: Vec<ValueType>,
     allowed_props: Vec<String>,
 }
 
@@ -26,7 +27,7 @@ static COMPONENT_MANIFEST: LazyLock<ComponentManifest> = LazyLock::new(|| {
 
 pub fn validate_table_renderer(
     renderer: &ComponentReference,
-    value_type: &str,
+    value_type: ValueType,
 ) -> Result<(), BlueprintError> {
     validate_component(Some(renderer), "table", "table", Some(value_type))
 }
@@ -35,7 +36,7 @@ pub(crate) fn validate_component(
     component: Option<&ComponentReference>,
     view: &str,
     placement: &'static str,
-    value_type: Option<&str>,
+    value_type: Option<ValueType>,
 ) -> Result<(), BlueprintError> {
     let Some(component) = component else {
         return Ok(());
@@ -68,14 +69,11 @@ pub(crate) fn validate_component(
         });
     }
     if let Some(value_type) = value_type
-        && !manifest_component
-            .value_types
-            .iter()
-            .any(|item| item == value_type)
+        && !manifest_component.value_types.contains(&value_type)
     {
         return Err(BlueprintError::InvalidComponentValueType {
             id: component.id.clone(),
-            value_type: value_type.to_owned(),
+            value_type: value_type.as_str().to_owned(),
         });
     }
     if let Some(capability) = required_view_capability(view)

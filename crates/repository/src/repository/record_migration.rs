@@ -202,7 +202,7 @@ impl AttricatRepository {
                     });
                 }
                 Some(target)
-                    if source.value_type == "relationship"
+                    if source.value_type == ValueType::Relationship
                         && target.target_blueprint_codes != source.target_blueprint_codes =>
                 {
                     issues.push(MigrationIssue {
@@ -213,7 +213,7 @@ impl AttricatRepository {
                     });
                 }
                 Some(target)
-                    if source.value_type == "relationship"
+                    if source.value_type == ValueType::Relationship
                         && (target.cardinality != source.cardinality
                             || target.target_cardinality != source.target_cardinality) =>
                 {
@@ -225,7 +225,7 @@ impl AttricatRepository {
                     });
                 }
                 Some(target)
-                    if source.value_type == "file"
+                    if source.value_type == ValueType::File
                         && (target.file_policy != source.file_policy
                             || target.cardinality != source.cardinality) =>
                 {
@@ -461,7 +461,7 @@ impl AttricatRepository {
                             NewAttributeValue::Scalar { value, .. } => {
                                 current.relationship_target_record_id.is_none()
                                     && migration_scalar_values_equal(
-                                        &source.value_type,
+                                        source.value_type,
                                         &current.value,
                                         value,
                                     )
@@ -626,7 +626,7 @@ impl AttricatRepository {
                 unresolved.insert(source.code.clone());
                 continue;
             }
-            let replaced = if source.value_type == "relationship" {
+            let replaced = if source.value_type == ValueType::Relationship {
                 supplied_relationship_sets.contains(&key)
                     || value.relationship_target_record_id.is_some_and(|target| {
                         supplied_relationship_values.contains(&(
@@ -1014,13 +1014,13 @@ fn migration_contract_compatible(
     {
         return false;
     }
-    match source.value_type.as_str() {
-        "relationship" => {
+    match source.value_type {
+        ValueType::Relationship => {
             target.target_blueprint_codes == source.target_blueprint_codes
                 && target.cardinality == source.cardinality
                 && target.target_cardinality == source.target_cardinality
         }
-        "file" => {
+        ValueType::File => {
             target.file_policy == source.file_policy && target.cardinality == source.cardinality
         }
         _ => true,
@@ -1034,8 +1034,8 @@ fn migration_value_compatible(
     default_context_id: Option<Uuid>,
 ) -> bool {
     migration_contract_compatible(source, target, value.context_id, default_context_id)
-        && (source.value_type == "relationship"
-            || source.value_type == "file"
+        && (source.value_type == ValueType::Relationship
+            || source.value_type == ValueType::File
             || target.value_schema.as_ref().is_none_or(|schema| {
                 validate_json_schema(schema, &value.value)
                     .expect("compiled blueprint schema is valid")
@@ -1043,10 +1043,9 @@ fn migration_value_compatible(
             }))
 }
 
-fn migration_scalar_values_equal(value_type: &str, current: &Value, supplied: &Value) -> bool {
+fn migration_scalar_values_equal(value_type: ValueType, current: &Value, supplied: &Value) -> bool {
     current == supplied
-        || super::values::ValueType::parse(value_type)
-            .and_then(|value_type| super::values::NativeValue::parse(value_type, supplied.clone()))
+        || super::values::NativeValue::parse(value_type, supplied.clone())
             .is_ok_and(|value| value.json() == *current)
 }
 

@@ -42,7 +42,7 @@ pub struct RecordSearchSort {
     pub relationship_path: Vec<String>,
     pub leaf_field: String,
     pub leaf_blueprint_id: Uuid,
-    pub value_type: String,
+    pub value_type: ValueType,
     pub descending: bool,
     pub effective_source_version: Option<i64>,
     pub publication_context_id: Option<Uuid>,
@@ -192,7 +192,7 @@ pub struct RecordSearchFilter {
     pub relationship_path: Vec<String>,
     pub leaf_field: String,
     pub operator: String,
-    pub value_type: String,
+    pub value_type: ValueType,
     pub value: String,
 }
 
@@ -234,7 +234,8 @@ struct TablePathEdgeRow {
 struct TablePathLeafRow {
     id: Uuid,
     code: String,
-    value_type: String,
+    #[sqlx(try_from = "String")]
+    value_type: ValueType,
     inherit: bool,
     preview: Option<Value>,
 }
@@ -850,7 +851,7 @@ impl AttricatRepository {
                 query = query
                     .bind(&filter.relationship_path)
                     .bind(&filter.leaf_field)
-                    .bind(&filter.value_type)
+                    .bind(filter.value_type.as_str())
                     .bind(&filter.operator)
                     .bind(&filter.value);
             }
@@ -932,7 +933,7 @@ impl AttricatRepository {
             .bind(blueprint_id)
             .bind(blueprint_version)
             .bind(&filter.leaf_field)
-            .bind(&filter.value_type)
+            .bind(filter.value_type.as_str())
             .bind(&filter.operator)
             .bind(&filter.value)
             .bind(self.workspace_id.0)
@@ -1246,7 +1247,7 @@ impl AttricatRepository {
                 )
                 .await;
         }
-        let (column, column_type) = native_sort_column(&sort.value_type)?;
+        let (column, column_type) = native_sort_column(sort.value_type)?;
         let comparison = if sort.descending { "<" } else { ">" };
         let direction = if sort.descending { "DESC" } else { "ASC" };
         let null_order = if sort.descending { "LAST" } else { "FIRST" };
@@ -1448,7 +1449,7 @@ impl AttricatRepository {
             export_status,
             current_blueprint_version,
         } = scope;
-        let (column, column_type) = native_sort_column(&sort.value_type)?;
+        let (column, column_type) = native_sort_column(sort.value_type)?;
         let comparison = if sort.descending { "<" } else { ">" };
         let direction = if sort.descending { "DESC" } else { "ASC" };
         let workspace_id = self.workspace_id.0;
@@ -1458,7 +1459,7 @@ impl AttricatRepository {
         .bind(workspace_id)
         .bind(sort.leaf_blueprint_id)
         .bind(&sort.leaf_field)
-        .bind(&sort.value_type)
+        .bind(sort.value_type.as_str())
         .fetch_all(&self.pool)
         .await?;
         let mut rows = Vec::new();
@@ -1586,7 +1587,7 @@ impl AttricatRepository {
     pub async fn hydrate_table_values(
         &self,
         items: &mut [RecordPreview],
-        paths: &HashMap<String, String>,
+        paths: &HashMap<String, ValueType>,
         relationships: &HashMap<String, String>,
         context: &SearchContext,
     ) -> Result<(), RepositoryError> {
@@ -1611,7 +1612,7 @@ impl AttricatRepository {
     async fn table_path_values(
         &self,
         items: &[RecordPreview],
-        paths: &HashMap<String, String>,
+        paths: &HashMap<String, ValueType>,
         context: &SearchContext,
     ) -> Result<TableValues, RepositoryError> {
         let mut values_by_root = TableValues::new();
@@ -1623,12 +1624,12 @@ impl AttricatRepository {
         // columns and one for scalar columns; dotted paths walk per hop.
         let direct_files: Vec<&str> = paths
             .iter()
-            .filter(|(path, leaf_type)| !path.contains('.') && leaf_type.as_str() == "file")
+            .filter(|(path, leaf_type)| !path.contains('.') && **leaf_type == ValueType::File)
             .map(|(path, _)| path.as_str())
             .collect();
         let (direct_codes, direct_types): (Vec<&str>, Vec<&str>) = paths
             .iter()
-            .filter(|(path, leaf_type)| !path.contains('.') && leaf_type.as_str() != "file")
+            .filter(|(path, leaf_type)| !path.contains('.') && **leaf_type != ValueType::File)
             .map(|(path, leaf_type)| (path.as_str(), leaf_type.as_str()))
             .unzip();
         if !direct_files.is_empty() {
@@ -1723,13 +1724,13 @@ impl AttricatRepository {
         // together, so columns sharing a prefix share its hops and each depth
         // costs one query. `reached` maps a hop prefix to the (root, record)
         // pairs at its end.
-        let relationship_paths: Vec<(&str, &str, Vec<&str>)> = paths
+        let relationship_paths: Vec<(&str, ValueType, Vec<&str>)> = paths
             .iter()
             .filter_map(|(path, leaf_type)| {
                 let parts: Vec<_> = path.split('.').collect();
                 (2..=MAX_RELATIONSHIP_HOPS + 1)
                     .contains(&parts.len())
-                    .then_some((path.as_str(), leaf_type.as_str(), parts))
+                    .then_some((path.as_str(), *leaf_type, parts))
             })
             .collect();
         let mut reached: HashMap<String, Vec<(Uuid, Uuid)>> =
@@ -1816,7 +1817,7 @@ impl AttricatRepository {
         }
         // Every leaf of every path is read in one query; only the leaf
         // attribute of each context's preview is selected.
-        let requested: HashSet<(Uuid, &str, &str)> = relationship_paths
+        let requested: HashSet<(Uuid, &str, ValueType)> = relationship_paths
             .iter()
             .flat_map(|(_, leaf_type, parts)| {
                 let leaf = parts[parts.len() - 1];
@@ -1836,9 +1837,9 @@ impl AttricatRepository {
         for (id, code, value_type) in requested {
             leaf_ids.push(id);
             leaf_codes.push(code);
-            leaf_types.push(value_type);
+            leaf_types.push(value_type.as_str());
         }
-        let leaves: HashMap<(Uuid, String, String), Value> = sqlx::query_as::<_, TablePathLeafRow>(
+        let leaves: HashMap<(Uuid, String, ValueType), Value> = sqlx::query_as::<_, TablePathLeafRow>(
             r#"SELECT e.id, leaf.code, leaf.value_type, a.context_fallback <> 'none' AS inherit,
                       (SELECT jsonb_object_agg(context.key, jsonb_build_object(leaf.code, context.value -> leaf.code))
                          FROM jsonb_each(e.projections -> 'preview') context
@@ -1873,7 +1874,7 @@ impl AttricatRepository {
                 .into_iter()
                 .flatten()
             {
-                let key = (*id, leaf.to_owned(), (*leaf_type).to_owned());
+                let key = (*id, leaf.to_owned(), *leaf_type);
                 if let Some(value) = leaves.get(&key) {
                     let values = values_by_root
                         .entry(*root)
@@ -2715,7 +2716,9 @@ impl AttricatRepository {
             let attribute = selected
                 .attributes
                 .iter()
-                .find(|a| a.code.eq_ignore_ascii_case(parts[1]) && a.value_type != "relationship")
+                .find(|a| {
+                    a.code.eq_ignore_ascii_case(parts[1]) && a.value_type != ValueType::Relationship
+                })
                 .ok_or_else(|| {
                     RepositoryError::InvalidBlueprintDefinition(format!(
                         "unknown selected-blueprint attribute '{}'",
@@ -2725,17 +2728,17 @@ impl AttricatRepository {
             return Ok(TermPlan::SelectedAttribute(Some(attribute.code.clone())));
         }
         if parts.len() == 1 {
-            if let Some(attribute) = selected
-                .attributes
-                .iter()
-                .find(|a| a.code.eq_ignore_ascii_case(parts[0]) && a.value_type != "relationship")
-            {
+            if let Some(attribute) = selected.attributes.iter().find(|a| {
+                a.code.eq_ignore_ascii_case(parts[0]) && a.value_type != ValueType::Relationship
+            }) {
                 return Ok(TermPlan::SelectedAttribute(Some(attribute.code.clone())));
             }
             let relationship = selected
                 .attributes
                 .iter()
-                .find(|a| a.code.eq_ignore_ascii_case(parts[0]) && a.value_type == "relationship")
+                .find(|a| {
+                    a.code.eq_ignore_ascii_case(parts[0]) && a.value_type == ValueType::Relationship
+                })
                 .ok_or_else(|| {
                     RepositoryError::InvalidBlueprintDefinition(format!(
                         "unknown search selector '{}'",
@@ -2768,7 +2771,10 @@ impl AttricatRepository {
             .iter()
             .find(|a| {
                 a.code.eq_ignore_ascii_case(leaf)
-                    && !matches!(a.value_type.as_str(), "relationship" | "file" | "json")
+                    && !matches!(
+                        a.value_type,
+                        ValueType::Relationship | ValueType::File | ValueType::Json
+                    )
             })
             .map(|attribute| attribute.code.clone())
             .ok_or_else(|| {
@@ -2801,7 +2807,8 @@ impl AttricatRepository {
                 .attributes
                 .iter()
                 .find(|a| {
-                    a.code.eq_ignore_ascii_case(relationship_name) && a.value_type == "relationship"
+                    a.code.eq_ignore_ascii_case(relationship_name)
+                        && a.value_type == ValueType::Relationship
                 })
                 .ok_or_else(|| {
                     RepositoryError::InvalidBlueprintDefinition(format!(
@@ -3594,15 +3601,17 @@ fn context_fallback_column(record: &str) -> String {
     )
 }
 
-fn native_sort_column(value_type: &str) -> Result<(&'static str, &'static str), RepositoryError> {
+fn native_sort_column(
+    value_type: ValueType,
+) -> Result<(&'static str, &'static str), RepositoryError> {
     match value_type {
-        "string" => Ok(("value_text", "text")),
-        "number" => Ok(("value_number", "numeric")),
-        "integer" => Ok(("value_integer", "bigint")),
-        "boolean" => Ok(("value_boolean", "boolean")),
-        "date" => Ok(("value_date", "date")),
-        "datetime" => Ok(("value_datetime", "timestamptz")),
-        "time" => Ok(("value_time", "time")),
+        ValueType::String => Ok(("value_text", "text")),
+        ValueType::Number => Ok(("value_number", "numeric")),
+        ValueType::Integer => Ok(("value_integer", "bigint")),
+        ValueType::Boolean => Ok(("value_boolean", "boolean")),
+        ValueType::Date => Ok(("value_date", "date")),
+        ValueType::Datetime => Ok(("value_datetime", "timestamptz")),
+        ValueType::Time => Ok(("value_time", "time")),
         _ => Err(RepositoryError::InvalidBlueprintDefinition(format!(
             "{value_type} is not sortable"
         ))),

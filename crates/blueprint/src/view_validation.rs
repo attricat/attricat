@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use attricat_domain::value_type::ValueType;
 use attricat_validation::saved_search::{MAX_RELATIONSHIP_HOPS, browse_path_hop};
 
 use crate::{
@@ -190,7 +191,7 @@ fn validate_view_nodes(
                     component.as_ref(),
                     view,
                     "field",
-                    Some(&attribute.value_type),
+                    Some(attribute.value_type),
                 )?;
             }
             ViewNode::RelationshipList { field, component } => {
@@ -199,7 +200,7 @@ fn validate_view_nodes(
                     component.as_ref(),
                     view,
                     "relationship_list",
-                    Some(&attribute.value_type),
+                    Some(attribute.value_type),
                 )?;
                 if component.as_ref().is_some_and(|component| {
                     component.id == "attricat.relationship_hierarchy"
@@ -311,7 +312,7 @@ fn validate_table_columns(
                 table_component,
                 "table",
                 "table",
-                Some(&attribute.value_type),
+                Some(attribute.value_type),
             )?;
         } else {
             let relationship = parts[0];
@@ -322,7 +323,7 @@ fn validate_table_columns(
                     view: "table".to_owned(),
                     field: relationship.to_owned(),
                 })?;
-            if attribute.value_type != "relationship" {
+            if attribute.value_type != ValueType::Relationship {
                 return Err(BlueprintError::TableColumnRelationshipRequired {
                     field: column.field.clone(),
                 });
@@ -355,7 +356,7 @@ fn validate_browse_by_path(
         .find(|attribute| attribute.code == hops[0])
         .ok_or_else(invalid)?;
     if !browse_path_hop(
-        &first.value_type,
+        first.value_type,
         first.target_blueprint.as_deref(),
         first.cardinality.as_deref(),
         hops.len(),
@@ -378,13 +379,13 @@ fn validate_view_field<'a>(
             view: view.to_owned(),
             field: field.to_owned(),
         })?;
-    if relationship && attribute.value_type != "relationship" {
+    if relationship && attribute.value_type != ValueType::Relationship {
         return Err(BlueprintError::NonRelationshipViewField {
             view: view.to_owned(),
             field: field.to_owned(),
         });
     }
-    if !relationship && attribute.value_type == "relationship" {
+    if !relationship && attribute.value_type == ValueType::Relationship {
         return Err(BlueprintError::NonScalarViewField {
             view: view.to_owned(),
             field: field.to_owned(),

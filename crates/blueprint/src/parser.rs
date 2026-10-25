@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use attricat_domain::value_type::ValueType;
 use attricat_validation::{CODE_PATTERN, is_valid_code, validate_json_schema_definition};
 use schemars::{JsonSchema, generate::SchemaSettings};
 use serde::Deserialize;
@@ -12,18 +13,6 @@ use crate::{
     PublicationPolicy, UNIQUE_KEY_SCOPES, UniqueKeyDefinition, ViewDefinition,
 };
 
-pub const ATTRIBUTE_VALUE_TYPES: &[&str] = &[
-    "string",
-    "number",
-    "integer",
-    "boolean",
-    "date",
-    "datetime",
-    "time",
-    "json",
-    "relationship",
-    "file",
-];
 /// `one_to_one` is relationship shorthand for both directions set to `one`.
 pub const ATTRIBUTE_CARDINALITIES: &[&str] = &["one", "many", "one_to_one"];
 /// Per-direction relationship cardinalities, also the file cardinalities.
@@ -109,7 +98,7 @@ struct RawAttributeDeclaration {
     #[schemars(length(min = 1, max = MAX_DESCRIPTION_CHARS))]
     description: Option<String>,
     /// Stored value type.
-    #[schemars(extend("enum" = ATTRIBUTE_VALUE_TYPES))]
+    #[schemars(extend("enum" = ValueType::codes()))]
     value_type: Option<String>,
     /// A `provider:type@semver-range` reference resolved by the host using an
     /// enabled workspace installation.
@@ -344,13 +333,15 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
             ) {
                 (Some(value_type), None, None) => {
                     validate_non_empty(&value_type, "attribute value_type")?;
-                    if !ATTRIBUTE_VALUE_TYPES.contains(&value_type.as_str()) {
+                    let Some(value_type) = ValueType::parse(&value_type) else {
                         return Err(BlueprintError::UnsupportedValueType {
                             code: attribute.code,
                             value_type,
                         });
-                    }
-                    if attribute.declares_relationship_targets() && value_type != "relationship" {
+                    };
+                    if attribute.declares_relationship_targets()
+                        && value_type != ValueType::Relationship
+                    {
                         return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                     }
                     let (target_blueprint, target_blueprints) =
@@ -361,30 +352,30 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         &raw.kind,
                         &target_blueprints,
                     )?;
-                    if value_type == "relationship" && attribute.value_schema.is_some() {
+                    if value_type == ValueType::Relationship && attribute.value_schema.is_some() {
                         return Err(BlueprintError::RelationshipValueSchema {
                             code: attribute.code,
                         });
                     }
                     if attribute.default_value.is_some()
-                        && matches!(value_type.as_str(), "relationship" | "file")
+                        && matches!(value_type, ValueType::Relationship | ValueType::File)
                     {
                         return Err(BlueprintError::DefaultValueOnNonScalarAttribute {
                             code: attribute.code,
                         });
                     }
                     let has_file_policy = (attribute.cardinality.is_some()
-                        && value_type != "relationship")
+                        && value_type != ValueType::Relationship)
                         || attribute.ordered.is_some()
                         || !attribute.allowed_mime_groups.is_empty()
                         || !attribute.allowed_extensions.is_empty()
                         || attribute.max_bytes.is_some()
                         || !attribute.purposes.is_empty()
                         || attribute.image_only.is_some();
-                    if value_type != "file" && has_file_policy {
+                    if value_type != ValueType::File && has_file_policy {
                         return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                     }
-                    let (cardinality, target_cardinality) = if value_type == "relationship" {
+                    let (cardinality, target_cardinality) = if value_type == ValueType::Relationship {
                         // A tree gives every record at most one parent.
                         let cardinality = attribute.cardinality.clone().unwrap_or_else(|| {
                             if hierarchy.as_deref() == Some("tree") {
@@ -431,13 +422,13 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         }
                         (None, None)
                     };
-                    if value_type == "file"
+                    if value_type == ValueType::File
                         && (attribute.value_schema.is_some()
                             || attribute.target_blueprint.is_some())
                     {
                         return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                     }
-                    let file_policy = if value_type == "file" {
+                    let file_policy = if value_type == ValueType::File {
                         Some(parse_file_policy(&attribute, &attribute.code)?)
                     } else {
                         None
@@ -448,7 +439,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     )?;
                     if value_schema.as_ref().is_some_and(|schema| {
                         schema.get(attricat_validation::status::STATUS_KEY).is_some()
-                    }) && value_type != "string"
+                    }) && value_type != ValueType::String
                     {
                         return Err(BlueprintError::InvalidJsonSchema {
                             field: format!("attribute '{}'.value_schema", attribute.code),
@@ -459,7 +450,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         schema
                             .get(attricat_validation::principal::PRINCIPAL_KEY)
                             .is_some()
-                    }) && (value_type != "string" || attribute.default_value.is_some())
+                    }) && (value_type != ValueType::String || attribute.default_value.is_some())
                     {
                         return Err(BlueprintError::InvalidJsonSchema {
                             field: format!("attribute '{}'.value_schema", attribute.code),
@@ -569,7 +560,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         description: attribute.description,
                         // Resolved before persistence; this keeps the pure compiler
                         // useful without giving extensions storage control.
-                        value_type: "string".to_owned(),
+                        value_type: ValueType::String,
                         value_schema: None,
                         extension_type: Some(extension_type),
                         extension_configuration,
@@ -605,12 +596,10 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 rule.code
             )));
         }
-        let types: HashMap<String, Option<String>> = attributes
+        let types: HashMap<String, Option<ValueType>> = attributes
             .iter()
             .map(|attribute| match attribute {
-                AttributeDeclaration::Local(local) => {
-                    (local.code.clone(), Some(local.value_type.clone()))
-                }
+                AttributeDeclaration::Local(local) => (local.code.clone(), Some(local.value_type)),
                 AttributeDeclaration::Selection { code, .. } => (code.clone(), None),
             })
             .collect();

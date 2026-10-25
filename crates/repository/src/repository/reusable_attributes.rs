@@ -16,17 +16,25 @@ fn default_context_editable() -> String {
     "all".to_owned()
 }
 
-const REUSABLE_ATTRIBUTE_VALUE_TYPES: &[&str] = &[
-    "string",
-    "number",
-    "integer",
-    "boolean",
-    "date",
-    "datetime",
-    "time",
-    "relationship",
-    "file",
+/// Every value type except `json`.
+const REUSABLE_ATTRIBUTE_VALUE_TYPES: &[ValueType] = &[
+    ValueType::String,
+    ValueType::Number,
+    ValueType::Integer,
+    ValueType::Boolean,
+    ValueType::Date,
+    ValueType::Datetime,
+    ValueType::Time,
+    ValueType::Relationship,
+    ValueType::File,
 ];
+
+fn reusable_attribute_value_type_codes() -> Vec<&'static str> {
+    REUSABLE_ATTRIBUTE_VALUE_TYPES
+        .iter()
+        .map(|value_type| value_type.as_str())
+        .collect()
+}
 
 /// A workspace attribute that record blueprints can attach by reference.
 #[derive(Deserialize, JsonSchema)]
@@ -41,7 +49,7 @@ struct ReusableAttributeDefinition {
     #[schemars(length(min = 1))]
     name: String,
     /// Stored value type.
-    #[schemars(extend("enum" = REUSABLE_ATTRIBUTE_VALUE_TYPES))]
+    #[schemars(extend("enum" = reusable_attribute_value_type_codes()))]
     value_type: String,
     /// JSON Schema (Draft 2020-12) for scalar values, written as a TOML table.
     #[serde(default)]
@@ -137,14 +145,16 @@ fn parse_definition(
     if definition.name.trim().is_empty() {
         return invalid("name must not be empty".to_owned());
     }
-    if !REUSABLE_ATTRIBUTE_VALUE_TYPES.contains(&definition.value_type.as_str()) {
+    let Some(value_type) = ValueType::parse(&definition.value_type)
+        .filter(|value_type| REUSABLE_ATTRIBUTE_VALUE_TYPES.contains(value_type))
+    else {
         return invalid(format!(
             "attribute '{code}' has unsupported value type '{}'",
             definition.value_type
         ));
-    }
+    };
     if definition.default_value.is_some()
-        && matches!(definition.value_type.as_str(), "relationship" | "file")
+        && matches!(value_type, ValueType::Relationship | ValueType::File)
     {
         return invalid(format!(
             "attribute '{code}' can only define a default value for scalar values"
@@ -189,7 +199,7 @@ fn parse_definition(
         if schema
             .get(attricat_validation::principal::PRINCIPAL_KEY)
             .is_some()
-            && (definition.value_type != "string" || definition.default_value.is_some())
+            && (value_type != ValueType::String || definition.default_value.is_some())
         {
             return Err(RepositoryError::InvalidReusableAttributeDefinition(
                 "user or team assignment requires a string attribute without a default_value"
@@ -199,7 +209,7 @@ fn parse_definition(
         if schema
             .get(attricat_validation::status::STATUS_KEY)
             .is_some()
-            && definition.value_type != "string"
+            && value_type != ValueType::String
         {
             return Err(RepositoryError::InvalidReusableAttributeDefinition(
                 "status is only supported on string attributes".into(),
@@ -617,7 +627,7 @@ impl AttricatRepository {
         sqlx::query(r#"INSERT INTO attributes (id, workspace_id, record_id, reusable_attribute_revision_id, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)"#)
             .bind(attribute_id).bind(ws).bind(record.id).bind(revision.id).bind(format!("{}:{}", revision.namespace, revision.code))
-            .bind(&revision.value_type).bind(&revision.value_schema).bind(&revision.default_value).bind(&revision.file_policy)
+            .bind(revision.value_type.as_str()).bind(&revision.value_schema).bind(&revision.default_value).bind(&revision.file_policy)
             .bind(&revision.target_blueprint_code).bind(&revision.cardinality).bind(&revision.target_cardinality).bind(&revision.tags)
             .bind(&revision.context_fallback).bind(&revision.context_editable).bind(revision.readonly).bind(position).execute(&mut **transaction).await?;
         if let Some(default_value) = revision.default_value {

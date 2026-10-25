@@ -358,7 +358,7 @@ fn key_components(
                 .get(code)
                 .filter(|attribute| !attribute.record_scoped)?;
             normalize_key_component(
-                &attribute.value_type,
+                attribute.value_type,
                 &attribute.resolve(path)?.key_input(),
                 case_sensitive,
             )
@@ -431,10 +431,7 @@ async fn duplicates(
     // the subject's value in some context; the comparison happens in Rust on
     // the values resolved in this context.
     let first = &key[0];
-    let (filter, parameter) = candidate_filter(
-        subject.value_type(first).unwrap_or_default(),
-        &components[0],
-    );
+    let (filter, parameter) = candidate_filter(subject.value_type(first), &components[0]);
     let query = format!(
         r#"SELECT DISTINCT av.record_id
            FROM attribute_values av
@@ -489,13 +486,16 @@ async fn duplicates(
 
 /// A SQL condition (on `av`, parameter `$6`) every row whose value
 /// normalizes to `component` satisfies.
-fn candidate_filter(value_type: &str, component: &Value) -> (&'static str, Option<String>) {
+fn candidate_filter(
+    value_type: Option<ValueType>,
+    component: &Value,
+) -> (&'static str, Option<String>) {
     let text = match component {
         Value::String(text) => text.clone(),
         other => other.to_string(),
     };
     match value_type {
-        "string" => {
+        Some(ValueType::String) => {
             // Normalized strings keep each whitespace-free token verbatim
             // (case aside). ASCII case folding is the same in PostgreSQL.
             let token = text
@@ -512,11 +512,11 @@ fn candidate_filter(value_type: &str, component: &Value) -> (&'static str, Optio
                 ("($6::text IS NULL AND av.value_text IS NOT NULL)", None)
             }
         }
-        "number" => ("av.value_number = $6::text::numeric", Some(text)),
-        "integer" => ("av.value_integer = $6::text::bigint", Some(text)),
-        "boolean" => ("av.value_boolean = $6::text::boolean", Some(text)),
-        "date" => ("av.value_date = $6::text::date", Some(text)),
-        "datetime" => ("av.value_datetime = $6::text::timestamptz", Some(text)),
+        Some(ValueType::Number) => ("av.value_number = $6::text::numeric", Some(text)),
+        Some(ValueType::Integer) => ("av.value_integer = $6::text::bigint", Some(text)),
+        Some(ValueType::Boolean) => ("av.value_boolean = $6::text::boolean", Some(text)),
+        Some(ValueType::Date) => ("av.value_date = $6::text::date", Some(text)),
+        Some(ValueType::Datetime) => ("av.value_datetime = $6::text::timestamptz", Some(text)),
         _ => ("$6::text IS NULL", None),
     }
 }
@@ -1143,21 +1143,24 @@ mod tests {
     #[test]
     fn candidate_filters_never_exclude_a_normalized_match() {
         assert_eq!(
-            candidate_filter("string", &json!("ab x_%")),
+            candidate_filter(Some(ValueType::String), &json!("ab x_%")),
             ("av.value_text ILIKE $6", Some("%x\\_\\%%".to_owned()))
         );
         assert_eq!(
-            candidate_filter("string", &json!("żółw")).1,
+            candidate_filter(Some(ValueType::String), &json!("żółw")).1,
             None,
             "non-ASCII text is compared without a SQL prefilter"
         );
         assert_eq!(
-            candidate_filter("number", &json!("1.5")),
+            candidate_filter(Some(ValueType::Number), &json!("1.5")),
             (
                 "av.value_number = $6::text::numeric",
                 Some("1.5".to_owned())
             )
         );
-        assert_eq!(candidate_filter("time", &json!({"time": "x"})).1, None);
+        assert_eq!(
+            candidate_filter(Some(ValueType::Time), &json!({"time": "x"})).1,
+            None
+        );
     }
 }

@@ -1,4 +1,5 @@
 mod support;
+use api::value_type::ValueType;
 use support::*;
 
 const ITEM: &str = r#"format_version = 1
@@ -711,7 +712,7 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
             relationship_path: vec![],
             leaf_field: "amount".into(),
             operator: "is_set".into(),
-            value_type: "number".into(),
+            value_type: ValueType::Number,
             value: value.into(),
         };
         let ids = other

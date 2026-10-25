@@ -4,6 +4,7 @@
 //! concerns belong to the registry and runtime follow-on work; the installer
 //! accepts trusted release archives and applies only structural safety limits.
 
+use attricat_domain::value_type::ValueType;
 use std::{
     collections::{BTreeMap, HashSet},
     io::{Cursor, Read},
@@ -974,10 +975,7 @@ impl Manifest {
                 )));
             }
             for value_type in &renderer.value_types {
-                if !matches!(
-                    value_type.as_str(),
-                    "string" | "number" | "integer" | "boolean" | "date" | "datetime" | "time"
-                ) {
+                if !ValueType::parse(value_type).is_some_and(ValueType::is_scalar) {
                     return Err(ManifestError::Invalid(format!(
                         "cell renderer '{}' has unsupported value type '{value_type}'",
                         renderer.id
@@ -1208,8 +1206,17 @@ impl ExtensionAttributeType {
             ))
         })?;
         if !matches!(
-            self.primitive.as_str(),
-            "string" | "number" | "integer" | "boolean" | "date" | "datetime" | "time" | "json"
+            ValueType::parse(&self.primitive),
+            Some(
+                ValueType::String
+                    | ValueType::Number
+                    | ValueType::Integer
+                    | ValueType::Boolean
+                    | ValueType::Date
+                    | ValueType::Datetime
+                    | ValueType::Time
+                    | ValueType::Json
+            )
         ) {
             return Err(ManifestError::Invalid(format!(
                 "attribute type '{}' has unsupported primitive '{}'",

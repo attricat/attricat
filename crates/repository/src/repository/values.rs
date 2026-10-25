@@ -85,24 +85,10 @@ pub(super) enum NativeValue {
     Json(Value),
 }
 
-#[derive(Clone, Copy)]
-pub(super) enum ValueType {
-    String,
-    Number,
-    Integer,
-    Boolean,
-    Date,
-    Datetime,
-    Time,
-    Json,
-    /// File metadata is stored in attribute_file_references, not a native
-    /// attribute_values value column.
-    File,
-}
-
 #[derive(Clone, sqlx::FromRow)]
 pub struct NativeValueRow {
-    pub value_type: String,
+    #[sqlx(try_from = "String")]
+    pub value_type: ValueType,
     pub value_text: Option<String>,
     pub value_number: Option<Decimal>,
     pub value_integer: Option<i64>,
@@ -112,23 +98,6 @@ pub struct NativeValueRow {
     pub value_time: Option<NaiveTime>,
     pub value_time_zone: Option<String>,
     pub value_json: Option<Value>,
-}
-
-impl ValueType {
-    pub(super) fn parse(value_type: &str) -> Result<Self, RepositoryError> {
-        match value_type {
-            "string" => Ok(Self::String),
-            "number" => Ok(Self::Number),
-            "integer" => Ok(Self::Integer),
-            "boolean" => Ok(Self::Boolean),
-            "date" => Ok(Self::Date),
-            "datetime" => Ok(Self::Datetime),
-            "time" => Ok(Self::Time),
-            "json" => Ok(Self::Json),
-            "file" => Ok(Self::File),
-            _ => Err(RepositoryError::AttributeValueTypeMismatch),
-        }
-    }
 }
 
 /// One native value split into the `attribute_values` value columns.
@@ -224,7 +193,7 @@ impl NativeValue {
                 Ok(Self::Time(time, time_zone.to_owned()))
             }
             ValueType::Json => Ok(Self::Json(value)),
-            ValueType::File => Err(invalid()),
+            ValueType::Relationship | ValueType::File => Err(invalid()),
         }
     }
 
@@ -247,10 +216,11 @@ impl NativeValue {
 }
 
 pub fn native_value_json(row: NativeValueRow) -> Result<Value, RepositoryError> {
-    let value_type = ValueType::parse(&row.value_type)
-        .map_err(|_| RepositoryError::InvalidStoredAttributeValue)?;
-    if matches!(value_type, ValueType::File) {
-        return Ok(Value::Null);
+    let value_type = row.value_type;
+    match value_type {
+        ValueType::File => return Ok(Value::Null),
+        ValueType::Relationship => return Err(RepositoryError::InvalidStoredAttributeValue),
+        _ => {}
     }
     let populated = [
         row.value_text.is_some(),
@@ -278,7 +248,9 @@ pub fn native_value_json(row: NativeValueRow) -> Result<Value, RepositoryError> 
             .filter(|(_, zone)| zone.parse::<Tz>().is_ok())
             .map(|(time, zone)| NativeValue::Time(time, zone)),
         ValueType::Json => row.value_json.map(NativeValue::Json),
-        ValueType::File => unreachable!("file values return before native decoding"),
+        ValueType::Relationship | ValueType::File => {
+            unreachable!("relationship and file values return before native decoding")
+        }
     }
     .ok_or(RepositoryError::InvalidStoredAttributeValue)?;
     if populated != 1 {

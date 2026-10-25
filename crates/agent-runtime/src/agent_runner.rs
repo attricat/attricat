@@ -1,4 +1,5 @@
 //! Durable single-run orchestration.
+use attricat_domain::value_type::ValueType;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -199,7 +200,7 @@ async fn catalog_map(repository: &AttricatRepository) -> Result<String, RunError
         let links = blueprint
             .attributes
             .iter()
-            .filter(|attribute| attribute.value_type == "relationship")
+            .filter(|attribute| attribute.value_type == ValueType::Relationship)
             .map(|attribute| {
                 let targets = if attribute.target_blueprint_codes.is_empty() {
                     "any blueprint".to_owned()
@@ -217,7 +218,7 @@ async fn catalog_map(repository: &AttricatRepository) -> Result<String, RunError
             .attributes
             .iter()
             .filter(|attribute| {
-                attribute.value_type != "relationship"
+                attribute.value_type != ValueType::Relationship
                     && descriptions.contains_key(attribute.code.as_str())
             })
             .map(|attribute| format!("{}{}", attribute.code, described(&attribute.code)))

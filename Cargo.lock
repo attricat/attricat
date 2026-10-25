@@ -309,6 +309,7 @@ dependencies = [
 name = "attricat-blueprint"
 version = "0.1.0"
 dependencies = [
+ "attricat-domain",
  "attricat-events",
  "attricat-lexicon",
  "attricat-rules",
@@ -380,6 +381,7 @@ dependencies = [
 name = "attricat-extension-manifest"
 version = "0.1.0"
 dependencies = [
+ "attricat-domain",
  "attricat-validation",
  "semver",
  "serde",
@@ -565,6 +567,7 @@ name = "attricat-solution-pack"
 version = "0.1.0"
 dependencies = [
  "attricat-blueprint",
+ "attricat-domain",
  "attricat-extension-manifest",
  "attricat-lexicon",
  "attricat-rules",
@@ -623,6 +626,7 @@ dependencies = [
 name = "attricat-validation"
 version = "0.1.0"
 dependencies = [
+ "attricat-domain",
  "chrono",
  "jsonschema",
  "metrics",

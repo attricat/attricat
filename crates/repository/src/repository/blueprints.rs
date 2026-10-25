@@ -1,5 +1,5 @@
 use super::generations::{Generation, advance_generation};
-use super::values::{NativeValue, ValueType};
+use super::values::NativeValue;
 use super::*;
 use crate::domain_events::{
     BLUEPRINT_CREATED_V1, BLUEPRINT_PUBLISHED_V1, BLUEPRINT_REVISION_CREATED_V1,
@@ -320,7 +320,7 @@ impl AttricatRepository {
                 .bind(version)
                 .bind(attribute.code)
                 .bind(attribute.name)
-                .bind(attribute.value_type)
+                .bind(attribute.value_type.as_str())
                 .bind(attribute.value_schema)
                 .bind(attribute.extension_type)
                 .bind(attribute.default_value)
@@ -548,7 +548,7 @@ impl AttricatRepository {
                 sqlx::query(
                     "UPDATE attributes SET value_type = $1, value_schema = $2, extension_type = $3, updated_at = now() WHERE blueprint_id = $4 AND blueprint_version = $5 AND code = $6 AND workspace_id = $7",
                 )
-                .bind(&attribute.value_type)
+                .bind(attribute.value_type.as_str())
                 .bind(&attribute.value_schema)
                 .bind(&attribute.extension_type)
                 .bind(blueprint_id)
@@ -855,11 +855,11 @@ impl AttricatRepository {
                 continue;
             };
             if parts.len() == 1 {
-                if first.value_type != "relationship" {
+                if first.value_type != ValueType::Relationship {
                     resolved.push(TablePathAttribute {
                         code: path.to_owned(),
-                        value_type: first.value_type.clone(),
-                        sortable: !matches!(first.value_type.as_str(), "file" | "json"),
+                        value_type: first.value_type,
+                        sortable: !matches!(first.value_type, ValueType::File | ValueType::Json),
                     });
                 }
                 continue;
@@ -867,7 +867,7 @@ impl AttricatRepository {
             let mut attribute = first.clone();
             let mut sortable = true;
             for field in &parts[1..] {
-                if attribute.value_type != "relationship" {
+                if attribute.value_type != ValueType::Relationship {
                     break;
                 }
                 sortable &= attribute.cardinality.as_deref() == Some("one");
@@ -897,13 +897,15 @@ impl AttricatRepository {
                 };
                 attribute = next.into_domain();
             }
-            if !matches!(attribute.value_type.as_str(), "relationship" | "file")
-                && attribute.code == parts[parts.len() - 1]
+            if !matches!(
+                attribute.value_type,
+                ValueType::Relationship | ValueType::File
+            ) && attribute.code == parts[parts.len() - 1]
             {
                 resolved.push(TablePathAttribute {
                     code: path.to_owned(),
-                    value_type: attribute.value_type.clone(),
-                    sortable: sortable && attribute.value_type != "json",
+                    value_type: attribute.value_type,
+                    sortable: sortable && attribute.value_type != ValueType::Json,
                 });
             }
         }
@@ -1136,11 +1138,7 @@ fn validate_attribute_default_value(
     let Some(default_value) = &attribute.default_value else {
         return Ok(());
     };
-    let native = NativeValue::parse(
-        ValueType::parse(&attribute.value_type)?,
-        default_value.clone(),
-    )
-    .map_err(|_| {
+    let native = NativeValue::parse(attribute.value_type, default_value.clone()).map_err(|_| {
         RepositoryError::InvalidBlueprintDefinition(format!(
             "default value for attribute '{}' does not match its value type",
             attribute.code

@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use attricat_domain::value_type::ValueType;
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -56,7 +57,7 @@ pub fn compile(
             AttributeDeclaration::Local(local) => (
                 local.code.clone(),
                 local.name.clone(),
-                local.value_type.clone(),
+                local.value_type,
                 local.value_schema.clone(),
                 local.extension_type.as_ref().map(|reference| {
                     serde_json::json!({
@@ -95,7 +96,7 @@ pub fn compile(
                 (
                     code.clone(),
                     attribute.name.clone(),
-                    attribute.value_type.clone(),
+                    attribute.value_type,
                     attribute.value_schema.clone(),
                     attribute.extension_type.clone(),
                     attribute.default_value.clone(),
@@ -181,9 +182,9 @@ fn validate_declarative_checks(
         MAX_RECORD_CHECKS, MAX_TRANSITION_CONDITIONS, Usage, record_checks, validate_checks,
     };
     use attricat_validation::status::{STATUS_KEY, transition_edges};
-    let types: HashMap<String, String> = attributes
+    let types: HashMap<String, ValueType> = attributes
         .iter()
-        .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
+        .map(|attribute| (attribute.code.clone(), attribute.value_type))
         .collect();
     if let Some(schema) = &definition.record_schema {
         let invalid = |message: String| BlueprintError::InvalidJsonSchema {
@@ -265,10 +266,16 @@ fn validate_unique_key_attributes(
                     key: key.code.clone(),
                     message: format!("unknown attribute '{code}'"),
                 })?;
-            let supported = match attribute.value_type.as_str() {
-                "json" | "file" => false,
-                "relationship" => attribute.cardinality.as_deref() == Some("one"),
-                _ => true,
+            let supported = match attribute.value_type {
+                ValueType::Json | ValueType::File => false,
+                ValueType::Relationship => attribute.cardinality.as_deref() == Some("one"),
+                ValueType::String
+                | ValueType::Number
+                | ValueType::Integer
+                | ValueType::Boolean
+                | ValueType::Date
+                | ValueType::Datetime
+                | ValueType::Time => true,
             };
             if !supported {
                 return Err(BlueprintError::InvalidUniqueKey {

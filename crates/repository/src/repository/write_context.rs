@@ -9,6 +9,7 @@
 //! Published blueprint attributes are immutable, and record-scoped attributes
 //! change only under the record lock the writer already holds.
 
+use attricat_domain::value_type::ValueType;
 use std::{
     collections::{BTreeMap, HashSet},
     sync::Arc,
@@ -35,7 +36,8 @@ use super::{
 pub(super) struct WriteAttribute {
     pub id: Uuid,
     pub code: String,
-    pub value_type: String,
+    #[sqlx(try_from = "String")]
+    pub value_type: ValueType,
     pub value_schema: Option<Value>,
     pub target_blueprint_codes: Vec<String>,
     pub cardinality: Option<String>,

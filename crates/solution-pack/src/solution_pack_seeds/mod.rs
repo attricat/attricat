@@ -6,6 +6,7 @@
 //! seed only provisions a new installation: there is no update, drift, or
 //! removal handling for any of these resources.
 
+use attricat_domain::value_type::ValueType;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use attricat_blueprint::BlueprintKind;
@@ -542,7 +543,7 @@ fn validate_rule(
     let types = target
         .effective_attributes()
         .iter()
-        .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
+        .map(|attribute| (attribute.code.clone(), attribute.value_type))
         .collect::<HashMap<_, _>>();
     attricat_rules::validate_against_attributes(&compiled, &types).map_err(|error| {
         SolutionPackError::Invalid(format!(
@@ -621,7 +622,7 @@ fn declares_relationship(blueprint: &SolutionPackBlueprint, code: &str) -> bool 
     blueprint
         .effective_attributes()
         .iter()
-        .any(|attribute| attribute.code == code && attribute.value_type == "relationship")
+        .any(|attribute| attribute.code == code && attribute.value_type == ValueType::Relationship)
 }
 
 /// Checks every write, including those nested in a referencing-records
@@ -753,10 +754,7 @@ fn validate_saved_search(
         let attribute = walk_attribute_path(target, field, &by_code, &mut referenced_blueprints)
             .map_err(|reason| invalid_state(&reason))?;
         if filter["operator"] == saved_search::FILTER_OPERATOR_IS_SET
-            && !matches!(
-                attribute.value_type.as_str(),
-                "string" | "number" | "integer" | "boolean" | "date" | "datetime" | "time"
-            )
+            && !attribute.value_type.is_scalar()
         {
             return Err(invalid_state(&format!(
                 "presence filter '{field}' must select a scalar attribute"
@@ -792,7 +790,7 @@ fn validate_saved_search(
             if !nodes.is_some_and(|nodes| {
                 nodes.effective_attributes().iter().any(|attribute| {
                     attribute.code == hierarchy
-                        && attribute.value_type == "relationship"
+                        && attribute.value_type == ValueType::Relationship
                         && attribute.target_blueprint.as_deref() == Some(nodes.code())
                 })
             }) {
@@ -851,7 +849,7 @@ fn walk_attribute_path<'a>(
         if index + 1 == segments.len() {
             return Ok(attribute);
         }
-        if attribute.value_type != "relationship" {
+        if attribute.value_type != ValueType::Relationship {
             return Err(format!(
                 "field '{path}' segment '{segment}' is not a relationship"
             ));
@@ -895,7 +893,7 @@ fn validate_relationship_path<'a>(
         ));
     }
     let attribute = walk_attribute_path(start, path, by_code, referenced)?;
-    if attribute.value_type == "relationship" {
+    if attribute.value_type == ValueType::Relationship {
         Ok(attribute)
     } else {
         Err(format!("relationship facet '{path}' is not a relationship"))
@@ -915,7 +913,7 @@ fn validate_browse_path(
         let attribute =
             walk_attribute_path(start, &segments[..end].join("."), by_code, referenced)?;
         if !saved_search::browse_path_hop(
-            &attribute.value_type,
+            attribute.value_type,
             attribute.target_blueprint.as_deref(),
             attribute.cardinality.as_deref(),
             segments.len(),

@@ -5,7 +5,7 @@ use super::structural_constraints::{UniqueKeyScope, enforced_unique_keys};
 use super::system_annotations::{
     validate_system_annotations, validate_system_metadata, validate_system_tag_update,
 };
-use super::values::{NativeValue, ValueType};
+use super::values::NativeValue;
 use super::write_context::WriteContext;
 use super::*;
 use crate::domain_events::{
@@ -1170,7 +1170,7 @@ impl AttricatRepository {
         let attribute_label = attribute_code.clone();
         let attribute = write.attribute(attribute_id, attribute_code.as_deref())?;
         write.ensure_editable(Some(context_id), &attribute.context_editable)?;
-        if (attribute.value_type == "relationship") != target_record_id.is_some() {
+        if (attribute.value_type == ValueType::Relationship) != target_record_id.is_some() {
             return Err(RepositoryError::AttributeKindMismatch);
         }
         let attribute_id = attribute.id;
@@ -1194,7 +1194,7 @@ impl AttricatRepository {
                 native: None,
             });
         }
-        let native = NativeValue::parse(ValueType::parse(&attribute.value_type)?, payload)?;
+        let native = NativeValue::parse(attribute.value_type, payload)?;
         if let Some(schema) = &attribute.value_schema
             && let Some(error) = validate_json_schema(schema, &native.json())
                 .map_err(|message| RepositoryError::AttributeValueSchemaMismatch {
@@ -1397,7 +1397,7 @@ impl AttricatRepository {
         let attribute = write
             .by_code(&selector.attribute_code)
             .ok_or(RepositoryError::AttributeNotApplicable)?;
-        if attribute.value_type == "relationship" {
+        if attribute.value_type == ValueType::Relationship {
             return Err(RepositoryError::AttributeKindMismatch);
         }
         write.ensure_editable(context_id, &attribute.context_editable)?;
@@ -1639,7 +1639,7 @@ impl AttricatRepository {
             relationship.attribute_id,
             relationship.attribute_code.as_deref(),
         )?;
-        if attribute.value_type != "relationship" {
+        if attribute.value_type != ValueType::Relationship {
             return Err(RepositoryError::AttributeKindMismatch);
         }
         Ok((
@@ -1868,7 +1868,7 @@ impl AttricatRepository {
         if active {
             let attribute = write
                 .by_id(attribute_id)
-                .filter(|attribute| attribute.value_type == "relationship")
+                .filter(|attribute| attribute.value_type == ValueType::Relationship)
                 .ok_or(RepositoryError::AttributeNotApplicable)?;
             self.validate_relationship_cardinality(
                 transaction,

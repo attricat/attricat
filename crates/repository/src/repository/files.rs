@@ -683,20 +683,18 @@ impl AttricatRepository {
         .fetch_optional(&mut **transaction)
         .await?;
         let version = revision.ok_or(RepositoryError::NotFound("blueprint"))?;
-        let row = sqlx::query_as::<_, (String, Option<Value>, String, bool)>(
-            "SELECT value_type, file_policy, context_editable, readonly FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND workspace_id = $4 AND deleted_at IS NULL",
+        let row = sqlx::query_as::<_, (Option<Value>, String, bool)>(
+            "SELECT file_policy, context_editable, readonly FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND workspace_id = $4 AND value_type = $5 AND deleted_at IS NULL",
         )
         .bind(attribute_code)
         .bind(blueprint_id)
         .bind(version)
         .bind(workspace_id)
+        .bind(ValueType::File.as_str())
         .fetch_optional(&mut **transaction)
         .await?
         .ok_or(RepositoryError::AttributeNotApplicable)?;
-        let (value_type, file_policy, context_editable, readonly) = row;
-        if value_type != "file" {
-            return Err(RepositoryError::AttributeNotApplicable);
-        }
+        let (file_policy, context_editable, readonly) = row;
         if readonly {
             return Err(RepositoryError::FileAttributeReadonly);
         }
@@ -993,7 +991,7 @@ impl AttricatRepository {
         .bind(self.workspace_id.0)
         .fetch_optional(&mut **transaction).await?
         .ok_or(RepositoryError::AttributeNotApplicable)?;
-        if row.1 != "file" {
+        if row.1 != ValueType::File.as_str() {
             return Err(RepositoryError::AttributeNotApplicable);
         }
         if row.4 {

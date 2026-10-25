@@ -17,6 +17,7 @@ use crate::{
     },
 };
 use attricat_domain::permissions::Permission;
+use attricat_domain::value_type::ValueType;
 use attricat_validation::saved_search;
 use axum::{
     Json,
@@ -333,7 +334,7 @@ async fn resolve_tree_facet_target(
                     .attributes
                     .iter()
                     .find(|a| a.code == *hop)
-                    .filter(|a| a.value_type == "relationship")
+                    .filter(|a| a.value_type == ValueType::Relationship)
                     .ok_or_else(|| {
                         invalid("source_relationship_field must be a relationship attribute")
                     })?;
@@ -342,7 +343,7 @@ async fn resolve_tree_facet_target(
                     .clone()
                     .ok_or_else(|| invalid("source_relationship_field has no target blueprint"))?;
                 if !saved_search::browse_path_hop(
-                    &relationship.value_type,
+                    relationship.value_type,
                     Some(&target_code),
                     relationship.cardinality.as_deref(),
                     hops.len(),
@@ -380,7 +381,7 @@ async fn resolve_tree_facet_target(
             .iter()
             .find(|a| a.code == hierarchy_field)
             .ok_or_else(|| invalid("hierarchy_field is not an attribute"))?;
-        if hierarchy.value_type != "relationship"
+        if hierarchy.value_type != ValueType::Relationship
             || hierarchy.target_blueprint_code.as_deref() != Some(&target.blueprint.code)
         {
             return Err(invalid(

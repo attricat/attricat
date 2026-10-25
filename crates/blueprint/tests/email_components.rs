@@ -1,4 +1,5 @@
 use attricat_blueprint::{compile, parse};
+use attricat_domain::value_type::ValueType;
 
 const SOURCE: &str = r#"
 format_version = 1
@@ -76,11 +77,11 @@ fn email_display_is_a_string_table_renderer() {
         serde_json::json!({"id": "attricat.email_display", "version": 1, "props": {}}),
     )
     .unwrap();
-    assert!(attricat_blueprint::validate_table_renderer(&renderer, "string").is_ok());
-    assert!(attricat_blueprint::validate_table_renderer(&renderer, "number").is_err());
+    assert!(attricat_blueprint::validate_table_renderer(&renderer, ValueType::String).is_ok());
+    assert!(attricat_blueprint::validate_table_renderer(&renderer, ValueType::Number).is_err());
     let editor = serde_json::from_value(
         serde_json::json!({"id": "attricat.email_edit", "version": 1, "props": {}}),
     )
     .unwrap();
-    assert!(attricat_blueprint::validate_table_renderer(&editor, "string").is_err());
+    assert!(attricat_blueprint::validate_table_renderer(&editor, ValueType::String).is_err());
 }

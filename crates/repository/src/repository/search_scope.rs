@@ -1,6 +1,7 @@
 //! Resolves a record search request into the blueprint, context and matching
 //! records it covers. The records API and the agent's search tools share it so
 //! filters, relationship paths and `@me` mean the same thing in both.
+use attricat_domain::value_type::ValueType;
 use std::collections::{HashMap, HashSet};
 
 use attricat_validation::saved_search::{FILTER_OPERATOR_IS_SET, MAX_RELATIONSHIP_HOPS};
@@ -240,7 +241,8 @@ impl AttricatRepository {
                 .attributes
                 .iter()
                 .find(|attribute| {
-                    attribute.code == *relationship_name && attribute.value_type == "relationship"
+                    attribute.code == *relationship_name
+                        && attribute.value_type == ValueType::Relationship
                 })
                 .ok_or_else(|| {
                     invalid_in(
@@ -272,7 +274,7 @@ impl AttricatRepository {
         {
             Some(attribute) => (
                 attribute.code.clone(),
-                attribute.value_type.clone(),
+                attribute.value_type,
                 false,
                 attribute.value_schema.clone(),
             ),
@@ -326,16 +328,20 @@ impl AttricatRepository {
             });
         }
         let presence = filter.operator == FILTER_OPERATOR_IS_SET;
-        let valid_operator = match value_type.as_str() {
-            "string" => {
+        let valid_operator = match value_type {
+            ValueType::String => {
                 presence || matches!(filter.operator.as_str(), "eq" | "contains" | "starts_with")
             }
-            "number" | "integer" | "date" | "datetime" | "time" => {
+            ValueType::Number
+            | ValueType::Integer
+            | ValueType::Date
+            | ValueType::Datetime
+            | ValueType::Time => {
                 presence || matches!(filter.operator.as_str(), "eq" | "gt" | "gte" | "lt" | "lte")
             }
-            "boolean" => presence || filter.operator == "eq",
+            ValueType::Boolean => presence || filter.operator == "eq",
             // A file value has no comparable scalar, only attached files.
-            "file" => presence,
+            ValueType::File => presence,
             _ => false,
         };
         if !valid_operator {
@@ -347,22 +353,22 @@ impl AttricatRepository {
         let value = if presence {
             filter.value.as_bool().map(|value| value.to_string())
         } else {
-            match value_type.as_str() {
-                "string" => filter.value.as_str().map(str::to_owned),
-                "number" => filter.value.as_number().map(ToString::to_string),
-                "integer" => filter.value.as_i64().map(|value| value.to_string()),
-                "boolean" => filter.value.as_bool().map(|value| value.to_string()),
-                "date" => filter.value.as_str().and_then(|value| {
+            match value_type {
+                ValueType::String => filter.value.as_str().map(str::to_owned),
+                ValueType::Number => filter.value.as_number().map(ToString::to_string),
+                ValueType::Integer => filter.value.as_i64().map(|value| value.to_string()),
+                ValueType::Boolean => filter.value.as_bool().map(|value| value.to_string()),
+                ValueType::Date => filter.value.as_str().and_then(|value| {
                     chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
                         .ok()
                         .map(|_| value.to_owned())
                 }),
-                "datetime" => filter.value.as_str().and_then(|value| {
+                ValueType::Datetime => filter.value.as_str().and_then(|value| {
                     chrono::DateTime::parse_from_rfc3339(value)
                         .ok()
                         .map(|_| value.to_owned())
                 }),
-                "time" => filter.value.as_str().and_then(|value| {
+                ValueType::Time => filter.value.as_str().and_then(|value| {
                     ["%H:%M", "%H:%M:%S", "%H:%M:%S%.f"]
                         .iter()
                         .any(|format| chrono::NaiveTime::parse_from_str(value, format).is_ok())
@@ -412,7 +418,9 @@ impl AttricatRepository {
             let relationship = current
                 .attributes
                 .iter()
-                .find(|attribute| attribute.code == name && attribute.value_type == "relationship")
+                .find(|attribute| {
+                    attribute.code == name && attribute.value_type == ValueType::Relationship
+                })
                 .ok_or_else(|| {
                     invalid_in(
                         format!(
@@ -477,7 +485,7 @@ impl AttricatRepository {
                 relationship_path: Vec::new(),
                 leaf_field: sort.field.clone(),
                 leaf_blueprint_id: blueprint.blueprint.id,
-                value_type: "integer".to_owned(),
+                value_type: ValueType::Integer,
                 descending,
                 effective_source_version,
                 publication_context_id: Some(channel.context_id),
@@ -495,7 +503,7 @@ impl AttricatRepository {
                 relationship_path: Vec::new(),
                 leaf_field: sort.field.clone(),
                 leaf_blueprint_id: blueprint.blueprint.id,
-                value_type: "integer".to_owned(),
+                value_type: ValueType::Integer,
                 descending,
                 effective_source_version,
                 publication_context_id: None,
@@ -540,7 +548,8 @@ impl AttricatRepository {
                 .attributes
                 .iter()
                 .find(|attribute| {
-                    attribute.code == *relationship_name && attribute.value_type == "relationship"
+                    attribute.code == *relationship_name
+                        && attribute.value_type == ValueType::Relationship
                 })
                 .ok_or_else(|| invalid("sort.field relationship is invalid".to_owned()))?;
             if relationship.cardinality.as_deref() != Some("one") {
@@ -561,14 +570,11 @@ impl AttricatRepository {
             .attributes
             .iter()
             .find(|attribute| attribute.code == leaf_field)
-            .map(|attribute| attribute.value_type.clone())
+            .map(|attribute| attribute.value_type)
             .ok_or_else(|| {
                 invalid("sort.field must resolve to a scalar table column".to_owned())
             })?;
-        if !matches!(
-            value_type.as_str(),
-            "string" | "number" | "integer" | "boolean" | "date" | "datetime" | "time"
-        ) {
+        if !value_type.is_scalar() {
             return Err(invalid(
                 "sort.field must resolve to a scalar table column".to_owned(),
             ));
@@ -588,11 +594,11 @@ impl AttricatRepository {
 }
 
 /// The scalar table columns a page hydrates, by attribute code.
-pub fn table_value_paths(blueprint: &BlueprintWithAttributes) -> HashMap<String, String> {
+pub fn table_value_paths(blueprint: &BlueprintWithAttributes) -> HashMap<String, ValueType> {
     blueprint
         .table_path_attributes
         .iter()
-        .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
+        .map(|attribute| (attribute.code.clone(), attribute.value_type))
         .collect()
 }
 
@@ -617,7 +623,7 @@ pub fn table_relationship_targets(blueprint: &BlueprintWithAttributes) -> HashMa
                 .attributes
                 .iter()
                 .find(|attribute| attribute.code == relationship)
-                .filter(|attribute| attribute.value_type == "relationship")
+                .filter(|attribute| attribute.value_type == ValueType::Relationship)
                 .and_then(|attribute| {
                     attribute
                         .target_blueprint_code

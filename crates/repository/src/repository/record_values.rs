@@ -19,6 +19,7 @@
 //! `context_fallback = "none"` only looks at the requested context.
 use super::RepositoryError;
 use super::values::{NativeValueRow, native_value_json};
+use attricat_domain::value_type::ValueType;
 use attricat_validation::predicate::ResolvedRecord;
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
@@ -161,9 +162,9 @@ impl DirectValue {
 }
 
 /// One attribute's direct values of a record, by context.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct AttributeValues {
-    pub value_type: String,
+    pub value_type: ValueType,
     /// `context_fallback` is not `none`.
     pub inherit: bool,
     /// One of the record's own additional (reusable) attributes rather than a
@@ -235,10 +236,10 @@ impl RecordValues {
             .collect()
     }
 
-    pub(crate) fn value_type(&self, code: &str) -> Option<&str> {
+    pub(crate) fn value_type(&self, code: &str) -> Option<ValueType> {
         self.attributes
             .get(code)
-            .map(|attribute| attribute.value_type.as_str())
+            .map(|attribute| attribute.value_type)
     }
 }
 
@@ -370,12 +371,12 @@ fn add_row(record: &mut RecordValues, row: ValueRow) -> Result<(), RepositoryErr
         .attributes
         .entry(row.attribute_code)
         .or_insert_with(|| AttributeValues {
-            value_type: row.native.value_type.clone(),
+            value_type: row.native.value_type,
             inherit: row.context_fallback != "none",
             record_scoped: row.record_scoped,
             by_context: HashMap::new(),
         });
-    if row.native.value_type == "relationship" {
+    if row.native.value_type == ValueType::Relationship {
         let (Some(target), true) = (row.relationship_target_record_id, row.active) else {
             return Ok(());
         };
@@ -400,7 +401,7 @@ fn add_row(record: &mut RecordValues, row: ValueRow) -> Result<(), RepositoryErr
         return Ok(());
     }
     let exact = row.native.value_number.map(|number| number.to_string());
-    let value = if row.native.value_type == "file" {
+    let value = if row.native.value_type == ValueType::File {
         row.files.unwrap_or_else(|| Value::Array(Vec::new()))
     } else {
         native_value_json(row.native)?
@@ -461,9 +462,13 @@ mod tests {
         }
     }
 
-    fn attribute(value_type: &str, inherit: bool, values: &[(u128, Value)]) -> AttributeValues {
+    fn attribute(
+        value_type: ValueType,
+        inherit: bool,
+        values: &[(u128, Value)],
+    ) -> AttributeValues {
         AttributeValues {
-            value_type: value_type.into(),
+            value_type,
             inherit,
             record_scoped: false,
             by_context: values
@@ -505,21 +510,21 @@ mod tests {
         record.attributes.insert(
             "title".into(),
             attribute(
-                "string",
+                ValueType::String,
                 true,
                 &[(1, json!("Shirt")), (2, json!("Chemise"))],
             ),
         );
         record.attributes.insert(
             "slug".into(),
-            attribute("string", false, &[(1, json!("shirt"))]),
+            attribute(ValueType::String, false, &[(1, json!("shirt"))]),
         );
         // An explicit empty file value is a direct value: it does not reveal
         // the inherited photo.
         record.attributes.insert(
             "photo".into(),
             attribute(
-                "file",
+                ValueType::File,
                 true,
                 &[(1, json!([{"id": "f", "sha256": "x"}])), (2, json!([]))],
             ),
@@ -538,9 +543,9 @@ mod tests {
         let mut record = RecordValues::empty(Uuid::from_u128(10), Uuid::nil(), 1);
         record.attributes.insert(
             "title".into(),
-            attribute("string", true, &[(1, json!("A"))]),
+            attribute(ValueType::String, true, &[(1, json!("A"))]),
         );
-        let mut own = attribute("string", true, &[(1, json!("B"))]);
+        let mut own = attribute(ValueType::String, true, &[(1, json!("B"))]);
         own.record_scoped = true;
         record.attributes.insert("acme:note".into(), own);
         let path = [Uuid::from_u128(1)];
@@ -565,7 +570,7 @@ mod tests {
             created_at: DateTime::<Utc>::MIN_UTC,
             files: None,
             native: NativeValueRow {
-                value_type: "relationship".into(),
+                value_type: ValueType::Relationship,
                 value_text: None,
                 value_number: None,
                 value_integer: None,

@@ -1,6 +1,7 @@
 //! The Explorer search state stored by named views, share links and saved
 //! searches that solution packs install. Every write path validates and
 //! normalizes the state here, so equal searches are stored identically.
+use attricat_domain::value_type::ValueType;
 use serde_json::Value;
 
 pub const EXPLORER_SEARCH_KIND: &str = "explorer_search";
@@ -240,12 +241,12 @@ pub fn normalize_state(state: &Value) -> Value {
 /// single value (`cardinality = "one"`), as for sortable table paths. Each
 /// source then reaches at most one node of the browsed blueprint.
 pub fn browse_path_hop(
-    value_type: &str,
+    value_type: ValueType,
     target_blueprint: Option<&str>,
     cardinality: Option<&str>,
     hops: usize,
 ) -> bool {
-    value_type == "relationship"
+    value_type == ValueType::Relationship
         && target_blueprint.is_some()
         && (hops == 1 || cardinality == Some("one"))
 }

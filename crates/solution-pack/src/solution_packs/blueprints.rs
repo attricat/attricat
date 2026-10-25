@@ -1,6 +1,7 @@
 //! Blueprint resources: pack-local references are rewritten, includes are
 //! resolved within the pack, and every blueprint is compiled offline.
 
+use attricat_domain::value_type::ValueType;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use attricat_blueprint::{
@@ -575,7 +576,7 @@ fn validate_table_paths(
                                 column.field
                             ))
                         })?;
-                    if attribute.value_type != "relationship" {
+                    if attribute.value_type != ValueType::Relationship {
                         return invalid(format!(
                             "blueprint '{owner_key}' table column '{}' segment '{segment}' must be a relationship",
                             column.field
@@ -607,7 +608,10 @@ fn validate_table_paths(
                             column.field
                         ))
                     })?;
-                if matches!(leaf_attribute.value_type.as_str(), "relationship" | "file") {
+                if matches!(
+                    leaf_attribute.value_type,
+                    ValueType::Relationship | ValueType::File
+                ) {
                     return invalid(format!(
                         "blueprint '{owner_key}' table column '{}' leaf must be scalar",
                         column.field
@@ -628,7 +632,7 @@ fn validate_table_paths(
                     .find(|attribute| attribute.code == *hop)
                     .filter(|attribute| {
                         browse_path_hop(
-                            &attribute.value_type,
+                            attribute.value_type,
                             attribute.target_blueprint.as_deref(),
                             attribute.cardinality.as_deref(),
                             hops.len(),
@@ -771,7 +775,7 @@ fn validate_incoming_relationships_in_nodes(
                                 relationship.field
                             ))
                         })?;
-                    if attribute.value_type != "relationship" {
+                    if attribute.value_type != ValueType::Relationship {
                         return invalid(format!(
                             "blueprint '{owner_key}' incoming relationship source '{source_key}' field '{}' must be a relationship",
                             relationship.field

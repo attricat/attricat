@@ -46,7 +46,7 @@ pub struct Attribute {
     /// when the revision is read; it is not stored with the attribute.
     #[serde(default)]
     pub description: Option<String>,
-    pub value_type: String,
+    pub value_type: crate::value_type::ValueType,
     pub value_schema: Option<Value>,
     /// Immutable provider/type/release metadata for extension-defined types.
     pub extension_type: Option<Value>,
@@ -78,7 +78,7 @@ pub struct ReusableAttribute {
     pub code: String,
     pub name: String,
     pub version: i64,
-    pub value_type: String,
+    pub value_type: crate::value_type::ValueType,
     pub value_schema: Option<Value>,
     pub default_value: Option<Value>,
     pub file_policy: Option<Value>,
@@ -138,7 +138,7 @@ pub struct RecordReusableAttribute {
     pub code: String,
     pub name: String,
     pub version: i64,
-    pub value_type: String,
+    pub value_type: crate::value_type::ValueType,
     pub value_schema: Option<Value>,
     pub default_value: Option<Value>,
     pub file_policy: Option<Value>,
@@ -355,7 +355,7 @@ pub struct BlueprintWithAttributes {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TablePathAttribute {
     pub code: String,
-    pub value_type: String,
+    pub value_type: crate::value_type::ValueType,
     pub sortable: bool,
 }
 
