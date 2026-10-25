@@ -12,6 +12,7 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use sqlx::{FromRow, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -223,6 +224,61 @@ pub struct ExportRetrySelection {
     /// Names the request: one already recorded under it is not retried
     /// again, and its records are returned.
     pub request_key: Option<String>,
+}
+
+/// An operator's export retry, optionally resyncing the retried records.
+#[derive(Clone, Debug)]
+pub struct ExportRetryRequest {
+    pub connection: Option<String>,
+    pub record_ids: Option<Vec<Uuid>>,
+    pub status: Option<String>,
+    /// Also resync the retried records on every export job of the extension
+    /// that targets the connection.
+    pub run: bool,
+    /// Makes the retry idempotent: sent again as it was, it retries nothing
+    /// twice and finds the runs it started.
+    pub idempotency_key: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ExportRetryOutcome {
+    pub record_ids: Vec<Uuid>,
+    pub run_ids: Vec<Uuid>,
+    /// Jobs whose resync could not start; the retry itself still happened.
+    pub job_errors: Vec<ExportRetryJobError>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ExportRetryJobError {
+    pub job_id: Uuid,
+    pub message: String,
+}
+
+/// Record IDs in one order without repeats, as a selection names them.
+pub fn sorted_record_ids(ids: &[Uuid]) -> Vec<Uuid> {
+    let mut ids = ids.to_vec();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}
+
+/// How an idempotency key names a set of records, so a request sent again
+/// maps to the same run key.
+pub fn record_ids_selection(ids: &[Uuid]) -> String {
+    sorted_record_ids(ids)
+        .iter()
+        .map(Uuid::to_string)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// What a client is told about a job whose retry resync could not start.
+fn resync_error_message(error: &RepositoryError) -> String {
+    match error {
+        RepositoryError::InvalidExtension(message) => message.clone(),
+        RepositoryError::NotFound(what) => format!("{what} not found"),
+        _ => "the job could not start a resync".to_owned(),
+    }
 }
 
 /// Matches a mapping's `column` to the connection bound at `param`: equal
@@ -980,6 +1036,89 @@ impl AttricatRepository {
             .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(status).bind(blueprint_id).bind(limit.saturating_add(1))
             .fetch_all(&self.pool).await?;
         Ok((ids.len() as i64 <= limit).then_some(ids))
+    }
+
+    /// Retries the selected mappings of `extension_id` and, when asked,
+    /// resyncs the retried records on each matching export job.
+    pub async fn retry_exports(
+        &self,
+        extension_id: &str,
+        request: ExportRetryRequest,
+    ) -> Result<ExportRetryOutcome, RepositoryError> {
+        // With a key, the request as sent (not the records a status resolves
+        // to now) names the retry. A request sent again finds the records the
+        // first one retried instead of retrying anything twice, and resyncs
+        // them under the same run keys, which start each job's run only once.
+        let selection = request.idempotency_key.as_ref().map(|_| {
+            format!(
+                "retry:{}:{}:{}",
+                request.connection.as_deref().unwrap_or(""),
+                request.status.as_deref().unwrap_or(""),
+                record_ids_selection(request.record_ids.as_deref().unwrap_or_default())
+            )
+        });
+        let request_key = request
+            .idempotency_key
+            .as_ref()
+            .zip(selection.as_ref())
+            .map(|(key, selection)| {
+                format!(
+                    "{:x}",
+                    Sha256::digest(format!("{extension_id}\0{key}\0{selection}").as_bytes())
+                )
+            });
+        let record_ids = self
+            .request_export_retry(
+                extension_id,
+                ExportRetrySelection {
+                    connection: request.connection.clone(),
+                    record_ids: request.record_ids,
+                    status: request.status,
+                    request_key,
+                },
+            )
+            .await?;
+        // The retry is recorded above. Each job resyncs only its blueprint's
+        // records, and a job that cannot run is reported rather than failing
+        // a retry that already happened.
+        let mut run_ids = Vec::new();
+        let mut job_errors = Vec::new();
+        if request.run && !record_ids.is_empty() {
+            let key = request
+                .idempotency_key
+                .unwrap_or_else(|| format!("retry-{}", Uuid::new_v4().simple()));
+            for job in self
+                .extension_export_connector_jobs(extension_id)
+                .await?
+                .into_iter()
+                .filter(|job| job.connection == request.connection)
+            {
+                let ids = self
+                    .records_of_blueprint(job.blueprint_id, &record_ids)
+                    .await?;
+                if ids.is_empty() {
+                    continue;
+                }
+                match self
+                    .resync_blueprint_connector_job(job.id, &key, selection.as_deref(), Some(ids))
+                    .await
+                {
+                    Ok(runs) => run_ids.extend(runs),
+                    Err(error) => {
+                        tracing::warn!(job = %job.id, %error, "export retry resync could not start");
+                        job_errors.push(ExportRetryJobError {
+                            job_id: job.id,
+                            message: resync_error_message(&error),
+                        });
+                    }
+                }
+            }
+        }
+        Ok(ExportRetryOutcome {
+            record_ids,
+            run_ids,
+            job_errors,
+        })
     }
 
     /// Marks the selected mappings for retry and emits
