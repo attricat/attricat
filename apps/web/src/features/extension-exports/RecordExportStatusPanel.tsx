@@ -29,8 +29,8 @@ import type {
   ExportDestination,
   ExportMapping,
 } from './schemas';
-import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type Row = {
   key: string;
@@ -137,7 +137,7 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
     return <CircularProgress aria-label={t('extensionExports.loading')} />;
   }
   if (status.error) {
-    return <Alert severity="error">{errorMessage(status.error)}</Alert>;
+    return <ApiErrorAlert error={status.error} />;
   }
   const rows = exportRows(
     status.data.statuses,
@@ -155,11 +155,7 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
   }
   return (
     <Box>
-      {retry.error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {errorMessage(retry.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={retry.error} sx={{ mb: 2 }} />
       {!!retry.data?.job_errors.length && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           {t('extensionExports.retryJobErrors', {

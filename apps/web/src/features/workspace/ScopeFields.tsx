@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Alert, MenuItem, TextField } from '@mui/material';
+import { MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { IconLabel } from '../../components/IconLabel';
 import {
@@ -11,7 +11,7 @@ import {
 import { listGrantTargets, selectedScopeTarget, type ScopeType } from './api';
 import { workspaceScope } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type ScopeFieldsProps = {
   onScopeChange: (scope: ScopeType) => void;
@@ -93,9 +93,7 @@ const ScopeTargetField = ({
         : t('workspace.record');
   return (
     <>
-      {targets.isError && (
-        <Alert severity="error">{errorMessage(targets.error)}</Alert>
-      )}
+      <ApiErrorAlert error={targets.error} />
       <TextField
         required
         fullWidth

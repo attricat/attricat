@@ -34,7 +34,7 @@ import { useBlueprintDetailActions } from './useBlueprintDetailActions';
 import { useBlueprintRevisionComparison } from './useBlueprintRevisionComparison';
 import { useSafeBlueprintMigration } from './useSafeBlueprintMigration';
 import { lexiconText } from '../lexicon/lexicon';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type BlueprintDetailDialog = 'publish' | 'publishRecords' | 'safeMigration';
 
@@ -99,9 +99,7 @@ export const BlueprintDetailPage = ({
       {revisions.isPending && (
         <Typography>{t('blueprints.loadingBlueprint')}</Typography>
       )}
-      {revisions.isError && (
-        <Alert severity="error">{errorMessage(revisions.error)}</Alert>
-      )}
+      <ApiErrorAlert error={revisions.error} />
       {blueprint && (
         <>
           <BlueprintDetailHeader

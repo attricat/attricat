@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Alert, Box, Button } from '@mui/material';
+import { Box, Button } from '@mui/material';
 import { SettingsPage } from '../../components/CenteredPage';
 import { PageHeader } from '../../components/PageHeader';
 import { WorkspaceIcon } from '../../components/systemIcons';
@@ -11,8 +11,8 @@ import { WorkspaceMembersSection } from './WorkspaceMembersSection';
 import { WorkspaceNavigationSection } from './WorkspaceNavigationSection';
 import { WorkspaceRolesSection } from './WorkspaceRolesSection';
 import { WorkspaceTeamsSection } from './WorkspaceTeamsSection';
-import { errorMessage } from '../../api/errors';
 import { sessionOptions } from '../auth/queryOptions';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type WorkspaceManagementSection =
   'members' | 'teams' | 'roles' | 'invitations' | 'navigation' | 'agent';
@@ -97,9 +97,7 @@ export const WorkspaceManagementPage = ({
             </Button>
           ))}
       </Box>
-      {session.isError && (
-        <Alert severity="error">{errorMessage(session.error)}</Alert>
-      )}
+      <ApiErrorAlert error={session.error} />
       {section === 'members' && (
         <WorkspaceMembersSection
           canManage={capabilities?.members_manage === true}

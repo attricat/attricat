@@ -26,7 +26,7 @@ import { ReusableAttributePreview } from './ReusableAttributePreview';
 import { reusableAttributeTemplates } from './templates';
 import { ReusableAttributeIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type PendingUnsavedAction =
   { templateIndex: number; type: 'replace' } | { type: 'discard' };
@@ -180,11 +180,7 @@ export const ReusableAttributeEditorPage = ({
           </Stack>
         }
       />
-      {save.error && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {errorMessage(save.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={save.error} sx={{ mt: 3 }} />
       {!definitionId && (
         <DefinitionTemplateDialog
           onClose={() => setTemplateDialogOpen(false)}

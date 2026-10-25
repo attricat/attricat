@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Box, CircularProgress, Typography } from '@mui/material';
+import { Box, CircularProgress, Typography } from '@mui/material';
 import {
   lazy,
   Suspense,
@@ -57,7 +57,6 @@ import { RecordPreviewToolbar } from './RecordPreviewToolbar';
 import { RecordControlsPanel } from './RecordControlsPanel';
 import { RelationshipPickerActionBar } from './RelationshipPickerActionBar';
 import { useRecordPublications } from './useRecordPublications';
-import { errorMessage } from '../../../api/errors';
 import { capabilities, accessTargetKinds } from '../../auth/capabilities';
 
 const loadRecordCommentsPanel = () =>
@@ -258,9 +257,7 @@ export const RecordPreview = ({
                 />
               </Box>
             )}
-            {actionError && (
-              <ApiErrorAlert error={actionError} sx={{ mt: 3 }} />
-            )}
+            <ApiErrorAlert error={actionError} sx={{ mt: 3 }} />
             {blueprint.data && resolved.data && (
               <ExtensionOutlet
                 context={{
@@ -332,16 +329,8 @@ export const RecordPreview = ({
                     />
                   </Box>
                 )}
-                {resolved.isError && (
-                  <Alert severity="error" sx={{ mt: 3 }}>
-                    {errorMessage(resolved.error)}
-                  </Alert>
-                )}
-                {blueprint.isError && (
-                  <Alert severity="error" sx={{ mt: 3 }}>
-                    {errorMessage(blueprint.error)}
-                  </Alert>
-                )}
+                <ApiErrorAlert error={resolved.error} sx={{ mt: 3 }} />
+                <ApiErrorAlert error={blueprint.error} sx={{ mt: 3 }} />
                 {resolved.data && blueprint.data && (
                   // A single relationship shows its record on the full page;
                   // a panel beside another page keeps to links.

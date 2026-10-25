@@ -29,6 +29,7 @@ import { WorkflowIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 const WorkflowDetailLink = Link as unknown as ComponentType<{
   params: { workflowId: string };
@@ -112,11 +113,7 @@ export const WorkflowsPage = () => {
         icon={WorkflowIcon}
         title={t('workflows.title')}
       />
-      {workflows.isError && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {errorMessage(workflows.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={workflows.error} sx={{ mt: 3 }} />
       {runs.isError && (
         <Alert severity="warning" sx={{ mt: 3 }}>
           {t('workflows.runsUnavailable', {

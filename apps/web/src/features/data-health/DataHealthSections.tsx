@@ -19,7 +19,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { BlueprintLabel } from './BlueprintLabel';
 import { formatBytes } from './dataHealthFormat';
 import { Timestamp } from '../../time/Timestamp';
-import { SectionError } from './SectionError';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import type {
   BlueprintHealth,
   CompletenessHealth,
@@ -37,7 +37,7 @@ export const StorageSection = ({ query }: SectionProps<StorageHealth>) => {
   return (
     <Paper sx={{ mt: 4, p: 2 }}>
       <Typography variant="h5">{t('dataHealth.storage')}</Typography>
-      <SectionError error={query.error} />
+      <ApiErrorAlert error={query.error} />
       <Table size="small">
         <TableHead>
           <TableRow>
@@ -68,7 +68,7 @@ export const BlueprintHealthSection = ({
       <Box sx={{ p: 2 }}>
         <Typography variant="h5">{t('dataHealth.blueprintHealth')}</Typography>
       </Box>
-      <SectionError error={query.error} />
+      <ApiErrorAlert error={query.error} />
       <Table size="small">
         <TableHead>
           <TableRow>
@@ -117,7 +117,7 @@ export const FreshnessSection = ({ query }: SectionProps<FreshnessBand>) => {
       <Typography variant="h5">
         {t('dataHealth.freshnessDistribution')}
       </Typography>
-      <SectionError error={query.error} />
+      <ApiErrorAlert error={query.error} />
       <Stack direction="row" spacing={3} sx={{ mt: 2 }}>
         {(query.data ?? []).map((band) => (
           <Box key={band.label}>
@@ -170,7 +170,7 @@ export const CompletenessSection = ({
       <Typography color="text.secondary" sx={{ mb: 2 }}>
         {t('dataHealth.completenessDescription')}
       </Typography>
-      <SectionError error={query.error} />
+      <ApiErrorAlert error={query.error} />
       <Table size="small">
         <TableHead>
           <TableRow>
@@ -212,7 +212,7 @@ export const ContextCoverageSection = ({
       onExpandedChange={onExpandedChange}
       title={t('dataHealth.contextCoverage')}
     >
-      <SectionError error={query.error} />
+      <ApiErrorAlert error={query.error} />
       <Table size="small">
         <TableHead>
           <TableRow>
@@ -246,7 +246,7 @@ export const RelationshipIntegritySection = ({
       onExpandedChange={onExpandedChange}
       title={t('dataHealth.relationshipIntegrity')}
     >
-      <SectionError error={query.error} />
+      <ApiErrorAlert error={query.error} />
       <Table size="small">
         <TableHead>
           <TableRow>

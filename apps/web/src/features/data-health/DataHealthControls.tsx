@@ -1,5 +1,4 @@
 import {
-  Alert,
   Button,
   FormControl,
   InputLabel,
@@ -20,7 +19,7 @@ import {
   staleAfterLabelId,
   staleAfterSelectMinWidth,
 } from './constants';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type Props = {
   staleAfterDays: number;
@@ -115,11 +114,7 @@ const DataHealthControlsForm = ({
           {isRefreshing ? t('dataHealth.refreshing') : t('dataHealth.refresh')}
         </Button>
       </Stack>
-      {refreshError && (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          {errorMessage(refreshError)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={refreshError} sx={{ mt: 2 }} />
     </>
   );
 };

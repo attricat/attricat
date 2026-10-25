@@ -8,7 +8,7 @@ import { InvitationList } from './InvitationList';
 import { InviteExistingUserForm } from './InviteExistingUserForm';
 import { principalQueryKeys } from '../principals/queryKeys';
 import { workspaceQueryKeys } from './queryKeys';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const WorkspaceInvitationsSection = ({
   canManage,
@@ -45,12 +45,8 @@ export const WorkspaceInvitationsSection = ({
   return (
     <Stack spacing={2} sx={{ mt: 3 }}>
       {error && <Alert severity="error">{error}</Alert>}
-      {invitations.isError && (
-        <Alert severity="error">{errorMessage(invitations.error)}</Alert>
-      )}
-      {roles.isError && (
-        <Alert severity="error">{errorMessage(roles.error)}</Alert>
-      )}
+      <ApiErrorAlert error={invitations.error} />
+      <ApiErrorAlert error={roles.error} />
       <InvitationList
         invitations={invitations.data}
         onChanged={refresh}

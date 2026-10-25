@@ -1,5 +1,4 @@
 import {
-  Alert,
   Button,
   Paper,
   Stack,
@@ -14,10 +13,10 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { errorMessage } from '../../api/errors';
 import { clearBudget, listBudgets, setBudget } from './api';
 import { extensionExportQueryKeys } from './queryKeys';
 import type { HostPermissionBudget } from './schemas';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 const BudgetRow = ({
   budget,
@@ -67,9 +66,7 @@ const BudgetRow = ({
       <TableCell>
         {budget.lowered ? describe(budget.lowered) : '—'}
         {(save.error ?? reset.error) && (
-          <Alert severity="error" sx={{ mt: 1 }}>
-            {errorMessage(save.error ?? reset.error)}
-          </Alert>
+          <ApiErrorAlert error={save.error ?? reset.error} sx={{ mt: 1 }} />
         )}
       </TableCell>
       <TableCell>

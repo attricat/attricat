@@ -1,14 +1,7 @@
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import {
-  Alert,
-  Button,
-  Paper,
-  Stack,
-  MenuItem,
-  TextField,
-} from '@mui/material';
+import { Button, Paper, Stack, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeftIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
@@ -20,7 +13,7 @@ import { parseContextMetadata } from './contextMetadata';
 import { contextQueryKeys } from './queryKeys';
 import { ContextIcon } from '../../components/systemIcons';
 import { useInitialFocus } from '../../components/initialFocus';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const CreateContextPage = () => {
   const { t } = useTranslation();
@@ -150,9 +143,7 @@ export const CreateContextPage = () => {
               />
             )}
           </form.Field>
-          {create.error && (
-            <Alert severity="error">{errorMessage(create.error)}</Alert>
-          )}
+          <ApiErrorAlert error={create.error} />
           <Button
             disabled={
               create.isPending || contexts.isPending || contexts.isError

@@ -89,9 +89,7 @@ export const UnlockStatusDialog = ({
             </MenuItem>
           ))}
         </TextField>
-        {unlock.isError && (
-          <ApiErrorAlert error={unlock.error} sx={{ mt: 2 }} />
-        )}
+        <ApiErrorAlert error={unlock.error} sx={{ mt: 2 }} />
       </DialogContent>
       <DialogActions>
         <Button disabled={unlock.isPending} onClick={onClose}>

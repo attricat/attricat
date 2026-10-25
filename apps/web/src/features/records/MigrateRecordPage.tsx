@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, Box, Skeleton, Stack, Typography } from '@mui/material';
+import { Box, Skeleton, Stack, Typography } from '@mui/material';
 import { ArrowLeftIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -29,8 +29,8 @@ import { recordQueryKeys } from './queryKeys';
 import { invalidateRecord } from './invalidateRecord';
 import { useRecordLabels } from './useRecordLabels';
 import { attributeValueKinds } from './valueTypes';
-import { errorMessage } from '../../api/errors';
 import { blueprintByCodeOptions } from './queryOptions';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
@@ -186,11 +186,7 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
           <Skeleton height={48} variant="rounded" />
         </Stack>
       )}
-      {preview.error && (
-        <Alert severity="error" sx={{ mt: 4 }}>
-          {errorMessage(preview.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={preview.error} sx={{ mt: 4 }} />
       {preview.data && (
         <RecordForm
           blueprint={preview.data.target}

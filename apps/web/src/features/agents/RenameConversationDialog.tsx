@@ -3,7 +3,6 @@ import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert,
   Box,
   Button,
   Dialog,
@@ -15,7 +14,7 @@ import {
 import { maximumTitleBytes } from './constants';
 import { updateConversationTitle } from './api';
 import { agentQueryKeys } from './queryKeys';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const RenameConversationDialog = ({
   conversationId,
@@ -92,11 +91,7 @@ export const RenameConversationDialog = ({
               />
             )}
           </form.Field>
-          {rename.error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {errorMessage(rename.error)}
-            </Alert>
-          )}
+          <ApiErrorAlert error={rename.error} sx={{ mt: 2 }} />
         </DialogContent>
         <DialogActions>
           <Button disabled={rename.isPending} onClick={onClose}>

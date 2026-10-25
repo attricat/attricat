@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, Button, Stack, Typography } from '@mui/material';
+import { Button, Stack, Typography } from '@mui/material';
 import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -18,8 +18,8 @@ import { ReusableAttributeGroupsTable } from './ReusableAttributeGroupsTable';
 import { ReusableAttributesTable } from './ReusableAttributesTable';
 import { ReusableAttributeIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
-import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const ReusableAttributesPage = () => {
   const { t } = useTranslation();
@@ -75,13 +75,10 @@ export const ReusableAttributesPage = () => {
           )
         }
       />
-      {(attributes.error || groups.error || publish.error) && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {errorMessage(attributes.error) ??
-            errorMessage(groups.error) ??
-            errorMessage(publish.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert
+        error={attributes.error ?? groups.error ?? publish.error}
+        sx={{ mt: 3 }}
+      />
       {attributes.isPending ? (
         <Typography sx={{ mt: 3 }}>
           {t('reusableAttributes.loading')}

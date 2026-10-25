@@ -46,13 +46,15 @@ export const ApiErrorAlert = ({
   action,
   sx,
 }: {
-  error: Error;
+  /** Nothing is shown while there is no error. */
+  error: Error | null | undefined;
   violations?: readonly CheckViolation[];
   /** Offered for errors other than check violations, such as a retry. */
   action?: ReactNode;
   sx?: SxProps<Theme>;
 }) => {
   const { t } = useTranslation();
+  if (!error) return null;
   const checks = checkViolationError(error);
   if (!checks)
     return (

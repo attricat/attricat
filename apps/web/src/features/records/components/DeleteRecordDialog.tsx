@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -11,7 +10,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { deleteRecord } from '../api';
 import { removeRecord } from '../invalidateRecord';
-import { errorMessage } from '../../../api/errors';
+import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 
 export const DeleteRecordDialog = ({
   recordId,
@@ -42,11 +41,7 @@ export const DeleteRecordDialog = ({
       <DialogTitle>{t('records.deleteRecord')}</DialogTitle>
       <DialogContent>
         <Typography>{t('records.deleteRecordConfirmation')}</Typography>
-        {deletion.isError && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {errorMessage(deletion.error)}
-          </Alert>
-        )}
+        <ApiErrorAlert error={deletion.error} sx={{ mt: 2 }} />
       </DialogContent>
       <DialogActions>
         <Button disabled={deletion.isPending} onClick={onClose}>

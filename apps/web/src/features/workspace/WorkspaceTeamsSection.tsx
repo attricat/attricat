@@ -34,7 +34,7 @@ import type { DirectoryUser, Team } from '../principals/schemas';
 import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
 import { EmptyState } from '../../components/EmptyState';
 import { TeamIcon } from '../../components/systemIcons';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type Editing = { team: Team | null } | null;
 /** The team keeps its name in the dialog while it fades out after closing. */
@@ -88,9 +88,7 @@ const TeamDialog = ({
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
-            {save.isError && (
-              <Alert severity="error">{errorMessage(save.error)}</Alert>
-            )}
+            <ApiErrorAlert error={save.error} />
             <form.Field name="name">
               {(field) => (
                 <TextField
@@ -194,12 +192,8 @@ export const WorkspaceTeamsSection = ({
       <Typography color="text.secondary" variant="body2">
         {t('workspace.teamsDescription')}
       </Typography>
-      {teams.isError && (
-        <Alert severity="error">{errorMessage(teams.error)}</Alert>
-      )}
-      {directory.isError && (
-        <Alert severity="error">{errorMessage(directory.error)}</Alert>
-      )}
+      <ApiErrorAlert error={teams.error} />
+      <ApiErrorAlert error={directory.error} />
       <Paper>
         {teams.isPending && <LinearProgress aria-label={t('app.loading')} />}
         <List>
@@ -277,11 +271,7 @@ export const WorkspaceTeamsSection = ({
           <DialogContentText>
             {t('workspace.deleteTeamConfirm', { team: deleting?.team.name })}
           </DialogContentText>
-          {remove.isError && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {errorMessage(remove.error)}
-            </Alert>
-          )}
+          <ApiErrorAlert error={remove.error} sx={{ mt: 2 }} />
         </DialogContent>
         <DialogActions>
           <Button disabled={remove.isPending} onClick={closeDelete}>

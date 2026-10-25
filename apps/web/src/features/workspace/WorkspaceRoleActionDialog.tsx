@@ -1,7 +1,6 @@
 import { useForm } from '@tanstack/react-form';
 import { useMutation } from '@tanstack/react-query';
 import {
-  Alert,
   Box,
   Button,
   Dialog,
@@ -19,7 +18,7 @@ import {
   updateRole,
   type WorkspaceRole,
 } from './api';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export type RoleDialogAction =
   | { role: WorkspaceRole; type: 'rename' }
@@ -162,11 +161,7 @@ export const WorkspaceRoleActionDialog = ({
               )}
             </form.Field>
           )}
-          {mutation.isError && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {errorMessage(mutation.error)}
-            </Alert>
-          )}
+          <ApiErrorAlert error={mutation.error} sx={{ mt: 2 }} />
         </DialogContent>
         <DialogActions>
           <Button disabled={mutation.isPending} onClick={onClose}>

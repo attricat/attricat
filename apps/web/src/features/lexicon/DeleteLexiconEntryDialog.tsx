@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
 import {
-  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -12,7 +11,7 @@ import type { StoredLexiconEntry } from './schemas';
 import { useLexiconMutations } from './useLexiconMutations';
 import { LEXICON_MANAGEMENT_NAMESPACES } from './constants';
 import { pluralCategoryLabel } from './languages';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const DeleteLexiconEntryDialog = ({
   entry,
@@ -39,11 +38,7 @@ export const DeleteLexiconEntryDialog = ({
             category: pluralCategoryLabel(t, entry.plural_category),
           })}
         </DialogContentText>
-        {remove.error && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {errorMessage(remove.error)}
-          </Alert>
-        )}
+        <ApiErrorAlert error={remove.error} sx={{ mt: 2 }} />
       </DialogContent>
       <DialogActions>
         <Button disabled={remove.isPending} onClick={onClose}>

@@ -25,6 +25,7 @@ import {
   RECORD_DRAWER_WIDTH,
 } from '../constants';
 import { errorMessage } from '../../../api/errors';
+import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 
 export const RecordAgentDrawer = ({
   recordId,
@@ -156,9 +157,7 @@ export const RecordAgentDrawer = ({
             {errorMessage(conversations.error)}
           </Alert>
         )}
-        {create.error && (
-          <Alert severity="error">{errorMessage(create.error)}</Alert>
-        )}
+        <ApiErrorAlert error={create.error} />
         {open && conversationId ? (
           <ConversationPanel
             key={conversationId}

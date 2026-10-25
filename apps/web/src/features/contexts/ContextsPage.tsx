@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert,
   Button,
   List,
   ListItem,
@@ -19,8 +18,8 @@ import { contextQueryKeys } from './queryKeys';
 import { EmptyState } from '../../components/EmptyState';
 import { ContextIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
-import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const ContextsPage = () => {
   const { t } = useTranslation();
@@ -53,11 +52,7 @@ export const ContextsPage = () => {
       {contexts.isPending && (
         <Typography sx={{ mt: 3 }}>{t('contexts.loadingContexts')}</Typography>
       )}
-      {contexts.isError && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {errorMessage(contexts.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={contexts.error} sx={{ mt: 3 }} />
       {contexts.data && (
         <Paper sx={{ mt: 3 }}>
           <List disablePadding>

@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ArrowLeftIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Box, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { RouterButton } from '../../components/RouterLink';
 import { PageHeader } from '../../components/PageHeader';
@@ -14,7 +14,7 @@ import { recordFormOptions } from './queryOptions';
 import type { RecordAuditChange } from './api';
 import { recordQueryKeys } from './queryKeys';
 import { BlueprintLink } from '../blueprints/BlueprintLink';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type EventChanges = [RecordAuditChange, ...RecordAuditChange[]];
 
@@ -63,11 +63,7 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
       {changes.isPending && (
         <Typography sx={{ py: 3 }}>{t('records.loadingChanges')}</Typography>
       )}
-      {changes.isError && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {errorMessage(changes.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={changes.error} sx={{ mt: 3 }} />
       {changes.data && (
         <Box sx={{ mt: 3 }}>
           {groupChangesByEvent(changeItems).map(([eventId, eventChanges]) => (
@@ -77,9 +73,7 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
             <Typography>{t('records.noRecordedChanges')}</Typography>
           )}
           {changes.isFetchNextPageError && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {errorMessage(changes.error)}
-            </Alert>
+            <ApiErrorAlert error={changes.error} sx={{ mb: 2 }} />
           )}
           {changes.hasNextPage && (
             <LoadMoreButton

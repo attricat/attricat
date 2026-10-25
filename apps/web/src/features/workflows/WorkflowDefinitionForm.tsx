@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { errorMessage } from '../../api/errors';
 import { TomlEditor } from '../../components/TomlEditor';
 import { draftEditors } from '../drafts/constants';
 import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
@@ -20,6 +19,7 @@ import {
   workflowRoutes,
 } from './constants';
 import { workflowQueryKeys } from './queryKeys';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 /** Edits a workflow definition starting from its loaded source revision. */
 export const WorkflowDefinitionForm = ({
@@ -115,11 +115,7 @@ export const WorkflowDefinitionForm = ({
             />
           )}
         </form.Field>
-        {(validate.error || save.error) && (
-          <Alert severity="error">
-            {errorMessage(validate.error ?? save.error)}
-          </Alert>
-        )}
+        <ApiErrorAlert error={validate.error ?? save.error} />
         {validate.data && (
           <Alert severity="success">
             {t('workflows.validationSucceeded', {

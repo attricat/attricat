@@ -13,8 +13,8 @@ import { useTranslation } from 'react-i18next';
 import { JsonBlock } from '../../components/JsonValue';
 import { previewExport } from './api';
 import type { ExportDestination } from './schemas';
-import { errorMessage } from '../../api/errors';
 import { extensionExportQueryKeys } from './queryKeys';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 /**
  * The payload a destination would receive for one record, with the issues
@@ -58,9 +58,7 @@ export const ExportPreviewDialog = ({
         {preview.isPending && (
           <CircularProgress aria-label={t('extensionExports.previewLoading')} />
         )}
-        {preview.error && (
-          <Alert severity="error">{errorMessage(preview.error)}</Alert>
-        )}
+        <ApiErrorAlert error={preview.error} />
         {preview.data && (
           <Stack spacing={2}>
             {issues.length ? (

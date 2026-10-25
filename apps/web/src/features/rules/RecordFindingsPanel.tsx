@@ -318,10 +318,8 @@ export const RecordFindingsPanel = ({
           void runs.refetch();
         }}
       />
-      {recheck.error && <ApiErrorAlert error={recheck.error} sx={{ mb: 1 }} />}
-      {acknowledge.error && (
-        <ApiErrorAlert error={acknowledge.error} sx={{ mb: 1 }} />
-      )}
+      <ApiErrorAlert error={recheck.error} sx={{ mb: 1 }} />
+      <ApiErrorAlert error={acknowledge.error} sx={{ mb: 1 }} />
       {findings.isPending && (
         <CircularProgress
           aria-label={t('rules.recordFindings.loading')}

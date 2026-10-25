@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Alert,
   Chip,
   FormControlLabel,
   Paper,
@@ -30,8 +29,8 @@ import { ChannelChecksEditor } from './ChannelChecksEditor';
 import { EXPORT_TABLE_COLUMN_COUNT } from './constants';
 import { exportQueryKeys } from './queryKeys';
 import { ExportIcon } from '../../components/systemIcons';
-import { errorMessage } from '../../api/errors';
 import { capabilities, accessTargetKinds } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const ExportsPage = () => {
   const { t } = useTranslation();
@@ -90,13 +89,10 @@ export const ExportsPage = () => {
       <Typography color="text.secondary" sx={{ mt: 1 }}>
         {t('exports.description')}
       </Typography>
-      {(contexts.isError || channels.isError || updateChannel.isError) && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {errorMessage(contexts.error) ??
-            errorMessage(channels.error) ??
-            errorMessage(updateChannel.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert
+        error={contexts.error ?? channels.error ?? updateChannel.error}
+        sx={{ mt: 3 }}
+      />
       {(contexts.isPending || channels.isPending) && (
         <Typography sx={{ mt: 3 }}>{t('exports.loading')}</Typography>
       )}

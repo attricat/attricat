@@ -1,4 +1,4 @@
-import { Alert, Box, Button, Stack, Typography } from '@mui/material';
+import { Box, Button, Stack, Typography } from '@mui/material';
 import { ArrowRightIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -14,7 +14,7 @@ import { toggledSort } from './explorerSearchState';
 import type { OpenRecordPanel } from './ExplorerTableCells';
 import type { ExplorerSort } from './search';
 import { useExplorerSelection } from './useExplorerSelection';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type Props = {
   blueprint: Blueprint;
@@ -76,7 +76,7 @@ export const ExplorerOverviewSection = ({
         </Button>
       </Stack>
       {error ? (
-        <Alert severity="error">{errorMessage(error)}</Alert>
+        <ApiErrorAlert error={error} />
       ) : (
         page && (
           <ExplorerResultsTable

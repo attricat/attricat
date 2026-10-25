@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Box, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
@@ -16,7 +16,7 @@ import { AuditFilters } from './AuditFilters';
 import { auditPageSize } from './constants';
 import { auditQueryKeys } from './queryKeys';
 import { AuditLogIcon } from '../../components/systemIcons';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const AuditLogPage = () => {
   const { t } = useTranslation();
@@ -54,9 +54,7 @@ export const AuditLogPage = () => {
         onApply={applyFilters}
         onChange={updateDraft}
       />
-      {events.isError && (
-        <Alert severity="error">{errorMessage(events.error)}</Alert>
-      )}
+      <ApiErrorAlert error={events.error} />
       <AuditEventsTable
         events={events.data?.events}
         isLoading={events.isLoading}

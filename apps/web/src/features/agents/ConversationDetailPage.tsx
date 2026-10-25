@@ -12,7 +12,7 @@ import { ConversationPanel } from './ConversationPanel';
 import { isTitlePending } from './titlePolling';
 import { RenameConversationDialog } from './RenameConversationDialog';
 import { AgentIcon } from '../../components/systemIcons';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type ConversationDetailPageProps = { conversationId: string };
 
@@ -62,9 +62,7 @@ export const ConversationDetailPage = ({
             {t('agents.readOnlyNotice')}
           </Alert>
         )}
-        {conversation.error && (
-          <Alert severity="error">{errorMessage(conversation.error)}</Alert>
-        )}
+        <ApiErrorAlert error={conversation.error} />
         {renameOpen && conversation.data && (
           <RenameConversationDialog
             key={conversationId}

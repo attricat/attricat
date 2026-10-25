@@ -1,4 +1,4 @@
-import { Alert, Box } from '@mui/material';
+import { Box } from '@mui/material';
 import { useMemo, useState } from 'react';
 import { useCan } from '../auth/useCan';
 import type { RecordItem } from '../records/api';
@@ -10,8 +10,8 @@ import type { OpenRecordPanel } from './ExplorerTableCells';
 import type { ExplorerSearch } from './search';
 import type { ExplorerData } from './useExplorerData';
 import { useExplorerSelection } from './useExplorerSelection';
-import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type Props = {
   data: ExplorerData;
@@ -83,11 +83,7 @@ export const ExplorerResults = ({
 
   return (
     <>
-      {results.isError && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {errorMessage(results.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={results.error} sx={{ mt: 3 }} />
       {results.data && (
         <Box sx={{ mt: 3 }}>
           {!search.allVersions &&

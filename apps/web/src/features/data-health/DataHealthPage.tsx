@@ -33,7 +33,7 @@ import {
   StorageSection,
 } from './DataHealthSections';
 import type { DataHealthSearch } from './schemas';
-import { SectionError } from './SectionError';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { DataHealthIcon } from '../../components/systemIcons';
 import { ExportHealthCard } from '../extension-exports/ExportHealthCard';
@@ -108,7 +108,7 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
         icon={DataHealthIcon}
         title={t('dataHealth.title')}
       />
-      <SectionError error={summary.error} />
+      <ApiErrorAlert error={summary.error} />
       {summary.data && (
         <>
           <DataHealthSummaryCards

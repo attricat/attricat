@@ -42,8 +42,8 @@ import {
 import { ExportStatusChip } from './ExportStatusChip';
 import { extensionExportQueryKeys } from './queryKeys';
 import type { ExportStatusCount, ManifestExports } from './schemas';
-import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 const allConnections = '';
 
@@ -154,10 +154,8 @@ export const ExtensionExportStatusSection = ({
           destinations: exports.map((item) => item.title).join(', '),
         })}
       </Typography>
-      {page.error && <Alert severity="error">{errorMessage(page.error)}</Alert>}
-      {retry.error && (
-        <Alert severity="error">{errorMessage(retry.error)}</Alert>
-      )}
+      <ApiErrorAlert error={page.error} />
+      <ApiErrorAlert error={retry.error} />
       {!!retry.data?.job_errors.length && (
         <Alert severity="warning">
           {t('extensionExports.retryJobErrors', {

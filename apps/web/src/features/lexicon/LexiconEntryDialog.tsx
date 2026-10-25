@@ -2,7 +2,6 @@ import { useRef } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert,
   Box,
   Button,
   Dialog,
@@ -31,7 +30,7 @@ import {
 } from './languages';
 import { normalizeLexiconTerm } from './references';
 import { useLexiconMutations } from './useLexiconMutations';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 /**
  * Adds or edits one translation. In edit mode the identity (key, context,
@@ -222,11 +221,7 @@ export const LexiconEntryDialog = ({
               )}
             </form.Field>
           </Stack>
-          {save.error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {errorMessage(save.error)}
-            </Alert>
-          )}
+          <ApiErrorAlert error={save.error} sx={{ mt: 2 }} />
         </DialogContent>
         <DialogActions>
           <Button disabled={save.isPending} onClick={onClose}>

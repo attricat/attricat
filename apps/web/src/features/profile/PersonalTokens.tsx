@@ -26,7 +26,7 @@ import { listTokens, type PersonalToken } from './api';
 import { tokenSkeletonCount, tokenSkeletonHeight } from './constants';
 import { profileQueryKeys } from './queryKeys';
 import { RevokeTokenDialog } from './RevokeTokenDialog';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type TokenStatus = 'active' | 'expired' | 'revoked';
 
@@ -209,9 +209,7 @@ export const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
         onClose={() => setRevoking(undefined)}
         token={revoking}
       />
-      {tokens.isError && (
-        <Alert severity="error">{errorMessage(tokens.error)}</Alert>
-      )}
+      <ApiErrorAlert error={tokens.error} />
       {tokens.isPending && (
         <Box sx={tokenGridSx}>
           {Array.from({ length: tokenSkeletonCount }, (_, index) => (

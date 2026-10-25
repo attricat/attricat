@@ -3,7 +3,6 @@ import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert,
   Box,
   Button,
   Dialog,
@@ -19,7 +18,7 @@ import {
   displayNameMaxLength,
   displayNameMinLength,
 } from './constants';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const ChangeDisplayNameDialog = ({
   initialName,
@@ -103,11 +102,7 @@ export const ChangeDisplayNameDialog = ({
               />
             )}
           </form.Field>
-          {save.error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {errorMessage(save.error)}
-            </Alert>
-          )}
+          <ApiErrorAlert error={save.error} sx={{ mt: 2 }} />
         </DialogContent>
         <DialogActions>
           <Button disabled={save.isPending} onClick={onClose}>

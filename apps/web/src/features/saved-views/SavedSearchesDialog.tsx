@@ -1,5 +1,4 @@
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -31,8 +30,8 @@ import {
 } from './constants';
 import { savedViewQueryKeys } from './queryKeys';
 import type { SavedSearchActions } from './useSavedSearchActions';
-import { errorMessage } from '../../api/errors';
 import { useDebouncedValue } from '../../components/useDebouncedValue';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const SavedSearchesDialog = ({
   actions,
@@ -86,9 +85,7 @@ export const SavedSearchesDialog = ({
         {list.isFetching && list.isPlaceholderData && (
           <LinearProgress sx={{ mb: 1 }} />
         )}
-        {list.isError && (
-          <Alert severity="error">{errorMessage(list.error)}</Alert>
-        )}
+        <ApiErrorAlert error={list.error} />
         {list.isSuccess && views.length === 0 && (
           <Typography color="text.secondary" variant="body2">
             {searchText

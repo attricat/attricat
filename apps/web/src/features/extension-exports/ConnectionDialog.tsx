@@ -1,5 +1,4 @@
 import {
-  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -15,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { createConnection, type NewConnection } from './api';
 import type { ConnectionGrantType } from './constants';
 import type { ManifestExports } from './schemas';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type ConnectionKind = NonNullable<
   ManifestExports['server']
@@ -120,9 +119,7 @@ export const ConnectionDialog = ({
             submit();
           }}
         >
-          {create.error && (
-            <Alert severity="error">{errorMessage(create.error)}</Alert>
-          )}
+          <ApiErrorAlert error={create.error} />
           <TextField
             label={t('extensionExports.connectionKind')}
             select

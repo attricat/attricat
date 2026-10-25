@@ -1,5 +1,4 @@
 import {
-  Alert,
   Box,
   MenuItem,
   Paper,
@@ -11,7 +10,7 @@ import { lazy, Suspense, type ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Blueprint } from './schemas';
 import type { BlueprintRevisionComparison as Comparison } from './useBlueprintRevisionComparison';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 const TomlDiffEditor = lazy(() =>
   import('./TomlDiffEditor').then(({ TomlDiffEditor }) => ({
@@ -88,11 +87,7 @@ export const BlueprintRevisionComparison = ({
           value={comparison.rightVersion}
         />
       </Stack>
-      {(left.isError || right.isError) && (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          {errorMessage(left.error) ?? errorMessage(right.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={left.error ?? right.error} sx={{ mt: 2 }} />
       <Box sx={{ mt: 3 }}>
         <Suspense
           fallback={<Typography>{t('blueprints.loadingEditor')}</Typography>}

@@ -8,9 +8,9 @@ import { getWorkflowRevision } from './api';
 import { workflowQueryKeys } from './queryKeys';
 import { WorkflowDefinitionForm } from './WorkflowDefinitionForm';
 import { WorkflowIcon } from '../../components/systemIcons';
-import { errorMessage } from '../../api/errors';
 import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const WorkflowEditorPage = ({
   workflowId,
@@ -61,11 +61,7 @@ export const WorkflowEditorPage = ({
           workflowId ? t('workflows.newRevision') : t('workflows.newWorkflow')
         }
       />
-      {source.isError && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {errorMessage(source.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={source.error} sx={{ mt: 3 }} />
       <WorkflowDefinitionForm
         key={`${workflowId}:${sourceVersion}`}
         readOnly={source.isError}

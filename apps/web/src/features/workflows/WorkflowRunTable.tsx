@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -17,7 +16,7 @@ import { runTableEmptyColSpan, workflowRunStatus } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import { workflowQueryKeys } from './queryKeys';
 import type { WorkflowRun } from './schemas';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 const runStatusColor = (status: WorkflowRun['status']) => {
   if (status === workflowRunStatus.deadLetter) return 'error';
@@ -101,11 +100,7 @@ export const WorkflowRunTable = ({
           </TableBody>
         </Table>
       </Box>
-      {replay.isError && (
-        <Alert severity="error" sx={{ m: 2 }}>
-          {errorMessage(replay.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={replay.error} sx={{ m: 2 }} />
     </Paper>
   );
 };

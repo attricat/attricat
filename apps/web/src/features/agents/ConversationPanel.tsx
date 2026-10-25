@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box } from '@mui/material';
-import { errorMessage } from '../../api/errors';
 import { decideApproval } from './api';
 import { smartFillRecordForm } from '../records/api';
 import { thinkingRunStatuses } from './constants';
@@ -15,6 +14,7 @@ import {
   invalidateConversation,
 } from './queryOptions';
 import { useConversationLiveUpdates } from './useConversationLiveUpdates';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export type DraftContext = {
   recordId: string;
@@ -68,11 +68,7 @@ export const ConversationPanel = ({
         minHeight: 0,
       }}
     >
-      {(messages.error || runs.error || approvals.error) && (
-        <Alert severity="error">
-          {errorMessage(messages.error ?? runs.error ?? approvals.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={messages.error ?? runs.error ?? approvals.error} />
       {live.error && <Alert severity="info">{live.error}</Alert>}
       <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
         <ConversationTranscript

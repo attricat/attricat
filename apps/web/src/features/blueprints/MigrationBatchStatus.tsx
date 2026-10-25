@@ -1,6 +1,5 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import {
-  Alert,
   Button,
   Chip,
   LinearProgress,
@@ -24,7 +23,7 @@ import {
 } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import type { BlueprintMigrationBatchStatus as MigrationBatch } from './schemas';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 const statusColor = (status: MigrationBatch['status']) => {
   if (status === migrationBatchStatuses.completed) return 'success';
@@ -88,11 +87,7 @@ export const MigrationBatchStatus = ({
             : t('blueprints.refreshMigrations')}
         </Button>
       </Stack>
-      {batches.isError && (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          {errorMessage(batches.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={batches.error} sx={{ mt: 2 }} />
       {batches.isPending && (
         <Typography sx={{ mt: 2 }}>
           {t('blueprints.loadingMigrations')}

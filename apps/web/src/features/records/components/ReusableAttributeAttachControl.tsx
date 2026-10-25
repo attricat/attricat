@@ -27,9 +27,7 @@ export const ReusableAttributeAttachControl = ({
   });
   return (
     <>
-      {reusable.error && (
-        <ApiErrorAlert error={reusable.error} sx={{ mb: 2 }} />
-      )}
+      <ApiErrorAlert error={reusable.error} sx={{ mb: 2 }} />
       <Button
         disabled={disabled}
         onClick={() => {

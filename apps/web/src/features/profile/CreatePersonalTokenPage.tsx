@@ -40,6 +40,7 @@ import { profileQueryKeys } from './queryKeys';
 import { useInitialFocus } from '../../components/initialFocus';
 import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 const permissionGroup = (code: string) => code.split('.')[0] ?? code;
 
@@ -163,9 +164,7 @@ export const CreatePersonalTokenPage = () => {
           />
         </Stack>
         {error && <Alert severity="error">{error}</Alert>}
-        {permissions.isError && (
-          <Alert severity="error">{errorMessage(permissions.error)}</Alert>
-        )}
+        <ApiErrorAlert error={permissions.error} />
         <ProfileSection
           description={t('profile.tokenDetailsDescription')}
           icon={PersonalTokenIcon}

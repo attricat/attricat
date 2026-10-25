@@ -22,7 +22,11 @@ import {
   publishWorkflowRevision,
   runWorkflowNow,
 } from './api';
-import { workflowDetailTab, type WorkflowDetailTab, workflowStatus } from './constants';
+import {
+  workflowDetailTab,
+  type WorkflowDetailTab,
+  workflowStatus,
+} from './constants';
 import { workflowQueryKeys } from './queryKeys';
 import { WorkflowActions } from './WorkflowActions';
 import { WorkflowComparePanel } from './WorkflowComparePanel';
@@ -33,6 +37,7 @@ import { WorkflowIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const { t } = useTranslation();
@@ -111,7 +116,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   if (revisions.isError)
     return (
       <PageContainer>
-        <Alert severity="error">{errorMessage(revisions.error)}</Alert>
+        <ApiErrorAlert error={revisions.error} />
       </PageContainer>
     );
   if (!current)
@@ -164,11 +169,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
           {t('workflows.readOnly')}
         </Alert>
       )}
-      {mutationError && (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          {errorMessage(mutationError)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={mutationError} sx={{ mt: 2 }} />
       {runs.isError && (
         <Alert severity="warning" sx={{ mt: 2 }}>
           {t('workflows.runsUnavailable', {

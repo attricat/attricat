@@ -27,8 +27,8 @@ import {
   profileSkeletonWidth,
   profileValueSkeletonWidth,
 } from './constants';
-import { errorMessage } from '../../api/errors';
 import { sessionOptions } from '../auth/queryOptions';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 const AccountDetail = ({
   label,
@@ -71,9 +71,7 @@ export const ProfilePage = () => {
     THUMBNAIL_POLLING_STATUSES.has(avatar?.status ?? '');
   return (
     <Stack spacing={6}>
-      {session.isError && (
-        <Alert severity="error">{errorMessage(session.error)}</Alert>
-      )}
+      <ApiErrorAlert error={session.error} />
       <ProfileSection
         description={t('profile.accountDescription')}
         icon={ProfileIcon}

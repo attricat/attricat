@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -11,7 +10,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { duplicateRecord, type AttricatRecord } from '../api';
 import { invalidateRecordSearches } from '../invalidateRecord';
-import { errorMessage } from '../../../api/errors';
+import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 
 /** Confirms copying a record, then reports the copy. */
 export const DuplicateRecordDialog = ({
@@ -43,11 +42,7 @@ export const DuplicateRecordDialog = ({
       <DialogTitle>{t('records.duplicateRecord')}</DialogTitle>
       <DialogContent>
         <Typography>{t('records.duplicateRecordConfirmation')}</Typography>
-        {duplication.isError && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {errorMessage(duplication.error)}
-          </Alert>
-        )}
+        <ApiErrorAlert error={duplication.error} sx={{ mt: 2 }} />
       </DialogContent>
       <DialogActions>
         <Button disabled={duplication.isPending} onClick={onClose}>

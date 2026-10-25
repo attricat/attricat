@@ -4,7 +4,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert,
   Box,
   Button,
   Dialog,
@@ -26,7 +25,7 @@ import {
   maximumAgentConversationBlueprintNameLength,
   maximumAgentInstructionsLength,
 } from './constants';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const SendSelectedToAgentDialog = ({
   blueprintName,
@@ -136,9 +135,7 @@ export const SendSelectedToAgentDialog = ({
               />
             )}
           </form.Field>
-          {start.isError && (
-            <Alert severity="error">{errorMessage(start.error)}</Alert>
-          )}
+          <ApiErrorAlert error={start.error} />
         </Stack>
       </DialogContent>
       <DialogActions>

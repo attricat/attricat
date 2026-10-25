@@ -2,7 +2,6 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert,
   Autocomplete,
   Box,
   Button,
@@ -40,9 +39,9 @@ import {
 import { downloadLexiconFile } from './lexiconFile';
 import { lexiconQueryKeys } from './queryKeys';
 import type { StoredLexiconEntry } from './schemas';
-import { errorMessage } from '../../api/errors';
 import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type DialogState =
   | { kind: 'add'; draft: LexiconEntryDraft }
@@ -173,16 +172,8 @@ export const LexiconPage = ({
           value={filter}
         />
       </Stack>
-      {exportFile.error && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {errorMessage(exportFile.error)}
-        </Alert>
-      )}
-      {report.isError && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {errorMessage(report.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={exportFile.error} sx={{ mt: 3 }} />
+      <ApiErrorAlert error={report.error} sx={{ mt: 3 }} />
       {coverage && (
         <LexiconCoverageSection
           canEdit={canEdit}
@@ -194,11 +185,7 @@ export const LexiconPage = ({
       {entries.isPending && (
         <Typography sx={{ mt: 3 }}>{t('lexicon.loading')}</Typography>
       )}
-      {entries.isError && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {errorMessage(entries.error)}
-        </Alert>
-      )}
+      <ApiErrorAlert error={entries.error} sx={{ mt: 3 }} />
       {entries.data && (
         <Paper component="section" sx={{ mt: 3 }}>
           <Box sx={{ borderBottom: 1, borderColor: 'divider', p: 2 }}>

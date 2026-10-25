@@ -27,7 +27,7 @@ import {
   maxBulkEditMaxRecords,
 } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 const AgentSettingsForm = ({ settings }: { settings: AgentSettings }) => {
   const { t } = useTranslation();
@@ -146,9 +146,7 @@ const AgentSettingsForm = ({ settings }: { settings: AgentSettings }) => {
         <Typography role="status" variant="body2">
           {notice}
         </Typography>
-        {save.isError && (
-          <Alert severity="error">{errorMessage(save.error)}</Alert>
-        )}
+        <ApiErrorAlert error={save.error} />
       </Stack>
     </Box>
   );
@@ -180,9 +178,7 @@ export const WorkspaceAgentSection = ({
       {settings.isPending && (
         <CircularProgress aria-label={t('workspace.loadingAgentSettings')} />
       )}
-      {settings.isError && (
-        <Alert severity="error">{errorMessage(settings.error)}</Alert>
-      )}
+      <ApiErrorAlert error={settings.error} />
       {settings.data && <AgentSettingsForm settings={settings.data} />}
     </Stack>
   );
