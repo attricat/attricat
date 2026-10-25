@@ -225,11 +225,7 @@ pub enum ViewDefinition {
     },
     /// Explorer table columns.
     Table {
-        /// Legacy scalar-field shorthand. New definitions use `columns`.
-        #[serde(default)]
-        #[schemars(extend("x-attricat-reference" = "attribute"))]
-        fields: Option<Vec<String>>,
-        /// Table columns. Cannot be combined with `fields`.
+        /// Table columns.
         #[serde(default)]
         columns: Option<Vec<TableColumn>>,
         /// Registered component that renders this block.

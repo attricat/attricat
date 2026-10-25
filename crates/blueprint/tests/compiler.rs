@@ -563,7 +563,7 @@ children = [
 
 [views.index]
 type = "table"
-fields = ["title"]
+columns = [{ field = "title" }]
 
 [[attributes]]
 code = "title"
@@ -630,7 +630,7 @@ fields = ["title"]
 
 [views.index]
 type = "table"
-fields = ["categories"]
+columns = [{ field = "categories" }]
 
 [[attributes]]
 code = "title"
@@ -643,8 +643,8 @@ value_type = "relationship"
     assert!(compile(parse(source).unwrap(), &[], source).is_err());
 
     let invalid_component_id = source.replace(
-        "fields = [\"categories\"]",
-        "fields = [\"title\"]\ncomponent = { id = \"attricat.bad-id\", version = 1 }",
+        "columns = [{ field = \"categories\" }]",
+        "columns = [{ field = \"title\" }]\ncomponent = { id = \"attricat.bad-id\", version = 1 }",
     );
     assert!(
         compile(
@@ -656,8 +656,8 @@ value_type = "relationship"
     );
 
     let invalid_component_version = source.replace(
-        "fields = [\"categories\"]",
-        "fields = [\"title\"]\ncomponent = { id = \"attricat.table\", version = 0 }",
+        "columns = [{ field = \"categories\" }]",
+        "columns = [{ field = \"title\" }]\ncomponent = { id = \"attricat.table\", version = 0 }",
     );
     assert!(
         compile(
@@ -669,7 +669,7 @@ value_type = "relationship"
     );
 
     let invalid_relationship_leaf = source.replace(
-        "type = \"table\"\nfields = [\"categories\"]",
+        "type = \"table\"\ncolumns = [{ field = \"categories\" }]",
         "type = \"stack\"\nchildren = [{ type = \"relationship_list\", field = \"title\" }]",
     );
     assert!(
@@ -1089,7 +1089,7 @@ fields = ["title"]
 
 [views.table]
 type = "table"
-fields = []
+columns = []
 
 [[attributes]]
 code = "title"
@@ -1346,7 +1346,7 @@ target_blueprint = "category"
 }
 
 #[test]
-fn table_columns_preserve_legacy_fields_and_reject_invalid_paths() {
+fn table_columns_resolve_relationship_paths_and_reject_invalid_ones() {
     let source = r#"
 format_version = 1
 code = "product"
@@ -1400,14 +1400,8 @@ cardinality = "one"
         )
         .is_err()
     );
-    assert!(
-        compile(
-            parse(&source.replace("columns = [", "fields = [\"title\"]\ncolumns = [")).unwrap(),
-            &[],
-            source
-        )
-        .is_err()
-    );
+    // The former `fields` shorthand is no longer part of the table view.
+    assert!(parse(&source.replace("columns = [", "fields = [\"title\"]\ncolumns = [")).is_err());
     assert!(parse(&source.replace("cardinality = \"one\"", "cardinality = \"invalid\"")).is_err());
     // Modern column tables must validate their table-level component too.
     let invalid_table_component = source.replace(

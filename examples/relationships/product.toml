@@ -75,4 +75,4 @@ children = [
 
 [views.table]
 type = "table"
-fields = ["title", "price", "stock_on_hand", "available"]
+columns = [{ field = "title" }, { field = "price" }, { field = "stock_on_hand" }, { field = "available" }]

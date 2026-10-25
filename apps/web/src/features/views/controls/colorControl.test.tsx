@@ -141,7 +141,6 @@ describe('color components', () => {
           },
           table: {
             type: 'table',
-            fields: [],
             columns: [{ field: 'hex', label: 'Color', renderer: display }],
           },
         }}

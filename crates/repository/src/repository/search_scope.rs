@@ -589,29 +589,11 @@ impl AttricatRepository {
 
 /// The scalar table columns a page hydrates, by attribute code.
 pub fn table_value_paths(blueprint: &BlueprintWithAttributes) -> HashMap<String, String> {
-    let mut paths: HashMap<_, _> = blueprint
+    blueprint
         .table_path_attributes
         .iter()
         .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
-        .collect();
-    if let Some(fields) = blueprint
-        .blueprint
-        .views
-        .get("table")
-        .and_then(|table| table.get("fields"))
-        .and_then(serde_json::Value::as_array)
-    {
-        for field in fields.iter().filter_map(serde_json::Value::as_str) {
-            if let Some(attribute) = blueprint
-                .attributes
-                .iter()
-                .find(|attribute| attribute.code == field && attribute.value_type != "relationship")
-            {
-                paths.insert(attribute.code.clone(), attribute.value_type.clone());
-            }
-        }
-    }
-    paths
+        .collect()
 }
 
 /// The direct relationships table columns traverse, with their target

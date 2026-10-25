@@ -19,7 +19,7 @@ test('previews blueprint views and inspects revision metadata', async ({
       recordSchema:
         '{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}',
       views:
-        '[views.detail]\ntype = "stack"\nchildren = [{ type = "heading", text = "Preview detail" }, { type = "field", field = "title" }]\n\n[views.table]\ntype = "table"\nfields = ["title"]',
+        '[views.detail]\ntype = "stack"\nchildren = [{ type = "heading", text = "Preview detail" }, { type = "field", field = "title" }]\n\n[views.table]\ntype = "table"\ncolumns = [{ field = "title" }]',
     },
   );
 

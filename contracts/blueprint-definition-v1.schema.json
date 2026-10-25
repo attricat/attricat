@@ -1201,7 +1201,7 @@
           "properties": {
             "columns": {
               "default": null,
-              "description": "Table columns. Cannot be combined with `fields`.",
+              "description": "Table columns.",
               "items": {
                 "$ref": "#/$defs/TableColumn"
               },
@@ -1221,18 +1221,6 @@
               ],
               "default": null,
               "description": "Registered component that renders this block."
-            },
-            "fields": {
-              "default": null,
-              "description": "Legacy scalar-field shorthand. New definitions use `columns`.",
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array",
-                "null"
-              ],
-              "x-attricat-reference": "attribute"
             },
             "type": {
               "const": "table",

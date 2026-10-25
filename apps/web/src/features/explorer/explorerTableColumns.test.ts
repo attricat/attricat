@@ -28,11 +28,11 @@ const blueprintWithTable = (table: unknown) =>
   }) as unknown as BlueprintWithAttributes;
 
 describe('buildExplorerTableColumns', () => {
-  it('labels legacy field columns with attribute names', () => {
+  it('labels unlabelled columns with attribute names', () => {
     const columns = buildExplorerTableColumns(
       blueprintWithTable({
         type: 'table',
-        fields: ['product_family', 'unit_price'],
+        columns: [{ field: 'product_family' }, { field: 'unit_price' }],
       }),
       true,
     );

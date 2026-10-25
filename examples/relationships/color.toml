@@ -22,4 +22,4 @@ children = [
 
 [views.table]
 type = "table"
-fields = ["name", "hex"]
+columns = [{ field = "name" }, { field = "hex" }]

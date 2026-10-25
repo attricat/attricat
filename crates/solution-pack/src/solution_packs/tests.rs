@@ -2046,7 +2046,7 @@ value_type = "string"
             br#"
 [views.table]
 type = "table"
-fields = ["name"]
+columns = [{ field = "name" }]
 component = { id = "INVALID", version = 1 }
 "#
             .iter()

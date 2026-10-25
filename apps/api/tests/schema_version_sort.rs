@@ -15,7 +15,7 @@ type = "dropdown_option"
 fields = ["title"]
 [views.table]
 type = "table"
-fields = ["title"]
+columns = [{ field = "title" }]
 [[attributes]]
 code = "title"
 value_type = "string""#;

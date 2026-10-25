@@ -23,4 +23,4 @@ children = [
 
 [views.table]
 type = "table"
-fields = ["name", "slug"]
+columns = [{ field = "name" }, { field = "slug" }]

@@ -46,41 +46,14 @@ pub(crate) fn validate_view(
                 validate_view_field(view, field, attributes, false)?;
             }
         }
-        ViewDefinition::Table {
-            fields,
-            columns,
-            component,
-        } => {
-            let Some(fields) = fields else {
-                if columns.is_none() {
-                    return Err(BlueprintError::EmptyTableColumns);
-                }
-                // Table components are still part of the view contract when
-                // modern `columns` are used. Validate their identity,
-                // placement, and capability before resolving column paths.
-                validate_component(component.as_ref(), view, "table", None)?;
-                validate_table_columns(
-                    columns.as_deref().unwrap_or_default(),
-                    attributes,
-                    component.as_ref(),
-                )?;
-                return Ok(());
-            };
-            if columns.is_some() {
-                return Err(BlueprintError::TableFieldsAndColumns);
-            }
-            if fields.is_empty() {
+        ViewDefinition::Table { columns, component } => {
+            let Some(columns) = columns else {
                 return Err(BlueprintError::EmptyTableColumns);
-            }
-            for field in fields {
-                let attribute = validate_view_field(view, field, attributes, false)?;
-                validate_component(
-                    component.as_ref(),
-                    view,
-                    "table",
-                    Some(&attribute.value_type),
-                )?;
-            }
+            };
+            // Validate the table component's identity, placement and
+            // capability before resolving column paths.
+            validate_component(component.as_ref(), view, "table", None)?;
+            validate_table_columns(columns, attributes, component.as_ref())?;
         }
         ViewDefinition::Explorer { browse_by } => {
             if view != "explorer" || *blueprint_kind != BlueprintKind::Record {
@@ -333,7 +306,7 @@ fn validate_table_columns(
         }
         if parts.len() == 1 {
             let attribute = validate_view_field("table", parts[0], attributes, false)?;
-            // This matches legacy `fields` behavior for local scalar columns.
+            // A local scalar column also checks the component's value type.
             validate_component(
                 table_component,
                 "table",

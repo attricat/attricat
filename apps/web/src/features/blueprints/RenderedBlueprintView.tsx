@@ -110,7 +110,7 @@ export const RenderedBlueprintView = ({
     return (
       <TableViewPreview
         attributes={attributes}
-        fields={view.fields}
+        fields={view.type === viewBlockTypes.table ? [] : view.fields}
         columns={view.type === viewBlockTypes.table ? view.columns : undefined}
         values={values}
       />

@@ -52,14 +52,7 @@ export const buildExplorerTableColumns = (
     blueprint.blueprint.views.table?.type === 'table'
       ? blueprint.blueprint.views.table
       : undefined;
-  if (!tableView?.columns?.length)
-    return (tableView?.fields ?? []).map((field) => ({
-      field,
-      label: defaultLabel(field),
-      relationshipSortBlocked: false,
-      sortable: false,
-    }));
-  return tableView.columns.map((column) => {
+  return (tableView?.columns ?? []).map((column) => {
     const configuredSortable =
       blueprint.table_path_attributes.find(
         (attribute) => attribute.code === column.field,

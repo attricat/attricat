@@ -114,7 +114,6 @@ describe('email components', () => {
           },
           table: {
             type: 'table',
-            fields: [],
             columns: [{ field: 'contact', renderer: emailDisplay }],
           },
         }}

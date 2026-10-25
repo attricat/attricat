@@ -82,7 +82,7 @@ describe('definition snippets', () => {
       ({ id }) => id === 'tableView',
     )!;
     expect(apply(bases.blueprint, section)).toMatch(
-      /value_type = "string"\n\n\[views\.table\]\ntype = "table"\nfields = \["code"\]\n$/,
+      /value_type = "string"\n\n\[views\.table\]\ntype = "table"\ncolumns = \[\{ field = "code" \}\]\n$/,
     );
   });
 

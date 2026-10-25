@@ -51,16 +51,16 @@ describe('JSON Schema validation', () => {
     ).toBeNull();
   });
 
-  it('accepts API table views with null legacy columns', () => {
+  it('accepts API table views with null columns', () => {
     expect(
       blueprintSchema.parse({
         ...blueprintIdentity,
         code: 'product',
         name: 'Product',
         version: 1,
-        views: { table: { type: 'table', fields: ['sku'], columns: null } },
+        views: { table: { type: 'table', columns: null } },
       }).views.table,
-    ).toMatchObject({ type: 'table', fields: ['sku'], columns: undefined });
+    ).toMatchObject({ type: 'table', columns: undefined });
   });
 
   it('rejects component versions outside the API u32 contract', () => {

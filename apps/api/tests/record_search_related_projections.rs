@@ -100,7 +100,7 @@ fields = ["title"]
 
 [views.table]
 type = "table"
-fields = ["title"]
+columns = [{ field = "title" }]
 
 [[attributes]]
 code = "title"

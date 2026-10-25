@@ -112,7 +112,7 @@ const blueprintSnippets: DefinitionSnippet[] = [
   {
     id: 'tableView',
     group: 'views',
-    body: '[views.table]\ntype = "table"\nfields = ["${1:code}"]',
+    body: '[views.table]\ntype = "table"\ncolumns = [{ field = "${1:code}" }]',
     placement: snippetPlacements.section,
     conflicts: [['views', 'table']],
   },

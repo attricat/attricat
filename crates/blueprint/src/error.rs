@@ -128,9 +128,7 @@ pub enum BlueprintError {
     UnknownViewField { view: String, field: String },
     #[error("view '{view}' field '{field}' must be scalar")]
     NonScalarViewField { view: String, field: String },
-    #[error("table view cannot define both fields and columns")]
-    TableFieldsAndColumns,
-    #[error("table view must define fields or columns")]
+    #[error("table view must define columns")]
     EmptyTableColumns,
     #[error("table column '{field}' is invalid")]
     InvalidTableColumnPath { field: String },
