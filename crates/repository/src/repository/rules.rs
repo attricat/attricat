@@ -891,12 +891,12 @@ impl AttricatRepository {
         .bind(ws)
         .fetch_optional(&mut *tx)
         .await?;
-        match status.as_deref() {
-            Some("cancelled") | Some("completed") | Some("dead_letter") => {
+        match status.map(stored_code::<RunStatus>).transpose()? {
+            Some(status) if status.is_terminal() => {
                 tx.commit().await?;
                 return Ok(true);
             }
-            Some("leased") => {}
+            Some(RunStatus::Leased) => {}
             _ => {
                 return Err(RepositoryError::InvalidRuleDefinition(
                     "rule run is not available for its task".into(),

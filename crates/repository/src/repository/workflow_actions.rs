@@ -472,7 +472,11 @@ impl AttricatRepository {
                 .is_empty(),
             None => false,
         };
-        let status = if references { "completed" } else { "skipped" };
+        let status = if references {
+            WorkflowTargetStatus::Completed
+        } else {
+            WorkflowTargetStatus::Skipped
+        };
         let marker = sqlx::query(
             r#"INSERT INTO workflow_run_action_targets AS t (run_id, action_index, record_id, workspace_id, status)
                VALUES ($1, $2, $3, $4, $5)
@@ -484,7 +488,7 @@ impl AttricatRepository {
         .bind(action.action_index)
         .bind(record_id)
         .bind(self.workspace_id.0)
-        .bind(status)
+        .bind(status.as_str())
         .execute(&mut *transaction)
         .await?;
         if marker.rows_affected() == 1

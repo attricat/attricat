@@ -1200,11 +1200,15 @@ impl AttricatRepository {
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(RepositoryError::NotFound("solution-pack application"))?;
-        if application.0 == "abandoned" {
+        let state: SolutionPackApplicationState = stored_code(application.0.clone())?;
+        if state == SolutionPackApplicationState::Abandoned {
             tx.commit().await?;
             return Ok(false);
         }
-        if application.0 == "completed" || application.0 == "invalid" {
+        if matches!(
+            state,
+            SolutionPackApplicationState::Completed | SolutionPackApplicationState::Invalid
+        ) {
             return Err(RepositoryError::SolutionPackApplicationInvalid);
         }
         let resumable_until = application.2.ok_or_else(|| {
@@ -2668,9 +2672,16 @@ impl AttricatRepository {
         .bind(plan_id)
         .fetch_optional(&self.pool)
         .await?;
-        match application_state.as_deref() {
+        match application_state
+            .map(stored_code::<SolutionPackApplicationState>)
+            .transpose()?
+        {
             // Apply reports these states itself.
-            Some("completed" | "invalid" | "abandoned") => return Ok(Vec::new()),
+            Some(
+                SolutionPackApplicationState::Completed
+                | SolutionPackApplicationState::Invalid
+                | SolutionPackApplicationState::Abandoned,
+            ) => return Ok(Vec::new()),
             Some(_) => {}
             None if !ready => return Err(RepositoryError::SolutionPackPlanNotReady),
             None if expires_at <= Utc::now() => {
@@ -4535,7 +4546,7 @@ impl AttricatRepository {
             .await?,
             None => None,
         };
-        if step_state.as_deref() == Some("completed") {
+        if step_state.map(stored_code).transpose()? == Some(SolutionPackStepState::Completed) {
             tx.commit().await?;
             return Ok(true);
         }
@@ -4681,7 +4692,9 @@ impl AttricatRepository {
         let application = sqlx::query_as::<_, (Uuid, String)>("SELECT plan_id,state FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2 FOR UPDATE")
             .bind(workspace_id).bind(application_id).fetch_optional(&mut *tx).await?
             .ok_or(RepositoryError::NotFound("solution-pack application"))?;
-        if application.1 != "completed" {
+        if stored_code::<SolutionPackApplicationState>(application.1.clone())?
+            != SolutionPackApplicationState::Completed
+        {
             return Err(RepositoryError::SolutionPackApplicationInvalid);
         }
         if trigger == "post_apply"

@@ -10,6 +10,7 @@
 //! event handler and a connector job never push the same record at once.
 
 use attricat_domain::states::ExportStatus;
+use attricat_domain::states::HandlerAttemptStatus;
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -74,7 +75,8 @@ fn check_connection(connection: Option<&str>) -> Result<(), RepositoryError> {
 /// The stored outcome of one handler for one event.
 #[derive(Clone, Debug, FromRow)]
 pub struct HandlerAttempt {
-    pub status: String,
+    #[sqlx(try_from = "String")]
+    pub status: HandlerAttemptStatus,
     pub attempts: i32,
     pub next_attempt_at: Option<DateTime<Utc>>,
 }
@@ -86,7 +88,7 @@ pub struct HandlerAttemptOutcome<'a> {
     pub extension_id: &'a str,
     pub handler_id: &'a str,
     pub installed_release_id: Uuid,
-    pub status: &'a str,
+    pub status: HandlerAttemptStatus,
     pub attempts: i32,
     pub next_attempt_at: Option<DateTime<Utc>>,
     pub error_code: Option<&'a str>,
@@ -100,7 +102,8 @@ pub struct HandlerFailure {
     pub event_id: Uuid,
     pub event_type: String,
     pub handler_id: String,
-    pub status: String,
+    #[sqlx(try_from = "String")]
+    pub status: HandlerAttemptStatus,
     pub attempts: i32,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
@@ -337,7 +340,7 @@ impl AttricatRepository {
     ) -> Result<(), RepositoryError> {
         sqlx::query("INSERT INTO extension_handler_attempts(workspace_id,event_id,extension_id,handler_id,installed_release_id,status,attempts,next_attempt_at,error_code,error_message,record_id,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,clock_timestamp()) ON CONFLICT(workspace_id,event_id,extension_id,handler_id) DO UPDATE SET installed_release_id=$5,status=$6,attempts=$7,next_attempt_at=$8,error_code=$9,error_message=$10,record_id=$11,updated_at=clock_timestamp()")
             .bind(self.workspace_id()).bind(outcome.event_id).bind(outcome.extension_id)
-            .bind(outcome.handler_id).bind(outcome.installed_release_id).bind(outcome.status)
+            .bind(outcome.handler_id).bind(outcome.installed_release_id).bind(outcome.status.as_str())
             .bind(outcome.attempts).bind(outcome.next_attempt_at).bind(outcome.error_code)
             .bind(outcome.error_message).bind(outcome.record_id)
             .execute(&self.pool).await?;

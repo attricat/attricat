@@ -3,6 +3,7 @@
 //! Handlers must be idempotent: a lease can expire after a handler has made a
 //! durable change but before its acknowledgement commits, and delivery order is
 //! intentionally not guaranteed.
+use attricat_domain::states::RunStatus;
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
@@ -294,7 +295,12 @@ async fn record_delivery_health(
     repository: &AttricatRepository,
     workspace_id: Uuid,
 ) -> Result<(), RepositoryError> {
-    const STATUSES: [&str; 4] = ["pending", "leased", "completed", "dead_letter"];
+    const STATUSES: [RunStatus; 4] = [
+        RunStatus::Pending,
+        RunStatus::Leased,
+        RunStatus::Completed,
+        RunStatus::DeadLetter,
+    ];
     let health = repository.event_delivery_health_by_consumer().await?;
     let workspace = workspace_id.to_string();
     let consumers = health
@@ -302,7 +308,7 @@ async fn record_delivery_health(
         .map(|(consumer, _, _)| consumer.as_str())
         .collect::<HashSet<_>>();
     for consumer in consumers {
-        for status in STATUSES {
+        for status in STATUSES.map(RunStatus::as_str) {
             let count = health
                 .iter()
                 .find(|(name, state, _)| name == consumer && state == status)

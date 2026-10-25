@@ -6,6 +6,7 @@ use super::extension_operation_artifacts::{
     MAX_OPERATION_WORKSPACE_ARTIFACT_BYTES,
 };
 use super::{AttricatRepository, ExtensionOperationArtifact, RepositoryError};
+use attricat_domain::states::HttpDeliveryState;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
@@ -20,7 +21,8 @@ fn denied() -> RepositoryError {
 pub struct ExtensionHttpDelivery {
     pub id: Uuid,
     pub delivery_key: String,
-    pub state: String,
+    #[sqlx(try_from = "String")]
+    pub state: HttpDeliveryState,
     pub http_status: Option<i32>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -202,7 +204,7 @@ impl AttricatRepository {
         let mut tx = self.pool.begin().await?;
         self.ensure_task_fence(&mut tx).await?;
         sqlx::query("UPDATE extension_operation_http_deliveries SET state=$3,http_status=$4,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND state='uncertain'")
-            .bind(id).bind(self.workspace_id()).bind(if reqwest::StatusCode::from_u16(status).is_ok_and(|status| status.is_success()) { "succeeded" } else { "failed" }).bind(i32::from(status)).execute(&mut *tx).await?;
+            .bind(id).bind(self.workspace_id()).bind(if reqwest::StatusCode::from_u16(status).is_ok_and(|status| status.is_success()) { HttpDeliveryState::Succeeded } else { HttpDeliveryState::Failed }.as_str()).bind(i32::from(status)).execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -219,9 +221,9 @@ fn delivery_state(
     if digest != destination_digest {
         return Err(denied());
     }
-    Ok(match (state, status) {
-        ("succeeded", Some(v)) => DeliveryState::Succeeded(v as u16),
-        ("failed", Some(v)) => DeliveryState::Failed(v as u16),
+    Ok(match (HttpDeliveryState::parse(state), status) {
+        (Some(HttpDeliveryState::Succeeded), Some(v)) => DeliveryState::Succeeded(v as u16),
+        (Some(HttpDeliveryState::Failed), Some(v)) => DeliveryState::Failed(v as u16),
         _ => DeliveryState::Uncertain,
     })
 }

@@ -7,6 +7,7 @@
 //! against the immutable release manifest and invocation-time grants.
 
 use attricat_domain::states::ArtifactState;
+use attricat_domain::states::HandlerAttemptStatus;
 use std::{
     collections::{HashMap, VecDeque},
     fs::{File, OpenOptions},
@@ -1954,7 +1955,7 @@ impl WasmExtensionTaskHandler {
                     extension_id,
                     handler_id,
                     installed_release_id: *release,
-                    status: "completed",
+                    status: HandlerAttemptStatus::Completed,
                     attempts: 1,
                     next_attempt_at: None,
                     error_code: None,
@@ -1978,7 +1979,7 @@ impl WasmExtensionTaskHandler {
         dispatch: &mut EventDispatch,
     ) -> Result<HandlerStep, RepositoryError> {
         let now = chrono::Utc::now();
-        let record = |status: &'static str,
+        let record = |status: HandlerAttemptStatus,
                       attempts: i32,
                       next_attempt_at: Option<chrono::DateTime<chrono::Utc>>| {
             HandlerAttemptOutcome {
@@ -1995,11 +1996,11 @@ impl WasmExtensionTaskHandler {
             }
         };
         let attempts = previous.as_ref().map_or(0, |attempt| attempt.attempts);
-        match previous.as_ref().map(|attempt| attempt.status.as_str()) {
-            Some("completed" | "superseded" | "rejected" | "exhausted") => {
+        match previous.as_ref().map(|attempt| attempt.status) {
+            Some(status) if status.is_settled() => {
                 return Ok(HandlerStep::Settled);
             }
-            Some("retrying" | "debouncing") => {
+            Some(HandlerAttemptStatus::Retrying | HandlerAttemptStatus::Debouncing) => {
                 if let Some(due) = previous
                     .as_ref()
                     .and_then(|attempt| attempt.next_attempt_at)
@@ -2023,7 +2024,11 @@ impl WasmExtensionTaskHandler {
             let due = event.occurred_at + delay(debounce);
             if previous.is_none() && due > now {
                 repository
-                    .record_extension_handler_attempt(record("debouncing", 0, Some(due)))
+                    .record_extension_handler_attempt(record(
+                        HandlerAttemptStatus::Debouncing,
+                        0,
+                        Some(due),
+                    ))
                     .await?;
                 dispatch.resume_no_later_than(due);
                 return Ok(HandlerStep::Settled);
@@ -2048,7 +2053,11 @@ impl WasmExtensionTaskHandler {
                         .await?;
                 }
                 repository
-                    .record_extension_handler_attempt(record("superseded", attempts, None))
+                    .record_extension_handler_attempt(record(
+                        HandlerAttemptStatus::Superseded,
+                        attempts,
+                        None,
+                    ))
                     .await?;
                 counter!("attricat_extension_invocations_total", "outcome" => "superseded")
                     .increment(1);
@@ -2153,7 +2162,7 @@ impl WasmExtensionTaskHandler {
                         error_code: Some(&rejection.code),
                         error_message: Some(&rejection.message),
                         record_id: rejection.record_id,
-                        ..record("rejected", attempt, None)
+                        ..record(HandlerAttemptStatus::Rejected, attempt, None)
                     })
                     .await?;
                 Ok(HandlerStep::Settled)
@@ -2177,7 +2186,7 @@ impl WasmExtensionTaskHandler {
                     .record_extension_handler_attempt(HandlerAttemptOutcome {
                         error_code: Some("retries_exhausted"),
                         error_message: Some(&message),
-                        ..record("exhausted", attempt, None)
+                        ..record(HandlerAttemptStatus::Exhausted, attempt, None)
                     })
                     .await?;
                 Ok(HandlerStep::Settled)
@@ -2192,7 +2201,7 @@ impl WasmExtensionTaskHandler {
                     .record_extension_handler_attempt(HandlerAttemptOutcome {
                         error_code: Some("retry"),
                         error_message: Some(&message),
-                        ..record("retrying", attempt, Some(due))
+                        ..record(HandlerAttemptStatus::Retrying, attempt, Some(due))
                     })
                     .await?;
                 dispatch.resume_no_later_than(due);

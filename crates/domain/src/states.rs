@@ -126,7 +126,8 @@ crate::code_enum! {
 }
 
 crate::code_enum! {
-    /// Where a leased workflow, rule or extension operation run stands.
+    /// Where a leased workflow, rule or extension operation run stands. Event
+    /// deliveries use the same codes but are never cancelled.
     pub enum RunStatus (UnknownRunStatus: "run status") {
         Pending => "pending",
         Leased => "leased",
@@ -195,6 +196,42 @@ crate::code_enum! {
     }
 }
 
+crate::code_enum! {
+    /// The outcome of one extension event handler for one event.
+    pub enum HandlerAttemptStatus (UnknownHandlerAttemptStatus: "handler attempt status") {
+        Completed => "completed",
+        /// Failed and due again at its next attempt time.
+        Retrying => "retrying",
+        /// Waiting out the handler's debounce window.
+        Debouncing => "debouncing",
+        /// A newer event for the same record replaced it.
+        Superseded => "superseded",
+        Rejected => "rejected",
+        /// Out of attempts.
+        Exhausted => "exhausted",
+    }
+}
+
+impl HandlerAttemptStatus {
+    /// Whether the handler is done with the event.
+    pub const fn is_settled(self) -> bool {
+        matches!(
+            self,
+            Self::Completed | Self::Superseded | Self::Rejected | Self::Exhausted
+        )
+    }
+}
+
+crate::code_enum! {
+    /// Where an extension operation's brokered HTTP delivery stands.
+    pub enum HttpDeliveryState (UnknownHttpDeliveryState: "HTTP delivery state") {
+        /// Sent without a recorded response, so it may or may not have applied.
+        Uncertain => "uncertain",
+        Succeeded => "succeeded",
+        Failed => "failed",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,6 +259,16 @@ mod tests {
             RevisionStatus::parse,
         );
         crate::codes::assert_codes_round_trip(RunStatus::ALL, RunStatus::as_str, RunStatus::parse);
+        crate::codes::assert_codes_round_trip(
+            HttpDeliveryState::ALL,
+            HttpDeliveryState::as_str,
+            HttpDeliveryState::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            HandlerAttemptStatus::ALL,
+            HandlerAttemptStatus::as_str,
+            HandlerAttemptStatus::parse,
+        );
         crate::codes::assert_codes_round_trip(
             FileJobStatus::ALL,
             FileJobStatus::as_str,

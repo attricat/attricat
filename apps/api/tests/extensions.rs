@@ -1,6 +1,6 @@
 mod support;
 
-use api::states::ExtensionState;
+use api::states::{ExtensionState, HttpDeliveryState};
 use api::value_type::ValueType;
 use std::{io::Cursor, path::Path, sync::Arc};
 
@@ -2974,7 +2974,7 @@ async fn packaged_public_http_transfer_and_redirect_policy(pool: sqlx::PgPool) {
                     .await
                     .unwrap();
                 assert_eq!(deliveries.len(), 1);
-                assert_eq!(progress["delivery_outcome"], deliveries[0].state);
+                assert_eq!(progress["delivery_outcome"], deliveries[0].state.as_str());
             }
             _ => unreachable!(),
         }
@@ -3060,7 +3060,7 @@ async fn delivery_attempt_is_uncertain_until_confirmed_and_never_auto_resends(po
     ));
     assert_eq!(
         scoped.list_extension_http_deliveries(run).await.unwrap()[0].state,
-        "uncertain"
+        HttpDeliveryState::Uncertain
     );
     assert!(
         scoped
@@ -3074,7 +3074,7 @@ async fn delivery_attempt_is_uncertain_until_confirmed_and_never_auto_resends(po
         .unwrap();
     assert_eq!(
         scoped.list_extension_http_deliveries(run).await.unwrap()[0].state,
-        "succeeded"
+        HttpDeliveryState::Succeeded
     );
     assert!(matches!(
         scoped
