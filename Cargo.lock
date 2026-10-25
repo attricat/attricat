@@ -346,7 +346,6 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "rand 0.8.8",
- "rust_decimal",
  "secrecy",
  "serde",
  "serde_json",
@@ -557,7 +556,6 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.20",
  "toml",
- "uuid",
 ]
 
 [[package]]
@@ -603,16 +601,12 @@ dependencies = [
  "aws-smithy-runtime-api",
  "aws-smithy-types",
  "bytes",
- "chrono",
  "futures-util",
  "metrics",
  "secrecy",
- "serde",
- "sha2 0.10.9",
  "thiserror 2.0.20",
  "tokio",
  "url",
- "uuid",
 ]
 
 [[package]]
@@ -643,7 +637,6 @@ dependencies = [
 name = "attricat-workers"
 version = "0.1.0"
 dependencies = [
- "async-stream",
  "async-trait",
  "attricat-domain",
  "attricat-events",
@@ -651,25 +644,16 @@ dependencies = [
  "attricat-rules",
  "attricat-storage",
  "attricat-workflow",
- "axum",
- "base64 0.22.1",
- "bytes",
  "chrono",
- "futures-util",
  "image",
  "kamadak-exif",
  "metrics",
- "reqwest",
- "secrecy",
- "serde",
  "serde_json",
  "sha2 0.10.9",
  "sqlx",
  "thiserror 2.0.20",
  "tokio",
- "tokio-stream",
  "tracing",
- "url",
  "uuid",
  "webp",
 ]
