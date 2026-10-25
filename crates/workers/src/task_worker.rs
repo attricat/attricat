@@ -301,14 +301,7 @@ async fn record_queue_metrics(
 }
 
 fn truncate_error(value: &str, max_bytes: usize) -> String {
-    if value.len() <= max_bytes {
-        return value.to_owned();
-    }
-    let mut end = max_bytes;
-    while !value.is_char_boundary(end) {
-        end -= 1;
-    }
-    value[..end].to_owned()
+    value[..value.floor_char_boundary(max_bytes)].to_owned()
 }
 
 fn bounded_error(code: &str, message: &str) -> (String, String) {

@@ -455,10 +455,7 @@ async fn oversized_retry_error_is_truncated_and_consumes_failure_budget(pool: Pg
     // The worker bounds this before calling the repository; keep the repository
     // validation strict while proving the bounded transition consumes a retry.
     let message = "é".repeat(600);
-    let mut end = 1024;
-    while !message.is_char_boundary(end) {
-        end -= 1;
-    }
+    let end = message.floor_char_boundary(1024);
     let status = repository
         .retry_task_at(
             task.id,
