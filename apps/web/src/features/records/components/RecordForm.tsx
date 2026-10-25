@@ -33,13 +33,7 @@ import {
   validateRecordForm,
   valuesForForm,
 } from '../recordForm';
-import {
-  editableFormAttributes,
-  recordSchemaRequiredAttributes,
-  headingEditableAttributes,
-  unplacedEditableAttributes,
-  unplacedRequiredAttributes,
-} from '../recordFormAttributes';
+import { recordFormLayout } from '../recordFormAttributes';
 import {
   viewFieldEditComponents,
   viewFieldEditors,
@@ -67,7 +61,6 @@ import { RecordBlueprintSelect } from './RecordBlueprintSelect';
 import {
   savedStatusState,
   statusConfiguration,
-  statusLocks,
   statusTransitionDenial,
 } from '../status';
 import { useStatusTransitionDenialText } from '../useStatusTransitionDenialText';
@@ -85,7 +78,6 @@ import {
 } from '../../../components/FormErrorSummary';
 import { UnsavedChangesGuard } from '../../drafts/UnsavedChangesGuard';
 import { FieldRevealContext, useFieldReveal } from '../../views/fieldReveal';
-import { viewPlacedFields } from '../../views/viewFieldComponents';
 import { migrationReviewSelector } from '../constants';
 
 export type RecordFormHandle = {
@@ -239,22 +231,23 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     const showAllAttributes = showAllProp || layout !== undefined;
     const shownView = layout ?? (showAllAttributes ? undefined : detailView);
     const fieldComponents = viewFieldEditComponents(detailView);
-    // Required by the caller or, in the default context, by the record schema.
-    const requiredCodes = new Set([
-      ...requiredAttributes,
-      ...(blueprint && contextId === defaultContextId
-        ? recordSchemaRequiredAttributes(blueprint.blueprint.record_schema)
-        : []),
-    ]);
-    const editableAttributes = editableFormAttributes(
-      blueprint?.attributes ?? [],
-      {
-        contextId,
-        defaultContextId,
-        requiredCodes,
-        usesFormLayout: Boolean(blueprint && !showAllAttributes && !detailView),
-      },
-    );
+    const {
+      editableAttributes,
+      fieldOrder,
+      headingFields,
+      lockedAttributes,
+      otherAttributes,
+      requiredCodes,
+      submittedAttributes,
+    } = recordFormLayout({
+      blueprint,
+      contextId,
+      defaultContextId,
+      requiredAttributes,
+      savedValues,
+      showAllAttributes,
+      shownView,
+    });
     const fieldEditors = viewFieldEditors(fieldComponents, editableAttributes);
     // Files queued while creating a record are submitted with it, so they
     // count toward required file attributes.
@@ -297,44 +290,6 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
         codes: current.error === error ? [...current.codes, code] : [code],
       }));
     };
-    const lockedAttributes = statusLocks(
-      blueprint?.attributes ?? [],
-      savedValues,
-      contextId,
-      noStatusParentContextIds,
-    );
-    // Locked values are never resubmitted; the server rejects any change.
-    const submittedAttributes = editableAttributes.filter(
-      (attribute) => lockedAttributes[attribute.code] === undefined,
-    );
-    // The heading only displays values, so its fields are edited first.
-    const headingFields =
-      detailView && !showAllAttributes
-        ? headingEditableAttributes(editableAttributes, detailView)
-        : [];
-    // Editable fields the layout leaves out.
-    const otherAttributes =
-      blueprint && !showAllAttributes
-        ? [
-            ...new Set([
-              ...(detailView
-                ? unplacedEditableAttributes(editableAttributes, detailView)
-                : []),
-              ...unplacedRequiredAttributes(editableAttributes, detailView, [
-                ...requiredCodes,
-              ]),
-            ]),
-          ]
-        : [];
-    // Fields in the order the form shows them, to go to the first error.
-    const fieldOrder = [
-      ...new Set([
-        ...headingFields.map((attribute) => attribute.code),
-        ...viewPlacedFields(shownView),
-        ...otherAttributes.map((attribute) => attribute.code),
-        ...editableAttributes.map((attribute) => attribute.code),
-      ]),
-    ];
     // The blueprint picker comes first; once a blueprint loads, its first
     // field, or in a migration the first field to review. A failed save
     // leaves focus where it is.

@@ -1,9 +1,11 @@
 import {
   viewBlockTypes,
   type Attribute,
+  type BlueprintWithAttributes,
   type FormAttributeValue,
   type ViewDefinition,
 } from './api';
+import { statusLocks } from './status';
 import type { FileMetadata } from '../files/schemas';
 import { isHiddenByDefault } from './attributeVisibility';
 import {
@@ -186,3 +188,91 @@ export const filesForAttribute = (
       item.attribute_code === attributeCode &&
       inContext(item, contextId),
   )?.files ?? [];
+
+/**
+ * Which fields a record form edits, which it submits, and the order it shows
+ * them in. `showAllAttributes` lists every field instead of the detail view's
+ * layout; `shownView` is the layout the form renders.
+ */
+export const recordFormLayout = ({
+  blueprint,
+  contextId,
+  defaultContextId,
+  requiredAttributes,
+  savedValues,
+  showAllAttributes,
+  shownView,
+}: {
+  blueprint: BlueprintWithAttributes | undefined;
+  contextId: string | null;
+  defaultContextId: string | null;
+  requiredAttributes: readonly string[];
+  savedValues: readonly FormAttributeValue[];
+  showAllAttributes: boolean;
+  shownView: ViewDefinition | undefined;
+}) => {
+  const detailView = blueprint?.blueprint.views.detail;
+  // Required by the caller or, in the default context, by the record schema.
+  const requiredCodes = new Set([
+    ...requiredAttributes,
+    ...(blueprint && contextId === defaultContextId
+      ? recordSchemaRequiredAttributes(blueprint.blueprint.record_schema)
+      : []),
+  ]);
+  const editableAttributes = editableFormAttributes(
+    blueprint?.attributes ?? [],
+    {
+      contextId,
+      defaultContextId,
+      requiredCodes,
+      usesFormLayout: Boolean(blueprint && !showAllAttributes && !detailView),
+    },
+  );
+  const lockedAttributes = statusLocks(
+    blueprint?.attributes ?? [],
+    savedValues,
+    contextId,
+    [],
+  );
+  // Locked values are never resubmitted; the server rejects any change.
+  const submittedAttributes = editableAttributes.filter(
+    (attribute) => lockedAttributes[attribute.code] === undefined,
+  );
+  // The heading only displays values, so its fields are edited first.
+  const headingFields =
+    detailView && !showAllAttributes
+      ? headingEditableAttributes(editableAttributes, detailView)
+      : [];
+  // Editable fields the layout leaves out.
+  const otherAttributes =
+    blueprint && !showAllAttributes
+      ? [
+          ...new Set([
+            ...(detailView
+              ? unplacedEditableAttributes(editableAttributes, detailView)
+              : []),
+            ...unplacedRequiredAttributes(editableAttributes, detailView, [
+              ...requiredCodes,
+            ]),
+          ]),
+        ]
+      : [];
+  // Fields in the order the form shows them, to go to the first error.
+  const fieldOrder = [
+    ...new Set([
+      ...headingFields.map((attribute) => attribute.code),
+      ...viewPlacedFields(shownView),
+      ...otherAttributes.map((attribute) => attribute.code),
+      ...editableAttributes.map((attribute) => attribute.code),
+    ]),
+  ];
+  return {
+    editableAttributes,
+    fieldOrder,
+    headingFields,
+    lockedAttributes,
+    otherAttributes,
+    requiredCodes,
+    submittedAttributes,
+  };
+};
