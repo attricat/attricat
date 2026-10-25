@@ -112,10 +112,7 @@ export const ExtensionExportStatusSection = ({
         null);
   const filter = { connection, status };
   const page = useInfiniteQuery({
-    queryKey: [
-      ...extensionExportQueryKeys.extension(extensionId, filter),
-      'pages',
-    ],
+    queryKey: extensionExportQueryKeys.extensionPages(extensionId, filter),
     queryFn: ({ pageParam }) =>
       extensionExportStatus(extensionId, { ...filter, after: pageParam }),
     initialPageParam: null as string | null,

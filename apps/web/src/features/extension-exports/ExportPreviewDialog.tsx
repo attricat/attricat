@@ -14,6 +14,7 @@ import { JsonBlock } from '../../components/JsonValue';
 import { previewExport } from './api';
 import type { ExportDestination } from './schemas';
 import { errorMessage } from '../../api/errors';
+import { extensionExportQueryKeys } from './queryKeys';
 
 /**
  * The payload a destination would receive for one record, with the issues
@@ -32,14 +33,12 @@ export const ExportPreviewDialog = ({
 }) => {
   const { t } = useTranslation();
   const preview = useQuery({
-    queryKey: [
-      'extension-exports',
-      'preview',
+    queryKey: extensionExportQueryKeys.preview(
       destination.extension_id,
       destination.export_id,
       recordId,
       connection,
-    ],
+    ),
     queryFn: () =>
       previewExport(
         destination.extension_id,
