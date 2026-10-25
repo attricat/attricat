@@ -577,12 +577,7 @@ impl AttricatRepository {
         .fetch_all(&self.pool)
         .await?;
         let mut items: Vec<_> = rows.into_iter().map(record_preview).collect();
-        let next_cursor = if items.len() > limit as usize {
-            items.pop();
-            items.last().map(|item| item.id)
-        } else {
-            None
-        };
+        let next_cursor = next_page_cursor(&mut items, limit, |item| item.id);
         Ok(RecordPreviewPage { items, next_cursor })
     }
 
@@ -718,14 +713,9 @@ impl AttricatRepository {
         .fetch_all(&self.pool)
         .await?;
         let mut items: Vec<_> = rows.into_iter().map(incoming_relationship_item).collect();
-        let next_cursor = if items.len() > limit as usize {
-            items.pop();
-            items
-                .last()
-                .map(|item| encode_search_cursor(item.created_at, item.id))
-        } else {
-            None
-        };
+        let next_cursor = next_page_cursor(&mut items, limit, |item| {
+            encode_search_cursor(item.created_at, item.id)
+        });
         // Advance the cursor over the fetched page, including hidden rows, so
         // a scoped reader can continue past a page with no readable sources.
         let ids = items.iter().map(|item| item.id).collect::<Vec<_>>();
@@ -1024,14 +1014,9 @@ impl AttricatRepository {
             .fetch_all(&self.pool)
             .await?;
         let mut items: Vec<_> = rows.into_iter().map(record_preview).collect();
-        let next_cursor = if items.len() > limit as usize {
-            items.pop();
-            items
-                .last()
-                .map(|item| encode_search_cursor(item.created_at, item.id))
-        } else {
-            None
-        };
+        let next_cursor = next_page_cursor(&mut items, limit, |item| {
+            encode_search_cursor(item.created_at, item.id)
+        });
         Ok((items, next_cursor))
     }
 
@@ -1332,7 +1317,7 @@ impl AttricatRepository {
             nulls_first = nulls_first,
             null_order = null_order,
         );
-        let rows = sqlx::query_as::<_, SortedRecordPreviewRow>(&sql)
+        let mut rows = sqlx::query_as::<_, SortedRecordPreviewRow>(&sql)
             .bind(blueprint_id)
             .bind(blueprint_version)
             .bind(matching_record_ids)
@@ -1350,14 +1335,9 @@ impl AttricatRepository {
             .bind(export_status_param(export_status))
             .fetch_all(&self.pool)
             .await?;
-        let mut rows = rows;
-        let next_cursor = if rows.len() > limit as usize {
-            rows.pop();
-            rows.last()
-                .map(|row| encode_sorted_search_cursor(sort, row))
-        } else {
-            None
-        };
+        let next_cursor = next_page_cursor(&mut rows, limit, |row| {
+            encode_sorted_search_cursor(sort, row)
+        });
         Ok((
             rows.into_iter().map(sorted_record_preview).collect(),
             next_cursor,
@@ -1451,13 +1431,9 @@ impl AttricatRepository {
         } else {
             query.fetch_all(&self.pool).await?
         };
-        let next_cursor = if rows.len() > limit as usize {
-            rows.pop();
-            rows.last()
-                .map(|row| encode_sorted_search_cursor(sort, row))
-        } else {
-            None
-        };
+        let next_cursor = next_page_cursor(&mut rows, limit, |row| {
+            encode_sorted_search_cursor(sort, row)
+        });
         Ok((
             rows.into_iter().map(sorted_record_preview).collect(),
             next_cursor,
@@ -1612,13 +1588,9 @@ impl AttricatRepository {
             rows.append(&mut null_rows);
         }
 
-        let next_cursor = if rows.len() > limit as usize {
-            rows.pop();
-            rows.last()
-                .map(|row| encode_sorted_search_cursor(sort, row))
-        } else {
-            None
-        };
+        let next_cursor = next_page_cursor(&mut rows, limit, |row| {
+            encode_sorted_search_cursor(sort, row)
+        });
         Ok((
             rows.into_iter().map(sorted_record_preview).collect(),
             next_cursor,
@@ -2245,12 +2217,7 @@ impl AttricatRepository {
         // UUIDs order bytewise in both PostgreSQL and Rust, so cursors carry over.
         page.retain(|id| cursor.is_none_or(|cursor| *id > cursor));
         page.truncate(limit as usize + 1);
-        let next_cursor = if page.len() > limit as usize {
-            page.pop();
-            page.last().copied()
-        } else {
-            None
-        };
+        let next_cursor = next_page_cursor(&mut page, limit, |id| *id);
         let mut included: Vec<_> = include_ids
             .iter()
             .chain(selected_paths.iter().flatten())
@@ -3615,6 +3582,21 @@ fn relationship_sort_forward_joins(depth: usize) -> Result<String, RepositoryErr
 
 /// The `attribute_values` column a sortable value type is stored in, and the
 /// SQL type its cursor value is cast to.
+/// Drops the extra row a page query fetched to detect a next page, and
+/// returns the cursor of the last row kept when there is one.
+fn next_page_cursor<T, C>(
+    rows: &mut Vec<T>,
+    limit: i64,
+    cursor: impl FnOnce(&T) -> C,
+) -> Option<C> {
+    let limit = limit as usize;
+    if rows.len() <= limit {
+        return None;
+    }
+    rows.truncate(limit);
+    rows.last().map(cursor)
+}
+
 /// The revision's `{code: context_fallback}` map for the record aliased
 /// `record`, as a select-list expression.
 fn context_fallback_column(record: &str) -> String {
