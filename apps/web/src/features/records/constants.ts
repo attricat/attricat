@@ -130,3 +130,20 @@ export const migrationReviewSelector = '[data-migration-review]';
 
 /** How long a field shows that it was saved, and its save can be undone. */
 export const RECENT_SAVE_DURATION_MS = 6000;
+
+/** Where one inline field's change stands. */
+export const fieldSaveStates = {
+  saving: 'saving',
+  saved: 'saved',
+  unsaved: 'unsaved',
+} as const;
+export type FieldSaveState =
+  (typeof fieldSaveStates)[keyof typeof fieldSaveStates];
+
+/** How a save that conflicts with another editor's change is settled. */
+export const conflictResolutions = {
+  keepMine: 'keepMine',
+  useTheirs: 'useTheirs',
+} as const;
+export type ConflictResolution =
+  (typeof conflictResolutions)[keyof typeof conflictResolutions];

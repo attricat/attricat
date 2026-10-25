@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../../components/iconSizes';
 import { focusControlIn } from '../../../components/initialFocus';
-import type { FieldSaveState } from '../useRecordFieldSaves';
+import { fieldSaveStates, type FieldSaveState } from '../constants';
 
 /**
  * Whether a field's change is being saved or was just saved, with undo, in
@@ -28,17 +28,18 @@ export const FieldSaveStatus = ({
   const [focused, setFocused] = useState(false);
   const [hovered, setHovered] = useState(false);
   // The link can go while focused or pointed at, without a blur or leave.
-  if (state !== 'saved' && (focused || hovered)) {
+  if (state !== fieldSaveStates.saved && (focused || hovered)) {
     setFocused(false);
     setHovered(false);
   }
-  const holding = state === 'saved' && (focused || hovered);
+  const holding = state === fieldSaveStates.saved && (focused || hovered);
   useEffect(() => {
     if (!holding) return;
     onHold(true);
     return () => onHold(false);
   }, [holding, onHold]);
-  if (state !== 'saving' && state !== 'saved') return null;
+  if (state !== fieldSaveStates.saving && state !== fieldSaveStates.saved)
+    return null;
   return (
     <Box
       sx={{
@@ -56,7 +57,7 @@ export const FieldSaveStatus = ({
         zIndex: 1,
       }}
     >
-      {state === 'saving' ? (
+      {state === fieldSaveStates.saving ? (
         t('records.fieldSaving')
       ) : (
         <>

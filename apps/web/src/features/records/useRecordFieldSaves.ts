@@ -7,6 +7,12 @@ import type { FieldEditRules } from './recordForm';
 import { fieldSaveRequest } from './recordFieldSaves';
 import { invalidateRecord } from './invalidateRecord';
 import { useLatestCallback } from '../../components/useLatestCallback';
+import {
+  conflictResolutions,
+  fieldSaveStates,
+  type ConflictResolution,
+  type FieldSaveState,
+} from './constants';
 
 type Options = {
   recordId: string;
@@ -21,8 +27,6 @@ type Options = {
   /** Called when changes start or stop waiting to be saved. */
   onPendingChange?: (pending: boolean) => void;
 };
-
-export type ConflictResolution = 'keepMine' | 'useTheirs';
 
 type State = {
   /** The version `saved` belongs to; saves are made against it. */
@@ -41,7 +45,6 @@ type State = {
 };
 
 /** Where a field's change is on its way to the server. */
-export type FieldSaveState = 'saving' | 'saved' | 'unsaved';
 
 const isStaleRecord = (error: unknown) =>
   error instanceof ApiRequestError && error.code === STALE_RECORD_ERROR_CODE;
@@ -239,11 +242,11 @@ export const useRecordFieldSaves = ({
     /** Whether a field's change is being saved, was just saved, or failed. */
     fieldState: (code: string): FieldSaveState | undefined =>
       state.sending.includes(code)
-        ? 'saving'
+        ? fieldSaveStates.saving
         : state.error && state.pending[code] !== undefined
-          ? 'unsaved'
+          ? fieldSaveStates.unsaved
           : state.lastSave && code in state.lastSave.previous
-            ? 'saved'
+            ? fieldSaveStates.saved
             : undefined,
     /** The fields the last save changed, while it can be undone. */
     lastSaveFields: Object.keys(state.lastSave?.previous ?? {}),
@@ -289,7 +292,7 @@ export const useRecordFieldSaves = ({
     ) => {
       request.current = { attributes, fieldRules };
       const pending =
-        resolution === 'useTheirs'
+        resolution === conflictResolutions.useTheirs
           ? {}
           : Object.fromEntries(
               Object.entries(current.current.pending).filter(

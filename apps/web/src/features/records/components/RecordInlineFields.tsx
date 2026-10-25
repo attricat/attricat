@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Link, Stack, Typography } from '@mui/material';
+import { Box, Button, Stack } from '@mui/material';
 import {
   forwardRef,
   useEffect,
@@ -20,7 +20,6 @@ import {
 } from '../../views/components/EditableRecordLayout';
 import { FieldRevealContext, useFieldReveal } from '../../views/fieldReveal';
 import { attributeLabel } from '../recordDisplay';
-import { ConflictingChange } from './ConflictingChange';
 import { FieldSaveStatus } from './FieldSaveStatus';
 import { RecordView } from '../../views/components/RecordView';
 import type { ResolvedValue } from '../../views/components/ValueField';
@@ -56,10 +55,7 @@ import { schemaMismatchField } from '../recordFieldSaves';
 import { recordFormOptions } from '../queryOptions';
 import { choiceEditorOptions } from '../choices';
 import { savedStatusLocks, statusConfiguration, statusLocks } from '../status';
-import {
-  useRecordFieldSaves,
-  type ConflictResolution,
-} from '../useRecordFieldSaves';
+import { useRecordFieldSaves } from '../useRecordFieldSaves';
 import { attributeValueTypes } from '../valueTypes';
 import { RecordFormAttributeEditor } from './RecordFormAttributeEditor';
 import { StatusLockNotice } from './StatusLockNotice';
@@ -68,6 +64,9 @@ import { InlineFieldEditor } from './InlineFieldEditor';
 import { ReusableAttributeAttachControl } from './ReusableAttributeAttachControl';
 import { UnsavedFieldChangesGuard } from './UnsavedFieldChangesGuard';
 import { useLatestCallback } from '../../../components/useLatestCallback';
+import { InlineSaveStatus } from './InlineSaveStatus';
+import { SaveConflictAlert } from './SaveConflictAlert';
+import type { ConflictResolution } from '../constants';
 
 type Props = {
   recordId: string;
@@ -389,43 +388,14 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
       <>
         {unsaved && <UnsavedFieldChangesGuard />}
         {saves.conflict && (
-          <Alert
-            action={
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button
-                  color="inherit"
-                  onClick={() => void resolveConflict('keepMine')}
-                  size="small"
-                >
-                  {t('records.keepMyChanges')}
-                </Button>
-                <Button
-                  color="inherit"
-                  onClick={() => void resolveConflict('useTheirs')}
-                  size="small"
-                >
-                  {t('records.useLatestValues')}
-                </Button>
-              </Box>
-            }
-            severity="warning"
-            sx={{ mb: 2 }}
-          >
-            {t('records.changedByAnotherEditor')}
-            <Box component="ul" sx={{ mb: 0, mt: 1, pl: 2 }}>
-              {changeable
-                .filter((attribute) => attribute.code in saves.pending)
-                .map((attribute) => (
-                  <li key={attribute.code}>
-                    <ConflictingChange
-                      attribute={attribute}
-                      mine={saves.pending[attribute.code] ?? ''}
-                      theirs={latestFields[attribute.code] ?? ''}
-                    />
-                  </li>
-                ))}
-            </Box>
-          </Alert>
+          <SaveConflictAlert
+            attributes={changeable.filter(
+              (attribute) => attribute.code in saves.pending,
+            )}
+            latest={latestFields}
+            onResolve={(resolution) => void resolveConflict(resolution)}
+            pending={saves.pending}
+          />
         )}
         {generalError && (
           <ApiErrorAlert
@@ -461,30 +431,12 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
             updatedAt={form.record.updated_at}
           />
         )}
-        <Typography
-          aria-live="polite"
-          color="text.secondary"
-          sx={{ display: 'block', minHeight: '1.5em', mb: 1 }}
-          variant="caption"
-        >
-          {saves.saving ? (
-            t('records.savingChanges')
-          ) : hasPending ? (
-            <Link
-              color="inherit"
-              component="button"
-              onClick={() => revealField(Object.keys(saves.pending)[0])}
-              type="button"
-              variant="caption"
-            >
-              {t('records.unsavedChangeCount', {
-                count: Object.keys(saves.pending).length,
-              })}
-            </Link>
-          ) : saves.savedAny ? (
-            t('records.allChangesSaved')
-          ) : null}
-        </Typography>
+        <InlineSaveStatus
+          onReveal={revealField}
+          pendingCodes={Object.keys(saves.pending)}
+          savedAny={saves.savedAny}
+          saving={saves.saving}
+        />
         <Box ref={fieldsRef}>
           <FieldRevealContext value={revealRequest}>
             <EditableRecordLayout
