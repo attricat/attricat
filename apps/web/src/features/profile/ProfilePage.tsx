@@ -9,12 +9,16 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { GlobeIcon, LanguagesIcon, PencilIcon } from 'lucide-react';
+import { PencilIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { monoFontFamily } from '../../app/theme';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { ProfileIcon } from '../../components/systemIcons';
+import {
+  ProfileIcon,
+  LanguageIcon,
+  TimeZoneIcon,
+} from '../../components/systemIcons';
 import { UserAvatar } from '../../components/UserAvatar';
 import { fileStatuses, THUMBNAIL_POLLING_STATUSES } from '../files/constants';
 import { AvatarControls } from './AvatarControls';
@@ -169,14 +173,14 @@ export const ProfilePage = () => {
       </ProfileSection>
       <ProfileSection
         description={t('profile.languageDescription')}
-        icon={LanguagesIcon}
+        icon={LanguageIcon}
         title={t('language.label')}
       >
         <LanguageSwitcher />
       </ProfileSection>
       <ProfileSection
         description={t('timeZone.description')}
-        icon={GlobeIcon}
+        icon={TimeZoneIcon}
         title={t('timeZone.label')}
       >
         <TimeZonePreference disabled={!account} />

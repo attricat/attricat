@@ -32,6 +32,8 @@ export { SlidersHorizontalIcon as SearchScopeIcon } from 'lucide-react';
 export { BookOpenIcon as DocumentationIcon } from 'lucide-react';
 export { KeyRoundIcon as PersonalTokenIcon } from 'lucide-react';
 export { LanguagesIcon as LexiconIcon } from 'lucide-react';
+export { LanguagesIcon as LanguageIcon } from 'lucide-react';
+export { GlobeIcon as TimeZoneIcon } from 'lucide-react';
 export { LockKeyholeIcon as PermissionIcon } from 'lucide-react';
 export { SquareActivityIcon as ExtensionRunIcon } from 'lucide-react';
 export { UserRoundIcon as AssignedUserIcon } from 'lucide-react';
