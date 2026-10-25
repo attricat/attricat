@@ -236,19 +236,7 @@ pub(crate) fn connection_is(column: &str, param: &str, connection: Option<&str>)
     }
 }
 
-impl AttricatRepository {
-    /// Whether the extension has a connection named `connection`.
-    pub(crate) async fn extension_connection_exists<'e>(
-        &self,
-        executor: impl sqlx::PgExecutor<'e>,
-        extension_id: &str,
-        connection: &str,
-    ) -> Result<bool, RepositoryError> {
-        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3)")
-            .bind(self.workspace_id()).bind(extension_id).bind(connection)
-            .fetch_one(executor).await?)
-    }
-}
+impl AttricatRepository {}
 
 fn bounded_json(value: &Value, max: usize, label: &str) -> Result<(), RepositoryError> {
     if serde_json::to_vec(value).map_or(true, |bytes| bytes.len() > max) {

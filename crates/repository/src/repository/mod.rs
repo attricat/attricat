@@ -81,6 +81,7 @@ mod extension_attricat_data;
 mod extension_connections;
 mod extension_connector_pages;
 mod extension_export_state;
+mod extension_host_resources;
 mod extension_interactive_operations;
 mod extension_operation_artifacts;
 mod extension_operation_http_transfer;
