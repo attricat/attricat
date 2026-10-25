@@ -1,5 +1,6 @@
 mod support;
 
+use api::states::RecordMigrationStatus;
 use api::{
     model::{CreateBlueprint, MigrateRecordRequest, NewAttributeValue},
     repository::AttricatRepository,
@@ -79,7 +80,7 @@ async fn compatible_scalar_migration_preserves_row_identity_without_history(pool
         .preview_record_migration(record.id)
         .await
         .unwrap();
-    assert_eq!(preview.status, "ready");
+    assert_eq!(preview.status, RecordMigrationStatus::Ready);
     repository
         .migrate_record_to_latest(
             record.id,
@@ -358,7 +359,7 @@ cardinality = "one"
         .preview_record_migration(source.id)
         .await
         .unwrap();
-    assert_eq!(preview.status, "ready");
+    assert_eq!(preview.status, RecordMigrationStatus::Ready);
     repository
         .migrate_record_to_latest(
             source.id,
@@ -466,7 +467,7 @@ value_type = "string"
         .preview_record_migration(record.id)
         .await
         .unwrap();
-    assert_eq!(preview.status, "needs_input");
+    assert_eq!(preview.status, RecordMigrationStatus::NeedsInput);
     repository
         .migrate_record_to_latest(
             record.id,
@@ -861,7 +862,7 @@ context_editable = "all"
         .preview_record_migration(record.id)
         .await
         .unwrap();
-    assert_eq!(preview.status, "needs_input");
+    assert_eq!(preview.status, RecordMigrationStatus::NeedsInput);
     assert!(preview.issues.iter().any(|issue| {
         issue.attribute_code.as_deref() == Some("title") && issue.kind == "context_not_editable"
     }));
@@ -1063,7 +1064,7 @@ async fn migration_reports_only_properties_the_target_schema_requires(pool: PgPo
         .preview_record_migration(record.id)
         .await
         .unwrap();
-    assert_eq!(preview.status, "needs_input");
+    assert_eq!(preview.status, RecordMigrationStatus::NeedsInput);
     let missing: Vec<_> = preview
         .issues
         .iter()

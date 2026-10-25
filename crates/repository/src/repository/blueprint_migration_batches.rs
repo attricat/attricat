@@ -7,6 +7,7 @@ use crate::{
     },
     task_queue::{TaskInsert, TaskKind},
 };
+use attricat_domain::states::RecordMigrationStatus;
 use attricat_domain::states::RevisionStatus;
 use chrono::{DateTime, Utc};
 use futures_util::{StreamExt, stream};
@@ -17,7 +18,8 @@ use uuid::Uuid;
 #[derive(sqlx::FromRow)]
 struct BatchMigration {
     id: Uuid,
-    status: String,
+    #[sqlx(try_from = "String")]
+    status: RecordMigrationStatus,
 }
 
 #[derive(Clone, Copy, sqlx::FromRow)]
@@ -413,16 +415,21 @@ impl AttricatRepository {
         record_id: Uuid,
     ) -> Result<&'static str, RepositoryError> {
         let migration = self.reserve_batch_migration(batch, record_id).await?;
-        match migration.status.as_str() {
-            "migrated" | "needs_input" | "blocked" | "failed" | "skipped" | "superseded" => {
+        match migration.status {
+            RecordMigrationStatus::Migrated
+            | RecordMigrationStatus::NeedsInput
+            | RecordMigrationStatus::Blocked
+            | RecordMigrationStatus::Failed
+            | RecordMigrationStatus::Skipped
+            | RecordMigrationStatus::Superseded => {
                 return Ok("already_terminal");
             }
-            "pending" => match self
+            RecordMigrationStatus::Pending => match self
                 .preview_record_migration_against(record_id, Some(migration.id), target)
                 .await
             {
                 Ok(preview)
-                    if preview.status == "ready"
+                    if preview.status == RecordMigrationStatus::Ready
                         || removal_policy_covers_preview(
                             &batch.removal_policy,
                             &preview.issues,
@@ -439,12 +446,7 @@ impl AttricatRepository {
                     return Ok("failed");
                 }
             },
-            "ready" | "migrating" => {}
-            status => {
-                return Err(RepositoryError::InvalidBlueprintDefinition(format!(
-                    "unknown batch migration status '{status}'"
-                )));
-            }
+            RecordMigrationStatus::Ready | RecordMigrationStatus::Migrating => {}
         }
         self.begin_batch_migration(migration.id).await?;
         match self

@@ -36,6 +36,23 @@ crate::code_enum! {
 }
 
 crate::code_enum! {
+    /// Where one record's migration to a newer blueprint revision stands.
+    pub enum RecordMigrationStatus (UnknownRecordMigrationStatus: "record migration status") {
+        /// The preview found no issues; the migration can apply as is.
+        Ready => "ready",
+        NeedsInput => "needs_input",
+        Blocked => "blocked",
+        /// Reserved by a migration batch and not yet previewed.
+        Pending => "pending",
+        Migrating => "migrating",
+        Migrated => "migrated",
+        Failed => "failed",
+        Skipped => "skipped",
+        Superseded => "superseded",
+    }
+}
+
+crate::code_enum! {
     /// Where an uploaded file stands. Only ready files are served.
     pub enum FileStatus (UnknownFileStatus: "file status") {
         Uploading => "uploading",
@@ -162,6 +179,11 @@ mod tests {
             RevisionStatus::parse,
         );
         crate::codes::assert_codes_round_trip(RunStatus::ALL, RunStatus::as_str, RunStatus::parse);
+        crate::codes::assert_codes_round_trip(
+            RecordMigrationStatus::ALL,
+            RecordMigrationStatus::as_str,
+            RecordMigrationStatus::parse,
+        );
         crate::codes::assert_codes_round_trip(
             FileStatus::ALL,
             FileStatus::as_str,

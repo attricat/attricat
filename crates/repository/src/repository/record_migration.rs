@@ -7,6 +7,7 @@ use crate::domain_events::{
     RECORD_MIGRATED_V1, RecordMigratedV1, ReleasedRelationshipV1,
 };
 use crate::persistence_rows::Db;
+use attricat_domain::states::RecordMigrationStatus;
 use attricat_validation::validate_json_schema;
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
@@ -342,9 +343,9 @@ impl AttricatRepository {
             }
         }
         let status = if issues.is_empty() {
-            "ready"
+            RecordMigrationStatus::Ready
         } else {
-            "needs_input"
+            RecordMigrationStatus::NeedsInput
         };
         let (migration_id, reserved_for_batch) = match migration_id {
             Some(migration_id) => (migration_id, true),
@@ -359,7 +360,7 @@ impl AttricatRepository {
             .bind(migration_id)
             .bind(record.blueprint_version)
             .bind(target.blueprint.version)
-            .bind(status)
+            .bind(status.as_str())
             .bind(serde_json::to_value(&issues).expect("migration issues serialize"))
             .bind(workspace_id)
             .execute(&mut *transaction)
@@ -380,7 +381,7 @@ impl AttricatRepository {
             .bind(record.blueprint_id)
             .bind(record.blueprint_version)
             .bind(target.blueprint.version)
-            .bind(status)
+            .bind(status.as_str())
             .bind(serde_json::to_value(&issues).expect("migration issues serialize"))
             .execute(&mut *transaction)
             .await?;
@@ -392,7 +393,7 @@ impl AttricatRepository {
             source_version: record.blueprint_version,
             target,
             values,
-            status: status.to_owned(),
+            status,
             issues,
         })
     }
@@ -736,7 +737,7 @@ impl AttricatRepository {
                 .record(transaction_started.elapsed().as_secs_f64());
             return Err(RepositoryError::MigrationTargetChanged);
         }
-        if migration.3 == "blocked" {
+        if migration.3 == RecordMigrationStatus::Blocked.as_str() {
             return Err(RepositoryError::MigrationNotApplicable);
         }
         let source_values = self

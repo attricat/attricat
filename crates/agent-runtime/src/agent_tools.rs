@@ -4,6 +4,7 @@
 //! context in the repository boundary and avoids granting the model a network
 //! capability.
 
+use attricat_domain::states::RecordMigrationStatus;
 use attricat_domain::value_type::ValueType;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -2393,7 +2394,7 @@ pub async fn execute_mutation(
             }
             let input: Input = decode(arguments)?;
             let preview = repository.preview_record_migration(input.record_id).await?;
-            if preview.status != "ready"
+            if preview.status != RecordMigrationStatus::Ready
                 && input.values.is_empty()
                 && input.relationships.is_empty()
                 && input.discard_attributes.is_empty()

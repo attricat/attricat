@@ -966,7 +966,7 @@ pub struct RecordMigrationPreview {
     pub source_version: i64,
     pub target: BlueprintWithAttributes,
     pub values: Vec<FormAttributeValue>,
-    pub status: String,
+    pub status: crate::states::RecordMigrationStatus,
     pub issues: Vec<MigrationIssue>,
 }
 
