@@ -17,6 +17,7 @@ import {
   snippetIsPresent,
   type DefinitionSnippet,
 } from './definitionSnippets';
+import { scanToml } from './tomlOutline';
 
 const insertMenuMaxHeight = 480;
 const insertMenuWidth = 340;
@@ -57,8 +58,10 @@ export const DefinitionInsertMenu = ({
     setAnchor(null);
     setGroup(undefined);
   };
+  // Scanned once per render of the open menu, not once per snippet.
+  const outline = open ? scanToml(definition) : undefined;
   const available = (snippet: DefinitionSnippet) =>
-    !snippetIsPresent(definition, snippet);
+    !outline || !snippetIsPresent(outline, snippet);
 
   const groupItems = () =>
     groups.map((name) => {

@@ -9,6 +9,7 @@ import {
   snippetIsPresent,
   type DefinitionSnippet,
 } from './definitionSnippets';
+import { scanToml } from './tomlOutline';
 
 /** Expands Monaco snippet syntax the way accepting every default would. */
 const expand = (body: string) => {
@@ -62,7 +63,7 @@ describe('definition snippets', () => {
         const text = apply(bases[kind], snippet);
         expect(() => parse(text)).not.toThrow();
         expect(definitionDiagnostics(kind, text)).toEqual([]);
-        expect(snippetIsPresent(text, snippet)).toBe(
+        expect(snippetIsPresent(scanToml(text), snippet)).toBe(
           Boolean(snippet.conflicts),
         );
       });
@@ -99,10 +100,12 @@ describe('definition snippets', () => {
     const target = definitionSnippets.reusableAttribute.find(
       ({ id }) => id === 'relationshipTarget',
     )!;
-    expect(snippetIsPresent(bases.reusableAttribute, target)).toBe(false);
+    expect(snippetIsPresent(scanToml(bases.reusableAttribute), target)).toBe(
+      false,
+    );
     expect(
       snippetIsPresent(
-        `${bases.reusableAttribute}cardinality = "one"\n`,
+        scanToml(`${bases.reusableAttribute}cardinality = "one"\n`),
         target,
       ),
     ).toBe(true);

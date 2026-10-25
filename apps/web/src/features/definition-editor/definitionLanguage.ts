@@ -156,6 +156,26 @@ export const attachDefinitionModel = (
   };
 };
 
+const errorMarker = (
+  monaco: Monaco,
+  model: editor.ITextModel,
+  { message, range }: { message: string; range: TextRange },
+): editor.IMarkerData => {
+  const { startLineNumber, startColumn, endLineNumber, endColumn } = toRange(
+    monaco,
+    model,
+    range,
+  );
+  return {
+    endColumn,
+    endLineNumber,
+    message,
+    severity: monaco.MarkerSeverity.Error,
+    startColumn,
+    startLineNumber,
+  };
+};
+
 export const updateDefinitionDiagnostics = (
   monaco: Monaco,
   model: editor.ITextModel,
@@ -165,18 +185,9 @@ export const updateDefinitionDiagnostics = (
   monaco.editor.setModelMarkers(
     model,
     diagnosticsOwner,
-    definitionDiagnostics(kind, model.getValue()).map(({ message, range }) => {
-      const { startLineNumber, startColumn, endLineNumber, endColumn } =
-        toRange(monaco, model, range);
-      return {
-        endColumn,
-        endLineNumber,
-        message,
-        severity: monaco.MarkerSeverity.Error,
-        startColumn,
-        startLineNumber,
-      };
-    }),
+    definitionDiagnostics(kind, model.getValue()).map((diagnostic) =>
+      errorMarker(monaco, model, diagnostic),
+    ),
   );
 };
 
@@ -191,19 +202,7 @@ export const updateServerDiagnostic = (
     monaco.editor.setModelMarkers(model, serverDiagnosticsOwner, []);
     return;
   }
-  const { startLineNumber, startColumn, endLineNumber, endColumn } = toRange(
-    monaco,
-    model,
-    error.range,
-  );
   monaco.editor.setModelMarkers(model, serverDiagnosticsOwner, [
-    {
-      endColumn,
-      endLineNumber,
-      message: error.message,
-      severity: monaco.MarkerSeverity.Error,
-      startColumn,
-      startLineNumber,
-    },
+    errorMarker(monaco, model, error),
   ]);
 };

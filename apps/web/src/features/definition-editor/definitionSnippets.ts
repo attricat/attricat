@@ -1,5 +1,5 @@
 import { definitionKinds, type DefinitionKind } from './constants';
-import { scanToml, type TomlPath } from './tomlOutline';
+import { scanToml, type TomlOutline, type TomlPath } from './tomlOutline';
 
 const snippetPlacements = {
   /** A top-level key, inserted before the first table header. */
@@ -242,13 +242,17 @@ export const definitionSnippets: Record<DefinitionKind, DefinitionSnippet[]> = {
   [definitionKinds.reusableAttribute]: reusableAttributeSnippets,
 };
 
-/** Whether the definition already has something the snippet would add. */
-export const snippetIsPresent = (text: string, snippet: DefinitionSnippet) => {
-  const outline = scanToml(text);
-  return (snippet.conflicts ?? []).some((path) =>
+/**
+ * Whether the definition, scanned with `scanToml`, already has something the
+ * snippet would add.
+ */
+export const snippetIsPresent = (
+  outline: TomlOutline,
+  snippet: DefinitionSnippet,
+) =>
+  (snippet.conflicts ?? []).some((path) =>
     outline.keysIn(path.slice(0, -1)).has(String(path.at(-1))),
   );
-};
 
 /**
  * Where a snippet goes and the text to insert there. Keys go after the last
