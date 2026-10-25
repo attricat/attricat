@@ -1,5 +1,5 @@
 import { useForm } from '@tanstack/react-form';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   Button,
@@ -13,7 +13,6 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useRef, useState } from 'react';
 import { UserAvatar } from '../../components/UserAvatar';
 import { UserProfileLink } from '../../components/UserProfileLink';
 import { userAvatarSizes } from '../../components/userAvatars';
@@ -32,8 +31,8 @@ import {
 import { activeMemberState, ownerRoleCode, workspaceScope } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
 import { ScopeFields } from './ScopeFields';
-import { errorMessage } from '../../api/errors';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 
 export const WorkspaceMembersSection = ({
   canManage,
@@ -52,9 +51,6 @@ export const WorkspaceMembersSection = ({
     type: 'unit',
   });
   const client = useQueryClient();
-  const [error, setError] = useState<string>();
-  const submitting = useRef(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const members = useQuery({
     enabled: canManage,
     queryKey: workspaceQueryKeys.members(),
@@ -78,41 +74,43 @@ export const WorkspaceMembersSection = ({
       scope_type: workspaceScope,
       scope_target_id: workspaceId ?? '',
     },
-    onSubmit: async ({ value }) => {
-      if (submitting.current) return;
-      submitting.current = true;
-      setIsSubmitting(true);
-      setError(undefined);
-      try {
-        const input = ensureActiveScopeTarget(
-          {
-            role_id: value.role_id,
-            scope_type: value.scope_type,
-            scope_target_id: selectedScopeTarget(
-              value.scope_type,
-              value.scope_target_id,
-              workspaceId,
-            ),
-          },
-          workspaceId,
-          client.getQueryData(
-            workspaceQueryKeys.grantTargets(value.scope_type),
+    onSubmit: ({ value }) => grantRole.submit(value),
+  });
+  const grantRole = useExclusiveMutation({
+    mutationFn: (value: typeof form.state.values) => {
+      const input = ensureActiveScopeTarget(
+        {
+          role_id: value.role_id,
+          scope_type: value.scope_type,
+          scope_target_id: selectedScopeTarget(
+            value.scope_type,
+            value.scope_target_id,
+            workspaceId,
           ),
-        );
-        await grantMemberRole(value.member_id, input);
-        void refresh();
-        form.reset();
-      } catch (reason) {
-        setError(
-          reason instanceof Error
-            ? errorMessage(reason)
-            : t('workspace.grantRoleFailed'),
-        );
-      } finally {
-        submitting.current = false;
-        setIsSubmitting(false);
-      }
+        },
+        workspaceId,
+        client.getQueryData(workspaceQueryKeys.grantTargets(value.scope_type)),
+      );
+      return grantMemberRole(value.member_id, input);
     },
+    onSuccess: () => {
+      void refresh();
+      form.reset();
+    },
+  });
+  const revoke = useMutation({
+    mutationFn: ({
+      memberId,
+      grantId,
+    }: {
+      memberId: string;
+      grantId: string;
+    }) => revokeMemberRole(memberId, grantId),
+    onSuccess: refresh,
+  });
+  const transfer = useMutation({
+    mutationFn: transferOwnership,
+    onSuccess: refresh,
   });
   const isOwner = members.data?.some(
     (member) =>
@@ -131,7 +129,9 @@ export const WorkspaceMembersSection = ({
   }
   return (
     <Stack spacing={2} sx={{ mt: 3 }}>
-      {error && <Alert severity="error">{error}</Alert>}
+      <ApiErrorAlert error={grantRole.error} />
+      <ApiErrorAlert error={revoke.error} />
+      <ApiErrorAlert error={transfer.error} />
       <ApiErrorAlert error={members.error} />
       <ApiErrorAlert error={roles.error} />
       <Paper>
@@ -170,10 +170,9 @@ export const WorkspaceMembersSection = ({
                 member.grants.map((grant) => (
                   <Button
                     key={grant.id}
+                    disabled={revoke.isPending}
                     onClick={() =>
-                      revokeMemberRole(member.id, grant.id)
-                        .then(refresh)
-                        .catch((e: Error) => setError(errorMessage(e)))
+                      revoke.mutate({ memberId: member.id, grantId: grant.id })
                     }
                   >
                     {t('workspace.revoke', { role: grant.role_code })}
@@ -182,11 +181,8 @@ export const WorkspaceMembersSection = ({
               <Stack direction="row" sx={{ gap: 1 }}>
                 {isOwner && (
                   <Button
-                    onClick={() =>
-                      transferOwnership(member.id)
-                        .then(refresh)
-                        .catch((e: Error) => setError(errorMessage(e)))
-                    }
+                    disabled={transfer.isPending}
+                    onClick={() => transfer.mutate(member.id)}
                   >
                     {t('workspace.transferOwnership')}
                   </Button>
@@ -258,7 +254,11 @@ export const WorkspaceMembersSection = ({
                 />
               )}
             </form.Subscribe>
-            <Button disabled={isSubmitting} type="submit" variant="contained">
+            <Button
+              disabled={grantRole.isPending}
+              type="submit"
+              variant="contained"
+            >
               {t('workspace.grantRole')}
             </Button>
           </Stack>

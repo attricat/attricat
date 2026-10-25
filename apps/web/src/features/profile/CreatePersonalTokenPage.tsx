@@ -14,7 +14,7 @@ import {
   Typography,
 } from '@mui/material';
 import { ArrowLeftIcon, CircleCheckIcon } from 'lucide-react';
-import { useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { monoFontFamily } from '../../app/theme';
 import { SettingsPage } from '../../components/CenteredPage';
@@ -38,9 +38,9 @@ import { SecretDialog } from './SecretDialog';
 import { createToken, listTokenPermissions } from './api';
 import { profileQueryKeys } from './queryKeys';
 import { useInitialFocus } from '../../components/initialFocus';
-import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 
 const permissionGroup = (code: string) => code.split('.')[0] ?? code;
 
@@ -81,47 +81,38 @@ export const CreatePersonalTokenPage = () => {
     queryFn: listTokenPermissions,
   });
   const [secret, setSecret] = useState<string>();
-  const creating = useRef(false);
-  const [isCreating, setIsCreating] = useState(false);
-  const [error, setError] = useState<string>();
   const timeZone = useTimeZone();
   const permissionIdPrefix = useId();
+  const create = useExclusiveMutation({
+    mutationFn: async (value: {
+      label: string;
+      permissions: string[];
+      expires_at: string;
+    }) => {
+      const expiresAt = value.expires_at
+        ? new Date(zonedDateTimeToIso(value.expires_at, timeZone))
+        : undefined;
+      if (
+        expiresAt &&
+        (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date())
+      ) {
+        throw new Error(t('profile.tokenExpiry'));
+      }
+      return createToken({
+        label: value.label.trim(),
+        permissions: value.permissions,
+        ...(expiresAt ? { expires_at: expiresAt.toISOString() } : {}),
+      });
+    },
+    onSuccess: (token) => {
+      setSecret(token.secret);
+      show({ message: t('profile.tokenCreated'), severity: 'success' });
+      void client.invalidateQueries({ queryKey: profileQueryKeys.tokens() });
+    },
+  });
   const form = useForm({
     defaultValues: { label: '', permissions: [] as string[], expires_at: '' },
-    onSubmit: async ({ value }) => {
-      if (creating.current) return;
-      creating.current = true;
-      setIsCreating(true);
-      setError(undefined);
-      try {
-        const expiresAt = value.expires_at
-          ? new Date(zonedDateTimeToIso(value.expires_at, timeZone))
-          : undefined;
-        if (
-          expiresAt &&
-          (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date())
-        ) {
-          throw new Error(t('profile.tokenExpiry'));
-        }
-        const token = await createToken({
-          label: value.label.trim(),
-          permissions: value.permissions,
-          ...(expiresAt ? { expires_at: expiresAt.toISOString() } : {}),
-        });
-        setSecret(token.secret);
-        show({ message: t('profile.tokenCreated'), severity: 'success' });
-        void client.invalidateQueries({ queryKey: profileQueryKeys.tokens() });
-      } catch (reason) {
-        setError(
-          reason instanceof Error
-            ? errorMessage(reason)
-            : t('profile.createFailed'),
-        );
-      } finally {
-        creating.current = false;
-        setIsCreating(false);
-      }
-    },
+    onSubmit: ({ value }) => create.submit(value),
   });
 
   if (!canManage) {
@@ -163,7 +154,7 @@ export const CreatePersonalTokenPage = () => {
             title={t('profile.createToken')}
           />
         </Stack>
-        {error && <Alert severity="error">{error}</Alert>}
+        <ApiErrorAlert error={create.error} />
         <ApiErrorAlert error={permissions.error} />
         <ProfileSection
           description={t('profile.tokenDetailsDescription')}
@@ -414,7 +405,7 @@ export const CreatePersonalTokenPage = () => {
           <Button component={Link} to={tokensPath} variant="outlined">
             {t('common.cancel')}
           </Button>
-          <Button disabled={isCreating} type="submit" variant="contained">
+          <Button disabled={create.isPending} type="submit" variant="contained">
             {t('profile.create')}
           </Button>
         </Stack>

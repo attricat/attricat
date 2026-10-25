@@ -13,7 +13,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { invalidateAuthorization } from '../auth/invalidateAuthorization';
 import { useTranslation } from 'react-i18next';
 import { ArchiveIcon, CopyIcon, PencilIcon } from 'lucide-react';
@@ -23,8 +23,8 @@ import {
   WorkspaceRoleActionDialog,
   type RoleDialogAction,
 } from './WorkspaceRoleActionDialog';
-import { errorMessage } from '../../api/errors';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 
 export const WorkspaceRolesSection = ({
   canManage,
@@ -33,9 +33,6 @@ export const WorkspaceRolesSection = ({
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [error, setError] = useState<string>();
-  const submitting = useRef(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [dialogAction, setDialogAction] = useState<RoleDialogAction>();
   const roles = useQuery({
     enabled: canManage,
@@ -51,35 +48,23 @@ export const WorkspaceRolesSection = ({
     void invalidateAuthorization(client);
     return client.invalidateQueries({ queryKey: workspaceQueryKeys.roles() });
   };
+  const create = useExclusiveMutation({
+    mutationFn: createRole,
+    onSuccess: () => {
+      void refresh();
+      form.reset();
+    },
+  });
   const form = useForm({
     defaultValues: { code: '', permissions: [] as string[] },
-    onSubmit: async ({ value }) => {
-      if (submitting.current) return;
-      submitting.current = true;
-      setIsSubmitting(true);
-      setError(undefined);
-      try {
-        await createRole(value);
-        void refresh();
-        form.reset();
-      } catch (reason) {
-        setError(
-          reason instanceof Error
-            ? errorMessage(reason)
-            : t('workspace.createRoleFailed'),
-        );
-      } finally {
-        submitting.current = false;
-        setIsSubmitting(false);
-      }
-    },
+    onSubmit: ({ value }) => create.submit(value),
   });
   if (!canManage) {
     return <Alert severity="error">{t('workspace.notAuthorizedRoles')}</Alert>;
   }
   return (
     <Stack spacing={2} sx={{ mt: 3 }}>
-      {error && <Alert severity="error">{error}</Alert>}
+      <ApiErrorAlert error={create.error} />
       <ApiErrorAlert error={roles.error} />
       <ApiErrorAlert error={permissions.error} />
       <Paper>
@@ -182,7 +167,7 @@ export const WorkspaceRolesSection = ({
               </>
             )}
           </form.Field>
-          <Button disabled={isSubmitting} type="submit" variant="contained">
+          <Button disabled={create.isPending} type="submit" variant="contained">
             {t('workspace.createRole')}
           </Button>
         </Stack>
