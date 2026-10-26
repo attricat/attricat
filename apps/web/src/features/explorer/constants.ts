@@ -97,8 +97,6 @@ export const overviewRecordsPerBlueprint = 5;
 export const overviewConcurrentSearches = 4;
 /** How long an overview stays fresh through focus changes and remounts. */
 export const overviewStaleTimeMs = 30_000;
-/** React Query's default retry count for unexpected failures. */
-export const defaultQueryRetries = 3;
 
 // Layout dimensions.
 /** The record panel floats over the results; keep most of them visible. */
