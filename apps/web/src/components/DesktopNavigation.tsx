@@ -5,7 +5,7 @@ import {
   saveNavigationPanelCollapsed,
   savedNavigationPanelCollapsed,
 } from './navigationPanelPreference';
-import { SideNavigation } from './SideNavigation';
+import { CompactSideNavigation } from './SideNavigation';
 import {
   compactNavigationWidth,
   managementSidebarWidth,
@@ -61,14 +61,13 @@ export const DesktopNavigation = ({
         slotProps={{ paper: { sx: { overflow: 'hidden', width } } }}
         variant="permanent"
       >
-        <SideNavigation
-          compact
-          compactExploreOpen={exploreOpen}
-          compactExtensionsOpen={extensionsOpen}
-          compactManageOpen={manageOpen}
-          onCompactExploreOpenChange={rememberingOpen(setExploreOpen)}
-          onCompactExtensionsOpenChange={rememberingOpen(setExtensionsOpen)}
-          onCompactManageOpenChange={rememberingOpen(setManageOpen)}
+        <CompactSideNavigation
+          exploreOpen={exploreOpen}
+          extensionsOpen={extensionsOpen}
+          manageOpen={manageOpen}
+          onExploreOpenChange={rememberingOpen(setExploreOpen)}
+          onExtensionsOpenChange={rememberingOpen(setExtensionsOpen)}
+          onManageOpenChange={rememberingOpen(setManageOpen)}
           onSignOut={onSignOut}
         />
       </Drawer>

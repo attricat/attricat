@@ -18,7 +18,7 @@ import '../i18n';
 import { currentSession } from '../features/auth/api';
 import { getUnreadCount } from '../features/notifications/api';
 import { listSidebarExploreNavigation } from '../features/workspace/api';
-import { SideNavigation } from './SideNavigation';
+import { CompactSideNavigation, MobileSideNavigation } from './SideNavigation';
 
 let currentPathname = '/';
 
@@ -123,7 +123,12 @@ vi.mock('../features/extensions/ExtensionOutlet', () => ({
 
 const renderNavigation = (
   onNavigate = vi.fn(),
-  props: Partial<ComponentProps<typeof SideNavigation>> = {},
+  {
+    compact = false,
+    ...props
+  }: { compact?: boolean } & Partial<
+    ComponentProps<typeof CompactSideNavigation>
+  > = {},
 ) => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -131,7 +136,11 @@ const renderNavigation = (
 
   render(
     <QueryClientProvider client={client}>
-      <SideNavigation {...props} onNavigate={onNavigate} />
+      {compact ? (
+        <CompactSideNavigation {...props} />
+      ) : (
+        <MobileSideNavigation onNavigate={onNavigate} />
+      )}
     </QueryClientProvider>,
   );
 
@@ -215,18 +224,18 @@ describe('SideNavigation', () => {
   });
 
   it('keeps compact Explore and Manage panels mutually exclusive', async () => {
-    const onCompactManageOpenChange = vi.fn();
+    const onManageOpenChange = vi.fn();
     renderNavigation(vi.fn(), {
       compact: true,
-      onCompactManageOpenChange,
+      onManageOpenChange,
     });
 
     fireEvent.click(screen.getByRole('link', { name: 'Manage' }));
-    onCompactManageOpenChange.mockClear();
+    onManageOpenChange.mockClear();
     fireEvent.click(screen.getByRole('link', { name: /record explorer/i }));
 
-    expect(onCompactManageOpenChange).toHaveBeenCalledOnce();
-    expect(onCompactManageOpenChange).toHaveBeenCalledWith(false);
+    expect(onManageOpenChange).toHaveBeenCalledOnce();
+    expect(onManageOpenChange).toHaveBeenCalledWith(false);
     expect(screen.queryByRole('navigation', { name: 'Manage' })).toBeNull();
     expect(
       screen.getByRole('navigation', { name: /record explorer/i }),
@@ -239,7 +248,7 @@ describe('SideNavigation', () => {
     });
     const view = render(
       <QueryClientProvider client={client}>
-        <SideNavigation />
+        <MobileSideNavigation />
       </QueryClientProvider>,
     );
     expect(
@@ -249,7 +258,7 @@ describe('SideNavigation', () => {
     currentPathname = '/manage/extensions';
     view.rerender(
       <QueryClientProvider client={client}>
-        <SideNavigation />
+        <MobileSideNavigation />
       </QueryClientProvider>,
     );
     expect(screen.getByRole('heading', { name: 'Manage' })).toBeTruthy();
@@ -257,7 +266,7 @@ describe('SideNavigation', () => {
     currentPathname = '/extensions';
     view.rerender(
       <QueryClientProvider client={client}>
-        <SideNavigation />
+        <MobileSideNavigation />
       </QueryClientProvider>,
     );
     expect(screen.getByRole('heading', { name: 'Apps' })).toBeTruthy();

@@ -3,7 +3,7 @@ import { MenuIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrandIcon } from './BrandIcon';
-import { SideNavigation } from './SideNavigation';
+import { MobileSideNavigation } from './SideNavigation';
 import { expandedNavigationWidth } from './sideNavigationLayout';
 
 export const MobileNavigation = ({
@@ -40,7 +40,7 @@ export const MobileNavigation = ({
         slotProps={{ paper: { sx: { width: expandedNavigationWidth } } }}
         variant="temporary"
       >
-        <SideNavigation
+        <MobileSideNavigation
           key={`${pathname}:${open ? 'open' : 'closed'}`}
           onNavigate={close}
           onSignOut={onSignOut}

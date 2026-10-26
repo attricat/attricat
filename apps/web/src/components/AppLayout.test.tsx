@@ -46,22 +46,24 @@ vi.mock('../features/extension-runs/ExtensionRunWatcher', () => ({
   ExtensionRunWatcher: () => null,
 }));
 
-vi.mock('./SideNavigation', () => ({
-  SideNavigation: ({
-    onCompactExploreOpenChange,
+vi.mock('./SideNavigation', () => {
+  const Navigation = ({
+    onExploreOpenChange,
     onSignOut,
   }: {
-    onCompactExploreOpenChange?: (open: boolean) => void;
+    onExploreOpenChange?: (open: boolean) => void;
     onSignOut?: () => void;
   }) => (
     <>
-      <button onClick={() => onCompactExploreOpenChange?.(true)}>
-        Open Explore
-      </button>
+      <button onClick={() => onExploreOpenChange?.(true)}>Open Explore</button>
       <button onClick={onSignOut}>Sign out</button>
     </>
-  ),
-}));
+  );
+  return {
+    CompactSideNavigation: Navigation,
+    MobileSideNavigation: Navigation,
+  };
+});
 
 const session = {
   email: 'user@example.test',
