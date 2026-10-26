@@ -9,19 +9,14 @@ import {
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-
-type Proposal = {
-  fields: Record<string, string>;
-  explanation: string;
-  baseValues?: Record<string, string | null>;
-};
+import type { ParsedDraftProposal } from './parseDraftProposal';
 
 export const DraftProposal = ({
   proposal,
   onApply,
   getDraftValues,
 }: {
-  proposal: Proposal;
+  proposal: ParsedDraftProposal;
   onApply: (fields: Record<string, string>) => void;
   getDraftValues?: () => Record<string, string>;
 }) => {

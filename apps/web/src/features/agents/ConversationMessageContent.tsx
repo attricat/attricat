@@ -13,12 +13,9 @@ import { bulkEditToolName } from './bulkEdits';
 import { bulkEditResultSchema } from './schemas';
 import { BulkEditResult } from './BulkEditResult';
 import { useTranslation } from 'react-i18next';
-import '../../i18n';
+import { isJsonObject as isRecord } from '../../api/jsonObject';
 import { JsonBlock } from '../../components/JsonValue';
 import { messageRoles, uuidPattern } from './constants';
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const JsonDetails = ({
   children,

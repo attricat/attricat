@@ -1,11 +1,10 @@
-type ParsedDraftProposal = {
+import { isJsonObject as isRecord } from '../../api/jsonObject';
+
+export type ParsedDraftProposal = {
   fields: Record<string, string>;
   explanation: string;
   baseValues?: Record<string, string | null>;
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export const parseDraftProposal = (
   content: unknown,
