@@ -1,3 +1,10 @@
+import { z } from 'zod';
+import {
+  readStoredJson,
+  writeStored,
+  writeStoredJson,
+  storageAreas,
+} from '../../components/browserStorage';
 import { columnPreferencesStorageKeyPrefix } from './constants';
 
 export type ExplorerColumnPreferences = {
@@ -30,51 +37,29 @@ const normalizePreferences = (
   };
 };
 
-const isPreferences = (value: unknown): value is ExplorerColumnPreferences =>
-  Boolean(
-    value &&
-    typeof value === 'object' &&
-    Array.isArray((value as ExplorerColumnPreferences).hidden) &&
-    Array.isArray((value as ExplorerColumnPreferences).order) &&
-    (value as ExplorerColumnPreferences).hidden.every(
-      (id) => typeof id === 'string',
-    ) &&
-    (value as ExplorerColumnPreferences).order.every(
-      (id) => typeof id === 'string',
-    ),
-  );
+const preferencesSchema = z.object({
+  hidden: z.array(z.string()),
+  order: z.array(z.string()),
+});
 
 export const getExplorerColumnPreferences = (
   blueprintId: string,
   columnIds: string[],
 ): ExplorerColumnPreferences => {
-  try {
-    const stored = JSON.parse(
-      localStorage.getItem(storageKey(blueprintId)) ?? '',
-    );
-    return isPreferences(stored)
-      ? normalizePreferences(stored, columnIds)
-      : defaultPreferences(columnIds);
-  } catch {
-    return defaultPreferences(columnIds);
-  }
+  const stored = readStoredJson(
+    storageAreas.local,
+    storageKey(blueprintId),
+    preferencesSchema,
+  );
+  return stored
+    ? normalizePreferences(stored, columnIds)
+    : defaultPreferences(columnIds);
 };
 
 export const setExplorerColumnPreferences = (
   blueprintId: string,
   preferences: ExplorerColumnPreferences,
-) => {
-  try {
-    localStorage.setItem(storageKey(blueprintId), JSON.stringify(preferences));
-  } catch {
-    // Storage can be unavailable in hardened browser contexts.
-  }
-};
+) => writeStoredJson(storageAreas.local, storageKey(blueprintId), preferences);
 
-export const clearExplorerColumnPreferences = (blueprintId: string) => {
-  try {
-    localStorage.removeItem(storageKey(blueprintId));
-  } catch {
-    // Storage can be unavailable in hardened browser contexts.
-  }
-};
+export const clearExplorerColumnPreferences = (blueprintId: string) =>
+  writeStored(storageAreas.local, storageKey(blueprintId), null);
