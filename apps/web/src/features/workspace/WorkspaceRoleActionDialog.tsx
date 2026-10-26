@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { z } from 'zod';
 import {
   duplicateRole,
   retireRole,
@@ -26,8 +27,6 @@ export type RoleDialogAction =
   | { role: WorkspaceRole; type: 'retire' };
 
 const roleCodePattern = /^[a-z][a-z0-9_-]*$/;
-const uuidPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const WorkspaceRoleActionDialog = ({
   action,
@@ -68,7 +67,7 @@ export const WorkspaceRoleActionDialog = ({
   const codeError = (value: string) =>
     roleCodePattern.test(value) ? undefined : t('workspace.roleCodeInvalid');
   const replacementRoleError = (value: string) =>
-    !value || uuidPattern.test(value)
+    !value || z.uuid().safeParse(value).success
       ? undefined
       : t('workspace.replacementRoleInvalid');
   const title =

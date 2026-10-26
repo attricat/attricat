@@ -19,12 +19,34 @@ export const messageRoles = {
   tool: 'tool',
 } as const;
 
-export const activeRunStatuses: readonly string[] = [
-  'queued',
-  'running',
-  'awaiting_approval',
+export const agentRunStatuses = {
+  queued: 'queued',
+  running: 'running',
+  awaitingApproval: 'awaiting_approval',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+  skipped: 'skipped',
+} as const;
+type AgentRunStatus = (typeof agentRunStatuses)[keyof typeof agentRunStatuses];
+
+/** Runs that have not finished, including those waiting for an approval. */
+export const activeRunStatuses: readonly AgentRunStatus[] = [
+  agentRunStatuses.queued,
+  agentRunStatuses.running,
+  agentRunStatuses.awaitingApproval,
 ];
-export const thinkingRunStatuses: readonly string[] = ['queued', 'running'];
+/** Runs the agent is working on, shown with a thinking indicator. */
+export const thinkingRunStatuses: readonly AgentRunStatus[] = [
+  agentRunStatuses.queued,
+  agentRunStatuses.running,
+];
+
+/** What a bulk edit reports for each record it applies. */
+export const bulkProgressStates = {
+  applied: 'applied',
+  failed: 'failed',
+} as const;
 
 export const runUpdateEvents = [
   'status',
