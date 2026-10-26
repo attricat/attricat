@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
 import { makeTheme } from '../../../app/theme';
@@ -132,19 +133,22 @@ describe('color components', () => {
   });
   it('previews editing and configured table columns with the same value', () => {
     const { container } = render(
-      <BlueprintViewsPreview
-        attributes={[attribute]}
-        views={{
-          detail: {
-            type: 'stack',
-            children: [{ type: 'field', field: 'hex', component: display }],
-          },
-          table: {
-            type: 'table',
-            columns: [{ field: 'hex', label: 'Color', renderer: display }],
-          },
-        }}
-      />,
+      // The sandbox's field diagnostics read the session.
+      <QueryClientProvider client={new QueryClient()}>
+        <BlueprintViewsPreview
+          attributes={[attribute]}
+          views={{
+            detail: {
+              type: 'stack',
+              children: [{ type: 'field', field: 'hex', component: display }],
+            },
+            table: {
+              type: 'table',
+              columns: [{ field: 'hex', label: 'Color', renderer: display }],
+            },
+          }}
+        />
+      </QueryClientProvider>,
     );
     fireEvent.change(screen.getByLabelText('Pick color for hex'), {
       target: { value: '#123456' },

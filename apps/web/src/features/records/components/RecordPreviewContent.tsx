@@ -1,5 +1,5 @@
 import { Alert, Box, Paper, Typography } from '@mui/material';
-import { useState, type Ref } from 'react';
+import { useRef, useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
 import {
@@ -13,6 +13,11 @@ import {
 } from '../../extensions/constants';
 import { useExtensionRuntime } from '../../extensions/useExtensionRuntime';
 import { RecordView } from '../../views/components/RecordView';
+import {
+  FieldRevealContext,
+  RevealFieldContext,
+  useFieldReveal,
+} from '../../views/fieldReveal';
 import { recordHeadingComponentId } from '../../views/components/blocks/RecordHeadingDefinition';
 import type {
   Attribute,
@@ -21,6 +26,8 @@ import type {
   getResolvedRecordPreview,
   StatusTransitionAccess,
 } from '../api';
+import { FieldDiagnosticsContext } from '../fieldDiagnostics';
+import { useBlueprintFieldDiagnostics } from '../useBlueprintFieldDiagnostics';
 import { attributeLabel } from '../recordDisplay';
 import { RecordContextPicker } from './RecordContextPicker';
 import {
@@ -63,6 +70,24 @@ export const RecordPreviewContent = ({
   const { t } = useTranslation();
   // Switching context would drop changes that are not saved yet.
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  // Leads from a field's diagnostics to the fields connected to it; an
+  // editable record's fields reveal their own.
+  const readOnlyFieldsRef = useRef<HTMLDivElement>(null);
+  const { request: revealRequest, reveal: revealField } =
+    useFieldReveal(readOnlyFieldsRef);
+  const shownContextId = contextId ?? defaultContextId ?? undefined;
+  const diagnostics = useBlueprintFieldDiagnostics({
+    attributes: blueprint.attributes,
+    recordSchema: blueprint.blueprint.record_schema,
+    definition: blueprint.blueprint.definition,
+    revision: blueprint.blueprint,
+    record: {
+      id: recordId,
+      contextCode: contexts.find((context) => context.id === shownContextId)
+        ?.code,
+      contextId: shownContextId,
+    },
+  });
   const runtimeScope = {
     blueprintId: blueprint.blueprint.id,
     blueprintVersion: blueprint.blueprint.version,
@@ -129,73 +154,79 @@ export const RecordPreviewContent = ({
   return (
     <Box sx={{ mt: 3 }}>
       <Paper component="section" sx={{ p: { xs: 2, md: 3 } }}>
-        <RecordContextPicker
-          contexts={contexts}
-          disabled={hasPendingChanges}
-          onChange={onContextChange}
-          value={contextId ?? ''}
-        />
-        {form && contextId && contextId !== defaultContextId && (
-          // Says whose values the fields change, and where the rest come from.
-          <Alert severity="info" sx={{ mt: 2 }}>
-            {t('records.editingContext', {
-              context:
-                contexts.find((context) => context.id === contextId)?.code ??
-                contextId,
-            })}
-          </Alert>
-        )}
-        {form ? (
-          <RecordInlineFields
-            key={`${recordId}:${contextId ?? ''}`}
-            attributes={blueprint.attributes}
-            contextId={contextId ?? null}
-            defaultContextId={defaultContextId}
-            recordId={recordId}
-            form={form}
-            ref={inlineFieldsRef}
-            onPendingChange={setHasPendingChanges}
-            renderAttributeDecoration={renderAttributeDecoration}
-            renderAttributePanel={renderAttributePanel}
-            renderFilePanel={renderFilePanel}
-            resolvedValues={resolved.values}
-            reusableResolvedValues={resolved.reusable_values ?? {}}
-            singleColumn={singleColumn}
-            statusParentContextIds={statusParentContextIds}
-            statusTransitions={statusTransitions}
-            view={blueprint.blueprint.views.detail}
+        <FieldDiagnosticsContext value={diagnostics}>
+          <RecordContextPicker
+            contexts={contexts}
+            disabled={hasPendingChanges}
+            onChange={onContextChange}
+            value={contextId ?? ''}
           />
-        ) : (
-          <>
-            <RecordView
+          {form && contextId && contextId !== defaultContextId && (
+            // Says whose values the fields change, and where the rest come from.
+            <Alert severity="info" sx={{ mt: 2 }}>
+              {t('records.editingContext', {
+                context:
+                  contexts.find((context) => context.id === contextId)?.code ??
+                  contextId,
+              })}
+            </Alert>
+          )}
+          {form ? (
+            <RecordInlineFields
+              key={`${recordId}:${contextId ?? ''}`}
               attributes={blueprint.attributes}
-              fallbackVisibilityScope="detail"
-              contextId={contextId}
+              contextId={contextId ?? null}
+              defaultContextId={defaultContextId}
               recordId={recordId}
+              form={form}
+              ref={inlineFieldsRef}
+              onPendingChange={setHasPendingChanges}
               renderAttributeDecoration={renderAttributeDecoration}
               renderAttributePanel={renderAttributePanel}
               renderFilePanel={renderFilePanel}
-              values={resolved.values}
-              view={blueprint.blueprint.views.detail}
+              resolvedValues={resolved.values}
+              reusableResolvedValues={resolved.reusable_values ?? {}}
               singleColumn={singleColumn}
-              skipComponentId={recordHeadingComponentId}
+              statusParentContextIds={statusParentContextIds}
+              statusTransitions={statusTransitions}
+              view={blueprint.blueprint.views.detail}
             />
-            {(resolved.reusable_attributes?.length ?? 0) > 0 && (
-              <Box component="section" sx={{ mt: 4 }}>
-                <Typography component="h2" variant="h6">
-                  {t('records.additionalAttributes')}
-                </Typography>
-                <RecordView
-                  attributes={resolved.reusable_attributes}
-                  contextId={contextId}
-                  recordId={recordId}
-                  singleColumn={singleColumn}
-                  values={resolved.reusable_values ?? {}}
-                />
-              </Box>
-            )}
-          </>
-        )}
+          ) : (
+            <Box ref={readOnlyFieldsRef}>
+              <RevealFieldContext value={revealField}>
+                <FieldRevealContext value={revealRequest}>
+                  <RecordView
+                    attributes={blueprint.attributes}
+                    fallbackVisibilityScope="detail"
+                    contextId={contextId}
+                    recordId={recordId}
+                    renderAttributeDecoration={renderAttributeDecoration}
+                    renderAttributePanel={renderAttributePanel}
+                    renderFilePanel={renderFilePanel}
+                    values={resolved.values}
+                    view={blueprint.blueprint.views.detail}
+                    singleColumn={singleColumn}
+                    skipComponentId={recordHeadingComponentId}
+                  />
+                  {(resolved.reusable_attributes?.length ?? 0) > 0 && (
+                    <Box component="section" sx={{ mt: 4 }}>
+                      <Typography component="h2" variant="h6">
+                        {t('records.additionalAttributes')}
+                      </Typography>
+                      <RecordView
+                        attributes={resolved.reusable_attributes}
+                        contextId={contextId}
+                        recordId={recordId}
+                        singleColumn={singleColumn}
+                        values={resolved.reusable_values ?? {}}
+                      />
+                    </Box>
+                  )}
+                </FieldRevealContext>
+              </RevealFieldContext>
+            </Box>
+          )}
+        </FieldDiagnosticsContext>
       </Paper>
       <ExtensionOutlet
         context={{ record_id: recordId, context_id: contextId }}

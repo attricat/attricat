@@ -18,7 +18,11 @@ import {
   EditableRecordLayout,
   EditableRecordSection,
 } from '../../views/components/EditableRecordLayout';
-import { FieldRevealContext, useFieldReveal } from '../../views/fieldReveal';
+import {
+  FieldRevealContext,
+  RevealFieldContext,
+  useFieldReveal,
+} from '../../views/fieldReveal';
 import { attributeLabel } from '../recordDisplay';
 import { FieldSaveStatus } from './FieldSaveStatus';
 import { RecordView } from '../../views/components/RecordView';
@@ -438,35 +442,37 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
           saving={saves.saving}
         />
         <Box ref={fieldsRef}>
-          <FieldRevealContext value={revealRequest}>
-            <EditableRecordLayout
-              {...viewProps}
-              attributes={attributes}
-              fallbackVisibilityScope="detail"
-              headingAttributes={headingEditableAttributes(
-                blueprintChangeable,
-                view,
+          <RevealFieldContext value={revealField}>
+            <FieldRevealContext value={revealRequest}>
+              <EditableRecordLayout
+                {...viewProps}
+                attributes={attributes}
+                fallbackVisibilityScope="detail"
+                headingAttributes={headingEditableAttributes(
+                  blueprintChangeable,
+                  view,
+                )}
+                otherAttributes={unplacedEditableAttributes(
+                  blueprintChangeable,
+                  view,
+                )}
+                values={resolvedValues}
+                view={view}
+              />
+              {form.reusable_attributes.length > 0 && (
+                <EditableRecordSection
+                  headingLevel="h2"
+                  title={t('records.additionalAttributes')}
+                >
+                  <RecordView
+                    {...viewProps}
+                    attributes={form.reusable_attributes}
+                    values={reusableResolvedValues}
+                  />
+                </EditableRecordSection>
               )}
-              otherAttributes={unplacedEditableAttributes(
-                blueprintChangeable,
-                view,
-              )}
-              values={resolvedValues}
-              view={view}
-            />
-            {form.reusable_attributes.length > 0 && (
-              <EditableRecordSection
-                headingLevel="h2"
-                title={t('records.additionalAttributes')}
-              >
-                <RecordView
-                  {...viewProps}
-                  attributes={form.reusable_attributes}
-                  values={reusableResolvedValues}
-                />
-              </EditableRecordSection>
-            )}
-          </FieldRevealContext>
+            </FieldRevealContext>
+          </RevealFieldContext>
         </Box>
         {form.can_write && (
           <Box sx={{ mt: 3 }}>

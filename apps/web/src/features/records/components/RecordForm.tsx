@@ -77,7 +77,13 @@ import {
   type FormErrorSummaryItem,
 } from '../../../components/FormErrorSummary';
 import { UnsavedChangesGuard } from '../../drafts/UnsavedChangesGuard';
-import { FieldRevealContext, useFieldReveal } from '../../views/fieldReveal';
+import {
+  FieldRevealContext,
+  RevealFieldContext,
+  useFieldReveal,
+} from '../../views/fieldReveal';
+import { FieldDiagnosticsContext } from '../fieldDiagnostics';
+import { useBlueprintFieldDiagnostics } from '../useBlueprintFieldDiagnostics';
 import { migrationReviewSelector } from '../constants';
 
 export type RecordFormHandle = {
@@ -113,6 +119,7 @@ const pickDraftFields = (
 const noStatusParentContextIds: readonly string[] = [];
 const noStatusTransitions: readonly [] = [];
 const noResolvedValues = {};
+const noAttributes: readonly Attribute[] = [];
 const noPendingConfirmations: readonly FormErrorSummaryItem[] = [];
 const fieldSkeletons = ['first', 'second', 'third'];
 
@@ -306,6 +313,13 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     // Opens the tab or accordion holding a field and focuses it.
     const { request: revealRequest, reveal: revealField } =
       useFieldReveal(formRef);
+    // The record is not saved yet, so its fields have no findings or values.
+    const diagnostics = useBlueprintFieldDiagnostics({
+      attributes: blueprint?.attributes ?? noAttributes,
+      recordSchema: blueprint?.blueprint.record_schema,
+      definition: blueprint?.blueprint.definition,
+      revision: blueprint?.blueprint,
+    });
     const errorsRef = useRef<HTMLDivElement>(null);
     // Set when the errors should take focus once they first render.
     const errorFocusPending = useRef(false);
@@ -752,24 +766,28 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                   </Box>
                 );
                 return (
-                  <FieldRevealContext value={revealRequest}>
-                    <EditableRecordLayout
-                      attributes={blueprint.attributes}
-                      fallbackVisibilityScope={
-                        showAllAttributes
-                          ? undefined
-                          : detailView
-                            ? 'detail'
-                            : 'form'
-                      }
-                      headingAttributes={headingFields}
-                      invalidFields={new Set(Object.keys(allFieldErrors))}
-                      otherAttributes={otherAttributes}
-                      renderEditor={renderEditor}
-                      values={noResolvedValues}
-                      view={shownView}
-                    />
-                  </FieldRevealContext>
+                  <FieldDiagnosticsContext value={diagnostics}>
+                    <RevealFieldContext value={revealField}>
+                      <FieldRevealContext value={revealRequest}>
+                        <EditableRecordLayout
+                          attributes={blueprint.attributes}
+                          fallbackVisibilityScope={
+                            showAllAttributes
+                              ? undefined
+                              : detailView
+                                ? 'detail'
+                                : 'form'
+                          }
+                          headingAttributes={headingFields}
+                          invalidFields={new Set(Object.keys(allFieldErrors))}
+                          otherAttributes={otherAttributes}
+                          renderEditor={renderEditor}
+                          values={noResolvedValues}
+                          view={shownView}
+                        />
+                      </FieldRevealContext>
+                    </RevealFieldContext>
+                  </FieldDiagnosticsContext>
                 );
               }}
             </form.Field>

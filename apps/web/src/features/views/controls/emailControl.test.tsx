@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '@mui/material';
 import { makeTheme } from '../../../app/theme';
@@ -97,27 +98,30 @@ describe('email components', () => {
   });
   it('uses email input and display in the blueprint sandbox', () => {
     render(
-      <BlueprintViewsPreview
-        attributes={[attribute]}
-        views={{
-          edit: {
-            type: 'stack',
-            children: [
-              { type: 'field', field: 'contact', component: emailEdit },
-            ],
-          },
-          detail: {
-            type: 'stack',
-            children: [
-              { type: 'field', field: 'contact', component: emailDisplay },
-            ],
-          },
-          table: {
-            type: 'table',
-            columns: [{ field: 'contact', renderer: emailDisplay }],
-          },
-        }}
-      />,
+      // The sandbox's field diagnostics read the session.
+      <QueryClientProvider client={new QueryClient()}>
+        <BlueprintViewsPreview
+          attributes={[attribute]}
+          views={{
+            edit: {
+              type: 'stack',
+              children: [
+                { type: 'field', field: 'contact', component: emailEdit },
+              ],
+            },
+            detail: {
+              type: 'stack',
+              children: [
+                { type: 'field', field: 'contact', component: emailDisplay },
+              ],
+            },
+            table: {
+              type: 'table',
+              columns: [{ field: 'contact', renderer: emailDisplay }],
+            },
+          }}
+        />
+      </QueryClientProvider>,
     );
     expect(screen.getByRole('textbox').getAttribute('type')).toBe('email');
     fireEvent.change(screen.getByRole('textbox'), {

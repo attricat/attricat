@@ -34,6 +34,13 @@ declare module '@mui/material/styles' {
     /** Marks a field changed before an explicit Save. */
     changed: string;
   }
+  interface PaletteColor {
+    /** A faint background in the color, behind content that keeps its own. */
+    tint?: string;
+  }
+  interface SimplePaletteColorOptions {
+    tint?: string;
+  }
 }
 
 export const monoFontFamily = typography.families.mono;
@@ -65,13 +72,17 @@ export const makeTheme = (mode: DesignMode) => {
       mode,
       primary: { main: c.brand.primary, contrastText: c.brand.onPrimary },
       secondary: { main: c.brand.accent },
-      success: { main: c.semantic.success.main },
+      success: {
+        main: c.semantic.success.main,
+        tint: c.semantic.success.tint,
+      },
       warning: {
         main: c.semantic.warning.main,
         contrastText: c.semantic.warning.onMain,
+        tint: c.semantic.warning.tint,
       },
-      error: { main: c.semantic.error.main },
-      info: { main: c.semantic.info.main },
+      error: { main: c.semantic.error.main, tint: c.semantic.error.tint },
+      info: { main: c.semantic.info.main, tint: c.semantic.info.tint },
       background: {
         default: c.background.default,
         paper: c.background.surface,

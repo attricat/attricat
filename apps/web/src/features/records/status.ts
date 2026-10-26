@@ -235,7 +235,7 @@ export const statusLabel = (
   return config && statusCodeLabel(config, value);
 };
 /** `all` never covers the status attribute that declares it. */
-const statusCovers = (
+export const statusCovers = (
   coverage: StatusCoverage,
   attributeCode: string,
   statusCode: string,

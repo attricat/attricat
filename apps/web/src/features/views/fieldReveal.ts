@@ -17,6 +17,15 @@ export const FieldRevealContext = createContext<FieldRevealRequest | null>(
   null,
 );
 
+/**
+ * Shows a field where the fields around it can lead to it, such as from a
+ * field's diagnostics; `null` where nothing reveals fields.
+ */
+export const RevealFieldContext = createContext<
+  ((code: string) => void) | null
+>(null);
+export const useRevealField = () => useContext(RevealFieldContext);
+
 // Frames to wait for nested tabs and accordions to open, one after another.
 const REVEAL_FRAMES = 30;
 

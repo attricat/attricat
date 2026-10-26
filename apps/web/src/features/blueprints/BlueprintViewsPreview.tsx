@@ -1,5 +1,5 @@
-import { Alert, Paper, Tab, Tabs, Typography } from '@mui/material';
-import { useState } from 'react';
+import { Alert, Box, Paper, Tab, Tabs, Typography } from '@mui/material';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import type {
@@ -9,7 +9,14 @@ import type {
   JsonSchema,
   ViewDefinition,
 } from '../records/api';
+import { FieldDiagnosticsContext } from '../records/fieldDiagnostics';
+import { useBlueprintFieldDiagnostics } from '../records/useBlueprintFieldDiagnostics';
 import { EditableRecordLayout } from '../views/components/EditableRecordLayout';
+import {
+  FieldRevealContext,
+  RevealFieldContext,
+  useFieldReveal,
+} from '../views/fieldReveal';
 import { resolveEditComponent } from '../views/components/registry';
 import {
   headingEditableAttributes,
@@ -30,11 +37,17 @@ const viewTabs = (views: Blueprint['views']): ViewTab[] => [
 
 export const BlueprintViewsPreview = ({
   attributes,
+  definition,
   recordSchema,
+  revision,
   views,
 }: {
   attributes: readonly Attribute[];
+  /** The definition source, for what only it records, such as unique keys. */
+  definition?: string;
   recordSchema?: JsonSchema | null;
+  /** The saved revision shown, whose enabled data quality rules apply. */
+  revision?: { id: string; version: number };
   views: Blueprint['views'];
 }) => {
   const { t } = useTranslation();
@@ -49,6 +62,15 @@ export const BlueprintViewsPreview = ({
   const [activeViewName, activeView] = tabs[activeViewIndex];
   const values = sandboxValuesForFields(attributes, fields);
   const validation = sandboxValidation(attributes, fields, recordSchema);
+  const diagnostics = useBlueprintFieldDiagnostics({
+    attributes,
+    recordSchema,
+    definition,
+    revision,
+  });
+  const fieldsRef = useRef<HTMLDivElement>(null);
+  const { request: revealRequest, reveal: revealField } =
+    useFieldReveal(fieldsRef);
   const updateField = (code: string, value: string) =>
     setFields((current) => ({ ...current, [code]: value }));
   // Display components on the detail layout edit with their paired editor.
@@ -56,13 +78,16 @@ export const BlueprintViewsPreview = ({
     attribute: Attribute,
     component?: ComponentReference | null,
   ) => (
-    <SandboxAttributeEditor
-      attribute={attribute}
-      component={resolveEditComponent(component) ?? component}
-      error={validation.fieldErrors[attribute.code]}
-      onChange={(value) => updateField(attribute.code, value)}
-      value={fields[attribute.code] ?? ''}
-    />
+    // Marks where the field is, to lead to it from a connected field.
+    <Box data-field-code={attribute.code}>
+      <SandboxAttributeEditor
+        attribute={attribute}
+        component={resolveEditComponent(component) ?? component}
+        error={validation.fieldErrors[attribute.code]}
+        onChange={(value) => updateField(attribute.code, value)}
+        value={fields[attribute.code] ?? ''}
+      />
+    </Box>
   );
   const editable = attributes.filter((attribute) => !attribute.readonly);
 
@@ -90,37 +115,47 @@ export const BlueprintViewsPreview = ({
       </Tabs>
       <Paper
         {...tabId.panel(activeViewIndex)}
+        ref={fieldsRef}
         sx={{ mt: 2, p: 2.5 }}
         variant="outlined"
       >
-        {activeViewName === sandboxEditTab && validation.formError && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {validation.formError}
-          </Alert>
-        )}
-        {activeViewName === sandboxEditTab ? (
-          <EditableRecordLayout
-            attributes={attributes}
-            fallbackVisibilityScope="detail"
-            headingAttributes={headingEditableAttributes(
-              editable,
-              views.detail,
-            )}
-            headingLevel="h3"
-            otherAttributes={unplacedEditableAttributes(editable, views.detail)}
-            renderEditor={renderEditor}
-            values={values}
-            view={activeView}
-          />
-        ) : (
-          activeView && (
-            <RenderedBlueprintView
-              attributes={attributes}
-              values={values}
-              view={activeView}
-            />
-          )
-        )}
+        <FieldDiagnosticsContext value={diagnostics}>
+          <RevealFieldContext value={revealField}>
+            <FieldRevealContext value={revealRequest}>
+              {activeViewName === sandboxEditTab && validation.formError && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {validation.formError}
+                </Alert>
+              )}
+              {activeViewName === sandboxEditTab ? (
+                <EditableRecordLayout
+                  attributes={attributes}
+                  fallbackVisibilityScope="detail"
+                  headingAttributes={headingEditableAttributes(
+                    editable,
+                    views.detail,
+                  )}
+                  headingLevel="h3"
+                  otherAttributes={unplacedEditableAttributes(
+                    editable,
+                    views.detail,
+                  )}
+                  renderEditor={renderEditor}
+                  values={values}
+                  view={activeView}
+                />
+              ) : (
+                activeView && (
+                  <RenderedBlueprintView
+                    attributes={attributes}
+                    values={values}
+                    view={activeView}
+                  />
+                )
+              )}
+            </FieldRevealContext>
+          </RevealFieldContext>
+        </FieldDiagnosticsContext>
       </Paper>
     </>
   );

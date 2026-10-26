@@ -178,6 +178,7 @@ export const BlueprintEditorPage = ({
           check.result && (
             <BlueprintViewsPreview
               attributes={check.result.attributes}
+              definition={definition}
               recordSchema={check.result.blueprint.record_schema}
               views={check.result.blueprint.views}
             />

@@ -22,7 +22,6 @@ import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { RuleIcon } from '../../components/systemIcons';
 import { Timestamp } from '../../time/Timestamp';
 import { useCan } from '../auth/useCan';
-import { attributeLabel } from '../records/recordDisplay';
 import {
   acknowledgeFinding,
   recheckRecord,
@@ -50,6 +49,7 @@ import {
 import { findingEvidenceSchema } from './schemas';
 import { capabilities } from '../auth/capabilities';
 import { findingSeverityColor } from './findingSeverity';
+import { findingMessage, type FindingAttribute } from './findingMessage';
 
 const isActive = (run: RuleRun) =>
   ACTIVE_RULE_RUN_STATUSES.includes(run.status);
@@ -63,20 +63,6 @@ const latestCompletion = (runs: readonly RuleRun[] | undefined) =>
         : latest,
     null,
   ) ?? null;
-
-/** Names the attribute a finding is about by its label instead of its code. */
-const findingMessage = (
-  message: string,
-  attributeCode: string | undefined,
-  attributes: readonly FindingAttribute[],
-) => {
-  const attribute = attributes.find((item) => item.code === attributeCode);
-  return attribute
-    ? message.replaceAll(`'${attribute.code}'`, attributeLabel(attribute))
-    : message;
-};
-
-type FindingAttribute = { code: string; name?: unknown };
 
 const FindingItem = ({
   acknowledging,
