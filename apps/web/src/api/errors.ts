@@ -26,10 +26,31 @@ const interpolatedDetails = (details: unknown) =>
     : {};
 
 /**
- * The text to show for a failed request or other error. An API error is
- * translated by its code as `apiErrors.<code>`, interpolating its scalar
- * details and the server's English `message`; the message itself is only the
- * fallback for a code without a translation.
+ * The text for an API error reported by `code`, as in a failed request or a
+ * per-item failure inside a response: translated as `apiErrors.<code>`,
+ * interpolating `details`' scalar fields and the server's English `message`,
+ * which is itself only the fallback for a code without a translation.
+ */
+export const apiErrorText = ({
+  code,
+  details,
+  message,
+}: {
+  code: string;
+  details?: unknown;
+  message: string;
+}) => {
+  const key = `${API_ERROR_KEY_PREFIX}.${code}`;
+  if (i18n.exists(key))
+    return i18n.t(key, { ...interpolatedDetails(details), message });
+  if (import.meta.env.DEV)
+    console.warn(`No translation for API error code ${code}`);
+  return message;
+};
+
+/**
+ * The text to show for a failed request or other error; an API error with a
+ * code is translated by `apiErrorText`.
  */
 export function errorMessage(error: Error): string;
 export function errorMessage(
@@ -37,15 +58,11 @@ export function errorMessage(
 ): string | undefined;
 export function errorMessage(error: Error | null | undefined) {
   if (!error) return undefined;
-  if (error instanceof ApiRequestError && error.code) {
-    const key = `${API_ERROR_KEY_PREFIX}.${error.code}`;
-    if (i18n.exists(key))
-      return i18n.t(key, {
-        ...interpolatedDetails(error.details),
-        message: error.message,
-      });
-    if (import.meta.env.DEV)
-      console.warn(`No translation for API error code ${error.code}`);
-  }
+  if (error instanceof ApiRequestError && error.code)
+    return apiErrorText({
+      code: error.code,
+      details: error.details,
+      message: error.message,
+    });
   return error.message;
 }

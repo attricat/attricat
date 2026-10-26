@@ -8,6 +8,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { apiErrorText } from '../../api/errors';
 import { useRecordLabels } from '../records/useRecordLabels';
 import type { BulkEditResult as BulkEditOutcome } from './bulkEdits';
 import { BulkEditRecordLink } from './BulkEditRecordLink';
@@ -81,10 +82,7 @@ export const BulkEditResult = ({ result }: { result: BulkEditOutcome }) => {
             />
           </Typography>
           <Typography color="text.secondary" variant="body2">
-            {t('agents.bulkEdit.failure', {
-              code: failure.code,
-              message: failure.message,
-            })}
+            {apiErrorText(failure)}
           </Typography>
         </Box>
       ))}

@@ -191,7 +191,9 @@ describe('bulk edit approval', () => {
     expect(screen.getByText('1 record failed')).toBeTruthy();
     expect(screen.getByText('1 record not changed')).toBeTruthy();
     expect(
-      screen.getByText('stale_record: The record changed after it was read.'),
+      screen.getByText(
+        'The record changed since it was loaded. Refresh before saving.',
+      ),
     ).toBeTruthy();
     const failed = await screen.findByRole('link', { name: 'Product 03' });
     expect(failed.getAttribute('href')).toBe(`/records/${recordId(3)}`);
