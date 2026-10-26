@@ -1,3 +1,4 @@
+import { useAcknowledgeFinding } from './useAcknowledgeFinding';
 import { FindingSeverityChip } from './FindingSeverityChip';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import {
@@ -27,12 +28,7 @@ import { attributeLabel } from '../records/recordDisplay';
 import { FieldRevealLink } from '../views/components/FieldRevealLink';
 import { useRevealField } from '../views/fieldReveal';
 import { useCan } from '../auth/useCan';
-import {
-  acknowledgeFinding,
-  recheckRecord,
-  type Finding,
-  type RuleRun,
-} from './api';
+import { recheckRecord, type Finding, type RuleRun } from './api';
 import {
   ACTIVE_RULE_RUN_STATUSES,
   findingStates,
@@ -281,11 +277,7 @@ export const RecordFindingsPanel = ({
         queryKey: ruleQueryKeys.recordRuns(recordId),
       }),
   });
-  const acknowledge = useMutation({
-    mutationFn: acknowledgeFinding,
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: ruleQueryKeys.findings() }),
-  });
+  const acknowledge = useAcknowledgeFinding();
 
   if (!canRead) return null;
   // The server orders findings most severe first, so loading another page

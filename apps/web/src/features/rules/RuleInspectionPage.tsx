@@ -1,3 +1,4 @@
+import { useAcknowledgeFinding } from './useAcknowledgeFinding';
 import {
   useInfiniteQuery,
   useMutation,
@@ -13,7 +14,6 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
 import {
-  acknowledgeFinding,
   disableRule,
   enableRuleRevision,
   listFindingsPage,
@@ -99,10 +99,7 @@ export const RuleInspectionPage = ({
   );
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ruleQueryKeys.all });
-  const acknowledge = useMutation({
-    mutationFn: acknowledgeFinding,
-    onSuccess: refresh,
-  });
+  const acknowledge = useAcknowledgeFinding();
   const run = useMutation({
     mutationFn: ({ rule, dryRun }: { rule: Rule; dryRun: boolean }) =>
       runRuleNow(rule.id, rule.version, dryRun),
