@@ -15,22 +15,20 @@ export type RuleInspectionSection = (typeof RULE_SECTIONS)[number]['key'];
 export const RULE_TAB_ID_PREFIX = 'rule-inspection-tab';
 export const RULE_TABPANEL_ID_PREFIX = 'rule-inspection-tabpanel';
 
-export const FINDING_STATE_OPEN = 'open';
-export const FINDING_STATE_ACKNOWLEDGED = 'acknowledged';
-export const FINDING_STATE_RESOLVED = 'resolved';
+export const findingStates = {
+  open: 'open',
+  acknowledged: 'acknowledged',
+  resolved: 'resolved',
+} as const;
 /**
  * Which findings the findings page lists by state. Unresolved, the default,
  * is open and acknowledged findings together.
  */
 export const findingStateFilters = {
   unresolved: 'unresolved',
-  open: FINDING_STATE_OPEN,
-  acknowledged: FINDING_STATE_ACKNOWLEDGED,
-  resolved: FINDING_STATE_RESOLVED,
+  ...findingStates,
   all: 'all',
 } as const;
-export type FindingStateFilter =
-  (typeof findingStateFilters)[keyof typeof findingStateFilters];
 /** Findings the findings page lists at a time. */
 export const FINDINGS_PAGE_SIZE = 50;
 /** The value of a findings filter that is not set. */
@@ -43,10 +41,19 @@ export const findingSeverities = {
   error: 'error',
   critical: 'critical',
 } as const;
+export const ruleRunStatuses = {
+  pending: 'pending',
+  leased: 'leased',
+  completed: 'completed',
+  deadLetter: 'dead_letter',
+  cancelled: 'cancelled',
+} as const;
+type RuleRunStatus =
+  (typeof ruleRunStatuses)[keyof typeof ruleRunStatuses];
 /** Run statuses that have not finished evaluating. */
-export const ACTIVE_RULE_RUN_STATUSES: readonly string[] = [
-  'pending',
-  'leased',
+export const ACTIVE_RULE_RUN_STATUSES: readonly RuleRunStatus[] = [
+  ruleRunStatuses.pending,
+  ruleRunStatuses.leased,
 ];
 /** Recent runs of one record that the record page inspects. */
 export const RECORD_RULE_RUNS_LIMIT = 20;

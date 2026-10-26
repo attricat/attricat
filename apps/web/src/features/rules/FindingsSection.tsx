@@ -30,7 +30,7 @@ import type { RuleRevisions } from './ruleRevisions';
 import {
   ANY_FINDING_FILTER,
   FINDING_FILTER_MIN_WIDTH,
-  FINDING_STATE_OPEN,
+  findingStates,
   findingSeverities,
   findingStateFilters,
 } from './constants';
@@ -261,7 +261,7 @@ export const FindingsSection = ({
                   })}
                 </TableCell>
                 <TableCell>
-                  {canManage && finding.state === FINDING_STATE_OPEN && (
+                  {canManage && finding.state === findingStates.open && (
                     <Button
                       disabled={acknowledging}
                       size="small"

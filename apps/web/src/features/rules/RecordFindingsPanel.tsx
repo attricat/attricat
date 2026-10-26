@@ -33,7 +33,7 @@ import {
 } from './api';
 import {
   ACTIVE_RULE_RUN_STATUSES,
-  FINDING_STATE_OPEN,
+  findingStates,
   RECORD_RULE_RUN_POLL_MS,
 } from './constants';
 import { ruleQueryKeys } from './queryKeys';
@@ -198,7 +198,7 @@ const FindingItem = ({
           />
         </Typography>
       </Box>
-      {finding.state === FINDING_STATE_OPEN ? (
+      {finding.state === findingStates.open ? (
         canManage && (
           <Button disabled={acknowledging} size="small" onClick={onAcknowledge}>
             {t('rules.acknowledge')}
