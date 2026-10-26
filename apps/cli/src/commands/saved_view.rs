@@ -55,6 +55,10 @@ pub(crate) enum SavedViewCommand {
         #[arg(long)]
         state: String,
     },
+    /// Show the Explorer state behind a short link.
+    GetLink {
+        id: Uuid,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -136,6 +140,9 @@ pub(crate) async fn saved_view_command(
         }
         SavedViewCommand::Delete { id } => {
             api.delete(&format!("/saved-views/{}", segment(id))).await
+        }
+        SavedViewCommand::GetLink { id } => {
+            api.get(&format!("/view-state-links/{}", segment(id))).await
         }
         SavedViewCommand::Link { state } => {
             let body =

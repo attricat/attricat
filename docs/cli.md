@@ -39,13 +39,18 @@ unchanged. Commands which transfer non-JSON data require `--output`; on a
 successful transfer they print JSON `null`.
 
 ```sh
-acli health
+acli health [live|ready|system]
 acli auth discover <workspace-login-identifier>
 acli auth login <workspace-login-identifier> --email <email> --password-stdin
 acli auth password-reset --email <email>
 acli auth password-reset-confirm --reset-token-stdin --password-stdin
 acli --session-file session.json auth session|logout|renew
 acli auth preferences --time-zone <iana-zone>|--clear-time-zone
+acli auth display-name <name>
+acli auth avatar set --file avatar.png
+acli auth avatar remove
+acli auth access --permission <code> --kind record|blueprint|context --id <id> [--id <id> ...]
+acli auth sample-logins
 acli metrics get --output metrics.prom
 
 acli audit list [--limit <n>] [--offset <n>] [--occurred-after <rfc3339>] [--occurred-before <rfc3339>] [--actor-user-id <uuid>] [--action-category <category>] [--target-type <type>] [--executor-type human|agent] [--agent-run-id <uuid>] [--agent-tool-call-id <uuid>]
@@ -354,7 +359,7 @@ need `blueprints.write`.
 
 ## Saved searches
 
-`acli saved-view list [--query <text>]`, `acli saved-view get <id>`, `acli saved-view create --name <name> --state <json-or-file> [--visibility private|workspace] [--description <text>]`, `acli saved-view update <id> [--name <name>] [--state <json-or-file>] [--visibility private|workspace] [--description <text>]` (keeps the fields you omit), `acli saved-view delete <id>`, and `acli saved-view link --state <json-or-file>` operate on Explorer saved views. The state must contain at least a blueprint code, for example:
+`acli saved-view list [--query <text>]`, `acli saved-view get <id>`, `acli saved-view create --name <name> --state <json-or-file> [--visibility private|workspace] [--description <text>]`, `acli saved-view update <id> [--name <name>] [--state <json-or-file>] [--visibility private|workspace] [--description <text>]` (keeps the fields you omit), `acli saved-view delete <id>`, `acli saved-view link --state <json-or-file>`, and `acli saved-view get-link <id>` operate on Explorer saved views. The state must contain at least a blueprint code, for example:
 
 ```sh
 acli saved-view create --name 'Active assets' --visibility workspace \

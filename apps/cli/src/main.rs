@@ -3,7 +3,7 @@ use std::{io, process::ExitCode};
 use clap::Parser;
 use reqwest::Client;
 
-use crate::cli::{Cli, Command, MetricsCommand};
+use crate::cli::{Cli, Command, HealthCommand, MetricsCommand};
 use crate::commands::agent::agent_command;
 use crate::commands::audit::audit_command;
 use crate::commands::auth::auth_command;
@@ -75,6 +75,15 @@ async fn main() -> ExitCode {
     }
 }
 
+fn health_path(command: Option<HealthCommand>) -> &'static str {
+    match command {
+        None => "/health",
+        Some(HealthCommand::Live) => "/health/live",
+        Some(HealthCommand::Ready) => "/health/ready",
+        Some(HealthCommand::System) => "/system/health",
+    }
+}
+
 fn load_dotenv() -> Result<(), CliError> {
     if std::env::args_os().any(|argument| argument == "--no-env") {
         return Ok(());
@@ -143,7 +152,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
     let api = Api::new(client, server);
 
     match cli.command {
-        Command::Health => api.get("/health").await,
+        Command::Health { command } => api.get(health_path(command)).await,
         Command::Directory { command } => directory_command(&api, command).await,
         Command::Notification { command } => notification_command(&api, command).await,
         Command::Team { command } => team_command(&api, command).await,

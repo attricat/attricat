@@ -1,17 +1,14 @@
-use std::{
-    fs,
-    io::{self},
-    path::PathBuf,
-};
+use std::{fs, io, path::PathBuf};
 
-use clap::Subcommand;
+use clap::{Subcommand, ValueEnum};
 use reqwest::Method;
 use serde_json::json;
+use uuid::Uuid;
 
 use crate::error::CliError;
 use crate::input::{read_secret_stdin, read_stdin_lines};
 use crate::session::save_session_response;
-use crate::transport::{Api, raw_response};
+use crate::transport::{Api, file_part, raw_response};
 
 #[derive(Subcommand)]
 pub(crate) enum AuthCommand {
@@ -58,9 +55,56 @@ pub(crate) enum AuthCommand {
         /// 2–64 letters, digits, and spaces; no leading or trailing space.
         name: String,
     },
+    /// Set or remove your profile picture.
+    Avatar {
+        #[command(subcommand)]
+        command: AvatarCommand,
+    },
+    /// Check which records, blueprints or contexts you hold a permission on.
+    Access {
+        /// Permission code, such as `records.write`.
+        #[arg(long)]
+        permission: String,
+        #[arg(long, value_enum)]
+        kind: AccessKind,
+        /// ID to check; repeat for several (at most 500).
+        #[arg(long = "id", required = true)]
+        ids: Vec<Uuid>,
+    },
+    /// Show the demo sign-in accounts, when the server offers them.
+    SampleLogins,
     Logout,
     Renew,
 }
+
+#[derive(Subcommand)]
+pub(crate) enum AvatarCommand {
+    /// Upload a PNG or JPEG of at most 10 MiB.
+    Set {
+        #[arg(long)]
+        file: PathBuf,
+    },
+    Remove,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum AccessKind {
+    Record,
+    Blueprint,
+    Context,
+}
+
+impl AccessKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Record => "record",
+            Self::Blueprint => "blueprint",
+            Self::Context => "context",
+        }
+    }
+}
+
+const AVATAR_PATH: &str = "/auth/avatar";
 
 pub(crate) async fn auth_command(
     api: &Api,
@@ -127,6 +171,27 @@ pub(crate) async fn auth_command(
             api.put_json("/auth/display-name", json!({ "display_name": name }))
                 .await
         }
+        AuthCommand::Avatar {
+            command: AvatarCommand::Set { file },
+        } => {
+            let form = reqwest::multipart::Form::new().part("file", file_part(&file).await?);
+            api.send_form(Method::PUT, AVATAR_PATH, form).await
+        }
+        AuthCommand::Avatar {
+            command: AvatarCommand::Remove,
+        } => api.delete(AVATAR_PATH).await,
+        AuthCommand::Access {
+            permission,
+            kind,
+            ids,
+        } => {
+            api.post_json(
+                "/auth/access",
+                json!({ "permission": permission, "kind": kind.as_str(), "ids": ids }),
+            )
+            .await
+        }
+        AuthCommand::SampleLogins => api.get("/auth/sample-logins").await,
         AuthCommand::Logout => {
             let response = api.send_raw(Method::POST, "/auth/logout", None).await?;
             let output = raw_response(response).await?;

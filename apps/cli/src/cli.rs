@@ -120,7 +120,11 @@ pub(crate) struct Cli {
 
 #[derive(Subcommand)]
 pub(crate) enum Command {
-    Health,
+    /// Check that the API answers; a subcommand checks something specific.
+    Health {
+        #[command(subcommand)]
+        command: Option<HealthCommand>,
+    },
     /// Browser-session authentication. Use --session-file to reuse a login across commands.
     Auth {
         #[command(subcommand)]
@@ -246,4 +250,14 @@ pub(crate) enum MetricsCommand {
         #[arg(long)]
         output: PathBuf,
     },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum HealthCommand {
+    /// Whether the API process is running.
+    Live,
+    /// Whether the API can serve requests; fails while it cannot.
+    Ready,
+    /// The running build (requires `data_health.read`).
+    System,
 }

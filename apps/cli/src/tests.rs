@@ -2099,7 +2099,7 @@ async fn bearer_token_skips_a_saved_browser_session() {
         token_stdin: false,
         session_file: Some(session_file.path().to_path_buf()),
         no_env: false,
-        command: Command::Health,
+        command: Command::Health { command: None },
     })
     .await
     .unwrap();
@@ -2129,7 +2129,7 @@ async fn forwards_http_json_without_reformatting() {
         token_stdin: false,
         session_file: None,
         no_env: false,
-        command: Command::Health,
+        command: Command::Health { command: None },
     })
     .await
     .unwrap();
@@ -2675,5 +2675,46 @@ async fn agent_commands_build_requests() {
             id
         ])
         .is_err()
+    );
+}
+
+#[tokio::test]
+async fn auth_health_and_link_commands_build_requests() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let access = echo(&[
+        "auth",
+        "access",
+        "--permission",
+        "records.write",
+        "--kind",
+        "record",
+        "--id",
+        id,
+    ])
+    .await;
+    assert_eq!(access["path"], "/auth/access");
+    assert_eq!(
+        access["body"],
+        json!({ "permission": "records.write", "kind": "record", "ids": [id] })
+    );
+    let avatar = tempfile::Builder::new().suffix(".png").tempfile().unwrap();
+    fs::write(avatar.path(), b"png bytes").unwrap();
+    let uploaded = echo(&[
+        "auth",
+        "avatar",
+        "set",
+        "--file",
+        avatar.path().to_str().unwrap(),
+    ])
+    .await;
+    assert_eq!(uploaded["method"], "PUT");
+    let body = uploaded["body"].as_str().unwrap();
+    assert!(body.contains("name=\"file\""));
+    assert!(body.contains("image/png"));
+    assert_eq!(echo(&["health", "ready"]).await["path"], "/health/ready");
+    assert_eq!(echo(&["health"]).await["path"], "/health");
+    assert_eq!(
+        echo(&["saved-view", "get-link", id]).await["path"],
+        format!("/view-state-links/{id}")
     );
 }

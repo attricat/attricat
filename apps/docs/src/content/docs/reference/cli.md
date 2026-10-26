@@ -141,12 +141,18 @@ language = "pl"
 ### Health and authentication
 
 ```sh
-acli health
+acli health [live | ready | system]
 acli auth discover <workspace-identifier>
 acli auth login <workspace-identifier> --email <email> --password-stdin
 acli auth session | renew | logout
 acli auth password-reset --email <email>
 acli auth password-reset-confirm --reset-token-stdin --password-stdin
+acli auth preferences --time-zone <iana-zone> | --clear-time-zone
+acli auth display-name <name>
+acli auth avatar set --file avatar.png
+acli auth avatar remove
+acli auth access --permission <code> --kind record|blueprint|context --id <id> [--id <id> ...]
+acli auth sample-logins
 acli token list
 acli token create --label <label> --permissions <json> [--expires-at <rfc3339>]
 acli token revoke <token-id>
@@ -158,6 +164,7 @@ acli token revoke <token-id>
 acli blueprint list [--include-drafts]
 acli blueprint catalogue
 acli blueprint create --file product.toml
+acli blueprint validate [--blueprint-id <id>] --file product.toml
 acli blueprint create-version <blueprint-id> --file product-v2.toml
 acli blueprint list-versions <blueprint-id>
 acli blueprint publish <blueprint-id> <version>
@@ -258,6 +265,7 @@ acli saved-view create --name <name> --state <json> [--visibility private|worksp
 acli saved-view update <id> [--name <name>] [--state <json>] [--visibility private|workspace] [--description <text>]
 acli saved-view delete <id>
 acli saved-view link --state <json>
+acli saved-view get-link <id>
 ```
 
 The state needs at least a blueprint code, for example `{"blueprint":"product","query":"linen"}`. `update` keeps every field you omit.
@@ -295,6 +303,7 @@ acli lexicon report [--language <tag>]...
 
 ```sh
 acli rule list [--blueprint-id <id>]
+acli rule get <rule-id>
 acli rule validate | create --blueprint-id <id> --blueprint-version <n> [--context-id <id>] --file rule.toml
 acli rule create-version <rule-id> --blueprint-id <id> --blueprint-version <n> --file rule.toml
 acli rule publish <rule-id> <version>
@@ -310,6 +319,7 @@ acli rule acknowledge <finding-id>
 
 acli workflow validate | create --file workflow.toml
 acli workflow list | get <workflow-id> | list-versions <workflow-id>
+acli workflow get-version <workflow-id> <version>
 acli workflow create-version <workflow-id> --file workflow.toml
 acli workflow publish | enable <workflow-id> <version>
 acli workflow disable <workflow-id>
@@ -357,6 +367,7 @@ acli workspace invitation create --email <email> --role-id <id> --scope-type wor
 acli workspace invitation revoke <invitation-id>
 acli workspace invitation accept --secret-stdin
 acli workspace user create --email <email> [--display-name <name>]
+acli workspace user set-password --onboarding-secret-stdin --invitation-secret-stdin --password-stdin
 acli workspace navigation get | sidebar
 acli workspace navigation set --entries <json>
 acli workspace agent get
@@ -366,6 +377,7 @@ acli workspace publication-channel set <context-id> --enabled true|false
 acli workspace grant-target list workspace|blueprint-family|record|context-subtree
 acli workspace token-permission list
 acli directory list
+acli directory user <user-id>
 acli team list
 acli team create --code <code> --name <name> [--member <user-id> …]
 acli team update <team-id> [--name <name>] [--member <user-id> … | --clear-members]
@@ -434,10 +446,10 @@ acli solution-pack inspect --file pack.tar.zst
 acli solution-pack plan create --file pack.tar.zst --prefix <prefix> --blueprint-publication draft|publish [--include-sample-data] [--map key=code ... --map-asset key=uuid ... --map-context key=code ...]
 acli solution-pack plan get <plan-id>
 acli solution-pack apply <plan-id>
-acli solution-pack applications list | show <id> | abandon <id>
+acli solution-pack applications list | get <id> | abandon <id>
 acli solution-pack checks list | rerun <application-id>
 acli solution-pack checks get <application-id> <run-id>
-acli presentation-asset list | show <id>
+acli presentation-asset list | get <id>
 acli presentation-asset download <id> --output <path>
 ```
 
