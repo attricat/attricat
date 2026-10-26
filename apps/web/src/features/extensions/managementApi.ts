@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request, requestNoContent } from '../../api/request';
+import { request, requestNoContent, jsonRequest } from '../../api/request';
 import { manualQuarantineDiagnosticCode, type GrantKind } from './constants';
 import {
   detailSchema,
@@ -11,12 +11,6 @@ import {
 } from './schemas';
 
 export type { ExtensionDetail, ExtensionInstallation } from './schemas';
-
-const body = (value: unknown, method = 'POST'): RequestInit => ({
-  method,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(value),
-});
 
 export const discoverExtensions = () =>
   request('/api/extension-registries/discover', z.array(discoveredSchema));
@@ -31,11 +25,15 @@ export const workspaceExtensionLayout = () =>
   request('/api/workspace/extension-layout', workspaceExtensionLayoutSchema);
 export const updateWorkspaceExtensionLayout = (
   layout: WorkspaceExtensionLayout,
-) => requestNoContent('/api/workspace/extension-layout', body(layout, 'PUT'));
+) =>
+  requestNoContent(
+    '/api/workspace/extension-layout',
+    jsonRequest('PUT', layout),
+  );
 export const extensionDetail = (id: string) =>
   request(`/api/extensions/${encodeURIComponent(id)}`, detailSchema);
 export const installExtension = (input: ExtensionReleaseReference) =>
-  request('/api/extensions', installationSchema, body(input));
+  request('/api/extensions', installationSchema, jsonRequest('POST', input));
 export const sideloadExtension = (archive: File) =>
   request('/api/extensions/sideload', installationSchema, {
     method: 'POST',
@@ -57,13 +55,13 @@ export const upgradeExtension = (
   request(
     `/api/extensions/${encodeURIComponent(id)}/upgrade`,
     installationSchema,
-    body(input),
+    jsonRequest('POST', input),
   );
 export const configureExtension = (id: string, configuration: unknown) =>
   request(
     `/api/extensions/${encodeURIComponent(id)}/configure`,
     installationSchema,
-    body({ configuration }, 'PUT'),
+    jsonRequest('PUT', { configuration }),
   );
 export const grantExtension = (
   id: string,
@@ -72,7 +70,7 @@ export const grantExtension = (
 ) =>
   requestNoContent(
     `/api/extensions/${encodeURIComponent(id)}/grants`,
-    body({ grant_kind, grant_id }),
+    jsonRequest('POST', { grant_kind, grant_id }),
   );
 export const revokeExtensionGrant = (
   id: string,
@@ -91,7 +89,7 @@ export const lifecycleExtension = (
     `/api/extensions/${encodeURIComponent(id)}/${action}`,
     installationSchema,
     action === 'quarantine'
-      ? body({ diagnostic_code: manualQuarantineDiagnosticCode })
+      ? jsonRequest('POST', { diagnostic_code: manualQuarantineDiagnosticCode })
       : { method: 'POST' },
   );
 export const removeExtension = (id: string) =>

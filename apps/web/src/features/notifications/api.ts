@@ -1,4 +1,4 @@
-import { request, requestNoContent } from '../../api/request';
+import { request, requestNoContent, jsonRequest } from '../../api/request';
 import { notificationsPath } from './constants';
 import {
   markAllReadResultSchema,
@@ -27,18 +27,14 @@ export const getUnreadCount = (signal?: AbortSignal) =>
   request(`${notificationsPath}/unread-count`, unreadCountSchema, { signal });
 
 export const setNotificationRead = (id: string, read: boolean) =>
-  requestNoContent(notificationPath(id), {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ read }),
-  });
+  requestNoContent(notificationPath(id), jsonRequest('PATCH', { read }));
 
 export const markAllNotificationsRead = (upTo?: string) =>
-  request(`${notificationsPath}/read-all`, markAllReadResultSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(upTo ? { up_to: upTo } : {}),
-  });
+  request(
+    `${notificationsPath}/read-all`,
+    markAllReadResultSchema,
+    jsonRequest('POST', upTo ? { up_to: upTo } : {}),
+  );
 
 export const deleteNotification = (id: string) =>
   requestNoContent(notificationPath(id), { method: 'DELETE' });

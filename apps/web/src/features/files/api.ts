@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request, requestUpload } from '../../api/request';
+import { request, requestUpload, jsonRequest } from '../../api/request';
 import {
   conversationUploadResultSchema,
   fileMetadataSchema,
@@ -81,11 +81,7 @@ export const updateFileReferences = (
   request(
     `/api/records/${uuidSegment(recordId)}/file-attributes/${encodeURIComponent(attributeCode)}/references`,
     fileReferencesUpdateResultSchema,
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updateFileReferencesSchema.parse(input)),
-    },
+    jsonRequest('PUT', updateFileReferencesSchema.parse(input)),
   );
 
 export const uploadConversationFiles = async (

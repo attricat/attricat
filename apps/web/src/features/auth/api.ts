@@ -3,6 +3,7 @@ import {
   request,
   requestNoContent,
   requestUpload,
+  jsonRequest,
 } from '../../api/request';
 import { httpStatus } from '../../api/httpStatus';
 import type { AccessTargetKind } from './capabilities';
@@ -20,11 +21,11 @@ export const fetchSampleLogins = async () =>
   request('/api/auth/sample-logins', sampleLoginsSchema);
 
 export const discoverWorkspace = async (loginIdentifier: string) => {
-  return request('/api/auth/discover', discoverySchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ login_identifier: loginIdentifier }),
-  });
+  return request(
+    '/api/auth/discover',
+    discoverySchema,
+    jsonRequest('POST', { login_identifier: loginIdentifier }),
+  );
 };
 
 export const login = async (
@@ -32,31 +33,29 @@ export const login = async (
   email: string,
   password: string,
 ) => {
-  return request('/api/auth/login', sessionSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  return request(
+    '/api/auth/login',
+    sessionSchema,
+    jsonRequest('POST', {
       login_identifier: loginIdentifier,
       email,
       password,
     }),
-  });
+  );
 };
 
 export const requestPasswordReset = async (email: string) => {
-  return requestNoContent('/api/auth/password-reset', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
+  return requestNoContent(
+    '/api/auth/password-reset',
+    jsonRequest('POST', { email }),
+  );
 };
 
 export const confirmPasswordReset = async (token: string, password: string) => {
-  return requestNoContent('/api/auth/password-reset/confirm', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token, password }),
-  });
+  return requestNoContent(
+    '/api/auth/password-reset/confirm',
+    jsonRequest('POST', { token, password }),
+  );
 };
 
 /** The most targets one access check may name. */
@@ -68,11 +67,11 @@ export const checkAccess = (
   kind: AccessTargetKind,
   ids: readonly string[],
 ) =>
-  request('/api/auth/access', accessSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ permission, kind, ids }),
-  });
+  request(
+    '/api/auth/access',
+    accessSchema,
+    jsonRequest('POST', { permission, kind, ids }),
+  );
 
 export const currentSession = async () => {
   try {
@@ -88,18 +87,18 @@ export const currentSession = async () => {
 };
 
 export const updatePreferences = (preferences: UserPreferences) =>
-  request('/api/auth/preferences', sessionSchema, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(preferences),
-  });
+  request(
+    '/api/auth/preferences',
+    sessionSchema,
+    jsonRequest('PATCH', preferences),
+  );
 
 export const updateDisplayName = (displayName: string) =>
-  request('/api/auth/display-name', sessionSchema, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ display_name: displayName }),
-  });
+  request(
+    '/api/auth/display-name',
+    sessionSchema,
+    jsonRequest('PUT', { display_name: displayName }),
+  );
 
 export const uploadAvatar = (
   file: File,

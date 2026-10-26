@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request } from '../../api/request';
+import { request, jsonRequest } from '../../api/request';
 import {
   attributeContextSchema,
   createAttributeContextSchema,
@@ -22,9 +22,9 @@ export const createContext = (
     data,
     parent_id: parentId,
   });
-  return request('/api/contexts', attributeContextSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return request(
+    '/api/contexts',
+    attributeContextSchema,
+    jsonRequest('POST', payload),
+  );
 };

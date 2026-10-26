@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request, requestNoContent } from '../../api/request';
+import { request, requestNoContent, jsonRequest } from '../../api/request';
 import {
   exportStatusPath,
   exportStatusPageSize,
@@ -17,12 +17,6 @@ import {
   retryResponseSchema,
   workspaceExportStatusSchema,
 } from './schemas';
-
-const json = (value: unknown, method = 'POST'): RequestInit => ({
-  method,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(value),
-});
 
 export const recordExportStatus = (recordId: string) =>
   request(recordExportStatusPath(recordId), recordExportStatusSchema);
@@ -67,7 +61,7 @@ export const retryExports = (
     retryResponseSchema,
     // Retried records are also resynced at once by the export jobs of
     // their connection, so a retry pushes even without a retry handler.
-    json({
+    jsonRequest('POST', {
       connection: selection.connection,
       run: true,
       idempotency_key: selection.idempotencyKey,
@@ -85,7 +79,7 @@ export const previewExport = (
   request(
     `${extensionPath(extensionId)}/exports/${encodeURIComponent(exportId)}/preview`,
     previewResponseSchema,
-    json({ record_id: recordId, connection }),
+    jsonRequest('POST', { record_id: recordId, connection }),
   );
 
 export const listConnections = (extensionId: string) =>
@@ -113,7 +107,7 @@ export const createConnection = (extensionId: string, input: NewConnection) =>
   request(
     `${extensionPath(extensionId)}/connections`,
     extensionConnectionSchema,
-    json(input),
+    jsonRequest('POST', input),
   );
 
 const connectionPath = (extensionId: string, connection: string) =>
@@ -131,7 +125,7 @@ export const updateConnection = (
   request(
     connectionPath(extensionId, connection),
     extensionConnectionSchema,
-    json(patch, 'PATCH'),
+    jsonRequest('PATCH', patch),
   );
 
 export const deleteConnection = (extensionId: string, connection: string) =>
@@ -169,7 +163,7 @@ export const exchangeAuthorizationCode = (
   request(
     `${connectionPath(extensionId, connection)}/authorization-code`,
     extensionConnectionSchema,
-    json(input),
+    jsonRequest('POST', input),
   );
 
 export const listBudgets = (extensionId: string) =>
@@ -188,7 +182,7 @@ export const setBudget = (
 ) =>
   requestNoContent(
     budgetPath(extensionId, hostPermissionId),
-    json(budget, 'PUT'),
+    jsonRequest('PUT', budget),
   );
 
 export const clearBudget = (extensionId: string, hostPermissionId: string) =>

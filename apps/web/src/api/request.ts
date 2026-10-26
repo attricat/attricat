@@ -55,6 +55,13 @@ const responseError = async (response: Response) => {
   return apiRequestError(response.status, body);
 };
 
+/** Request options sending `body`, when given, as JSON. */
+export const jsonRequest = (method: string, body?: unknown): RequestInit => ({
+  method,
+  headers: { 'Content-Type': 'application/json' },
+  ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+});
+
 export const request = async <T>(
   path: string,
   schema: z.ZodType<T>,

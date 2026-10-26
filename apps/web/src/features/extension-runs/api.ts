@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request, requestNoContent } from '../../api/request';
+import { request, requestNoContent, jsonRequest } from '../../api/request';
 import { extensionRunScopes, extensionRunsPath } from './constants';
 import {
   extensionRunDetailSchema,
@@ -42,11 +42,7 @@ export const startExtensionRun = (
   request(
     `/api/extensions/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}/operations`,
     startedExtensionRunSchema,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    },
+    jsonRequest('POST', input),
   );
 
 export const listExtensionRuns = (extensionId?: string) =>

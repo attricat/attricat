@@ -1,14 +1,9 @@
 import { z } from 'zod';
-import { request, requestNoContent } from '../../api/request';
+import { request, requestNoContent, jsonRequest } from '../../api/request';
 import { DIRECTORY_PATH, TEAMS_PATH } from './constants';
 import { directorySchema, teamSchema } from './schemas';
 import { uuidSegment } from '../../api/pathSegments';
 
-const json = (method: string, body: unknown): RequestInit => ({
-  method,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body),
-});
 const teamPath = (id: string) => `${TEAMS_PATH}/${uuidSegment(id)}`;
 
 export type TeamInput = {
@@ -21,10 +16,10 @@ export const getDirectory = (signal?: AbortSignal) =>
   request(DIRECTORY_PATH, directorySchema, { signal });
 export const listTeams = () => request(TEAMS_PATH, z.array(teamSchema));
 export const createTeam = (input: TeamInput) =>
-  request(TEAMS_PATH, teamSchema, json('POST', input));
+  request(TEAMS_PATH, teamSchema, jsonRequest('POST', input));
 export const updateTeam = (
   id: string,
   input: Partial<Omit<TeamInput, 'code'>>,
-) => request(teamPath(id), teamSchema, json('PATCH', input));
+) => request(teamPath(id), teamSchema, jsonRequest('PATCH', input));
 export const deleteTeam = (id: string) =>
   requestNoContent(teamPath(id), { method: 'DELETE' });

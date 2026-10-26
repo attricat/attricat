@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request, requestNoContent } from '../../api/request';
+import { request, requestNoContent, jsonRequest } from '../../api/request';
 import { inlineExplorerSearch, type ExplorerSearch } from '../explorer/search';
 import {
   EXPLORER_SEARCH_KIND,
@@ -9,11 +9,6 @@ import {
 } from './constants';
 import { savedViewSchema } from './schemas';
 
-const json = (body: unknown, method: string): RequestInit => ({
-  method,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body),
-});
 const statePayload = (state: ExplorerSearch) => ({
   kind: EXPLORER_SEARCH_KIND,
   state: inlineExplorerSearch(state),
@@ -42,7 +37,12 @@ export const createSavedView = (
   request(
     SAVED_VIEWS_PATH,
     savedViewSchema,
-    json({ ...statePayload(state), name, description, visibility }, 'POST'),
+    jsonRequest('POST', {
+      ...statePayload(state),
+      name,
+      description,
+      visibility,
+    }),
   );
 export const updateSavedView = (
   id: string,
@@ -54,7 +54,12 @@ export const updateSavedView = (
   request(
     `${SAVED_VIEWS_PATH}/${encodeURIComponent(id)}`,
     savedViewSchema,
-    json({ ...statePayload(state), name, description, visibility }, 'PUT'),
+    jsonRequest('PUT', {
+      ...statePayload(state),
+      name,
+      description,
+      visibility,
+    }),
   );
 export const deleteSavedView = (id: string) =>
   requestNoContent(`${SAVED_VIEWS_PATH}/${encodeURIComponent(id)}`, {
@@ -64,5 +69,5 @@ export const createViewStateLink = (state: ExplorerSearch) =>
   request(
     VIEW_STATE_LINKS_PATH,
     savedViewSchema,
-    json(statePayload(state), 'POST'),
+    jsonRequest('POST', statePayload(state)),
   );

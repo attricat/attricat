@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request } from '../../api/request';
+import { request, jsonRequest } from '../../api/request';
 import type { RemovalDisposition } from './constants';
 import {
   blueprintRecordPublicationSummarySchema,
@@ -40,11 +40,11 @@ export const getBlueprintRevision = (
 export const createBlueprint = (
   definition: string,
 ): Promise<BlueprintWithAttributes> =>
-  request('/api/blueprints', blueprintWithAttributesSchema, {
-    body: JSON.stringify({ definition }),
-    headers: { 'Content-Type': 'application/json' },
-    method: 'POST',
-  });
+  request(
+    '/api/blueprints',
+    blueprintWithAttributesSchema,
+    jsonRequest('POST', { definition }),
+  );
 
 export const createBlueprintRevision = (
   id: string,
@@ -53,11 +53,7 @@ export const createBlueprintRevision = (
   request(
     `/api/blueprints/${uuidSegment(id)}/versions`,
     blueprintWithAttributesSchema,
-    {
-      body: JSON.stringify({ definition }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    },
+    jsonRequest('POST', { definition }),
   );
 
 /**
@@ -75,9 +71,7 @@ export const validateBlueprint = (
       : `/api/blueprints/${uuidSegment(id)}/versions/validate`,
     blueprintWithAttributesSchema,
     {
-      body: JSON.stringify({ definition }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
+      ...jsonRequest('POST', { definition }),
       signal,
     },
   );
@@ -103,11 +97,7 @@ export const startSafeBlueprintMigrationBatch = (
     `/api/blueprints/${uuidSegment(id)}/versions/${versionSegment(version)}/safe-migration-batches`,
     blueprintMigrationBatchSchema,
     removalDisposition
-      ? {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ removal_disposition: removalDisposition }),
-        }
+      ? jsonRequest('POST', { removal_disposition: removalDisposition })
       : { method: 'POST' },
   );
 
@@ -119,11 +109,7 @@ export const publishBlueprintRecords = (
   request(
     `/api/blueprints/${uuidSegment(id)}/versions/${versionSegment(version)}/record-publications`,
     blueprintRecordPublicationSummarySchema,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ context_id: z.uuid().parse(contextId) }),
-    },
+    jsonRequest('POST', { context_id: z.uuid().parse(contextId) }),
   );
 
 export const publishBlueprintRecordsAllChannels = (

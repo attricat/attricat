@@ -1,4 +1,4 @@
-import { request, requestNoContent } from '../../api/request';
+import { request, requestNoContent, jsonRequest } from '../../api/request';
 import {
   LEXICON_ENTRIES_PATH,
   LEXICON_EXPORT_PATH,
@@ -21,12 +21,6 @@ import {
 const query = (params: Record<string, string>) =>
   new URLSearchParams(params).toString();
 
-const json = (method: string, body: unknown): RequestInit => ({
-  method,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body),
-});
-
 /** One language's translations, for the i18next lexicon namespace. */
 export const listLexiconEntries = (language: string) =>
   request(
@@ -46,7 +40,11 @@ export const getLexiconReport = (language: string, signal?: AbortSignal) =>
   );
 
 export const saveLexiconEntry = (entry: LexiconEntry) =>
-  request(LEXICON_ENTRIES_PATH, storedLexiconEntrySchema, json('PUT', entry));
+  request(
+    LEXICON_ENTRIES_PATH,
+    storedLexiconEntrySchema,
+    jsonRequest('PUT', entry),
+  );
 
 export const deleteLexiconEntry = (
   entry: Pick<LexiconEntry, 'key' | 'context' | 'language' | 'plural_category'>,
@@ -71,5 +69,5 @@ export const importLexicon = (file: LexiconFile, mode: LexiconImportMode) =>
   request(
     `${LEXICON_IMPORT_PATH}?${query({ mode })}`,
     lexiconImportSummarySchema,
-    json('POST', file),
+    jsonRequest('POST', file),
   );

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request } from '../../api/request';
+import { request, jsonRequest } from '../../api/request';
 import {
   conversationCreateResponseSchema,
   conversationDetailSchema,
@@ -12,11 +12,6 @@ import {
 } from './schemas';
 import { uuidSegment } from '../../api/pathSegments';
 
-const json = (method: string, body?: unknown): RequestInit => ({
-  method,
-  headers: { 'Content-Type': 'application/json' },
-  body: body === undefined ? undefined : JSON.stringify(body),
-});
 const queryParam = (value: string) => encodeURIComponent(value);
 
 export const listConversations = () =>
@@ -39,7 +34,7 @@ export const updateConversationTitle = (id: string, title: string) =>
   request(
     `/api/agent/conversations/${uuidSegment(id)}`,
     conversationSchema,
-    json('PATCH', { title }),
+    jsonRequest('PATCH', { title }),
   );
 export const createConversation = (
   title = '',
@@ -48,7 +43,7 @@ export const createConversation = (
   request(
     '/api/agent/conversations',
     conversationCreateResponseSchema,
-    json('POST', { title, ...record }),
+    jsonRequest('POST', { title, ...record }),
   );
 export const listMessages = (id: string, signal?: AbortSignal) =>
   request(
@@ -70,7 +65,7 @@ export const sendMessage = (
   request(
     `/api/agent/conversations/${uuidSegment(id)}/messages`,
     runResponseSchema,
-    json('POST', { content, attachment_ids: attachmentIds }),
+    jsonRequest('POST', { content, attachment_ids: attachmentIds }),
   );
 export const listApprovals = (conversationId?: string, signal?: AbortSignal) =>
   request(
@@ -82,7 +77,7 @@ export const decideApproval = (id: string, approved: boolean) =>
   request(
     `/api/agent/tool-calls/${uuidSegment(id)}/${approved ? 'approve' : 'reject'}`,
     z.unknown(),
-    json('POST'),
+    jsonRequest('POST'),
   );
 export const agentRunEventsUrl = (id: string) =>
   `/api/agent/runs/${uuidSegment(id)}/events`;

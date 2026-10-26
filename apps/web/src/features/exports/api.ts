@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request } from '../../api/request';
+import { request, jsonRequest } from '../../api/request';
 import { PUBLICATION_CHANNELS_PATH } from './constants';
 import { uuidSegment } from '../../api/pathSegments';
 import {
@@ -19,9 +19,5 @@ export const updatePublicationChannel = (
   request(
     `${PUBLICATION_CHANNELS_PATH}/${uuidSegment(contextId)}`,
     publicationChannelSchema,
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled, ...checks }),
-    },
+    jsonRequest('PUT', { enabled, ...checks }),
   );

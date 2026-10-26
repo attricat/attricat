@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request } from '../../api/request';
+import { request, jsonRequest } from '../../api/request';
 import {
   createReusableAttributeGroupSchema,
   createReusableAttributeSchema,
@@ -24,11 +24,11 @@ export const listReusableAttributes = (
   );
 
 export const createReusableAttribute = (input: CreateReusableAttribute) =>
-  request('/api/reusable-attributes', reusableAttributeSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(createReusableAttributeSchema.parse(input)),
-  });
+  request(
+    '/api/reusable-attributes',
+    reusableAttributeSchema,
+    jsonRequest('POST', createReusableAttributeSchema.parse(input)),
+  );
 
 export const createReusableAttributeRevision = (
   definitionId: string,
@@ -37,11 +37,7 @@ export const createReusableAttributeRevision = (
   request(
     `/api/reusable-attributes/${uuidSegment(definitionId)}/versions`,
     reusableAttributeSchema,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(createReusableAttributeSchema.parse(input)),
-    },
+    jsonRequest('POST', createReusableAttributeSchema.parse(input)),
   );
 
 /**
@@ -59,9 +55,7 @@ export const validateReusableAttribute = (
       : `/api/reusable-attributes/${uuidSegment(definitionId)}/versions/validate`,
     reusableAttributeSchema,
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(createReusableAttributeSchema.parse(input)),
+      ...jsonRequest('POST', createReusableAttributeSchema.parse(input)),
       signal,
     },
   );
@@ -88,23 +82,19 @@ export const createReusableAttributeGroup = (input: {
   position: number;
   reusable_attribute_revision_ids: string[];
 }): Promise<ReusableAttributeGroup> =>
-  request('/api/reusable-attribute-groups', reusableAttributeGroupSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(createReusableAttributeGroupSchema.parse(input)),
-  });
+  request(
+    '/api/reusable-attribute-groups',
+    reusableAttributeGroupSchema,
+    jsonRequest('POST', createReusableAttributeGroupSchema.parse(input)),
+  );
 
 export const attachReusableAttribute = (recordId: string, revisionId: string) =>
   request(
     `/api/v1/records/${uuidSegment(recordId)}/reusable-attributes`,
     z.unknown(),
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        reusable_attribute_revision_id: z.uuid().parse(revisionId),
-      }),
-    },
+    jsonRequest('POST', {
+      reusable_attribute_revision_id: z.uuid().parse(revisionId),
+    }),
   );
 
 export const attachReusableAttributeGroup = (

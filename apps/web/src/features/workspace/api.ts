@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import i18n from 'i18next';
-import { request, requestNoContent } from '../../api/request';
+import { request, requestNoContent, jsonRequest } from '../../api/request';
 import { uuidSegment } from '../../api/pathSegments';
 import { scopeTypes } from './constants';
 import {
@@ -56,19 +56,13 @@ export const ensureActiveScopeTarget = (
   return parsed;
 };
 
-const json = (method: string, value: unknown): RequestInit => ({
-  method,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(value),
-});
-
 export const listMembers = () =>
   request('/api/workspace/members', z.array(memberSchema));
 export const grantMemberRole = (memberId: string, input: GrantInput) =>
   request(
     `/api/workspace/members/${uuidSegment(memberId)}/grants`,
     z.object({ id: uuid }),
-    json('POST', grantInputSchema.parse(input)),
+    jsonRequest('POST', grantInputSchema.parse(input)),
   );
 export const revokeMemberRole = (memberId: string, grantId: string) =>
   requestNoContent(
@@ -89,7 +83,7 @@ export const createWorkspaceUser = (
   request(
     '/api/workspace/users',
     createdUserSchema,
-    json('POST', createUserInputSchema.parse(input)),
+    jsonRequest('POST', createUserInputSchema.parse(input)),
   );
 export const completeOnboarding = (input: {
   invitation_secret: string;
@@ -99,7 +93,7 @@ export const completeOnboarding = (input: {
   request(
     '/api/onboarding/complete',
     z.object({ membership_id: uuid }),
-    json('POST', input),
+    jsonRequest('POST', input),
   );
 
 export const listInvitations = () =>
@@ -110,7 +104,7 @@ export const createInvitation = (
   request(
     '/api/workspace/invitations',
     invitationSchema,
-    json('POST', invitationInputSchema.parse(input)),
+    jsonRequest('POST', invitationInputSchema.parse(input)),
   );
 export const revokeInvitation = (id: string) =>
   requestNoContent(`/api/workspace/invitations/${uuidSegment(id)}`, {
@@ -120,7 +114,7 @@ export const acceptInvitation = (secret: string) =>
   request(
     '/api/workspace/invitations/accept',
     z.object({ membership_id: uuid }),
-    json('POST', { secret: z.string().min(1).parse(secret) }),
+    jsonRequest('POST', { secret: z.string().min(1).parse(secret) }),
   );
 
 export const listRoles = () =>
@@ -137,7 +131,7 @@ export const updateExploreNavigation = (
 ) =>
   requestNoContent(
     '/api/workspace/navigation',
-    json('PUT', {
+    jsonRequest('PUT', {
       explore_navigation: z
         .array(exploreNavigationEntrySchema)
         .parse(explore_navigation),
@@ -149,7 +143,7 @@ export const updateAgentSettings = (settings: AgentSettings) =>
   request(
     '/api/workspace/agent-settings',
     agentSettingsSchema,
-    json('PUT', agentSettingsSchema.parse(settings)),
+    jsonRequest('PUT', agentSettingsSchema.parse(settings)),
   );
 export const listAssignableRoles = () =>
   request('/api/workspace/assignable-roles', z.array(roleSchema));
@@ -164,7 +158,7 @@ export const createRole = (input: z.input<typeof roleInputSchema>) =>
   request(
     '/api/workspace/roles',
     z.object({ id: uuid }),
-    json('POST', roleInputSchema.parse(input)),
+    jsonRequest('POST', roleInputSchema.parse(input)),
   );
 export const updateRole = (
   id: string,
@@ -172,20 +166,20 @@ export const updateRole = (
 ) =>
   requestNoContent(
     `/api/workspace/roles/${uuidSegment(id)}`,
-    json('PUT', roleInputSchema.parse(input)),
+    jsonRequest('PUT', roleInputSchema.parse(input)),
   );
 export const duplicateRole = (id: string, code: string) =>
   request(
     `/api/workspace/roles/${uuidSegment(id)}/duplicate`,
     z.object({ id: uuid }),
-    json('POST', {
+    jsonRequest('POST', {
       code: roleCodeSchema.parse(code),
     }),
   );
 export const retireRole = (id: string, replacement_role_id?: string) =>
   requestNoContent(
     `/api/workspace/roles/${uuidSegment(id)}/retire`,
-    json('POST', {
+    jsonRequest('POST', {
       ...(replacement_role_id
         ? { replacement_role_id: uuid.parse(replacement_role_id) }
         : {}),

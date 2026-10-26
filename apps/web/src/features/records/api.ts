@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request, requestNoContent } from '../../api/request';
+import { request, requestNoContent, jsonRequest } from '../../api/request';
 import {
   RECORD_CHANGES_PAGE_SIZE,
   RECORD_PREVIEW_QUERY,
@@ -148,9 +148,7 @@ const searchRecordsInit = (
     page: { size: pageSize, cursor },
   });
   return {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    ...jsonRequest('POST', payload),
     ...(signal === undefined ? {} : { signal }),
   };
 };
@@ -186,9 +184,8 @@ export const getRelationshipTreeFacetChildren = (
     '/api/v1/records/facets/relationship-tree/children',
     relationshipTreeFacetChildrenResponseSchema,
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(
+      ...jsonRequest(
+        'POST',
         relationshipTreeFacetChildrenRequestSchema.parse(input),
       ),
       ...(signal === undefined ? {} : { signal }),
@@ -202,9 +199,9 @@ export const getRecordLabels = (
   signal?: AbortSignal,
 ) =>
   request('/api/v1/records/labels', recordLabelsResponseSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ record_ids: z.array(uuidSchema).parse(recordIds) }),
+    ...jsonRequest('POST', {
+      record_ids: z.array(uuidSchema).parse(recordIds),
+    }),
     ...(signal === undefined ? {} : { signal }),
   });
 export const getRecordPreview = (id: string, signal?: AbortSignal) =>
@@ -259,21 +256,17 @@ export const createRecord = (
   input: z.input<typeof createRecordRequestSchema>,
 ) => {
   const payload = createRecordRequestSchema.parse(input);
-  return request('/api/v1/records', recordSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return request('/api/v1/records', recordSchema, jsonRequest('POST', payload));
 };
 export const smartFillRecordForm = (
   input: z.input<typeof smartFillRecordFormRequestSchema>,
 ) => {
   const payload = smartFillRecordFormRequestSchema.parse(input);
-  return request('/api/agent/smart-fill', smartFillRecordFormResponseSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return request(
+    '/api/agent/smart-fill',
+    smartFillRecordFormResponseSchema,
+    jsonRequest('POST', payload),
+  );
 };
 
 export const deleteRecord = (id: string) =>
@@ -290,11 +283,7 @@ export const updateRecord = (
 ) => {
   const path = recordPath(id);
   const payload = updateRecordRequestSchema.parse(input);
-  return request(path, recordSchema, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return request(path, recordSchema, jsonRequest('PUT', payload));
 };
 
 export const getRecordPublications = (id: string, signal?: AbortSignal) =>
@@ -317,9 +306,7 @@ export const getRecordsPublications = (
   signal?: AbortSignal,
 ) =>
   request('/api/v1/records/publications', recordsPublicationsResponseSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ record_ids: recordIds }),
+    ...jsonRequest('POST', { record_ids: recordIds }),
     ...(signal === undefined ? {} : { signal }),
   });
 /** Whether the record passes each enabled channel's publication checks. */
@@ -333,11 +320,11 @@ export const getRecordPublicationReadiness = (
     { signal },
   );
 export const publishRecord = (id: string, contextId: string) =>
-  request(`${recordPath(id)}/publications`, recordPublicationStatusSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ context_id: uuidSchema.parse(contextId) }),
-  });
+  request(
+    `${recordPath(id)}/publications`,
+    recordPublicationStatusSchema,
+    jsonRequest('POST', { context_id: uuidSchema.parse(contextId) }),
+  );
 /** Moves a locking status to `to` outside the declared transitions. */
 export const unlockRecordStatus = (
   id: string,
@@ -348,16 +335,16 @@ export const unlockRecordStatus = (
     expectedUpdatedAt: string;
   },
 ) =>
-  request(`${recordPath(id)}/status-unlock`, recordSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  request(
+    `${recordPath(id)}/status-unlock`,
+    recordSchema,
+    jsonRequest('POST', {
       attribute_code: input.attributeCode,
       ...(input.contextId && { context_id: uuidSchema.parse(input.contextId) }),
       to: input.to,
       expected_updated_at: input.expectedUpdatedAt,
     }),
-  });
+  );
 export const publishRecordAllChannels = (id: string) =>
   request(
     `${recordPath(id)}/publications/publish-all`,
@@ -365,11 +352,10 @@ export const publishRecordAllChannels = (id: string) =>
     { method: 'POST' },
   );
 export const unpublishRecord = (id: string, contextId: string) =>
-  requestNoContent(`${recordPath(id)}/publications/unpublish`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ context_id: uuidSchema.parse(contextId) }),
-  });
+  requestNoContent(
+    `${recordPath(id)}/publications/unpublish`,
+    jsonRequest('POST', { context_id: uuidSchema.parse(contextId) }),
+  );
 export const previewRecordMigration = (id: string) =>
   request(
     `${recordPath(id)}/blueprint-migration/preview`,
@@ -387,11 +373,11 @@ export const migrateRecord = (
   const query = expected_updated_at
     ? `?${new URLSearchParams({ expected_updated_at })}`
     : '';
-  return request(`${path}/blueprint-migration${query}`, recordSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  return request(
+    `${path}/blueprint-migration${query}`,
+    recordSchema,
+    jsonRequest('POST', payload),
+  );
 };
 
 /** Declared edges from the saved status and whether the caller may take them. */

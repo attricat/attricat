@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request, requestOffsetPage } from '../../api/request';
+import { request, requestOffsetPage, jsonRequest } from '../../api/request';
 import { RECORD_FINDINGS_PAGE_SIZE, RECORD_RULE_RUNS_LIMIT } from './constants';
 import { findingSchema, ruleRunSchema, ruleSchema } from './schemas';
 import { uuidSegment, versionSegment } from '../../api/pathSegments';
@@ -18,14 +18,10 @@ export const recheckRecord = (recordId: string) =>
   request(
     '/api/rule-findings/recheck',
     z.object({ run_ids: z.array(z.uuid()) }),
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        record_id: z.uuid().parse(recordId),
-        idempotency_key: crypto.randomUUID(),
-      }),
-    },
+    jsonRequest('POST', {
+      record_id: z.uuid().parse(recordId),
+      idempotency_key: crypto.randomUUID(),
+    }),
   );
 export const listFindings = (recordId?: string) =>
   request(
@@ -63,16 +59,12 @@ export const runRuleNow = (ruleId: string, version: number, dryRun: boolean) =>
   request(
     `/api/rules/${uuidSegment(ruleId)}/run-now`,
     z.object({ id: z.uuid() }),
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        dry_run: dryRun,
-        record_id: null,
-        idempotency_key: crypto.randomUUID(),
-        version: z.number().int().positive().parse(version),
-      }),
-    },
+    jsonRequest('POST', {
+      dry_run: dryRun,
+      record_id: null,
+      idempotency_key: crypto.randomUUID(),
+      version: z.number().int().positive().parse(version),
+    }),
   );
 export const enableRuleRevision = (
   ruleId: string,
@@ -82,13 +74,10 @@ export const enableRuleRevision = (
   request(
     `/api/rules/${uuidSegment(ruleId)}/versions/${versionSegment(version)}/enable`,
     ruleSchema,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(
-        acceptExistingViolations ? { accept_existing_violations: true } : {},
-      ),
-    },
+    jsonRequest(
+      'POST',
+      acceptExistingViolations ? { accept_existing_violations: true } : {},
+    ),
   );
 export const disableRule = (ruleId: string) =>
   request(`/api/rules/${uuidSegment(ruleId)}/disable`, ruleSchema, {

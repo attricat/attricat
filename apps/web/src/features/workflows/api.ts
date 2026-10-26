@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request, requestNoContent } from '../../api/request';
+import { request, requestNoContent, jsonRequest } from '../../api/request';
 import {
   compiledWorkflowSchema,
   workflowRunSchema,
@@ -12,11 +12,8 @@ import { uuidSegment, versionSegment } from '../../api/pathSegments';
 
 export type { Workflow } from './schemas';
 
-const definitionRequest = (definition: string) => ({
-  body: JSON.stringify({ definition }),
-  headers: { 'Content-Type': 'application/json' },
-  method: 'POST',
-});
+const definitionRequest = (definition: string) =>
+  jsonRequest('POST', { definition });
 
 export const listWorkflows = (): Promise<Workflow[]> =>
   request('/api/workflows', z.array(workflowSchema));
@@ -86,14 +83,10 @@ export const runWorkflowNow = (
   request(
     `/api/workflows/${uuidSegment(id)}/run-now`,
     z.object({ id: z.uuid() }),
-    {
-      body: JSON.stringify({
-        record_id: z.uuid().parse(recordId),
-        idempotency_key: z.string().min(1).max(128).parse(idempotencyKey),
-      }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    },
+    jsonRequest('POST', {
+      record_id: z.uuid().parse(recordId),
+      idempotency_key: z.string().min(1).max(128).parse(idempotencyKey),
+    }),
   );
 
 export const disableWorkflow = (id: string): Promise<Workflow> =>

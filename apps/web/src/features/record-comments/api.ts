@@ -1,4 +1,4 @@
-import { request, requestNoContent } from '../../api/request';
+import { request, requestNoContent, jsonRequest } from '../../api/request';
 import {
   commentCountSchema,
   commentInputSchema,
@@ -18,11 +18,10 @@ export const getCommentCount = (recordId: string, signal?: AbortSignal) =>
   request(`${commentsPath(recordId)}/count`, commentCountSchema, { signal });
 
 export const createComment = (recordId: string, body: string) =>
-  requestNoContent(commentsPath(recordId), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(commentInputSchema.parse({ body })),
-  });
+  requestNoContent(
+    commentsPath(recordId),
+    jsonRequest('POST', commentInputSchema.parse({ body })),
+  );
 
 export const updateComment = (
   recordId: string,
@@ -32,9 +31,5 @@ export const updateComment = (
 ) =>
   requestNoContent(
     `${commentsPath(recordId)}/${encodeURIComponent(commentId)}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...commentInputSchema.parse({ body }), revision }),
-    },
+    jsonRequest('PATCH', { ...commentInputSchema.parse({ body }), revision }),
   );
