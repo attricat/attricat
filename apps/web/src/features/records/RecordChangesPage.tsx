@@ -1,3 +1,5 @@
+import { AuditLogIcon } from '../../components/systemIcons';
+import { EmptyState } from '../../components/EmptyState';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ArrowLeftIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -70,7 +72,10 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
             <RecordChangeEvent changes={eventChanges} key={eventId} />
           ))}
           {changeItems.length === 0 && (
-            <Typography>{t('records.noRecordedChanges')}</Typography>
+            <EmptyState
+              icon={AuditLogIcon}
+              title={t('records.noRecordedChanges')}
+            />
           )}
           {changes.isFetchNextPageError && (
             <ApiErrorAlert error={changes.error} sx={{ mb: 2 }} />

@@ -1,3 +1,4 @@
+import { EmptyState } from '../../components/EmptyState';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Chip,
@@ -25,7 +26,7 @@ import { ruleDefinitionsOptions } from '../rules/queryOptions';
 import { ChannelChecksEditor } from './ChannelChecksEditor';
 import { EXPORT_TABLE_COLUMN_COUNT } from './constants';
 import { exportQueryKeys } from './queryKeys';
-import { ExportIcon } from '../../components/systemIcons';
+import { ContextIcon, ExportIcon } from '../../components/systemIcons';
 import { capabilities, accessTargetKinds } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { contextListOptions } from '../contexts/queryOptions';
@@ -163,7 +164,10 @@ export const ExportsPage = () => {
               {!contexts.data.length && (
                 <TableRow>
                   <TableCell colSpan={EXPORT_TABLE_COLUMN_COUNT}>
-                    {t('exports.noContexts')}
+                    <EmptyState
+                      icon={ContextIcon}
+                      title={t('exports.noContexts')}
+                    />
                   </TableCell>
                 </TableRow>
               )}

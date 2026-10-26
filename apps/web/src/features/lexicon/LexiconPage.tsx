@@ -1,3 +1,4 @@
+import { EmptyState } from '../../components/EmptyState';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -207,11 +208,14 @@ export const LexiconPage = ({
               unusedReferences={unusedReferences}
             />
           ) : (
-            <Typography sx={{ p: 2 }}>
-              {term
-                ? t('lexicon.noMatchingTranslations')
-                : t('lexicon.noTranslations', { language: languageName })}
-            </Typography>
+            <EmptyState
+              icon={LexiconIcon}
+              title={
+                term
+                  ? t('lexicon.noMatchingTranslations')
+                  : t('lexicon.noTranslations', { language: languageName })
+              }
+            />
           )}
         </Paper>
       )}
