@@ -18,6 +18,7 @@ import { ApiErrorAlert } from './ApiErrorAlert';
 export const ConfirmDialog = ({
   children,
   confirmLabel,
+  confirmDisabled = false,
   destructive = false,
   error,
   isPending,
@@ -30,6 +31,8 @@ export const ConfirmDialog = ({
   /** The question; text is shown as dialog content text. */
   children: ReactNode;
   confirmLabel: ReactNode;
+  /** Blocks confirming, such as when the field it changes is disabled; cancelling still works. */
+  confirmDisabled?: boolean;
   destructive?: boolean;
   error: Error | null | undefined;
   isPending: boolean;
@@ -59,7 +62,7 @@ export const ConfirmDialog = ({
         </Button>
         <Button
           color={destructive ? 'error' : 'primary'}
-          disabled={isPending}
+          disabled={isPending || confirmDisabled}
           onClick={onConfirm}
           variant="contained"
         >
