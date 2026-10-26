@@ -227,10 +227,17 @@ Z `--expected-updated-at` zapis kończy się błędem zamiast nadpisać rekord z
 
 ```sh
 acli file upload <record-id> <attribute-code> --file a.png [--file b.png] [--context-id <id>]
+acli file stage-upload <blueprint-id> <attribute-code> --file a.png [--file b.png] [--context-id <id>]
+acli file set-references <record-id> <attribute-code> [--file-id <id> ...] [--expected-file-id <id> ...] [--context-id <id>]
 acli file get <file-id>
+acli file retention-hold list <file-id>
+acli file retention-hold create <file-id> --days <n> --reason <text>
+acli file retention-hold release <file-id> <hold-id>
 acli file download-original <file-id> --output original.bin [--range 'bytes=0-1023']
 acli file download-variant <file-id> thumbnail|display --output preview.webp
 ```
+
+`stage-upload` przesyła pliki, zanim rekord powstanie; zwrócone identyfikatory plików podaj jako wartości atrybutu przy tworzeniu rekordu. `set-references` zastępuje pliki, do których odwołuje się atrybut, w podanej kolejności, i kończy się błędem, jeśli `--expected-file-id` nie wymienia dokładnie obecnych. Blokady retencji wymagają uprawnienia `files.hold`.
 
 ### Zapisane wyszukiwania
 

@@ -220,7 +220,12 @@ acli presentation-asset get <asset-id>
 acli presentation-asset download <asset-id> --output <path>
 
 acli file upload <record-id> <attribute-code> --file first.png [--file second.png] [--context-id <context-id>]
+acli file stage-upload <blueprint-id> <attribute-code> --file first.png [--file second.png] [--context-id <context-id>]
+acli file set-references <record-id> <attribute-code> [--file-id <file-id> ...] [--expected-file-id <file-id> ...] [--context-id <context-id>]
 acli file get <file-id>
+acli file retention-hold list <file-id>
+acli file retention-hold create <file-id> --days <days> --reason <text>
+acli file retention-hold release <file-id> <hold-id>
 acli file download-original <file-id> --output original.bin [--range 'bytes=0-1023']
 acli file download-variant <file-id> <kind> --output preview.webp [--range 'bytes=0-1023']
 ```

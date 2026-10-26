@@ -225,10 +225,17 @@ With `--expected-updated-at`, a write fails instead of overwriting a record that
 
 ```sh
 acli file upload <record-id> <attribute-code> --file a.png [--file b.png] [--context-id <id>]
+acli file stage-upload <blueprint-id> <attribute-code> --file a.png [--file b.png] [--context-id <id>]
+acli file set-references <record-id> <attribute-code> [--file-id <id> ...] [--expected-file-id <id> ...] [--context-id <id>]
 acli file get <file-id>
+acli file retention-hold list <file-id>
+acli file retention-hold create <file-id> --days <n> --reason <text>
+acli file retention-hold release <file-id> <hold-id>
 acli file download-original <file-id> --output original.bin [--range 'bytes=0-1023']
 acli file download-variant <file-id> thumbnail|display --output preview.webp
 ```
+
+`stage-upload` uploads files before the record exists; use the returned file IDs as the attribute's values when you create it. `set-references` replaces the files an attribute references, in order, and fails if `--expected-file-id` does not list exactly the current ones. Retention holds need the `files.hold` permission.
 
 ### Saved searches
 

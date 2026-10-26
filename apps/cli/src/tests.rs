@@ -2265,3 +2265,52 @@ async fn record_status_comment_and_history_commands_build_requests() {
         Cli::try_parse_from(["acli", "record", "approvals", id, "--before-time", "x"]).is_err()
     );
 }
+
+#[tokio::test]
+async fn file_reference_and_hold_commands_build_requests() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let file = "00000000-0000-4000-8000-000000000002";
+    let references = echo(&[
+        "file",
+        "set-references",
+        id,
+        "photos",
+        "--file-id",
+        file,
+        "--expected-file-id",
+        id,
+    ])
+    .await;
+    assert_eq!(references["method"], "PUT");
+    assert_eq!(
+        references["path"],
+        format!("/records/{id}/file-attributes/photos/references")
+    );
+    assert_eq!(
+        references["body"],
+        json!({ "context_id": null, "expected_file_ids": [id], "file_ids": [file] })
+    );
+    let cleared = echo(&["file", "set-references", id, "photos"]).await;
+    assert_eq!(cleared["body"]["file_ids"], json!([]));
+    let hold = echo(&[
+        "file",
+        "retention-hold",
+        "create",
+        file,
+        "--days",
+        "30",
+        "--reason",
+        "Legal review",
+    ])
+    .await;
+    assert_eq!(hold["path"], format!("/files/{file}/retention-holds"));
+    assert_eq!(
+        hold["body"],
+        json!({ "days": 30, "reason": "Legal review" })
+    );
+    let release = echo(&["file", "retention-hold", "release", file, id]).await;
+    assert_eq!(
+        release["path"],
+        format!("/files/{file}/retention-holds/{id}/release")
+    );
+}
