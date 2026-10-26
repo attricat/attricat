@@ -12,10 +12,8 @@ import {
 } from '@mui/material';
 import { ExternalLinkIcon, PlusIcon } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
-import { searchConversations } from './api';
 import { agentRoutes } from './constants';
-import { agentQueryKeys } from './queryKeys';
-import { titlePollInterval } from './titlePolling';
+import { conversationSearchOptions } from './queryOptions';
 import { EmptyState } from '../../components/EmptyState';
 import { AgentIcon } from '../../components/systemIcons';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
@@ -43,15 +41,9 @@ export const RecordConversationsPanel = ({
   onStart: () => void;
 }) => {
   const { t } = useTranslation();
-  const conversations = useInfiniteQuery({
-    queryKey: agentQueryKeys.recordConversations(recordId),
-    queryFn: ({ pageParam }) =>
-      searchConversations('', pageParam, { recordId }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (page) => page.next_cursor ?? undefined,
-    refetchInterval: (query) =>
-      titlePollInterval(query.state.data?.pages.flatMap((page) => page.items)),
-  });
+  const conversations = useInfiniteQuery(
+    conversationSearchOptions('', { recordId }),
+  );
   const items = conversations.data?.pages.flatMap((page) => page.items) ?? [];
   return (
     <Box>

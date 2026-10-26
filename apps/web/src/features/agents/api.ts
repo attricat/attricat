@@ -13,9 +13,7 @@ import {
 import { uuidSegment } from '../../api/pathSegments';
 import type { ConversationScope } from './constants';
 
-const queryParam = (value: string) => encodeURIComponent(value);
-
-type ConversationFilter = {
+export type ConversationFilter = {
   /** Only conversations about this record. */
   recordId?: string;
   /** Include conversations about records; ignored with `recordId`. */
@@ -78,12 +76,18 @@ export const sendMessage = (
     runResponseSchema,
     jsonRequest('POST', { content, attachment_ids: attachmentIds }),
   );
-export const listApprovals = (conversationId?: string, signal?: AbortSignal) =>
-  request(
-    `/api/agent/approvals${conversationId ? `?conversation_id=${queryParam(conversationId)}` : ''}`,
+export const listApprovals = (
+  conversationId?: string,
+  signal?: AbortSignal,
+) => {
+  const params = new URLSearchParams();
+  if (conversationId) params.set('conversation_id', conversationId);
+  return request(
+    `/api/agent/approvals${conversationId ? `?${params}` : ''}`,
     z.array(toolCallSchema),
     { signal },
   );
+};
 export const decideApproval = (id: string, approved: boolean) =>
   request(
     `/api/agent/tool-calls/${uuidSegment(id)}/${approved ? 'approve' : 'reject'}`,

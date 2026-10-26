@@ -20,7 +20,6 @@ import {
   RouterButton,
   RouterListItemButton,
 } from '../../components/RouterLink';
-import { searchConversations } from './api';
 import { Trans, useTranslation } from 'react-i18next';
 import { PlusIcon, SearchIcon } from 'lucide-react';
 import { Timestamp } from '../../time/Timestamp';
@@ -29,8 +28,7 @@ import {
   conversationScopes,
   maximumSearchLength,
 } from './constants';
-import { agentQueryKeys } from './queryKeys';
-import { titlePollInterval } from './titlePolling';
+import { conversationSearchOptions } from './queryOptions';
 import { EmptyState } from '../../components/EmptyState';
 import { AgentIcon } from '../../components/systemIcons';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -50,15 +48,9 @@ export const ConversationsPage = ({
     });
   const query = search.q ?? '';
   const scope = search.scope ?? conversationScopes.unattached;
-  const conversations = useInfiniteQuery({
-    queryKey: agentQueryKeys.conversationSearch(query, scope),
-    queryFn: ({ pageParam }) =>
-      searchConversations(query, pageParam, { scope }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (page) => page.next_cursor ?? undefined,
-    refetchInterval: (query) =>
-      titlePollInterval(query.state.data?.pages.flatMap((page) => page.items)),
-  });
+  const conversations = useInfiniteQuery(
+    conversationSearchOptions(query, { scope }),
+  );
   const items = conversations.data?.pages.flatMap((page) => page.items) ?? [];
   return (
     <PageContainer>
