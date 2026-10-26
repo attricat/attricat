@@ -1,12 +1,6 @@
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import {
-  Box,
-  Chip,
-  CircularProgress,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Box, Chip, CircularProgress, Stack, Typography } from '@mui/material';
 import { useId, type ReactNode } from 'react';
 import { monoFontFamily } from '../../../app/theme';
 import { Trans, useTranslation } from 'react-i18next';
