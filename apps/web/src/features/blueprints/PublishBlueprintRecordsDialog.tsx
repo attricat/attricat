@@ -12,11 +12,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
-import { listPublicationChannels } from '../exports/api';
-import { exportQueryKeys } from '../exports/queryKeys';
 import { allPublicationChannels } from './constants';
 import type { Blueprint } from './schemas';
 import { lexiconText } from '../lexicon/lexicon';
+import { publicationChannelsOptions } from '../exports/queryOptions';
 
 export const PublishBlueprintRecordsDialog = ({
   blueprint,
@@ -37,10 +36,7 @@ export const PublishBlueprintRecordsDialog = ({
   const [publicationChannel, setPublicationChannel] = useState<string>(
     allPublicationChannels,
   );
-  const publicationChannels = useQuery({
-    queryKey: exportQueryKeys.channels(),
-    queryFn: listPublicationChannels,
-  });
+  const publicationChannels = useQuery(publicationChannelsOptions());
 
   return (
     <Dialog onClose={() => !isPending && onClose()} open={open}>

@@ -2,12 +2,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Stack } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listAssignableRoles, listInvitations } from './api';
+import { listInvitations } from './api';
 import { InvitationList } from './InvitationList';
 import { InvitationForm } from './InvitationForm';
 import { principalQueryKeys } from '../principals/queryKeys';
 import { workspaceQueryKeys } from './queryKeys';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { assignableRolesOptions } from './queryOptions';
 
 export const WorkspaceInvitationsSection = ({
   canManage,
@@ -26,8 +27,7 @@ export const WorkspaceInvitationsSection = ({
   });
   const roles = useQuery({
     enabled: canManage,
-    queryKey: workspaceQueryKeys.assignableRoles(),
-    queryFn: listAssignableRoles,
+    ...assignableRolesOptions(),
   });
   const refresh = () => {
     // Joined members become assignable, so refresh the assignee directory.

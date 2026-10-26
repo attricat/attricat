@@ -5,8 +5,6 @@ import { ArrowLeftIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
-import { listContexts } from '../contexts/api';
-import { contextQueryKeys } from '../contexts/queryKeys';
 import { defaultContextCode } from '../contexts/constants';
 import { migrateRecord, previewRecordMigration } from './api';
 import { RecordForm } from './components/RecordForm';
@@ -31,6 +29,7 @@ import { useRecordLabels } from './useRecordLabels';
 import { attributeValueKinds } from './valueTypes';
 import { blueprintByCodeOptions } from './queryOptions';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { contextListOptions } from '../contexts/queryOptions';
 
 export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
@@ -41,10 +40,7 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
     queryKey: recordQueryKeys.migrationPreview(recordId),
     queryFn: () => previewRecordMigration(recordId),
   });
-  const contexts = useQuery({
-    queryKey: contextQueryKeys.all(),
-    queryFn: ({ signal }) => listContexts(signal),
-  });
+  const contexts = useQuery(contextListOptions());
   // The record's current revision names attributes the target removes.
   const sourceCode = preview.data?.target.blueprint.code;
   const sourceVersion = preview.data?.source_version;

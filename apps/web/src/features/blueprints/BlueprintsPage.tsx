@@ -20,26 +20,22 @@ import { PlusIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { RouterButton } from '../../components/RouterLink';
 import { PageHeader } from '../../components/PageHeader';
-import { listBlueprints } from './api';
 import { blueprintFilterWidth } from './constants';
 import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
-import { blueprintQueryKeys } from './queryKeys';
 import { EmptyState } from '../../components/EmptyState';
 import { BlueprintIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
 import { useAccess, useCan } from '../auth/useCan';
 import { capabilities, accessTargetKinds } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { blueprintCatalogueOptions } from './queryOptions';
 
 export const BlueprintsPage = () => {
   const { t } = useTranslation();
   const canEdit = useCan(capabilities.blueprintsWrite);
   const [query, setQuery] = useState('');
-  const blueprints = useQuery({
-    queryKey: blueprintQueryKeys.catalogue(),
-    queryFn: listBlueprints,
-  });
+  const blueprints = useQuery(blueprintCatalogueOptions());
   const editAccess = useAccess(
     capabilities.blueprintsWrite,
     accessTargetKinds.blueprint,

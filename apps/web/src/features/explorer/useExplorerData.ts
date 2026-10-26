@@ -8,15 +8,11 @@ import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo } from 'react';
 import { ApiRequestError } from '../../api/request';
 import { listBlueprintRevisions } from '../blueprints/api';
-import { listContexts } from '../contexts/api';
 import { defaultContextCode } from '../contexts/constants';
-import { contextQueryKeys } from '../contexts/queryKeys';
-import { listRecordBlueprints, searchRecordTablePage } from '../records/api';
+import { searchRecordTablePage } from '../records/api';
 import { isHiddenByDefault } from '../records/attributeVisibility';
 import { contextAncestorCodes } from '../records/previewContext';
 import { recordQueryKeys } from '../records/queryKeys';
-import { listPublicationChannels } from '../exports/api';
-import { exportQueryKeys } from '../exports/queryKeys';
 import {
   explorerVisibilityScope,
   relationshipPathSortErrorCode,
@@ -33,7 +29,12 @@ import { isRelationshipPath } from './explorerTableColumns';
 import { isRelationshipFilterAttribute } from './relationshipFilterTypes';
 import type { ExplorerSearch } from './search';
 import { sessionOptions } from '../auth/queryOptions';
-import { blueprintByCodeOptions } from '../records/queryOptions';
+import {
+  blueprintByCodeOptions,
+  recordBlueprintsOptions,
+} from '../records/queryOptions';
+import { contextListOptions } from '../contexts/queryOptions';
+import { publicationChannelsOptions } from '../exports/queryOptions';
 
 /**
  * Loads everything the Explorer page needs for the current search and keeps
@@ -41,10 +42,7 @@ import { blueprintByCodeOptions } from '../records/queryOptions';
  */
 export const useExplorerData = (search: ExplorerSearch) => {
   const navigate = useNavigate({ from: '/' });
-  const blueprints = useQuery({
-    queryKey: recordQueryKeys.blueprints(),
-    queryFn: ({ signal }) => listRecordBlueprints(signal),
-  });
+  const blueprints = useQuery(recordBlueprintsOptions());
   const currentBlueprint = blueprints.data?.find(
     (blueprint) => blueprint.code === search.blueprint,
   );
@@ -58,10 +56,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
   const canSearch = Boolean(
     search.blueprint && !blueprintMissing && versionResolved,
   );
-  const contexts = useQuery({
-    queryKey: contextQueryKeys.all(),
-    queryFn: ({ signal }) => listContexts(signal),
-  });
+  const contexts = useQuery(contextListOptions());
   const selectedBlueprint = useQuery({
     ...blueprintByCodeOptions(search.blueprint ?? '', effectiveVersion),
     enabled: Boolean(search.blueprint && versionResolved),
@@ -75,10 +70,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
     enabled: Boolean(currentBlueprint?.id),
   });
   const session = useQuery(sessionOptions());
-  const channels = useQuery({
-    queryKey: exportQueryKeys.channels(),
-    queryFn: listPublicationChannels,
-  });
+  const channels = useQuery(publicationChannelsOptions());
 
   useEffect(() => {
     if (

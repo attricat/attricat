@@ -1,21 +1,19 @@
 import { Box, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { getSystemHealth } from '../system-health/api';
-import { systemHealthQueryKeys } from '../system-health/queryKeys';
 import { apiHealthStatusKeys, type ApiHealthState } from './apiHealth';
 import {
   API_HEALTH_POLL_INTERVAL_SECONDS,
   shortCommitLength,
 } from './constants';
+import { systemHealthOptions } from '../system-health/queryOptions';
 
 const InspectorBuild = ({ apiHealth }: { apiHealth: ApiHealthState }) => {
   const { t } = useTranslation();
   // Re-enabling after a restart refetches, so a rebuilt API reports its new
   // commit without reloading the page.
   const health = useQuery({
-    queryKey: systemHealthQueryKeys.health(),
-    queryFn: getSystemHealth,
+    ...systemHealthOptions(),
     enabled: apiHealth === 'ready',
     retry: false,
   });

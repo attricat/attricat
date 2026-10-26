@@ -17,11 +17,10 @@ import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { SystemHealthIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
-import { getSystemHealth } from './api';
-import { systemHealthQueryKeys } from './queryKeys';
 import type { SystemHealth } from './schemas';
 import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
+import { systemHealthOptions } from './queryOptions';
 
 const BuildDetails = ({ build }: { build: SystemHealth['build'] }) => {
   const { t } = useTranslation();
@@ -82,8 +81,7 @@ export const SystemHealthPage = () => {
   const session = useQuery(sessionOptions());
   const canRead = useCan(capabilities.dataHealthRead);
   const health = useQuery({
-    queryKey: systemHealthQueryKeys.health(),
-    queryFn: getSystemHealth,
+    ...systemHealthOptions(),
     enabled: canRead,
   });
 

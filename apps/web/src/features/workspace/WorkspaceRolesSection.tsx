@@ -17,7 +17,7 @@ import { useState } from 'react';
 import { invalidateAuthorization } from '../auth/invalidateAuthorization';
 import { useTranslation } from 'react-i18next';
 import { ArchiveIcon, CopyIcon, PencilIcon } from 'lucide-react';
-import { createRole, listPermissions, listRoles } from './api';
+import { createRole, listPermissions } from './api';
 import { workspaceQueryKeys } from './queryKeys';
 import {
   WorkspaceRoleActionDialog,
@@ -25,6 +25,7 @@ import {
 } from './WorkspaceRoleActionDialog';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
+import { roleListOptions } from './queryOptions';
 
 export const WorkspaceRolesSection = ({
   canManage,
@@ -36,8 +37,7 @@ export const WorkspaceRolesSection = ({
   const [dialogAction, setDialogAction] = useState<RoleDialogAction>();
   const roles = useQuery({
     enabled: canManage,
-    queryKey: workspaceQueryKeys.roles(),
-    queryFn: listRoles,
+    ...roleListOptions(),
   });
   const permissions = useQuery({
     enabled: canManage,

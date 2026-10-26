@@ -11,11 +11,8 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon } from 'lucide-react';
-import { listRecordBlueprints } from '../records/api';
-import { recordQueryKeys } from '../records/queryKeys';
 import {
   listExploreNavigation,
-  listRoles,
   updateExploreNavigation,
   type ExploreNavigationEntry,
 } from './api';
@@ -23,6 +20,8 @@ import { navigationSelectMinWidth } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
 import { lexiconText } from '../lexicon/lexicon';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { roleListOptions } from './queryOptions';
+import { recordBlueprintsOptions } from '../records/queryOptions';
 
 export const WorkspaceNavigationSection = ({
   canManage,
@@ -37,13 +36,11 @@ export const WorkspaceNavigationSection = ({
     enabled: canManage,
   });
   const roles = useQuery({
-    queryKey: workspaceQueryKeys.roles(),
-    queryFn: listRoles,
+    ...roleListOptions(),
     enabled: canManage,
   });
   const blueprints = useQuery({
-    queryKey: recordQueryKeys.blueprints(),
-    queryFn: ({ signal }) => listRecordBlueprints(signal),
+    ...recordBlueprintsOptions(),
     enabled: canManage,
   });
   const [entries, setEntries] = useState<

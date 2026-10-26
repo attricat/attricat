@@ -13,21 +13,17 @@ import { PlusIcon } from 'lucide-react';
 import { JsonInline } from '../../components/JsonValue';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { listContexts } from './api';
-import { contextQueryKeys } from './queryKeys';
 import { EmptyState } from '../../components/EmptyState';
 import { ContextIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { contextListOptions } from './queryOptions';
 
 export const ContextsPage = () => {
   const { t } = useTranslation();
   const canCreate = useCan(capabilities.contextsWrite);
-  const contexts = useQuery({
-    queryKey: contextQueryKeys.all(),
-    queryFn: ({ signal }) => listContexts(signal),
-  });
+  const contexts = useQuery(contextListOptions());
   const contextCodes = new Map(
     contexts.data?.map((context) => [context.id, context.code]) ?? [],
   );

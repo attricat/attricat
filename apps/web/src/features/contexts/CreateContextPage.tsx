@@ -7,23 +7,21 @@ import { ArrowLeftIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
-import { createContext, listContexts } from './api';
+import { createContext } from './api';
 import { contextMetadataMinRows, emptyContextMetadata } from './constants';
 import { parseContextMetadata } from './contextMetadata';
 import { contextQueryKeys } from './queryKeys';
 import { ContextIcon } from '../../components/systemIcons';
 import { useInitialFocus } from '../../components/initialFocus';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { contextListOptions } from './queryOptions';
 
 export const CreateContextPage = () => {
   const { t } = useTranslation();
   const formRef = useInitialFocus<HTMLFormElement>();
   const navigate = useNavigate({ from: '/manage/contexts/new' });
   const queryClient = useQueryClient();
-  const contexts = useQuery({
-    queryKey: contextQueryKeys.all(),
-    queryFn: ({ signal }) => listContexts(signal),
-  });
+  const contexts = useQuery(contextListOptions());
   const create = useMutation({
     mutationFn: ({
       code,

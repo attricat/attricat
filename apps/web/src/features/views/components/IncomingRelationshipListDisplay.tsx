@@ -3,13 +3,12 @@ import { Stack } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { NewTabIcon } from '../../../components/NewTabIcon';
 import { RouterButton } from '../../../components/RouterLink';
-import { listBlueprints } from '../../blueprints/api';
-import { blueprintQueryKeys } from '../../blueprints/queryKeys';
 import { incomingRelationshipSearch } from '../../explorer/search';
 import { lexiconText } from '../../lexicon/lexicon';
 import { relatedRecordLinkProps } from '../../records/linkedRecord';
 import type { ViewComponentDefinition } from './componentTypes';
 import { VIEW_COMPONENT_IDS, VIEW_COMPONENT_VERSION } from '../constants';
+import { blueprintCatalogueOptions } from '../../blueprints/queryOptions';
 
 /**
  * Opens the records linking to this one in the Explorer. The Explorer searches
@@ -31,8 +30,7 @@ export const IncomingRelationshipListDisplay = ({
   const several = node.relationships.length > 1;
   // Only several links need the source blueprint's name to tell them apart.
   const blueprints = useQuery({
-    queryKey: blueprintQueryKeys.catalogue(),
-    queryFn: listBlueprints,
+    ...blueprintCatalogueOptions(),
     enabled: several,
   });
   const blueprintName = (code: string) => {

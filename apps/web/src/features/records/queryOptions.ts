@@ -9,6 +9,7 @@ import {
   getRecordRetentionHolds,
   getResolvedRecordPreview,
   getStatusTransitions,
+  listRecordBlueprints,
   type RecordControlCursor,
 } from './api';
 import { recordQueryKeys } from './queryKeys';
@@ -127,4 +128,11 @@ export const blueprintByCodeOptions = (code: string, version?: number) =>
   queryOptions({
     queryKey: recordQueryKeys.blueprintByCode(code, version),
     queryFn: ({ signal }) => getBlueprintByCode(code, version, signal),
+  });
+
+/** The blueprints records can be created from. */
+export const recordBlueprintsOptions = () =>
+  queryOptions({
+    queryKey: recordQueryKeys.blueprints(),
+    queryFn: ({ signal }) => listRecordBlueprints(signal),
   });

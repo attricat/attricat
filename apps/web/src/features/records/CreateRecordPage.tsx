@@ -3,8 +3,6 @@ import { Button } from '@mui/material';
 import { useRef, useState } from 'react';
 import { useCanGoBack, useNavigate, useRouter } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import { listContexts } from '../contexts/api';
-import { contextQueryKeys } from '../contexts/queryKeys';
 import { defaultContextCode } from '../contexts/constants';
 import { draftEditors } from '../drafts/constants';
 import {
@@ -21,6 +19,7 @@ import { attributeValueKinds } from './valueTypes';
 import { invalidFileReferencesCode } from '../files/constants';
 import { useToast } from '../../components/useToast';
 import { blueprintByCodeOptions } from './queryOptions';
+import { contextListOptions } from '../contexts/queryOptions';
 
 export const CreateRecordPage = ({
   search,
@@ -48,10 +47,7 @@ export const CreateRecordPage = ({
     blueprint.data &&
       `${blueprint.data.blueprint.id}:${blueprint.data.blueprint.version}`,
   );
-  const contexts = useQuery({
-    queryKey: contextQueryKeys.all(),
-    queryFn: ({ signal }) => listContexts(signal),
-  });
+  const contexts = useQuery(contextListOptions());
   const defaultContextId = contexts.data?.find(
     (context) => context.code === defaultContextCode,
   )?.id;

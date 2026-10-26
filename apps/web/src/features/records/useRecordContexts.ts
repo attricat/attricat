@@ -1,12 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listContexts } from '../contexts/api';
 import { defaultContextCode } from '../contexts/constants';
-import { contextQueryKeys } from '../contexts/queryKeys';
 import { getResolvedRecordPreview } from './api';
 import { recordQueryKeys } from './queryKeys';
 import { readAheadStaleTimeMs } from './queryOptions';
+import { contextListOptions } from '../contexts/queryOptions';
 
 /**
  * Loads attribute contexts and tracks the selected one. Until a context is
@@ -14,10 +13,7 @@ import { readAheadStaleTimeMs } from './queryOptions';
  */
 export const useRecordContextSelection = (initialContextId?: string) => {
   const [selectedContext, setSelectedContext] = useState('');
-  const contexts = useQuery({
-    queryKey: contextQueryKeys.all(),
-    queryFn: ({ signal }) => listContexts(signal),
-  });
+  const contexts = useQuery(contextListOptions());
   const defaultContextId =
     contexts.data?.find((context) => context.code === defaultContextCode)?.id ??
     null;

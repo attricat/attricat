@@ -16,10 +16,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
 import { useAccess, useCan } from '../auth/useCan';
-import { listContexts } from '../contexts/api';
-import { contextQueryKeys } from '../contexts/queryKeys';
 import {
-  listPublicationChannels,
   updatePublicationChannel,
   type PublicationChannel,
   type PublicationChannelChecks,
@@ -31,23 +28,19 @@ import { exportQueryKeys } from './queryKeys';
 import { ExportIcon } from '../../components/systemIcons';
 import { capabilities, accessTargetKinds } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { contextListOptions } from '../contexts/queryOptions';
+import { publicationChannelsOptions } from './queryOptions';
 
 export const ExportsPage = () => {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const contexts = useQuery({
-    queryKey: contextQueryKeys.all(),
-    queryFn: ({ signal }) => listContexts(signal),
-  });
+  const contexts = useQuery(contextListOptions());
   const channelAccess = useAccess(
     capabilities.contextsWrite,
     accessTargetKinds.context,
     contexts.data?.map((context) => context.id) ?? [],
   );
-  const channels = useQuery({
-    queryKey: exportQueryKeys.channels(),
-    queryFn: listPublicationChannels,
-  });
+  const channels = useQuery(publicationChannelsOptions());
   const canReadRules = useCan(capabilities.rulesRead);
   // Rule codes are suggestions only; a reader without rule access can type them.
   const rules = useQuery({

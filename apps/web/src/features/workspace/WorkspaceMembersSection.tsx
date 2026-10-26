@@ -22,7 +22,6 @@ import { useTranslation } from 'react-i18next';
 import {
   ensureActiveScopeTarget,
   grantMemberRole,
-  listAssignableRoles,
   listMembers,
   revokeMemberRole,
   selectedScopeTarget,
@@ -34,6 +33,7 @@ import { workspaceQueryKeys } from './queryKeys';
 import { ScopeFields } from './ScopeFields';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
+import { assignableRolesOptions } from './queryOptions';
 
 export const WorkspaceMembersSection = ({
   canManage,
@@ -59,8 +59,7 @@ export const WorkspaceMembersSection = ({
   });
   const roles = useQuery({
     enabled: canManage,
-    queryKey: workspaceQueryKeys.assignableRoles(),
-    queryFn: listAssignableRoles,
+    ...assignableRolesOptions(),
   });
   const refresh = () => {
     void invalidateAuthorization(client);

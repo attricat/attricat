@@ -1,12 +1,9 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { listBlueprints } from '../blueprints/api';
-import { blueprintQueryKeys } from '../blueprints/queryKeys';
-import { listContexts } from '../contexts/api';
-import { contextQueryKeys } from '../contexts/queryKeys';
-import { listRoles } from '../workspace/api';
-import { workspaceQueryKeys } from '../workspace/queryKeys';
 import { referenceStaleTimeMs } from './constants';
 import { blueprintByCodeOptions } from '../records/queryOptions';
+import { contextListOptions } from '../contexts/queryOptions';
+import { blueprintCatalogueOptions } from '../blueprints/queryOptions';
+import { roleListOptions } from '../workspace/queryOptions';
 
 export type ReferenceBlueprint = {
   code: string;
@@ -61,8 +58,7 @@ export const createDefinitionReferences = (
   blueprints: () =>
     orEmpty(() =>
       queryClient.fetchQuery({
-        queryFn: listBlueprints,
-        queryKey: blueprintQueryKeys.catalogue(),
+        ...blueprintCatalogueOptions(),
         staleTime: referenceStaleTimeMs,
       }),
     ),
@@ -70,8 +66,7 @@ export const createDefinitionReferences = (
     orEmpty(async () =>
       (
         await queryClient.fetchQuery({
-          queryFn: ({ signal }) => listContexts(signal),
-          queryKey: contextQueryKeys.all(),
+          ...contextListOptions(),
           staleTime: referenceStaleTimeMs,
         })
       ).map((context) => context.code),
@@ -80,8 +75,7 @@ export const createDefinitionReferences = (
     orEmpty(async () =>
       (
         await queryClient.fetchQuery({
-          queryFn: listRoles,
-          queryKey: workspaceQueryKeys.roles(),
+          ...roleListOptions(),
           staleTime: referenceStaleTimeMs,
         })
       ).map((role) => role.code),

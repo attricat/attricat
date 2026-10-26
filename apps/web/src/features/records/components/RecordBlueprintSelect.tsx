@@ -1,9 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Alert, MenuItem, TextField, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { listRecordBlueprints } from '../api';
-import { recordQueryKeys } from '../queryKeys';
 import { lexiconText } from '../../lexicon/lexicon';
+import { recordBlueprintsOptions } from '../queryOptions';
 
 type Props = {
   onChange: (blueprintCode: string) => void;
@@ -13,10 +12,7 @@ type Props = {
 /** Lets the user pick a blueprint before a record form can be shown. */
 export const RecordBlueprintSelect = ({ onChange, value }: Props) => {
   const { t } = useTranslation();
-  const blueprints = useQuery({
-    queryKey: recordQueryKeys.blueprints(),
-    queryFn: ({ signal }) => listRecordBlueprints(signal),
-  });
+  const blueprints = useQuery(recordBlueprintsOptions());
   return (
     <>
       <Typography variant="h6">{t('records.chooseBlueprint')}</Typography>
