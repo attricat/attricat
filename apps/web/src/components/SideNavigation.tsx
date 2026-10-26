@@ -1,3 +1,4 @@
+import type { BrandVariant } from './brandIconSizes';
 import { ArrowLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Box, Divider, IconButton, List, Typography } from '@mui/material';
@@ -36,7 +37,7 @@ const navigationSx = {
   position: 'relative',
 } as const;
 
-const Brand = ({ variant }: { variant: 'mark' | 'wordmark' }) => {
+const Brand = ({ variant }: { variant: BrandVariant }) => {
   const { t } = useTranslation();
   return (
     <Box

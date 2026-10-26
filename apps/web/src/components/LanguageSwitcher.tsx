@@ -1,11 +1,8 @@
+import { useActiveLanguage } from '../i18n/useActiveLanguage';
 import { FormControl, InputLabel, MenuItem, Select } from '@mui/material';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  defaultLanguage,
-  type SupportedLanguage,
-  supportedLanguages,
-} from '../i18n';
+import { type SupportedLanguage, supportedLanguages } from '../i18n';
 
 const languageSwitcherMinWidth = 120;
 
@@ -14,17 +11,10 @@ const languageLabelKeys = {
   pl: 'language.polish',
 } as const satisfies Record<SupportedLanguage, string>;
 
-const isSupportedLanguage = (
-  language: string | undefined,
-): language is SupportedLanguage =>
-  supportedLanguages.includes(language as SupportedLanguage);
-
 export const LanguageSwitcher = () => {
   const { i18n, t } = useTranslation();
   const labelId = useId();
-  const language = isSupportedLanguage(i18n.resolvedLanguage)
-    ? i18n.resolvedLanguage
-    : defaultLanguage;
+  const language = useActiveLanguage();
 
   return (
     <FormControl size="small" sx={{ minWidth: languageSwitcherMinWidth }}>

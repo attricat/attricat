@@ -1,3 +1,4 @@
+import type { BrandVariant } from './brandIconSizes';
 import { LazyMotion, domAnimation } from 'motion/react';
 import * as m from 'motion/react-m';
 import { useRef } from 'react';
@@ -16,7 +17,7 @@ const stack = (order: number) =>
 const AnimatedNavigationBrandIcon = ({
   variant,
 }: {
-  variant: 'mark' | 'wordmark';
+  variant: BrandVariant;
 }) => {
   const ref = useRef<SVGSVGElement>(null);
   const active = useNavigationIconActive(ref);

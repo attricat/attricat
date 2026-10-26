@@ -9,9 +9,7 @@ export const mobileSectionTitleKeys = {
   manage: 'navigation.manage',
 } as const;
 
-const mobileSectionForPathname = (
-  pathname: string,
-): MobileNavigationSection =>
+const mobileSectionForPathname = (pathname: string): MobileNavigationSection =>
   compactNavigationPanelForRoute(pathname) ?? 'primary';
 
 // Manual pane navigation applies only to the route where it was chosen.

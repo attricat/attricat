@@ -1,3 +1,4 @@
+import { useActiveLanguage } from '../i18n/useActiveLanguage';
 import {
   CssBaseline,
   ThemeProvider,
@@ -8,17 +9,12 @@ import { plPL, type Localization } from '@mui/material/locale';
 import { RouterProvider } from '@tanstack/react-router';
 import { LucideProvider } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
 import { ToastProvider } from '../components/ToastProvider';
 import { inspectorEnabled } from '../features/inspector/enabled';
 import { router } from './router';
 import { makeTheme } from './theme';
 import { useColorMode } from './colorMode';
-import {
-  defaultLanguage,
-  supportedLanguages,
-  type SupportedLanguage,
-} from '../i18n';
+import { type SupportedLanguage } from '../i18n';
 
 /** MUI's built-in component strings per language; English is MUI's default. */
 const muiLocales: Record<SupportedLanguage, Localization | undefined> = {
@@ -38,10 +34,7 @@ const Inspector = lazy(() =>
 );
 
 export const AppProviders = () => {
-  const { i18n } = useTranslation();
-  const language =
-    supportedLanguages.find((code) => code === i18n.resolvedLanguage) ??
-    defaultLanguage;
+  const language = useActiveLanguage();
   const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
   const preference = useColorMode((state) => state.preference);
   const mode = preference ?? (prefersDark ? 'dark' : 'light');
