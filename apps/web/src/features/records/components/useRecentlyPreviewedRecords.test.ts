@@ -27,16 +27,13 @@ describe('useRecentlyPreviewedRecords', () => {
 
   it('creates picker tokens when randomUUID is unavailable', () => {
     vi.stubGlobal('crypto', {
-      getRandomValues: (values: Uint32Array) => {
-        values.set([1, 2, 3, 4]);
-        return values;
-      },
+      getRandomValues: (values: Uint8Array) => values.fill(0xff),
     });
 
     const { result } = renderHook(() => useRecentlyPreviewedRecords());
 
     expect(result.current.previewHref('record-id')).toContain(
-      'relationshipPicker=1-2-3-4',
+      'relationshipPicker=ffffffff-ffff-4fff-bfff-ffffffffffff',
     );
   });
 

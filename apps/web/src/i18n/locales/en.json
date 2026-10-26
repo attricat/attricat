@@ -1578,9 +1578,7 @@
     "memberSummaryWithRoles": "{{email}} · {{state}} · {{roles}}",
     "memberStates": {
       "active": "Active",
-      "invited": "Invited",
-      "suspended": "Suspended",
-      "disabled": "Disabled"
+      "inactive": "Inactive"
     },
     "members": "Members",
     "roles": "Roles",

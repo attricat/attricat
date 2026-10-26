@@ -108,12 +108,15 @@ export const useSavedSearchActions = ({
       return Promise.resolve();
     return runBusy(async () => {
       await deleteSavedView(id);
-      await client.invalidateQueries({ queryKey: savedViewQueryKeys.all() });
+      // Leave the deleted search first, so the refresh below does not refetch
+      // it while it is still open and replace the Explorer with a 404.
       if (id === search.sourceView)
-        void navigate({
+        await navigate({
           to: '/',
           search: { ...search, sourceView: undefined },
         });
+      client.removeQueries({ queryKey: savedViewQueryKeys.detail(id, false) });
+      await client.invalidateQueries({ queryKey: savedViewQueryKeys.all() });
     });
   };
   const copyLink = () =>

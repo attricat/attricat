@@ -31,6 +31,7 @@ import type {
 } from './schemas';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { randomUuid } from '../../components/randomUuid';
 import { formatPushError } from './pushErrors';
 
 type Row = {
@@ -249,7 +250,7 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
                           size="small"
                           startIcon={<RotateCcwIcon />}
                           onClick={() =>
-                            retry.mutate({ mapping, key: crypto.randomUUID() })
+                            retry.mutate({ mapping, key: randomUuid() })
                           }
                         >
                           {t('extensionExports.retry')}

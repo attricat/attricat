@@ -157,19 +157,27 @@ export const BlueprintDetailPage = ({
               label={t('blueprints.migrations')}
             />
           </Tabs>
-          {pageTab === blueprintDetailTabs.metadata && metadataRevision && (
+          {pageTab === blueprintDetailTabs.metadata && (
             <Box {...tabId.panel(blueprintDetailTabs.metadata)}>
-              <BlueprintVersionMetadata blueprint={metadataRevision} />
-              <Box component="aside" sx={{ mt: 3 }}>
-                <ExtensionOutlet
-                  context={{
-                    context_version: blueprintExtensionContextVersion,
-                    blueprint_id: metadataRevision.blueprint.id,
-                    blueprint_version: metadataRevision.blueprint.version,
-                  }}
-                  outlet="blueprint_detail_panel"
-                />
-              </Box>
+              {metadata.isPending && (
+                <Typography>{t('blueprints.loadingBlueprint')}</Typography>
+              )}
+              <ApiErrorAlert error={metadata.error} />
+              {metadataRevision && (
+                <>
+                  <BlueprintVersionMetadata blueprint={metadataRevision} />
+                  <Box component="aside" sx={{ mt: 3 }}>
+                    <ExtensionOutlet
+                      context={{
+                        context_version: blueprintExtensionContextVersion,
+                        blueprint_id: metadataRevision.blueprint.id,
+                        blueprint_version: metadataRevision.blueprint.version,
+                      }}
+                      outlet="blueprint_detail_panel"
+                    />
+                  </Box>
+                </>
+              )}
             </Box>
           )}
           {pageTab === blueprintDetailTabs.revisionHistory && (

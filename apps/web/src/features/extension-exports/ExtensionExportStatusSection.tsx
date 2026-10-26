@@ -2,6 +2,7 @@ import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   FormControl,
   InputLabel,
   MenuItem,
@@ -36,6 +37,7 @@ import { extensionExportQueryKeys } from './queryKeys';
 import type { ManifestExports } from './schemas';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { randomUuid } from '../../components/randomUuid';
 import { allConnections, countsByConnection } from './exportCounts';
 import { ExportCountsTable } from './ExportCountsTable';
 import { ExportMappingsTable } from './ExportMappingsTable';
@@ -134,6 +136,8 @@ export const ExtensionExportStatusSection = ({
           destinations: exports.map((item) => item.title).join(', '),
         })}
       </Typography>
+      <ApiErrorAlert error={overview.error} />
+      <ApiErrorAlert error={connections.error} />
       <ApiErrorAlert error={page.error} />
       <ApiErrorAlert error={retry.error} />
       {!!retry.data?.job_errors.length && (
@@ -145,15 +149,19 @@ export const ExtensionExportStatusSection = ({
           })}
         </Alert>
       )}
-      {rows.length === 0 ? (
-        <EmptyState
-          description={t('extensionExports.nothingExportedDescription')}
-          icon={ExportIcon}
-          title={t('extensionExports.nothingExported')}
-        />
-      ) : (
-        <ExportCountsTable rows={rows} />
+      {overview.isPending && (
+        <CircularProgress aria-label={t('extensionExports.loading')} />
       )}
+      {overview.isSuccess &&
+        (rows.length === 0 ? (
+          <EmptyState
+            description={t('extensionExports.nothingExportedDescription')}
+            icon={ExportIcon}
+            title={t('extensionExports.nothingExported')}
+          />
+        ) : (
+          <ExportCountsTable rows={rows} />
+        ))}
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
         spacing={2}
@@ -216,7 +224,7 @@ export const ExtensionExportStatusSection = ({
               disabled={!selected.length || retry.isPending}
               startIcon={<RotateCcwIcon />}
               onClick={() =>
-                retry.mutate({ recordIds: selected, key: crypto.randomUUID() })
+                retry.mutate({ recordIds: selected, key: randomUuid() })
               }
             >
               {t('extensionExports.retrySelected', { count: selected.length })}
@@ -225,7 +233,7 @@ export const ExtensionExportStatusSection = ({
               disabled={!mappings.length || retry.isPending}
               startIcon={<RotateCcwIcon />}
               onClick={() =>
-                retry.mutate({ recordIds: undefined, key: crypto.randomUUID() })
+                retry.mutate({ recordIds: undefined, key: randomUuid() })
               }
             >
               {t('extensionExports.retryAll', {
@@ -235,17 +243,21 @@ export const ExtensionExportStatusSection = ({
           </>
         )}
       </Stack>
-      {mappings.length === 0 ? (
-        <Typography color="text.secondary" variant="body2">
-          {t('extensionExports.noRecordsInStatus')}
-        </Typography>
-      ) : (
-        <ExportMappingsTable
-          mappings={mappings}
-          onSelectedChange={setSelected}
-          selected={canManage && retryable ? selected : undefined}
-        />
+      {page.isPending && overview.isSuccess && (
+        <CircularProgress aria-label={t('extensionExports.loading')} />
       )}
+      {page.isSuccess &&
+        (mappings.length === 0 ? (
+          <Typography color="text.secondary" variant="body2">
+            {t('extensionExports.noRecordsInStatus')}
+          </Typography>
+        ) : (
+          <ExportMappingsTable
+            mappings={mappings}
+            onSelectedChange={setSelected}
+            selected={canManage && retryable ? selected : undefined}
+          />
+        ))}
       {page.hasNextPage && (
         <Box sx={{ mt: 2 }}>
           <LoadMoreButton

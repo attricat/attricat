@@ -122,6 +122,7 @@ export const ExtensionBudgetsSection = ({
     queryKey: extensionExportQueryKeys.budgets(extensionId),
     queryFn: () => listBudgets(extensionId),
   });
+  if (budgets.isError) return <ApiErrorAlert error={budgets.error} />;
   if (!budgets.data?.length) return null;
   return (
     <Paper sx={{ p: 2 }}>

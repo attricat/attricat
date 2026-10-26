@@ -1,22 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { randomUuid } from '../../../components/randomUuid';
 import { useLatestCallback } from '../../../components/useLatestCallback';
 
 const previewHighlightDuration = 5_000;
-let pickerTokenSequence = 0;
-
-const createPickerToken = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
-    return crypto.randomUUID();
-  if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.getRandomValues === 'function'
-  ) {
-    const values = crypto.getRandomValues(new Uint32Array(4));
-    return [...values].map((value) => value.toString(16)).join('-');
-  }
-  pickerTokenSequence += 1;
-  return `picker-${Date.now()}-${pickerTokenSequence}`;
-};
 
 const relationshipPickerSearchParameter = 'relationshipPicker';
 export const relationshipPickerMessageType =
@@ -49,7 +35,7 @@ export const useRecentlyPreviewedRecords = (
   onSelect?: (recordId: string) => void,
 ) => {
   const [previewedIds, setPreviewedIds] = useState<Set<string>>(new Set());
-  const [pickerToken] = useState(createPickerToken);
+  const [pickerToken] = useState(randomUuid);
   const select = useLatestCallback((id: string) => onSelect?.(id));
   const leftPicker = useRef(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(

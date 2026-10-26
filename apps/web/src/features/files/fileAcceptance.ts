@@ -1,26 +1,15 @@
+import { randomUuid } from '../../components/randomUuid';
 import type { Attribute } from '../records/api';
 import {
   IMAGE_MIME_PREFIX,
   MIME_GROUP_WILDCARD_SUFFIX,
-  PENDING_FILE_ID_PREFIX,
   SUPPORTED_IMAGE_MIME_TYPES,
 } from './constants';
 
 type FilePolicy = NonNullable<Attribute['file_policy']>;
 
-let pendingFileSequence = 0;
-
 /** Creates a client-side ID for a file queued for upload. */
-export const pendingFileId = () => {
-  if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.randomUUID === 'function'
-  ) {
-    return crypto.randomUUID();
-  }
-  pendingFileSequence += 1;
-  return `${PENDING_FILE_ID_PREFIX}-${Date.now()}-${pendingFileSequence}`;
-};
+export const pendingFileId = randomUuid;
 
 const normalizedExtension = (extension: string) =>
   extension.replace(/^\./, '').toLowerCase();

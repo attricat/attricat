@@ -95,6 +95,15 @@ export default tseslint.config(
             'Show request failures with errorMessage() from src/api/errors, which translates API error codes.',
         },
       ],
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'crypto',
+          property: 'randomUUID',
+          message:
+            'Use randomUuid() from src/components/randomUuid; crypto.randomUUID exists only in secure contexts.',
+        },
+      ],
       'react-refresh/only-export-components': [
         'warn',
         {
@@ -111,6 +120,15 @@ export default tseslint.config(
   {
     files: ['src/components/systemIcons.ts'],
     rules: { 'no-restricted-imports': 'off' },
+  },
+  {
+    // The helper wraps crypto.randomUUID; tests run in Node, which always has it.
+    files: [
+      'src/components/randomUuid.ts',
+      'src/**/*.test.{ts,tsx}',
+      'e2e/**/*.ts',
+    ],
+    rules: { 'no-restricted-properties': 'off' },
   },
   {
     // The shared time module is the only place allowed to format instants.

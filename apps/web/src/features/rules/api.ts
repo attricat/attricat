@@ -3,6 +3,7 @@ import { request, requestOffsetPage, jsonRequest } from '../../api/request';
 import { RECORD_FINDINGS_PAGE_SIZE, RECORD_RULE_RUNS_LIMIT } from './constants';
 import { findingSchema, ruleRunSchema, ruleSchema } from './schemas';
 import { uuidSegment, versionSegment } from '../../api/pathSegments';
+import { randomUuid } from '../../components/randomUuid';
 export type { Finding, Rule, RuleRun } from './schemas';
 export const listRules = () => request('/api/rules', z.array(ruleSchema));
 export const listRuleRuns = () =>
@@ -20,7 +21,7 @@ export const recheckRecord = (recordId: string) =>
     z.object({ run_ids: z.array(z.uuid()) }),
     jsonRequest('POST', {
       record_id: z.uuid().parse(recordId),
-      idempotency_key: crypto.randomUUID(),
+      idempotency_key: randomUuid(),
     }),
   );
 export const listFindings = (recordId?: string) =>
@@ -62,7 +63,7 @@ export const runRuleNow = (ruleId: string, version: number, dryRun: boolean) =>
     jsonRequest('POST', {
       dry_run: dryRun,
       record_id: null,
-      idempotency_key: crypto.randomUUID(),
+      idempotency_key: randomUuid(),
       version: z.number().int().positive().parse(version),
     }),
   );

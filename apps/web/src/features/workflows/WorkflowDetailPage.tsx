@@ -34,6 +34,7 @@ import { WorkflowIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { randomUuid } from '../../components/randomUuid';
 
 export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const { t } = useTranslation();
@@ -73,7 +74,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   });
   const runNow = useMutation({
     mutationFn: (recordId: string) =>
-      runWorkflowNow(workflowId, recordId, crypto.randomUUID()),
+      runWorkflowNow(workflowId, recordId, randomUuid()),
     onSuccess: refresh,
   });
   const disable = useMutation({

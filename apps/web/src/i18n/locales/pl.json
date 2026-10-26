@@ -1648,9 +1648,7 @@
     "memberSummaryWithRoles": "{{email}} · {{state}} · {{roles}}",
     "memberStates": {
       "active": "Aktywny",
-      "invited": "Zaproszony",
-      "suspended": "Zawieszony",
-      "disabled": "Wyłączony"
+      "inactive": "Nieaktywny"
     },
     "members": "Członkowie",
     "roles": "Role",

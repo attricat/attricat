@@ -1,4 +1,5 @@
 import { Button, List, ListItem, ListItemText, Paper } from '@mui/material';
+import { useMutation } from '@tanstack/react-query';
 import { Trans, useTranslation } from 'react-i18next';
 import { errorMessage } from '../../api/errors';
 import { Timestamp } from '../../time/Timestamp';
@@ -12,9 +13,15 @@ export const InvitationList = ({
 }: {
   invitations?: Invitation[];
   onChanged: () => unknown;
-  onError: (message: string) => void;
+  onError: (message?: string) => void;
 }) => {
   const { t } = useTranslation();
+  const revoke = useMutation({
+    mutationFn: revokeInvitation,
+    onMutate: () => onError(undefined),
+    onSuccess: onChanged,
+    onError: (reason) => onError(errorMessage(reason)),
+  });
   return (
     <Paper>
       <List>
@@ -27,11 +34,8 @@ export const InvitationList = ({
               !item.accepted_at && (
                 <Button
                   color="error"
-                  onClick={() =>
-                    revokeInvitation(item.id)
-                      .then(onChanged)
-                      .catch((e: Error) => onError(errorMessage(e)))
-                  }
+                  disabled={revoke.isPending}
+                  onClick={() => revoke.mutate(item.id)}
                 >
                   {t('workspace.revokeInvitation')}
                 </Button>

@@ -157,9 +157,7 @@ export const WorkspaceMembersSection = ({
                     : 'workspace.memberSummary',
                   {
                     email: member.email,
-                    state: t(`workspace.memberStates.${member.state}`, {
-                      defaultValue: member.state,
-                    }),
+                    state: t(`workspace.memberStates.${member.state}`),
                     roles: roleFormatter.format(
                       member.grants.map((grant) => grant.role_code),
                     ),

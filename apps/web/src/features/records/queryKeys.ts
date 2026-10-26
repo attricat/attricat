@@ -31,8 +31,6 @@ export const recordQueryKeys = {
   blueprintByCode: (code: string | undefined, version: number | undefined) =>
     [...recordQueryKeys.blueprintsByCode(), code, version] as const,
   currentBlueprint: (id: string) => ['current-blueprint', id] as const,
-  blueprintRevisions: (id: string | undefined) =>
-    ['blueprint-revisions', id] as const,
   relationshipTreeFacetChildren: (
     input: Omit<RelationshipTreeFacetChildrenRequest, 'cursor'>,
   ) => ['relationship-tree-facet-children', input] as const,

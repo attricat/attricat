@@ -56,7 +56,6 @@ export const fileCardinalities = {
 
 export const IMAGE_MIME_PREFIX = 'image/';
 export const MIME_GROUP_WILDCARD_SUFFIX = '/*';
-export const PENDING_FILE_ID_PREFIX = 'pending-file';
 
 /** Multipart form fields used by upload endpoints. */
 export const uploadFormFields = {
