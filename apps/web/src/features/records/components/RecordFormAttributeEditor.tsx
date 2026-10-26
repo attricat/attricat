@@ -12,8 +12,8 @@ import {
   filesForAttribute,
   hasLocalFormValue,
   isDefaultContextOnly,
-  type ResolvedFormValues,
 } from '../recordFormAttributes';
+import type { ResolvedValue } from '../../views/components/ValueField';
 import { attributeValueTypes } from '../valueTypes';
 import { attributeContextFallbacks } from '../constants';
 import { RecordAttributeEditor } from './RecordAttributeEditor';
@@ -51,7 +51,7 @@ type RecordFormAttributeEditorContext = {
   statusTransitions?: readonly StatusTransitionAccess[];
   fieldErrors: Record<string, string>;
   migrationReviews?: Readonly<Record<string, MigrationFieldReview>>;
-  resolvedValues: ResolvedFormValues;
+  resolvedValues: Readonly<Record<string, ResolvedValue>>;
   onRecordUpdated?: (updatedAt: string) => void;
 };
 
@@ -87,10 +87,12 @@ export const RecordFormAttributeEditor = ({
   const { t } = useTranslation();
   const { format: formatInstant } = useInstantFormat();
   const resolvedValue = resolvedValues[attribute.code];
+  // The context a shown value comes from; a value without one is not inherited.
+  const sourceContext = resolvedValue?.source_context;
   const inherited =
     !hasLocalFormValue(existingValues, attribute.code, contextId) &&
-    resolvedValue !== undefined &&
-    resolvedValue.source_context.id !== contextId;
+    sourceContext !== undefined &&
+    sourceContext.id !== contextId;
   const defaultOnly = isDefaultContextOnly(
     attribute,
     contextId,
@@ -118,7 +120,7 @@ export const RecordFormAttributeEditor = ({
 
   const inheritedHelperText = () => {
     if (!inherited) return undefined;
-    const context = resolvedValue.source_context.code;
+    const context = sourceContext.code;
     return attribute.value_type === attributeValueTypes.relationship ||
       attribute.value_type === attributeValueTypes.file
       ? t('records.inheritedFromContext', { context })

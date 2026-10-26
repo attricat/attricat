@@ -210,26 +210,17 @@ const resolvedPreviewValueSchema = z.union([
   jsonObjectSchema,
   z.array(fileMetadataSchema),
 ]);
+const resolvedPreviewEntrySchema = z.object({
+  value: resolvedPreviewValueSchema,
+  /** The context the value is set in, which may be a parent of the one asked for. */
+  source_context: z.object({ id: uuidSchema, code: z.string() }),
+});
 const resolvedRecordPreviewSchema = z.object({
   record: recordIdentitySchema,
   requested_context: attributeContextSchema,
-  values: z.record(
-    z.string(),
-    z.object({
-      value: resolvedPreviewValueSchema,
-      source_context: z.object({ id: uuidSchema, code: z.string() }),
-    }),
-  ),
+  values: z.record(z.string(), resolvedPreviewEntrySchema),
   reusable_attributes: z.array(attributeSchema).default([]),
-  reusable_values: z
-    .record(
-      z.string(),
-      z.object({
-        value: resolvedPreviewValueSchema,
-        source_context: z.object({ id: uuidSchema, code: z.string() }),
-      }),
-    )
-    .default({}),
+  reusable_values: z.record(z.string(), resolvedPreviewEntrySchema).default({}),
 });
 const resultVersionScopeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('empty') }),

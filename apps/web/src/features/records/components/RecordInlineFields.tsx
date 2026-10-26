@@ -47,7 +47,6 @@ import {
   headingEditableAttributes,
   smartFillFormFields,
   unplacedEditableAttributes,
-  type ResolvedFormValues,
 } from '../recordFormAttributes';
 import { schemaMismatchField } from '../recordFieldSaves';
 import { recordFormOptions } from '../queryOptions';
@@ -320,7 +319,7 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
               onChange={onChange}
               onRecordUpdated={saves.noteRecordUpdated}
               required={required}
-              resolvedValues={resolvedValues as ResolvedFormValues}
+              resolvedValues={resolvedValues}
               statusParentContextIds={statusParentContextIds}
               statusTransitions={statusTransitions}
               value={value}
