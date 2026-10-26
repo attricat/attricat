@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { createConversation, listConversations } from '../../agents/api';
 import { agentQueryKeys } from '../../agents/queryKeys';
-import { isTitlePending } from '../../agents/titlePolling';
+import { titlePollInterval } from '../../agents/titlePolling';
 import { RenameConversationDialog } from '../../agents/RenameConversationDialog';
 import {
   ConversationPanel,
@@ -21,7 +21,6 @@ import {
 } from '../../agents/ConversationPanel';
 import {
   CONVERSATION_RECORD_ID_PREFIX_LENGTH,
-  CONVERSATION_TITLE_POLL_INTERVAL,
   RECORD_DRAWER_WIDTH,
 } from '../constants';
 import { errorMessage } from '../../../api/errors';
@@ -50,10 +49,7 @@ export const RecordAgentDrawer = ({
     queryKey: agentQueryKeys.conversations(),
     queryFn: listConversations,
     enabled: open,
-    refetchInterval: (query) =>
-      query.state.data?.some(isTitlePending)
-        ? CONVERSATION_TITLE_POLL_INTERVAL
-        : false,
+    refetchInterval: (query) => titlePollInterval(query.state.data),
   });
   const existing = conversations.data?.find(
     (item) =>

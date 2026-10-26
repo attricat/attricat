@@ -19,13 +19,9 @@ import { searchConversations } from './api';
 import { Trans, useTranslation } from 'react-i18next';
 import { PlusIcon, SearchIcon } from 'lucide-react';
 import { Timestamp } from '../../time/Timestamp';
-import {
-  agentRoutes,
-  maximumSearchLength,
-  titlePollIntervalMs,
-} from './constants';
+import { agentRoutes, maximumSearchLength } from './constants';
 import { agentQueryKeys } from './queryKeys';
-import { isTitlePending } from './titlePolling';
+import { titlePollInterval } from './titlePolling';
 import { EmptyState } from '../../components/EmptyState';
 import { AgentIcon } from '../../components/systemIcons';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -45,10 +41,8 @@ export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
     queryFn: ({ pageParam }) => searchConversations(query, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.next_cursor ?? undefined,
-    refetchInterval: (state) =>
-      state.state.data?.pages.some((page) => page.items.some(isTitlePending))
-        ? titlePollIntervalMs
-        : false,
+    refetchInterval: (query) =>
+      titlePollInterval(query.state.data?.pages.flatMap((page) => page.items)),
   });
   const items = conversations.data?.pages.flatMap((page) => page.items) ?? [];
   return (

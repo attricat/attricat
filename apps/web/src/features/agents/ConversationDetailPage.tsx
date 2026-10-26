@@ -7,9 +7,9 @@ import { useResourcePageTitle } from '../../app/useResourcePageTitle';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { conversationOptions } from './queryOptions';
-import { conversationMinHeight, titlePollIntervalMs } from './constants';
+import { conversationMinHeight } from './constants';
 import { ConversationPanel } from './ConversationPanel';
-import { isTitlePending } from './titlePolling';
+import { titlePollInterval } from './titlePolling';
 import { RenameConversationDialog } from './RenameConversationDialog';
 import { AgentIcon } from '../../components/systemIcons';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -24,9 +24,7 @@ export const ConversationDetailPage = ({
   const conversation = useQuery({
     ...conversationOptions(conversationId),
     refetchInterval: (query) =>
-      query.state.data && isTitlePending(query.state.data)
-        ? titlePollIntervalMs
-        : false,
+      titlePollInterval(query.state.data && [query.state.data]),
   });
   useResourcePageTitle(conversation.data?.title, t('agents.agentConversation'));
   return (

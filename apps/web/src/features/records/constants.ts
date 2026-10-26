@@ -121,7 +121,6 @@ export const CONTEXT_MENU_WIDTH = 180;
 
 export const RELATIONSHIP_PICKER_ACTION_MIN_WIDTH = 300;
 
-export const CONVERSATION_TITLE_POLL_INTERVAL = 3_000;
 /** Number of record ID characters included in a new conversation title. */
 export const CONVERSATION_RECORD_ID_PREFIX_LENGTH = 8;
 

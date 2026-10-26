@@ -1,9 +1,16 @@
 export const extensionManagementQueryKeys = {
   all: ['extension-management'] as const,
-  marketplace: () => ['extension-management', 'marketplace'] as const,
+  marketplace: () =>
+    [...extensionManagementQueryKeys.all, 'marketplace'] as const,
   registry: (owner: string, repository: string) =>
-    ['extension-management', 'registry', owner, repository] as const,
-  installed: () => ['extension-management', 'installed'] as const,
-  layout: () => ['extension-management', 'layout'] as const,
-  detail: (id: string) => ['extension-management', 'detail', id] as const,
+    [
+      ...extensionManagementQueryKeys.all,
+      'registry',
+      owner,
+      repository,
+    ] as const,
+  installed: () => [...extensionManagementQueryKeys.all, 'installed'] as const,
+  layout: () => [...extensionManagementQueryKeys.all, 'layout'] as const,
+  detail: (id: string) =>
+    [...extensionManagementQueryKeys.all, 'detail', id] as const,
 };

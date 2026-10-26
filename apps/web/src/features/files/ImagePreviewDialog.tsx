@@ -21,17 +21,15 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from 'lucide-react';
-import { fileDownloadUrl, getFileMetadata } from './api';
+import { fileDownloadUrl } from './api';
 import {
   DISPLAY_VARIANT_KIND,
   fileStatuses,
   IMAGE_MAX_ZOOM,
   IMAGE_MIN_ZOOM,
   IMAGE_ZOOM_STEP,
-  THUMBNAIL_POLL_INTERVAL,
-  THUMBNAIL_POLLING_STATUSES,
 } from './constants';
-import { fileQueryKeys } from './queryKeys';
+import { fileMetadataOptions } from './queryOptions';
 import type { GalleryFile } from './ImageGallery';
 
 const ImagePreview = ({ file }: { file: GalleryFile }) => {
@@ -41,16 +39,7 @@ const ImagePreview = ({ file }: { file: GalleryFile }) => {
   const [loaded, setLoaded] = useState(false);
   const viewport = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const metadata = useQuery({
-    queryKey: fileQueryKeys.metadata(file.id),
-    queryFn: () => getFileMetadata(file.id),
-    retry: false,
-    refetchInterval: (query) =>
-      !query.state.error &&
-      THUMBNAIL_POLLING_STATUSES.has(query.state.data?.status ?? '')
-        ? THUMBNAIL_POLL_INTERVAL
-        : false,
-  });
+  const metadata = useQuery(fileMetadataOptions(file.id));
   const variant = metadata.data?.variants.find(
     (item) => item.kind === DISPLAY_VARIANT_KIND,
   );

@@ -107,8 +107,12 @@ const componentReferenceSchema = z.object({
   version: z.number().int().positive().max(MAX_COMPONENT_PROTOCOL_VERSION),
   props: jsonObjectSchema.nullish().transform((props) => props ?? {}),
 });
-const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
-  z.discriminatedUnion('type', [
+/**
+ * Blocks that lay out child nodes; they may appear nested in a view or as a
+ * view's root. Built on demand because they refer back to `viewNodeSchema`.
+ */
+const containerBlockSchemas = () =>
+  [
     z.object({
       type: z.literal(viewBlockTypes.stack),
       children: z.array(viewNodeSchema),
@@ -138,6 +142,10 @@ const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
       ),
       component: componentReferenceSchema.nullish(),
     }),
+  ] as const;
+const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
+  z.discriminatedUnion('type', [
+    ...containerBlockSchemas(),
     z.object({
       type: z.literal(viewBlockTypes.heading),
       text: z.string(),
@@ -212,35 +220,7 @@ const viewDefinitionSchema: z.ZodType<ViewDefinition> = z.lazy(() =>
         z.object({ order: z.array(z.string()), hidden: z.array(z.string()) }),
       ),
     }),
-    z.object({
-      type: z.literal(viewBlockTypes.stack),
-      children: z.array(viewNodeSchema),
-      component: componentReferenceSchema.nullish(),
-    }),
-    z.object({
-      type: z.literal(viewBlockTypes.grid),
-      children: z.array(viewNodeSchema),
-      component: componentReferenceSchema.nullish(),
-    }),
-    z.object({
-      type: z.literal(viewBlockTypes.section),
-      children: z.array(viewNodeSchema),
-      component: componentReferenceSchema.nullish(),
-    }),
-    z.object({
-      type: z.literal(viewBlockTypes.tabs),
-      tabs: z.array(
-        z.object({ label: z.string(), children: z.array(viewNodeSchema) }),
-      ),
-      component: componentReferenceSchema.nullish(),
-    }),
-    z.object({
-      type: z.literal(viewBlockTypes.accordion),
-      sections: z.array(
-        z.object({ label: z.string(), children: z.array(viewNodeSchema) }),
-      ),
-      component: componentReferenceSchema.nullish(),
-    }),
+    ...containerBlockSchemas(),
   ]),
 );
 export const viewsSchema = z.record(z.string(), viewDefinitionSchema);

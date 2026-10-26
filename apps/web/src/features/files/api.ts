@@ -17,6 +17,20 @@ export const getFileMetadata = (fileId: string) =>
 export const fileDownloadUrl = (fileId: string, variant?: string) =>
   `/api/files/${uuidSegment(fileId)}${variant ? `/variants/${encodeURIComponent(variant)}/download` : '/download'}`;
 
+/** The multipart body of an upload: one `file`, or several `files`. */
+const uploadFormData = (files: File[], contextId?: string | null) => {
+  const data = new FormData();
+  if (contextId)
+    data.append(uploadFormFields.contextId, z.uuid().parse(contextId));
+  files.forEach((file) =>
+    data.append(
+      files.length === 1 ? uploadFormFields.file : uploadFormFields.files,
+      file,
+    ),
+  );
+  return data;
+};
+
 export const uploadFiles = async ({
   recordId,
   attributeCode,
@@ -30,15 +44,7 @@ export const uploadFiles = async ({
   files: File[];
   onProgress?: (progress: number) => void;
 }) => {
-  const data = new FormData();
-  if (contextId)
-    data.append(uploadFormFields.contextId, z.uuid().parse(contextId));
-  files.forEach((file) =>
-    data.append(
-      files.length === 1 ? uploadFormFields.file : uploadFormFields.files,
-      file,
-    ),
-  );
+  const data = uploadFormData(files, contextId);
   const path = `/api/records/${uuidSegment(recordId)}/file-attributes/${encodeURIComponent(attributeCode)}/uploads`;
   return requestUpload(path, data, fileUploadResultSchema, onProgress);
 };
@@ -60,15 +66,7 @@ export const uploadStagedFiles = async ({
   files: File[];
   onProgress?: (progress: number) => void;
 }) => {
-  const data = new FormData();
-  if (contextId)
-    data.append(uploadFormFields.contextId, z.uuid().parse(contextId));
-  files.forEach((file) =>
-    data.append(
-      files.length === 1 ? uploadFormFields.file : uploadFormFields.files,
-      file,
-    ),
-  );
+  const data = uploadFormData(files, contextId);
   const path = `/api/blueprints/${uuidSegment(blueprintId)}/file-attributes/${encodeURIComponent(attributeCode)}/staged-uploads`;
   return requestUpload(path, data, stagedUploadResultSchema, onProgress);
 };

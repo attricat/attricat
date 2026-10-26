@@ -2,19 +2,18 @@ import { Box, CircularProgress, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { fileDownloadUrl, getFileMetadata } from './api';
+import { fileDownloadUrl } from './api';
 import {
   fileStatuses,
   MAX_LOADED_THUMBNAIL_SOURCES,
   MAX_THUMBNAIL_RETRIES,
   THUMBNAIL_FADE_IN_TRANSITION,
   THUMBNAIL_POLL_INTERVAL,
-  THUMBNAIL_POLLING_STATUSES,
   THUMBNAIL_RETRY_QUERY_PARAMETER,
   THUMBNAIL_SPINNER_SIZE,
   THUMBNAIL_VARIANT_KIND,
 } from './constants';
-import { fileQueryKeys } from './queryKeys';
+import { fileMetadataOptions } from './queryOptions';
 import type { FileMetadata } from './schemas';
 
 type ThumbnailFile = Pick<FileMetadata, 'id' | 'filename'>;
@@ -159,17 +158,7 @@ export const FileThumbnail = ({
   file: ThumbnailFile;
   size?: number;
 }) => {
-  const metadata = useQuery({
-    queryKey: fileQueryKeys.metadata(file.id),
-    queryFn: () => getFileMetadata(file.id),
-    retry: false,
-    refetchInterval: (query) =>
-      !query.state.error &&
-      THUMBNAIL_POLLING_STATUSES.has(query.state.data?.status ?? '')
-        ? THUMBNAIL_POLL_INTERVAL
-        : false,
-    refetchIntervalInBackground: false,
-  });
+  const metadata = useQuery(fileMetadataOptions(file.id));
   const currentFile = metadata.data;
   const thumbnail = currentFile?.variants.find(
     (variant) => variant.kind === THUMBNAIL_VARIANT_KIND,
