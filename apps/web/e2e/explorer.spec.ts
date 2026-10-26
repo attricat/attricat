@@ -35,7 +35,10 @@ test('shows explorer empty states and configured table fields', async ({
     code,
     'Explorer products',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]\n\n[[attributes]]\ncode = "stock"\nvalue_type = "integer"',
-    { views: '[views.table]\ntype = "table"\ncolumns = [{ field = "title" }, { field = "stock" }]' },
+    {
+      views:
+        '[views.table]\ntype = "table"\ncolumns = [{ field = "title" }, { field = "stock" }]',
+    },
   );
   await createRecord(blueprint, [
     scalar('title', 'Table product'),
@@ -91,7 +94,10 @@ test('reorders Explorer columns by dragging their handles', async ({
     code,
     'Explorer column order',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "stock"\nvalue_type = "integer"',
-    { views: '[views.table]\ntype = "table"\ncolumns = [{ field = "title" }, { field = "stock" }]' },
+    {
+      views:
+        '[views.table]\ntype = "table"\ncolumns = [{ field = "title" }, { field = "stock" }]',
+    },
   );
   await createRecord(blueprint, [
     scalar('title', 'Column product'),
@@ -229,7 +235,10 @@ value_type = "string"
 [[attributes]]
 code = "color"
 value_type = "string"`,
-    { views: '[views.table]\ntype = "table"\ncolumns = [{ field = "title" }, { field = "color" }]' },
+    {
+      views:
+        '[views.table]\ntype = "table"\ncolumns = [{ field = "title" }, { field = "color" }]',
+    },
   );
   await createRecord(blueprint, [
     scalar('title', 'Red laptop'),
@@ -292,7 +301,10 @@ value_type = "string"
 [[attributes]]
 code = "stock"
 value_type = "integer"`,
-    { views: '[views.table]\ntype = "table"\ncolumns = [{ field = "title" }, { field = "stock" }]' },
+    {
+      views:
+        '[views.table]\ntype = "table"\ncolumns = [{ field = "title" }, { field = "stock" }]',
+    },
   );
   await createRecord(blueprint, [
     scalar('title', 'In stock'),
