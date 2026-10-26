@@ -8,6 +8,7 @@ import {
   selectionContextVersion,
   selectionSources,
 } from './constants';
+import { uniqueRecordIdsSchema } from './outletContextSchemas';
 
 export type SelectionSource =
   (typeof selectionSources)[keyof typeof selectionSources];
@@ -29,19 +30,11 @@ export type ActionSelection = {
 export const selectionContextSchema = z
   .object({
     context_version: z.literal(selectionContextVersion),
-    selection_source: z.enum([
-      selectionSources.recordPreview,
-      selectionSources.explorerRow,
-      selectionSources.explorerSelection,
-    ]),
+    selection_source: z.enum(selectionSources),
     blueprint_id: z.uuid(),
     blueprint_version: z.number().int().positive(),
     context_id: z.uuid().nullable(),
-    record_ids: z
-      .array(z.uuid())
-      .min(1)
-      .max(maximumActionSelection)
-      .refine((ids) => new Set(ids).size === ids.length),
+    record_ids: uniqueRecordIdsSchema(maximumActionSelection),
   })
   .strict();
 export type SelectionContext = z.infer<typeof selectionContextSchema>;

@@ -18,6 +18,7 @@ import {
   type OpenActionDialog,
 } from './actionDialogStore';
 import {
+  actionDialogOutlet,
   extensionLoadingIndicatorSize,
   selectionSources,
   contributionKinds,
@@ -78,7 +79,7 @@ const ActionDialog = ({
     (item) =>
       item.extension_id === extensionId &&
       item.kind === contributionKinds.dialog &&
-      item.outlet === 'action_dialog',
+      item.outlet === actionDialogOutlet,
   );
   const count = context.record_ids.length;
   const title = contribution?.title ?? t('extensions.actionDialogTitle');

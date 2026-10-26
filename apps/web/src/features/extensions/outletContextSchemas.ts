@@ -3,7 +3,17 @@ import { maximumAgentSelection } from '../explorer/agentSelection';
 import { supportedOutletContextVersion } from './constants';
 
 const contextVersion = z.literal(supportedOutletContextVersion);
+
+/** A selection of one to `maximum` distinct records. */
+export const uniqueRecordIdsSchema = (maximum: number) =>
+  z
+    .array(z.uuid())
+    .min(1)
+    .max(maximum)
+    .refine((ids) => new Set(ids).size === ids.length);
 const blueprintVersion = z.number().int().positive();
+/** An extension's export id, as its manifest declares it. */
+const exportIdPattern = /^[A-Za-z0-9._-]{1,128}$/;
 
 const blueprintRevisionContextSchema = z
   .object({
@@ -50,7 +60,7 @@ export const outletContextSchemas = {
   export_mapping: z
     .object({
       context_version: contextVersion,
-      export_id: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/),
+      export_id: z.string().regex(exportIdPattern),
     })
     .strict(),
   explorer_bulk_action: z
@@ -58,11 +68,7 @@ export const outletContextSchemas = {
       context_version: contextVersion,
       blueprint_id: z.uuid(),
       blueprint_version: blueprintVersion,
-      record_ids: z
-        .array(z.uuid())
-        .min(1)
-        .max(maximumAgentSelection)
-        .refine((ids) => new Set(ids).size === ids.length),
+      record_ids: uniqueRecordIdsSchema(maximumAgentSelection),
     })
     .strict(),
   explorer_action: blueprintRevisionContextSchema,
