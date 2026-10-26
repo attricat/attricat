@@ -1,3 +1,4 @@
+import { latestRevisions } from '../../api/revisionStatus';
 import { FindingSeverityChip } from './FindingSeverityChip';
 import {
   Box,
@@ -87,15 +88,7 @@ const FindingFilter = ({
 
 /** Each rule once, named by its latest revision. */
 const ruleOptions = (rules: readonly Rule[]): FilterOption[] =>
-  [
-    ...rules
-      .reduce((latest, rule) => {
-        const known = latest.get(rule.id);
-        if (!known || rule.version > known.version) latest.set(rule.id, rule);
-        return latest;
-      }, new Map<string, Rule>())
-      .values(),
-  ]
+  latestRevisions(rules, (rule) => rule.id)
     .map((rule) => ({ value: rule.id, label: rule.name }))
     .sort((a, b) => a.label.localeCompare(b.label));
 

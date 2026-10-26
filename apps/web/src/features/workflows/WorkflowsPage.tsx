@@ -1,3 +1,4 @@
+import { latestRevisions } from '../../api/revisionStatus';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
@@ -19,7 +20,7 @@ import { PlusIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
-import { listWorkflowRuns, listWorkflows, type Workflow } from './api';
+import { listWorkflowRuns, listWorkflows } from './api';
 import { workflowQueryKeys } from './queryKeys';
 import { workflowRoutes, workflowRunStatus } from './constants';
 import { RevisionStatusChip } from '../../components/RevisionStatusChip';
@@ -41,18 +42,9 @@ export const WorkflowsPage = () => {
     queryKey: workflowQueryKeys.runs(),
     queryFn: listWorkflowRuns,
   });
-  const families = Object.values(
-    (workflows.data ?? []).reduce<Record<string, Workflow>>(
-      (result, workflow) => {
-        if (
-          !result[workflow.id] ||
-          result[workflow.id].version < workflow.version
-        )
-          result[workflow.id] = workflow;
-        return result;
-      },
-      {},
-    ),
+  const families = latestRevisions(
+    workflows.data ?? [],
+    (workflow) => workflow.id,
   );
   const runSummaries = new Map<
     string,
