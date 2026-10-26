@@ -1,5 +1,4 @@
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -17,6 +16,7 @@ import {
 } from '@mui/material';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
+import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import type { Blueprint } from '../blueprints/api';
@@ -104,6 +104,7 @@ export const FindingsSection = ({
   acknowledging,
   canManage,
   error,
+  onRetry,
   findings,
   filters,
   onFiltersChange,
@@ -120,7 +121,9 @@ export const FindingsSection = ({
 }: {
   acknowledging: boolean;
   canManage: boolean;
-  error: boolean;
+  /** The section's load failure, offered for retry. */
+  error: Error | null;
+  onRetry: () => void;
   findings: readonly Finding[] | undefined;
   filters: FindingsSearch;
   onFiltersChange: (filters: FindingsSearch) => void;
@@ -143,9 +146,9 @@ export const FindingsSection = ({
   return (
     <>
       {error && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {t('rules.errors.findings')}
-        </Alert>
+        <Box sx={{ mt: 3 }}>
+          <QueryErrorNotice error={error} onRetry={onRetry} />
+        </Box>
       )}
       <Paper component="section" sx={{ mt: 3 }}>
         <Stack

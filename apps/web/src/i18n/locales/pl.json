@@ -1955,11 +1955,6 @@
       "findings": "Ustalenia",
       "runs": "Historia wykonań"
     },
-    "errors": {
-      "definitions": "Nie udało się wczytać definicji reguł.",
-      "findings": "Nie udało się wczytać ustaleń reguł.",
-      "runs": "Nie udało się wczytać historii wykonań reguł."
-    },
     "columns": {
       "rule": "Reguła",
       "revision": "Rewizja",

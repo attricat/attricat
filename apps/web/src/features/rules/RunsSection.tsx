@@ -1,5 +1,4 @@
 import {
-  Alert,
   Box,
   Paper,
   Table,
@@ -10,6 +9,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { Timestamp } from '../../time/Timestamp';
 import type { RuleRun } from './api';
 import { RecordIdLink, RuleRevisionCell } from './RuleCells';
@@ -33,11 +33,14 @@ const lastRunTime = (runs: readonly RuleRun[]) =>
 export const RunsSection = ({
   recordLabels,
   error,
+  onRetry,
   revisions,
   runs,
 }: {
   recordLabels: ReadonlyMap<string, string>;
-  error: boolean;
+  /** The section's load failure, offered for retry. */
+  error: Error | null;
+  onRetry: () => void;
   revisions: RuleRevisions;
   runs: readonly RuleRun[] | undefined;
 }) => {
@@ -46,9 +49,9 @@ export const RunsSection = ({
   return (
     <>
       {error && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {t('rules.errors.runs')}
-        </Alert>
+        <Box sx={{ mt: 3 }}>
+          <QueryErrorNotice error={error} onRetry={onRetry} />
+        </Box>
       )}
       <Paper component="section" sx={{ mt: 3 }}>
         <Box sx={{ p: 2 }}>

@@ -1875,11 +1875,6 @@
       "findings": "Findings",
       "runs": "Run history"
     },
-    "errors": {
-      "definitions": "Unable to load rule definitions.",
-      "findings": "Unable to load rule findings.",
-      "runs": "Unable to load rule run history."
-    },
     "columns": {
       "rule": "Rule",
       "revision": "Revision",
