@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import '../../i18n';
 import type { Attribute } from './api';
-import { choiceLabel, choiceOptions } from './choices';
+import { choiceOptions } from './choices';
 
 const attribute = (value_schema: unknown, value_type = 'string') =>
   ({ code: 'size', value_schema, value_type }) as Attribute;
@@ -19,8 +19,6 @@ describe('choiceOptions', () => {
       { code: 's', label: 'Small' },
       { code: 'l', label: 'l' },
     ]);
-    expect(choiceLabel(options!, 's')).toBe('Small');
-    expect(choiceLabel(options!, 'x')).toBe('x');
   });
 
   it('resolves lexicon references in labels', () => {

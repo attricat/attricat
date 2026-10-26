@@ -55,13 +55,6 @@ export const choiceValueLabel = (
   return options?.find((option) => option.code === value)?.label;
 };
 
-/** The label of a configured value, or the value itself. */
-export const choiceLabel = (
-  options: readonly ChoiceOption[],
-  value: unknown,
-): string =>
-  options.find((option) => option.code === value)?.label ?? String(value);
-
 /**
  * The choices to offer in a select, unless the view configures its own edit
  * component for the attribute, which then takes precedence over the `enum`.

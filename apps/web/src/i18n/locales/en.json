@@ -39,8 +39,6 @@
   },
   "app": {
     "attricat": "Attricat",
-    "catalog": "Catalog",
-    "dataManagement": "Data management",
     "loading": "Loading",
     "findings": "Findings",
     "runs": "Runs"
@@ -1334,17 +1332,12 @@
   "management": {
     "dashboardTitle": "Management dashboard",
     "dashboardDescription": "A central place for catalog administration.",
-    "catalogTitle": "Catalog configuration",
-    "catalogDescription": "Manage blueprints, contexts, and data health.",
     "blueprintsDescription": "Define the record schemas used by your catalog.",
     "contextsDescription": "Configure contexts for scoped record values.",
     "exportsDescription": "Configure export channels and publish catalog records.",
     "dataHealthDescription": "Review catalog data quality and health checks.",
-    "workspaceTitle": "Workspace access",
     "workspaceDescription": "Manage members, roles, and navigation.",
-    "governanceTitle": "Governance",
     "governanceDescription": "Review activity and audit history.",
-    "extensionsTitle": "Extensions",
     "extensionsDescription": "Manage installed integrations and their permissions.",
     "workflowsDescription": "Create and safely operate versioned workflow definitions.",
     "rulesDescription": "Author and operate attricat-owned data quality rules.",

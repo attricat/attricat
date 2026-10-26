@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  hasInvalidScalarField,
   missingRequiredAttributes,
   relationshipTargetsForForm,
   serializeAttributeValues,
@@ -272,21 +271,6 @@ describe('record form values', () => {
         value: { time: '09:30:00', time_zone: 'America/New_York' },
       },
     ]);
-  });
-
-  it('identifies typed values that fail their attribute schema', () => {
-    expect(
-      hasInvalidScalarField(
-        [
-          {
-            code: 'price',
-            value_type: 'number',
-            value_schema: { type: 'number', minimum: 0 },
-          },
-        ],
-        { price: '-1' },
-      ),
-    ).toBe(true);
   });
 
   it('maps record schema property failures to their fields', () => {

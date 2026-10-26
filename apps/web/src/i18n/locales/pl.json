@@ -41,8 +41,6 @@
   },
   "app": {
     "attricat": "Attricat",
-    "catalog": "Katalog",
-    "dataManagement": "Zarządzanie danymi",
     "loading": "Ładowanie",
     "findings": "Ustalenia",
     "runs": "Uruchomienia"
@@ -1394,17 +1392,12 @@
   "management": {
     "dashboardTitle": "Panel zarządzania",
     "dashboardDescription": "Centralne miejsce administracji katalogiem.",
-    "catalogTitle": "Konfiguracja katalogu",
-    "catalogDescription": "Zarządzaj schematami, kontekstami i stanem danych.",
     "blueprintsDescription": "Definiuj schematy rekordów używane w katalogu.",
     "contextsDescription": "Konfiguruj konteksty dla zakresowych wartości rekordów.",
     "exportsDescription": "Konfiguruj kanały eksportu i publikuj rekordy katalogu.",
     "dataHealthDescription": "Przeglądaj jakość danych katalogu i kontrole stanu.",
-    "workspaceTitle": "Dostęp do obszaru roboczego",
     "workspaceDescription": "Zarządzaj członkami, rolami i nawigacją.",
-    "governanceTitle": "Nadzór",
     "governanceDescription": "Przeglądaj aktywność i historię audytu.",
-    "extensionsTitle": "Rozszerzenia",
     "extensionsDescription": "Zarządzaj zainstalowanymi integracjami i ich uprawnieniami.",
     "workflowsDescription": "Twórz i bezpiecznie obsługuj wersjonowane definicje przepływów pracy.",
     "rulesDescription": "Twórz i obsługuj katalogowe reguły jakości danych.",
