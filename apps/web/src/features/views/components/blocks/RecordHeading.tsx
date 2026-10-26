@@ -33,7 +33,8 @@ export const RecordHeading = ({
   view?: ViewDefinition;
 }) => {
   const heading = findRecordHeading(view);
-  const title = heading?.type === 'stack' ? heading.children[0] : undefined;
+  const title =
+    heading?.type === viewBlockTypes.stack ? heading.children[0] : undefined;
   const titleAttribute =
     title?.type === viewBlockTypes.field
       ? attributes.find((attribute) => attribute.code === title.field)
@@ -61,7 +62,7 @@ export const RecordHeading = ({
           <AttributeValueText attribute={titleAttribute} value={titleValue} />
         </PageTitle>
       </FieldErrorBoundary>
-      {heading?.type === 'stack' &&
+      {heading?.type === viewBlockTypes.stack &&
         heading.children.slice(1).map((child, index) => {
           if (child.type === viewBlockTypes.text)
             return (

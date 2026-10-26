@@ -1,3 +1,4 @@
+import { viewBlockTypes } from '../views/schemas';
 import { Box, useMediaQuery, useTheme } from '@mui/material';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -95,7 +96,9 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
   const browseBy = useBrowseBy({
     blueprintCode: search.blueprint,
     blueprintDefault:
-      explorerView?.type === 'explorer' ? explorerView.browse_by : undefined,
+      explorerView?.type === viewBlockTypes.explorer
+        ? explorerView.browse_by
+        : undefined,
     blueprintId: currentBlueprint?.id,
     onChange: actions.changeBrowseBy,
     relationshipFields,

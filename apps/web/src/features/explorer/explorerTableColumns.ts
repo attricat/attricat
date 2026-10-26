@@ -1,3 +1,4 @@
+import { viewBlockTypes } from '../views/schemas';
 import type { TFunction } from 'i18next';
 import type { BlueprintWithAttributes } from '../records/api';
 import { attributeLabel } from '../records/recordDisplay';
@@ -49,7 +50,7 @@ export const buildExplorerTableColumns = (
     return attribute ? attributeLabel(attribute) : undefined;
   };
   const tableView =
-    blueprint.blueprint.views.table?.type === 'table'
+    blueprint.blueprint.views.table?.type === viewBlockTypes.table
       ? blueprint.blueprint.views.table
       : undefined;
   return (tableView?.columns ?? []).map((column) => {
