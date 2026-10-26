@@ -319,6 +319,26 @@ acli workflow run-targets <run-id>
 acli workflow run-replay <run-id>
 ```
 
+### Agent
+
+```sh
+acli agent conversation list
+acli agent conversation search [--query <text>] [--cursor <cursor>]
+acli agent conversation create [--title <title>] [--record-id <id> [--context-id <id>]]
+acli agent conversation get | delete <conversation-id>
+acli agent conversation rename <conversation-id> --title <title>
+acli agent message list <conversation-id>
+acli agent message send <conversation-id> --content <text> [--attachment-id <id> ...] [--follow]
+acli agent upload <conversation-id> --file notes.pdf [--file photo.jpg]
+acli agent run list <conversation-id>
+acli agent run events <run-id> [--last-event-id <id>]
+acli agent approval list [--conversation-id <id>]
+acli agent approval approve | reject <tool-call-id>
+acli agent smart-fill --record-id <id> --content <text> [--default-context] [--context-id <id>] [--conversation-id <id>] [--draft-values <json>] [--attachment-id <id> ...]
+```
+
+`run events` and `message send --follow` print one JSON line per run event until the run ends, and resume where they stopped if the server closes the stream. Approve or reject each change the agent proposes with `approval approve` or `approval reject`. See [Agents and approvals](/guides/agents/).
+
 ### Workspace
 
 ```sh

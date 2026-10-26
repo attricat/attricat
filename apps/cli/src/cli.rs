@@ -6,6 +6,7 @@ use clap::{Args, Parser, Subcommand};
 use url::Url;
 use uuid::Uuid;
 
+use crate::commands::agent::AgentCommand;
 use crate::commands::audit::AuditCommand;
 use crate::commands::auth::AuthCommand;
 use crate::commands::blueprint::BlueprintCommand;
@@ -174,6 +175,11 @@ pub(crate) enum Command {
     Value {
         #[command(subcommand)]
         command: ValueCommand,
+    },
+    /// Converse with the workspace agent and approve its changes.
+    Agent {
+        #[command(subcommand)]
+        command: AgentCommand,
     },
     Audit {
         #[command(subcommand)]

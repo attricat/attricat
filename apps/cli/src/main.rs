@@ -4,6 +4,7 @@ use clap::Parser;
 use reqwest::Client;
 
 use crate::cli::{Cli, Command, MetricsCommand};
+use crate::commands::agent::agent_command;
 use crate::commands::audit::audit_command;
 use crate::commands::auth::auth_command;
 use crate::commands::blueprint::blueprint_command;
@@ -34,6 +35,7 @@ use crate::transport::{Api, CONNECT_TIMEOUT, is_secure_credential_transport};
 mod cli;
 mod commands;
 mod error;
+mod events;
 mod input;
 mod session;
 #[cfg(test)]
@@ -60,7 +62,10 @@ async fn main() -> ExitCode {
     };
     match run(cli).await {
         Ok(body) => {
-            println!("{body}");
+            // Streaming commands print as they go and return nothing more.
+            if !body.is_empty() {
+                println!("{body}");
+            }
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -153,6 +158,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         Command::Value { command } => value_command(&api, command).await,
         Command::Workspace { command } => workspace_command(&api, command).await,
         Command::Token { command } => token_command(&api, command).await,
+        Command::Agent { command } => agent_command(&api, command).await,
         Command::Audit { command } => audit_command(&api, command).await,
         Command::DataHealth { command } => data_health_command(&api, command).await,
         Command::Workflow { command } => workflow_command(&api, command).await,

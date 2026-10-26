@@ -275,6 +275,10 @@ value, so it follows the same workflow and approval rules as the web app;
 lists are newest first: pass the last item's `created_at` and `id` as
 `--before-time` and `--before-id` for the next page.
 
+`agent run events` and `agent message send --follow` print one JSON line per
+server-sent run event until the run's `terminal` event, reconnecting with
+`Last-Event-ID` if the server ends the stream first.
+
 
 ## Teams and assignments
 
@@ -297,6 +301,20 @@ Each command acts on the signed-in user's own inbox in the current workspace;
 see [Notifications](notifications.md).
 
 ```sh
+acli agent conversation list
+acli agent conversation search [--query <text>] [--cursor <cursor>]
+acli agent conversation create [--title <title>] [--record-id <id> [--context-id <id>]]
+acli agent conversation get | delete <conversation-id>
+acli agent conversation rename <conversation-id> --title <title>
+acli agent message list <conversation-id>
+acli agent message send <conversation-id> --content <text> [--attachment-id <id> ...] [--follow]
+acli agent upload <conversation-id> --file notes.pdf [--file photo.jpg]
+acli agent run list <conversation-id>
+acli agent run events <run-id> [--last-event-id <id>]
+acli agent approval list [--conversation-id <id>]
+acli agent approval approve | reject <tool-call-id>
+acli agent smart-fill --record-id <id> --content <text> [--default-context] [--context-id <id>] [--conversation-id <id>] [--draft-values <json>] [--attachment-id <id> ...]
+
 acli notification list [--unread] [--before-time <created_at> --before-id <id>]
 acli notification count            # {"count": <unread>}
 acli notification get <id>

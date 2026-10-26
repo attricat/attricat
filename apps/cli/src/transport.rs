@@ -24,6 +24,10 @@ pub(crate) const TRANSFER_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 pub(crate) const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 
+pub(crate) const EVENT_STREAM_MEDIA_TYPE: &str = "text/event-stream";
+
+const LAST_EVENT_ID_HEADER: &str = "last-event-id";
+
 /// Media type of extension and solution-pack archives.
 pub(crate) const ZSTD_MEDIA_TYPE: &str = "application/zstd";
 
@@ -108,6 +112,23 @@ impl Api {
 
     pub(crate) async fn patch_json(&self, path: &str, body: Value) -> Result<String, CliError> {
         self.send(Method::PATCH, path, Some(body)).await
+    }
+
+    /// Opens a server-sent event stream, resuming after `last_event_id`.
+    /// The stream has no overall timeout; the server bounds its lifetime.
+    pub(crate) async fn open_stream(
+        &self,
+        path: &str,
+        last_event_id: Option<&str>,
+    ) -> Result<reqwest::Response, CliError> {
+        let mut request = self
+            .client
+            .get(self.url(path)?)
+            .header(reqwest::header::ACCEPT, EVENT_STREAM_MEDIA_TYPE);
+        if let Some(id) = last_event_id {
+            request = request.header(LAST_EVENT_ID_HEADER, id);
+        }
+        send(request).await
     }
 
     /// Streams a local file as the raw request body.

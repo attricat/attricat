@@ -7,6 +7,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cli::{Cli, Command, PageArgs, SourceInput};
+use crate::commands::agent::follow_run;
 use crate::commands::data_health::data_health_path;
 use crate::commands::extension::connector_job::{ConnectorJobCommand, connector_job_command};
 use crate::commands::extension::operation::{
@@ -27,6 +28,7 @@ use crate::commands::team::team_request;
 use crate::commands::token::{GENERATOR_TOKEN_LABEL, GENERATOR_TOKEN_PERMISSIONS};
 use crate::commands::workspace::{AgentSettingsCommand, WorkspaceCommand, changed_agent_settings};
 use crate::error::CliError;
+use crate::events::{EventParser, ServerEvent};
 use crate::input::{
     ContextFile, RelationshipFile, ValueFile, form_update_body, json_array_input, json_input,
     json_object_input, json_string_array_input, parse_stdin_lines, read_source, relationships_body,
@@ -2553,4 +2555,125 @@ async fn extension_connection_export_and_run_commands_build_requests() {
         "/extensions/acme.erp/host-permission-budgets/erp-api"
     );
     assert!(Cli::try_parse_from(["acli", "extension", "secret", "set", "token"]).is_err());
+}
+
+#[test]
+fn event_parser_frames_server_sent_events_across_chunks() {
+    let mut parser = EventParser::default();
+    assert!(parser.push(b": keep-alive\n\nid: 1\nevent: sta").is_empty());
+    let events = parser.push(b"tus\ndata: {\"a\":\r\ndata: 1}\n\nevent: terminal\ndata: {}\n\n");
+    assert_eq!(
+        events,
+        vec![
+            ServerEvent {
+                id: Some("1".to_owned()),
+                event: Some("status".to_owned()),
+                data: "{\"a\":\n1}".to_owned(),
+            },
+            ServerEvent {
+                id: None,
+                event: Some("terminal".to_owned()),
+                data: "{}".to_owned()
+            },
+        ]
+    );
+}
+
+#[tokio::test]
+async fn agent_run_events_resume_after_the_last_event_until_terminal() {
+    use std::sync::{Arc, Mutex};
+
+    let resumed_after = Arc::new(Mutex::new(Vec::new()));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = axum::Router::new().route(
+        "/agent/runs/{run_id}/events",
+        axum::routing::get({
+            let resumed_after = resumed_after.clone();
+            move |headers: axum::http::HeaderMap| {
+                let resumed_after = resumed_after.clone();
+                async move {
+                    let last = headers
+                        .get("last-event-id")
+                        .map(|value| value.to_str().unwrap().to_owned());
+                    resumed_after.lock().unwrap().push(last.clone());
+                    let body = match last {
+                        None => "id: 7\nevent: status\ndata: {\"status\":\"running\"}\n\n",
+                        Some(_) => "id: 8\nevent: terminal\ndata: {\"status\":\"completed\"}\n\n",
+                    };
+                    (
+                        [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                        body,
+                    )
+                }
+            }
+        }),
+    );
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let api = Api::new(
+        Client::new(),
+        Url::parse(&format!("http://{address}")).unwrap(),
+    );
+    assert_eq!(
+        follow_run(&api, Uuid::from_u128(1), None).await.unwrap(),
+        ""
+    );
+    assert_eq!(
+        *resumed_after.lock().unwrap(),
+        vec![None, Some("7".to_owned())]
+    );
+    server.abort();
+}
+
+#[tokio::test]
+async fn agent_commands_build_requests() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let sent = echo(&[
+        "agent",
+        "message",
+        "send",
+        id,
+        "--content",
+        "Fix titles",
+        "--attachment-id",
+        id,
+    ])
+    .await;
+    assert_eq!(sent["path"], format!("/agent/conversations/{id}/messages"));
+    assert_eq!(
+        sent["body"],
+        json!({ "content": "Fix titles", "attachment_ids": [id] })
+    );
+    let search = echo(&["agent", "conversation", "search", "--query", "linen shirts"]).await;
+    assert_eq!(search["query"], "q=linen+shirts");
+    let approve = echo(&["agent", "approval", "approve", id]).await;
+    assert_eq!(approve["path"], format!("/agent/tool-calls/{id}/approve"));
+    let fill = echo(&[
+        "agent",
+        "smart-fill",
+        "--record-id",
+        id,
+        "--default-context",
+        "--content",
+        "100% linen",
+    ])
+    .await;
+    assert_eq!(
+        fill["body"],
+        json!({
+            "record_id": id, "context_id": null, "is_default_context": true,
+            "content": "100% linen", "conversation_id": null, "attachment_ids": [],
+        })
+    );
+    assert!(
+        Cli::try_parse_from([
+            "acli",
+            "agent",
+            "conversation",
+            "create",
+            "--context-id",
+            id
+        ])
+        .is_err()
+    );
 }
