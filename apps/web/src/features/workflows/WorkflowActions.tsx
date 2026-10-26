@@ -1,6 +1,5 @@
-import { Link } from '@tanstack/react-router';
 import { Button, Stack, TextField } from '@mui/material';
-import { type ComponentType, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { UseMutationResult } from '@tanstack/react-query';
 import {
@@ -10,14 +9,10 @@ import {
   PowerOffIcon,
   SendIcon,
 } from 'lucide-react';
+import { RouterButton } from '../../components/RouterLink';
 import { workflowRoutes } from './constants';
 import { revisionStatuses } from '../../api/revisionStatus';
 import type { Workflow } from './schemas';
-
-const WorkflowRevisionLink = Link as unknown as ComponentType<{
-  params: { version: string; workflowId: string };
-  to: typeof workflowRoutes.newRevision;
-}>;
 
 type VersionMutation = UseMutationResult<unknown, Error, number>;
 
@@ -41,15 +36,14 @@ export const WorkflowActions = ({
   const isEnabledRevision = current.enabled_version === current.version;
   return (
     <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-      <Button
-        component={WorkflowRevisionLink}
+      <RouterButton
         params={{ workflowId, version: String(current.version) }}
         startIcon={<PencilIcon />}
         to={workflowRoutes.newRevision}
         variant="outlined"
       >
         {t('workflows.newRevision')}
-      </Button>
+      </RouterButton>
       {current.status === revisionStatuses.draft && (
         <Button
           disabled={publish.isPending}

@@ -3,7 +3,6 @@ import { Link } from '@tanstack/react-router';
 import {
   Alert,
   Box,
-  Button,
   Chip,
   Paper,
   Stack,
@@ -14,7 +13,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { type ComponentType } from 'react';
+import { RouterButton } from '../../components/RouterLink';
 import { useTranslation } from 'react-i18next';
 import { PlusIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
@@ -30,11 +29,6 @@ import { WorkflowIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
-
-const WorkflowDetailLink = Link as unknown as ComponentType<{
-  params: { workflowId: string };
-  to: typeof workflowRoutes.detail;
-}>;
 
 export const WorkflowsPage = () => {
   const { t } = useTranslation();
@@ -82,14 +76,13 @@ export const WorkflowsPage = () => {
       <PageHeader
         actions={
           canManage ? (
-            <Button
-              component={Link}
+            <RouterButton
               startIcon={<PlusIcon />}
               to={workflowRoutes.create}
               variant="contained"
             >
               {t('workflows.newWorkflow')}
-            </Button>
+            </RouterButton>
           ) : undefined
         }
         description={t('workflows.description')}
@@ -195,14 +188,13 @@ export const WorkflowsPage = () => {
                         )}
                       </TableCell>
                       <TableCell align="right">
-                        <Button
-                          component={WorkflowDetailLink}
+                        <RouterButton
                           params={{ workflowId: workflow.id }}
                           to={workflowRoutes.detail}
                           size="small"
                         >
                           {t('workflows.inspect')}
-                        </Button>
+                        </RouterButton>
                       </TableCell>
                     </TableRow>
                   );
