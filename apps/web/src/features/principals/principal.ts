@@ -1,3 +1,4 @@
+import { personName } from '../../components/personName';
 import type { Attribute } from '../records/api';
 import { principalKinds, PRINCIPAL_SCHEMA_KEY } from './constants';
 import {
@@ -57,7 +58,7 @@ export const principalReference = (kind: PrincipalKind, id: string) =>
   `${kind}:${id}`;
 
 export const userLabel = (user: DirectoryUser) =>
-  user.display_name?.trim() || user.email;
+  personName(user.display_name, user.email);
 
 type ResolvedPrincipal =
   | { kind: 'user'; user: DirectoryUser; label: string }

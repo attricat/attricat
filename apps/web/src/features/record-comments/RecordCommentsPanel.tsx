@@ -1,3 +1,4 @@
+import { personName } from '../../components/personName';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import {
   useInfiniteQuery,
@@ -69,16 +70,16 @@ const CommentItem = ({
           <BrandIcon />
         ) : (
           <UserAvatar
-            name={comment.author_display_name || comment.author_email}
+            name={personName(comment.author_display_name, comment.author_email)}
             size={32}
           />
         )}
         <Typography variant="subtitle2">
           {comment.author_kind === systemAuthorKind ? (
-            comment.author_display_name || comment.author_email
+            personName(comment.author_display_name, comment.author_email)
           ) : (
             <UserProfileLink userId={comment.author_user_id}>
-              {comment.author_display_name || comment.author_email}
+              {personName(comment.author_display_name, comment.author_email)}
             </UserProfileLink>
           )}
         </Typography>

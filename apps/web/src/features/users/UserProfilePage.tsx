@@ -1,3 +1,4 @@
+import { personName } from '../../components/personName';
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
@@ -58,7 +59,7 @@ export const UserProfilePage = ({ userId }: { userId: string }) => {
   });
   const session = useQuery(sessionOptions());
   const user = profile.data;
-  const name = user ? user.display_name?.trim() || user.email : undefined;
+  const name = user ? personName(user.display_name, user.email) : undefined;
   const isSelf = session.data?.user_id === userId;
   const notFound =
     profile.error instanceof ApiRequestError &&
