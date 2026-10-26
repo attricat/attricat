@@ -251,8 +251,6 @@
     "email": "Email",
     "password": "Password",
     "forgotPassword": "Forgot password?",
-    "workspaceNotFound": "Unable to find workspace",
-    "loginFailed": "Unable to sign in",
     "sessionCheckFailed": "We couldn't restore your session. Check your connection and try again.",
     "retrySession": "Retry",
     "signOutFailed": "We couldn't sign you out. Check your connection and try again.",

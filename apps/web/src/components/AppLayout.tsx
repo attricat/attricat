@@ -1,3 +1,4 @@
+import { rememberReturnLocation } from '../features/auth/returnLocation';
 import {
   Navigate,
   Outlet,
@@ -15,7 +16,6 @@ import {
 import { Fragment, useEffect, useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { pageTitle } from '../app/pageTitle';
-import { returnToStorageKey } from '../app/storageKeys';
 import { logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
 import { ExtensionRunWatcher } from '../features/extension-runs/ExtensionRunWatcher';
@@ -34,16 +34,7 @@ const signOutErrorMaxWidth = 480;
 // Rendered before the login redirect so its effect records the original
 // location before navigation replaces it.
 const RememberReturnLocation = () => {
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(
-        returnToStorageKey,
-        `${window.location.pathname}${window.location.search}${window.location.hash}`,
-      );
-    } catch {
-      // Storage restrictions must not prevent signing in.
-    }
-  }, []);
+  useEffect(rememberReturnLocation, []);
   return null;
 };
 

@@ -255,8 +255,6 @@
     "email": "E-mail",
     "password": "Hasło",
     "forgotPassword": "Nie pamiętasz hasła?",
-    "workspaceNotFound": "Nie udało się znaleźć obszaru roboczego",
-    "loginFailed": "Nie udało się zalogować",
     "sessionCheckFailed": "Nie udało się przywrócić sesji. Sprawdź połączenie i spróbuj ponownie.",
     "retrySession": "Spróbuj ponownie",
     "signOutFailed": "Nie udało się wylogować. Sprawdź połączenie i spróbuj ponownie.",
