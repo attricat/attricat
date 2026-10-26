@@ -7,6 +7,7 @@ import { PrincipalKindIcon } from './PrincipalValue';
 import type { PrincipalConfiguration } from './schemas';
 import { usePrincipalDirectory } from './usePrincipalDirectory';
 import { FieldHint } from '../../components/FieldHint';
+import { principalKinds } from './constants';
 
 /**
  * Picks a workspace user or team. A saved assignee who can no longer be
@@ -46,7 +47,7 @@ export const PrincipalEditor = ({
         config.kinds.length > 1
           ? (option) =>
               t(
-                option.principal.kind === 'team'
+                option.principal.kind === principalKinds.team
                   ? 'principals.teams'
                   : 'principals.users',
               )
@@ -61,9 +62,9 @@ export const PrincipalEditor = ({
           (option) =>
             !query ||
             option.principal.label.toLowerCase().includes(query) ||
-            (option.principal.kind === 'user' &&
+            (option.principal.kind === principalKinds.user &&
               option.principal.user.email.toLowerCase().includes(query)) ||
-            (option.principal.kind === 'team' &&
+            (option.principal.kind === principalKinds.team &&
               option.principal.team.code.toLowerCase().includes(query)),
         );
       }}
@@ -75,7 +76,7 @@ export const PrincipalEditor = ({
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <PrincipalKindIcon kind={option.principal.kind} />
             <span>{option.principal.label}</span>
-            {option.principal.kind === 'user' &&
+            {option.principal.kind === principalKinds.user &&
               option.principal.user.display_name && (
                 <Typography color="text.secondary" variant="caption">
                   {option.principal.user.email}

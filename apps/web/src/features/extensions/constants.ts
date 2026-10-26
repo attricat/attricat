@@ -67,12 +67,13 @@ export const contributionKinds = {
 export const navigationGroups = ['promoted', 'grouped'] as const;
 export const promotedNavigationGroup = 'promoted';
 
-export const installationStates = [
-  'disabled',
-  'enabled',
-  'quarantined',
-] as const;
-export type InstallationState = (typeof installationStates)[number];
+export const installationStates = {
+  disabled: 'disabled',
+  enabled: 'enabled',
+  quarantined: 'quarantined',
+} as const;
+export type InstallationState =
+  (typeof installationStates)[keyof typeof installationStates];
 
 export const grantKinds = [
   'capability',

@@ -4,7 +4,7 @@ import {
   createTheme,
   useMediaQuery,
 } from '@mui/material';
-import { plPL } from '@mui/material/locale';
+import { plPL, type Localization } from '@mui/material/locale';
 import { RouterProvider } from '@tanstack/react-router';
 import { LucideProvider } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo } from 'react';
@@ -14,6 +14,17 @@ import { inspectorEnabled } from '../features/inspector/enabled';
 import { router } from './router';
 import { makeTheme } from './theme';
 import { useColorMode } from './colorMode';
+import {
+  defaultLanguage,
+  supportedLanguages,
+  type SupportedLanguage,
+} from '../i18n';
+
+/** MUI's built-in component strings per language; English is MUI's default. */
+const muiLocales: Record<SupportedLanguage, Localization | undefined> = {
+  en: undefined,
+  pl: plPL,
+};
 
 // LucideProvider types size as a number but forwards it to the SVG width and
 // height, so icons can follow their MUI container font size like SvgIcon.
@@ -28,15 +39,16 @@ const Inspector = lazy(() =>
 
 export const AppProviders = () => {
   const { i18n } = useTranslation();
-  const language = i18n.resolvedLanguage === 'pl' ? 'pl' : 'en';
+  const language =
+    supportedLanguages.find((code) => code === i18n.resolvedLanguage) ??
+    defaultLanguage;
   const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
   const preference = useColorMode((state) => state.preference);
   const mode = preference ?? (prefersDark ? 'dark' : 'light');
-  const localizedTheme = useMemo(
-    () =>
-      language === 'pl' ? createTheme(makeTheme(mode), plPL) : makeTheme(mode),
-    [language, mode],
-  );
+  const localizedTheme = useMemo(() => {
+    const locale = muiLocales[language];
+    return locale ? createTheme(makeTheme(mode), locale) : makeTheme(mode);
+  }, [language, mode]);
 
   useEffect(() => {
     document.documentElement.lang = language;

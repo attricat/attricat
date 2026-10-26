@@ -1,6 +1,10 @@
-import type { ScopeType } from './api';
-
-export const workspaceScope: ScopeType = 'workspace';
+/** What a role grant applies to: the whole workspace or one part of it. */
+export const scopeTypes = {
+  workspace: 'workspace',
+  blueprintFamily: 'blueprint_family',
+  record: 'record',
+  contextSubtree: 'context_subtree',
+} as const;
 export const ownerRoleCode = 'owner';
 export const activeMemberState = 'active';
 export const navigationSelectMinWidth = 250;

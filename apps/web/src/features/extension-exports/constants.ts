@@ -27,13 +27,21 @@ export const retryableExportStatuses: readonly ExportStatus[] = [
   'pending',
 ];
 
-export const connectionGrantTypes = [
-  'client_credentials',
-  'refresh_token',
-  'device_code',
-  'authorization_code',
-] as const;
-export type ConnectionGrantType = (typeof connectionGrantTypes)[number];
+export const connectionGrantTypes = {
+  clientCredentials: 'client_credentials',
+  refreshToken: 'refresh_token',
+  deviceCode: 'device_code',
+  authorizationCode: 'authorization_code',
+} as const;
+export type ConnectionGrantType =
+  (typeof connectionGrantTypes)[keyof typeof connectionGrantTypes];
+
+export const connectionStatuses = {
+  pendingAuthorization: 'pending_authorization',
+  active: 'active',
+  failed: 'failed',
+  revoked: 'revoked',
+} as const;
 
 /** How the public OAuth callback reports a browser authorization. */
 export const browserAuthorizationOutcomes = [

@@ -6,9 +6,13 @@ export const unreadCountRefreshMs = 30_000;
 /** The navigation badge shows this count at most, then `99+`. */
 export const maxBadgeCount = 99;
 
-export const inboxRoute = '/inbox';
 export const recordRoute = '/records/$recordId';
-export const conversationRoute = '/agents/$conversationId';
+
+/** What a notification is about, linking to it. */
+export const notificationSubjectKinds = {
+  record: 'record',
+  agentConversation: 'agent_conversation',
+} as const;
 
 export const inboxFilters = ['all', 'unread'] as const;
 export type InboxFilter = (typeof inboxFilters)[number];

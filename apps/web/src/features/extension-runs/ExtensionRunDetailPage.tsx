@@ -17,7 +17,11 @@ import { RouterButton } from '../../components/RouterLink';
 import { Timestamp } from '../../time/Timestamp';
 import { formatBytes } from '../data-health/dataHealthFormat';
 import { cancelExtensionRun, extensionRunArtifactUrl } from './api';
-import { extensionRunsPagePath, runDetailSkeletonHeight } from './constants';
+import {
+  extensionRunStatuses,
+  extensionRunsPagePath,
+  runDetailSkeletonHeight,
+} from './constants';
 import {
   ExtensionRunHeader,
   ExtensionRunProgress,
@@ -28,7 +32,7 @@ import type { ExtensionRunDetail } from './schemas';
 
 const Outputs = ({ run }: { run: ExtensionRunDetail }) => {
   const { t } = useTranslation();
-  if (run.status !== 'completed')
+  if (run.status !== extensionRunStatuses.completed)
     return (
       <Typography color="text.secondary" variant="body2">
         {t('extensionRuns.outputsAfterCompletion')}

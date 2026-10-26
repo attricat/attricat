@@ -20,7 +20,12 @@ import { EmptyState } from '../../components/EmptyState';
 import { InboxIcon } from '../../components/systemIcons';
 import { useRecordLabels } from '../records/useRecordLabels';
 import { listNotifications } from './api';
-import { inboxFilters, inboxRoute, type InboxFilter } from './constants';
+import { navigationRoutes } from '../../components/navigation';
+import {
+  inboxFilters,
+  notificationSubjectKinds,
+  type InboxFilter,
+} from './constants';
 import { NotificationListItem } from './NotificationListItem';
 import { notificationQueryKeys } from './queryKeys';
 import type { NotificationCursor } from './schemas';
@@ -57,7 +62,9 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
   const unreadCount = pages[0]?.unread_count ?? 0;
   const recordLabels = useRecordLabels(
     items.flatMap((item) =>
-      item.subject?.kind === 'record' ? [item.subject.id] : [],
+      item.subject?.kind === notificationSubjectKinds.record
+        ? [item.subject.id]
+        : [],
     ),
   );
   const error = notifications.error ?? session.error;
@@ -88,7 +95,7 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
           aria-label={t('inbox.filter')}
           onChange={(_, value: InboxFilter) =>
             void navigate({
-              to: inboxRoute,
+              to: navigationRoutes.inbox,
               search: { filter: value === 'all' ? undefined : value },
             })
           }
@@ -142,7 +149,7 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
                   })
                 }
                 recordLabel={
-                  notification.subject?.kind === 'record'
+                  notification.subject?.kind === notificationSubjectKinds.record
                     ? recordLabels.get(notification.subject.id)
                     : undefined
                 }

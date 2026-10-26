@@ -48,7 +48,7 @@ export const PrincipalValue = ({ value }: { value: unknown }) => {
   }
   return (
     <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
-      {principal.kind === 'user' ? (
+      {principal.kind === principalKinds.user ? (
         <RouterChip
           clickable
           icon={<PrincipalKindIcon kind={principal.kind} />}
@@ -70,7 +70,7 @@ export const PrincipalValue = ({ value }: { value: unknown }) => {
       {!isAssignable(principal) && (
         <Typography color="text.secondary" variant="caption">
           {t(
-            principal.kind === 'team'
+            principal.kind === principalKinds.team
               ? 'principals.deletedTeam'
               : 'principals.inactiveUser',
           )}

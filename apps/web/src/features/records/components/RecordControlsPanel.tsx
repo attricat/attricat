@@ -22,6 +22,7 @@ import {
   recordRetentionHoldsOptions,
 } from '../queryOptions';
 import { statusLabel } from '../status';
+import { retentionHoldSources } from '../constants';
 
 /** Display labels for attribute and status codes the panel reports. */
 const controlLabels = (attributes: readonly Attribute[]) => {
@@ -146,7 +147,7 @@ const HoldItem = ({
   return (
     <ControlItem
       title={
-        hold.source === 'status'
+        hold.source === retentionHoldSources.status
           ? t('records.recordControls.statusHold', {
               attribute: hold.attribute_code
                 ? labels.attribute(hold.attribute_code)

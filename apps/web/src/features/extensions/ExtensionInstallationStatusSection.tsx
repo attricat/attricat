@@ -14,6 +14,7 @@ import type {
   ExtensionInstallation,
   ExtensionLifecycleAction,
 } from './managementApi';
+import { installationStates } from './constants';
 
 type ExtensionInstallationStatusSectionProps = {
   busy: boolean;
@@ -47,14 +48,14 @@ export const ExtensionInstallationStatusSection = ({
       </Stack>
       <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
         <Button
-          disabled={locked || installation.state === 'enabled'}
+          disabled={locked || installation.state === installationStates.enabled}
           onClick={() => onLifecycleAction('enable')}
           startIcon={<PowerIcon />}
         >
           {t('extensions.enable')}
         </Button>
         <Button
-          disabled={locked || installation.state !== 'enabled'}
+          disabled={locked || installation.state !== installationStates.enabled}
           onClick={() => onLifecycleAction('disable')}
           startIcon={<PowerOffIcon />}
         >
@@ -62,7 +63,9 @@ export const ExtensionInstallationStatusSection = ({
         </Button>
         <Button
           color="warning"
-          disabled={locked || installation.state === 'quarantined'}
+          disabled={
+            locked || installation.state === installationStates.quarantined
+          }
           onClick={() => onLifecycleAction('quarantine')}
           startIcon={<ShieldAlertIcon />}
         >

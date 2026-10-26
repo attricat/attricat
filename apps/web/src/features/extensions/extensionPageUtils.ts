@@ -23,9 +23,9 @@ export const sourceReleaseTag = (source: string) =>
   source.split(releaseTagSeparator).at(-1);
 
 export const installationStateColor = (state: InstallationState) =>
-  state === 'enabled'
+  state === installationStates.enabled
     ? 'success'
-    : state === 'quarantined'
+    : state === installationStates.quarantined
       ? 'error'
       : 'default';
 
@@ -50,7 +50,7 @@ export const lifecycleOperationLabel = (
     : operation;
 
 const isInstallationState = (state: string): state is InstallationState =>
-  (installationStates as readonly string[]).includes(state);
+  (Object.values(installationStates) as string[]).includes(state);
 
 /** Known installation states are translated; unknown server values are shown verbatim. */
 export const lifecycleStateLabel = (

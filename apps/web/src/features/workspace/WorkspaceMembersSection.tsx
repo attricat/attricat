@@ -27,8 +27,9 @@ import {
   revokeMemberRole,
   selectedScopeTarget,
   transferOwnership,
+  type ScopeType,
 } from './api';
-import { activeMemberState, ownerRoleCode, workspaceScope } from './constants';
+import { activeMemberState, ownerRoleCode, scopeTypes } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
 import { ScopeFields } from './ScopeFields';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -71,7 +72,7 @@ export const WorkspaceMembersSection = ({
     defaultValues: {
       member_id: '',
       role_id: '',
-      scope_type: workspaceScope,
+      scope_type: scopeTypes.workspace as ScopeType,
       scope_target_id: workspaceId ?? '',
     },
     onSubmit: ({ value }) => grantRole.submit(value),
@@ -118,7 +119,7 @@ export const WorkspaceMembersSection = ({
       member.grants.some(
         (grant) =>
           grant.role_code === ownerRoleCode &&
-          grant.scope_type === workspaceScope &&
+          grant.scope_type === scopeTypes.workspace &&
           grant.scope_target_id === workspaceId,
       ),
   );

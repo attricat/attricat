@@ -35,6 +35,7 @@ import { ConnectionDialog } from './ConnectionDialog';
 import { extensionExportQueryKeys } from './queryKeys';
 import type { ExtensionConnection, ManifestExports } from './schemas';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { connectionGrantTypes, connectionStatuses } from './constants';
 
 const statusColors = {
   active: 'success',
@@ -91,7 +92,7 @@ const ConnectionRow = ({
       updateConnection(
         extensionId,
         connection.connection,
-        connection.grant_type === 'refresh_token'
+        connection.grant_type === connectionGrantTypes.refreshToken
           ? { refresh_token: secret }
           : { client_secret: secret },
       ),
@@ -200,7 +201,7 @@ const ConnectionRow = ({
               {t('extensionExports.authorizeInBrowser')}
             </Button>
           )}
-          {connection.grant_type === 'device_code' && (
+          {connection.grant_type === connectionGrantTypes.deviceCode && (
             <>
               <Button
                 disabled={busy}
@@ -222,7 +223,7 @@ const ConnectionRow = ({
               )}
             </>
           )}
-          {connection.status === 'active' && (
+          {connection.status === connectionStatuses.active && (
             <Button
               disabled={busy}
               size="small"
@@ -243,65 +244,67 @@ const ConnectionRow = ({
           </Button>
         </Stack>
       )}
-      {canManage && connection.grant_type === 'authorization_code' && (
-        <Stack
-          component="form"
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={1}
-          sx={{ mt: 1 }}
-          onSubmit={(event) => {
-            event.preventDefault();
-            exchange.mutate();
-          }}
-        >
-          <TextField
-            label={t('extensionExports.authorizationCode')}
-            required
-            size="small"
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-          />
-          <TextField
-            label={t('extensionExports.redirectUri')}
-            required
-            size="small"
-            type="url"
-            value={redirectUri}
-            onChange={(event) => setRedirectUri(event.target.value)}
-          />
-          <Button disabled={busy} type="submit">
-            {t('extensionExports.exchangeCode')}
-          </Button>
-        </Stack>
-      )}
-      {canManage && connection.grant_type !== 'device_code' && (
-        <Stack
-          component="form"
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={1}
-          sx={{ mt: 1 }}
-          onSubmit={(event) => {
-            event.preventDefault();
-            rotate.mutate();
-          }}
-        >
-          <TextField
-            autoComplete="new-password"
-            label={
-              connection.grant_type === 'refresh_token'
-                ? t('extensionExports.replaceRefreshToken')
-                : t('extensionExports.replaceSecret')
-            }
-            size="small"
-            type="password"
-            value={secret}
-            onChange={(event) => setSecret(event.target.value)}
-          />
-          <Button disabled={busy || !secret} type="submit">
-            {t('extensionExports.replace')}
-          </Button>
-        </Stack>
-      )}
+      {canManage &&
+        connection.grant_type === connectionGrantTypes.authorizationCode && (
+          <Stack
+            component="form"
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1}
+            sx={{ mt: 1 }}
+            onSubmit={(event) => {
+              event.preventDefault();
+              exchange.mutate();
+            }}
+          >
+            <TextField
+              label={t('extensionExports.authorizationCode')}
+              required
+              size="small"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+            />
+            <TextField
+              label={t('extensionExports.redirectUri')}
+              required
+              size="small"
+              type="url"
+              value={redirectUri}
+              onChange={(event) => setRedirectUri(event.target.value)}
+            />
+            <Button disabled={busy} type="submit">
+              {t('extensionExports.exchangeCode')}
+            </Button>
+          </Stack>
+        )}
+      {canManage &&
+        connection.grant_type !== connectionGrantTypes.deviceCode && (
+          <Stack
+            component="form"
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1}
+            sx={{ mt: 1 }}
+            onSubmit={(event) => {
+              event.preventDefault();
+              rotate.mutate();
+            }}
+          >
+            <TextField
+              autoComplete="new-password"
+              label={
+                connection.grant_type === connectionGrantTypes.refreshToken
+                  ? t('extensionExports.replaceRefreshToken')
+                  : t('extensionExports.replaceSecret')
+              }
+              size="small"
+              type="password"
+              value={secret}
+              onChange={(event) => setSecret(event.target.value)}
+            />
+            <Button disabled={busy || !secret} type="submit">
+              {t('extensionExports.replace')}
+            </Button>
+          </Stack>
+        )}
     </Box>
   );
 };

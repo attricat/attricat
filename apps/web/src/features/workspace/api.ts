@@ -2,6 +2,7 @@ import { z } from 'zod';
 import i18n from 'i18next';
 import { request, requestNoContent } from '../../api/request';
 import { uuidSegment } from '../../api/pathSegments';
+import { scopeTypes } from './constants';
 import {
   uuid,
   scopeTypeSchema,
@@ -35,7 +36,7 @@ export const selectedScopeTarget = (
   scopeType: ScopeType,
   scopeTargetId: string,
   workspaceId: string | undefined,
-) => (scopeType === 'workspace' ? (workspaceId ?? '') : scopeTargetId);
+) => (scopeType === scopeTypes.workspace ? (workspaceId ?? '') : scopeTargetId);
 
 export const ensureActiveScopeTarget = (
   input: GrantInput,
@@ -43,7 +44,7 @@ export const ensureActiveScopeTarget = (
   targets: readonly GrantTarget[] | undefined,
 ) => {
   const parsed = grantInputSchema.parse(input);
-  if (parsed.scope_type === 'workspace') {
+  if (parsed.scope_type === scopeTypes.workspace) {
     if (!workspaceId || parsed.scope_target_id !== uuid.parse(workspaceId)) {
       throw new Error(i18n.t('errors.workspaceScopeMismatch'));
     }

@@ -18,7 +18,7 @@ import {
   selectedScopeTarget,
   type ScopeType,
 } from './api';
-import { workspaceScope } from './constants';
+import { scopeTypes } from './constants';
 import { ExpiryField, RoleSelectField } from './InvitationFormFields';
 import { parseFutureExpiry } from './invitationExpiry';
 import { workspaceQueryKeys } from './queryKeys';
@@ -94,7 +94,7 @@ export const InvitationForm = ({
       email: '',
       display_name: '',
       role_id: '',
-      scope_type: workspaceScope,
+      scope_type: scopeTypes.workspace,
       scope_target_id: workspaceId ?? '',
       expires_at: '',
     } as InvitationValues,

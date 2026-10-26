@@ -9,7 +9,7 @@ import {
   WorkspaceIcon,
 } from '../../components/systemIcons';
 import { listGrantTargets, selectedScopeTarget, type ScopeType } from './api';
-import { workspaceScope } from './constants';
+import { scopeTypes } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
@@ -42,7 +42,7 @@ export const ScopeFields = ({
         select
         value={scope}
       >
-        <MenuItem value={workspaceScope}>
+        <MenuItem value={scopeTypes.workspace}>
           <IconLabel icon={WorkspaceIcon}>
             {t('workspace.entireWorkspace')}
           </IconLabel>
@@ -80,15 +80,15 @@ const ScopeTargetField = ({
 >) => {
   const { t } = useTranslation();
   const targets = useQuery({
-    enabled: scope !== workspaceScope,
+    enabled: scope !== scopeTypes.workspace,
     queryKey: workspaceQueryKeys.grantTargets(scope),
     queryFn: () => listGrantTargets(scope),
   });
-  if (scope === workspaceScope) return null;
+  if (scope === scopeTypes.workspace) return null;
   const label =
-    scope === 'blueprint_family'
+    scope === scopeTypes.blueprintFamily
       ? t('workspace.blueprintFamily')
-      : scope === 'context_subtree'
+      : scope === scopeTypes.contextSubtree
         ? t('workspace.contextSubtree')
         : t('workspace.record');
   return (

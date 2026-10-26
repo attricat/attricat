@@ -2,19 +2,20 @@ export const extensionRunsPath = '/api/extension-runs';
 export const extensionRunsPagePath = '/profile/extension-runs';
 
 /** Execution states; the extension's domain outcome is reported in progress. */
-export const extensionRunStatuses = [
-  'queued',
-  'running',
-  'cancelling',
-  'cancelled',
-  'completed',
-  'failed',
-] as const;
-export type ExtensionRunStatus = (typeof extensionRunStatuses)[number];
+export const extensionRunStatuses = {
+  queued: 'queued',
+  running: 'running',
+  cancelling: 'cancelling',
+  cancelled: 'cancelled',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+export type ExtensionRunStatus =
+  (typeof extensionRunStatuses)[keyof typeof extensionRunStatuses];
 export const activeExtensionRunStatuses: readonly ExtensionRunStatus[] = [
-  'queued',
-  'running',
-  'cancelling',
+  extensionRunStatuses.queued,
+  extensionRunStatuses.running,
+  extensionRunStatuses.cancelling,
 ];
 
 export const extensionRunFailures = [

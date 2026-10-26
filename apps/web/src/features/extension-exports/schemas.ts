@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { connectionGrantTypes, exportStatuses } from './constants';
+import {
+  connectionGrantTypes,
+  connectionStatuses,
+  exportStatuses,
+} from './constants';
 
 export const exportMappingSchema = z.object({
   extension_id: z.string(),
@@ -95,7 +99,7 @@ export const extensionConnectionSchema = z.object({
   client_id: z.string(),
   scope: z.string().nullable(),
   parameters: z.record(z.string(), z.unknown()),
-  status: z.enum(['pending_authorization', 'active', 'failed', 'revoked']),
+  status: z.enum(connectionStatuses),
   last_error: z.string().nullable(),
   last_refreshed_at: z.string().nullable(),
   access_token_expires_at: z.string().nullable(),

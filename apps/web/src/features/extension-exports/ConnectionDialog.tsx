@@ -12,7 +12,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createConnection, type NewConnection } from './api';
-import type { ConnectionGrantType } from './constants';
+import { connectionGrantTypes, type ConnectionGrantType } from './constants';
 import type { ManifestExports } from './schemas';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
@@ -48,7 +48,7 @@ export const ConnectionDialog = ({
   const [kind, setKind] = useState(kinds[0]?.id ?? '');
   const grantTypes = kinds.find((item) => item.id === kind)?.grant_types ?? [];
   const [grantType, setGrantType] = useState<ConnectionGrantType>(
-    grantTypes[0] ?? 'client_credentials',
+    grantTypes[0] ?? connectionGrantTypes.clientCredentials,
   );
   const [fields, setFields] = useState({
     connection: '',
@@ -88,17 +88,17 @@ export const ConnectionDialog = ({
       grant_type: grantType,
       token_url: fields.token_url.trim(),
       device_authorization_url:
-        grantType === 'device_code'
+        grantType === connectionGrantTypes.deviceCode
           ? optional(fields.device_authorization_url)
           : undefined,
       authorization_url:
-        grantType === 'authorization_code'
+        grantType === connectionGrantTypes.authorizationCode
           ? optional(fields.authorization_url.trim())
           : undefined,
       client_id: fields.client_id.trim(),
       client_secret: optional(fields.client_secret),
       refresh_token:
-        grantType === 'refresh_token'
+        grantType === connectionGrantTypes.refreshToken
           ? optional(fields.refresh_token)
           : undefined,
       scope: optional(fields.scope),
@@ -127,7 +127,9 @@ export const ConnectionDialog = ({
             onChange={(event) => {
               setKind(event.target.value);
               const next = kinds.find((item) => item.id === event.target.value);
-              setGrantType(next?.grant_types[0] ?? 'client_credentials');
+              setGrantType(
+                next?.grant_types[0] ?? connectionGrantTypes.clientCredentials,
+              );
             }}
           >
             {kinds.map((item) => (
@@ -169,7 +171,7 @@ export const ConnectionDialog = ({
             value={fields.token_url}
             onChange={set('token_url')}
           />
-          {grantType === 'device_code' && (
+          {grantType === connectionGrantTypes.deviceCode && (
             <TextField
               label={t('extensionExports.deviceAuthorizationUrl')}
               required
@@ -178,7 +180,7 @@ export const ConnectionDialog = ({
               onChange={set('device_authorization_url')}
             />
           )}
-          {grantType === 'authorization_code' && (
+          {grantType === connectionGrantTypes.authorizationCode && (
             <TextField
               helperText={t('extensionExports.authorizationUrlHelp')}
               label={t('extensionExports.authorizationUrl')}
@@ -197,12 +199,12 @@ export const ConnectionDialog = ({
             autoComplete="new-password"
             helperText={t('extensionExports.writeOnly')}
             label={t('extensionExports.clientSecret')}
-            required={grantType === 'client_credentials'}
+            required={grantType === connectionGrantTypes.clientCredentials}
             type="password"
             value={fields.client_secret}
             onChange={set('client_secret')}
           />
-          {grantType === 'refresh_token' && (
+          {grantType === connectionGrantTypes.refreshToken && (
             <TextField
               autoComplete="new-password"
               helperText={t('extensionExports.writeOnly')}

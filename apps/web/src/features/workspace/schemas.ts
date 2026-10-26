@@ -1,14 +1,13 @@
 import { z } from 'zod';
 import i18n from 'i18next';
-import { bulkEditPolicies, maxBulkEditMaxRecords } from './constants';
+import {
+  bulkEditPolicies,
+  maxBulkEditMaxRecords,
+  scopeTypes,
+} from './constants';
 
 export const uuid = z.uuid();
-export const scopeTypeSchema = z.enum([
-  'workspace',
-  'blueprint_family',
-  'record',
-  'context_subtree',
-]);
+export const scopeTypeSchema = z.enum(scopeTypes);
 const grantSchema = z.object({
   id: uuid,
   role_id: uuid,

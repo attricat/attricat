@@ -4,6 +4,7 @@ import { toast } from '../../components/toast';
 import i18n from '../../i18n';
 import type { ExtensionRun } from './schemas';
 import { useRunWatchStore } from './runWatchStore';
+import { extensionRunStatuses } from './constants';
 
 type Navigate = UseNavigateResult<string>;
 
@@ -35,9 +36,9 @@ export const notifyRunStarted = (runId: string, navigate: Navigate) => {
 /** Announces a watched run's terminal execution status. */
 export const notifyRunFinished = (run: ExtensionRun, navigate: Navigate) => {
   const action = viewRunAction(run.id, navigate);
-  if (run.status === 'completed')
+  if (run.status === extensionRunStatuses.completed)
     toast.success(i18n.t('extensionRuns.finished'), { action });
-  else if (run.status === 'cancelled')
+  else if (run.status === extensionRunStatuses.cancelled)
     toast.info(i18n.t('extensionRuns.cancelledNotice'), { action });
   else toast.error(i18n.t('extensionRuns.failedNotice'), { action });
 };
