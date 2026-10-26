@@ -64,9 +64,7 @@ import {
   statusTransitionDenial,
 } from '../status';
 import { useStatusTransitionDenialText } from '../useStatusTransitionDenialText';
-import { checkViolationError } from '../../../api/checkViolations';
-import { violationFieldErrors } from '../checkViolations';
-import { useViolationText } from '../../../components/useViolationText';
+import { useServerFieldErrors } from './useServerFieldErrors';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { RecordFormAttributeEditor } from './RecordFormAttributeEditor';
 import { useQueuedFileUploadsContext } from '../../files/queuedFileUploads';
@@ -220,7 +218,6 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     ref,
   ) => {
     const { t } = useTranslation();
-    const violationText = useViolationText();
     const denialText = useStatusTransitionDenialText();
     // A versioned editing session keeps values and its concurrency token from
     // the same snapshot. Refetches must not silently rebase unsaved edits.
@@ -273,33 +270,14 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
         ),
       [queuedFiles],
     );
-    const checks = checkViolationError(error);
-    // A field's server violation is cleared once the user edits that field.
-    const [editedAfterError, setEditedAfterError] = useState<{
-      error: unknown;
-      codes: readonly string[];
-    }>({ error: undefined, codes: [] });
-    const editedCodes =
-      editedAfterError.error === error ? editedAfterError.codes : [];
-    const serverViolations = checks
-      ? violationFieldErrors(
-          checks.violations,
-          editableAttributes.map((attribute) => attribute.code),
-          violationText,
-        )
-      : undefined;
-    const serverFieldErrors = Object.fromEntries(
-      Object.entries(serverViolations?.fieldErrors ?? {}).filter(
-        ([code]) => !editedCodes.includes(code),
-      ),
+    const {
+      fieldErrors: serverFieldErrors,
+      markEdited,
+      unplaced: unplacedViolations,
+    } = useServerFieldErrors(
+      error,
+      editableAttributes.map((attribute) => attribute.code),
     );
-    const markEdited = (code: string) => {
-      if (!checks || editedCodes.includes(code)) return;
-      setEditedAfterError((current) => ({
-        error,
-        codes: current.error === error ? [...current.codes, code] : [code],
-      }));
-    };
     // The blueprint picker comes first; once a blueprint loads, its first
     // field, or in a migration the first field to review. A failed save
     // leaves focus where it is.
@@ -684,10 +662,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                 />
               )}
               {error && (
-                <ApiErrorAlert
-                  error={error}
-                  violations={serverViolations?.unplaced}
-                />
+                <ApiErrorAlert error={error} violations={unplacedViolations} />
               )}
               {formError && <Alert severity="error">{formError}</Alert>}
             </Stack>
