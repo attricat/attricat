@@ -160,7 +160,7 @@ type RecordFormProps = {
   error?: Error | null;
   onLoadBlueprint?: (code: string, version?: number) => void;
   lockedBlueprint?: boolean;
-  onCancel?: () => void;
+  onCancel: () => void;
   /** Lets the user go back to choosing a blueprint. */
   onChangeBlueprint?: () => void;
   /** Offers a second submit that keeps the form open for the next record. */
@@ -528,47 +528,51 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       addAnother.current = another;
       void form.handleSubmit();
     };
-    const status =
-      isLoadingBlueprint || !blueprint ? undefined : submitAttempted &&
-        errorItems.length > 0 ? (
-        <Link
-          color="error"
-          component="button"
-          onClick={() => revealField(errorItems[0].id)}
-          type="button"
-          variant="body2"
-        >
-          {t('records.fieldsNeedAttention', { count: errorItems.length })}
-        </Link>
-      ) : missingRequired.length > 0 ? (
-        <Link
-          color="text.secondary"
-          component="button"
-          onClick={() => {
+    // The action bar names what still blocks saving and goes to the first of it.
+    const statusTarget = (():
+      { color: string; label: string; target: () => void } | undefined => {
+      if (isLoadingBlueprint || !blueprint) return undefined;
+      if (submitAttempted && errorItems.length > 0)
+        return {
+          color: 'error',
+          label: t('records.fieldsNeedAttention', { count: errorItems.length }),
+          target: () => revealField(errorItems[0].id),
+        };
+      if (missingRequired.length > 0)
+        return {
+          color: 'text.secondary',
+          label: t('records.requiredFieldsLeft', {
+            count: missingRequired.length,
+          }),
+          target: () => {
             const missing = new Set(
               missingRequired.map((attribute) => attribute.code),
             );
             const first = fieldOrder.find((code) => missing.has(code));
             if (first) revealField(first);
-          }}
-          type="button"
-          variant="body2"
-        >
-          {t('records.requiredFieldsLeft', { count: missingRequired.length })}
-        </Link>
-      ) : pendingConfirmations.length > 0 ? (
-        <Link
-          color="text.secondary"
-          component="button"
-          onClick={() => revealField(pendingConfirmations[0].id)}
-          type="button"
-          variant="body2"
-        >
-          {t('records.changesToConfirm', {
+          },
+        };
+      if (pendingConfirmations.length > 0)
+        return {
+          color: 'text.secondary',
+          label: t('records.changesToConfirm', {
             count: pendingConfirmations.length,
-          })}
-        </Link>
-      ) : undefined;
+          }),
+          target: () => revealField(pendingConfirmations[0].id),
+        };
+      return undefined;
+    })();
+    const status = statusTarget && (
+      <Link
+        color={statusTarget.color}
+        component="button"
+        onClick={statusTarget.target}
+        type="button"
+        variant="body2"
+      >
+        {statusTarget.label}
+      </Link>
+    );
 
     return (
       <Paper
@@ -781,11 +785,9 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
               {t('records.fieldsChanged', { count: changedCodes.size })}
             </Typography>
           )}
-          {onCancel && (
-            <Button disabled={isLoadingBlueprint} onClick={onCancel}>
-              {t('common.cancel')}
-            </Button>
-          )}
+          <Button disabled={isLoadingBlueprint} onClick={onCancel}>
+            {t('common.cancel')}
+          </Button>
           {blueprint && addAnotherLabel && (
             <Button
               disabled={isLoadingBlueprint}

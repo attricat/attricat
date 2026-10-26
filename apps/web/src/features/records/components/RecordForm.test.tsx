@@ -74,6 +74,7 @@ const renderForm = (
         blueprint={blueprint([])}
         contextId="123e4567-e89b-12d3-a456-426614174001"
         defaultContextId="123e4567-e89b-12d3-a456-426614174001"
+        onCancel={vi.fn()}
         onSubmit={onSubmit}
         ref={ref}
         submitLabel="Save"
