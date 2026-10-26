@@ -21,9 +21,9 @@ pack's temporary staging copies are removed.
 
 ```sh
 acli solution-pack inspect --file pack.tar.zst
-acli solution-pack plan --file pack.tar.zst --prefix example \
+acli solution-pack plan create --file pack.tar.zst --prefix example \
   --blueprint-publication publish --include-sample-data
-acli solution-pack plan show <plan-id>
+acli solution-pack plan get <plan-id>
 ```
 
 Inspection reports sample counts and warnings without creating records. Review
@@ -34,7 +34,7 @@ Apply takes only the reviewed plan ID; there is no sample-data switch at apply:
 
 ```sh
 acli solution-pack apply <plan-id>
-acli solution-pack applications show <application-id>
+acli solution-pack applications get <application-id>
 ```
 
 Samples are created against the plan's exact published blueprints. Values are

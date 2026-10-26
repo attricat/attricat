@@ -59,8 +59,8 @@ acli blueprint catalogue
 acli blueprint create --file product.toml
 acli blueprint create --stdin
 acli blueprint validate --file product.toml [--blueprint-id <blueprint-id>]
-acli blueprint revision <blueprint-id> --file product-v2.toml
-acli blueprint revision-list <blueprint-id>
+acli blueprint create-version <blueprint-id> --file product-v2.toml
+acli blueprint list-versions <blueprint-id>
 acli blueprint publish <blueprint-id> <version>
 acli blueprint publish-records <blueprint-id> <version> --context-id <context-id>
 acli blueprint publish-records-all <blueprint-id> <version>
@@ -99,16 +99,16 @@ acli record migrate-bulk --blueprint <code> --from-version <version> [--size <si
 
 acli value append <record-id> --file values.toml --context-id <context-id>
 acli value current <record-id>
-acli value replace <record-id> --file relationships.toml --context-id <context-id>
-acli value remove <record-id> --file relationships.toml --context-id <context-id>
+acli value replace-relationships <record-id> --file relationships.toml --context-id <context-id>
+acli value remove-relationships <record-id> --file relationships.toml --context-id <context-id>
 
 acli workflow validate|create --file workflow.toml
 acli workflow validate|create --stdin
 acli workflow list
 acli workflow get <workflow-id>
-acli workflow revision-list <workflow-id>
-acli workflow version-get <workflow-id> <version>
-acli workflow revision <workflow-id> --file workflow-v2.toml
+acli workflow list-versions <workflow-id>
+acli workflow get-version <workflow-id> <version>
+acli workflow create-version <workflow-id> --file workflow-v2.toml
 acli workflow publish|enable <workflow-id> <version>
 acli workflow disable <workflow-id>
 acli workflow run-now <workflow-id> --record-id <record-id> --idempotency-key <key>
@@ -120,7 +120,7 @@ acli rule list [--blueprint-id <uuid>]
 acli rule get <rule-id>
 acli rule validate|create --blueprint-id <uuid> --blueprint-version <version> [--context-id <uuid>] --file rule.toml
 acli rule validate|create --blueprint-id <uuid> --blueprint-version <version> [--context-id <uuid>] --stdin
-acli rule revision <rule-id> --blueprint-id <uuid> --blueprint-version <version> [--context-id <uuid>] --file rule-v2.toml
+acli rule create-version <rule-id> --blueprint-id <uuid> --blueprint-version <version> [--context-id <uuid>] --file rule-v2.toml
 acli rule publish <rule-id> <version>
 acli rule enable <rule-id> <version> [--accept-existing-violations]
 acli rule disable <rule-id>
@@ -162,54 +162,54 @@ acli token create --generator [--expires-at <rfc3339>]
 acli token create --label <label> --permissions <json-or-file> [--expires-at <rfc3339>]
 acli token revoke <token-id>
 
-acli extension-registry list|discover
-acli extension-registry add --source <github-owner/repository>
-acli extension-registry remove <registry-id>
-acli extension-registry details <owner> <repository>
+acli extension registry list|discover
+acli extension registry add --source <github-owner/repository>
+acli extension registry remove <registry-id>
+acli extension registry get <owner> <repository>
 acli extension list|runtime
-acli extension detail|remove|enable|disable <extension-id>
+acli extension get|remove|enable|disable <extension-id>
 acli extension workspace-mode --enabled true|false
 acli extension install --owner <owner> --repository <repository> --release-id <github-release-id>
 acli extension sideload --file extension.tar.zst
 acli extension upgrade <extension-id> --owner <owner> --repository <repository> --release-id <github-release-id>
 acli extension configure <extension-id> --configuration <json-or-file>
 acli extension grant <extension-id> --grant-kind <kind> --grant-id <id>
-acli extension revoke <extension-id> <grant-kind> <grant-id>
+acli extension revoke <extension-id> --grant-kind <grant-kind> --grant-id <grant-id>
 acli extension quarantine <extension-id> --diagnostic-code <code>
 acli extension artifact <extension-id> <contribution-id> --output contribution.js
 acli extension storage <extension-id> <contribution-id> <release-id> --body <json-or-file>
 acli extension command <extension-id> <contribution-id> --release-id <release-uuid> --command-id <id> --payload <json-or-file>
-acli extension-operation start <extension-id> --operation-id <id> --input <json-object-or-file> --idempotency-key <key> [--input-file-id <uuid>]
-acli extension-operation list
-acli extension-operation show|artifacts|deliveries|cancel|replay <run-id>
-acli extension-operation download <run-id> <artifact-id> --output <path>
-acli extension-run list [--extension-id <id>]
-acli extension-run show|cancel <run-id>
-acli extension-run download <run-id> <artifact-id> --output <path>
-acli extension annotation-namespace <extension-id> [--adopt]
-acli extension repair-annotations <extension-id> <record-id> --patch <json-object-or-file>
-acli extension-schedule list
-acli extension-schedule create <extension-id> --operation-id <id> --input <json-object-or-file> --interval-seconds <60-2592000> [--input-file-id <uuid>]
-acli extension-schedule update <schedule-id> --enabled true|false --interval-seconds <60-2592000>
-acli connector-job list <blueprint-id>
-acli connector-job run <job-id> --idempotency-key <key>
+acli extension operation start <extension-id> --operation-id <id> --input <json-object-or-file> --idempotency-key <key> [--input-file-id <uuid>]
+acli extension operation list
+acli extension operation get|artifacts|deliveries|cancel|replay <run-id>
+acli extension operation download <run-id> <artifact-id> --output <path>
+acli extension run list [--extension-id <id>]
+acli extension run get|cancel <run-id>
+acli extension run download <run-id> <artifact-id> --output <path>
+acli extension annotations namespace|adopt <extension-id>
+acli extension annotations repair <extension-id> <record-id> --patch <json-object-or-file>
+acli extension schedule list
+acli extension schedule create <extension-id> --operation-id <id> --input <json-object-or-file> --interval-seconds <60-2592000> [--input-file-id <uuid>]
+acli extension schedule update <schedule-id> --enabled true|false --interval-seconds <60-2592000>
+acli extension connector-job list <blueprint-id>
+acli extension connector-job run <job-id> --idempotency-key <key>
 
 acli solution-pack inspect --file pack.tar.zst
-acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... --map-context logical_key=existing_code ...]
-acli solution-pack plan show <plan-id>
+acli solution-pack plan create --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... --map-context logical_key=existing_code ...]
+acli solution-pack plan get <plan-id>
 acli solution-pack apply <plan-id>
 acli solution-pack applications list [--limit <n>] [--offset <n>]
-acli solution-pack applications show <application-id>
+acli solution-pack applications get <application-id>
 acli solution-pack applications abandon <application-id>
 acli solution-pack checks rerun <application-id>
 acli solution-pack checks list <application-id> [--limit <n>] [--offset <n>]
-acli solution-pack checks show <application-id> <run-id>
+acli solution-pack checks get <application-id> <run-id>
 acli presentation-asset list [--limit <n>] [--offset <n>]
-acli presentation-asset show <asset-id>
+acli presentation-asset get <asset-id>
 acli presentation-asset download <asset-id> --output <path>
 
 acli file upload <record-id> <attribute-code> --file first.png [--file second.png] [--context-id <context-id>]
-acli file metadata <file-id>
+acli file get <file-id>
 acli file download-original <file-id> --output original.bin [--range 'bytes=0-1023']
 acli file download-variant <file-id> <kind> --output preview.webp [--range 'bytes=0-1023']
 ```
@@ -222,7 +222,7 @@ offsets stop at 10,000.
 ## Teams and assignments
 
 ```sh
-acli directory                     # users and teams assignment attributes can reference
+acli directory list                     # users and teams assignment attributes can reference
 acli team list
 acli team create --code qa --name "Quality" --member <user-id> [--member <user-id>]
 acli team update <team-id> [--name "QA"] [--member <user-id> … | --clear-members]
@@ -375,7 +375,7 @@ only by the authenticated server; the CLI neither unpacks nor validates the arch
 and prints only the server's safe, bounded JSON response. `solution-pack apply`
 accepts only a UUID plan ID and has no flags that can alter the persisted plan.
 `applications abandon` permanently stops a resumable sample-selected application;
-`checks rerun`, `checks list`, and `checks show` evaluate or read informational,
+`checks rerun`, `checks list`, and `checks get` evaluate or read informational,
 non-mutating setup checks. History contains provenance and step results but no
 blueprint source or normalized resource payloads. `presentation-asset list` and
 `show` expose safe immutable metadata, while `download --output` streams

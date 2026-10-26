@@ -36,7 +36,7 @@ pub(crate) enum RuleCommand {
         #[command(flatten)]
         source: SourceInput,
     },
-    Revision {
+    CreateVersion {
         rule_id: Uuid,
         #[arg(long)]
         blueprint_id: Uuid,
@@ -118,7 +118,7 @@ pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<Stri
             )
             .await
         }
-        RuleCommand::Revision {
+        RuleCommand::CreateVersion {
             rule_id,
             blueprint_id,
             blueprint_version,

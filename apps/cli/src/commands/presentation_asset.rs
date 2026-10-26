@@ -13,7 +13,7 @@ pub(crate) enum PresentationAssetCommand {
         #[command(flatten)]
         page: PageArgs,
     },
-    Show {
+    Get {
         asset_id: Uuid,
     },
     Download {
@@ -32,7 +32,7 @@ pub(crate) async fn presentation_asset_command(
             api.get(&with_query("/presentation-assets", page.query()))
                 .await
         }
-        PresentationAssetCommand::Show { asset_id } => {
+        PresentationAssetCommand::Get { asset_id } => {
             api.get(&format!("/presentation-assets/{}", segment(asset_id)))
                 .await
         }

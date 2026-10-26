@@ -20,7 +20,7 @@ As a result, a value keeps the meaning it had when it was written, even after th
 In the web app, open the blueprint under **Manage → Blueprints** and create a new revision from the current one. With the CLI:
 
 ```sh
-acli blueprint revision <blueprint-id> --file product-v2.toml
+acli blueprint create-version <blueprint-id> --file product-v2.toml
 acli blueprint publish <blueprint-id> 2
 ```
 

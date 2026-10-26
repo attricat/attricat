@@ -99,8 +99,8 @@ Open UI frames notice these changes within 15 seconds and close.
 ## CLI
 
 ```sh
-acli extension-registry list
-acli extension-registry add --source acme/attricat-extensions
+acli extension registry list
+acli extension registry add --source acme/attricat-extensions
 acli extension list
 acli extension install --owner acme --repository attricat-inventory --release-id <github-release-id>
 acli extension sideload --file inventory-1.2.0.tar.zst

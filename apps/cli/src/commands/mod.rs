@@ -3,6 +3,7 @@ pub(crate) mod auth;
 pub(crate) mod blueprint;
 pub(crate) mod context;
 pub(crate) mod data_health;
+pub(crate) mod directory;
 pub(crate) mod event;
 pub(crate) mod extension;
 pub(crate) mod file;

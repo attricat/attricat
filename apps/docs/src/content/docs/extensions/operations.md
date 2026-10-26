@@ -60,14 +60,14 @@ A run whose release is disabled, quarantined, or loses a grant during a batch pa
 ## Start, watch, and download
 
 ```sh
-acli extension-operation start acme.export --operation-id export \
+acli extension operation start acme.export --operation-id export \
   --input '{"profile":{"version":1}}' --idempotency-key export-2026-03-01
-acli extension-operation list
-acli extension-operation show <run-id>
-acli extension-operation artifacts <run-id>
-acli extension-operation download <run-id> <artifact-id> --output products.csv
-acli extension-operation cancel <run-id>
-acli extension-operation replay <run-id>
+acli extension operation list
+acli extension operation get <run-id>
+acli extension operation artifacts <run-id>
+acli extension operation download <run-id> <artifact-id> --output products.csv
+acli extension operation cancel <run-id>
+acli extension operation replay <run-id>
 ```
 
 `--input-file-id` attaches a ready workspace file as the operation's input. The component opens it as `open-input("source")`; it never sees file IDs or storage keys.
@@ -125,7 +125,7 @@ With `network.request` and a host permission that sets `max_transfer_bytes`, a c
 - `transfer.fetch-input` downloads one byte range, up to 16 MiB, into an input artifact. Follow-up ranges require an ETag so the source cannot change between ranges.
 - `transfer.deliver-output` streams a finished output with `PUT`, or with `POST` if the host permission declares `idempotent_delivery: true`. Each delivery carries a stable `Idempotency-Key` header.
 
-A delivery attempt is recorded before any network traffic. After a timeout or crash the result is `uncertain` and it is never resent automatically. `acli extension-operation deliveries <run-id>` shows the delivery history.
+A delivery attempt is recorded before any network traffic. After a timeout or crash the result is `uncertain` and it is never resent automatically. `acli extension operation deliveries <run-id>` shows the delivery history.
 
 Host API 1.1 adds versions that fit marketplace and cloud storage uploads:
 
@@ -150,9 +150,9 @@ Export runs read records with the 1.1 `attricat.page-v2` and `attricat.withdrawn
 ## Schedules
 
 ```sh
-acli extension-schedule create acme.export --operation-id export \
+acli extension schedule create acme.export --operation-id export \
   --input '{"profile":{"version":1}}' --interval-seconds 86400
-acli extension-schedule update <schedule-id> --enabled false --interval-seconds 86400
+acli extension schedule update <schedule-id> --enabled false --interval-seconds 86400
 ```
 
 A schedule runs an operation every 60 seconds to 30 days. Missed intervals and overlapping runs are skipped. A schedule pauses while its release is disabled, quarantined, upgraded, or missing a grant.
@@ -195,8 +195,8 @@ input = { profile = { version = 1, business_key = "sku", columns = [
 Run a job by hand:
 
 ```sh
-acli connector-job list <blueprint-id>
-acli connector-job run <job-id> --idempotency-key manual-2026-03-01
+acli extension connector-job list <blueprint-id>
+acli extension connector-job run <job-id> --idempotency-key manual-2026-03-01
 ```
 
 Managing connector jobs needs `extensions.manage`.

@@ -65,7 +65,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/system/health` | Report the running API version and the source branch and commit it was built from (`data_health.read`). |
 | `POST` | `/solution-packs/inspect` | Inspect an uploaded archive without applying it (`solution_packs.manage`); see [inspection](#solution-pack-plan-upload). |
 | `GET` | `/presentation-assets` | List immutable private asset metadata (`solution_packs.manage`; `limit` 1–100, `offset` 0–10000). Use IDs for explicit `--map-asset` reuse; direct creation is unavailable. |
-| `GET` | `/presentation-assets/{asset-id}` | Return same-workspace metadata only (`solution_packs.manage`); cross-workspace IDs return `404`. Use `acli presentation-asset show <uuid>`. |
+| `GET` | `/presentation-assets/{asset-id}` | Return same-workspace metadata only (`solution_packs.manage`); cross-workspace IDs return `404`. Use `acli presentation-asset get <uuid>`. |
 | `GET` | `/presentation-assets/{asset-id}/content` | Download integrity-verified normalized bytes with immutable private caching, a digest ETag, and restrictive content headers (`solution_packs.manage`); see [presentation assets](#presentation-assets). No create/update/delete endpoint exists. |
 | `POST` | `/solution-packs/plans` | Revalidate an uploaded archive and persist an immutable, workspace-scoped dry-run (`solution_packs.manage`). See [plan request and response](#solution-pack-plan-upload). |
 | `GET` | `/solution-packs/plans/{plan-id}` | Read a safe summary of an immutable plan in the authenticated workspace (`solution_packs.manage`). Cross-workspace IDs return `404`. |

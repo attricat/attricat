@@ -172,7 +172,7 @@ value_schema = '''{"type": "string", "x-attricat-principal": {"version": 1, "kin
 | `version` | `1` | Wymagany. |
 | `kinds` | `["user"]`, `["team"]` lub oba | Wymagany. Co przyjmuje atrybut. |
 
-- Wartości mają postać `user:<id>` lub `team:<id>` z identyfikatorem zapisanym małymi literami, pobranym z `acli directory` lub `GET /directory`. Brak wartości oznacza brak przypisania.
+- Wartości mają postać `user:<id>` lub `team:<id>` z identyfikatorem zapisanym małymi literami, pobranym z `acli directory list` lub `GET /directory`. Brak wartości oznacza brak przypisania.
 - Schemat musi mieć `"type": "string"` i nie może mieć `enum`, `const`, `pattern` ani `format`. Atrybut nie może mieć `default_value` ani być jednocześnie statusem. Atrybuty wielokrotnego użytku przyjmują tę samą adnotację.
 - Nowa lub zmieniona wartość musi wskazywać aktywnego członka obszaru roboczego lub nieusunięty zespół, w dozwolonym rodzaju. W przeciwnym razie zapis zwraca `422 attribute_value_schema_mismatch`. Niezmienione wartości nie są sprawdzane ponownie.
 - Filtry wyszukiwania porównują zapisaną wartość dokładnie. Wartość `@me` z operatorem `eq` pasuje do wywołującego i do każdego zespołu, do którego należy.

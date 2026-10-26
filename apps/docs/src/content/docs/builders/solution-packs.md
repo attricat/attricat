@@ -27,9 +27,9 @@ The server validates the archive and returns its identity, version, digest, reso
 ## 2. Plan
 
 ```sh
-acli solution-pack plan --file pack.tar.zst \
+acli solution-pack plan create --file pack.tar.zst \
   --prefix example --blueprint-publication publish
-acli solution-pack plan show <plan-id>
+acli solution-pack plan get <plan-id>
 ```
 
 Planning saves an immutable dry run without changing catalog resources. Review readiness, actions, conflicts, and extension requirements. A requirement with status `install` lists the official release apply will install and the permissions it will grant.
@@ -64,7 +64,7 @@ New rule and workflow codes start with your prefix. Enabled rules and workflows 
 For a code collision, choose another prefix or explicitly map an exactly matching published blueprint. Use the resource keys reported by inspection and the publisher's installation guide:
 
 ```sh
-acli solution-pack plan --file pack.tar.zst --prefix example \
+acli solution-pack plan create --file pack.tar.zst --prefix example \
   --blueprint-publication publish \
   --map blueprints/product=shared_product
 ```
@@ -73,8 +73,8 @@ To reuse an exactly matching asset, find its ID first:
 
 ```sh
 acli presentation-asset list
-acli presentation-asset show <asset-id>
-acli solution-pack plan --file pack.tar.zst --prefix example \
+acli presentation-asset get <asset-id>
+acli solution-pack plan create --file pack.tar.zst --prefix example \
   --blueprint-publication publish \
   --map-asset assets/brand-logo=<asset-id>
 ```
@@ -87,7 +87,7 @@ A pack can create [contexts](/guides/contexts/), for example for markets or lang
 
 ```sh
 acli context list
-acli solution-pack plan --file pack.tar.zst --prefix example \
+acli solution-pack plan create --file pack.tar.zst --prefix example \
   --blueprint-publication publish \
   --map-context contexts/poland=PL
 ```
@@ -118,9 +118,9 @@ Packs leave existing installations as they are. A compatible installation satisf
 ```sh
 acli solution-pack apply <plan-id>
 acli solution-pack applications list
-acli solution-pack applications show <application-id>
+acli solution-pack applications get <application-id>
 acli solution-pack checks list <application-id>
-acli solution-pack checks show <application-id> <run-id>
+acli solution-pack checks get <application-id> <run-id>
 acli solution-pack checks rerun <application-id>
 ```
 

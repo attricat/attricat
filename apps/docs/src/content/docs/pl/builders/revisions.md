@@ -20,7 +20,7 @@ Dzięki temu wartość zachowuje znaczenie, jakie miała w chwili zapisu, nawet 
 W aplikacji internetowej otwórz schemat w **Zarządzanie → Schematy** i utwórz nową wersję na podstawie bieżącej. Za pomocą CLI:
 
 ```sh
-acli blueprint revision <blueprint-id> --file product-v2.toml
+acli blueprint create-version <blueprint-id> --file product-v2.toml
 acli blueprint publish <blueprint-id> 2
 ```
 

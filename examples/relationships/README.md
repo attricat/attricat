@@ -58,7 +58,7 @@ Replace the complete relationship sets in the default context, then read the
 direct and context-resolved previews:
 
 ```sh
-cargo run -p acli -- value replace "$PRODUCT_ID" --file relationships.toml --context-id 00000000-0000-4000-8000-000000000001
+cargo run -p acli -- value replace-relationships "$PRODUCT_ID" --file relationships.toml --context-id 00000000-0000-4000-8000-000000000001
 cargo run -p acli -- record preview "$PRODUCT_ID" --relationship-depth 1
 cargo run -p acli -- record resolved-preview "$PRODUCT_ID" --context-id "$PL_B2C_CONTEXT_ID"
 ```

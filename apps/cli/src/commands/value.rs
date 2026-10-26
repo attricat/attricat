@@ -18,14 +18,16 @@ pub(crate) enum ValueCommand {
     Current {
         record_id: Uuid,
     },
-    Replace {
+    /// Replace a record\'s targets for the given relationship attributes.
+    ReplaceRelationships {
         record_id: Uuid,
         #[arg(long)]
         file: PathBuf,
         #[arg(long)]
         context_id: Option<Uuid>,
     },
-    Remove {
+    /// Remove the given targets from relationship attributes.
+    RemoveRelationships {
         record_id: Uuid,
         #[arg(long)]
         file: PathBuf,
@@ -51,7 +53,7 @@ pub(crate) async fn value_command(api: &Api, command: ValueCommand) -> Result<St
             api.get(&format!("/records/{}/values/current", segment(record_id)))
                 .await
         }
-        ValueCommand::Replace {
+        ValueCommand::ReplaceRelationships {
             record_id,
             file,
             context_id,
@@ -62,7 +64,7 @@ pub(crate) async fn value_command(api: &Api, command: ValueCommand) -> Result<St
             )
             .await
         }
-        ValueCommand::Remove {
+        ValueCommand::RemoveRelationships {
             record_id,
             file,
             context_id,

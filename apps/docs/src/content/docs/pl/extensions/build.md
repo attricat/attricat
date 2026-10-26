@@ -168,7 +168,7 @@ Sprawdź, czy Twój kod obsługuje:
 - `api.log(level, message)` z `logging.write` zapisuje wpis w dzienniku serwera Attricat, oznaczony identyfikatorem rozszerzenia. Poziomy to `trace`, `debug`, `info`, `warn` i `error`. Wpisy są ograniczone do 16 KiB.
 - Każde wywołanie hosta zwraca `Err(message)`, gdy zostanie odrzucone, np. `missing capability 'storage.extension'`. Przekazuj te komunikaty do swoich dzienników; wskazują brakujące uprawnienie.
 - Instalacja objęta kwarantanną pokazuje swój stan na swojej stronie w **Zarządzanie → Rozszerzenia**. Usuń przyczynę, w razie błędu w kodzie przesyłając poprawione wydanie, i włącz rozszerzenie ponownie.
-- Dla operacji `acli extension-operation show <run-id>` pokazuje stan, postęp i błąd przebiegu.
+- Dla operacji `acli extension operation get <run-id>` pokazuje stan, postęp i błąd przebiegu.
 - W ramce klienckiej narzędzia deweloperskie przeglądarki pokazują wyjście konsoli i błędy. Wybierz ramkę rozszerzenia w menu kontekstu konsoli.
 
 ## Opublikuj
@@ -188,4 +188,4 @@ Aby dystrybuować rozszerzenie przez rejestr, opublikuj archiwum jako zasób Git
 }
 ```
 
-Administratorzy obszaru roboczego dodają Twój rejestr poleceniem `acli extension-registry add --source acme/attricat-extensions`. Oficjalny rejestr to `attricat/attricat-extensions`.
+Administratorzy obszaru roboczego dodają Twój rejestr poleceniem `acli extension registry add --source acme/attricat-extensions`. Oficjalny rejestr to `attricat/attricat-extensions`.

@@ -15,14 +15,14 @@ pub(crate) enum WorkflowCommand {
     Get {
         workflow_id: Uuid,
     },
-    RevisionList {
+    ListVersions {
         workflow_id: Uuid,
     },
-    VersionGet {
+    GetVersion {
         workflow_id: Uuid,
         version: i64,
     },
-    Revision {
+    CreateVersion {
         workflow_id: Uuid,
         #[command(flatten)]
         source: SourceInput,
@@ -76,11 +76,11 @@ pub(crate) async fn workflow_command(
             api.get(&format!("/workflows/{}", segment(workflow_id)))
                 .await
         }
-        WorkflowCommand::RevisionList { workflow_id } => {
+        WorkflowCommand::ListVersions { workflow_id } => {
             api.get(&format!("/workflows/{}/versions", segment(workflow_id)))
                 .await
         }
-        WorkflowCommand::VersionGet {
+        WorkflowCommand::GetVersion {
             workflow_id,
             version,
         } => {
@@ -90,7 +90,7 @@ pub(crate) async fn workflow_command(
             ))
             .await
         }
-        WorkflowCommand::Revision {
+        WorkflowCommand::CreateVersion {
             workflow_id,
             source,
         } => {

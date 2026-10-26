@@ -60,14 +60,14 @@ Przebieg, którego wydanie zostanie wyłączone, poddane kwarantannie lub utraci
 ## Uruchamiaj, obserwuj i pobieraj
 
 ```sh
-acli extension-operation start acme.export --operation-id export \
+acli extension operation start acme.export --operation-id export \
   --input '{"profile":{"version":1}}' --idempotency-key export-2026-03-01
-acli extension-operation list
-acli extension-operation show <run-id>
-acli extension-operation artifacts <run-id>
-acli extension-operation download <run-id> <artifact-id> --output products.csv
-acli extension-operation cancel <run-id>
-acli extension-operation replay <run-id>
+acli extension operation list
+acli extension operation get <run-id>
+acli extension operation artifacts <run-id>
+acli extension operation download <run-id> <artifact-id> --output products.csv
+acli extension operation cancel <run-id>
+acli extension operation replay <run-id>
 ```
 
 `--input-file-id` dołącza gotowy plik obszaru roboczego jako dane wejściowe operacji. Komponent otwiera go jako `open-input("source")`; nigdy nie widzi identyfikatorów plików ani kluczy magazynu.
@@ -125,7 +125,7 @@ Z `network.request` i uprawnieniem hosta, które ustawia `max_transfer_bytes`, k
 - `transfer.fetch-input` pobiera jeden zakres bajtów, do 16 MiB, do artefaktu wejściowego. Kolejne zakresy wymagają ETag, aby źródło nie mogło się zmienić między zakresami.
 - `transfer.deliver-output` strumieniuje gotowy plik wyjściowy metodą `PUT` albo `POST`, jeśli uprawnienie hosta deklaruje `idempotent_delivery: true`. Każde dostarczenie zawiera stały nagłówek `Idempotency-Key`.
 
-Próba dostarczenia jest zapisywana przed jakimkolwiek ruchem sieciowym. Po przekroczeniu limitu czasu lub awarii wynik to `uncertain` i nigdy nie jest wysyłany ponownie automatycznie. `acli extension-operation deliveries <run-id>` pokazuje historię dostarczeń.
+Próba dostarczenia jest zapisywana przed jakimkolwiek ruchem sieciowym. Po przekroczeniu limitu czasu lub awarii wynik to `uncertain` i nigdy nie jest wysyłany ponownie automatycznie. `acli extension operation deliveries <run-id>` pokazuje historię dostarczeń.
 
 API hosta 1.1 dodaje wersje dopasowane do przesyłania plików do marketplace'ów i magazynów w chmurze:
 
@@ -150,9 +150,9 @@ Przebiegi eksportu odczytują zamiast tego rekordy wywołaniami `attricat.page-v
 ## Harmonogramy
 
 ```sh
-acli extension-schedule create acme.export --operation-id export \
+acli extension schedule create acme.export --operation-id export \
   --input '{"profile":{"version":1}}' --interval-seconds 86400
-acli extension-schedule update <schedule-id> --enabled false --interval-seconds 86400
+acli extension schedule update <schedule-id> --enabled false --interval-seconds 86400
 ```
 
 Harmonogram uruchamia operację w odstępach od 60 sekund do 30 dni. Przegapione interwały i nakładające się przebiegi są pomijane. Harmonogram jest wstrzymywany, gdy jego wydanie jest wyłączone, poddane kwarantannie, uaktualnione lub nie ma wymaganego uprawnienia.
@@ -195,8 +195,8 @@ input = { profile = { version = 1, business_key = "sku", columns = [
 Uruchom zadanie ręcznie:
 
 ```sh
-acli connector-job list <blueprint-id>
-acli connector-job run <job-id> --idempotency-key manual-2026-03-01
+acli extension connector-job list <blueprint-id>
+acli extension connector-job run <job-id> --idempotency-key manual-2026-03-01
 ```
 
 Zarządzanie zadaniami konektorów wymaga `extensions.manage`.

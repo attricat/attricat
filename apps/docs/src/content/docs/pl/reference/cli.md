@@ -160,8 +160,8 @@ acli token revoke <token-id>
 acli blueprint list [--include-drafts]
 acli blueprint catalogue
 acli blueprint create --file product.toml
-acli blueprint revision <blueprint-id> --file product-v2.toml
-acli blueprint revision-list <blueprint-id>
+acli blueprint create-version <blueprint-id> --file product-v2.toml
+acli blueprint list-versions <blueprint-id>
 acli blueprint publish <blueprint-id> <version>
 acli blueprint get <blueprint-id>
 acli blueprint get-version <blueprint-id> <version>
@@ -206,7 +206,7 @@ acli record publication publish-all <record-id>
 
 acli value current <record-id>
 acli value append <record-id> --file values.toml --context-id <id>
-acli value replace | remove <record-id> --file relationships.toml --context-id <id>
+acli value replace-relationships | remove-relationships <record-id> --file relationships.toml --context-id <id>
 ```
 
 `record batch` przyjmuje tablicę JSON z operacjami tworzenia, aktualizacji i usuwania, podaną bezpośrednio lub w pliku, i zapisuje wszystkie albo żadną. Format operacji opisuje sekcja [Zmiany wsadowe](/pl/reference/api/#zmiany-wsadowe).
@@ -215,7 +215,7 @@ acli value replace | remove <record-id> --file relationships.toml --context-id <
 
 ```sh
 acli file upload <record-id> <attribute-code> --file a.png [--file b.png] [--context-id <id>]
-acli file metadata <file-id>
+acli file get <file-id>
 acli file download-original <file-id> --output original.bin [--range 'bytes=0-1023']
 acli file download-variant <file-id> thumbnail|display --output preview.webp
 ```
@@ -267,7 +267,7 @@ acli lexicon report [--language <znacznik>]...
 ```sh
 acli rule list [--blueprint-id <id>]
 acli rule validate | create --blueprint-id <id> --blueprint-version <n> [--context-id <id>] --file rule.toml
-acli rule revision <rule-id> --blueprint-id <id> --blueprint-version <n> --file rule.toml
+acli rule create-version <rule-id> --blueprint-id <id> --blueprint-version <n> --file rule.toml
 acli rule publish <rule-id> <version>
 acli rule enable <rule-id> <version> [--accept-existing-violations]
 acli rule disable <rule-id>
@@ -278,8 +278,8 @@ acli rule findings [--record-id <id>]
 acli rule acknowledge <finding-id>
 
 acli workflow validate | create --file workflow.toml
-acli workflow list | get <workflow-id> | revision-list <workflow-id>
-acli workflow revision <workflow-id> --file workflow.toml
+acli workflow list | get <workflow-id> | list-versions <workflow-id>
+acli workflow create-version <workflow-id> --file workflow.toml
 acli workflow publish | enable <workflow-id> <version>
 acli workflow disable <workflow-id>
 acli workflow run-now <workflow-id> --record-id <id> --idempotency-key <key>
@@ -314,7 +314,7 @@ acli workspace publication-channel list
 acli workspace publication-channel set <context-id> --enabled true|false
 acli workspace grant-target list workspace|blueprint-family|record|context-subtree
 acli workspace token-permission list
-acli directory
+acli directory list
 acli team list
 acli team create --code <code> --name <name> [--member <user-id> …]
 acli team update <team-id> [--name <name>] [--member <user-id> … | --clear-members]
@@ -325,46 +325,46 @@ acli audit list [--occurred-after <t>] [--occurred-before <t>] [--actor-user-id 
 ### Rozszerzenia
 
 ```sh
-acli extension-registry list | discover
-acli extension-registry add --source <owner/repository>
-acli extension-registry remove <registry-id>
-acli extension-registry details <owner> <repository>
+acli extension registry list | discover
+acli extension registry add --source <owner/repository>
+acli extension registry remove <registry-id>
+acli extension registry get <owner> <repository>
 acli extension list | runtime
-acli extension detail | enable | disable | remove <extension-id>
+acli extension get | enable | disable | remove <extension-id>
 acli extension install --owner <o> --repository <r> --release-id <github-release-id>
 acli extension sideload --file extension.tar.zst
 acli extension upgrade <extension-id> --owner <o> --repository <r> --release-id <id>
 acli extension configure <extension-id> --configuration <json>
 acli extension grant <extension-id> --grant-kind capability|host_permission|event_publish|event_subscribe --grant-id <id>
-acli extension revoke <extension-id> <grant-kind> <grant-id>
+acli extension revoke <extension-id> --grant-kind <grant-kind> --grant-id <grant-id>
 acli extension quarantine <extension-id> --diagnostic-code <code>
 acli extension workspace-mode --enabled true|false
-acli extension-operation start <extension-id> --operation-id <id> --input <json> --idempotency-key <key> [--input-file-id <id>]
-acli extension-operation list
-acli extension-operation show | artifacts | deliveries | cancel | replay <run-id>
-acli extension-operation download <run-id> <artifact-id> --output <path>
-acli extension-run list [--extension-id <id>]
-acli extension-run show | cancel <run-id>
-acli extension-run download <run-id> <artifact-id> --output <path>
-acli extension annotation-namespace <extension-id> [--adopt]
-acli extension repair-annotations <extension-id> <record-id> --patch <json>
-acli extension-schedule list
-acli extension-schedule create <extension-id> --operation-id <id> --input <json> --interval-seconds <60-2592000>
-acli extension-schedule update <schedule-id> --enabled true|false --interval-seconds <n>
-acli connector-job list <blueprint-id>
-acli connector-job run <job-id> --idempotency-key <key>
+acli extension operation start <extension-id> --operation-id <id> --input <json> --idempotency-key <key> [--input-file-id <id>]
+acli extension operation list
+acli extension operation get | artifacts | deliveries | cancel | replay <run-id>
+acli extension operation download <run-id> <artifact-id> --output <path>
+acli extension run list [--extension-id <id>]
+acli extension run get | cancel <run-id>
+acli extension run download <run-id> <artifact-id> --output <path>
+acli extension annotations namespace|adopt <extension-id>
+acli extension annotations repair <extension-id> <record-id> --patch <json>
+acli extension schedule list
+acli extension schedule create <extension-id> --operation-id <id> --input <json> --interval-seconds <60-2592000>
+acli extension schedule update <schedule-id> --enabled true|false --interval-seconds <n>
+acli extension connector-job list <blueprint-id>
+acli extension connector-job run <job-id> --idempotency-key <key>
 ```
 
 ### Pakiety rozwiązań
 
 ```sh
 acli solution-pack inspect --file pack.tar.zst
-acli solution-pack plan --file pack.tar.zst --prefix <prefix> --blueprint-publication draft|publish [--include-sample-data] [--map key=code ... --map-asset key=uuid ... --map-context key=code ...]
-acli solution-pack plan show <plan-id>
+acli solution-pack plan create --file pack.tar.zst --prefix <prefix> --blueprint-publication draft|publish [--include-sample-data] [--map key=code ... --map-asset key=uuid ... --map-context key=code ...]
+acli solution-pack plan get <plan-id>
 acli solution-pack apply <plan-id>
 acli solution-pack applications list | show <id> | abandon <id>
 acli solution-pack checks list | rerun <application-id>
-acli solution-pack checks show <application-id> <run-id>
+acli solution-pack checks get <application-id> <run-id>
 acli presentation-asset list | show <id>
 acli presentation-asset download <id> --output <path>
 ```

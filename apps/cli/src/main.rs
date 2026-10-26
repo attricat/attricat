@@ -9,11 +9,9 @@ use crate::commands::auth::auth_command;
 use crate::commands::blueprint::blueprint_command;
 use crate::commands::context::context_command;
 use crate::commands::data_health::data_health_command;
+use crate::commands::directory::directory_command;
 use crate::commands::event::event_command;
-use crate::commands::extension::{
-    connector_job_command, extension_command, extension_operation_command,
-    extension_registry_command, extension_run_command, extension_schedule_command,
-};
+use crate::commands::extension::extension_command;
 use crate::commands::file::file_command;
 use crate::commands::lexicon::lexicon_command;
 use crate::commands::notification::notification_command;
@@ -30,7 +28,7 @@ use crate::commands::workspace::workspace_command;
 use crate::error::CliError;
 use crate::input::read_secret_stdin;
 use crate::session::{CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE, SessionFile};
-use crate::transport::{Api, CONNECT_TIMEOUT, is_secure_credential_transport, segment};
+use crate::transport::{Api, CONNECT_TIMEOUT, is_secure_credential_transport};
 
 mod cli;
 mod commands;
@@ -140,10 +138,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
 
     match cli.command {
         Command::Health => api.get("/health").await,
-        Command::Directory { user: None } => api.get("/directory").await,
-        Command::Directory { user: Some(id) } => {
-            api.get(&format!("/directory/users/{}", segment(id))).await
-        }
+        Command::Directory { command } => directory_command(&api, command).await,
         Command::Notification { command } => notification_command(&api, command).await,
         Command::Team { command } => team_command(&api, command).await,
         Command::Lexicon { command } => lexicon_command(&api, command).await,
@@ -160,12 +155,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         Command::DataHealth { command } => data_health_command(&api, command).await,
         Command::Workflow { command } => workflow_command(&api, command).await,
         Command::Rule { command } => rule_command(&api, command).await,
-        Command::ExtensionRegistry { command } => extension_registry_command(&api, command).await,
         Command::Extension { command } => extension_command(&api, command).await,
-        Command::ExtensionOperation { command } => extension_operation_command(&api, command).await,
-        Command::ExtensionRun { command } => extension_run_command(&api, command).await,
-        Command::ExtensionSchedule { command } => extension_schedule_command(&api, command).await,
-        Command::ConnectorJob { command } => connector_job_command(&api, command).await,
         Command::SolutionPack { command } => solution_pack_command(&api, command).await,
         Command::PresentationAsset { command } => presentation_asset_command(&api, command).await,
         Command::File { command } => file_command(&api, command).await,

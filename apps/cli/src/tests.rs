@@ -8,11 +8,11 @@ use uuid::Uuid;
 
 use crate::cli::{Cli, Command, PageArgs, SourceInput};
 use crate::commands::data_health::data_health_path;
-use crate::commands::extension::{
-    ConnectorJobCommand, ExtensionOperationCommand, ExtensionScheduleCommand,
-    connector_job_command, extension_operation_command, extension_schedule_command,
-    operation_source,
+use crate::commands::extension::connector_job::{ConnectorJobCommand, connector_job_command};
+use crate::commands::extension::operation::{
+    ExtensionOperationCommand, extension_operation_command, operation_source,
 };
+use crate::commands::extension::schedule::{ExtensionScheduleCommand, extension_schedule_command};
 use crate::commands::lexicon::lexicon_request;
 use crate::commands::notification::notification_request;
 use crate::commands::record::migrate_records;
@@ -957,33 +957,30 @@ fn extension_run_and_annotation_commands_validate_arguments() {
     for args in [
         vec![
             "acli",
-            "extension-run",
+            "extension",
+            "run",
             "list",
             "--extension-id",
             "acme.docs",
         ],
-        vec!["acli", "extension-run", "show", id],
-        vec!["acli", "extension-run", "cancel", id],
+        vec!["acli", "extension", "run", "get", id],
+        vec!["acli", "extension", "run", "cancel", id],
         vec![
             "acli",
-            "extension-run",
+            "extension",
+            "run",
             "download",
             id,
             id,
             "--output",
             "out.pdf",
         ],
+        vec!["acli", "extension", "annotations", "adopt", "acme.docs"],
         vec![
             "acli",
             "extension",
-            "annotation-namespace",
-            "acme.docs",
-            "--adopt",
-        ],
-        vec![
-            "acli",
-            "extension",
-            "repair-annotations",
+            "annotations",
+            "repair",
             "acme.docs",
             id,
             "--patch",
@@ -992,9 +989,17 @@ fn extension_run_and_annotation_commands_validate_arguments() {
     ] {
         assert!(Cli::try_parse_from(args.clone()).is_ok(), "{args:?}");
     }
-    assert!(Cli::try_parse_from(["acli", "extension-run", "show", "not-a-uuid"]).is_err());
+    assert!(Cli::try_parse_from(["acli", "extension", "run", "get", "not-a-uuid"]).is_err());
     assert!(
-        Cli::try_parse_from(["acli", "extension", "repair-annotations", "acme.docs", id]).is_err()
+        Cli::try_parse_from([
+            "acli",
+            "extension",
+            "annotations",
+            "repair",
+            "acme.docs",
+            id
+        ])
+        .is_err()
     );
 }
 
@@ -1004,7 +1009,8 @@ fn operation_commands_validate_arguments() {
     assert!(
         Cli::try_parse_from([
             "acli",
-            "extension-operation",
+            "extension",
+            "operation",
             "start",
             "example",
             "--operation-id",
@@ -1021,7 +1027,8 @@ fn operation_commands_validate_arguments() {
     assert!(
         Cli::try_parse_from([
             "acli",
-            "extension-operation",
+            "extension",
+            "operation",
             "download",
             id,
             id,
@@ -1033,7 +1040,8 @@ fn operation_commands_validate_arguments() {
     assert!(
         Cli::try_parse_from([
             "acli",
-            "extension-operation",
+            "extension",
+            "operation",
             "start",
             "example",
             "--input",
@@ -1044,7 +1052,8 @@ fn operation_commands_validate_arguments() {
     assert!(
         Cli::try_parse_from([
             "acli",
-            "extension-schedule",
+            "extension",
+            "schedule",
             "create",
             "example",
             "--operation-id",
@@ -1059,7 +1068,8 @@ fn operation_commands_validate_arguments() {
     assert!(
         Cli::try_parse_from([
             "acli",
-            "extension-schedule",
+            "extension",
+            "schedule",
             "update",
             id,
             "--enabled",
@@ -1072,6 +1082,7 @@ fn operation_commands_validate_arguments() {
     assert!(
         Cli::try_parse_from([
             "acli",
+            "extension",
             "connector-job",
             "run",
             id,
@@ -1523,7 +1534,7 @@ fn presentation_asset_parser_supports_bounded_discovery_and_download() {
         Cli::try_parse_from([
             "acli",
             "presentation-asset",
-            "show",
+            "get",
             "00000000-0000-4000-8000-000000000001",
         ])
         .is_ok()
@@ -1547,6 +1558,7 @@ fn solution_pack_plan_parser_supports_create_and_show_shapes() {
         "acli",
         "solution-pack",
         "plan",
+        "create",
         "--file",
         "pack.tar.zst",
         "--prefix",
@@ -1561,6 +1573,7 @@ fn solution_pack_plan_parser_supports_create_and_show_shapes() {
             "acli",
             "solution-pack",
             "plan",
+            "create",
             "--file",
             "pack.tar.zst",
             "--prefix",
@@ -1576,7 +1589,7 @@ fn solution_pack_plan_parser_supports_create_and_show_shapes() {
         "acli",
         "solution-pack",
         "plan",
-        "show",
+        "get",
         "00000000-0000-4000-8000-000000000001",
     ]);
     assert!(show.is_ok());
@@ -1596,7 +1609,7 @@ fn solution_pack_plan_parser_supports_create_and_show_shapes() {
             "acli",
             "solution-pack",
             "applications",
-            "show",
+            "get",
             "00000000-0000-4000-8000-000000000002",
         ])
         .is_ok()
@@ -1630,7 +1643,7 @@ fn solution_pack_plan_parser_supports_create_and_show_shapes() {
             "acli",
             "solution-pack",
             "checks",
-            "show",
+            "get",
             "00000000-0000-4000-8000-000000000002",
             "00000000-0000-4000-8000-000000000003"
         ])
@@ -1748,7 +1761,7 @@ async fn solution_pack_apply_and_history_use_uuid_only_json_routes() {
         solution_pack_command(
             &api,
             SolutionPackCommand::Applications {
-                command: SolutionPackApplicationsCommand::Show { application_id },
+                command: SolutionPackApplicationsCommand::Get { application_id },
             }
         )
         .await
@@ -1799,7 +1812,7 @@ async fn solution_pack_apply_and_history_use_uuid_only_json_routes() {
         solution_pack_command(
             &api,
             SolutionPackCommand::Checks {
-                command: SolutionPackChecksCommand::Show {
+                command: SolutionPackChecksCommand::Get {
                     application_id,
                     run_id
                 },
@@ -1819,6 +1832,7 @@ async fn solution_pack_plan_rejects_incomplete_and_invalid_forms() {
             "acli",
             "solution-pack",
             "plan",
+            "create",
             "--file",
             "pack.tar.zst",
             "--prefix",
@@ -1828,48 +1842,42 @@ async fn solution_pack_plan_rejects_incomplete_and_invalid_forms() {
         ])
         .is_err()
     );
-    assert!(Cli::try_parse_from(["acli", "solution-pack", "plan", "show", "not-a-uuid",]).is_err());
+    assert!(Cli::try_parse_from(["acli", "solution-pack", "plan", "get", "not-a-uuid",]).is_err());
 
     let api = Api::new(Client::new(), Url::parse("http://127.0.0.1:1").unwrap());
-    let missing_publication = solution_pack_command(
-        &api,
-        SolutionPackCommand::Plan {
-            command: None,
-            file: Some(PathBuf::from("pack.tar.zst")),
-            prefix: Some("ecom".to_owned()),
-            blueprint_publication: None,
-            blueprint_maps: Vec::new(),
-            asset_maps: Vec::new(),
-            context_maps: Vec::new(),
-            include_sample_data: false,
-        },
-    )
-    .await;
-    assert!(matches!(missing_publication, Err(CliError::Input(_))));
-
-    let mixed_show = solution_pack_command(
-        &api,
-        SolutionPackCommand::Plan {
-            command: Some(SolutionPackPlanCommand::Show {
-                plan_id: Uuid::nil(),
-            }),
-            file: Some(PathBuf::from("pack.tar.zst")),
-            prefix: Some("ecom".to_owned()),
-            blueprint_publication: Some(BlueprintPublicationArgument::Draft),
-            blueprint_maps: Vec::new(),
-            asset_maps: Vec::new(),
-            context_maps: Vec::new(),
-            include_sample_data: false,
-        },
-    )
-    .await;
-    assert!(matches!(mixed_show, Err(CliError::Input(_))));
+    assert!(
+        Cli::try_parse_from([
+            "acli",
+            "solution-pack",
+            "plan",
+            "create",
+            "--file",
+            "pack.tar.zst",
+            "--prefix",
+            "ecom",
+        ])
+        .is_err()
+    );
+    assert!(
+        Cli::try_parse_from([
+            "acli",
+            "solution-pack",
+            "plan",
+            "get",
+            "00000000-0000-4000-8000-000000000001",
+            "--file",
+            "pack.tar.zst",
+        ])
+        .is_err()
+    );
 
     let mut command = <Cli as clap::CommandFactory>::command();
     let help = command
         .find_subcommand_mut("solution-pack")
         .unwrap()
         .find_subcommand_mut("plan")
+        .unwrap()
+        .find_subcommand_mut("create")
         .unwrap()
         .render_long_help()
         .to_string();
@@ -1884,14 +1892,15 @@ async fn solution_pack_plan_rejects_incomplete_and_invalid_forms() {
         let invalid_mapping = solution_pack_command(
             &api,
             SolutionPackCommand::Plan {
-                command: None,
-                file: Some(PathBuf::from("pack.tar.zst")),
-                prefix: Some("ecom".to_owned()),
-                blueprint_publication: Some(BlueprintPublicationArgument::Draft),
-                blueprint_maps: vec![mapping.to_owned()],
-                asset_maps: Vec::new(),
-                context_maps: Vec::new(),
-                include_sample_data: false,
+                command: SolutionPackPlanCommand::Create {
+                    file: PathBuf::from("pack.tar.zst"),
+                    prefix: "ecom".to_owned(),
+                    blueprint_publication: BlueprintPublicationArgument::Draft,
+                    blueprint_maps: vec![mapping.to_owned()],
+                    asset_maps: Vec::new(),
+                    context_maps: Vec::new(),
+                    include_sample_data: false,
+                },
             },
         )
         .await;
@@ -1962,14 +1971,15 @@ async fn solution_pack_plan_streams_parameters_and_show_fetches_by_id() {
     let created = solution_pack_command(
         &api,
         SolutionPackCommand::Plan {
-            command: None,
-            file: Some(archive.path().to_path_buf()),
-            prefix: Some("shop prefix".to_owned()),
-            blueprint_publication: Some(BlueprintPublicationArgument::Publish),
-            blueprint_maps: Vec::new(),
-            asset_maps: Vec::new(),
-            context_maps: Vec::new(),
-            include_sample_data: false,
+            command: SolutionPackPlanCommand::Create {
+                file: archive.path().to_path_buf(),
+                prefix: "shop prefix".to_owned(),
+                blueprint_publication: BlueprintPublicationArgument::Publish,
+                blueprint_maps: Vec::new(),
+                asset_maps: Vec::new(),
+                context_maps: Vec::new(),
+                include_sample_data: false,
+            },
         },
     )
     .await
@@ -1988,17 +1998,20 @@ async fn solution_pack_plan_streams_parameters_and_show_fetches_by_id() {
     solution_pack_command(
         &api,
         SolutionPackCommand::Plan {
-            command: None,
-            file: Some(archive.path().to_path_buf()),
-            prefix: Some("shop".to_owned()),
-            blueprint_publication: Some(BlueprintPublicationArgument::Publish),
-            blueprint_maps: vec![
-                "blueprints/product=shared_product".to_owned(),
-                "blueprints/category=shared_category".to_owned(),
-            ],
-            asset_maps: vec!["assets/brand-logo=00000000-0000-4000-8000-000000000999".to_owned()],
-            context_maps: vec!["contexts/poland=PL".to_owned()],
-            include_sample_data: false,
+            command: SolutionPackPlanCommand::Create {
+                file: archive.path().to_path_buf(),
+                prefix: "shop".to_owned(),
+                blueprint_publication: BlueprintPublicationArgument::Publish,
+                blueprint_maps: vec![
+                    "blueprints/product=shared_product".to_owned(),
+                    "blueprints/category=shared_category".to_owned(),
+                ],
+                asset_maps: vec![
+                    "assets/brand-logo=00000000-0000-4000-8000-000000000999".to_owned(),
+                ],
+                context_maps: vec!["contexts/poland=PL".to_owned()],
+                include_sample_data: false,
+            },
         },
     )
     .await
@@ -2022,17 +2035,18 @@ async fn solution_pack_plan_streams_parameters_and_show_fetches_by_id() {
     let duplicate = solution_pack_command(
         &api,
         SolutionPackCommand::Plan {
-            command: None,
-            file: Some(archive.path().to_path_buf()),
-            prefix: Some("shop".to_owned()),
-            blueprint_publication: Some(BlueprintPublicationArgument::Publish),
-            blueprint_maps: vec![
-                "blueprints/product=shared_product".to_owned(),
-                "blueprints/product=other_product".to_owned(),
-            ],
-            asset_maps: Vec::new(),
-            context_maps: Vec::new(),
-            include_sample_data: false,
+            command: SolutionPackPlanCommand::Create {
+                file: archive.path().to_path_buf(),
+                prefix: "shop".to_owned(),
+                blueprint_publication: BlueprintPublicationArgument::Publish,
+                blueprint_maps: vec![
+                    "blueprints/product=shared_product".to_owned(),
+                    "blueprints/product=other_product".to_owned(),
+                ],
+                asset_maps: Vec::new(),
+                context_maps: Vec::new(),
+                include_sample_data: false,
+            },
         },
     )
     .await;
@@ -2041,14 +2055,7 @@ async fn solution_pack_plan_streams_parameters_and_show_fetches_by_id() {
     let shown = solution_pack_command(
         &api,
         SolutionPackCommand::Plan {
-            command: Some(SolutionPackPlanCommand::Show { plan_id }),
-            file: None,
-            prefix: None,
-            blueprint_publication: None,
-            blueprint_maps: Vec::new(),
-            asset_maps: Vec::new(),
-            context_maps: Vec::new(),
-            include_sample_data: false,
+            command: SolutionPackPlanCommand::Get { plan_id },
         },
     )
     .await

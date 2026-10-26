@@ -45,9 +45,9 @@ alone does not mean the pack is suitable for your workspace.
 ## Create and review a plan
 
 ```sh
-acli solution-pack plan --file pack.tar.zst \
+acli solution-pack plan create --file pack.tar.zst \
   --prefix example --blueprint-publication publish
-acli solution-pack plan show <plan-id>
+acli solution-pack plan get <plan-id>
 ```
 
 Planning saves an immutable dry run without changing catalog resources. Review
@@ -88,7 +88,7 @@ blueprint whose definition matches the pack exactly. Use resource keys reported
 by inspection and the publisher's installation instructions:
 
 ```sh
-acli solution-pack plan --file pack.tar.zst --prefix example \
+acli solution-pack plan create --file pack.tar.zst --prefix example \
   --blueprint-publication publish \
   --map blueprints/product=shared_product
 ```
@@ -100,8 +100,8 @@ For presentation-asset reuse, inspect existing assets and supply an exact match:
 
 ```sh
 acli presentation-asset list
-acli presentation-asset show <asset-id>
-acli solution-pack plan --file pack.tar.zst --prefix example \
+acli presentation-asset get <asset-id>
+acli solution-pack plan create --file pack.tar.zst --prefix example \
   --blueprint-publication publish \
   --map-asset assets/brand-logo=<asset-id>
 ```
@@ -122,7 +122,7 @@ map it explicitly:
 
 ```sh
 acli context list
-acli solution-pack plan --file pack.tar.zst --prefix example \
+acli solution-pack plan create --file pack.tar.zst --prefix example \
   --blueprint-publication publish \
   --map-context contexts/poland=PL
 ```
@@ -232,9 +232,9 @@ remove them through normal extension administration.
 ```sh
 acli solution-pack apply <plan-id>
 acli solution-pack applications list
-acli solution-pack applications show <application-id>
+acli solution-pack applications get <application-id>
 acli solution-pack checks list <application-id> --limit 25 --offset 0
-acli solution-pack checks show <application-id> <run-id>
+acli solution-pack checks get <application-id> <run-id>
 acli solution-pack checks rerun <application-id>
 ```
 

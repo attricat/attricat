@@ -32,8 +32,30 @@ impl BlueprintPublicationArgument {
 
 #[derive(Subcommand)]
 pub(crate) enum SolutionPackPlanCommand {
+    /// Plan applying a local archive; nothing changes until `apply`.
+    Create {
+        #[arg(long)]
+        file: PathBuf,
+        #[arg(long)]
+        prefix: String,
+        #[arg(long, value_enum)]
+        blueprint_publication: BlueprintPublicationArgument,
+        /// Explicitly reuse a published blueprint (`logical_key=existing_code`).
+        #[arg(long = "map", value_name = "LOGICAL_KEY=EXISTING_CODE")]
+        blueprint_maps: Vec<String>,
+        /// Explicitly reuse an immutable presentation asset (`logical_key=asset_uuid`).
+        #[arg(long = "map-asset", value_name = "LOGICAL_KEY=ASSET_UUID")]
+        asset_maps: Vec<String>,
+        /// Use an existing context for a pack context instead of creating one
+        /// (`logical_key=existing_code`).
+        #[arg(long = "map-context", value_name = "LOGICAL_KEY=EXISTING_CODE")]
+        context_maps: Vec<String>,
+        /// Explicitly select the pack's optional synthetic sample records.
+        #[arg(long)]
+        include_sample_data: bool,
+    },
     /// Show one immutable workspace-scoped plan.
-    Show { plan_id: Uuid },
+    Get { plan_id: Uuid },
 }
 
 #[derive(Subcommand)]
@@ -44,7 +66,7 @@ pub(crate) enum SolutionPackApplicationsCommand {
         page: PageArgs,
     },
     /// Show one workspace-scoped application and its ordered steps.
-    Show { application_id: Uuid },
+    Get { application_id: Uuid },
     /// Permanently abandon a resumable sample-selected application.
     Abandon { application_id: Uuid },
 }
@@ -60,7 +82,7 @@ pub(crate) enum SolutionPackChecksCommand {
         page: PageArgs,
     },
     /// Show one immutable check run and its ordered results.
-    Show { application_id: Uuid, run_id: Uuid },
+    Get { application_id: Uuid, run_id: Uuid },
 }
 
 #[derive(Subcommand)]
@@ -73,26 +95,7 @@ pub(crate) enum SolutionPackCommand {
     /// Create a local-archive plan, or show an existing plan.
     Plan {
         #[command(subcommand)]
-        command: Option<SolutionPackPlanCommand>,
-        #[arg(long)]
-        file: Option<PathBuf>,
-        #[arg(long)]
-        prefix: Option<String>,
-        #[arg(long)]
-        blueprint_publication: Option<BlueprintPublicationArgument>,
-        /// Explicitly reuse a published blueprint (`logical_key=existing_code`).
-        #[arg(long = "map", value_name = "LOGICAL_KEY=EXISTING_CODE")]
-        blueprint_maps: Vec<String>,
-        /// Explicitly reuse an immutable presentation asset (`logical_key=asset_uuid`).
-        #[arg(long = "map-asset", value_name = "LOGICAL_KEY=ASSET_UUID")]
-        asset_maps: Vec<String>,
-        /// Use an existing context for a pack context instead of creating one
-        /// (`logical_key=existing_code`).
-        #[arg(long = "map-context", value_name = "LOGICAL_KEY=EXISTING_CODE")]
-        context_maps: Vec<String>,
-        /// Explicitly select the pack's optional synthetic sample records.
-        #[arg(long)]
-        include_sample_data: bool,
+        command: SolutionPackPlanCommand,
     },
     /// Apply exactly the persisted immutable plan; no choices are recomputed.
     Apply { plan_id: Uuid },
@@ -118,27 +121,22 @@ pub(crate) async fn solution_pack_command(
                 .await
         }
         SolutionPackCommand::Plan {
-            command: Some(SolutionPackPlanCommand::Show { plan_id }),
-            file: None,
-            prefix: None,
-            blueprint_publication: None,
-            blueprint_maps,
-            asset_maps,
-            context_maps,
-            include_sample_data: false,
-        } if blueprint_maps.is_empty() && asset_maps.is_empty() && context_maps.is_empty() => {
+            command: SolutionPackPlanCommand::Get { plan_id },
+        } => {
             api.get(&format!("/solution-packs/plans/{}", segment(plan_id)))
                 .await
         }
         SolutionPackCommand::Plan {
-            command: None,
-            file: Some(file),
-            prefix: Some(prefix),
-            blueprint_publication: Some(publication),
-            blueprint_maps,
-            asset_maps,
-            context_maps,
-            include_sample_data,
+            command:
+                SolutionPackPlanCommand::Create {
+                    file,
+                    prefix,
+                    blueprint_publication,
+                    blueprint_maps,
+                    asset_maps,
+                    context_maps,
+                    include_sample_data,
+                },
         } => {
             let path = with_query(
                 "/solution-packs/plans",
@@ -146,7 +144,7 @@ pub(crate) async fn solution_pack_command(
                     ("prefix", Some(prefix)),
                     (
                         "blueprint_publication",
-                        Some(publication.as_str().to_owned()),
+                        Some(blueprint_publication.as_str().to_owned()),
                     ),
                     ("include_sample_data", flag(include_sample_data)),
                 ],
@@ -162,11 +160,6 @@ pub(crate) async fn solution_pack_command(
                 solution_pack_plan_upload(api, &path, &file, maps).await
             }
         }
-        SolutionPackCommand::Plan { .. } => Err(CliError::Input(
-            "solution-pack plan requires --file, --prefix, and --blueprint-publication; \
-             plan show accepts only a plan ID"
-                .to_owned(),
-        )),
         SolutionPackCommand::Apply { plan_id } => {
             api.post(&format!("/solution-packs/plans/{}/apply", segment(plan_id)))
                 .await
@@ -175,7 +168,7 @@ pub(crate) async fn solution_pack_command(
             SolutionPackApplicationsCommand::List { page } => {
                 api.get(&with_query(APPLICATIONS_PATH, page.query())).await
             }
-            SolutionPackApplicationsCommand::Show { application_id } => {
+            SolutionPackApplicationsCommand::Get { application_id } => {
                 api.get(&format!("{APPLICATIONS_PATH}/{}", segment(application_id)))
                     .await
             }
@@ -205,7 +198,7 @@ pub(crate) async fn solution_pack_command(
                 ))
                 .await
             }
-            SolutionPackChecksCommand::Show {
+            SolutionPackChecksCommand::Get {
                 application_id,
                 run_id,
             } => {

@@ -15,7 +15,7 @@ pub(crate) enum BlueprintCommand {
         include_drafts: bool,
     },
     Create(SourceInput),
-    Revision {
+    CreateVersion {
         blueprint_id: Uuid,
         #[command(flatten)]
         source: SourceInput,
@@ -40,7 +40,7 @@ pub(crate) enum BlueprintCommand {
         version: i64,
     },
     Catalogue,
-    RevisionList {
+    ListVersions {
         blueprint_id: Uuid,
     },
     PublishRecords {
@@ -82,7 +82,7 @@ pub(crate) async fn blueprint_command(
             api.post_json("/blueprints", json!({ "definition": read_source(source)? }))
                 .await
         }
-        BlueprintCommand::Revision {
+        BlueprintCommand::CreateVersion {
             blueprint_id,
             source,
         } => {
@@ -130,7 +130,7 @@ pub(crate) async fn blueprint_command(
             .await
         }
         BlueprintCommand::Catalogue => api.get("/blueprints/catalogue").await,
-        BlueprintCommand::RevisionList { blueprint_id } => {
+        BlueprintCommand::ListVersions { blueprint_id } => {
             api.get(&format!("/blueprints/{}/versions", segment(blueprint_id)))
                 .await
         }

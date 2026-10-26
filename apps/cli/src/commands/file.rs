@@ -16,7 +16,7 @@ pub(crate) enum FileCommand {
         #[arg(long)]
         context_id: Option<Uuid>,
     },
-    Metadata {
+    Get {
         file_id: Uuid,
     },
     DownloadOriginal {
@@ -55,7 +55,7 @@ pub(crate) async fn file_command(api: &Api, command: FileCommand) -> Result<Stri
             )
             .await
         }
-        FileCommand::Metadata { file_id } => api.get(&format!("/files/{}", segment(file_id))).await,
+        FileCommand::Get { file_id } => api.get(&format!("/files/{}", segment(file_id))).await,
         FileCommand::DownloadOriginal {
             file_id,
             output,

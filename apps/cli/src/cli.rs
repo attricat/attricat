@@ -4,18 +4,15 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 use url::Url;
-use uuid::Uuid;
 
 use crate::commands::audit::AuditCommand;
 use crate::commands::auth::AuthCommand;
 use crate::commands::blueprint::BlueprintCommand;
 use crate::commands::context::ContextCommand;
 use crate::commands::data_health::DataHealthCommand;
+use crate::commands::directory::DirectoryCommand;
 use crate::commands::event::EventCommand;
-use crate::commands::extension::{
-    ConnectorJobCommand, ExtensionCommand, ExtensionOperationCommand, ExtensionRegistryCommand,
-    ExtensionRunCommand, ExtensionScheduleCommand,
-};
+use crate::commands::extension::ExtensionCommand;
 use crate::commands::file::FileCommand;
 use crate::commands::lexicon::LexiconCommand;
 use crate::commands::notification::NotificationCommand;
@@ -121,11 +118,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: RecordCommand,
     },
-    /// List workspace users and teams that assignment attributes can reference.
+    /// Workspace users and teams that assignment attributes can reference.
     Directory {
-        /// Show one member's profile, with their teams, instead.
-        #[arg(long)]
-        user: Option<Uuid>,
+        #[command(subcommand)]
+        command: DirectoryCommand,
     },
     /// Read and manage your own notification inbox in the workspace.
     Notification {
@@ -167,30 +163,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: RuleCommand,
     },
-    ExtensionRegistry {
-        #[command(subcommand)]
-        command: ExtensionRegistryCommand,
-    },
+    /// Installed extensions, their registries, runs, schedules and connector jobs.
     Extension {
         #[command(subcommand)]
         command: ExtensionCommand,
-    },
-    ExtensionOperation {
-        #[command(subcommand)]
-        command: ExtensionOperationCommand,
-    },
-    /// Your own interactive extension runs, started from extension actions.
-    ExtensionRun {
-        #[command(subcommand)]
-        command: ExtensionRunCommand,
-    },
-    ExtensionSchedule {
-        #[command(subcommand)]
-        command: ExtensionScheduleCommand,
-    },
-    ConnectorJob {
-        #[command(subcommand)]
-        command: ConnectorJobCommand,
     },
     SolutionPack {
         #[command(subcommand)]

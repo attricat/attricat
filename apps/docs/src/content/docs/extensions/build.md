@@ -168,7 +168,7 @@ Check that your code handles:
 - `api.log(level, message)` with `logging.write` writes to the Attricat server log, tagged with your extension ID. Levels are `trace`, `debug`, `info`, `warn`, and `error`. Messages are limited to 16 KiB.
 - Every host call returns `Err(message)` when it is refused, such as `missing capability 'storage.extension'`. Pass these messages through to your logs; they name the missing grant.
 - A quarantined installation shows its state on its page under **Manage → Extensions**. Fix the cause, uploading a corrected release if your code was at fault, and enable it again.
-- For operations, `acli extension-operation show <run-id>` shows a run's status, progress, and error.
+- For operations, `acli extension operation get <run-id>` shows a run's status, progress, and error.
 - In a client frame, the browser developer tools show your console output and errors. Select the extension's frame in the console's context menu.
 
 ## Publish
@@ -188,4 +188,4 @@ To distribute through a registry, publish the archive as an asset of a GitHub Re
 }
 ```
 
-Workspace administrators add your registry with `acli extension-registry add --source acme/attricat-extensions`. The official registry is `attricat/attricat-extensions`.
+Workspace administrators add your registry with `acli extension registry add --source acme/attricat-extensions`. The official registry is `attricat/attricat-extensions`.
