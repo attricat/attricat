@@ -1,7 +1,7 @@
+import { FindingSeverityChip } from './FindingSeverityChip';
 import {
   Box,
   Button,
-  Chip,
   FormControl,
   InputLabel,
   MenuItem,
@@ -34,7 +34,6 @@ import {
   findingSeverities,
   findingStateFilters,
 } from './constants';
-import { findingSeverityColor } from './findingSeverity';
 
 type FilterOption = { value: string; label: string };
 
@@ -236,13 +235,7 @@ export const FindingsSection = ({
             {(findings ?? []).map((finding) => (
               <TableRow key={finding.id}>
                 <TableCell>
-                  <Chip
-                    color={findingSeverityColor(finding.severity)}
-                    label={t(`rules.severities.${finding.severity}`, {
-                      defaultValue: finding.severity,
-                    })}
-                    size="small"
-                  />
+                  <FindingSeverityChip severity={finding.severity} />
                 </TableCell>
                 <TableCell>{finding.message}</TableCell>
                 <TableCell>

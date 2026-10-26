@@ -1,3 +1,4 @@
+import { FindingSeverityChip } from './FindingSeverityChip';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import {
   useInfiniteQuery,
@@ -52,9 +53,10 @@ import {
 } from './ruleRevisions';
 import { findingEvidenceSchema } from './schemas';
 import { capabilities } from '../auth/capabilities';
-import { findingSeverityColor } from './findingSeverity';
 import { findingMessage, type FindingAttribute } from './findingMessage';
 
+/** Lines up the messages beside severity chips of different lengths. */
+const severityChipMinWidth = 72;
 const isActive = (run: RuleRun) =>
   ACTIVE_RULE_RUN_STATUSES.includes(run.status);
 
@@ -125,13 +127,9 @@ const FindingItem = ({
         '&:not(:last-of-type)': { borderBottom: 1, borderColor: 'divider' },
       }}
     >
-      <Chip
-        color={findingSeverityColor(finding.severity)}
-        label={t(`rules.severities.${finding.severity}`, {
-          defaultValue: finding.severity,
-        })}
-        size="small"
-        sx={{ minWidth: 72 }}
+      <FindingSeverityChip
+        severity={finding.severity}
+        sx={{ minWidth: severityChipMinWidth }}
       />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography
