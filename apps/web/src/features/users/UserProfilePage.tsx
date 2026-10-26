@@ -12,6 +12,7 @@ import {
 import { PencilIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { httpStatus } from '../../api/httpStatus';
 import { ApiRequestError } from '../../api/request';
 import { compactIconSize } from '../../components/iconSizes';
 import { EmptyState } from '../../components/EmptyState';
@@ -26,8 +27,6 @@ import { getUserProfile } from './api';
 import { userProfileAvatarSize, userProfileSkeletonWidth } from './constants';
 import { userQueryKeys } from './queryKeys';
 import { sessionOptions } from '../auth/queryOptions';
-
-const NOT_FOUND = 404;
 
 const ProfileDetail = ({
   label,
@@ -53,8 +52,9 @@ export const UserProfilePage = ({ userId }: { userId: string }) => {
     queryKey: userQueryKeys.profile(userId),
     queryFn: ({ signal }) => getUserProfile(userId, signal),
     retry: (count, error) =>
-      !(error instanceof ApiRequestError && error.status === NOT_FOUND) &&
-      count < 3,
+      !(
+        error instanceof ApiRequestError && error.status === httpStatus.notFound
+      ) && count < 3,
   });
   const session = useQuery(sessionOptions());
   const user = profile.data;
@@ -62,7 +62,7 @@ export const UserProfilePage = ({ userId }: { userId: string }) => {
   const isSelf = session.data?.user_id === userId;
   const notFound =
     profile.error instanceof ApiRequestError &&
-    profile.error.status === NOT_FOUND;
+    profile.error.status === httpStatus.notFound;
 
   return (
     <PageContainer maxWidth="md">

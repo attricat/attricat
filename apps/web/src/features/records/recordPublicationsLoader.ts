@@ -1,3 +1,5 @@
+import { notFoundErrorCode } from '../../api/errors';
+import { httpStatus } from '../../api/httpStatus';
 import { ApiRequestError } from '../../api/request';
 import i18n from '../../i18n';
 import { getRecordsPublications, type RecordPublicationStatus } from './api';
@@ -29,9 +31,9 @@ const lookUp = async (chunk: string[], batch: Map<string, Waiter[]>) => {
           publications === undefined
             ? waiter.reject(
                 new ApiRequestError(
-                  404,
+                  httpStatus.notFound,
                   i18n.t('errors.recordUnavailable'),
-                  'not_found',
+                  notFoundErrorCode,
                 ),
               )
             : waiter.resolve(publications),

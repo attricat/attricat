@@ -25,6 +25,13 @@ import {
 import { errorMessage } from '../../api/errors';
 import { httpStatus } from '../../api/httpStatus';
 
+/** Responses that mean the user can no longer comment on this record. */
+const refusedStatuses: ReadonlySet<number> = new Set([
+  httpStatus.unauthorized,
+  httpStatus.forbidden,
+  httpStatus.notFound,
+]);
+
 export const CommentComposer = ({
   recordId,
   comment,
@@ -56,7 +63,7 @@ export const CommentComposer = ({
   });
   const forbidden =
     mutation.error instanceof ApiRequestError &&
-    [401, 403, 404].includes(mutation.error.status);
+    refusedStatuses.has(mutation.error.status);
   const conflict =
     mutation.error instanceof ApiRequestError &&
     mutation.error.status === httpStatus.conflict;

@@ -9,6 +9,9 @@ import { ApiRequestError } from './request';
 export type ApiErrorCode =
   keyof (typeof import('../i18n/locales/en.json'))['apiErrors'];
 
+/** The error code of a missing (or unreadable) resource. */
+export const notFoundErrorCode = 'not_found' satisfies ApiErrorCode;
+
 /** Translation key prefix of API error codes (`apiErrors.<code>`). */
 const API_ERROR_KEY_PREFIX = 'apiErrors';
 
