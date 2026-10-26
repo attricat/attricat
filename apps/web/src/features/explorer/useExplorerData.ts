@@ -1,3 +1,4 @@
+import { revisionStatuses } from '../../api/revisionStatus';
 import {
   keepPreviousData,
   useInfiniteQuery,
@@ -18,7 +19,6 @@ import { listPublicationChannels } from '../exports/api';
 import { exportQueryKeys } from '../exports/queryKeys';
 import {
   explorerVisibilityScope,
-  publishedRevisionStatus,
   relationshipPathSortErrorCode,
 } from './constants';
 import {
@@ -70,7 +70,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
     queryKey: recordQueryKeys.blueprintRevisions(currentBlueprint?.id),
     queryFn: async ({ signal }) =>
       (await listBlueprintRevisions(currentBlueprint?.id ?? '', signal)).filter(
-        (revision) => revision.status === publishedRevisionStatus,
+        (revision) => revision.status === revisionStatuses.published,
       ),
     enabled: Boolean(currentBlueprint?.id),
   });

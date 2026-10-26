@@ -3,7 +3,8 @@ import { Box, Button, Chip, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { CircleArrowUpIcon, PencilIcon, SendIcon } from 'lucide-react';
 import { PageHeader } from '../../components/PageHeader';
-import { blueprintStatusChipColor, blueprintStatuses } from './constants';
+import { revisionStatuses } from '../../api/revisionStatus';
+import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
 import type { Blueprint } from './schemas';
 import { BlueprintIcon } from '../../components/systemIcons';
@@ -62,7 +63,7 @@ export const BlueprintDetailHeader = ({
                 </Button>
               </Link>
             )}
-            {canPublish && blueprint.status === blueprintStatuses.draft && (
+            {canPublish && blueprint.status === revisionStatuses.draft && (
               <Button
                 color="primary"
                 onClick={onPublish}
@@ -73,7 +74,7 @@ export const BlueprintDetailHeader = ({
               </Button>
             )}
             {canPublishRecords &&
-              blueprint.status === blueprintStatuses.published && (
+              blueprint.status === revisionStatuses.published && (
                 <Button
                   onClick={onPublishRecords}
                   startIcon={<SendIcon />}
@@ -103,10 +104,7 @@ export const BlueprintDetailHeader = ({
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
         <Chip label={blueprint.code} variant="outlined" />
         <Chip label={blueprint.kind} variant="outlined" />
-        <Chip
-          color={blueprintStatusChipColor(blueprint.status)}
-          label={t(`blueprints.revisionStatuses.${blueprint.status}`)}
-        />
+        <RevisionStatusChip status={blueprint.status} />
         <Chip
           label={t('blueprints.latestVersion', { version: blueprint.version })}
         />

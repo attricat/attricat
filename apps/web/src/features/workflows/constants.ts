@@ -1,8 +1,3 @@
-export const workflowStatus = {
-  draft: 'draft',
-  published: 'published',
-} as const;
-
 export const workflowRunStatus = {
   completed: 'completed',
   deadLetter: 'dead_letter',
@@ -28,7 +23,6 @@ export const workflowRoutes = {
 export const compareSelectMinWidth = 220;
 export const runTableEmptyColSpan = 6;
 export const editorHeight = 'calc(100vh - 380px)';
-export const monospaceFontFamily = 'monospace';
 
 export const starterWorkflowDefinition = `format_version = 1
 code = "example-workflow"

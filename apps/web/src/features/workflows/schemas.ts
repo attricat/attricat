@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import { revisionStatusSchema } from '../../api/revisionStatus';
 
 export const workflowSchema = z.object({
   id: z.uuid(),
   code: z.string(),
   name: z.string(),
   version: z.number().int().positive(),
-  status: z.enum(['draft', 'published']),
+  status: revisionStatusSchema,
   definition: z.string(),
   definition_hash: z.string(),
   compiled_plan: z.unknown(),

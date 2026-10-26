@@ -339,7 +339,6 @@
       "notRun_one": "{{count}} record not changed",
       "notRun_other": "{{count}} records not changed",
       "stoppedAt": "The edit stopped at",
-      "failure": "{{code}}: {{message}}",
       "appliedRecords_one": "Show the changed record",
       "appliedRecords_other": "Show the {{count}} changed records",
       "notRunRecords_one": "Show the record that was not changed",
@@ -878,10 +877,6 @@
     "revisionHistory": "Revision history",
     "version": "Version",
     "definitionHash": "Definition hash",
-    "revisionStatuses": {
-      "draft": "Draft",
-      "published": "Published"
-    },
     "versionNumber": "v{{version}}",
     "versionOption": "v{{version}} ({{status}})",
     "diffTitle": "{{original}} → {{modified}}"
@@ -1318,8 +1313,6 @@
     "runDiagnostics": "Run diagnostics",
     "status": "Status",
     "statuses": {
-      "draft": "Draft",
-      "published": "Published",
       "pending": "Pending",
       "leased": "Leased",
       "completed": "Completed",
@@ -1750,7 +1743,11 @@
     "loadMore": "Load more",
     "loading": "Loading...",
     "groupedNotifications_one": "{{count}} grouped notification",
-    "groupedNotifications_other": "{{count}} grouped notifications"
+    "groupedNotifications_other": "{{count}} grouped notifications",
+    "revisionStatuses": {
+      "draft": "Draft",
+      "published": "Published"
+    }
   },
   "inspector": {
     "apiRestarting": "API restarting…",

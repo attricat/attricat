@@ -1,3 +1,4 @@
+import { revisionStatuses } from '../../api/revisionStatus';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Box, Tab, Tabs, Typography } from '@mui/material';
 import { useState } from 'react';
@@ -20,7 +21,6 @@ import { BlueprintVersionMetadata } from './BlueprintVersionMetadata';
 import {
   archiveRemovalDisposition,
   blueprintDetailTabs,
-  blueprintStatuses,
   blueprintExtensionContextVersion,
   type BlueprintDetailTab,
 } from './constants';
@@ -80,7 +80,7 @@ export const BlueprintDetailPage = ({
   // or the latest draft before anything is published.
   const metadataVersion = (
     revisionItems.find(
-      (revision) => revision.status === blueprintStatuses.published,
+      (revision) => revision.status === revisionStatuses.published,
     ) ?? blueprint
   )?.version;
   const metadata = useQuery({

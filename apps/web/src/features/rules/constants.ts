@@ -37,7 +37,6 @@ export const RECORD_RULE_RUN_POLL_MS = 1000;
  * edit's events start; they are created asynchronously.
  */
 export const RECORD_RULE_CHECK_WATCH_MS = 15_000;
-export const RULE_STATUS_PUBLISHED = 'published';
 export const RULE_HAS_EXISTING_VIOLATIONS =
   'rule_has_existing_violations' satisfies ApiErrorCode;
 /** Characters of a record ID shown where no display label is loaded. */

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { revisionStatusSchema } from '../../api/revisionStatus';
 
 const reusableAttributeValueTypeSchema = z.enum([
   'string',
@@ -34,7 +35,7 @@ export const reusableAttributeSchema = z.object({
   readonly: z.boolean(),
   searchable: z.boolean(),
   facetable: z.boolean(),
-  status: z.enum(['draft', 'published']),
+  status: revisionStatusSchema,
   published_at: z.string().datetime().nullable(),
   definition: z.string(),
 });

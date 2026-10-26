@@ -1,6 +1,5 @@
 import {
   Box,
-  Chip,
   Paper,
   Table,
   TableBody,
@@ -9,7 +8,8 @@ import {
   TableRow,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { monospaceFontFamily, workflowStatus } from './constants';
+import { monoFontFamily } from '../../app/theme';
+import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
 import type { Workflow } from './schemas';
 
@@ -37,15 +37,7 @@ export const WorkflowRevisionTable = ({
               <TableRow key={revision.version}>
                 <TableCell>v{revision.version}</TableCell>
                 <TableCell>
-                  <Chip
-                    color={
-                      revision.status === workflowStatus.published
-                        ? 'success'
-                        : 'warning'
-                    }
-                    label={t(`workflows.statuses.${revision.status}`)}
-                    size="small"
-                  />
+                  <RevisionStatusChip size="small" status={revision.status} />
                 </TableCell>
                 <TableCell>
                   <Timestamp
@@ -59,7 +51,7 @@ export const WorkflowRevisionTable = ({
                     value={revision.published_at}
                   />
                 </TableCell>
-                <TableCell sx={{ fontFamily: monospaceFontFamily }}>
+                <TableCell sx={{ fontFamily: monoFontFamily }}>
                   {revision.definition_hash}
                 </TableCell>
               </TableRow>

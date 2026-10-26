@@ -1,3 +1,4 @@
+import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Chip, Stack, Tab, Tabs, Typography } from '@mui/material';
 import { useState } from 'react';
@@ -22,11 +23,7 @@ import {
   publishWorkflowRevision,
   runWorkflowNow,
 } from './api';
-import {
-  workflowDetailTab,
-  type WorkflowDetailTab,
-  workflowStatus,
-} from './constants';
+import { workflowDetailTab, type WorkflowDetailTab } from './constants';
 import { workflowQueryKeys } from './queryKeys';
 import { WorkflowActions } from './WorkflowActions';
 import { WorkflowComparePanel } from './WorkflowComparePanel';
@@ -147,12 +144,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       />
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
         <Chip label={current.code} variant="outlined" />
-        <Chip
-          color={
-            current.status === workflowStatus.published ? 'success' : 'warning'
-          }
-          label={t(`workflows.statuses.${current.status}`)}
-        />
+        <RevisionStatusChip status={current.status} />
         <Chip
           color={current.enabled_version === null ? 'default' : 'success'}
           label={

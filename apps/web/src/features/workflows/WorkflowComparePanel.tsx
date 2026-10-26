@@ -27,7 +27,8 @@ export const WorkflowComparePanel = ({
       >
         {revisions.map((revision) => (
           <MenuItem key={revision.version} value={revision.version}>
-            v{revision.version} ({t(`workflows.statuses.${revision.status}`)})
+            v{revision.version} (
+            {t(`common.revisionStatuses.${revision.status}`)})
           </MenuItem>
         ))}
       </TextField>

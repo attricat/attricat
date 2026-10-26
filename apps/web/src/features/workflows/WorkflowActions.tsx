@@ -10,7 +10,8 @@ import {
   PowerOffIcon,
   SendIcon,
 } from 'lucide-react';
-import { workflowRoutes, workflowStatus } from './constants';
+import { workflowRoutes } from './constants';
+import { revisionStatuses } from '../../api/revisionStatus';
 import type { Workflow } from './schemas';
 
 const WorkflowRevisionLink = Link as unknown as ComponentType<{
@@ -49,7 +50,7 @@ export const WorkflowActions = ({
       >
         {t('workflows.newRevision')}
       </Button>
-      {current.status === workflowStatus.draft && (
+      {current.status === revisionStatuses.draft && (
         <Button
           disabled={publish.isPending}
           onClick={() => publish.mutate(current.version)}
@@ -59,7 +60,7 @@ export const WorkflowActions = ({
           {t('workflows.publish')}
         </Button>
       )}
-      {current.status === workflowStatus.published && !isEnabledRevision && (
+      {current.status === revisionStatuses.published && !isEnabledRevision && (
         <Button
           disabled={enable.isPending}
           onClick={() => enable.mutate(current.version)}

@@ -17,7 +17,7 @@ import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { FlaskConicalIcon, PlayIcon } from 'lucide-react';
 import type { Rule } from './api';
-import { RULE_STATUS_PUBLISHED } from './constants';
+import { revisionStatuses } from '../../api/revisionStatus';
 import { RuleLifecycleChip } from './RuleCells';
 
 export const RulesSection = ({
@@ -81,7 +81,8 @@ export const RulesSection = ({
                     </TableCell>
                     <TableCell>v{rule.version}</TableCell>
                     <TableCell>
-                      {canManage && rule.status === RULE_STATUS_PUBLISHED ? (
+                      {canManage &&
+                      rule.status === revisionStatuses.published ? (
                         <FormControlLabel
                           control={
                             <Switch

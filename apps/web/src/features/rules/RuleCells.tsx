@@ -2,7 +2,8 @@ import { Box, Chip } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import type { Rule } from './api';
-import { RULE_STATUS_PUBLISHED, SHORT_RECORD_ID_LENGTH } from './constants';
+import { SHORT_RECORD_ID_LENGTH } from './constants';
+import { revisionStatuses } from '../../api/revisionStatus';
 import { ruleRevisionKey, type RuleRevisions } from './ruleRevisions';
 
 /** Names a rule revision, linking to its definition once it is known. */
@@ -43,7 +44,7 @@ export const RuleLifecycleChip = ({ rule }: { rule: Rule }) => {
       label={
         enabled
           ? t('rules.enabled')
-          : rule.status === RULE_STATUS_PUBLISHED
+          : rule.status === revisionStatuses.published
             ? t('rules.disabled')
             : t('rules.draft')
       }

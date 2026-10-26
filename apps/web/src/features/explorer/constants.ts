@@ -49,8 +49,6 @@ export const publicationStatuses = {
   published: 'published',
 } as const;
 
-export const publishedRevisionStatus = 'published';
-
 export const relationshipPathSortErrorCode =
   'relationship_path_sort_requires_single_result_version' satisfies ApiErrorCode;
 /** Returned when a query names fields the searched blueprint lacks. */

@@ -4,7 +4,7 @@ import {
   getSafeBlueprintMigrationImpact,
   listBlueprintMigrationBatches,
 } from './api';
-import { blueprintStatuses } from './constants';
+import { revisionStatuses } from '../../api/revisionStatus';
 import {
   ACTIVE_MIGRATION_POLL_INTERVAL_MS,
   hasActiveMigrationForVersion,
@@ -23,7 +23,7 @@ export const useSafeBlueprintMigration = (
   revisions: readonly Blueprint[],
 ) => {
   const latestPublished = revisions.find(
-    (revision) => revision.status === blueprintStatuses.published,
+    (revision) => revision.status === revisionStatuses.published,
   );
   const targetVersion = latestPublished?.version;
   const sourceVersion =
@@ -32,7 +32,7 @@ export const useSafeBlueprintMigration = (
       : revisions.find(
           (revision) =>
             revision.version < targetVersion &&
-            revision.status === blueprintStatuses.published,
+            revision.status === revisionStatuses.published,
         )?.version;
   const migrationBatches = useQuery({
     queryKey: blueprintQueryKeys.migrationBatches(blueprintId),

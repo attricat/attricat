@@ -1,3 +1,4 @@
+import { revisionStatuses } from '../../api/revisionStatus';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -19,7 +20,6 @@ import {
   DEFAULT_GROUP_POSITION,
   GROUP_POSITION_STEP,
   MIN_GROUP_POSITION,
-  STATUS_PUBLISHED,
 } from './constants';
 import { reusableAttributeQueryKeys } from './queryKeys';
 import { errorMessage } from '../../api/errors';
@@ -74,7 +74,7 @@ export const ReusableAttributeGroupDialog = ({
     },
   });
   const published = attributes.filter(
-    (attribute) => attribute.status === STATUS_PUBLISHED,
+    (attribute) => attribute.status === revisionStatuses.published,
   );
   return (
     <Dialog

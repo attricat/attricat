@@ -22,7 +22,8 @@ import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
 import { listWorkflowRuns, listWorkflows, type Workflow } from './api';
 import { workflowQueryKeys } from './queryKeys';
-import { workflowRoutes, workflowRunStatus, workflowStatus } from './constants';
+import { workflowRoutes, workflowRunStatus } from './constants';
+import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
 import { EmptyState } from '../../components/EmptyState';
 import { WorkflowIcon } from '../../components/systemIcons';
@@ -169,14 +170,9 @@ export const WorkflowsPage = () => {
                       </TableCell>
                       <TableCell>
                         <Stack direction="row" spacing={1}>
-                          <Chip
-                            color={
-                              workflow.status === workflowStatus.published
-                                ? 'success'
-                                : 'warning'
-                            }
-                            label={t(`workflows.statuses.${workflow.status}`)}
+                          <RevisionStatusChip
                             size="small"
+                            status={workflow.status}
                           />
                           <Typography>v{workflow.version}</Typography>
                         </Stack>

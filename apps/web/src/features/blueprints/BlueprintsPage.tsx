@@ -21,7 +21,8 @@ import { PageContainer } from '../../components/PageContainer';
 import { RouterButton } from '../../components/RouterLink';
 import { PageHeader } from '../../components/PageHeader';
 import { listBlueprints } from './api';
-import { blueprintFilterWidth, blueprintStatusChipColor } from './constants';
+import { blueprintFilterWidth } from './constants';
+import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
 import { blueprintQueryKeys } from './queryKeys';
 import { EmptyState } from '../../components/EmptyState';
@@ -138,12 +139,9 @@ export const BlueprintsPage = () => {
                       })}
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        color={blueprintStatusChipColor(blueprint.status)}
-                        label={t(
-                          `blueprints.revisionStatuses.${blueprint.status}`,
-                        )}
+                      <RevisionStatusChip
                         size="small"
+                        status={blueprint.status}
                       />
                     </TableCell>
                     <TableCell>

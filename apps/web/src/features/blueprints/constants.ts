@@ -1,12 +1,4 @@
-import type { Blueprint, BlueprintMigrationBatchStatus } from './schemas';
-
-export const blueprintStatuses = {
-  draft: 'draft',
-  published: 'published',
-} as const satisfies Record<string, Blueprint['status']>;
-
-export const blueprintStatusChipColor = (status: Blueprint['status']) =>
-  status === blueprintStatuses.published ? 'success' : 'warning';
+import type { BlueprintMigrationBatchStatus } from './schemas';
 
 export const migrationBatchStatuses = {
   draft: 'draft',

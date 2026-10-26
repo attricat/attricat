@@ -1,5 +1,5 @@
 import { Box, Paper, Typography } from '@mui/material';
-import { monospaceFontFamily } from './constants';
+import { monoFontFamily } from '../../app/theme';
 
 export const WorkflowSourcePanel = ({
   definition,
@@ -16,7 +16,7 @@ export const WorkflowSourcePanel = ({
       aria-label={title}
       component="pre"
       sx={{
-        fontFamily: monospaceFontFamily,
+        fontFamily: monoFontFamily,
         m: 0,
         mt: title ? 1 : 0,
         overflow: 'auto',

@@ -351,7 +351,6 @@
       "notRun_many": "Pominięto {{count}} rekordów",
       "notRun_other": "Pominięto {{count}} rekordu",
       "stoppedAt": "Edycja zatrzymała się na rekordzie",
-      "failure": "{{code}}: {{message}}",
       "appliedRecords_one": "Pokaż zmieniony rekord",
       "appliedRecords_few": "Pokaż zmienione rekordy ({{count}})",
       "appliedRecords_many": "Pokaż zmienione rekordy ({{count}})",
@@ -926,10 +925,6 @@
     "revisionHistory": "Historia wersji",
     "version": "Wersja",
     "definitionHash": "Skrót definicji",
-    "revisionStatuses": {
-      "draft": "Szkic",
-      "published": "Opublikowany"
-    },
     "versionNumber": "v{{version}}",
     "versionOption": "v{{version}} ({{status}})",
     "diffTitle": "{{original}} → {{modified}}"
@@ -1378,8 +1373,6 @@
     "runDiagnostics": "Diagnostyka uruchomień",
     "status": "Stan",
     "statuses": {
-      "draft": "Szkic",
-      "published": "Opublikowany",
       "pending": "Oczekujący",
       "leased": "Przydzielony",
       "completed": "Ukończony",
@@ -1826,7 +1819,11 @@
     "groupedNotifications_one": "{{count}} zgrupowane powiadomienie",
     "groupedNotifications_few": "{{count}} zgrupowane powiadomienia",
     "groupedNotifications_many": "{{count}} zgrupowanych powiadomień",
-    "groupedNotifications_other": "{{count}} zgrupowanych powiadomień"
+    "groupedNotifications_other": "{{count}} zgrupowanych powiadomień",
+    "revisionStatuses": {
+      "draft": "Szkic",
+      "published": "Opublikowany"
+    }
   },
   "inspector": {
     "apiRestarting": "Ponowne uruchamianie API…",

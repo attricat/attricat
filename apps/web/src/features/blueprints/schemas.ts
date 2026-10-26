@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { revisionStatusSchema } from '../../api/revisionStatus';
 import {
   attributeSchema as recordAttributeSchema,
   blueprintSchema as recordBlueprintSchema,
@@ -24,7 +25,7 @@ export const blueprintSchema = z.object({
   includes: jsonValueSchema,
   views: recordBlueprintSchema.shape.views,
   record_schema: recordBlueprintSchema.shape.record_schema,
-  status: z.enum(['draft', 'published']),
+  status: revisionStatusSchema,
   published_at: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),

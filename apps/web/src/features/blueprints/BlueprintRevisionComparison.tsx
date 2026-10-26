@@ -41,7 +41,7 @@ const RevisionSelect = ({
         <MenuItem key={revision.version} value={revision.version}>
           {t('blueprints.versionOption', {
             version: revision.version,
-            status: t(`blueprints.revisionStatuses.${revision.status}`),
+            status: t(`common.revisionStatuses.${revision.status}`),
           })}
         </MenuItem>
       ))}
@@ -62,7 +62,7 @@ export const BlueprintRevisionComparison = ({
   const revisionTitle = ({ version, status }: Blueprint) =>
     t('blueprints.revisionTitle', {
       version,
-      status: t(`blueprints.revisionStatuses.${status}`),
+      status: t(`common.revisionStatuses.${status}`),
     });
 
   return (

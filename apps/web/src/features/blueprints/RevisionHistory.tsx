@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import {
   Box,
   Button,
-  Chip,
   Paper,
   Table,
   TableBody,
@@ -13,7 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { Blueprint } from './api';
-import { blueprintStatusChipColor } from './constants';
+import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
 import { useCanOn } from '../auth/useCan';
 import { capabilities, accessTargetKinds } from '../auth/capabilities';
@@ -57,11 +56,7 @@ export const RevisionHistory = ({
                   })}
                 </TableCell>
                 <TableCell>
-                  <Chip
-                    color={blueprintStatusChipColor(revision.status)}
-                    label={t(`blueprints.revisionStatuses.${revision.status}`)}
-                    size="small"
-                  />
+                  <RevisionStatusChip size="small" status={revision.status} />
                 </TableCell>
                 <TableCell>
                   <Timestamp

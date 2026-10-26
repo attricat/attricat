@@ -1,5 +1,3 @@
-export const STATUS_PUBLISHED = 'published';
-export const STATUS_DRAFT = 'draft';
 export const DEFAULT_GROUP_POSITION = '0';
 export const MIN_GROUP_POSITION = 0;
 export const GROUP_POSITION_STEP = 1;

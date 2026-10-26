@@ -1,7 +1,8 @@
+import { revisionStatuses } from '../../api/revisionStatus';
+import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import {
   Box,
   Button,
-  Chip,
   Paper,
   Table,
   TableBody,
@@ -15,11 +16,7 @@ import { PencilIcon, SendIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
 import type { ReusableAttribute } from './api';
-import {
-  ATTRIBUTES_TABLE_COLUMN_COUNT,
-  STATUS_DRAFT,
-  STATUS_PUBLISHED,
-} from './constants';
+import { ATTRIBUTES_TABLE_COLUMN_COUNT } from './constants';
 import { lexiconText } from '../lexicon/lexicon';
 import { ValueTypeLabel } from '../records/components/ValueTypeLabel';
 import { EmptyState } from '../../components/EmptyState';
@@ -72,15 +69,7 @@ export const ReusableAttributesTable = ({
                   <ValueTypeLabel valueType={attribute.value_type} />
                 </TableCell>
                 <TableCell>
-                  <Chip
-                    color={
-                      attribute.status === STATUS_PUBLISHED
-                        ? 'success'
-                        : 'warning'
-                    }
-                    label={attribute.status}
-                    size="small"
-                  />
+                  <RevisionStatusChip size="small" status={attribute.status} />
                 </TableCell>
                 <TableCell align="right">
                   {canEdit && (
@@ -93,7 +82,7 @@ export const ReusableAttributesTable = ({
                       {t('reusableAttributes.edit')}
                     </RouterButton>
                   )}
-                  {canEdit && attribute.status === STATUS_DRAFT && (
+                  {canEdit && attribute.status === revisionStatuses.draft && (
                     <Button
                       disabled={publishing}
                       onClick={() => onPublish(attribute.id)}
