@@ -451,6 +451,7 @@
     "selectBlueprint": "Select a blueprint",
     "loadBlueprint": "Load blueprint",
     "loadingBlueprint": "Loading blueprint...",
+    "saving": "Saving…",
     "couldNotLoadBlueprints": "Could not load blueprints.",
     "statusUnknown": "Unknown or retired status: {{value}}",
     "statusTerminal": "No status transitions are available.",

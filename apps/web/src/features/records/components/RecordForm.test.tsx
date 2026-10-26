@@ -134,6 +134,19 @@ describe('RecordForm', () => {
     expect(document.activeElement).toBe(titleBox());
   });
 
+  it('says it is saving, not loading, while the values are submitted', () => {
+    renderForm({
+      blueprint: blueprint([attribute('title')]),
+      isSubmitting: true,
+    });
+    const submit = screen.getByRole('button', { name: 'Saving…' });
+    expect(submit).toHaveProperty('disabled', true);
+    expect(
+      screen.queryByRole('button', { name: 'Loading blueprint...' }),
+    ).toBeNull();
+    expect(titleBox()).toHaveProperty('disabled', true);
+  });
+
   it('focuses the first field a migration asks to review', () => {
     renderForm({
       blueprint: blueprint([attribute('title'), attribute('price')]),

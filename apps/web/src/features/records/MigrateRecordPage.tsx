@@ -201,7 +201,7 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
           pendingConfirmations={pendingConfirmations}
           requiredAttributes={requiredMigrationAttributes(preview.data.issues)}
           initialValues={initialFields}
-          isLoadingBlueprint={migrate.isPending}
+          isSubmitting={migrate.isPending}
           onCancel={() =>
             void navigate({
               to: '/records/$recordId',

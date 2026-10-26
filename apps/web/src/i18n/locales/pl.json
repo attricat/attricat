@@ -467,6 +467,7 @@
     "selectBlueprint": "Wybierz schemat",
     "loadBlueprint": "Wczytaj schemat",
     "loadingBlueprint": "Wczytywanie schematu...",
+    "saving": "Zapisywanie…",
     "couldNotLoadBlueprints": "Nie udało się wczytać schematów.",
     "statusUnknown": "Nieznany lub wycofany status: {{value}}",
     "statusTerminal": "Brak dostępnych zmian statusu.",

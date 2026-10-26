@@ -151,6 +151,8 @@ type RecordFormProps = {
   defaultContextId?: string | null;
   existingValues?: FormAttributeValue[];
   isLoadingBlueprint?: boolean;
+  /** The entered values are being saved. */
+  isSubmitting?: boolean;
   showAllAttributes?: boolean;
   /** Lays out every editable field instead of the blueprint's detail view. */
   layout?: ViewDefinition;
@@ -198,6 +200,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       defaultContextId = null,
       existingValues = [],
       isLoadingBlueprint = false,
+      isSubmitting = false,
       showAllAttributes: showAllProp = false,
       layout,
       migrationReviews = {},
@@ -382,6 +385,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     };
     // The submit button that was used, read when the form submits.
     const addAnother = useRef(false);
+    const busy = isLoadingBlueprint || isSubmitting;
     const [submitAttempted, setSubmitAttempted] = useState(false);
     const [confirmingBlueprintChange, setConfirmingBlueprintChange] =
       useState(false);
@@ -392,7 +396,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
         fields: initialFields,
       },
       onSubmit: ({ value }) => {
-        if (isLoadingBlueprint) return;
+        if (busy) return;
         if (!blueprint) {
           onLoadBlueprint?.(value.blueprintCode);
           return;
@@ -527,7 +531,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     );
     const editorContext = {
       statusParentContextIds: noStatusParentContextIds,
-      disabled: isLoadingBlueprint,
+      disabled: busy,
       contextId,
       defaultContextId,
       existingValues,
@@ -599,7 +603,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           // Keys bubble from the form's dialogs through their portals.
           if (!event.currentTarget.contains(event.target as Node)) return;
           event.preventDefault();
-          if (!isLoadingBlueprint) submit(false);
+          if (!busy) submit(false);
         }}
         onSubmit={(event) => {
           event.preventDefault();
@@ -653,15 +657,13 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           onDiscard={draft.discard}
           onRestore={restoreDraft}
         />
-        {guardUnsavedChanges &&
-          !isLoadingBlueprint &&
-          (fieldsChanged || hasQueuedFiles) && (
-            <UnsavedChangesGuard
-              description={t('records.unsavedFormDescription')}
-              onDiscard={draft.clear}
-              title={t('records.unsavedFormTitle')}
-            />
-          )}
+        {guardUnsavedChanges && !busy && (fieldsChanged || hasQueuedFiles) && (
+          <UnsavedChangesGuard
+            description={t('records.unsavedFormDescription')}
+            onDiscard={draft.clear}
+            title={t('records.unsavedFormTitle')}
+          />
+        )}
         <Stack spacing={VIEW_EDIT_LAYOUT_SPACING}>
           {(error ||
             formError ||
@@ -709,7 +711,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                 })}
               </Typography>
               <Button
-                disabled={isLoadingBlueprint}
+                disabled={busy}
                 onClick={() =>
                   fieldsChanged || hasQueuedFiles
                     ? setConfirmingBlueprintChange(true)
@@ -803,12 +805,12 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
               {t('records.fieldsChanged', { count: changedCodes.size })}
             </Typography>
           )}
-          <Button disabled={isLoadingBlueprint} onClick={onCancel}>
+          <Button disabled={busy} onClick={onCancel}>
             {t('common.cancel')}
           </Button>
           {blueprint && addAnotherLabel && (
             <Button
-              disabled={isLoadingBlueprint}
+              disabled={busy}
               onClick={() => submit(true)}
               variant="outlined"
             >
@@ -817,11 +819,15 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           )}
           <Button
             aria-keyshortcuts={submitShortcut}
-            disabled={isLoadingBlueprint}
+            disabled={busy}
             type="submit"
             variant="contained"
           >
-            {isLoadingBlueprint ? t('records.loadingBlueprint') : submitLabel}
+            {isLoadingBlueprint
+              ? t('records.loadingBlueprint')
+              : isSubmitting
+                ? t('records.saving')
+                : submitLabel}
           </Button>
         </FormActionBar>
       </Paper>
