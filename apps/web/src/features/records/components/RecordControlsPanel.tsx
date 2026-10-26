@@ -1,7 +1,7 @@
+import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import {
   Box,
-  Button,
   Chip,
   CircularProgress,
   Stack,
@@ -239,13 +239,13 @@ export const RecordControlsPanel = ({
             ))}
           </Box>
           {approvals.hasNextPage && (
-            <Button
-              disabled={approvals.isFetchingNextPage}
-              onClick={() => void approvals.fetchNextPage()}
+            <LoadMoreButton
+              compact
+              isLoading={approvals.isFetchingNextPage}
+              label={t('records.recordControls.loadMoreApprovals')}
+              onLoadMore={() => void approvals.fetchNextPage()}
               sx={{ mt: 1 }}
-            >
-              {t('records.recordControls.loadMoreApprovals')}
-            </Button>
+            />
           )}
         </Box>
       )}
@@ -264,13 +264,13 @@ export const RecordControlsPanel = ({
             ))}
           </Box>
           {holds.hasNextPage && (
-            <Button
-              disabled={holds.isFetchingNextPage}
-              onClick={() => void holds.fetchNextPage()}
+            <LoadMoreButton
+              compact
+              isLoading={holds.isFetchingNextPage}
+              label={t('records.recordControls.loadMoreHolds')}
+              onLoadMore={() => void holds.fetchNextPage()}
               sx={{ mt: 1 }}
-            >
-              {t('records.recordControls.loadMoreHolds')}
-            </Button>
+            />
           )}
         </Box>
       )}

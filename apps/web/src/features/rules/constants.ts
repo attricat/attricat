@@ -48,8 +48,7 @@ export const ruleRunStatuses = {
   deadLetter: 'dead_letter',
   cancelled: 'cancelled',
 } as const;
-type RuleRunStatus =
-  (typeof ruleRunStatuses)[keyof typeof ruleRunStatuses];
+type RuleRunStatus = (typeof ruleRunStatuses)[keyof typeof ruleRunStatuses];
 /** Run statuses that have not finished evaluating. */
 export const ACTIVE_RULE_RUN_STATUSES: readonly RuleRunStatus[] = [
   ruleRunStatuses.pending,

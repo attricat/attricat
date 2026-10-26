@@ -1,3 +1,4 @@
+import { LoadMoreButton } from '../../components/LoadMoreButton';
 import {
   useInfiniteQuery,
   useQuery,
@@ -197,12 +198,12 @@ export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
         ))}
       </Box>
       {comments.hasNextPage && (
-        <Button
-          disabled={comments.isFetchingNextPage}
-          onClick={() => void comments.fetchNextPage()}
-        >
-          {t('comments.loadMore')}
-        </Button>
+        <LoadMoreButton
+          compact
+          isLoading={comments.isFetchingNextPage}
+          label={t('comments.loadMore')}
+          onLoadMore={() => void comments.fetchNextPage()}
+        />
       )}
     </Box>
   );

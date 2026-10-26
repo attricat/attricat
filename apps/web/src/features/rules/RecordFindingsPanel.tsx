@@ -1,3 +1,4 @@
+import { LoadMoreButton } from '../../components/LoadMoreButton';
 import {
   useInfiniteQuery,
   useMutation,
@@ -385,13 +386,13 @@ export const RecordFindingsPanel = ({
         )
       )}
       {findings.hasNextPage && (
-        <Button
-          disabled={findings.isFetchingNextPage}
-          onClick={() => void findings.fetchNextPage()}
+        <LoadMoreButton
+          compact
+          isLoading={findings.isFetchingNextPage}
+          label={t('rules.recordFindings.loadMore')}
+          onLoadMore={() => void findings.fetchNextPage()}
           sx={{ mt: 1 }}
-        >
-          {t('rules.recordFindings.loadMore')}
-        </Button>
+        />
       )}
     </Box>
   );
