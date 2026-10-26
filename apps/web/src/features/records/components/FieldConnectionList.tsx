@@ -1,4 +1,4 @@
-import { Link, Stack, Typography } from '@mui/material';
+import { Stack, Typography } from '@mui/material';
 import { Fragment } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import type { Attribute } from '../api';
@@ -6,6 +6,7 @@ import {
   attributeConnectionKinds,
   type AttributeConnection,
 } from '../attributeConnections';
+import { FieldRevealLink } from '../../views/components/FieldRevealLink';
 import { attributeLabel } from '../recordDisplay';
 
 /** Fields named before the rest are summed up as a count. */
@@ -25,14 +26,7 @@ const FieldName = ({
   const attribute = attributes.find((item) => item.code === code);
   const label = attribute ? attributeLabel(attribute) : code;
   return onReveal ? (
-    <Link
-      component="button"
-      onClick={() => onReveal(code)}
-      sx={{ font: 'inherit', verticalAlign: 'baseline' }}
-      type="button"
-    >
-      {label}
-    </Link>
+    <FieldRevealLink onClick={() => onReveal(code)}>{label}</FieldRevealLink>
   ) : (
     <>{label}</>
   );

@@ -14,13 +14,16 @@ import {
 } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { PlayIcon } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { EmptyState } from '../../components/EmptyState';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { RuleIcon } from '../../components/systemIcons';
 import { Timestamp } from '../../time/Timestamp';
+import { attributeLabel } from '../records/recordDisplay';
+import { FieldRevealLink } from '../views/components/FieldRevealLink';
+import { useRevealField } from '../views/fieldReveal';
 import { useCan } from '../auth/useCan';
 import {
   acknowledgeFinding,
@@ -71,6 +74,7 @@ const FindingItem = ({
   contextCodes,
   finding,
   onAcknowledge,
+  onRevealField,
   revisions,
 }: {
   acknowledging: boolean;
@@ -79,6 +83,8 @@ const FindingItem = ({
   contextCodes: readonly string[] | undefined;
   finding: Finding;
   onAcknowledge: () => void;
+  /** Leads to the field the finding is about, where the page shows it. */
+  onRevealField?: (code: string) => void;
   revisions: RuleRevisions;
 }) => {
   const { t } = useTranslation();
@@ -91,11 +97,22 @@ const FindingItem = ({
   const rule = revisions.get(
     ruleRevisionKey(finding.rule_id, finding.rule_version),
   );
-  const message = findingMessage(
-    finding.message,
-    evidence.success ? evidence.data.attribute_code : undefined,
-    attributes,
-  );
+  const attributeCode = evidence.success
+    ? evidence.data.attribute_code
+    : undefined;
+  const message = findingMessage(finding.message, attributeCode, attributes);
+  const attribute = attributes.find((item) => item.code === attributeCode);
+  const fieldLink =
+    attribute && onRevealField
+      ? (label: string) => (
+          <FieldRevealLink onClick={() => onRevealField(attribute.code)}>
+            {label}
+          </FieldRevealLink>
+        )
+      : undefined;
+  const label = attribute && attributeLabel(attribute);
+  // The field's label links where the message names it, or after it.
+  const messageParts = label ? message.split(label) : [message];
   return (
     <Box
       component="li"
@@ -145,7 +162,23 @@ const FindingItem = ({
           )}
         </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          {message}
+          {fieldLink && label
+            ? messageParts.map((part, index) => (
+                <Fragment key={index}>
+                  {index > 0 && fieldLink(label)}
+                  {part}
+                </Fragment>
+              ))
+            : message}
+          {fieldLink && label && messageParts.length === 1 && (
+            <>
+              {' '}
+              <Trans
+                components={{ field: fieldLink(label) }}
+                i18nKey="rules.recordFindings.aboutField"
+              />
+            </>
+          )}
         </Typography>
         <Typography
           component="p"
@@ -209,6 +242,7 @@ export const RecordFindingsPanel = ({
   const client = useQueryClient();
   const canRead = useCan(capabilities.rulesRead);
   const canManage = useCan(capabilities.rulesManage);
+  const revealField = useRevealField();
   const rules = useQuery({ ...ruleDefinitionsOptions(), enabled: canRead });
   const findings = useInfiniteQuery({
     ...recordFindingsOptions(recordId),
@@ -323,6 +357,7 @@ export const RecordFindingsPanel = ({
               contextCodes={contextCodes}
               finding={finding}
               onAcknowledge={() => acknowledge.mutate(finding.id)}
+              onRevealField={revealField ?? undefined}
               revisions={revisions}
             />
           ))}

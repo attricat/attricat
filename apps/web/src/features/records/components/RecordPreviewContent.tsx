@@ -1,5 +1,5 @@
 import { Alert, Box, Paper, Typography } from '@mui/material';
-import { useRef, useState, type Ref } from 'react';
+import { useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
 import {
@@ -13,11 +13,6 @@ import {
 } from '../../extensions/constants';
 import { useExtensionRuntime } from '../../extensions/useExtensionRuntime';
 import { RecordView } from '../../views/components/RecordView';
-import {
-  FieldRevealContext,
-  RevealFieldContext,
-  useFieldReveal,
-} from '../../views/fieldReveal';
 import { recordHeadingComponentId } from '../../views/components/blocks/RecordHeadingDefinition';
 import type {
   Attribute,
@@ -70,11 +65,6 @@ export const RecordPreviewContent = ({
   const { t } = useTranslation();
   // Switching context would drop changes that are not saved yet.
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
-  // Leads from a field's diagnostics to the fields connected to it; an
-  // editable record's fields reveal their own.
-  const readOnlyFieldsRef = useRef<HTMLDivElement>(null);
-  const { request: revealRequest, reveal: revealField } =
-    useFieldReveal(readOnlyFieldsRef);
   const shownContextId = contextId ?? defaultContextId ?? undefined;
   const diagnostics = useBlueprintFieldDiagnostics({
     attributes: blueprint.attributes,
@@ -192,39 +182,35 @@ export const RecordPreviewContent = ({
               view={blueprint.blueprint.views.detail}
             />
           ) : (
-            <Box ref={readOnlyFieldsRef}>
-              <RevealFieldContext value={revealField}>
-                <FieldRevealContext value={revealRequest}>
+            <>
+              <RecordView
+                attributes={blueprint.attributes}
+                fallbackVisibilityScope="detail"
+                contextId={contextId}
+                recordId={recordId}
+                renderAttributeDecoration={renderAttributeDecoration}
+                renderAttributePanel={renderAttributePanel}
+                renderFilePanel={renderFilePanel}
+                values={resolved.values}
+                view={blueprint.blueprint.views.detail}
+                singleColumn={singleColumn}
+                skipComponentId={recordHeadingComponentId}
+              />
+              {(resolved.reusable_attributes?.length ?? 0) > 0 && (
+                <Box component="section" sx={{ mt: 4 }}>
+                  <Typography component="h2" variant="h6">
+                    {t('records.additionalAttributes')}
+                  </Typography>
                   <RecordView
-                    attributes={blueprint.attributes}
-                    fallbackVisibilityScope="detail"
+                    attributes={resolved.reusable_attributes}
                     contextId={contextId}
                     recordId={recordId}
-                    renderAttributeDecoration={renderAttributeDecoration}
-                    renderAttributePanel={renderAttributePanel}
-                    renderFilePanel={renderFilePanel}
-                    values={resolved.values}
-                    view={blueprint.blueprint.views.detail}
                     singleColumn={singleColumn}
-                    skipComponentId={recordHeadingComponentId}
+                    values={resolved.reusable_values ?? {}}
                   />
-                  {(resolved.reusable_attributes?.length ?? 0) > 0 && (
-                    <Box component="section" sx={{ mt: 4 }}>
-                      <Typography component="h2" variant="h6">
-                        {t('records.additionalAttributes')}
-                      </Typography>
-                      <RecordView
-                        attributes={resolved.reusable_attributes}
-                        contextId={contextId}
-                        recordId={recordId}
-                        singleColumn={singleColumn}
-                        values={resolved.reusable_values ?? {}}
-                      />
-                    </Box>
-                  )}
-                </FieldRevealContext>
-              </RevealFieldContext>
-            </Box>
+                </Box>
+              )}
+            </>
           )}
         </FieldDiagnosticsContext>
       </Paper>

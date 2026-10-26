@@ -52,6 +52,11 @@ import { RecordExtensionDrawer } from './RecordExtensionDrawer';
 import { RecordHeading } from './RecordHeading';
 import type { RecordInlineFieldsHandle } from './RecordInlineFields';
 import { RecordPreviewContent } from './RecordPreviewContent';
+import {
+  FieldRevealContext,
+  RevealFieldContext,
+  useFieldReveal,
+} from '../../views/fieldReveal';
 import { RecordPreviewTabs } from './RecordPreviewTabs';
 import { RecordPreviewToolbar } from './RecordPreviewToolbar';
 import { RecordControlsPanel } from './RecordControlsPanel';
@@ -118,6 +123,11 @@ export const RecordPreview = ({
   const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   const inlineFieldsRef = useRef<RecordInlineFieldsHandle>(null);
+  // Leads to a field from its save status, a connected field's diagnostics
+  // or a data quality finding about it.
+  const fieldsRef = useRef<HTMLDivElement>(null);
+  const { request: revealRequest, reveal: revealField } =
+    useFieldReveal(fieldsRef);
   // A link to the comments opens their tab.
   const [tab, setTab] = useState<RecordPreviewTabKey>(() =>
     showComments && window.location.hash === `#${commentsSectionId}`
@@ -228,206 +238,214 @@ export const RecordPreview = ({
           </RecordBlueprintHeaderActions>
         ),
         children: (
-          <>
-            {relationshipPickerToken && (
-              <RelationshipPickerActionBar
-                recordId={recordId}
-                pickerToken={relationshipPickerToken}
-              />
-            )}
-            {resolved.data && blueprint.data && (
-              <Box>
-                {/* Names the kind of record; a full page names it in its
-                    header's eyebrow instead. */}
-                {compact && (
-                  <Typography color="primary" component="p" variant="overline">
-                    <BlueprintLink
-                      blueprint={blueprint.data.blueprint}
-                      style={{ textDecoration: 'none' }}
-                    />
-                  </Typography>
-                )}
-                <RecordHeading
-                  attributes={blueprint.data.attributes}
-                  compact={compact}
-                  contextId={selectedContextId}
+          <RevealFieldContext value={revealField}>
+            <FieldRevealContext value={revealRequest}>
+              {relationshipPickerToken && (
+                <RelationshipPickerActionBar
                   recordId={recordId}
-                  values={resolved.data.values}
-                  view={blueprint.data.blueprint.views.detail}
+                  pickerToken={relationshipPickerToken}
                 />
-              </Box>
-            )}
-            <ApiErrorAlert error={actionError} sx={{ mt: 3 }} />
-            {blueprint.data && resolved.data && (
-              <ExtensionOutlet
-                context={{
-                  context_version: RECORD_HEADER_CONTEXT_VERSION,
-                  record_id: recordId,
-                  blueprint_id: blueprint.data.blueprint.id,
-                  blueprint_version: blueprint.data.blueprint.version,
-                }}
-                outlet="record_header_action"
-                runtimeScope={{
-                  blueprintId: blueprint.data.blueprint.id,
-                  blueprintVersion: blueprint.data.blueprint.version,
-                }}
-              />
-            )}
-            <RecordPreviewToolbar
-              blueprint={blueprint.data?.blueprint}
-              compact={compact}
-              recordId={recordId}
-              extensionPanelOpen={extensionPanelOpen}
-              onOpenExtensions={() => {
-                setAgentPanelOpen(false);
-                setExtensionPanelOpen(true);
-              }}
-              agentPanelOpen={agentPanelOpen}
-              onOpenAgent={() => {
-                setExtensionPanelOpen(false);
-                setAgentPanelOpen(true);
-              }}
-              schemaOutdated={schemaOutdated}
-              showExtensions={Boolean(loaded)}
-              canWrite={recordForm.data?.can_write === true}
-              canCreate={canCreateRecords}
-              canAskAgent={canAskAgent}
-              onDuplicate={() => setDuplicateOpen(true)}
-              canDelete={canDeleteRecords && Boolean(resolved.data)}
-              onDelete={() => setDeleteOpen(true)}
-              canPublish={canPublish}
-              publications={publications}
-            />
-            {contexts.isPending && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-                <CircularProgress
-                  aria-label={t('records.loadingContexts')}
-                  enableTrackSlot
-                />
-              </Box>
-            )}
-            <QueryErrorNotice
-              error={contexts.error}
-              isRetrying={contexts.isFetching}
-              onRetry={() => void contexts.refetch()}
-            />
-            {contexts.data && (
-              <>
-                {resolved.isPending && (
-                  <Box
-                    sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}
-                  >
-                    <CircularProgress
-                      aria-label={t('records.resolvingValues')}
-                      enableTrackSlot
-                    />
-                  </Box>
-                )}
-                <ApiErrorAlert error={resolved.error} sx={{ mt: 3 }} />
-                <ApiErrorAlert error={blueprint.error} sx={{ mt: 3 }} />
-                {resolved.data && blueprint.data && (
-                  // A single relationship shows its record on the full page;
-                  // a panel beside another page keeps to links.
-                  <KnownRecordLabelsContext value={knownLabels}>
-                    <RelatedRecordPreviewContext.Provider
-                      value={compact ? null : (contextId ?? null)}
+              )}
+              {resolved.data && blueprint.data && (
+                <Box>
+                  {/* Names the kind of record; a full page names it in its
+                    header's eyebrow instead. */}
+                  {compact && (
+                    <Typography
+                      color="primary"
+                      component="p"
+                      variant="overline"
                     >
-                      <RecordPreviewContent
-                        blueprint={blueprint.data}
-                        contextId={selectedContextId}
-                        contexts={contexts.data}
-                        defaultContextId={defaultContextId}
-                        recordId={recordId}
-                        // A cached form must not become the save baseline before
-                        // the opening refresh has completed.
-                        form={
-                          recordForm.isFetchedAfterMount
-                            ? recordForm.data
-                            : undefined
-                        }
-                        statusParentContextIds={statusParentContexts(
-                          contexts.data,
-                          contextId,
-                        )}
-                        statusTransitions={statusTransitions.data}
-                        inlineFieldsRef={inlineFieldsRef}
-                        onContextChange={setSelectedContext}
-                        resolved={resolved.data}
-                        singleColumn={compact}
+                      <BlueprintLink
+                        blueprint={blueprint.data.blueprint}
+                        style={{ textDecoration: 'none' }}
                       />
-                    </RelatedRecordPreviewContext.Provider>
-                  </KnownRecordLabelsContext>
-                )}
-              </>
-            )}
-            {resolvedRecord && (
-              <RecordPreviewTabs
-                onChange={setTab}
-                panelRef={tabPanelRef}
-                tabs={[
-                  ...(canReadRules
-                    ? [
-                        {
-                          key: recordPreviewTabs.dataQuality,
-                          label: t('rules.recordFindings.title'),
-                          content: (
-                            <RecordFindingsPanel
-                              attributes={blueprint.data?.attributes}
-                              blueprintId={resolvedRecord.blueprint_id}
-                              blueprintVersion={
-                                resolvedRecord.blueprint_version
-                              }
-                              contextCodes={contexts.data?.map(
-                                (context) => context.code,
-                              )}
-                              recordId={recordId}
-                            />
-                          ),
-                        },
-                      ]
-                    : []),
-                  ...(showComments
-                    ? [
-                        {
-                          key: recordPreviewTabs.comments,
-                          label: t('comments.title'),
-                          content: (
-                            <Suspense
-                              fallback={
-                                <CircularProgress
-                                  aria-label={t('comments.loading')}
-                                />
-                              }
-                            >
-                              <RecordCommentsPanel
-                                key={recordId}
+                    </Typography>
+                  )}
+                  <RecordHeading
+                    attributes={blueprint.data.attributes}
+                    compact={compact}
+                    contextId={selectedContextId}
+                    recordId={recordId}
+                    values={resolved.data.values}
+                    view={blueprint.data.blueprint.views.detail}
+                  />
+                </Box>
+              )}
+              <ApiErrorAlert error={actionError} sx={{ mt: 3 }} />
+              {blueprint.data && resolved.data && (
+                <ExtensionOutlet
+                  context={{
+                    context_version: RECORD_HEADER_CONTEXT_VERSION,
+                    record_id: recordId,
+                    blueprint_id: blueprint.data.blueprint.id,
+                    blueprint_version: blueprint.data.blueprint.version,
+                  }}
+                  outlet="record_header_action"
+                  runtimeScope={{
+                    blueprintId: blueprint.data.blueprint.id,
+                    blueprintVersion: blueprint.data.blueprint.version,
+                  }}
+                />
+              )}
+              <RecordPreviewToolbar
+                blueprint={blueprint.data?.blueprint}
+                compact={compact}
+                recordId={recordId}
+                extensionPanelOpen={extensionPanelOpen}
+                onOpenExtensions={() => {
+                  setAgentPanelOpen(false);
+                  setExtensionPanelOpen(true);
+                }}
+                agentPanelOpen={agentPanelOpen}
+                onOpenAgent={() => {
+                  setExtensionPanelOpen(false);
+                  setAgentPanelOpen(true);
+                }}
+                schemaOutdated={schemaOutdated}
+                showExtensions={Boolean(loaded)}
+                canWrite={recordForm.data?.can_write === true}
+                canCreate={canCreateRecords}
+                canAskAgent={canAskAgent}
+                onDuplicate={() => setDuplicateOpen(true)}
+                canDelete={canDeleteRecords && Boolean(resolved.data)}
+                onDelete={() => setDeleteOpen(true)}
+                canPublish={canPublish}
+                publications={publications}
+              />
+              {contexts.isPending && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+                  <CircularProgress
+                    aria-label={t('records.loadingContexts')}
+                    enableTrackSlot
+                  />
+                </Box>
+              )}
+              <QueryErrorNotice
+                error={contexts.error}
+                isRetrying={contexts.isFetching}
+                onRetry={() => void contexts.refetch()}
+              />
+              {contexts.data && (
+                <>
+                  {resolved.isPending && (
+                    <Box
+                      sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}
+                    >
+                      <CircularProgress
+                        aria-label={t('records.resolvingValues')}
+                        enableTrackSlot
+                      />
+                    </Box>
+                  )}
+                  <ApiErrorAlert error={resolved.error} sx={{ mt: 3 }} />
+                  <ApiErrorAlert error={blueprint.error} sx={{ mt: 3 }} />
+                  {resolved.data && blueprint.data && (
+                    // A single relationship shows its record on the full page;
+                    // a panel beside another page keeps to links.
+                    <Box ref={fieldsRef}>
+                      <KnownRecordLabelsContext value={knownLabels}>
+                        <RelatedRecordPreviewContext.Provider
+                          value={compact ? null : (contextId ?? null)}
+                        >
+                          <RecordPreviewContent
+                            blueprint={blueprint.data}
+                            contextId={selectedContextId}
+                            contexts={contexts.data}
+                            defaultContextId={defaultContextId}
+                            recordId={recordId}
+                            // A cached form must not become the save baseline before
+                            // the opening refresh has completed.
+                            form={
+                              recordForm.isFetchedAfterMount
+                                ? recordForm.data
+                                : undefined
+                            }
+                            statusParentContextIds={statusParentContexts(
+                              contexts.data,
+                              contextId,
+                            )}
+                            statusTransitions={statusTransitions.data}
+                            inlineFieldsRef={inlineFieldsRef}
+                            onContextChange={setSelectedContext}
+                            resolved={resolved.data}
+                            singleColumn={compact}
+                          />
+                        </RelatedRecordPreviewContext.Provider>
+                      </KnownRecordLabelsContext>
+                    </Box>
+                  )}
+                </>
+              )}
+              {resolvedRecord && (
+                <RecordPreviewTabs
+                  onChange={setTab}
+                  panelRef={tabPanelRef}
+                  tabs={[
+                    ...(canReadRules
+                      ? [
+                          {
+                            key: recordPreviewTabs.dataQuality,
+                            label: t('rules.recordFindings.title'),
+                            content: (
+                              <RecordFindingsPanel
+                                attributes={blueprint.data?.attributes}
+                                blueprintId={resolvedRecord.blueprint_id}
+                                blueprintVersion={
+                                  resolvedRecord.blueprint_version
+                                }
+                                contextCodes={contexts.data?.map(
+                                  (context) => context.code,
+                                )}
                                 recordId={recordId}
                               />
-                            </Suspense>
-                          ),
-                        },
-                      ]
-                    : []),
-                  {
-                    key: recordPreviewTabs.recordControl,
-                    label: t('records.recordControls.title'),
-                    content: (
-                      <RecordControlsPanel
-                        attributes={blueprint.data?.attributes ?? []}
-                        recordId={recordId}
-                      />
-                    ),
-                  },
-                  {
-                    key: recordPreviewTabs.exports,
-                    label: t('extensionExports.recordTab'),
-                    content: <RecordExportStatusPanel recordId={recordId} />,
-                  },
-                ]}
-                value={tab}
-              />
-            )}
-          </>
+                            ),
+                          },
+                        ]
+                      : []),
+                    ...(showComments
+                      ? [
+                          {
+                            key: recordPreviewTabs.comments,
+                            label: t('comments.title'),
+                            content: (
+                              <Suspense
+                                fallback={
+                                  <CircularProgress
+                                    aria-label={t('comments.loading')}
+                                  />
+                                }
+                              >
+                                <RecordCommentsPanel
+                                  key={recordId}
+                                  recordId={recordId}
+                                />
+                              </Suspense>
+                            ),
+                          },
+                        ]
+                      : []),
+                    {
+                      key: recordPreviewTabs.recordControl,
+                      label: t('records.recordControls.title'),
+                      content: (
+                        <RecordControlsPanel
+                          attributes={blueprint.data?.attributes ?? []}
+                          recordId={recordId}
+                        />
+                      ),
+                    },
+                    {
+                      key: recordPreviewTabs.exports,
+                      label: t('extensionExports.recordTab'),
+                      content: <RecordExportStatusPanel recordId={recordId} />,
+                    },
+                  ]}
+                  value={tab}
+                />
+              )}
+            </FieldRevealContext>
+          </RevealFieldContext>
         ),
       })}
       {duplicateOpen && (

@@ -1992,6 +1992,7 @@
     "allRecords": "Wszystkie rekordy",
     "recordWithoutLabel": "Rekord {{id}}",
     "recordFindings": {
+      "aboutField": "(pole: <field/>)",
       "title": "Jakość danych",
       "checking": "Sprawdzanie reguł…",
       "recheck": "Sprawdź ponownie",

@@ -4,7 +4,6 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
-  useRef,
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -18,11 +17,6 @@ import {
   EditableRecordLayout,
   EditableRecordSection,
 } from '../../views/components/EditableRecordLayout';
-import {
-  FieldRevealContext,
-  RevealFieldContext,
-  useFieldReveal,
-} from '../../views/fieldReveal';
 import { attributeLabel } from '../recordDisplay';
 import { FieldSaveStatus } from './FieldSaveStatus';
 import { RecordView } from '../../views/components/RecordView';
@@ -183,10 +177,6 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
       const attribute = allAttributes.find((item) => item.code === code);
       return attribute ? attributeLabel(attribute) : code;
     });
-    const fieldsRef = useRef<HTMLDivElement>(null);
-    // Leads from the save status to a field whose change was not saved.
-    const { request: revealRequest, reveal: revealField } =
-      useFieldReveal(fieldsRef);
     // Pending changes left after a failed or conflicting save; leaving the
     // record drops them. Changes still being saved finish on their own.
     const unsaved = hasPending && !saves.saving;
@@ -436,43 +426,38 @@ export const RecordInlineFields = forwardRef<RecordInlineFieldsHandle, Props>(
           />
         )}
         <InlineSaveStatus
-          onReveal={revealField}
           pendingCodes={Object.keys(saves.pending)}
           savedAny={saves.savedAny}
           saving={saves.saving}
         />
-        <Box ref={fieldsRef}>
-          <RevealFieldContext value={revealField}>
-            <FieldRevealContext value={revealRequest}>
-              <EditableRecordLayout
+        <Box>
+          <EditableRecordLayout
+            {...viewProps}
+            attributes={attributes}
+            fallbackVisibilityScope="detail"
+            headingAttributes={headingEditableAttributes(
+              blueprintChangeable,
+              view,
+            )}
+            otherAttributes={unplacedEditableAttributes(
+              blueprintChangeable,
+              view,
+            )}
+            values={resolvedValues}
+            view={view}
+          />
+          {form.reusable_attributes.length > 0 && (
+            <EditableRecordSection
+              headingLevel="h2"
+              title={t('records.additionalAttributes')}
+            >
+              <RecordView
                 {...viewProps}
-                attributes={attributes}
-                fallbackVisibilityScope="detail"
-                headingAttributes={headingEditableAttributes(
-                  blueprintChangeable,
-                  view,
-                )}
-                otherAttributes={unplacedEditableAttributes(
-                  blueprintChangeable,
-                  view,
-                )}
-                values={resolvedValues}
-                view={view}
+                attributes={form.reusable_attributes}
+                values={reusableResolvedValues}
               />
-              {form.reusable_attributes.length > 0 && (
-                <EditableRecordSection
-                  headingLevel="h2"
-                  title={t('records.additionalAttributes')}
-                >
-                  <RecordView
-                    {...viewProps}
-                    attributes={form.reusable_attributes}
-                    values={reusableResolvedValues}
-                  />
-                </EditableRecordSection>
-              )}
-            </FieldRevealContext>
-          </RevealFieldContext>
+            </EditableRecordSection>
+          )}
         </Box>
         {form.can_write && (
           <Box sx={{ mt: 3 }}>

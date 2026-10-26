@@ -17,6 +17,7 @@ import {
   type RuleRun,
 } from './api';
 import { RECORD_RULE_RUN_POLL_MS } from './constants';
+import { RevealFieldContext } from '../views/fieldReveal';
 import { RecordFindingsPanel } from './RecordFindingsPanel';
 import { watchRecordRuleChecks } from './recordRuleChecks';
 
@@ -99,6 +100,7 @@ const run = (status: string, completedAt: string | null): RuleRun => ({
 
 const renderPanel = (
   props: Partial<Parameters<typeof RecordFindingsPanel>[0]> = {},
+  revealField: ((code: string) => void) | null = null,
 ) =>
   render(
     <QueryClientProvider
@@ -106,12 +108,14 @@ const renderPanel = (
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <RecordFindingsPanel
-        blueprintId={blueprintId}
-        blueprintVersion={1}
-        recordId={recordId}
-        {...props}
-      />
+      <RevealFieldContext value={revealField}>
+        <RecordFindingsPanel
+          blueprintId={blueprintId}
+          blueprintVersion={1}
+          recordId={recordId}
+          {...props}
+        />
+      </RevealFieldContext>
     </QueryClientProvider>,
   );
 
@@ -175,6 +179,47 @@ describe('RecordFindingsPanel', () => {
     expect(within(first!).getByText(/All contexts/)).toBeTruthy();
     expect(within(second!).getByText('summary is required')).toBeTruthy();
     expect(within(second!).getByText(/Contexts: pl/)).toBeTruthy();
+  });
+
+  it('leads to the field a finding is about', async () => {
+    const user = userEvent.setup();
+    const revealField = vi.fn();
+    vi.mocked(listUnresolvedRecordFindings).mockResolvedValue({
+      items: [
+        {
+          ...finding,
+          message: "'title' is required",
+          evidence: { attribute_code: 'title' },
+        },
+        {
+          ...finding,
+          id: '00000000-0000-4000-8000-000000000006',
+          message: 'Too short for search results',
+          evidence: { attribute_code: 'summary' },
+        },
+      ],
+    });
+    renderPanel(
+      {
+        attributes: [
+          { code: 'title', name: 'Listing title' },
+          { code: 'summary', name: 'Summary' },
+        ],
+      },
+      revealField,
+    );
+    const [named, unnamed] = await screen.findAllByRole('listitem');
+    expect(named!.textContent).toContain('Listing title is required');
+    expect(unnamed!.textContent).toContain(
+      'Too short for search results (field: Summary)',
+    );
+
+    await user.click(
+      within(named!).getByRole('button', { name: 'Listing title' }),
+    );
+    await user.click(within(unnamed!).getByRole('button', { name: 'Summary' }));
+
+    expect(revealField.mock.calls).toEqual([['title'], ['summary']]);
   });
 
   it('re-runs the record’s checks and refreshes findings when they finish', async () => {

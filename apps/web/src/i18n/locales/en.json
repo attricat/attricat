@@ -1912,6 +1912,7 @@
     "allRecords": "All records",
     "recordWithoutLabel": "Record {{id}}",
     "recordFindings": {
+      "aboutField": "(field: <field/>)",
       "title": "Data quality",
       "checking": "Checking rules…",
       "recheck": "Re-run checks",
