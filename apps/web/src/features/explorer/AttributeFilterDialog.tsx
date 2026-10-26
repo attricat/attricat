@@ -133,39 +133,38 @@ export const AttributeFilterDialog = ({
   const directory = usePrincipalDirectory(Boolean(principal) && !presence);
   // Filters may target former members and deleted teams, unlike assignment.
   // Attributes with a closed set of values are filtered by choosing one.
-  const valueChoices: { value: string; label: string }[] | undefined = presence
-    ? [
+  const valueChoices = ((): { value: string; label: string }[] | undefined => {
+    if (presence)
+      return [
         { value: booleanFilterValues.true, label: t('explorer.valueIsSet') },
         {
           value: booleanFilterValues.false,
           label: t('explorer.valueIsNotSet'),
         },
-      ]
-    : attribute?.value_type === attributeValueTypes.boolean
-      ? [
-          { value: booleanFilterValues.true, label: t('explorer.true') },
-          { value: booleanFilterValues.false, label: t('explorer.false') },
-        ]
-      : principal
-        ? [
-            {
-              value: CURRENT_USER_FILTER_VALUE,
-              label: t('explorer.assignedToMe'),
-            },
-            ...directoryOptions(directory.data, principal).map((option) => ({
-              value: option.value,
-              label: option.principal.label,
-            })),
-          ]
-        : status
-          ? status.options.map((option) => ({
-              value: option.code,
-              label: statusOptionLabel(option),
-            }))
-          : choices?.map((option) => ({
-              value: option.code,
-              label: option.label,
-            }));
+      ];
+    if (attribute?.value_type === attributeValueTypes.boolean)
+      return [
+        { value: booleanFilterValues.true, label: t('explorer.true') },
+        { value: booleanFilterValues.false, label: t('explorer.false') },
+      ];
+    if (principal)
+      return [
+        { value: CURRENT_USER_FILTER_VALUE, label: t('explorer.assignedToMe') },
+        ...directoryOptions(directory.data, principal).map((option) => ({
+          value: option.value,
+          label: option.principal.label,
+        })),
+      ];
+    if (status)
+      return status.options.map((option) => ({
+        value: option.code,
+        label: statusOptionLabel(option),
+      }));
+    return choices?.map((option) => ({
+      value: option.code,
+      label: option.label,
+    }));
+  })();
   const submit = () => void form.handleSubmit();
   const submitOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') return;

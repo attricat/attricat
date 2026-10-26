@@ -44,8 +44,6 @@ type State = {
   conflict: boolean;
 };
 
-/** Where a field's change is on its way to the server. */
-
 const isStaleRecord = (error: unknown) =>
   error instanceof ApiRequestError && error.code === STALE_RECORD_ERROR_CODE;
 
