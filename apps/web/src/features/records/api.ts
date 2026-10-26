@@ -19,7 +19,7 @@ import {
   recordSearchPageSchema,
   relationshipTreeFacetChildrenRequestSchema,
   relationshipTreeFacetChildrenResponseSchema,
-  getBlueprintRequestSchema,
+  blueprintSelectorSchema,
   getBlueprintRevisionRequestSchema,
   resolvedRecordPreviewSchema,
   smartFillRecordFormRequestSchema,
@@ -229,7 +229,7 @@ export const getBlueprintByCode = (
   version?: number,
   signal?: AbortSignal,
 ) => {
-  const input = getBlueprintRequestSchema.parse({ code, version });
+  const input = blueprintSelectorSchema.parse({ code, version });
   const path = `/api/blueprints/by-code/${encodeURIComponent(input.code)}${input.version === undefined ? '' : `/versions/${input.version}`}`;
   return request(path, blueprintWithAttributesSchema, { signal });
 };

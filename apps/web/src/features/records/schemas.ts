@@ -98,32 +98,34 @@ export const blueprintWithAttributesSchema = z.object({
     .default([]),
 });
 const scalarValueSchema = z.json();
+/** The attribute and context a value is set in; no context means the default. */
+const attributeValueTargetSchema = z.object({
+  attribute_code: z.string().min(1),
+  context_id: uuidSchema.nullable().optional(),
+});
+/** A blueprint by code, at a version or its current one. */
+const blueprintSelectorSchema = z.object({
+  code: z.string().min(1),
+  version: z.number().int().positive().optional(),
+});
 export const newAttributeValueSchema = z.discriminatedUnion('kind', [
-  z.object({
+  attributeValueTargetSchema.extend({
     kind: z.literal(attributeValueKinds.scalar),
-    attribute_code: z.string().min(1),
-    context_id: uuidSchema.nullable().optional(),
     value: scalarValueSchema,
   }),
-  z.object({
+  attributeValueTargetSchema.extend({
     kind: z.literal(attributeValueKinds.relationship),
-    attribute_code: z.string().min(1),
-    context_id: uuidSchema.nullable().optional(),
     target_record_id: uuidSchema,
   }),
 ]);
 export const formAttributeValueSchema = z.discriminatedUnion('kind', [
   ...newAttributeValueSchema.options,
-  z.object({
+  attributeValueTargetSchema.extend({
     kind: z.literal(attributeValueKinds.file),
-    attribute_code: z.string().min(1),
-    context_id: uuidSchema.nullable().optional(),
     files: z.array(fileMetadataSchema),
   }),
 ]);
-export const relationshipTargetsSchema = z.object({
-  attribute_code: z.string().min(1),
-  context_id: uuidSchema.nullable().optional(),
+export const relationshipTargetsSchema = attributeValueTargetSchema.extend({
   target_record_ids: z.array(uuidSchema),
 });
 const attributeValueSelectorSchema = z.object({
@@ -334,10 +336,7 @@ export const recordSearchFilterSchema = z
     },
   );
 export const searchRecordsRequestSchema = z.object({
-  blueprint: z.object({
-    code: z.string().min(1),
-    version: z.number().int().positive().optional(),
-  }),
+  blueprint: blueprintSelectorSchema,
   query: z.string(),
   filters: z.array(recordSearchFilterSchema),
   relationship_filters: z
@@ -384,10 +383,7 @@ export const searchRecordsRequestSchema = z.object({
   }),
 });
 export const relationshipTreeFacetChildrenRequestSchema = z.object({
-  blueprint: z.object({
-    code: z.string().min(1),
-    version: z.number().int().positive().optional(),
-  }),
+  blueprint: blueprintSelectorSchema,
   query: z.string().optional(),
   /** Omitted to list the blueprint's own tree through `hierarchy_field`. */
   source_relationship_field: z.string().min(1).optional(),
@@ -411,24 +407,15 @@ export const relationshipTreeFacetChildrenResponseSchema = z.object({
   selected_paths: z.array(z.array(uuidSchema)),
   next_cursor: uuidSchema.nullable(),
 });
-const getBlueprintRequestSchema = z.object({
-  code: z.string().min(1),
-  version: z.number().int().positive().optional(),
-});
 const getBlueprintRevisionRequestSchema = z.object({
   id: uuidSchema,
   version: z.number().int().positive(),
 });
-export const newFileAttributeValueSchema = z.object({
-  attribute_code: z.string().min(1),
-  context_id: uuidSchema.nullable().optional(),
+export const newFileAttributeValueSchema = attributeValueTargetSchema.extend({
   file_ids: z.array(uuidSchema).min(1),
 });
 export const createRecordRequestSchema = z.object({
-  blueprint: z.object({
-    code: z.string().min(1),
-    version: z.number().int().positive().optional(),
-  }),
+  blueprint: blueprintSelectorSchema,
   values: z.array(newAttributeValueSchema),
   /** Staged uploads the create claims, one ordered list per attribute. */
   files: z.array(newFileAttributeValueSchema).optional(),
@@ -506,7 +493,7 @@ export {
   recordFormResponseSchema,
   recordSearchResponseSchema,
   recordSearchPageSchema,
-  getBlueprintRequestSchema,
+  blueprintSelectorSchema,
   getBlueprintRevisionRequestSchema,
   resolvedRecordPreviewSchema,
 };
