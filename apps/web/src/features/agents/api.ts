@@ -15,7 +15,7 @@ import type { ConversationScope } from './constants';
 
 const queryParam = (value: string) => encodeURIComponent(value);
 
-export type ConversationFilter = {
+type ConversationFilter = {
   /** Only conversations about this record. */
   recordId?: string;
   /** Include conversations about records; ignored with `recordId`. */
