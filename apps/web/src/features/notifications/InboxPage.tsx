@@ -46,7 +46,7 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
   const notifications = useInfiniteQuery({
     queryKey: notificationQueryKeys.list(workspaceId, userId, filter),
     queryFn: ({ pageParam, signal }) =>
-      listNotifications(filter === 'unread', pageParam, signal),
+      listNotifications(filter === inboxFilters.unread, pageParam, signal),
     initialPageParam: undefined as KeysetCursor | undefined,
     getNextPageParam: (page) => nextKeysetCursor(page, createdAtCursor),
     enabled: Boolean(workspaceId && userId),
@@ -95,18 +95,20 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
           onChange={(_, value: InboxFilter) =>
             void navigate({
               to: navigationRoutes.inbox,
-              search: { filter: value === 'all' ? undefined : value },
+              search: {
+                filter: value === inboxFilters.all ? undefined : value,
+              },
             })
           }
           value={filter}
         >
-          {inboxFilters.map((value) => (
+          {Object.values(inboxFilters).map((value) => (
             <Tab
               aria-controls={panelId}
               id={tabId(value)}
               key={value}
               label={
-                value === 'unread'
+                value === inboxFilters.unread
                   ? t('inbox.filters.unreadCount', { count: unreadCount })
                   : t('inbox.filters.all')
               }
@@ -165,7 +167,9 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
                   description={t('inbox.emptyDescription')}
                   icon={InboxIcon}
                   title={t(
-                    filter === 'unread' ? 'inbox.noUnread' : 'inbox.empty',
+                    filter === inboxFilters.unread
+                      ? 'inbox.noUnread'
+                      : 'inbox.empty',
                   )}
                 />
               </ListItem>
