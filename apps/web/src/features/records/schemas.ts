@@ -5,10 +5,11 @@ import { fileMetadataSchema } from '../files/schemas';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 import { jsonObjectSchema, viewsSchema } from '../views/schemas';
 import {
-  PRESENCE_FILTER_OPERATOR,
+  attributeFilterOperators,
   SMART_FILL_MAX_ATTACHMENTS,
   SMART_FILL_MAX_CONTENT_LENGTH,
   statusTransitionDenialCodes,
+  retentionHoldSources,
 } from './constants';
 
 export const uuidSchema = z.uuid();
@@ -319,16 +320,7 @@ export const recordMigrationPreviewSchema = z.object({
   status: z.enum(['ready', 'needs_input', 'blocked']),
   issues: z.array(migrationIssueSchema),
 });
-const attributeFilterOperatorSchema = z.enum([
-  'eq',
-  'contains',
-  'starts_with',
-  'gt',
-  'gte',
-  'lt',
-  'lte',
-  PRESENCE_FILTER_OPERATOR,
-]);
+const attributeFilterOperatorSchema = z.enum(attributeFilterOperators);
 export const recordSearchFilterSchema = z
   .object({
     field: z.string().min(1),
@@ -337,7 +329,7 @@ export const recordSearchFilterSchema = z
   })
   .refine(
     (filter) =>
-      filter.operator !== PRESENCE_FILTER_OPERATOR ||
+      filter.operator !== attributeFilterOperators.isSet ||
       typeof filter.value === 'boolean',
     {
       message: 'Presence filters require a boolean value',
@@ -557,7 +549,7 @@ export type RecordApproval = z.infer<typeof recordApprovalSchema>;
 export const retentionHoldSchema = z.object({
   id: z.string(),
   file_id: z.string(),
-  source: z.enum(['status', 'explicit']),
+  source: z.enum(retentionHoldSources),
   attribute_code: z.string().nullable(),
   status: z.string().nullable(),
   reason: z.string().nullable(),

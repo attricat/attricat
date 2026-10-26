@@ -8,9 +8,27 @@ export const MAX_COMPONENT_PROTOCOL_VERSION = 4_294_967_295;
 export const SMART_FILL_MAX_CONTENT_LENGTH = 32_768;
 export const SMART_FILL_MAX_ATTACHMENTS = 16;
 
+/** Why a retention hold keeps a record: its status, or an explicit hold. */
+export const retentionHoldSources = {
+  status: 'status',
+  explicit: 'explicit',
+} as const;
+
 export const RECORD_SEARCH_PAGE_SIZE = 25;
-/** Scalar filter that distinguishes an absent value from a present one. */
-export const PRESENCE_FILTER_OPERATOR = 'is_set';
+/**
+ * Operators a record search filter compares an attribute value with; `isSet`
+ * distinguishes an absent value from a present one.
+ */
+export const attributeFilterOperators = {
+  eq: 'eq',
+  contains: 'contains',
+  startsWith: 'starts_with',
+  gt: 'gt',
+  gte: 'gte',
+  lt: 'lt',
+  lte: 'lte',
+  isSet: 'is_set',
+} as const;
 /** Most record IDs one label lookup may name; the API enforces the same. */
 export const RECORD_LABEL_BATCH_SIZE = 100;
 export const RECORD_CHANGES_PAGE_SIZE = 25;

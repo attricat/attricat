@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next';
 import type { Attribute } from '../records/api';
-import { PRESENCE_FILTER_OPERATOR } from '../records/constants';
+import { attributeFilterOperators } from '../records/constants';
+import { attributeValueTypes } from '../records/valueTypes';
 import { attributeLabel } from '../records/recordDisplay';
 import { choiceOptions, choiceValueLabel } from '../records/choices';
 import { statusConfiguration, statusLabel } from '../records/status';
@@ -15,17 +16,22 @@ import type { AttributeFilter } from './search';
 export type AttributeFilterOperator = AttributeFilter['operator'];
 
 export const filterableValueTypes = [
-  'string',
-  'number',
-  'integer',
-  'boolean',
-  'date',
-  'datetime',
-  'time',
+  attributeValueTypes.string,
+  attributeValueTypes.number,
+  attributeValueTypes.integer,
+  attributeValueTypes.boolean,
+  attributeValueTypes.date,
+  attributeValueTypes.datetime,
+  attributeValueTypes.time,
 ] as const;
 
 /** File values can only be filtered by whether any file is attached. */
-const presenceOnlyValueTypes = ['file'] as const;
+const presenceOnlyValueTypes = [attributeValueTypes.file] as const;
+
+const { contains, eq, gt, gte, isSet, lt, lte, startsWith } =
+  attributeFilterOperators;
+/** Operators of values ordered by size or time. */
+const comparisonOperators = [eq, gt, gte, lt, lte, isSet];
 
 export const isFilterableAttribute = (attribute: Attribute) =>
   [...filterableValueTypes, ...presenceOnlyValueTypes].some(
@@ -35,19 +41,22 @@ export const isFilterableAttribute = (attribute: Attribute) =>
 export const operatorsForValueType = (
   valueType: Attribute['value_type'],
 ): AttributeFilterOperator[] => {
-  if (valueType === 'string')
-    return ['eq', 'contains', 'starts_with', PRESENCE_FILTER_OPERATOR];
-  if (valueType === 'boolean') return ['eq', PRESENCE_FILTER_OPERATOR];
-  if (valueType === 'file') return [PRESENCE_FILTER_OPERATOR];
-  if (
-    valueType === 'number' ||
-    valueType === 'integer' ||
-    valueType === 'date' ||
-    valueType === 'datetime' ||
-    valueType === 'time'
-  )
-    return ['eq', 'gt', 'gte', 'lt', 'lte', PRESENCE_FILTER_OPERATOR];
-  return [];
+  switch (valueType) {
+    case attributeValueTypes.string:
+      return [eq, contains, startsWith, isSet];
+    case attributeValueTypes.boolean:
+      return [eq, isSet];
+    case attributeValueTypes.file:
+      return [isSet];
+    case attributeValueTypes.number:
+    case attributeValueTypes.integer:
+    case attributeValueTypes.date:
+    case attributeValueTypes.datetime:
+    case attributeValueTypes.time:
+      return comparisonOperators;
+    default:
+      return [];
+  }
 };
 
 /**
@@ -61,8 +70,10 @@ export const operatorsForAttribute = (
   (statusConfiguration(attribute) ||
     choiceOptions(attribute) ||
     principalConfiguration(attribute))
-    ? ['eq', PRESENCE_FILTER_OPERATOR]
-    : operatorsForValueType(attribute?.value_type ?? 'string');
+    ? [eq, isSet]
+    : operatorsForValueType(
+        attribute?.value_type ?? attributeValueTypes.string,
+      );
 
 /**
  * Attribute filters have no identity of their own and may repeat, so their
@@ -108,7 +119,7 @@ export const attributeFilterLabel = (
   attribute?: Attribute,
   directory?: Directory,
 ) =>
-  filter.operator === PRESENCE_FILTER_OPERATOR
+  filter.operator === isSet
     ? t(
         filter.value
           ? 'explorer.attributeFilterIsSet'

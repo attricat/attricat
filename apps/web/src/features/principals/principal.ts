@@ -8,6 +8,7 @@ import {
   type PrincipalConfiguration,
   type PrincipalKind,
 } from './schemas';
+import { attributeValueTypes } from '../records/valueTypes';
 
 const referencePattern =
   /^(user|team):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
@@ -24,7 +25,7 @@ export const principalConfiguration = (
   attribute: Attribute,
 ): PrincipalConfiguration | undefined => {
   if (
-    attribute.value_type !== 'string' ||
+    attribute.value_type !== attributeValueTypes.string ||
     !attribute.value_schema ||
     typeof attribute.value_schema !== 'object'
   )
@@ -70,15 +71,17 @@ export const resolvePrincipal = (
   if (!reference || !directory) return undefined;
   if (reference.kind === principalKinds.user) {
     const user = directory.users.find((item) => item.id === reference.id);
-    return user && { kind: 'user', user, label: userLabel(user) };
+    return user && { kind: principalKinds.user, user, label: userLabel(user) };
   }
   const team = directory.teams.find((item) => item.id === reference.id);
-  return team && { kind: 'team', team, label: team.name };
+  return team && { kind: principalKinds.team, team, label: team.name };
 };
 
 /** Whether a directory entry can be newly assigned. */
 export const isAssignable = (principal: ResolvedPrincipal) =>
-  principal.kind === 'user' ? principal.user.active : !principal.team.deleted;
+  principal.kind === principalKinds.user
+    ? principal.user.active
+    : !principal.team.deleted;
 
 type PrincipalOption = { value: string; principal: ResolvedPrincipal };
 
@@ -94,13 +97,13 @@ export const directoryOptions = (
   const users = config.kinds.includes(principalKinds.user)
     ? directory.users.map((user) => ({
         value: principalReference(principalKinds.user, user.id),
-        principal: { kind: 'user' as const, user, label: userLabel(user) },
+        principal: { kind: principalKinds.user, user, label: userLabel(user) },
       }))
     : [];
   const teams = config.kinds.includes(principalKinds.team)
     ? directory.teams.map((team) => ({
         value: principalReference(principalKinds.team, team.id),
-        principal: { kind: 'team' as const, team, label: team.name },
+        principal: { kind: principalKinds.team, team, label: team.name },
       }))
     : [];
   return [...users, ...teams];

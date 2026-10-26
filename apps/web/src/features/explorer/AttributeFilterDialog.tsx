@@ -12,7 +12,7 @@ import type { KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
 import type { Attribute } from '../records/api';
-import { PRESENCE_FILTER_OPERATOR } from '../records/constants';
+import { attributeFilterOperators } from '../records/constants';
 import { ValueTypeIcon } from '../records/components/ValueTypeLabel';
 import { attributeLabel } from '../records/recordDisplay';
 import { choiceOptions } from '../records/choices';
@@ -38,6 +38,7 @@ import {
 } from './relationshipFilterTypes';
 import type { AttributeFilter } from './search';
 import { useTimeZone } from '../../time/useInstantFormat';
+import { attributeValueTypes } from '../records/valueTypes';
 
 // Long blueprints offer many fields, so match typed text against the label
 // and the code, which also covers relationship paths such as family.name.
@@ -128,7 +129,7 @@ export const AttributeFilterDialog = ({
   const status = attribute && statusConfiguration(attribute);
   const choices = attribute && choiceOptions(attribute);
   const principal = attribute && principalConfiguration(attribute);
-  const presence = effectiveOperator === PRESENCE_FILTER_OPERATOR;
+  const presence = effectiveOperator === attributeFilterOperators.isSet;
   const directory = usePrincipalDirectory(Boolean(principal) && !presence);
   // Filters may target former members and deleted teams, unlike assignment.
   // Attributes with a closed set of values are filtered by choosing one.
@@ -140,7 +141,7 @@ export const AttributeFilterDialog = ({
           label: t('explorer.valueIsNotSet'),
         },
       ]
-    : attribute?.value_type === 'boolean'
+    : attribute?.value_type === attributeValueTypes.boolean
       ? [
           { value: booleanFilterValues.true, label: t('explorer.true') },
           { value: booleanFilterValues.false, label: t('explorer.false') },
@@ -267,7 +268,7 @@ export const AttributeFilterDialog = ({
                     );
                     if (validOperator) {
                       if (
-                        (validOperator === PRESENCE_FILTER_OPERATOR) !==
+                        (validOperator === attributeFilterOperators.isSet) !==
                         presence
                       ) {
                         form.setFieldValue('value', '');
@@ -308,7 +309,7 @@ export const AttributeFilterDialog = ({
                     fullWidth
                     slotProps={{
                       htmlInput:
-                        attribute.value_type === 'integer'
+                        attribute.value_type === attributeValueTypes.integer
                           ? { step: 1 }
                           : undefined,
                     }}

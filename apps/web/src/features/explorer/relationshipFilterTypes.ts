@@ -1,4 +1,5 @@
 import type { Attribute } from '../records/api';
+import { attributeValueTypes } from '../records/valueTypes';
 
 export type RelationshipFilterAttribute = Attribute & {
   target_blueprint_code: string;
@@ -8,7 +9,7 @@ export type RelationshipFilterAttribute = Attribute & {
 export const isRelationshipFilterAttribute = (
   attribute: Attribute,
 ): attribute is RelationshipFilterAttribute =>
-  attribute.value_type === 'relationship' &&
+  attribute.value_type === attributeValueTypes.relationship &&
   typeof attribute.target_blueprint_code === 'string';
 
 export type ExplorerRelationshipFacet = {

@@ -1,3 +1,4 @@
+import { attributeFilterOperators } from '../records/constants';
 import type { ApiErrorCode } from '../../api/errors';
 
 // Search and filter limits.
@@ -25,9 +26,9 @@ export const maximumBrowsePathHops = 3;
 /** Most relationship paths the Browse rail offers after the direct fields. */
 export const maximumBrowsePaths = 15;
 
-export const defaultAttributeFilterOperator = 'eq';
+export const defaultAttributeFilterOperator = attributeFilterOperators.eq;
 /** Cell shortcuts always filter by equality rather than guessing an operator. */
-export const cellFilterOperator = 'eq';
+export const cellFilterOperator = attributeFilterOperators.eq;
 
 export const versionScopes = {
   all: 'all',

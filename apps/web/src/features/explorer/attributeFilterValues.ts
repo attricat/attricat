@@ -1,5 +1,5 @@
 import type { Attribute } from '../records/api';
-import { PRESENCE_FILTER_OPERATOR } from '../records/constants';
+import { attributeFilterOperators } from '../records/constants';
 import type { AttributeFilterOperator } from './attributeFilters';
 import { defaultAttributeFilterOperator } from './constants';
 import {
@@ -8,6 +8,7 @@ import {
   zonedDateTimeToIso,
 } from '../../time/instantFormat';
 import type { AttributeFilter } from './search';
+import { attributeValueTypes } from '../records/valueTypes';
 
 type ValueType = Attribute['value_type'] | undefined;
 
@@ -50,12 +51,15 @@ export const parseAttributeFilterValue = (
   timeZone: string,
   operator?: AttributeFilterOperator,
 ): AttributeFilter['value'] => {
-  if (operator === PRESENCE_FILTER_OPERATOR)
+  if (operator === attributeFilterOperators.isSet)
     return value === booleanFilterValues.true;
-  if (valueType === 'number') return Number(value);
-  if (valueType === 'integer') return Number.parseInt(value, 10);
-  if (valueType === 'boolean') return value === booleanFilterValues.true;
-  if (valueType === 'datetime') return zonedDateTimeToIso(value, timeZone);
+  if (valueType === attributeValueTypes.number) return Number(value);
+  if (valueType === attributeValueTypes.integer)
+    return Number.parseInt(value, 10);
+  if (valueType === attributeValueTypes.boolean)
+    return value === booleanFilterValues.true;
+  if (valueType === attributeValueTypes.datetime)
+    return zonedDateTimeToIso(value, timeZone);
   return value;
 };
 
@@ -64,7 +68,7 @@ export const isAttributeFilterValueValid = (
   value: string,
   operator?: AttributeFilterOperator,
 ) => {
-  if (operator === PRESENCE_FILTER_OPERATOR) {
+  if (operator === attributeFilterOperators.isSet) {
     return (
       value === booleanFilterValues.true || value === booleanFilterValues.false
     );
@@ -72,21 +76,24 @@ export const isAttributeFilterValueValid = (
   const numericValue = Number(value);
   return (
     value !== '' &&
-    (valueType !== 'number' || Number.isFinite(numericValue)) &&
-    (valueType !== 'integer' ||
+    (valueType !== attributeValueTypes.number ||
+      Number.isFinite(numericValue)) &&
+    (valueType !== attributeValueTypes.integer ||
       (integerPattern.test(value) && Number.isSafeInteger(numericValue))) &&
-    (valueType !== 'datetime' || zonedDateTimeToIso(value, utcTimeZone) !== '')
+    (valueType !== attributeValueTypes.datetime ||
+      zonedDateTimeToIso(value, utcTimeZone) !== '')
   );
 };
 
 export const attributeFilterInputType = (valueType: ValueType) =>
-  valueType === 'number' || valueType === 'integer'
+  valueType === attributeValueTypes.number ||
+  valueType === attributeValueTypes.integer
     ? 'number'
-    : valueType === 'date'
+    : valueType === attributeValueTypes.date
       ? 'date'
-      : valueType === 'datetime'
+      : valueType === attributeValueTypes.datetime
         ? 'datetime-local'
-        : valueType === 'time'
+        : valueType === attributeValueTypes.time
           ? 'time'
           : 'text';
 
@@ -100,8 +107,8 @@ export const attributeFilterInputValue = (
   timeZone: string,
 ) => {
   const inputValue = String(filter.value);
-  return valueType === 'datetime' &&
-    filter.operator !== PRESENCE_FILTER_OPERATOR
+  return valueType === attributeValueTypes.datetime &&
+    filter.operator !== attributeFilterOperators.isSet
     ? isoToZonedDateTime(inputValue, timeZone)
     : inputValue;
 };

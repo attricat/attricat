@@ -14,6 +14,7 @@ import {
   type RelationshipFilterAttribute,
 } from './relationshipFilterTypes';
 import { browseBySchema, type BrowseBy } from './search';
+import { attributeValueTypes } from '../records/valueTypes';
 
 /** A relationship field or path the browse rail can list targets of. */
 export type BrowseByField = {
@@ -46,7 +47,7 @@ export const hierarchyFieldOf = (target: BlueprintWithAttributes) =>
   target.attributes
     .filter(
       (attribute) =>
-        attribute.value_type === 'relationship' &&
+        attribute.value_type === attributeValueTypes.relationship &&
         attribute.hierarchy != null &&
         attribute.target_blueprint_code === target.blueprint.code,
     )
