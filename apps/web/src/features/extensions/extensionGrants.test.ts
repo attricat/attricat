@@ -22,3 +22,8 @@ it('lists distinct requested grants that are not granted yet', () => {
     { kind: 'event_subscribe', id: 'other:created' },
   ]);
 });
+
+it('requests no grants for a manifest it cannot read', () => {
+  expect(pendingGrants(null, [])).toEqual([]);
+  expect(pendingGrants({ permissions: 'attricat.read' }, [])).toEqual([]);
+});
