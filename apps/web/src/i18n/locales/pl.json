@@ -663,8 +663,6 @@
     "dataQualityFindings_few": "{{count}} problemy z jakością danych",
     "dataQualityFindings_many": "{{count}} problemów z jakością danych",
     "dataQualityFindings_other": "{{count}} problemu z jakością danych",
-    "previewContextUnavailable": "Kontekst podglądu jest niedostępny",
-    "recordPreviewUnavailable": "Podgląd rekordu jest niedostępny",
     "invalidTimeZone": "Oczekiwano strefy czasowej IANA",
     "invalidJson": "Oczekiwano JSON",
     "blueprintLabel": "Schemat: {{name}}",

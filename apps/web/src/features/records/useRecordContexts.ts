@@ -1,10 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { defaultContextCode } from '../contexts/constants';
-import { getResolvedRecordPreview } from './api';
-import { recordQueryKeys } from './queryKeys';
-import { readAheadStaleTimeMs } from './queryOptions';
+import { resolvedRecordPreviewOptions } from './queryOptions';
 import { contextListOptions } from '../contexts/queryOptions';
 
 /**
@@ -29,16 +26,4 @@ export const useRecordContextSelection = (initialContextId?: string) => {
 export const useResolvedRecordPreview = (
   recordId: string,
   contextId: string | null,
-) => {
-  const { t } = useTranslation();
-  return useQuery({
-    queryKey: recordQueryKeys.resolvedPreview(recordId, contextId ?? undefined),
-    queryFn: () => {
-      if (!contextId) throw new Error(t('records.previewContextUnavailable'));
-      return getResolvedRecordPreview(recordId, contextId);
-    },
-    enabled: contextId !== null,
-    // Shares a preview loaded ahead with `resolvedRecordPreviewOptions`.
-    staleTime: readAheadStaleTimeMs,
-  });
-};
+) => useQuery(resolvedRecordPreviewOptions(recordId, contextId));

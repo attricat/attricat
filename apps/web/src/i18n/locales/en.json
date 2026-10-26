@@ -637,8 +637,6 @@
     "loadMigrationFirst": "Load the migration preview first",
     "dataQualityFindings_one": "{{count}} data quality finding",
     "dataQualityFindings_other": "{{count}} data quality findings",
-    "previewContextUnavailable": "Preview context is unavailable",
-    "recordPreviewUnavailable": "Record preview is unavailable",
     "invalidTimeZone": "Expected an IANA time zone",
     "invalidJson": "Expected JSON",
     "blueprintLabel": "Blueprint: {{name}}",

@@ -1,4 +1,8 @@
-import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
+import {
+  infiniteQueryOptions,
+  queryOptions,
+  skipToken,
+} from '@tanstack/react-query';
 import {
   getBlueprintByCode,
   getRecordApprovals,
@@ -39,11 +43,14 @@ export const recordLabelOptions = (recordId: string) =>
 /** A record's values as seen from a context. */
 export const resolvedRecordPreviewOptions = (
   recordId: string,
-  contextId: string,
+  /** The context the values are seen from; waits while it is unknown. */
+  contextId: string | null,
 ) =>
   queryOptions({
-    queryKey: recordQueryKeys.resolvedPreview(recordId, contextId),
-    queryFn: () => getResolvedRecordPreview(recordId, contextId),
+    queryKey: recordQueryKeys.resolvedPreview(recordId, contextId ?? undefined),
+    queryFn: contextId
+      ? () => getResolvedRecordPreview(recordId, contextId)
+      : skipToken,
     staleTime: readAheadStaleTimeMs,
   });
 
