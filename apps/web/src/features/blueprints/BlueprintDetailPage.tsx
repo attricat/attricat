@@ -1,3 +1,4 @@
+import { blueprintRevisionOptions } from './queryOptions';
 import { revisionStatuses } from '../../api/revisionStatus';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Box, Tab, Tabs, Typography } from '@mui/material';
@@ -14,7 +15,7 @@ import { useResourcePageTitle } from '../../app/useResourcePageTitle';
 import { PageContainer } from '../../components/PageContainer';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
-import { getBlueprintRevision, listBlueprintRevisions } from './api';
+import { listBlueprintRevisions } from './api';
 import { BlueprintDetailHeader } from './BlueprintDetailHeader';
 import { BlueprintRevisionComparison } from './BlueprintRevisionComparison';
 import { BlueprintVersionMetadata } from './BlueprintVersionMetadata';
@@ -83,11 +84,9 @@ export const BlueprintDetailPage = ({
       (revision) => revision.status === revisionStatuses.published,
     ) ?? blueprint
   )?.version;
-  const metadata = useQuery({
-    queryKey: blueprintQueryKeys.revision(blueprintId, metadataVersion ?? 0),
-    queryFn: () => getBlueprintRevision(blueprintId, metadataVersion!),
-    enabled: metadataVersion !== undefined,
-  });
+  const metadata = useQuery(
+    blueprintRevisionOptions(blueprintId, metadataVersion),
+  );
   const metadataRevision = metadata.data;
   useResourcePageTitle(
     blueprint && lexiconText(blueprint.name),

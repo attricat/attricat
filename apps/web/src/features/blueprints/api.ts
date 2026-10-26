@@ -31,10 +31,12 @@ export const listBlueprintRevisions = (
 export const getBlueprintRevision = (
   id: string,
   version: number,
+  signal?: AbortSignal,
 ): Promise<BlueprintWithAttributes> =>
   request(
     `/api/blueprints/${uuidSegment(id)}/versions/${versionSegment(version)}`,
     blueprintWithAttributesSchema,
+    { signal },
   );
 
 export const createBlueprint = (
