@@ -180,7 +180,7 @@ Attricat stores uploaded files, generated image variants, extension artifacts, a
 | `S3_UPLOAD_TIMEOUT_SECONDS` | Timeout for uploads and deletes. |
 | `S3_DOWNLOAD_TIMEOUT_SECONDS` | Timeout for downloads and the startup bucket check. |
 
-Grant the credentials only `PutObject`, `GetObject`, `DeleteObject`, and `HeadBucket` on that bucket, keep the bucket private, and use TLS. Clients never receive object keys or signed URLs; every download goes through the API.
+Grant the credentials only `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload`, and `ListObjectsV2` on that bucket, keep the bucket private, and use TLS. Clients never receive object keys or signed URLs; every download goes through the API.
 
 ## File uploads and processing
 

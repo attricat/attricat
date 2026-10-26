@@ -180,7 +180,7 @@ Attricat przechowuje przesłane pliki, wygenerowane warianty obrazów, artefakty
 | `S3_UPLOAD_TIMEOUT_SECONDS` | Limit czasu przesyłania i usuwania. |
 | `S3_DOWNLOAD_TIMEOUT_SECONDS` | Limit czasu pobierania i sprawdzania zasobnika przy starcie. |
 
-Przyznaj danym uwierzytelniającym tylko `PutObject`, `GetObject`, `DeleteObject` i `HeadBucket` na tym zasobniku, utrzymuj zasobnik jako prywatny i używaj TLS. Klienci nigdy nie otrzymują kluczy obiektów ani podpisanych adresów URL; każde pobranie przechodzi przez API.
+Przyznaj danym uwierzytelniającym tylko `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload` i `ListObjectsV2` na tym zasobniku, utrzymuj zasobnik jako prywatny i używaj TLS. Klienci nigdy nie otrzymują kluczy obiektów ani podpisanych adresów URL; każde pobranie przechodzi przez API.
 
 ## Przesyłanie i przetwarzanie plików
 

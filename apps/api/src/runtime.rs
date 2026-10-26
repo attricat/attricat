@@ -8,7 +8,9 @@ use crate::storage::{ObjectStore, S3ObjectStore, StorageConfig};
 pub async fn ready_object_store(
     storage: StorageConfig,
 ) -> Result<Arc<S3ObjectStore>, &'static str> {
-    let store = Arc::new(S3ObjectStore::new(storage).await);
+    let store = Arc::new(
+        S3ObjectStore::new(storage).map_err(|_| "object storage client could not be created")?,
+    );
     store.readiness().await.map_err(|_| {
         "object storage readiness failed: cannot access the configured S3 bucket; check S3_ENDPOINT, S3_BUCKET, and credentials"
     })?;
