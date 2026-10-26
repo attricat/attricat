@@ -1,17 +1,14 @@
 import { Box, Chip, List, Stack, TextField, Typography } from '@mui/material';
-import { useInfiniteQuery } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
-import { searchRecords } from '../records/api';
 import { useRelationshipSelectionLabels } from '../records/components/useRelationshipSelectionLabels';
 import {
   scrollRelationshipPickerToTop,
   useRecentlyPreviewedRecords,
 } from '../records/components/useRecentlyPreviewedRecords';
-import { dropdownOptionLabel, displayLabel } from '../records/recordDisplay';
-import { recordQueryKeys } from '../records/queryKeys';
-import { RelationshipTargetOption } from './RelationshipTargetOption';
+import { RelationshipTargetOption } from '../records/components/RelationshipTargetOption';
+import { useRelationshipTargets } from '../records/components/useRelationshipTargets';
 import { errorMessage } from '../../api/errors';
 
 type Props = {
@@ -33,24 +30,15 @@ export const RelationshipTargetPicker = ({
       if (!selectedIds.includes(id)) onSelectedIdsChange([...selectedIds, id]);
       scrollRelationshipPickerToTop(pickerContentRoot.current);
     });
-  const targets = useInfiniteQuery({
-    queryKey: recordQueryKeys.relationshipTargets(targetBlueprint, query),
-    queryFn: ({ pageParam, signal }) =>
-      searchRecords({
-        blueprint: targetBlueprint,
-        cursor: pageParam,
-        query,
-        signal,
-      }),
-    initialPageParam: null as string | null,
-    getNextPageParam: (page) => page.next_cursor,
-  });
-  const options = targets.data?.pages.flatMap((page) => page.items) ?? [];
+  const { options, targetLabel, targets } = useRelationshipTargets(
+    targetBlueprint,
+    query,
+    true,
+  );
   const selectedLabels = useRelationshipSelectionLabels(
     targetBlueprint,
     selectedIds,
   );
-  const views = targets.data?.pages[0]?.blueprint.blueprint.views ?? {};
   const toggle = (id: string) =>
     onSelectedIdsChange(
       selectedIds.includes(id)
@@ -83,15 +71,13 @@ export const RelationshipTargetPicker = ({
       <List dense disablePadding>
         {options.map((target) => (
           <RelationshipTargetOption
-            href={previewHref(target.id)}
+            isSample={target.is_sample === true}
             key={target.id}
-            label={
-              dropdownOptionLabel(target.preview, views) ??
-              displayLabel(target.display, target.id)
-            }
-            onOpenPreview={() => openPreview(target.id)}
+            label={targetLabel(target)}
+            onPreview={() => openPreview(target.id)}
             onPreviewLinkClick={() => markPreviewed(target.id)}
-            onToggle={() => toggle(target.id)}
+            onSelect={() => toggle(target.id)}
+            previewHref={previewHref(target.id)}
             previewed={isPreviewed(target.id)}
             selected={selectedIds.includes(target.id)}
           />
