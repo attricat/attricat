@@ -7,12 +7,18 @@ import {
   suffix,
 } from './helpers';
 
-// Run history is listed newest first.
+// Run history is listed newest first. Saving a record also runs the enabled
+// rules for that record alone, and that run may be listed after a manual one,
+// so only runs over all records count.
 const expectLatestRun = async (page: Page, ruleName: string, run: string) => {
   await expect(async () => {
     await page.goto('/manage/rules/runs');
     await expect(
-      page.getByRole('row').filter({ hasText: ruleName }).first(),
+      page
+        .getByRole('row')
+        .filter({ hasText: ruleName })
+        .filter({ hasText: 'All records' })
+        .first(),
     ).toHaveAccessibleName(`${ruleName} v1 All records ${run}`, {
       timeout: 1_000,
     });
