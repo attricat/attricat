@@ -1,20 +1,11 @@
-import { useRef } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  TextField,
-} from '@mui/material';
+import { TextField } from '@mui/material';
 import { maximumTitleBytes } from './constants';
 import { updateConversationTitle } from './api';
 import { agentQueryKeys } from './queryKeys';
-import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { FormDialog } from '../../components/FormDialog';
 
 export const RenameConversationDialog = ({
   conversationId,
@@ -27,7 +18,6 @@ export const RenameConversationDialog = ({
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const inputRef = useRef<HTMLInputElement>(null);
   const rename = useMutation({
     mutationFn: (title: string) =>
       updateConversationTitle(conversationId, title),
@@ -49,59 +39,37 @@ export const RenameConversationDialog = ({
     onSubmit: ({ value }) => rename.mutate(value.title.trim()),
   });
   return (
-    <Dialog
-      fullWidth
-      maxWidth="sm"
-      onClose={() => {
-        if (!rename.isPending) onClose();
-      }}
-      open
-      slotProps={{ transition: { onEntered: () => inputRef.current?.focus() } }}
+    <FormDialog
+      error={rename.error}
+      isPending={rename.isPending}
+      onClose={onClose}
+      onSubmit={() => void form.handleSubmit()}
+      submitLabel={t('agents.saveTitle')}
+      title={t('agents.renameConversation')}
     >
-      <Box
-        component="form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void form.handleSubmit();
+      <form.Field
+        name="title"
+        validators={{
+          onChange: ({ value }) => validateTitle(value),
+          onSubmit: ({ value }) => validateTitle(value),
         }}
       >
-        <DialogTitle>{t('agents.renameConversation')}</DialogTitle>
-        <DialogContent>
-          <form.Field
-            name="title"
-            validators={{
-              onChange: ({ value }) => validateTitle(value),
-              onSubmit: ({ value }) => validateTitle(value),
-            }}
-          >
-            {(field) => (
-              <TextField
-                required
-                autoComplete="off"
-                error={field.state.meta.errors.length > 0}
-                fullWidth
-                helperText={field.state.meta.errors[0]}
-                inputRef={inputRef}
-                label={t('agents.conversationTitle')}
-                margin="dense"
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                slotProps={{ htmlInput: { maxLength: maximumTitleBytes } }}
-                value={field.state.value}
-              />
-            )}
-          </form.Field>
-          <ApiErrorAlert error={rename.error} sx={{ mt: 2 }} />
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={rename.isPending} onClick={onClose}>
-            {t('common.cancel')}
-          </Button>
-          <Button disabled={rename.isPending} type="submit" variant="contained">
-            {t('agents.saveTitle')}
-          </Button>
-        </DialogActions>
-      </Box>
-    </Dialog>
+        {(field) => (
+          <TextField
+            required
+            autoComplete="off"
+            error={field.state.meta.errors.length > 0}
+            fullWidth
+            helperText={field.state.meta.errors[0]}
+            label={t('agents.conversationTitle')}
+            margin="dense"
+            onBlur={field.handleBlur}
+            onChange={(event) => field.handleChange(event.target.value)}
+            slotProps={{ htmlInput: { maxLength: maximumTitleBytes } }}
+            value={field.state.value}
+          />
+        )}
+      </form.Field>
+    </FormDialog>
   );
 };

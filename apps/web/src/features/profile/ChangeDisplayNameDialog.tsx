@@ -1,16 +1,7 @@
-import { useRef } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  TextField,
-} from '@mui/material';
+import { TextField } from '@mui/material';
 import { updateDisplayName } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import {
@@ -18,7 +9,7 @@ import {
   displayNameMaxLength,
   displayNameMinLength,
 } from './constants';
-import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { FormDialog } from '../../components/FormDialog';
 
 export const ChangeDisplayNameDialog = ({
   initialName,
@@ -29,7 +20,6 @@ export const ChangeDisplayNameDialog = ({
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const inputRef = useRef<HTMLInputElement>(null);
   const save = useMutation({
     mutationFn: (name: string) => updateDisplayName(name),
     onSuccess: (session) => {
@@ -55,64 +45,42 @@ export const ChangeDisplayNameDialog = ({
     onSubmit: ({ value }) => save.mutate(value.displayName),
   });
   return (
-    <Dialog
-      fullWidth
-      maxWidth="sm"
-      onClose={() => {
-        if (!save.isPending) onClose();
-      }}
-      open
-      slotProps={{ transition: { onEntered: () => inputRef.current?.focus() } }}
+    <FormDialog
+      error={save.error}
+      isPending={save.isPending}
+      onClose={onClose}
+      onSubmit={() => void form.handleSubmit()}
+      submitLabel={t('profile.saveDisplayName')}
+      title={t('profile.changeDisplayName')}
     >
-      <Box
-        component="form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void form.handleSubmit();
+      <form.Field
+        name="displayName"
+        validators={{
+          onChange: ({ value }) => validateName(value),
+          onSubmit: ({ value }) => validateName(value),
         }}
       >
-        <DialogTitle>{t('profile.changeDisplayName')}</DialogTitle>
-        <DialogContent>
-          <form.Field
-            name="displayName"
-            validators={{
-              onChange: ({ value }) => validateName(value),
-              onSubmit: ({ value }) => validateName(value),
-            }}
-          >
-            {(field) => (
-              <TextField
-                required
-                autoComplete="name"
-                error={field.state.meta.errors.length > 0}
-                fullWidth
-                helperText={
-                  field.state.meta.errors[0] ??
-                  t('profile.displayNameHint', {
-                    min: displayNameMinLength,
-                    max: displayNameMaxLength,
-                  })
-                }
-                inputRef={inputRef}
-                label={t('profile.displayName')}
-                margin="dense"
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                value={field.state.value}
-              />
-            )}
-          </form.Field>
-          <ApiErrorAlert error={save.error} sx={{ mt: 2 }} />
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={save.isPending} onClick={onClose}>
-            {t('common.cancel')}
-          </Button>
-          <Button disabled={save.isPending} type="submit" variant="contained">
-            {t('profile.saveDisplayName')}
-          </Button>
-        </DialogActions>
-      </Box>
-    </Dialog>
+        {(field) => (
+          <TextField
+            required
+            autoComplete="name"
+            error={field.state.meta.errors.length > 0}
+            fullWidth
+            helperText={
+              field.state.meta.errors[0] ??
+              t('profile.displayNameHint', {
+                min: displayNameMinLength,
+                max: displayNameMaxLength,
+              })
+            }
+            label={t('profile.displayName')}
+            margin="dense"
+            onBlur={field.handleBlur}
+            onChange={(event) => field.handleChange(event.target.value)}
+            value={field.state.value}
+          />
+        )}
+      </form.Field>
+    </FormDialog>
   );
 };

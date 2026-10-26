@@ -1,18 +1,7 @@
 import { useRef } from 'react';
 import { useForm } from '@tanstack/react-form';
 import { useTranslation } from 'react-i18next';
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-} from '@mui/material';
+import { DialogContentText, MenuItem, Stack, TextField } from '@mui/material';
 import {
   DEFAULT_PLURAL_CATEGORY,
   LEXICON_RESERVED_CHARACTERS,
@@ -30,7 +19,7 @@ import {
 } from './languages';
 import { normalizeLexiconTerm } from './references';
 import { useLexiconMutations } from './useLexiconMutations';
-import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { FormDialog } from '../../components/FormDialog';
 
 /**
  * Adds or edits one translation. In edit mode the identity (key, context,
@@ -89,13 +78,11 @@ export const LexiconEntryDialog = ({
   });
   const categories = pluralCategories(language);
   return (
-    <Dialog
-      fullWidth
-      maxWidth="sm"
-      onClose={() => {
-        if (!save.isPending) onClose();
-      }}
-      open
+    <FormDialog
+      error={save.error}
+      isPending={save.isPending}
+      onClose={onClose}
+      onSubmit={() => void form.handleSubmit()}
       slotProps={{
         transition: {
           onEntered: () => {
@@ -103,135 +90,113 @@ export const LexiconEntryDialog = ({
           },
         },
       }}
+      submitLabel={t('lexicon.saveTranslation')}
+      title={
+        editing ? t('lexicon.editTranslation') : t('lexicon.addTranslation')
+      }
     >
-      <Box
-        component="form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void form.handleSubmit();
-        }}
-      >
-        <DialogTitle>
-          {editing ? t('lexicon.editTranslation') : t('lexicon.addTranslation')}
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>
-            {t('lexicon.dialogLanguage', {
-              language: languageLabel(language, i18n.language),
-            })}
-          </DialogContentText>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <form.Field
-              name="key"
-              validators={{
-                onChange: ({ value }) =>
-                  validateTerm(value, MAX_LEXICON_KEY_LENGTH, true),
-                onSubmit: ({ value }) =>
-                  validateTerm(value, MAX_LEXICON_KEY_LENGTH, true),
-              }}
+      <DialogContentText sx={{ mb: 2 }}>
+        {t('lexicon.dialogLanguage', {
+          language: languageLabel(language, i18n.language),
+        })}
+      </DialogContentText>
+      <Stack spacing={2} sx={{ pt: 1 }}>
+        <form.Field
+          name="key"
+          validators={{
+            onChange: ({ value }) =>
+              validateTerm(value, MAX_LEXICON_KEY_LENGTH, true),
+            onSubmit: ({ value }) =>
+              validateTerm(value, MAX_LEXICON_KEY_LENGTH, true),
+          }}
+        >
+          {(field) => (
+            <TextField
+              autoComplete="off"
+              disabled={editing}
+              error={field.state.meta.errors.length > 0}
+              fullWidth
+              helperText={field.state.meta.errors[0] ?? t('lexicon.keyHelp')}
+              inputRef={keyRef}
+              label={t('lexicon.key')}
+              onBlur={field.handleBlur}
+              onChange={(event) => field.handleChange(event.target.value)}
+              required
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <form.Field
+          name="context"
+          validators={{
+            onChange: ({ value }) =>
+              validateTerm(value, MAX_LEXICON_CONTEXT_LENGTH, false),
+          }}
+        >
+          {(field) => (
+            <TextField
+              autoComplete="off"
+              disabled={editing}
+              error={field.state.meta.errors.length > 0}
+              fullWidth
+              helperText={
+                field.state.meta.errors[0] ?? t('lexicon.contextHelp')
+              }
+              label={t('lexicon.context')}
+              onBlur={field.handleBlur}
+              onChange={(event) => field.handleChange(event.target.value)}
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <form.Field name="plural_category">
+          {(field) => (
+            <TextField
+              disabled={editing}
+              fullWidth
+              helperText={t('lexicon.pluralCategoryHelp', {
+                category: pluralCategoryLabel(t, DEFAULT_PLURAL_CATEGORY),
+              })}
+              label={t('lexicon.pluralCategory')}
+              onChange={(event) => field.handleChange(event.target.value)}
+              select
+              value={field.state.value}
             >
-              {(field) => (
-                <TextField
-                  autoComplete="off"
-                  disabled={editing}
-                  error={field.state.meta.errors.length > 0}
-                  fullWidth
-                  helperText={
-                    field.state.meta.errors[0] ?? t('lexicon.keyHelp')
-                  }
-                  inputRef={keyRef}
-                  label={t('lexicon.key')}
-                  onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  required
-                  value={field.state.value}
-                />
-              )}
-            </form.Field>
-            <form.Field
-              name="context"
-              validators={{
-                onChange: ({ value }) =>
-                  validateTerm(value, MAX_LEXICON_CONTEXT_LENGTH, false),
-              }}
-            >
-              {(field) => (
-                <TextField
-                  autoComplete="off"
-                  disabled={editing}
-                  error={field.state.meta.errors.length > 0}
-                  fullWidth
-                  helperText={
-                    field.state.meta.errors[0] ?? t('lexicon.contextHelp')
-                  }
-                  label={t('lexicon.context')}
-                  onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  value={field.state.value}
-                />
-              )}
-            </form.Field>
-            <form.Field name="plural_category">
-              {(field) => (
-                <TextField
-                  disabled={editing}
-                  fullWidth
-                  helperText={t('lexicon.pluralCategoryHelp', {
-                    category: pluralCategoryLabel(t, DEFAULT_PLURAL_CATEGORY),
+              {categories.map((category) => (
+                <MenuItem key={category} value={category}>
+                  {t('lexicon.pluralCategoryOption', {
+                    category: pluralCategoryLabel(t, category),
+                    examples: pluralExamples(language, category).join(', '),
                   })}
-                  label={t('lexicon.pluralCategory')}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  select
-                  value={field.state.value}
-                >
-                  {categories.map((category) => (
-                    <MenuItem key={category} value={category}>
-                      {t('lexicon.pluralCategoryOption', {
-                        category: pluralCategoryLabel(t, category),
-                        examples: pluralExamples(language, category).join(', '),
-                      })}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              )}
-            </form.Field>
-            <form.Field
-              name="text"
-              validators={{
-                onChange: ({ value }) => validateText(value),
-                onSubmit: ({ value }) => validateText(value),
-              }}
-            >
-              {(field) => (
-                <TextField
-                  autoComplete="off"
-                  error={field.state.meta.errors.length > 0}
-                  fullWidth
-                  helperText={
-                    field.state.meta.errors[0] ?? t('lexicon.textHelp')
-                  }
-                  inputRef={textRef}
-                  label={t('lexicon.translation')}
-                  multiline
-                  onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  required
-                  value={field.state.value}
-                />
-              )}
-            </form.Field>
-          </Stack>
-          <ApiErrorAlert error={save.error} sx={{ mt: 2 }} />
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={save.isPending} onClick={onClose}>
-            {t('common.cancel')}
-          </Button>
-          <Button disabled={save.isPending} type="submit" variant="contained">
-            {t('lexicon.saveTranslation')}
-          </Button>
-        </DialogActions>
-      </Box>
-    </Dialog>
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
+        </form.Field>
+        <form.Field
+          name="text"
+          validators={{
+            onChange: ({ value }) => validateText(value),
+            onSubmit: ({ value }) => validateText(value),
+          }}
+        >
+          {(field) => (
+            <TextField
+              autoComplete="off"
+              error={field.state.meta.errors.length > 0}
+              fullWidth
+              helperText={field.state.meta.errors[0] ?? t('lexicon.textHelp')}
+              inputRef={textRef}
+              label={t('lexicon.translation')}
+              multiline
+              onBlur={field.handleBlur}
+              onChange={(event) => field.handleChange(event.target.value)}
+              required
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+      </Stack>
+    </FormDialog>
   );
 };

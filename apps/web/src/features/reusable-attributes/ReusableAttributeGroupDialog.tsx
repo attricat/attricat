@@ -1,18 +1,7 @@
 import { revisionStatuses } from '../../api/revisionStatus';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Alert,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-} from '@mui/material';
+import { Alert, MenuItem, Stack, TextField } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createReusableAttributeGroup, type ReusableAttribute } from './api';
@@ -23,6 +12,7 @@ import {
 } from './constants';
 import { reusableAttributeQueryKeys } from './queryKeys';
 import { errorMessage } from '../../api/errors';
+import { FormDialog } from '../../components/FormDialog';
 
 export const ReusableAttributeGroupDialog = ({
   attributes,
@@ -77,104 +67,78 @@ export const ReusableAttributeGroupDialog = ({
     (attribute) => attribute.status === revisionStatuses.published,
   );
   return (
-    <Dialog
-      fullWidth
-      maxWidth="sm"
-      onClose={() => {
-        if (!save.isPending) onClose();
-      }}
-      open
+    <FormDialog
+      isPending={save.isPending}
+      onClose={onClose}
+      onSubmit={() => void form.handleSubmit()}
+      submitDisabled={!published.length}
+      submitLabel={t('reusableAttributes.groupDialog.create')}
+      title={t('reusableAttributes.groupDialog.title')}
     >
-      <DialogTitle>{t('reusableAttributes.groupDialog.title')}</DialogTitle>
-      <Box
-        component="form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void form.handleSubmit();
-        }}
-      >
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <form.Field name="code">
-              {(field) => (
-                <TextField
-                  label={t('reusableAttributes.groupDialog.code')}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  required
-                  value={field.state.value}
-                />
-              )}
-            </form.Field>
-            <form.Field name="name">
-              {(field) => (
-                <TextField
-                  label={t('reusableAttributes.groupDialog.name')}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  required
-                  value={field.state.value}
-                />
-              )}
-            </form.Field>
-            <form.Field name="position">
-              {(field) => (
-                <TextField
-                  label={t('reusableAttributes.groupDialog.position')}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  slotProps={{
-                    htmlInput: {
-                      min: MIN_GROUP_POSITION,
-                      step: GROUP_POSITION_STEP,
-                    },
-                  }}
-                  type="number"
-                  value={field.state.value}
-                />
-              )}
-            </form.Field>
-            <form.Field name="revisionIds">
-              {(field) => (
-                <TextField
-                  required
-                  helperText={t('reusableAttributes.groupDialog.revisionsHelp')}
-                  label={t('reusableAttributes.groupDialog.revisions')}
-                  onChange={(event) =>
-                    field.handleChange(
-                      event.target.value as unknown as string[],
-                    )
-                  }
-                  select
-                  slotProps={{ select: { multiple: true } }}
-                  value={field.state.value}
-                >
-                  {published.map((attribute) => (
-                    <MenuItem key={attribute.id} value={attribute.id}>
-                      {attribute.namespace}:{attribute.code} · v
-                      {attribute.version}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              )}
-            </form.Field>
-            {(validationError || save.error) && (
-              <Alert severity="error">
-                {validationError ?? errorMessage(save.error)}
-              </Alert>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={save.isPending} onClick={onClose}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            disabled={save.isPending || !published.length}
-            type="submit"
-            variant="contained"
-          >
-            {t('reusableAttributes.groupDialog.create')}
-          </Button>
-        </DialogActions>
-      </Box>
-    </Dialog>
+      <Stack spacing={2} sx={{ pt: 1 }}>
+        <form.Field name="code">
+          {(field) => (
+            <TextField
+              label={t('reusableAttributes.groupDialog.code')}
+              onChange={(event) => field.handleChange(event.target.value)}
+              required
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <form.Field name="name">
+          {(field) => (
+            <TextField
+              label={t('reusableAttributes.groupDialog.name')}
+              onChange={(event) => field.handleChange(event.target.value)}
+              required
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <form.Field name="position">
+          {(field) => (
+            <TextField
+              label={t('reusableAttributes.groupDialog.position')}
+              onChange={(event) => field.handleChange(event.target.value)}
+              slotProps={{
+                htmlInput: {
+                  min: MIN_GROUP_POSITION,
+                  step: GROUP_POSITION_STEP,
+                },
+              }}
+              type="number"
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <form.Field name="revisionIds">
+          {(field) => (
+            <TextField
+              required
+              helperText={t('reusableAttributes.groupDialog.revisionsHelp')}
+              label={t('reusableAttributes.groupDialog.revisions')}
+              onChange={(event) =>
+                field.handleChange(event.target.value as unknown as string[])
+              }
+              select
+              slotProps={{ select: { multiple: true } }}
+              value={field.state.value}
+            >
+              {published.map((attribute) => (
+                <MenuItem key={attribute.id} value={attribute.id}>
+                  {attribute.namespace}:{attribute.code} · v{attribute.version}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
+        </form.Field>
+        {(validationError || save.error) && (
+          <Alert severity="error">
+            {validationError ?? errorMessage(save.error)}
+          </Alert>
+        )}
+      </Stack>
+    </FormDialog>
   );
 };
