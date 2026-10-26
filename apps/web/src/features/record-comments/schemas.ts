@@ -31,4 +31,3 @@ export const commentCountSchema = z.object({
   count: z.number().int().nonnegative(),
 });
 export type RecordComment = z.infer<typeof commentSchema>;
-export type CommentCursor = { before_time: string; before_id: string };

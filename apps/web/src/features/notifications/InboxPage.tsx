@@ -28,7 +28,11 @@ import {
 } from './constants';
 import { NotificationListItem } from './NotificationListItem';
 import { notificationQueryKeys } from './queryKeys';
-import type { NotificationCursor } from './schemas';
+import {
+  createdAtCursor,
+  nextKeysetCursor,
+  type KeysetCursor,
+} from '../../api/keysetCursor';
 import { useInboxActions } from './useInboxActions';
 import { useInboxIdentity } from './useInboxIdentity';
 
@@ -43,13 +47,8 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
     queryKey: notificationQueryKeys.list(workspaceId, userId, filter),
     queryFn: ({ pageParam, signal }) =>
       listNotifications(filter === 'unread', pageParam, signal),
-    initialPageParam: undefined as NotificationCursor | undefined,
-    getNextPageParam: (page) => {
-      const last = page.items.at(-1);
-      return page.has_more && last
-        ? { before_time: last.created_at, before_id: last.id }
-        : undefined;
-    },
+    initialPageParam: undefined as KeysetCursor | undefined,
+    getNextPageParam: (page) => nextKeysetCursor(page, createdAtCursor),
     enabled: Boolean(workspaceId && userId),
   });
   const { isBusy, markAllRead, remove, setRead } = useInboxActions(

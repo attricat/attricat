@@ -565,7 +565,6 @@ export const recordControlPageSchema = <T extends z.ZodType>(item: T) =>
   z.object({ items: z.array(item), has_more: z.boolean() });
 
 /** Continues a record control list before its last item. */
-export type RecordControlCursor = { before_time: string; before_id: string };
 
 /** Unwraps an `{ items: [...] }` collection response. */
 export const itemsResponseSchema = <T extends z.ZodType>(item: T) =>

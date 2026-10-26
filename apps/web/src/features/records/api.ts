@@ -39,8 +39,8 @@ import {
   recordsPublicationsResponseSchema,
 } from './schemas';
 
-import type { RecordControlCursor } from './schemas';
 import { uuidSegment } from '../../api/pathSegments';
+import { keysetQuery, type KeysetCursor } from '../../api/keysetCursor';
 export { viewBlockTypes } from '../views/schemas';
 export type {
   ComponentReference,
@@ -54,7 +54,6 @@ export type {
   AttricatRecord,
   RecordApproval,
   RecordAuditChange,
-  RecordControlCursor,
   RecordFormResponse,
   RecordMigrationPreview,
   RecordPublicationReadiness,
@@ -384,27 +383,24 @@ export const getStatusTransitions = (
     { signal },
   );
 
-const recordControlQuery = (cursor?: RecordControlCursor) =>
-  cursor ? `?${new URLSearchParams(cursor)}` : '';
-
 export const getRecordApprovals = (
   id: string,
-  cursor?: RecordControlCursor,
+  cursor?: KeysetCursor,
   signal?: AbortSignal,
 ) =>
   request(
-    `${recordPath(id)}/approvals${recordControlQuery(cursor)}`,
+    `${recordPath(id)}/approvals${keysetQuery(cursor)}`,
     recordControlPageSchema(recordApprovalSchema),
     { signal },
   );
 
 export const getRecordRetentionHolds = (
   id: string,
-  cursor?: RecordControlCursor,
+  cursor?: KeysetCursor,
   signal?: AbortSignal,
 ) =>
   request(
-    `${recordPath(id)}/retention-holds${recordControlQuery(cursor)}`,
+    `${recordPath(id)}/retention-holds${keysetQuery(cursor)}`,
     recordControlPageSchema(retentionHoldSchema),
     { signal },
   );

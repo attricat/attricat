@@ -10,9 +10,13 @@ import {
   getResolvedRecordPreview,
   getStatusTransitions,
   listRecordBlueprints,
-  type RecordControlCursor,
 } from './api';
 import { recordQueryKeys } from './queryKeys';
+import {
+  createdAtCursor,
+  nextKeysetCursor,
+  type KeysetCursor,
+} from '../../api/keysetCursor';
 
 // Revisited virtual rows reuse their result; mutations explicitly invalidate it.
 const publicationStaleTimeMs = 60_000;
@@ -76,23 +80,14 @@ export const recordPublicationReadinessOptions = (recordId: string) =>
     queryFn: ({ signal }) => getRecordPublicationReadiness(recordId, signal),
   });
 
-/** Continues a newest-first record control list after its last page. */
-const nextRecordControlCursor = <T>(
-  page: { items: T[]; has_more: boolean },
-  cursorOf: (item: T) => RecordControlCursor,
-) => {
-  const last = page.items.at(-1);
-  return page.has_more && last ? cursorOf(last) : undefined;
-};
-
 export const recordApprovalsOptions = (recordId: string) =>
   infiniteQueryOptions({
     queryKey: recordQueryKeys.approvals(recordId),
     queryFn: ({ pageParam, signal }) =>
       getRecordApprovals(recordId, pageParam, signal),
-    initialPageParam: undefined as RecordControlCursor | undefined,
+    initialPageParam: undefined as KeysetCursor | undefined,
     getNextPageParam: (page) =>
-      nextRecordControlCursor(page, (approval) => ({
+      nextKeysetCursor(page, (approval) => ({
         before_time: approval.approved_at,
         before_id: approval.id,
       })),
@@ -104,12 +99,8 @@ export const recordRetentionHoldsOptions = (recordId: string) =>
     queryKey: recordQueryKeys.retentionHolds(recordId),
     queryFn: ({ pageParam, signal }) =>
       getRecordRetentionHolds(recordId, pageParam, signal),
-    initialPageParam: undefined as RecordControlCursor | undefined,
-    getNextPageParam: (page) =>
-      nextRecordControlCursor(page, (hold) => ({
-        before_time: hold.created_at,
-        before_id: hold.id,
-      })),
+    initialPageParam: undefined as KeysetCursor | undefined,
+    getNextPageParam: (page) => nextKeysetCursor(page, createdAtCursor),
     staleTime: readAheadStaleTimeMs,
   });
 

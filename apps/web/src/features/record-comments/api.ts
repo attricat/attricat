@@ -3,16 +3,14 @@ import {
   commentCountSchema,
   commentInputSchema,
   commentPageSchema,
-  type CommentCursor,
 } from './schemas';
+import { keysetQuery, type KeysetCursor } from '../../api/keysetCursor';
 
 const commentsPath = (recordId: string) =>
   `/api/v1/records/${encodeURIComponent(recordId)}/comments`;
 
-export const listComments = (recordId: string, cursor?: CommentCursor) => {
-  const query = cursor ? `?${new URLSearchParams(cursor)}` : '';
-  return request(`${commentsPath(recordId)}${query}`, commentPageSchema);
-};
+export const listComments = (recordId: string, cursor?: KeysetCursor) =>
+  request(`${commentsPath(recordId)}${keysetQuery(cursor)}`, commentPageSchema);
 
 export const getCommentCount = (recordId: string, signal?: AbortSignal) =>
   request(`${commentsPath(recordId)}/count`, commentCountSchema, { signal });

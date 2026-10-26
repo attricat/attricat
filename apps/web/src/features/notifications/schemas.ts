@@ -36,4 +36,3 @@ export const markAllReadResultSchema = z.object({
 });
 
 export type Notification = z.infer<typeof notificationSchema>;
-export type NotificationCursor = { before_time: string; before_id: string };

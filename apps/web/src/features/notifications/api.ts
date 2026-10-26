@@ -4,15 +4,15 @@ import {
   markAllReadResultSchema,
   notificationPageSchema,
   unreadCountSchema,
-  type NotificationCursor,
 } from './schemas';
+import type { KeysetCursor } from '../../api/keysetCursor';
 
 const notificationPath = (id: string) =>
   `${notificationsPath}/${encodeURIComponent(id)}`;
 
 export const listNotifications = (
   unreadOnly: boolean,
-  cursor?: NotificationCursor,
+  cursor?: KeysetCursor,
   signal?: AbortSignal,
 ) => {
   const params = new URLSearchParams(cursor);
