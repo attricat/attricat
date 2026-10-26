@@ -91,7 +91,7 @@ image_only = true
 /// `RECORD_MIGRATION_BENCH_BASELINE_SCALAR_EPS=12.5`. Explicit baselines are
 /// asserted so a benchmark run supplies reproducible throughput evidence
 /// without making shared CI timing a pass/fail threshold.
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 #[ignore = "benchmark; run explicitly with a controlled PostgreSQL instance"]
 async fn preserved_value_workloads_report_writes_and_throughput(pool: PgPool) {
     let repository = AttricatRepository::new(

@@ -2,7 +2,7 @@ use crate::support;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn schema_version_sort_paginates_all_revisions_in_both_directions(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

@@ -5927,7 +5927,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    #[sqlx::test(migrator = "crate::TEST_MIGRATOR")]
     async fn failed_navigation_step_revalidates_and_resumes(pool: sqlx::PgPool) {
         let workspace_id = AttricatRepository::DEFAULT_WORKSPACE_ID;
         let repository =
@@ -5987,7 +5987,7 @@ mod tests {
         assert_eq!(navigation[0]["blueprint_code"], "retry_product");
     }
 
-    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    #[sqlx::test(migrator = "crate::TEST_MIGRATOR")]
     async fn application_insertion_plan_lock_wins_against_expired_staging_cleanup(
         pool: sqlx::PgPool,
     ) {
@@ -6093,7 +6093,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    #[sqlx::test(migrator = "crate::TEST_MIGRATOR")]
     async fn ambiguous_commit_reconciliation_never_fails_a_later_pending_step(pool: sqlx::PgPool) {
         let workspace_id = AttricatRepository::DEFAULT_WORKSPACE_ID;
         let plan_id = Uuid::new_v4();
@@ -6273,7 +6273,7 @@ value_type = "string"
         (plan_id, application_id, target_id)
     }
 
-    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    #[sqlx::test(migrator = "crate::TEST_MIGRATOR")]
     async fn sample_retryable_failure_retains_staging_and_resumes_exactly_once(pool: PgPool) {
         let (plan_id, application_id, target_id) =
             insert_sample_lifecycle_fixture(&pool, false).await;
@@ -6351,7 +6351,7 @@ value_type = "string"
         );
     }
 
-    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    #[sqlx::test(migrator = "crate::TEST_MIGRATOR")]
     async fn sample_ambiguous_commit_reconciles_without_duplicate_side_effects(pool: PgPool) {
         let (plan_id, application_id, target_id) =
             insert_sample_lifecycle_fixture(&pool, false).await;
@@ -6427,7 +6427,7 @@ value_type = "string"
         );
     }
 
-    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    #[sqlx::test(migrator = "crate::TEST_MIGRATOR")]
     async fn manual_abandonment_is_terminal_and_scrubs_staging(pool: PgPool) {
         let (plan_id, application_id, _) = insert_sample_lifecycle_fixture(&pool, false).await;
         let repository =
@@ -6461,7 +6461,7 @@ value_type = "string"
         );
     }
 
-    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    #[sqlx::test(migrator = "crate::TEST_MIGRATOR")]
     async fn hourly_cleanup_auto_abandons_and_purges_expired_staging(pool: PgPool) {
         let (plan_id, application_id, _) = insert_sample_lifecycle_fixture(&pool, true).await;
         let (unstarted_plan_id, unstarted_application_id, _) =
@@ -6515,7 +6515,7 @@ value_type = "string"
         assert_eq!(unstarted_staged, 0);
     }
 
-    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    #[sqlx::test(migrator = "crate::TEST_MIGRATOR")]
     async fn retry_staleness_atomically_invalidates_and_scrubs_sample_staging(pool: PgPool) {
         for extension_drift in [false, true] {
             let (plan_id, application_id, _) = insert_sample_lifecycle_fixture(&pool, false).await;
@@ -6566,7 +6566,7 @@ value_type = "string"
         }
     }
 
-    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    #[sqlx::test(migrator = "crate::TEST_MIGRATOR")]
     async fn sample_expiry_cleanup_skips_a_plan_locked_for_application_start(pool: PgPool) {
         let (plan_id, application_id, _) = insert_sample_lifecycle_fixture(&pool, false).await;
         sqlx::query("DELETE FROM solution_pack_application_steps WHERE application_id=$1")
@@ -6610,7 +6610,7 @@ value_type = "string"
         assert_eq!(staged, 1);
     }
 
-    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    #[sqlx::test(migrator = "crate::TEST_MIGRATOR")]
     async fn abandonment_uses_application_lock_and_step_timeouts(pool: PgPool) {
         let (_, application_id, _) = insert_sample_lifecycle_fixture(&pool, false).await;
         let mut timeout_tx = pool.begin().await.unwrap();

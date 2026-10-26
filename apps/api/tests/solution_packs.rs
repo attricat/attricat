@@ -831,7 +831,7 @@ async fn apply_plan(client: &Client, base_url: &str, plan_id: &str) -> reqwest::
         .unwrap()
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn inspection_requires_authentication_and_solution_pack_permission(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let archive = valid_archive();
@@ -878,7 +878,7 @@ async fn inspection_requires_authentication_and_solution_pack_permission(pool: P
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn inspection_enforces_personal_access_token_permission_subset(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let owner = authenticated_client();
@@ -956,7 +956,7 @@ async fn inspection_enforces_personal_access_token_permission_subset(pool: PgPoo
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn inspection_requires_browser_session_csrf(pool: PgPool) {
     let (base_url, server) = start_session_server(pool.clone()).await;
     let hash = hash_password(&Password::new("correct horse battery staple")).unwrap();
@@ -1114,7 +1114,7 @@ async fn inspection_requires_browser_session_csrf(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn sample_matcher_rejects_an_omitted_effective_default(pool: PgPool) {
     const BLUEPRINT: &[u8] = br#"
 format_version = 1
@@ -1144,7 +1144,7 @@ default_value = "Jane@example.com"
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn matcher_substrings_cover_explicit_defaulted_and_encoded_values(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -1251,7 +1251,7 @@ default_value = "Jane@example.com"
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn sample_temporal_values_are_type_aware_and_strict(pool: PgPool) {
     const DATE_BLUEPRINT: &[u8] = br#"
 format_version = 1
@@ -1422,7 +1422,7 @@ value_type = "date"
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn sample_data_requires_opt_in_and_applies_with_ordinary_audit_and_event(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -1559,7 +1559,7 @@ async fn sample_data_requires_opt_in_and_applies_with_ordinary_audit_and_event(p
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn sample_dataset_reservation_survives_every_plan_and_application_state(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -1616,7 +1616,7 @@ async fn sample_dataset_reservation_survives_every_plan_and_application_state(po
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn guidance_and_checks_persist_and_reruns_are_informational_and_immutable(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -1777,7 +1777,7 @@ async fn guidance_and_checks_persist_and_reruns_are_informational_and_immutable(
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn near_limit_checklist_persists_without_null_optional_checks(pool: PgPool) {
     let items = (0..16)
         .map(|position| {
@@ -1813,7 +1813,7 @@ async fn near_limit_checklist_persists_without_null_optional_checks(pool: PgPool
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn all_check_predicates_evaluate_current_state_and_fail_closed_atomically(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let release_id = install_layout_extension(&pool).await;
@@ -2065,7 +2065,7 @@ async fn all_check_predicates_evaluate_current_state_and_fail_closed_atomically(
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn inspection_rejects_missing_or_wrong_media_type_and_invalid_archives(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -2137,7 +2137,7 @@ value_type = "string"
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn legacy_context_declarations_are_rejected_by_inspection_and_planning(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -2185,7 +2185,7 @@ async fn legacy_context_declarations_are_rejected_by_inspection_and_planning(poo
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn valid_inspection_returns_only_safe_summaries_without_persisting(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let archive = valid_archive();
@@ -2259,7 +2259,7 @@ async fn valid_inspection_returns_only_safe_summaries_without_persisting(pool: P
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn extension_requirements_are_safe_visible_plan_evidence(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -2315,7 +2315,7 @@ async fn extension_requirements_are_safe_visible_plan_evidence(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn compatible_disabled_extension_satisfies_plan_and_is_revalidated_on_apply(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let release_id = Uuid::new_v4();
@@ -2489,7 +2489,7 @@ async fn compatible_disabled_extension_satisfies_plan_and_is_revalidated_on_appl
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn inspection_enforces_the_32_mib_compressed_body_limit(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let oversized = vec![0_u8; 32 * 1024 * 1024 + 1];
@@ -2507,7 +2507,7 @@ async fn inspection_enforces_the_32_mib_compressed_body_limit(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn plan_creation_persists_an_audited_immutable_dry_run_without_attricat_mutation(
     pool: PgPool,
 ) {
@@ -2595,7 +2595,7 @@ async fn plan_creation_persists_an_audited_immutable_dry_run_without_attricat_mu
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn plan_validates_prefix_and_reports_existing_code_conflicts(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -2641,7 +2641,7 @@ async fn plan_validates_prefix_and_reports_existing_code_conflicts(pool: PgPool)
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn apply_runs_reverse_declared_dependencies_in_dependency_order(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -2676,7 +2676,7 @@ async fn apply_runs_reverse_declared_dependencies_in_dependency_order(pool: PgPo
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn mapped_plan_digest_rejects_kind_downgrade_and_resource_row_removal(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -2850,7 +2850,7 @@ async fn mapped_plan_digest_rejects_kind_downgrade_and_resource_row_removal(pool
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn explicit_exact_blueprint_mapping_reuses_without_mutation_and_revalidates(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -3397,7 +3397,7 @@ async fn explicit_exact_blueprint_mapping_reuses_without_mutation_and_revalidate
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn plan_routes_require_solution_pack_permission_and_isolate_workspaces(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let viewer_id = create_principal_with_role(
@@ -3523,7 +3523,7 @@ async fn plan_routes_require_solution_pack_permission_and_isolate_workspaces(poo
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn apply_merges_extension_layout_without_enabling_or_replacing_settings(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     install_layout_extension(&pool).await;
@@ -3630,7 +3630,7 @@ async fn apply_merges_extension_layout_without_enabling_or_replacing_settings(po
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn blueprint_extension_layout_applies_for_draft_and_publish_with_disabled_extension(
     pool: PgPool,
 ) {
@@ -3679,7 +3679,7 @@ async fn blueprint_extension_layout_applies_for_draft_and_publish_with_disabled_
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn layout_apply_rejects_compatible_release_change_after_planning(pool: PgPool) {
     let prior_release_id = install_layout_extension(&pool).await;
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
@@ -3728,7 +3728,7 @@ async fn layout_apply_rejects_compatible_release_change_after_planning(pool: PgP
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn layout_apply_rejects_malformed_current_layout_and_preserves_it(pool: PgPool) {
     install_layout_extension(&pool).await;
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
@@ -3811,7 +3811,7 @@ async fn layout_apply_rejects_malformed_current_layout_and_preserves_it(pool: Pg
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn both_workspace_settings_plan_and_apply_in_either_manifest_order(pool: PgPool) {
     install_layout_extension(&pool).await;
     let (base_url, server) = start_server(pool.clone()).await;
@@ -3858,7 +3858,7 @@ async fn both_workspace_settings_plan_and_apply_in_either_manifest_order(pool: P
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn malformed_workspace_settings_root_fails_closed_before_layout_application(pool: PgPool) {
     install_layout_extension(&pool).await;
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
@@ -3916,7 +3916,7 @@ async fn malformed_workspace_settings_root_fails_closed_before_layout_applicatio
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn apply_appends_explore_navigation_and_preserves_unrelated_settings(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     sqlx::query("UPDATE workspaces SET settings = '{\"theme\":\"dark\",\"explore_navigation\":[]}'::jsonb WHERE id=$1")
@@ -3982,7 +3982,7 @@ async fn apply_appends_explore_navigation_and_preserves_unrelated_settings(pool:
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn malformed_or_duplicate_existing_navigation_is_conflict_and_is_preserved(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let (base_url, server) = start_server(pool.clone()).await;
@@ -4043,7 +4043,7 @@ async fn malformed_or_duplicate_existing_navigation_is_conflict_and_is_preserved
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn concurrent_ordinary_navigation_replacement_and_pack_append_do_not_lose_updates(
     pool: PgPool,
 ) {
@@ -4116,7 +4116,7 @@ async fn concurrent_ordinary_navigation_replacement_and_pack_append_do_not_lose_
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn concurrent_ordinary_layout_replacement_and_pack_append_do_not_lose_updates(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     install_layout_extension(&pool).await;
@@ -4184,7 +4184,7 @@ async fn concurrent_ordinary_layout_replacement_and_pack_append_do_not_lose_upda
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn satisfied_navigation_step_is_durable_and_visibility_change_is_stale(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let (base_url, server) = start_server(pool.clone()).await;
@@ -4267,7 +4267,7 @@ async fn satisfied_navigation_step_is_durable_and_visibility_change_is_stale(poo
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn duplicate_system_and_workspace_role_codes_remain_valid_for_navigation(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     sqlx::query("INSERT INTO roles (id,code,workspace_id,is_system) VALUES ($1,'viewer',$2,false)")
@@ -4302,7 +4302,7 @@ async fn duplicate_system_and_workspace_role_codes_remain_valid_for_navigation(p
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn apply_creates_draft_blueprint_once_with_safe_history(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -4417,7 +4417,7 @@ async fn apply_creates_draft_blueprint_once_with_safe_history(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn application_read_contract_rejects_bad_inputs_and_keeps_max_pages_compact(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -4509,7 +4509,7 @@ async fn application_read_contract_rejects_bad_inputs_and_keeps_max_pages_compac
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn apply_respects_publish_and_rejects_expired_blocked_and_stale_plans(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -4605,7 +4605,7 @@ async fn apply_respects_publish_and_rejects_expired_blocked_and_stale_plans(pool
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn cross_kind_target_created_while_a_step_is_executing_invalidates_the_application(
     pool: PgPool,
 ) {
@@ -4673,7 +4673,7 @@ async fn cross_kind_target_created_while_a_step_is_executing_invalidates_the_app
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn concurrent_apply_requests_converge_without_duplicate_resources(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -4727,7 +4727,7 @@ async fn concurrent_apply_requests_converge_without_duplicate_resources(pool: Pg
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn failed_step_is_durable_and_retry_resumes_without_duplicate_completed_resources(
     pool: PgPool,
 ) {
@@ -4881,7 +4881,7 @@ fn archive_with_lexicon() -> Vec<u8> {
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn apply_adds_pack_lexicon_entries_without_overriding_workspace_entries(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -5032,7 +5032,7 @@ async fn start_server_with_official_extensions(
     (base_url, server, official)
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn pack_installs_configures_grants_and_enables_an_official_extension(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;
@@ -5191,7 +5191,7 @@ async fn pack_installs_configures_grants_and_enables_an_official_extension(pool:
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn interrupted_official_extension_install_resumes_without_reinstalling(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;
@@ -5262,7 +5262,7 @@ async fn interrupted_official_extension_install_resumes_without_reinstalling(poo
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn official_release_changed_after_review_is_refused(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;
@@ -5318,7 +5318,7 @@ async fn official_release_changed_after_review_is_refused(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn official_extension_resolution_reports_registry_and_release_failures(pool: PgPool) {
     let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;
     let client = authenticated_client();
@@ -5357,7 +5357,7 @@ async fn official_extension_resolution_reports_registry_and_release_failures(poo
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn installed_official_extension_satisfies_the_packs_extension_layout(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;

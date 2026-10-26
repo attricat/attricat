@@ -25,7 +25,7 @@ code = "description"
 value_type = "string"
 "#;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn single_keys_normalize_values_and_report_the_conflicting_record(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -126,7 +126,7 @@ async fn single_keys_normalize_values_and_report_the_conflicting_record(pool: Pg
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn concurrent_duplicate_writes_allow_exactly_one(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -169,7 +169,7 @@ async fn concurrent_duplicate_writes_allow_exactly_one(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn composite_keys_combine_relationships_and_scalars(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -253,7 +253,7 @@ value_type = "string"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn publishing_a_key_reports_existing_duplicates_and_then_covers_older_revisions(
     pool: PgPool,
 ) {
@@ -334,7 +334,7 @@ async fn publishing_a_key_reports_existing_duplicates_and_then_covers_older_revi
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn context_scoped_keys_compare_resolved_values_in_every_context(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -459,7 +459,7 @@ async fn current_values(client: &Client, base_url: &str, record: &Value) -> Vec<
         .collect()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn duplicating_leaves_out_enforced_key_values(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -613,7 +613,7 @@ async fn set_scalar(
         .unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn new_contexts_do_not_inherit_keys_of_attributes_without_fallback(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -664,7 +664,7 @@ context_fallback = "none"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reparenting_a_context_can_swap_two_records_key_values(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

@@ -104,7 +104,7 @@ value_type = "relationship"
 target_blueprint = "certificate"
 "#;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn record_schema_checks_compare_attributes_on_every_write(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -252,7 +252,7 @@ target_blueprint = "facility"
 cardinality = "one"
 "#;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn linked_record_checks_read_one_hop_on_save(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -370,7 +370,7 @@ target_blueprint = "nonconformance"
 cardinality = "one"
 "#;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn transition_conditions_block_and_explain_status_changes(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -526,7 +526,7 @@ fn rule(code: &str, predicate: &str, extra: &str) -> String {
     )
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn new_rule_predicates_open_and_resolve_findings(pool: PgPool) {
     AttricatRepository::system(pool.clone())
         .ensure_builtin_permissions()
@@ -646,7 +646,7 @@ allowed_extensions = ["png"]
 max_bytes = 1048576
 "#;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn predicates_see_file_values_and_explicit_empty_local_values(pool: PgPool) {
     AttricatRepository::system(pool.clone())
         .ensure_builtin_permissions()
@@ -729,7 +729,7 @@ async fn predicates_see_file_values_and_explicit_empty_local_values(pool: PgPool
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn enforcing_rules_dry_run_before_enabling_and_reject_writes(pool: PgPool) {
     AttricatRepository::system(pool.clone())
         .ensure_builtin_permissions()
@@ -865,7 +865,7 @@ async fn enforcing_rules_dry_run_before_enabling_and_reject_writes(pool: PgPool)
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn channels_require_checks_before_publication(pool: PgPool) {
     AttricatRepository::system(pool.clone())
         .ensure_builtin_permissions()
@@ -961,7 +961,7 @@ async fn channels_require_checks_before_publication(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn retained_edits_withdraw_publications_whose_channel_checks_now_fail(pool: PgPool) {
     AttricatRepository::system(pool.clone())
         .ensure_builtin_permissions()
@@ -1146,7 +1146,7 @@ cardinality = "one"
 
 /// A rule run reads linked and referencing records for a whole candidate
 /// page at once; each candidate still sees only its own related records.
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn rule_pages_resolve_related_records_per_candidate(pool: PgPool) {
     AttricatRepository::system(pool.clone())
         .ensure_builtin_permissions()
@@ -1274,7 +1274,7 @@ predicates = [
 
 /// Re-pointing a referencing record re-evaluates both the record it now
 /// references and the one it stopped referencing.
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn referenced_by_rules_reevaluate_records_that_lose_a_reference(pool: PgPool) {
     AttricatRepository::system(pool.clone())
         .ensure_builtin_permissions()
@@ -1361,7 +1361,7 @@ predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
 
 /// A blueprint migration that re-points a relationship also re-evaluates the
 /// record it released, although `record.migrated.v1` carries no facts.
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn referenced_by_rules_reevaluate_records_a_migration_releases(pool: PgPool) {
     AttricatRepository::system(pool.clone())
         .ensure_builtin_permissions()
@@ -1481,7 +1481,7 @@ predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
 
 /// The status-transitions preview checks every context the write would
 /// change, including child contexts that inherit the status.
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn transition_preview_covers_inheriting_contexts(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();

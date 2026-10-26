@@ -126,7 +126,7 @@ async fn linked_files(pool: &PgPool, record_id: &str) -> Vec<Uuid> {
     .unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn a_staged_file_satisfies_a_required_file_attribute(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -186,7 +186,7 @@ async fn a_staged_file_satisfies_a_required_file_attribute(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn a_staged_file_is_claimed_only_once_by_its_uploader_for_its_binding(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -252,7 +252,7 @@ async fn a_staged_file_is_claimed_only_once_by_its_uploader_for_its_binding(pool
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn a_staged_file_cannot_be_linked_to_an_existing_record(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -285,7 +285,7 @@ async fn a_staged_file_cannot_be_linked_to_an_existing_record(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn staged_uploads_follow_the_attribute_cardinality_and_policy(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -412,7 +412,7 @@ async fn staged_uploads_follow_the_attribute_cardinality_and_policy(pool: PgPool
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn staged_uploads_require_permission_to_create_records(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -431,7 +431,7 @@ async fn staged_uploads_require_permission_to_create_records(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn duplicating_a_record_whose_schema_requires_a_file_succeeds(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -467,7 +467,7 @@ async fn duplicating_a_record_whose_schema_requires_a_file_succeeds(pool: PgPool
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn expired_unclaimed_staged_files_are_reclaimed(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

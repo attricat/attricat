@@ -168,12 +168,12 @@ async fn renewal_cannot_escape_revocation(pool: PgPool, deactivate: bool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn member_deactivation_catches_a_concurrent_session_renewal(pool: PgPool) {
     renewal_cannot_escape_revocation(pool, true).await;
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn role_revocation_catches_a_concurrent_session_renewal(pool: PgPool) {
     renewal_cannot_escape_revocation(pool, false).await;
 }

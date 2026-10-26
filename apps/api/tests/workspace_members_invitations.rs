@@ -3,7 +3,7 @@ use crate::support;
 use chrono::{Duration, Utc};
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn invitations_are_digest_only_one_time_and_bound_to_verified_email(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
@@ -30,7 +30,7 @@ async fn invitations_are_digest_only_one_time_and_bound_to_verified_email(pool: 
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn revoked_or_expired_invitations_never_activate_a_member(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();

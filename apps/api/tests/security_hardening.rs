@@ -36,7 +36,7 @@ fn bearer(token: &Value) -> Client {
     Client::builder().default_headers(headers).build().unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn token_cannot_launder_owner_authority_through_roles_or_invitations(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -97,7 +97,7 @@ async fn token_cannot_launder_owner_authority_through_roles_or_invitations(pool:
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn role_cannot_retire_into_itself_and_delete_its_grants(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
     let repository = AttricatRepository::system(pool.clone());
@@ -126,7 +126,7 @@ async fn role_cannot_retire_into_itself_and_delete_its_grants(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn queued_agent_runs_retain_and_enforce_the_initiating_token(pool: PgPool) {
     let (base, server) = start_server_with_config(pool.clone(), |state| {
         state.agent_provider = AgentProviderConfig::from_values(
@@ -350,7 +350,7 @@ async fn queued_agent_runs_retain_and_enforce_the_initiating_token(pool: PgPool)
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn approving_another_users_agent_change_requires_the_mutation_permission(pool: PgPool) {
     let (base, server) = start_server_with_config(pool.clone(), |state| {
         state.agent_provider = AgentProviderConfig::from_values(
@@ -418,7 +418,7 @@ async fn approving_another_users_agent_change_requires_the_mutation_permission(p
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn relationship_hydration_does_not_expose_unreadable_records(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -522,7 +522,7 @@ async fn relationship_hydration_does_not_expose_unreadable_records(pool: PgPool)
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn relationship_previews_have_a_global_expansion_budget(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -550,7 +550,7 @@ async fn relationship_previews_have_a_global_expansion_budget(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn login_attempt_budget_is_shared_across_workspaces(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'other', 'Other', 'other.local')")
@@ -567,7 +567,7 @@ async fn login_attempt_budget_is_shared_across_workspaces(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn concurrent_ownership_transfers_recheck_the_owner_after_locking(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
     let (_, first) = add_workspace_user(&pool).await;

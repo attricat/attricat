@@ -5,7 +5,7 @@ use std::sync::Arc;
 use api::storage::FakeObjectStore;
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn liveness_and_readiness_have_distinct_dependency_semantics(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool, store.clone()).await;
@@ -51,7 +51,7 @@ async fn liveness_and_readiness_have_distinct_dependency_semantics(pool: PgPool)
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn data_health_sections_return_an_empty_attricat(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -103,7 +103,7 @@ async fn data_health_sections_return_an_empty_attricat(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn data_health_cache_reports_miss_then_hit_in_server_timing(pool: PgPool) {
     let (base_url, server) = start_server_with_data_health_cache_ttl(pool, 300).await;
     let client = authenticated_client();
@@ -129,7 +129,7 @@ async fn data_health_cache_reports_miss_then_hit_in_server_timing(pool: PgPool) 
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn metrics_endpoint_exposes_low_cardinality_request_metrics(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -159,7 +159,7 @@ async fn metrics_endpoint_exposes_low_cardinality_request_metrics(pool: PgPool) 
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn data_health_completeness_counts_default_values(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

@@ -4,7 +4,7 @@ use support::*;
 
 const ENDPOINT: &str = "/data-health/background-processing";
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn background_processing_requires_identity_and_data_health_permission(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     assert_eq!(
@@ -69,7 +69,7 @@ async fn task(pool: &PgPool, workspace_id: Uuid, kind: &str, status: &str, offse
         .bind(status).bind(offset).execute(pool).await.unwrap();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn background_processing_is_workspace_scoped_and_excludes_finished_tasks_and_secrets(
     pool: PgPool,
 ) {

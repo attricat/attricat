@@ -14,7 +14,7 @@ async fn insert_event(pool: &PgPool, event_type: &str, correlation_id: Uuid) -> 
     event_id
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn event_delivery_materialization_is_atomic_filtered_and_deduplicated(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -90,7 +90,7 @@ async fn event_delivery_materialization_is_atomic_filtered_and_deduplicated(pool
     assert_eq!(replay.3, "queued");
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn materialization_is_idempotent_across_coordinator_restart(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -143,7 +143,7 @@ async fn materialization_is_idempotent_across_coordinator_restart(pool: PgPool) 
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn newly_eligible_plugin_event_is_backfilled_after_watermark_advanced(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -195,7 +195,7 @@ async fn newly_eligible_plugin_event_is_backfilled_after_watermark_advanced(pool
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn expired_event_task_lease_rejects_stale_receipts_and_redelivers(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),

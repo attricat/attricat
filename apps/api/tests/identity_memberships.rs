@@ -29,7 +29,7 @@ async fn permission_set(pool: &PgPool, role: &str) -> BTreeSet<String> {
     .collect()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn identity_memberships_seeded_roles_and_scoped_grants(pool: PgPool) {
     let all_permissions = BTreeSet::from([
         "blueprints.publish",
@@ -221,7 +221,7 @@ async fn identity_memberships_seeded_roles_and_scoped_grants(pool: PgPool) {
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn bootstrap_owner_record_is_normalized_and_unique(pool: PgPool) {
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let user = Uuid::new_v4();

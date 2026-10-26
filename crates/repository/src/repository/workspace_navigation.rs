@@ -330,7 +330,7 @@ mod tests {
 
     use super::*;
 
-    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    #[sqlx::test(migrator = "crate::TEST_MIGRATOR")]
     async fn workspace_lock_serializes_navigation_mutations(pool: sqlx::PgPool) {
         let workspace_id = AttricatRepository::DEFAULT_WORKSPACE_ID;
         let repository = AttricatRepository::new(pool, AttricatRepository::DEFAULT_WORKSPACE_ID);

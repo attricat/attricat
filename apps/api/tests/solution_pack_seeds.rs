@@ -218,7 +218,7 @@ fn action<'a>(plan: &'a Value, key: &str) -> &'a Value {
         .unwrap_or_else(|| panic!("missing action {key}"))
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn seeds_install_contexts_channels_rules_workflows_and_saved_searches(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -441,7 +441,7 @@ async fn seeds_install_contexts_channels_rules_workflows_and_saved_searches(pool
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn installers_map_pack_contexts_to_existing_contexts_and_channels(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -623,7 +623,7 @@ fn dependent_archive(range: &str) -> Vec<u8> {
     )
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn seeds_reuse_exact_blueprints_from_applied_prerequisites(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -800,7 +800,7 @@ fn sample_archive() -> (Vec<u8>, Vec<u8>) {
     (archive, sample)
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn samples_store_bundled_files_and_contextual_values(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
@@ -916,7 +916,7 @@ async fn samples_store_bundled_files_and_contextual_values(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn unapplied_sample_file_staging_is_released_for_cleanup(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;

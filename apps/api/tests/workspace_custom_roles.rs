@@ -29,7 +29,7 @@ async fn workspace_owner(pool: &PgPool) -> (Uuid, Uuid, Uuid) {
     (workspace, user, membership)
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn custom_roles_are_managed_by_the_repository(pool: PgPool) {
     let (workspace, owner, membership) = workspace_owner(&pool).await;
     let repository = AttricatRepository::system(pool.clone());
@@ -80,7 +80,7 @@ async fn custom_roles_are_managed_by_the_repository(pool: PgPool) {
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn retiring_a_role_into_owner_keeps_owner_grants_workspace_scoped(pool: PgPool) {
     let (workspace, owner, membership) = workspace_owner(&pool).await;
     let repository = AttricatRepository::system(pool.clone());

@@ -28,7 +28,7 @@ async fn system_user_of(pool: &PgPool, workspace: Uuid) -> Option<Uuid> {
         .unwrap()
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn workspace_initialization_creates_and_backfills_one_system_user(pool: PgPool) {
     let (_base, _server) = start_server(pool.clone()).await;
     let workspace = bootstrap_workspace_id();
@@ -73,7 +73,7 @@ async fn workspace_initialization_creates_and_backfills_one_system_user(pool: Pg
     assert_eq!((memberships, credentials, tokens), (0, 0, 0));
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn system_users_are_not_members_and_cannot_be_invited(pool: PgPool) {
     let (base, _server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -109,7 +109,7 @@ async fn system_users_are_not_members_and_cannot_be_invited(pool: PgPool) {
     assert_eq!(memberships, 0);
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn system_comments_never_notify_the_system_user(pool: PgPool) {
     let (base, _server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -185,7 +185,7 @@ async fn system_comments_never_notify_the_system_user(pool: PgPool) {
     assert!(response.status().is_client_error(), "{}", response.status());
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn system_users_cannot_authenticate(pool: PgPool) {
     let (_base, _server) = start_server(pool.clone()).await;
     let workspace = bootstrap_workspace_id();

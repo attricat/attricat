@@ -2,7 +2,7 @@ use crate::support;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn directional_cardinality_rejects_source_and_target_conflicts_per_context(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -93,7 +93,7 @@ target_cardinality = "one"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn source_one_allows_many_sources_to_share_a_target(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -154,7 +154,7 @@ cardinality = "one""#,
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn concurrent_opposite_order_appends_do_not_deadlock(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -237,7 +237,7 @@ target_cardinality = "one""#,
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn cardinality_is_enforced_when_an_record_migrates_to_declaring_revision(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

@@ -316,7 +316,7 @@ async fn wait_until(pool: &PgPool, sql: &str, timeout: Duration) -> bool {
     false
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 #[ignore = "measurement harness; run explicitly with --ignored --nocapture"]
 async fn database_round_trips(pool: PgPool) {
     init_tracing(

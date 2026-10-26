@@ -2,7 +2,7 @@ use crate::support;
 
 use support::{PgPool, StatusCode, authenticated_client, start_server};
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn registry_sources_include_official_source_and_manage_custom_sources(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();

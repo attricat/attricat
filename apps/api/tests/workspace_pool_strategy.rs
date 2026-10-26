@@ -4,7 +4,7 @@ use api::repository::AttricatRepository;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use uuid::Uuid;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn workspace_scopes_share_one_bounded_pool_under_concurrency_and_close_cleanly(pool: PgPool) {
     let workspace_ids: Vec<_> = (0..48).map(|_| Uuid::new_v4()).collect();
     for (index, workspace_id) in workspace_ids.iter().enumerate() {

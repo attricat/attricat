@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn presentation_asset_constraints_are_fail_closed(pool: PgPool) {
     let workspace_id = Uuid::parse_str("00000000-0000-4000-8000-000000000002").unwrap();
     sqlx::query("INSERT INTO presentation_assets (id,workspace_id,purpose,media_type,byte_size,sha256,width,height,object_key) VALUES ($1,$2,'logo','image/png',16,$3,1,1,$4)")

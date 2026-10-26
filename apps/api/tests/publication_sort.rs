@@ -2,7 +2,7 @@ use crate::support;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn publication_sort_uses_selected_channel_and_keyset_pages(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

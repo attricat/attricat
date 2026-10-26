@@ -12,7 +12,7 @@ use tokio::sync::watch;
 
 const DEFINITION: &str = "format_version = 1\ncode = \"tag_new_products\"\nname = \"Tag new products\"\n[[triggers]]\nevent_type = \"record.created.v1\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"new\"]";
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn workflow_lifecycle_keeps_immutable_revisions(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -82,7 +82,7 @@ async fn workflow_lifecycle_keeps_immutable_revisions(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn completion_failure_on_final_attempt_dead_letters_workflow_run_and_replays_generation(
     pool: PgPool,
 ) {
@@ -253,7 +253,7 @@ async fn wait_for_tag(pool: &PgPool, record_id: Uuid, tag: &str) {
     panic!("workflow action did not add {tag}; runs: {runs:?}");
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn sample_marker_is_preserved_by_ordinary_tag_add_automation(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -388,7 +388,7 @@ default_value = "untitled"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn workflow_outbox_dispatcher_and_worker_are_idempotent_and_disable_safe(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -758,7 +758,7 @@ async fn fan_out_latest_event(pool: &PgPool, record_id: &str) -> (String, u64) {
     (event.event_type, created)
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn event_triggers_run_only_when_a_listed_attribute_changed(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -958,7 +958,7 @@ async fn handle_workflow_task_once(repository: &AttricatRepository) -> bool {
     }
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn referencing_update_validates_each_target_and_retries_only_failures(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -1141,7 +1141,7 @@ tags = ["needs-review"]"#,
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn referencing_update_refuses_more_targets_than_its_limit(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -1184,7 +1184,7 @@ async fn referencing_update_refuses_more_targets_than_its_limit(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn workflow_writes_withdraw_changed_publications(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -1271,7 +1271,7 @@ fixed = "Reworked""#,
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn manual_run_of_a_disabled_workflow_explains_it_is_not_enabled(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

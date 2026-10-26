@@ -131,7 +131,7 @@ fn cell(response: &Value, record: &Value, field: &str) -> Value {
         .clone()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn search_resolves_filters_sorting_and_table_values_for_the_requested_context(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();

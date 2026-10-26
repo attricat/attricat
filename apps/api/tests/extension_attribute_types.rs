@@ -2,7 +2,7 @@ use crate::support;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn json_values_round_trip_through_current_and_history_reads(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

@@ -27,7 +27,7 @@ fn cookie_pair(response: &reqwest::Response) -> (String, String) {
     (cookies[0].clone(), cookies[1].clone())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn login_rotates_sessions_and_csrf_protects_mutations(pool: PgPool) {
     let (base_url, server) = start_session_server(pool.clone()).await;
     let password = Password::new("correct horse battery staple");
@@ -129,7 +129,7 @@ async fn login_rotates_sessions_and_csrf_protects_mutations(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn password_reset_requests_are_rate_limited_without_disclosing_or_issuing_more_tokens(
     pool: PgPool,
 ) {
@@ -166,7 +166,7 @@ async fn password_reset_requests_are_rate_limited_without_disclosing_or_issuing_
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn session_workspace_selects_the_explicit_attricat_scope(pool: PgPool) {
     let (base_url, server) = start_session_server(pool.clone()).await;
     let owner_id = OWNER_ID.parse::<Uuid>().unwrap();
@@ -271,7 +271,7 @@ async fn session_workspace_selects_the_explicit_attricat_scope(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn stale_password_verification_cannot_issue_a_session(pool: PgPool) {
     let (_base_url, server) = start_session_server(pool.clone()).await;
     let password = Password::new("correct horse battery staple");
@@ -314,7 +314,7 @@ async fn stale_password_verification_cannot_issue_a_session(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn login_rate_limit_rejects_attempts_after_the_fixed_window_threshold(pool: PgPool) {
     let (base_url, server) = start_session_server(pool).await;
     let client = Client::new();
@@ -337,7 +337,7 @@ async fn login_rate_limit_rejects_attempts_after_the_fixed_window_threshold(pool
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn time_zone_preference_persists_on_the_account_and_rejects_unknown_zones(pool: PgPool) {
     let (base_url, server) = start_session_server(pool.clone()).await;
     let password = Password::new("correct horse battery staple");
@@ -434,7 +434,7 @@ async fn time_zone_preference_persists_on_the_account_and_rejects_unknown_zones(
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn display_name_updates_the_account_and_rejects_invalid_names(pool: PgPool) {
     let (base_url, server) = start_session_server(pool.clone()).await;
     let password = Password::new("correct horse battery staple");
@@ -505,7 +505,7 @@ async fn display_name_updates_the_account_and_rejects_invalid_names(pool: PgPool
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn sample_accounts_hold_their_roles_and_are_published(pool: PgPool) {
     let client = Client::new();
     let (base_url, server) = start_server_with_config(pool.clone(), |_| {}).await;
@@ -569,7 +569,7 @@ async fn sample_accounts_hold_their_roles_and_are_published(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn demo_mode_refuses_changes_that_could_lock_visitors_out(pool: PgPool) {
     let (base_url, server) = start_server_with_config(pool, |state| state.demo_mode = true).await;
     let anonymous = Client::new();

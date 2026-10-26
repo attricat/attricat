@@ -61,7 +61,7 @@ async fn record(owner: &Client, base: &str) -> Uuid {
         .unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reclaimed_agent_tasks_cannot_commit_comments_saved_views_or_publications(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let id = record(&authenticated_client(), &base).await;
@@ -185,7 +185,7 @@ async fn reclaimed_agent_tasks_cannot_commit_comments_saved_views_or_publication
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn sibling_agent_decisions_queue_one_resume_only_after_the_wave_is_resolved(pool: PgPool) {
     use api::repository::ApprovalDecision;
     let (_, server) = start_server(pool.clone()).await;
@@ -289,7 +289,7 @@ async fn sibling_agent_decisions_queue_one_resume_only_after_the_wave_is_resolve
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn decisions_during_provider_delivery_are_not_lost_and_terminal_runs_cannot_be_approved(
     pool: PgPool,
 ) {
@@ -399,7 +399,7 @@ async fn decisions_during_provider_delivery_are_not_lost_and_terminal_runs_canno
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn task_fences_use_wall_clock_after_waiting_for_a_domain_lock(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let id = record(&authenticated_client(), &base).await;

@@ -89,7 +89,7 @@ fn kinds(page: &Value) -> Vec<&str> {
         .collect()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn system_events_reach_the_inbox_of_each_affected_member(pool: PgPool) {
     let (base, _server) = start_server(pool.clone()).await;
     let owner_client = authenticated_client();
@@ -235,7 +235,7 @@ async fn system_events_reach_the_inbox_of_each_affected_member(pool: PgPool) {
     assert_eq!(inbox(&member_client, &base, "").await["unread_count"], 4);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn comments_notify_current_assignees_not_earlier_ones(pool: PgPool) {
     let (base, _server) = start_server(pool.clone()).await;
     let owner_client = authenticated_client();
@@ -292,7 +292,7 @@ async fn comments_notify_current_assignees_not_earlier_ones(pool: PgPool) {
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn members_read_mark_and_delete_only_their_own_notifications(pool: PgPool) {
     let (base, _server) = start_server(pool.clone()).await;
     let owner_client = authenticated_client();
@@ -448,7 +448,7 @@ async fn members_read_mark_and_delete_only_their_own_notifications(pool: PgPool)
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_tools_act_on_the_initiating_users_inbox(pool: PgPool) {
     let (base, _server) = start_server(pool.clone()).await;
     let owner_client = authenticated_client();

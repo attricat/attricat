@@ -1,7 +1,7 @@
 use crate::support;
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn saved_views_are_scoped_and_link_snapshots_are_reusable(pool: PgPool) {
     let (base_url, _server) = start_server(pool).await;
     let client = authenticated_client();
@@ -163,7 +163,7 @@ async fn saved_views_are_scoped_and_link_snapshots_are_reusable(pool: PgPool) {
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn saved_views_and_links_keep_the_browse_rail(pool: PgPool) {
     let (base_url, _server) = start_server(pool).await;
     let client = authenticated_client();

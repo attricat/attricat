@@ -214,7 +214,7 @@ async fn content_revision(pool: &sqlx::PgPool, record_id: Uuid) -> i64 {
         .unwrap()
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn handler_outcomes_reject_and_retry_records_without_quarantine(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     repository
@@ -312,7 +312,7 @@ async fn handler_outcomes_reject_and_retry_records_without_quarantine(pool: sqlx
     assert_eq!(installation_state(&pool).await, "quarantined");
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     let store = Arc::new(FakeObjectStore::available());
@@ -657,7 +657,7 @@ async fn content_revisions_guard_the_mapping_store_against_stale_pushes(pool: sq
     commit("withdrawn").await.unwrap();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     let store = Arc::new(FakeObjectStore::available());
@@ -789,7 +789,7 @@ async fn leases_yield_to_rejections_and_keep_mid_push_retries(pool: sqlx::PgPool
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn leases_survive_a_retried_begin_and_withdrawals_can_be_undone(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     let store = Arc::new(FakeObjectStore::available());
@@ -842,7 +842,7 @@ async fn leases_survive_a_retried_begin_and_withdrawals_can_be_undone(pool: sqlx
     assert!(begin("handler:published").await.is_some());
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn a_keyed_retry_sent_again_retries_nothing_twice(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     let store = Arc::new(FakeObjectStore::available());
@@ -900,7 +900,7 @@ async fn a_keyed_retry_sent_again_retries_nothing_twice(pool: sqlx::PgPool) {
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn catalog_pages_pair_snapshot_values_with_snapshot_revisions(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     let store = Arc::new(FakeObjectStore::available());
@@ -1035,7 +1035,7 @@ async fn run_status(pool: &sqlx::PgPool, run: Uuid) -> (String, Value, Option<St
     .unwrap()
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn connector_runs_read_resolved_rows_close_out_withdrawals_and_resync(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     let store = Arc::new(FakeObjectStore::available());
@@ -1241,7 +1241,7 @@ async fn connector_runs_read_resolved_rows_close_out_withdrawals_and_resync(pool
     assert_ne!(resync("status:rejected").await, first);
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn batch_failures_retry_reject_or_fault_by_their_kind(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     let store = Arc::new(FakeObjectStore::available());
@@ -1423,7 +1423,7 @@ input = {{fail = "{fail}"}}
     assert_eq!(installation_state(&pool).await, "quarantined");
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn export_status_preview_and_retry_are_served_over_http(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     let store = Arc::new(FakeObjectStore::available());
@@ -1614,7 +1614,7 @@ async fn set_title(repository: &AttricatRepository, record: Uuid, title: &str) {
         .unwrap();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn debounced_handlers_push_a_burst_of_edits_once(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     repository
@@ -1673,7 +1673,7 @@ async fn debounced_handlers_push_a_burst_of_edits_once(pool: sqlx::PgPool) {
     assert_eq!(installation_state(&pool).await, "enabled");
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn related_record_changes_trigger_and_advance_the_linking_row(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     let store = Arc::new(FakeObjectStore::available());
@@ -1795,7 +1795,7 @@ trigger = {events = ["attribute_value.changed.v1"], debounce_seconds = 1}
     assert!(refused.to_string().contains("context"), "{refused}");
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn change_triggered_jobs_export_only_the_changed_records(pool: sqlx::PgPool) {
     let repository = workspace_repository(&pool).await;
     let store = Arc::new(FakeObjectStore::available());

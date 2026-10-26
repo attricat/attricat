@@ -46,7 +46,7 @@ async fn upload(client: &Client, url: &str) -> reqwest::Response {
         .unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn gallery_references_are_ordered_conflict_checked_and_archived(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
@@ -170,7 +170,7 @@ async fn gallery_references_are_ordered_conflict_checked_and_archived(pool: PgPo
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn unordered_gallery_allows_removal_but_not_reordering_or_foreign_references(pool: PgPool) {
     let (base, server) =
         start_server_with_object_store(pool, Arc::new(FakeObjectStore::available())).await;
@@ -216,7 +216,7 @@ async fn unordered_gallery_allows_removal_but_not_reordering_or_foreign_referenc
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn readonly_file_attributes_reject_uploads_and_reference_changes(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_object_store(pool, store.clone()).await;
@@ -242,7 +242,7 @@ async fn readonly_file_attributes_reject_uploads_and_reference_changes(pool: PgP
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn gallery_edits_are_local_and_empty_values_stop_inheritance(pool: PgPool) {
     let (base, server) =
         start_server_with_object_store(pool, Arc::new(FakeObjectStore::available())).await;
@@ -337,7 +337,7 @@ async fn gallery_edits_are_local_and_empty_values_stop_inheritance(pool: PgPool)
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn default_context_policy_blocks_reference_changes_in_children(pool: PgPool) {
     let (base, server) =
         start_server_with_object_store(pool, Arc::new(FakeObjectStore::available())).await;
@@ -391,7 +391,7 @@ async fn default_context_policy_blocks_reference_changes_in_children(pool: PgPoo
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn gallery_changes_return_the_version_an_open_form_saves_against(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
@@ -442,7 +442,7 @@ async fn gallery_changes_return_the_version_an_open_form_saves_against(pool: PgP
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn gallery_writes_archive_history_and_emit_audited_value_changes(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_object_store(pool.clone(), store).await;
@@ -516,7 +516,7 @@ async fn gallery_writes_archive_history_and_emit_audited_value_changes(pool: PgP
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn duplicating_a_gallery_writes_its_list_once_without_history(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_object_store(pool.clone(), store).await;

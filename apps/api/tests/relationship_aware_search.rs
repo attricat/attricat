@@ -17,7 +17,7 @@ async fn set_values(client: &reqwest::Client, base_url: &str, record: &Value, va
         .unwrap();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn search_requires_an_explicit_relationship_selector_for_traversal(pool: sqlx::PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -116,7 +116,7 @@ target_blueprint = "search_color"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn search_selects_records_by_id_directly_and_through_relationships(pool: sqlx::PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

@@ -2,7 +2,7 @@ use crate::support;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn validates_attribute_and_record_json_schemas(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

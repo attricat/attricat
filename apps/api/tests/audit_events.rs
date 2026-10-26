@@ -18,7 +18,7 @@ use support::{
 use tokio::net::TcpListener;
 use uuid::Uuid;
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn attricat_mutation_creates_a_redacted_audit_event(pool: sqlx::PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let request_id = Uuid::new_v4();
@@ -62,7 +62,7 @@ async fn completed_provider() -> &'static str {
     "data: {\"choices\":[{\"delta\":{\"content\":\"Done\"}}]}\n\ndata: [DONE]\n\n"
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn approved_agent_mutation_has_explicit_redacted_provenance(pool: sqlx::PgPool) {
     let (base_url, api_server) = start_server(pool.clone()).await;
     let conversation: support::Value = authenticated_client()
@@ -218,7 +218,7 @@ async fn approved_agent_mutation_has_explicit_redacted_provenance(pool: sqlx::Pg
     provider_server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn audit_insert_failure_rolls_back_the_mutation(pool: sqlx::PgPool) {
     sqlx::query(
         "ALTER TABLE audit_events ADD CONSTRAINT audit_events_test_reject CHECK (false) NOT VALID",
@@ -251,7 +251,7 @@ async fn audit_insert_failure_rolls_back_the_mutation(pool: sqlx::PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn context_and_token_revocation_audits_are_transaction_owned(pool: sqlx::PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -300,7 +300,7 @@ async fn context_and_token_revocation_audits_are_transaction_owned(pool: sqlx::P
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn invitation_acceptance_audits_the_invitation_workspace(pool: sqlx::PgPool) {
     use reqwest::header::{HeaderMap, HeaderValue};
 
@@ -423,7 +423,7 @@ async fn invitation_acceptance_audits_the_invitation_workspace(pool: sqlx::PgPoo
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn denied_mutations_are_not_audited(pool: sqlx::PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let request_id = Uuid::new_v4();

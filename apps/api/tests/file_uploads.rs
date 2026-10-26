@@ -60,7 +60,7 @@ fn png_part(name: &str) -> Part {
         .unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn malformed_trailing_multipart_field_removes_staged_files(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -117,7 +117,7 @@ async fn malformed_trailing_multipart_field_removes_staged_files(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn oversized_context_id_is_rejected_before_buffering_the_field(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -140,7 +140,7 @@ async fn oversized_context_id_is_rejected_before_buffering_the_field(pool: PgPoo
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn text_upload_with_binary_tail_is_rejected(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
@@ -189,7 +189,7 @@ max_bytes = 1024
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
@@ -340,7 +340,7 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn migration_retains_files_on_compatible_file_attributes(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store).await;
@@ -488,7 +488,7 @@ image_only = true"# }))
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let policy = Arc::new(RecordingFilePolicy(Mutex::new(Vec::new())));
@@ -645,7 +645,7 @@ async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool)
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn file_reads_use_active_linked_record_scopes(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store).await;
@@ -823,7 +823,7 @@ async fn file_reads_use_active_linked_record_scopes(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn rejects_policy_and_signature_mismatches_with_the_error_envelope(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool, store.clone()).await;
@@ -857,7 +857,7 @@ async fn rejects_policy_and_signature_mismatches_with_the_error_envelope(pool: P
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn duplicating_an_record_is_atomic_with_its_file_links(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

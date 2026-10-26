@@ -278,7 +278,7 @@ fn connection(name: &str, grant_type: &str) -> NewExtensionConnection {
     }
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn brokered_requests_carry_host_managed_credentials_only(pool: sqlx::PgPool) {
     let (_, seen) = shared_mock();
     let repository =
@@ -551,7 +551,7 @@ async fn brokered_requests_carry_host_managed_credentials_only(pool: sqlx::PgPoo
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn operators_manage_connections_without_seeing_credentials(pool: sqlx::PgPool) {
     shared_mock();
     let repository =
@@ -740,7 +740,7 @@ async fn operators_manage_connections_without_seeing_credentials(pool: sqlx::PgP
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn record_files_reach_marketplaces_by_public_link_or_as_run_input(pool: sqlx::PgPool) {
     shared_mock();
     api::extension_runtime::use_public_file_link_base(
@@ -1025,7 +1025,7 @@ max_bytes = 1024
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn moving_the_token_endpoint_to_another_host_needs_the_secret_and_drops_tokens(
     pool: sqlx::PgPool,
 ) {
@@ -1141,7 +1141,7 @@ async fn browser_session(base_url: &str) -> (reqwest::Client, String) {
     )
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn operators_authorize_connections_in_the_browser(pool: sqlx::PgPool) {
     let (_, seen) = shared_mock();
     connections::use_oauth_callback(connections::OAuthCallback {

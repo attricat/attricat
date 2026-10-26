@@ -22,7 +22,7 @@ use reqwest::multipart::{Form, Part};
 use support::*;
 use tokio::time::{sleep, timeout};
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_blueprint_reads_list_summaries_and_fetch_one_definition(pool: PgPool) {
     let (_base_url, server) = start_server(pool.clone()).await;
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
@@ -144,7 +144,7 @@ async fn agent_blueprint_reads_list_summaries_and_fetch_one_definition(pool: PgP
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn approved_record_edits_apply_to_the_proposed_state_and_name_their_targets(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -329,7 +329,7 @@ async fn approved_record_edits_apply_to_the_proposed_state_and_name_their_target
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -483,7 +483,7 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_duplicates_comments_validates_and_reviews_attricat_health(pool: PgPool) {
     AttricatRepository::system(pool.clone())
         .ensure_builtin_permissions()
@@ -690,7 +690,7 @@ async fn agent_duplicates_comments_validates_and_reviews_attricat_health(pool: P
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_annotation_and_context_edits_use_attricat_validation(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -751,7 +751,7 @@ async fn agent_annotation_and_context_edits_use_attricat_validation(pool: PgPool
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(pool: PgPool) {
     AttricatRepository::system(pool.clone())
         .ensure_builtin_permissions()
@@ -933,7 +933,7 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_history_reads_and_record_value_edits_use_scoped_attricat_services(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -1018,7 +1018,7 @@ async fn agent_history_reads_and_record_value_edits_use_scoped_attricat_services
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_conversation_reads_and_persisted_sse_replay(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -1089,7 +1089,7 @@ async fn agent_conversation_reads_and_persisted_sse_replay(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn completed_conversation_gets_a_provider_generated_title(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
     let provider_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1175,7 +1175,7 @@ async fn completed_conversation_gets_a_provider_generated_title(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn conversation_search_paginates_and_manual_titles_win(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let repository =
@@ -1268,7 +1268,7 @@ async fn conversation_search_paginates_and_manual_titles_win(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn record_conversations_validate_their_context_and_record(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -1400,7 +1400,7 @@ async fn record_conversations_validate_their_context_and_record(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn submitting_a_message_and_enqueuing_its_run_are_atomic(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let conversation_id = Uuid::new_v4();
@@ -1466,7 +1466,7 @@ async fn submitting_a_message_and_enqueuing_its_run_are_atomic(pool: PgPool) {
     assert_ne!(task_id, Uuid::nil());
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reconciliation_retains_conversation_attachments(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let conversation_id = Uuid::new_v4();
@@ -1539,7 +1539,7 @@ async fn slow_provider() -> axum::http::StatusCode {
     axum::http::StatusCode::OK
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_deltas_are_persisted_before_the_provider_finishes(pool: PgPool) {
     let (_, api_server) = start_server(pool.clone()).await;
     let release = Arc::new(tokio::sync::Notify::new());
@@ -1620,7 +1620,7 @@ async fn agent_deltas_are_persisted_before_the_provider_finishes(pool: PgPool) {
     provider.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPool) {
     let (base_url, api_server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -1733,7 +1733,7 @@ async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPo
     provider_server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn record_conversation_mutations_uploads_and_events_require_record_read(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -1915,7 +1915,7 @@ async fn record_conversation_mutations_uploads_and_events_require_record_read(po
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -2095,7 +2095,7 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reconciliation_skips_a_file_locked_by_an_attachment_transaction(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let conversation_id = Uuid::new_v4();
@@ -2177,7 +2177,7 @@ async fn reconciliation_skips_a_file_locked_by_an_attachment_transaction(pool: P
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reconciliation_first_rejects_deleted_and_cross_tenant_attachments(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let other_workspace_id = Uuid::new_v4();
@@ -2257,7 +2257,7 @@ async fn reconciliation_first_rejects_deleted_and_cross_tenant_attachments(pool:
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn standalone_conversation_upload_survives_reconciliation_until_attached(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
@@ -2473,7 +2473,7 @@ async fn standalone_conversation_upload_survives_reconciliation_until_attached(p
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_http_limits_accept_the_boundary_and_reject_the_next_value(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -2541,7 +2541,7 @@ async fn agent_http_limits_accept_the_boundary_and_reject_the_next_value(pool: P
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_message_requires_a_configured_provider(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -2572,7 +2572,7 @@ async fn agent_message_requires_a_configured_provider(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn startup_recovery_only_interrupts_expired_agent_tasks(pool: PgPool) {
     use api::task_queue::{TaskInsert, TaskKind};
 
@@ -2640,7 +2640,7 @@ async fn startup_recovery_only_interrupts_expired_agent_tasks(pool: PgPool) {
     assert_eq!(recovered, 1);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn read_only_runs_offer_no_mutations_and_refuse_one_named_anyway(pool: PgPool) {
     let (_, api_server) = start_server(pool.clone()).await;
     let offered = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
@@ -2731,7 +2731,7 @@ async fn read_only_runs_offer_no_mutations_and_refuse_one_named_anyway(pool: PgP
     provider.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
     let (base_url, api_server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -2973,7 +2973,7 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
     provider.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn runs_stop_after_the_configured_tool_round_limit(pool: PgPool) {
     let (_, api_server) = start_server(pool.clone()).await;
     let requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -3041,7 +3041,7 @@ async fn runs_stop_after_the_configured_tool_round_limit(pool: PgPool) {
     provider.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn conversation_detail_reports_a_read_only_agent(pool: PgPool) {
     let (base_url, server) = start_server_with_config(pool, |state| {
         let mut config = AgentProviderConfig::from_values(

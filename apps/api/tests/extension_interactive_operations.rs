@@ -147,7 +147,7 @@ async fn record_scoped_viewer(pool: &sqlx::PgPool, record_id: Uuid) -> ScopedVie
     }
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world(
     pool: sqlx::PgPool,
 ) {
@@ -360,7 +360,7 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn interactive_runs_are_authorized_per_record_and_fail_closed(pool: sqlx::PgPool) {
     let repository =
         AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
@@ -692,7 +692,7 @@ code = "title"
 value_type = "string"
 "#;
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn annotation_tag_changes_run_tag_checks(pool: sqlx::PgPool) {
     let repository =
         AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
@@ -730,7 +730,7 @@ async fn annotation_tag_changes_run_tag_checks(pool: sqlx::PgPool) {
     assert_eq!(tags, ["acme.docs:reviewed"]);
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn extension_annotation_namespaces_are_patched_and_protected_on_every_write_path(
     pool: sqlx::PgPool,
 ) {
@@ -882,7 +882,7 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPool) {
     let repository =
         AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
@@ -990,7 +990,7 @@ async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPo
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
     let repository =
         AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
@@ -1062,7 +1062,7 @@ async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
         .unwrap();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) {
     let repository =
         AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
@@ -1127,7 +1127,7 @@ async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) 
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
     let repository =
         AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
@@ -1186,7 +1186,7 @@ target_blueprint = "interactive_other_item"
 cardinality = "many"
 target_cardinality = "many"
 "#;
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn interactive_links_require_read_access_to_every_target(pool: sqlx::PgPool) {
     let repository =
         AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());

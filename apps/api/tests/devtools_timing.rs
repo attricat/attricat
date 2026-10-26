@@ -2,7 +2,7 @@ use crate::support;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn devtools_search_timings_are_aggregate_and_sanitized(pool: PgPool) {
     let (base_url, server) = start_server_with_devtools(pool).await;
     let client = authenticated_client();

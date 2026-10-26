@@ -74,7 +74,7 @@ async fn get_status(client: &Client, url: String) -> StatusCode {
     client.get(url).send().await.unwrap().status()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn avatars_are_processed_shared_with_members_and_reclaimed(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;

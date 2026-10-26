@@ -73,7 +73,7 @@ async fn accept(client: &Client, base: &str, secret: &str) -> reqwest::Response 
         .unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn old_invitation_cannot_reactivate_a_disabled_member_but_a_new_one_can(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
@@ -139,7 +139,7 @@ async fn old_invitation_cannot_reactivate_a_disabled_member_but_a_new_one_can(po
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn old_invitation_cannot_restore_a_revoked_role_grant(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
@@ -174,7 +174,7 @@ async fn old_invitation_cannot_restore_a_revoked_role_grant(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn acceptance_waiting_behind_deactivation_cannot_restore_membership(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
     let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());

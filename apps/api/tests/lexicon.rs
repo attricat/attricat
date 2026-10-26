@@ -56,7 +56,7 @@ async fn viewer_client(pool: &PgPool) -> Client {
     Client::builder().default_headers(headers).build().unwrap()
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn blueprints_reject_malformed_lexicon_references(pool: PgPool) {
     let (base, _server) = start_server(pool).await;
     let client = authenticated_client();
@@ -76,7 +76,7 @@ async fn blueprints_reject_malformed_lexicon_references(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn lexicon_entries_round_trip_and_report_coverage(pool: PgPool) {
     let (base, _server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -295,7 +295,7 @@ const STATUS_SCHEMA: &str = r#"{
   }
 }"#;
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn status_option_labels_are_lexicon_references(pool: PgPool) {
     let (base, _server) = start_server(pool).await;
     let client = authenticated_client();

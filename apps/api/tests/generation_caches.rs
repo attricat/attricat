@@ -67,7 +67,7 @@ async fn send(request: reqwest::RequestBuilder) -> (StatusCode, Value) {
     (status, serde_json::from_str(&text).unwrap_or(Value::Null))
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn published_versions_contexts_and_rules_apply_to_the_next_request(pool: PgPool) {
     AttricatRepository::system(pool.clone())
         .ensure_builtin_permissions()
@@ -203,14 +203,14 @@ async fn published_versions_contexts_and_rules_apply_to_the_next_request(pool: P
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn the_database_identity_is_created_once(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let first = repository.ensure_database_identity().await.unwrap();
     assert_eq!(repository.ensure_database_identity().await.unwrap(), first);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn revoked_workspace_access_applies_to_the_next_request(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -259,7 +259,7 @@ async fn revoked_workspace_access_applies_to_the_next_request(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn explore_navigation_writes_and_publications_apply_to_the_next_request(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

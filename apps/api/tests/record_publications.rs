@@ -22,7 +22,7 @@ code = "related"
 value_type = "relationship"
 "#;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn channel_publication_is_authorized_and_record_changes_withdraw_approval(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -144,7 +144,7 @@ async fn channel_publication_is_authorized_and_record_changes_withdraw_approval(
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn trusted_blueprint_role_retains_publication_after_an_record_edit(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -212,7 +212,7 @@ async fn trusted_blueprint_role_retains_publication_after_an_record_edit(pool: P
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn blueprint_revision_can_publish_its_records_by_channel(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -322,7 +322,7 @@ async fn blueprint_revision_can_publish_its_records_by_channel(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn publication_endpoints_require_an_authenticated_publisher(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let response = Client::new()
@@ -337,7 +337,7 @@ async fn publication_endpoints_require_an_authenticated_publisher(pool: PgPool) 
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn deleting_a_context_announces_its_withdrawn_publications(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -393,7 +393,7 @@ async fn deleting_a_context_announces_its_withdrawn_publications(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn deleting_an_record_announces_its_withdrawn_publications(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -457,7 +457,7 @@ async fn deleting_an_record_announces_its_withdrawn_publications(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn publication_lookup_reports_only_live_records_the_caller_may_read(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

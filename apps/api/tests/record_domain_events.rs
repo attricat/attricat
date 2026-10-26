@@ -5,7 +5,7 @@ use api::domain_events::{
 };
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn record_and_scalar_value_writes_enqueue_one_normalized_event_each(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -82,7 +82,7 @@ async fn record_and_scalar_value_writes_enqueue_one_normalized_event_each(pool: 
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn relationship_set_mutation_emits_one_targeted_event(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -165,7 +165,7 @@ async fn relationship_set_mutation_emits_one_targeted_event(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn record_outbox_failure_rolls_back_the_record_write(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

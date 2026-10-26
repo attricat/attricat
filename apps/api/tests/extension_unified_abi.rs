@@ -88,7 +88,7 @@ fn archive(server: &[u8]) -> Vec<u8> {
     ])
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn one_unified_component_serves_commands_and_interactive_operations(pool: sqlx::PgPool) {
     let repository =
         AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());

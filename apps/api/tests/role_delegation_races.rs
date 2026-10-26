@@ -104,12 +104,12 @@ async fn changed_role_is_not_delegable(pool: PgPool, invite: bool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn grant_rechecks_the_locked_roles_permissions(pool: PgPool) {
     changed_role_is_not_delegable(pool, false).await;
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn invitation_rechecks_the_locked_roles_permissions(pool: PgPool) {
     changed_role_is_not_delegable(pool, true).await;
 }
@@ -194,17 +194,17 @@ async fn former_owner_cannot_delegate(pool: PgPool, invite: bool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn former_owner_cannot_grant_owner_after_waiting_for_transfer(pool: PgPool) {
     former_owner_cannot_delegate(pool, false).await;
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn former_owner_cannot_invite_owner_after_waiting_for_transfer(pool: PgPool) {
     former_owner_cannot_delegate(pool, true).await;
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn role_edit_cannot_restore_permissions_removed_during_its_lock_wait(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
     let repository = AttricatRepository::system(pool.clone());
@@ -280,7 +280,7 @@ async fn role_edit_cannot_restore_permissions_removed_during_its_lock_wait(pool:
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn role_retirement_cannot_grant_owner_after_a_concurrent_transfer(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
     let repository = AttricatRepository::system(pool.clone());

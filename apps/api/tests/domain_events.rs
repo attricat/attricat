@@ -76,7 +76,7 @@ impl EventHandler for FollowOnContextHandler {
     }
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn context_creation_commits_a_typed_outbox_event(pool: sqlx::PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let correlation_id = Uuid::new_v4();
@@ -123,7 +123,7 @@ async fn context_creation_commits_a_typed_outbox_event(pool: sqlx::PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn context_updates_and_deletes_emit_lifecycle_events(pool: sqlx::PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -178,7 +178,7 @@ async fn context_updates_and_deletes_emit_lifecycle_events(pool: sqlx::PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn blueprint_lifecycle_emits_versioned_events(pool: sqlx::PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -213,7 +213,7 @@ async fn blueprint_lifecycle_emits_versioned_events(pool: sqlx::PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn outbox_insert_failure_rolls_back_the_attricat_mutation(pool: sqlx::PgPool) {
     sqlx::query(
         "ALTER TABLE domain_events ADD CONSTRAINT domain_events_test_reject CHECK (false) NOT VALID",
@@ -255,7 +255,7 @@ async fn outbox_insert_failure_rolls_back_the_attricat_mutation(pool: sqlx::PgPo
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn consumer_starts_at_the_current_workspace_watermark(pool: sqlx::PgPool) {
     let repository = api::repository::AttricatRepository::new(
         pool.clone(),
@@ -277,7 +277,7 @@ async fn consumer_starts_at_the_current_workspace_watermark(pool: sqlx::PgPool) 
     assert_eq!(consumer.watermark, 1);
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn registration_waits_for_an_uncommitted_outbox_append(pool: sqlx::PgPool) {
     let workspace_id = Uuid::parse_str("00000000-0000-4000-8000-000000000002").unwrap();
     let mut append = pool.begin().await.unwrap();
@@ -308,7 +308,7 @@ async fn registration_waits_for_an_uncommitted_outbox_append(pool: sqlx::PgPool)
     assert_eq!(registration.await.unwrap().watermark, 1);
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn delivery_claims_are_exclusive_and_completion_is_durable(pool: sqlx::PgPool) {
     use std::time::Duration;
 
@@ -362,7 +362,7 @@ async fn delivery_claims_are_exclusive_and_completion_is_durable(pool: sqlx::PgP
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn expired_leases_redeliver_the_same_event_and_reject_stale_acknowledgements(
     pool: sqlx::PgPool,
 ) {
@@ -422,7 +422,7 @@ async fn expired_leases_redeliver_the_same_event_and_reject_stale_acknowledgemen
     repository.complete_event_delivery(&retry).await.unwrap();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn deliveries_can_complete_out_of_order_without_losing_the_deferred_event(
     pool: sqlx::PgPool,
 ) {
@@ -494,7 +494,7 @@ async fn deliveries_can_complete_out_of_order_without_losing_the_deferred_event(
         .unwrap();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn dispatcher_preserves_causal_lineage_and_suppresses_its_own_follow_on_event(
     pool: sqlx::PgPool,
 ) {
@@ -559,7 +559,7 @@ async fn dispatcher_preserves_causal_lineage_and_suppresses_its_own_follow_on_ev
     assert_eq!(follow_on.3, "test-follow-on-context");
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn stalled_handler_is_timed_out_and_delivery_is_retried(pool: sqlx::PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -601,7 +601,7 @@ async fn stalled_handler_is_timed_out_and_delivery_is_retried(pool: sqlx::PgPool
     }
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn failed_deliveries_wait_until_due_then_dead_letter(pool: sqlx::PgPool) {
     use std::time::Duration;
 
@@ -672,7 +672,7 @@ async fn failed_deliveries_wait_until_due_then_dead_letter(pool: sqlx::PgPool) {
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn dead_letter_can_be_replayed_without_changing_event(pool: sqlx::PgPool) {
     let repository = api::repository::AttricatRepository::new(
         pool.clone(),

@@ -14,7 +14,7 @@ async fn create_user(pool: &PgPool, email: &str) -> Uuid {
     id
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn external_identity_linking_is_explicit_and_unique(pool: PgPool) {
     let existing = create_user(&pool, "existing@example.test").await;
     let linked = create_user(&pool, "linked@example.test").await;
