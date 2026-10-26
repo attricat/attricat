@@ -66,6 +66,11 @@ webp = { version = "0.3", default-features = false }
 wit-bindgen = "0.57"
 zstd = "0.13"
 
+# Dependencies keep only line tables, which still give panic and backtrace
+# locations, so every linked test binary stays small.
+[profile.dev.package."*"]
+debug = "line-tables-only"
+
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"

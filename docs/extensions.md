@@ -1808,7 +1808,7 @@ root:
 ```sh
 (cd ../../attricat-connector-csv && just pack)
 ATTRICAT_CONNECTOR_CSV_ARCHIVE="$(pwd)/../../attricat-connector-csv/dist/attricat-connector-csv-0.1.0.tar.zst" \
-  cargo test -p api --test extensions packaged_csv_connector_exports_through_the_real_host
+  cargo test -p api --test integration extensions::packaged_csv_connector_exports_through_the_real_host
 ```
 
 This test installs the actual packaged component into a migrated PostgreSQL

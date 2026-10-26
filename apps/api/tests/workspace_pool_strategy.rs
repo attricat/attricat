@@ -1,5 +1,3 @@
-mod support;
-
 use std::time::Duration;
 
 use api::repository::AttricatRepository;

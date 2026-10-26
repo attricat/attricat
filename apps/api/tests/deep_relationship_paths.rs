@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use api::{agent_tools, repository::AttricatRepository};
 use support::*;

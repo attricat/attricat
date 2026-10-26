@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use api::repository::{AttricatRepository, NewUploadedFile};
 use chrono::Utc;

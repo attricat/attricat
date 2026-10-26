@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 use support::*;
 
 const DEFINITION: &str = r#"format_version = 1

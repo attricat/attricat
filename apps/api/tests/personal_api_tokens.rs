@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use chrono::{Duration, Utc};
 use sha2::{Digest, Sha256};

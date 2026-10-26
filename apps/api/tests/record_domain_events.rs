@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use api::domain_events::{
     ATTRIBUTE_VALUE_CHANGED_V1, ATTRIBUTE_VALUE_RESTORED_V1, RECORD_CREATED_V1,

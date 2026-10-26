@@ -3,7 +3,7 @@
 //!
 //! ```sh
 //! set -a; source .env; set +a
-//! RUST_LOG=warn cargo test --release -p api --test facet_latency -- --ignored --nocapture
+//! RUST_LOG=warn cargo test --release -p api --test integration facet_latency:: -- --ignored --nocapture
 //! ```
 //!
 //! `FACET_BENCH_PRODUCTS` (default 100000) sets the number of products. They
@@ -16,7 +16,7 @@
 //! `listing.category` and `listing.line.category`. See `perf/facets.md` for
 //! results.
 
-mod support;
+use crate::support;
 
 use std::time::{Duration, Instant};
 

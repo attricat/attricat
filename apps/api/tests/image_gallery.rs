@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use api::storage::FakeObjectStore;
 use reqwest::multipart::{Form, Part};

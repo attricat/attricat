@@ -1,7 +1,7 @@
 //! Generation-keyed caches never serve state older than the generation a
 //! request reads: each change below is visible to the very next request.
 
-mod support;
+use crate::support;
 
 use std::time::Duration;
 

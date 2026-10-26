@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use api::states::{ExtensionState, HttpDeliveryState};
 use api::value_type::ValueType;

@@ -1,6 +1,6 @@
 //! Invariants of the maintenance worker's retention sweep: it deletes only
 //! expired terminal rows and never one that live work still needs.
-mod support;
+use crate::support;
 
 use std::time::Duration;
 

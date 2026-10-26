@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use support::{PgPool, StatusCode, authenticated_client, start_server};
 

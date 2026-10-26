@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use api::{
     account::{Password, SessionDigest, hash_password},

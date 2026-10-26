@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use api::permissions::Permission;
 use api::states::MembershipState;

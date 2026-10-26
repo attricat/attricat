@@ -45,7 +45,7 @@ contracts:
 deny:
     cargo deny check
 
-ci: fmt-check check clippy test-rust deny
+ci: fmt-check clippy test-rust deny
 
 # Bump the workspace version, then commit, tag and push it to start a release.
 release bump:
@@ -85,7 +85,7 @@ sql: _assert-env
     docker compose --env-file .env --project-name attricat-$POSTGRES_PORT -f apps/api/compose.yml exec postgres psql --username=postgres --dbname=attricat
 
 test-s3-compat: _assert-env
-    cargo test -p api --test s3_compat -- --ignored
+    cargo test -p api --test integration s3_compat:: -- --ignored
 
 reset-db: _assert-env
     #!/usr/bin/env bash

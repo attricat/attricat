@@ -4,7 +4,7 @@
 //! host-side OAuth with serialized rotating refresh tokens; and transfer v2
 //! with presigned PUTs and multipart POSTs. No component sees a credential.
 
-mod support;
+use crate::support;
 
 use api::states::ConnectionStatus;
 use std::sync::{Arc, Mutex};

@@ -84,7 +84,7 @@ image_only = true
 /// Reproducible write-amplification/throughput benchmark for issue #244.
 ///
 /// Run with:
-/// `RECORD_MIGRATION_BENCH_RECORDS=100 cargo test -p api --test record_migration_benchmarks -- --ignored --nocapture`
+/// `RECORD_MIGRATION_BENCH_RECORDS=100 cargo test -p api --test integration record_migration_benchmarks:: -- --ignored --nocapture`
 ///
 /// For a recorded pre-change comparison, also set the per-workload baseline
 /// variables printed by this test, for example

@@ -1,6 +1,6 @@
 //! Files uploaded before their record exists and claimed when it is created.
 
-mod support;
+use crate::support;
 
 use reqwest::multipart::{Form, Part};
 use support::*;

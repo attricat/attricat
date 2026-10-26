@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 use api::{
     account::SessionDigest,
     repository::{AttricatRepository, SYSTEM_USER_DISPLAY_NAME, system_user_email},

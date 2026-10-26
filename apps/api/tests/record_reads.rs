@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use reqwest::header::{HeaderMap, HeaderValue};
 use support::*;

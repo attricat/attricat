@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 use api::value_type::ValueType;
 use support::*;
 

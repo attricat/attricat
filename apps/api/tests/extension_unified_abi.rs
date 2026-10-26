@@ -1,7 +1,7 @@
 //! One release on the `attricat:host@1.0.0` ABI declares an event handler, a
 //! client command, scoped configuration and an interactive operation.
 
-mod support;
+use crate::support;
 
 use std::sync::Arc;
 

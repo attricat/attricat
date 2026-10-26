@@ -4,14 +4,14 @@
 //!
 //! ```sh
 //! set -a; source .env; set +a
-//! OTEL_EXPORTER_OTLP_TRACES_ENDPOINT= RUST_LOG=warn cargo test -p api --test round_trip_baseline -- --ignored --nocapture
+//! OTEL_EXPORTER_OTLP_TRACES_ENDPOINT= RUST_LOG=warn cargo test -p api --test integration round_trip_baseline:: -- --ignored --nocapture
 //! ```
 //!
 //! Set `ROUND_TRIP_EXTENSION_ARCHIVE` to a packaged extension (for example the
 //! sibling `attricat-extension-example` `dist/*.tar.zst`) to measure its event
 //! handler; otherwise the unified test component is built and installed.
 
-mod support;
+use crate::support;
 
 use std::{
     collections::HashMap,

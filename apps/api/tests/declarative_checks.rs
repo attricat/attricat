@@ -1,6 +1,6 @@
 //! One predicate engine enforced as record-schema checks, transition
 //! conditions, enforcing rules and publication gates, and reported by rules.
-mod support;
+use crate::support;
 
 use std::time::Duration;
 

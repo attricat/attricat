@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 use api::{
     agent_tools::{execute_mutation, execute_read},
     repository::AttricatRepository,

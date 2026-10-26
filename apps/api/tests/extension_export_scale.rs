@@ -2,7 +2,7 @@
 //! mapped to an external ID stay in host-managed storage, and the lookups an
 //! exporter makes per push stay index-backed.
 
-mod support;
+use crate::support;
 
 use std::time::{Duration, Instant};
 

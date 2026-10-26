@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use api::{http::StreamControl, repository::AttricatRepository, storage::FakeObjectStore};
 use chrono::Utc;

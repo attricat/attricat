@@ -3,7 +3,7 @@
 //! the mapping store and its revision guard, connector page v2, the withdrawn
 //! feed, deferred and failing batches, resyncs and the export status API.
 
-mod support;
+use crate::support;
 
 use api::states::ExportStatus;
 use std::{sync::Arc, time::Duration};

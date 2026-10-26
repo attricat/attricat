@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use axum::http::StatusCode;
 use support::{BOOTSTRAP_WORKSPACE_ID, Uuid, authenticated_client, start_server};
