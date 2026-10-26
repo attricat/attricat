@@ -52,11 +52,23 @@ export const useQuerySchema = (
   const results = useQueries({
     queries: codes.map((code) => blueprintByCodeOptions(code)),
   });
-  const targets = new Map(cachedTargets);
-  results.forEach((result, index) => {
-    if (result.data) targets.set(codes[index], result.data.attributes);
-  });
-  const schema: QuerySchema | undefined = base && { ...base, targets };
+  // Keeps the schema's identity until a target loads or changes, so the
+  // highlighting and suggestions built from it are not redone every render.
+  const targetsKey = codes
+    .map(
+      (code, index) =>
+        `${code}:${results[index]?.dataUpdatedAt ?? 0}:${cachedTargets.has(code)}`,
+    )
+    .join('|');
+  const schema = useMemo((): QuerySchema | undefined => {
+    if (!base) return undefined;
+    const targets = new Map(cachedTargets);
+    results.forEach((result, index) => {
+      if (result.data) targets.set(codes[index], result.data.attributes);
+    });
+    return { ...base, targets };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- targetsKey stands for codes, cachedTargets and results
+  }, [base, targetsKey]);
   const lexiconRevision = useLexiconRevision();
   const blueprintNames = useMemo(
     () =>
