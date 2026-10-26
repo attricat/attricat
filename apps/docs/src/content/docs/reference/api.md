@@ -52,7 +52,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `stale_record` | 409 | `expected_updated_at` no longer matches the record. Reload it and try again. |
 | `status_precondition_required` | 428 | A write to a status attribute did not send `expected_updated_at`. Read the record and send its `updated_at`. |
 | `status_transition_forbidden` | 403 | The status transition requires a permission or role the caller does not have. |
-| `status_separation_of_duties` | 403 | The status transition must be made by someone other than the person who made an earlier transition. |
+| `status_separation_of_duties` | 403 | The status transition must be made by someone other than the person who made an earlier transition. Holders of `records.unlock` are exempt. |
 | `record_locked` | 409 | The record's status locks the content being changed, or the record cannot be deleted while it is locked. |
 | `status_not_locked` | 409 | An unlock named a status that does not lock the record. |
 | `record_id_taken` | 409 | A batch `create` chose an `record_id` that already exists. |
@@ -144,7 +144,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `POST` | `/v1/records/{id}/blueprint-migration/preview` | Check migration to the current revision. |
 | `POST` | `/v1/records/{id}/blueprint-migration` | Migrate. |
 | `POST` | `/v1/records/{id}/reusable-attributes`, `/v1/records/{id}/reusable-attribute-groups/{group_id}` | Attach a reusable attribute or group. |
-| `GET` | `/v1/records/{id}/status-transitions?context_id=…` | Declared transitions from the saved status in one context (default context if omitted): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, unmet}]}`. `denial_code` is `status_transition_forbidden`, `status_separation_of_duties` or `transition_conditions_unmet`; `unmet` lists unmet conditions and enforcing rules as violations. |
+| `GET` | `/v1/records/{id}/status-transitions?context_id=…` | Declared transitions from the saved status in one context (default context if omitted): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, waives_separation, unmet}]}`. `denial_code` is `status_transition_forbidden`, `status_separation_of_duties` or `transition_conditions_unmet`; `waives_separation` is `true` when the transition is allowed only because the caller holds `records.unlock`; `unmet` lists unmet conditions and enforcing rules as violations. |
 | `GET` | `/v1/records/{id}/approvals` | Approvals recorded by status transitions, newest first and 20 per page, with who approved, when, a digest of the covered content, and why an approval was voided. Returns `{"items","has_more"}`; continue with `before_time` (the last item's `approved_at`) and `before_id`. |
 | `GET` | `/v1/records/{id}/export-status` | The record's export status at every export extension (`statuses`: connection, status, external ID, error, last sync) and the enabled export destinations (`destinations`). |
 | `GET` | `/v1/records/{id}/retention-holds` | Retention holds on the record's files, newest first and 20 per page. Returns `{"items","has_more"}`; continue with `before_time` (the last item's `created_at`) and `before_id`. |

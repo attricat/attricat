@@ -68,7 +68,7 @@ const BUILTIN_PERMISSIONS: &[(Permission, &str)] = &[
     ),
     (
         Permission::RecordsUnlock,
-        "Unlock records whose status locks them, outside the declared transitions",
+        "Override status controls: unlock locked records and waive separation of duties",
     ),
     (
         Permission::WorkflowsRead,

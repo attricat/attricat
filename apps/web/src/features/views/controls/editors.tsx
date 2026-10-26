@@ -359,6 +359,14 @@ export const StatusEditor = ({
       )}
       {config.options.map((option) => {
         const denied = denial(option.code);
+        const waived =
+          !denied &&
+          transitions.some(
+            (edge) =>
+              edge.attribute_code === attribute.code &&
+              edge.to === option.code &&
+              edge.waives_separation,
+          );
         return (
           <MenuItem
             key={option.code}
@@ -379,6 +387,12 @@ export const StatusEditor = ({
                   primary: { sx: { color: 'text.disabled' } },
                   secondary: { sx: { color: 'text.secondary' } },
                 }}
+              />
+            ) : waived ? (
+              <ListItemText
+                primary={statusOptionLabel(option)}
+                secondary={t('records.statusSeparationWaived')}
+                slotProps={{ secondary: { sx: { color: 'text.secondary' } } }}
               />
             ) : (
               statusOptionLabel(option)

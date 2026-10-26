@@ -164,7 +164,7 @@ Przejście może określać wymagania. Osoba zapisująca zmianę musi spełnić 
 
 - `permission`: [uprawnienie](/pl/reference/permissions/), które musi mieć dla tego rekordu, np. `records.publish`.
 - `roles`: musi mieć co najmniej jedną z tych ról (wbudowaną lub [niestandardową](/pl/operate/workspaces/#role)), przydzieloną w całym obszarze roboczym, dla schematu lub dla tego rekordu.
-- `separate_from`: rozdzielenie obowiązków. Nie może to być osoba, która jako ostatnia wykonała w tym rekordzie i w tym kontekście przejście o jednym z podanych kodów `code`. Na przykład osoba, która przesłała dokument do przeglądu, nie może go też zatwierdzić.
+- `separate_from`: rozdzielenie obowiązków. Nie może to być osoba, która jako ostatnia wykonała w tym rekordzie i w tym kontekście przejście o jednym z podanych kodów `code`. Na przykład osoba, która przesłała dokument do przeglądu, nie może go też zatwierdzić. Nie dotyczy to właścicieli i administratorów, więc obszar roboczy z jedną osobą nigdy nie czeka na drugą. Lista wyboru statusu informuje ich, że pomijają tę zasadę, a zmiana jest zapisywana w historii statusów i w dzienniku audytu jako `record.separation.waive`. Innym rolom można to umożliwić [uprawnieniem `records.unlock`](/pl/reference/permissions/).
 
 Nadaj przejściu `code`, aby wskazywać je w `separate_from` i w historii. Odrzucone przejście zwraca `403 status_transition_forbidden` lub `403 status_separation_of_duties` i nic nie zostaje zapisane. Lista wyboru statusu na stronie rekordu wyłącza przejścia, których nie możesz wykonać, i wyjaśnia dlaczego.
 

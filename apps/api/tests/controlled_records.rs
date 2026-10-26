@@ -203,6 +203,58 @@ async fn transitions_enforce_roles_permissions_and_separation_of_duties(pool: Pg
 }
 
 #[sqlx::test]
+async fn owners_may_approve_their_own_submission(pool: PgPool) {
+    let (_, server, _, record) = setup(&pool).await;
+    // A sole owner who also holds the edge's role: nobody else could approve.
+    let (user, membership) = add_workspace_user(&pool).await;
+    grant_role(&pool, membership, OWNER_ROLE_ID, GrantScope::Workspace).await;
+    grant_role(
+        &pool,
+        membership,
+        reviewer_role(&pool).await,
+        GrantScope::Workspace,
+    )
+    .await;
+    let owner = client_for(user);
+
+    expect_status(record.set_status(&owner, "review").await, StatusCode::OK).await;
+    let access: Value = get_json(&owner, &format!("{}/status-transitions", record.url)).await;
+    let approve = access["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|edge| edge["to"] == "approved")
+        .unwrap();
+    assert_eq!(approve["allowed"], true);
+    assert_eq!(approve["waives_separation"], true);
+
+    expect_status(record.set_status(&owner, "approved").await, StatusCode::OK).await;
+    let rows: Vec<(Option<String>, bool)> = sqlx::query_as(
+        "SELECT edge_code, separation_waived FROM record_status_transitions ORDER BY occurred_at, to_status",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        rows,
+        [
+            (None, false),
+            (Some("submit".to_owned()), false),
+            (Some("approve".to_owned()), true)
+        ]
+    );
+    let audit: Value = sqlx::query_scalar(
+        "SELECT metadata->'record_control' FROM audit_events WHERE action = 'record.separation.waive'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audit["transition_code"], "approve");
+    assert_eq!(audit["separate_from"], "submit");
+    server.abort();
+}
+
+#[sqlx::test]
 async fn locked_records_reject_writes_until_an_audited_correction(pool: PgPool) {
     let (base, server, _, record) = setup(&pool).await;
     let owner = authenticated_client();

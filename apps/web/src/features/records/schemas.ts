@@ -522,6 +522,11 @@ export const statusTransitionAccessSchema = z.object({
   allowed: z.boolean(),
   denial_code: z.enum(statusTransitionDenialCodes).nullable(),
   denial_reason: z.string().nullable(),
+  /**
+   * Allowed only because the caller holds `records.unlock`: they made the
+   * earlier step that separation of duties would require someone else for.
+   */
+  waives_separation: z.boolean().optional(),
   /** Unmet transition conditions and enforcing rules, as check violations. */
   unmet: z.array(checkViolationSchema).optional(),
 });

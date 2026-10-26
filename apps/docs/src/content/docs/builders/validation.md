@@ -164,7 +164,7 @@ A transition can name requirements. The person saving must meet all of them, in 
 
 - `permission`: a [permission](/reference/permissions/) they must hold for this record, such as `records.publish`.
 - `roles`: they must hold at least one of these roles (built-in or [custom](/operate/workspaces/#roles)), granted for the whole workspace, the blueprint, or this record.
-- `separate_from`: separation of duties. They must not be the person who most recently made a transition with one of these `code`s on this record, in this context. For example, whoever submitted a document cannot also approve it.
+- `separate_from`: separation of duties. They must not be the person who most recently made a transition with one of these `code`s on this record, in this context. For example, whoever submitted a document cannot also approve it. Owners and administrators are exempt, so a workspace with a single member is never stuck waiting for a second person. The status select tells them when they are overriding the rule, and the change is recorded in the status history and audited as `record.separation.waive`. Other roles can be given this through the [`records.unlock` permission](/reference/permissions/).
 
 Give a transition a `code` to name it in `separate_from` and in history. A refused transition returns `403 status_transition_forbidden` or `403 status_separation_of_duties`, and nothing is saved. The status select on the record page disables the transitions you may not make and says why.
 

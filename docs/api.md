@@ -676,7 +676,7 @@ results report the same `code`, `message` and `details`.
 | `422` | `relationship_target_type_mismatch` | none; the target's blueprint is not in the attribute's `target_blueprint_codes` |
 | `428` | `status_precondition_required` | none; resend with `expected_updated_at` |
 | `403` | `status_transition_forbidden` | `attribute`, `context`, `from`, `to`, `reason` |
-| `403` | `status_separation_of_duties` | `attribute`, `context`, `edge` (the earlier transition made by this user) |
+| `403` | `status_separation_of_duties` | `attribute`, `context`, `edge` (the earlier transition made by this user); never returned to holders of `records.unlock` |
 | `409` | `record_locked` | `attribute`, `context`, `status` (the locking status) |
 | `409` | `status_not_locked` | `attribute`, `context`, `status`; an unlock named a status that does not lock the record |
 | `409` | `unique_key_conflict` | `key`, `context`, normalized `values`, `conflicting_record_id` |

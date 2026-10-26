@@ -209,7 +209,12 @@ effective change in every context:
   workspace-local) through a workspace, blueprint-family or record grant.
 - `separate_from`: the actor is not the `actor_user_id` of the most recent
   `record_status_transitions` row for the same record, attribute and context
-  whose `edge_code` is one of the listed codes.
+  whose `edge_code` is one of the listed codes, unless the actor holds
+  `records.unlock` for the record. Owners and administrators hold it, so a
+  sole member can complete a separated workflow. Such a change is recorded
+  with `separation_waived = true` and audited as `record.separation.waive`
+  with the attribute, context, endpoints, edge code and the `separate_from`
+  edge it overrode. Roles, permissions and conditions still apply.
 
 The acting principal is the interactive extension initiator, otherwise the
 request or agent audit actor (the human who approved an agent change), otherwise
@@ -224,7 +229,8 @@ edges behave as before. Every effective change is recorded in
 `GET /v1/records/{record_id}/status-transitions?context_id=…` returns the
 declared edges from the saved effective status in that context (default context
 when omitted), each with `allowed`, `denial_code` and `denial_reason` for the
-caller, and `unmet` transition conditions and enforcing rules (see
+caller, `waives_separation` for allowed edges that override separation of
+duties, and `unmet` transition conditions and enforcing rules (see
 [available destinations](#available-destinations)). Like the write, it checks
 every context whose effective status the edge would change: the selected
 context and each context that inherits the status from it. Each `unmet` entry

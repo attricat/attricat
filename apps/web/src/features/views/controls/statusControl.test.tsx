@@ -159,4 +159,38 @@ describe('status presentation and input', () => {
     fireEvent.click(live);
     expect(onChange).not.toHaveBeenCalled();
   });
+  it('explains edges an owner may take despite separation of duties', () => {
+    const onChange = vi.fn();
+    render(
+      <StatusEditor
+        config={config}
+        attribute={attribute}
+        value="draft"
+        baseline="draft"
+        inheritedValue={null}
+        transitions={[
+          {
+            attribute_code: 'Status',
+            from: 'draft',
+            to: 'live',
+            code: 'approve',
+            allowed: true,
+            denial_code: null,
+            denial_reason: null,
+            waives_separation: true,
+          },
+        ]}
+        disabled={false}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Status' }));
+    const live = screen.getByRole('option', { name: /Live/ });
+    expect(live.getAttribute('aria-disabled')).toBeNull();
+    expect(
+      screen.getByText(/As an owner or administrator, you can do both/),
+    ).toBeTruthy();
+    fireEvent.click(live);
+    expect(onChange).toHaveBeenCalledWith('live');
+  });
 });

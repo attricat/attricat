@@ -52,7 +52,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `stale_record` | 409 | `expected_updated_at` nie odpowiada już rekordowi. Wczytaj go ponownie i spróbuj jeszcze raz. |
 | `status_precondition_required` | 428 | Zapis atrybutu statusu nie zawiera `expected_updated_at`. Odczytaj rekord i wyślij jego `updated_at`. |
 | `status_transition_forbidden` | 403 | Przejście statusu wymaga uprawnienia lub roli, których wywołujący nie ma. |
-| `status_separation_of_duties` | 403 | Przejście statusu musi wykonać ktoś inny niż osoba, która wykonała wcześniejsze przejście. |
+| `status_separation_of_duties` | 403 | Przejście statusu musi wykonać ktoś inny niż osoba, która wykonała wcześniejsze przejście. Nie dotyczy osób z uprawnieniem `records.unlock`. |
 | `record_locked` | 409 | Status rekordu blokuje zmienianą treść albo rekordu nie można usunąć, dopóki jest zablokowany. |
 | `status_not_locked` | 409 | Odblokowanie wskazało status, który nie blokuje rekordu. |
 | `record_id_taken` | 409 | Operacja `create` we wsadzie wybrała `record_id`, który już istnieje. |
@@ -144,7 +144,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `POST` | `/v1/records/{id}/blueprint-migration/preview` | Sprawdza migrację do bieżącej wersji. |
 | `POST` | `/v1/records/{id}/blueprint-migration` | Migruje. |
 | `POST` | `/v1/records/{id}/reusable-attributes`, `/v1/records/{id}/reusable-attribute-groups/{group_id}` | Dołącza atrybut lub grupę atrybutów wielokrotnego użytku. |
-| `GET` | `/v1/records/{id}/status-transitions?context_id=…` | Zadeklarowane przejścia z zapisanego statusu w jednym kontekście (bez parametru: kontekst domyślny): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, unmet}]}`. `denial_code` to `status_transition_forbidden`, `status_separation_of_duties` lub `transition_conditions_unmet`; `unmet` wymienia niespełnione warunki i egzekwowane reguły jako naruszenia. |
+| `GET` | `/v1/records/{id}/status-transitions?context_id=…` | Zadeklarowane przejścia z zapisanego statusu w jednym kontekście (bez parametru: kontekst domyślny): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, waives_separation, unmet}]}`. `denial_code` to `status_transition_forbidden`, `status_separation_of_duties` lub `transition_conditions_unmet`; `waives_separation` ma wartość `true`, gdy przejście jest dozwolone tylko dzięki uprawnieniu `records.unlock`; `unmet` wymienia niespełnione warunki i egzekwowane reguły jako naruszenia. |
 | `GET` | `/v1/records/{id}/approvals` | Zatwierdzenia zarejestrowane przez przejścia statusów, od najnowszych, po 20 na stronę, z osobą zatwierdzającą, czasem, skrótem objętej treści i powodem unieważnienia. Zwraca `{"items","has_more"}`; kontynuuj z `before_time` (`approved_at` ostatniego elementu) i `before_id`. |
 | `GET` | `/v1/records/{id}/export-status` | Stan eksportu rekordu we wszystkich rozszerzeniach eksportujących (`statuses`: połączenie, status, zewnętrzny identyfikator, błąd, ostatnia synchronizacja) oraz włączone miejsca docelowe eksportu (`destinations`). |
 | `GET` | `/v1/records/{id}/retention-holds` | Blokady retencji na plikach rekordu, od najnowszych, po 20 na stronę. Zwraca `{"items","has_more"}`; kontynuuj z `before_time` (`created_at` ostatniego elementu) i `before_id`. |

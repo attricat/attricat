@@ -82,6 +82,9 @@ pub struct StatusTransitionAccess {
     /// `status_separation_of_duties` or `transition_conditions_unmet`.
     pub denial_code: Option<super::ErrorCode>,
     pub denial_reason: Option<String>,
+    /// An allowed edge whose separation of duties the caller would fail,
+    /// overridden because they hold `records.unlock`.
+    pub waives_separation: bool,
     /// Transition conditions and enforcing rules that the saved state plus
     /// this destination would not satisfy.
     pub unmet: Vec<super::CheckViolation>,
@@ -537,6 +540,32 @@ impl AttricatRepository {
                 ))));
             }
         }
+        if let Some(edge) = self
+            .separation_conflict(transaction, record, change, requirements, actor)
+            .await?
+            && !self
+                .may_waive_separation(transaction, record, actor)
+                .await?
+        {
+            return Ok(Some(RepositoryError::StatusSeparationOfDuties {
+                attribute: change.attribute_code.clone(),
+                context: change.context_code.clone(),
+                edge,
+            }));
+        }
+        Ok(None)
+    }
+
+    /// The first `separate_from` edge whose most recent transition for this
+    /// record, attribute and context `actor` made.
+    async fn separation_conflict(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record: &Record,
+        change: &StatusChange,
+        requirements: &TransitionRequirements,
+        actor: AuthorizationActor,
+    ) -> Result<Option<String>, RepositoryError> {
         for edge in &requirements.separate_from {
             let previous: Option<Option<Uuid>> = sqlx::query_scalar(
                 "SELECT actor_user_id FROM record_status_transitions WHERE workspace_id = $1 AND record_id = $2 AND attribute_code = $3 AND context_id = $4 AND edge_code = $5 AND kind = $6 ORDER BY occurred_at DESC, id DESC LIMIT 1",
@@ -550,14 +579,46 @@ impl AttricatRepository {
             .fetch_optional(&mut **transaction)
             .await?;
             if previous == Some(Some(actor.user_id)) {
-                return Ok(Some(RepositoryError::StatusSeparationOfDuties {
-                    attribute: change.attribute_code.clone(),
-                    context: change.context_code.clone(),
-                    edge: edge.clone(),
-                }));
+                return Ok(Some(edge.clone()));
             }
         }
         Ok(None)
+    }
+
+    /// Owners and administrators (`records.unlock`) may take an edge whose
+    /// separation of duties they would otherwise fail, so a sole user is
+    /// never stuck waiting for a second person.
+    async fn may_waive_separation(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record: &Record,
+        actor: AuthorizationActor,
+    ) -> Result<bool, RepositoryError> {
+        match self
+            .ensure_principal_may(transaction, actor, Permission::RecordsUnlock, &[record.id])
+            .await
+        {
+            Ok(()) => Ok(true),
+            Err(RepositoryError::ActorNotAuthorized) => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// The `separate_from` edge that `change` overrides: one whose most recent
+    /// transition the acting principal made. Call only for allowed changes.
+    async fn waived_separation(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record: &Record,
+        change: &StatusChange,
+        actor: Option<AuthorizationActor>,
+    ) -> Result<Option<String>, RepositoryError> {
+        let Some(actor) = actor else {
+            return Ok(None);
+        };
+        let requirements = transition_requirements(&change.schema, &change.before, &change.after);
+        self.separation_conflict(transaction, record, change, &requirements, actor)
+            .await
     }
 
     /// Rejects changes to attributes locked by a context's status at the start
@@ -784,6 +845,13 @@ impl AttricatRepository {
                 transition_requirements(&change.schema, &change.before, &change.after).code
             };
             let unlocked = status_lock(&change.schema, &change.before).is_some();
+            // Looked up before this write's own row exists.
+            let waived = if overridden {
+                None
+            } else {
+                self.waived_separation(transaction, record, change, self.acting_principal())
+                    .await?
+            };
             self.record_status_transition(
                 transaction,
                 record,
@@ -795,8 +863,25 @@ impl AttricatRepository {
                     TransitionKind::Transition
                 },
                 unlocked,
+                waived.is_some(),
             )
             .await?;
+            if let Some(separate_from) = waived {
+                self.write_control_audit_event(
+                    transaction,
+                    "record.separation.waive",
+                    record.id,
+                    serde_json::json!({
+                        "attribute_code": change.attribute_code,
+                        "context_code": change.context_code,
+                        "from": change.before,
+                        "to": change.after,
+                        "transition_code": edge_code,
+                        "separate_from": separate_from,
+                    }),
+                )
+                .await?;
+            }
             if unlocked {
                 self.write_control_audit_event(
                     transaction,
@@ -1013,6 +1098,7 @@ impl AttricatRepository {
                 None,
                 TransitionKind::ApprovalVoid,
                 false,
+                false,
             )
             .await?;
         }
@@ -1091,6 +1177,7 @@ impl AttricatRepository {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn record_status_transition(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -1099,10 +1186,11 @@ impl AttricatRepository {
         edge_code: Option<&str>,
         kind: TransitionKind,
         unlocked: bool,
+        separation_waived: bool,
     ) -> Result<(), RepositoryError> {
         let actor = self.acting_principal();
         sqlx::query(
-            "INSERT INTO record_status_transitions (id, workspace_id, record_id, attribute_code, context_id, from_status, to_status, edge_code, kind, unlocked, actor_user_id, actor_token_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+            "INSERT INTO record_status_transitions (id, workspace_id, record_id, attribute_code, context_id, from_status, to_status, edge_code, kind, unlocked, separation_waived, actor_user_id, actor_token_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
         )
         .bind(Uuid::new_v4())
         .bind(self.workspace_id.0)
@@ -1114,6 +1202,7 @@ impl AttricatRepository {
         .bind(edge_code)
         .bind(kind.as_str())
         .bind(unlocked)
+        .bind(separation_waived)
         .bind(actor.map(|actor| actor.user_id))
         .bind(actor.and_then(|actor| actor.token_id))
         .execute(&mut **transaction)
@@ -1218,6 +1307,19 @@ impl AttricatRepository {
                         break;
                     }
                 }
+                let mut waives_separation = false;
+                if denial.is_none() {
+                    for change in &changes {
+                        if self
+                            .waived_separation(&mut transaction, &record, change, Some(actor))
+                            .await?
+                            .is_some()
+                        {
+                            waives_separation = true;
+                            break;
+                        }
+                    }
+                }
                 let mut denial_code = denial.as_ref().map(RepositoryError::code);
                 let mut denial_reason = denial.map(|error| error.to_string());
                 let mut unmet: Vec<super::CheckViolation> = Vec::new();
@@ -1259,6 +1361,7 @@ impl AttricatRepository {
                     allowed: denial_code.is_none(),
                     denial_code,
                     denial_reason,
+                    waives_separation,
                     unmet,
                 });
             }

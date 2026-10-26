@@ -471,6 +471,7 @@
     "statusTransitions": "Niedozwolone zmiany są wyłączone. Zmiany zostaną zastosowane po zapisaniu.",
     "statusInherit": "Użyj odziedziczonego statusu: {{value}}",
     "statusTransitionDenied": "Ta zmiana zapisanego statusu jest niedozwolona.",
+    "statusSeparationWaived": "Wykonano już wcześniejszy krok, więc zwykle ten wykonuje ktoś inny. Jako właściciel lub administrator możesz wykonać oba.",
     "managedBySystem": "Zarządzane przez działania systemowe.",
     "lockedByStatus": "Zablokowane, gdy rekord ma status {{status}}. Odblokowuje je dozwolone przejście korygujące.",
     "statusLock": {
