@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use url::Url;
 use uuid::Uuid;
 
-use crate::cli::{Cli, Command, SourceInput};
+use crate::cli::{Cli, Command, PageArgs, SourceInput};
 use crate::commands::data_health::data_health_path;
 use crate::commands::extension::{
     ConnectorJobCommand, ExtensionOperationCommand, ExtensionScheduleCommand,
@@ -29,14 +29,13 @@ use crate::commands::workspace::{AgentSettingsCommand, WorkspaceCommand, changed
 use crate::error::CliError;
 use crate::input::{
     ContextFile, RelationshipFile, ValueFile, form_update_body, json_array_input, json_input,
-    json_object_input, json_string_array_input, read_source, relationships_body, toml_to_json,
-    values_body,
+    json_object_input, json_string_array_input, parse_stdin_lines, read_source, relationships_body,
+    toml_to_json, values_body,
 };
 use crate::run;
 use crate::session::SessionFile;
 use crate::transport::{
-    MAX_RESPONSE_BYTES, endpoint, is_secure_credential_transport, raw_download, raw_response,
-    segment,
+    Api, MAX_RESPONSE_BYTES, endpoint, is_secure_credential_transport, raw_response, segment,
 };
 
 #[test]
@@ -882,14 +881,15 @@ async fn rule_routes_forward_definition_and_run_options() {
             }),
         );
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    let client = Client::new();
-    let url = Url::parse(&format!("http://{address}")).unwrap();
+    let api = Api::new(
+        Client::new(),
+        Url::parse(&format!("http://{address}")).unwrap(),
+    );
     let id = Uuid::from_u128(1);
     let file = tempfile::NamedTempFile::new().unwrap();
     fs::write(file.path(), "format_version = 1\n").unwrap();
     let result = rule_command(
-        &client,
-        &url,
+        &api,
         RuleCommand::Validate {
             blueprint_id: id,
             blueprint_version: 2,
@@ -908,8 +908,7 @@ async fn rule_routes_forward_definition_and_run_options() {
         json!({"blueprint_id":id,"blueprint_version":2,"context_id":null,"definition":"format_version = 1\n"})
     );
     let result = rule_command(
-        &client,
-        &url,
+        &api,
         RuleCommand::RunNow {
             rule_id: id,
             idempotency_key: "check".into(),
@@ -924,8 +923,7 @@ async fn rule_routes_forward_definition_and_run_options() {
         json!({"idempotency_key":"check","record_id":id,"dry_run":true})
     );
     let result = rule_command(
-        &client,
-        &url,
+        &api,
         RuleCommand::Enable {
             rule_id: id,
             version: 3,
@@ -939,8 +937,7 @@ async fn rule_routes_forward_definition_and_run_options() {
         json!({"accept_existing_violations":true})
     );
     let result = rule_command(
-        &client,
-        &url,
+        &api,
         RuleCommand::Findings {
             record_id: Some(id),
         },
@@ -1126,13 +1123,14 @@ async fn operation_commands_forward_bounded_requests() {
             ),
         );
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    let client = Client::new();
-    let url = Url::parse(&format!("http://{address}")).unwrap();
+    let api = Api::new(
+        Client::new(),
+        Url::parse(&format!("http://{address}")).unwrap(),
+    );
     let id = Uuid::from_u128(1);
     let start: Value = serde_json::from_str(
         &extension_operation_command(
-            &client,
-            &url,
+            &api,
             ExtensionOperationCommand::Start {
                 extension_id: "example".into(),
                 operation_id: "export".into(),
@@ -1151,8 +1149,7 @@ async fn operation_commands_forward_bounded_requests() {
     );
     let schedule: Value = serde_json::from_str(
         &extension_schedule_command(
-            &client,
-            &url,
+            &api,
             ExtensionScheduleCommand::Create {
                 extension_id: "example".into(),
                 operation_id: "export".into(),
@@ -1168,8 +1165,7 @@ async fn operation_commands_forward_bounded_requests() {
     assert_eq!(schedule["body"]["interval_seconds"], 60);
     let updated: Value = serde_json::from_str(
         &extension_schedule_command(
-            &client,
-            &url,
+            &api,
             ExtensionScheduleCommand::Update {
                 schedule_id: id,
                 enabled: false,
@@ -1183,8 +1179,7 @@ async fn operation_commands_forward_bounded_requests() {
     assert_eq!(updated, json!({"enabled":false,"interval_seconds":120}));
     let run: Value = serde_json::from_str(
         &connector_job_command(
-            &client,
-            &url,
+            &api,
             ConnectorJobCommand::Run {
                 job_id: id,
                 idempotency_key: "once".into(),
@@ -1300,13 +1295,11 @@ async fn failed_download_leaves_the_existing_output_unchanged() {
     let directory = tempfile::tempdir().unwrap();
     let output = directory.path().join("artifact.bin");
     fs::write(&output, "previous").unwrap();
-    let result = raw_download(
-        &Client::new(),
-        &Url::parse(&format!("http://{address}")).unwrap(),
-        "/download",
-        &output,
-        None,
+    let result = Api::new(
+        Client::new(),
+        Url::parse(&format!("http://{address}")).unwrap(),
     )
+    .download("/download", &output, None)
     .await;
     assert!(matches!(result, Err(CliError::Transport(_))));
     assert_eq!(fs::read_to_string(output).unwrap(), "previous");
@@ -1359,8 +1352,7 @@ async fn migrate_bulk_classifies_needs_input_without_submitting_a_migration() {
     });
     let client = Client::builder().build().unwrap();
     let body = migrate_records(
-        &client,
-        &Url::parse(&format!("http://{address}")).unwrap(),
+        &Api::new(client, Url::parse(&format!("http://{address}")).unwrap()),
         "product",
         1,
         25,
@@ -1406,8 +1398,10 @@ async fn migrate_bulk_rejects_a_repeated_next_cursor() {
         }
     });
     let result = migrate_records(
-        &Client::new(),
-        &Url::parse(&format!("http://{address}")).unwrap(),
+        &Api::new(
+            Client::new(),
+            Url::parse(&format!("http://{address}")).unwrap(),
+        ),
         "product",
         1,
         25,
@@ -1434,8 +1428,7 @@ async fn migrate_bulk_rejects_a_malformed_next_cursor() {
     });
     let client = Client::new();
     let result = migrate_records(
-        &client,
-        &Url::parse(&format!("http://{address}")).unwrap(),
+        &Api::new(client, Url::parse(&format!("http://{address}")).unwrap()),
         "product",
         1,
         25,
@@ -1522,7 +1515,10 @@ fn presentation_asset_parser_supports_bounded_discovery_and_download() {
         ])
         .is_ok()
     );
-    assert!(Cli::try_parse_from(["acli", "presentation-asset", "list", "--limit", "101"]).is_err());
+    assert!(Cli::try_parse_from(["acli", "presentation-asset", "list", "--limit", "0"]).is_err());
+    assert!(
+        Cli::try_parse_from(["acli", "presentation-asset", "list", "--offset", "10001"]).is_err()
+    );
     assert!(
         Cli::try_parse_from([
             "acli",
@@ -1705,25 +1701,28 @@ async fn solution_pack_apply_and_history_use_uuid_only_json_routes() {
                 ),
             );
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    let client = Client::new();
-    let url = Url::parse(&format!("http://{address}")).unwrap();
+    let api = Api::new(
+        Client::new(),
+        Url::parse(&format!("http://{address}")).unwrap(),
+    );
     let plan_id = Uuid::from_u128(1);
     assert_eq!(
-        solution_pack_command(&client, &url, SolutionPackCommand::Apply { plan_id })
+        solution_pack_command(&api, SolutionPackCommand::Apply { plan_id })
             .await
             .unwrap(),
         format!(r#"{{"plan_id":"{plan_id}"}}"#)
     );
     assert_eq!(
         solution_pack_command(
-            &client,
-            &url,
+            &api,
             SolutionPackCommand::Applications {
                 command: SolutionPackApplicationsCommand::List {
-                    limit: 25,
-                    offset: 0,
+                    page: PageArgs {
+                        limit: Some(25),
+                        offset: Some(0),
+                    },
                 },
-            },
+            }
         )
         .await
         .unwrap(),
@@ -1731,14 +1730,15 @@ async fn solution_pack_apply_and_history_use_uuid_only_json_routes() {
     );
     assert_eq!(
         solution_pack_command(
-            &client,
-            &url,
+            &api,
             SolutionPackCommand::Applications {
                 command: SolutionPackApplicationsCommand::List {
-                    limit: 100,
-                    offset: 10_000,
+                    page: PageArgs {
+                        limit: Some(100),
+                        offset: Some(10_000),
+                    },
                 },
-            },
+            }
         )
         .await
         .unwrap(),
@@ -1746,11 +1746,10 @@ async fn solution_pack_apply_and_history_use_uuid_only_json_routes() {
     );
     assert_eq!(
         solution_pack_command(
-            &client,
-            &url,
+            &api,
             SolutionPackCommand::Applications {
                 command: SolutionPackApplicationsCommand::Show { application_id },
-            },
+            }
         )
         .await
         .unwrap(),
@@ -1758,11 +1757,10 @@ async fn solution_pack_apply_and_history_use_uuid_only_json_routes() {
     );
     assert_eq!(
         solution_pack_command(
-            &client,
-            &url,
+            &api,
             SolutionPackCommand::Applications {
                 command: SolutionPackApplicationsCommand::Abandon { application_id },
-            },
+            }
         )
         .await
         .unwrap(),
@@ -1770,8 +1768,7 @@ async fn solution_pack_apply_and_history_use_uuid_only_json_routes() {
     );
     assert_eq!(
         solution_pack_command(
-            &client,
-            &url,
+            &api,
             SolutionPackCommand::Checks {
                 command: SolutionPackChecksCommand::Rerun { application_id },
             }
@@ -1782,13 +1779,14 @@ async fn solution_pack_apply_and_history_use_uuid_only_json_routes() {
     );
     assert_eq!(
         solution_pack_command(
-            &client,
-            &url,
+            &api,
             SolutionPackCommand::Checks {
                 command: SolutionPackChecksCommand::List {
                     application_id,
-                    limit: 25,
-                    offset: 0
+                    page: PageArgs {
+                        limit: Some(25),
+                        offset: Some(0),
+                    },
                 },
             }
         )
@@ -1799,8 +1797,7 @@ async fn solution_pack_apply_and_history_use_uuid_only_json_routes() {
     let run_id = Uuid::from_u128(3);
     assert_eq!(
         solution_pack_command(
-            &client,
-            &url,
+            &api,
             SolutionPackCommand::Checks {
                 command: SolutionPackChecksCommand::Show {
                     application_id,
@@ -1833,9 +1830,8 @@ async fn solution_pack_plan_rejects_incomplete_and_invalid_forms() {
     );
     assert!(Cli::try_parse_from(["acli", "solution-pack", "plan", "show", "not-a-uuid",]).is_err());
 
-    let api = Url::parse("http://127.0.0.1:1").unwrap();
+    let api = Api::new(Client::new(), Url::parse("http://127.0.0.1:1").unwrap());
     let missing_publication = solution_pack_command(
-        &Client::new(),
         &api,
         SolutionPackCommand::Plan {
             command: None,
@@ -1852,7 +1848,6 @@ async fn solution_pack_plan_rejects_incomplete_and_invalid_forms() {
     assert!(matches!(missing_publication, Err(CliError::Input(_))));
 
     let mixed_show = solution_pack_command(
-        &Client::new(),
         &api,
         SolutionPackCommand::Plan {
             command: Some(SolutionPackPlanCommand::Show {
@@ -1887,7 +1882,6 @@ async fn solution_pack_plan_rejects_incomplete_and_invalid_forms() {
         "contexts/default=valid_code",
     ] {
         let invalid_mapping = solution_pack_command(
-            &Client::new(),
             &api,
             SolutionPackCommand::Plan {
                 command: None,
@@ -1960,10 +1954,12 @@ async fn solution_pack_plan_streams_parameters_and_show_fetches_by_id() {
     });
     let archive = tempfile::NamedTempFile::new().unwrap();
     fs::write(archive.path(), b"opaque archive bytes").unwrap();
-    let api = Url::parse(&format!("http://{address}")).unwrap();
+    let api = Api::new(
+        Client::new(),
+        Url::parse(&format!("http://{address}")).unwrap(),
+    );
 
     let created = solution_pack_command(
-        &Client::new(),
         &api,
         SolutionPackCommand::Plan {
             command: None,
@@ -1983,14 +1979,13 @@ async fn solution_pack_plan_streams_parameters_and_show_fetches_by_id() {
     assert_eq!(
         received.lock().unwrap().take().unwrap(),
         (
-            "prefix=shop%20prefix&blueprint_publication=publish".to_owned(),
+            "prefix=shop+prefix&blueprint_publication=publish".to_owned(),
             "application/zstd".to_owned(),
             b"opaque archive bytes".to_vec()
         )
     );
 
     solution_pack_command(
-        &Client::new(),
         &api,
         SolutionPackCommand::Plan {
             command: None,
@@ -2025,7 +2020,6 @@ async fn solution_pack_plan_streams_parameters_and_show_fetches_by_id() {
     assert!(body.contains(r#"{"code":"PL","key":"contexts/poland"}"#));
 
     let duplicate = solution_pack_command(
-        &Client::new(),
         &api,
         SolutionPackCommand::Plan {
             command: None,
@@ -2045,7 +2039,6 @@ async fn solution_pack_plan_streams_parameters_and_show_fetches_by_id() {
     assert!(matches!(duplicate, Err(CliError::Input(_))));
 
     let shown = solution_pack_command(
-        &Client::new(),
         &api,
         SolutionPackCommand::Plan {
             command: Some(SolutionPackPlanCommand::Show { plan_id }),
@@ -2125,4 +2118,15 @@ async fn forwards_http_json_without_reformatting() {
     assert_eq!(body, r#"{"status":"ok"}"#);
 
     server.abort();
+}
+
+#[test]
+fn stdin_secrets_need_exactly_one_non_empty_line_each() {
+    assert_eq!(
+        parse_stdin_lines("token\nsecret\n", ["reset token", "password"]).unwrap(),
+        ["token".to_owned(), "secret".to_owned()]
+    );
+    let error = parse_stdin_lines("token\n\n", ["reset token", "password"]).unwrap_err();
+    assert_eq!(error.to_string(), "password must be stdin line 2");
+    assert!(parse_stdin_lines("a\nb\nc\n", ["reset token", "password"]).is_err());
 }

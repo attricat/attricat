@@ -1,13 +1,11 @@
 use clap::Subcommand;
-use reqwest::{Client, Method};
 use serde_json::{Value, json};
-use url::Url;
 use uuid::Uuid;
 
 use crate::cli::SourceInput;
 use crate::error::CliError;
 use crate::input::read_source;
-use crate::transport::{request, segment};
+use crate::transport::{Api, segment, with_query};
 
 #[derive(Subcommand)]
 pub(crate) enum RuleCommand {
@@ -86,46 +84,25 @@ pub(crate) enum RuleCommand {
     },
 }
 
-pub(crate) async fn rule_command(
-    client: &Client,
-    server: &Url,
-    command: RuleCommand,
-) -> Result<String, CliError> {
+pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<String, CliError> {
     match command {
         RuleCommand::List { blueprint_id } => {
-            let path = match blueprint_id {
-                Some(id) => format!("/rules?blueprint_id={}", segment(id)),
-                None => "/rules".to_owned(),
-            };
-            request(client, server, Method::GET, &path, None).await
-        }
-        RuleCommand::Get { rule_id } => {
-            request(
-                client,
-                server,
-                Method::GET,
-                &format!("/rules/{}", segment(rule_id)),
-                None,
-            )
+            api.get(&with_query(
+                "/rules",
+                [("blueprint_id", blueprint_id.map(|id| id.to_string()))],
+            ))
             .await
         }
+        RuleCommand::Get { rule_id } => api.get(&format!("/rules/{}", segment(rule_id))).await,
         RuleCommand::Validate {
             blueprint_id,
             blueprint_version,
             context_id,
             source,
         } => {
-            request(
-                client,
-                server,
-                Method::POST,
+            api.post_json(
                 "/rules/validate",
-                Some(rule_body(
-                    blueprint_id,
-                    blueprint_version,
-                    context_id,
-                    source,
-                )?),
+                rule_body(blueprint_id, blueprint_version, context_id, source)?,
             )
             .await
         }
@@ -135,17 +112,9 @@ pub(crate) async fn rule_command(
             context_id,
             source,
         } => {
-            request(
-                client,
-                server,
-                Method::POST,
+            api.post_json(
                 "/rules",
-                Some(rule_body(
-                    blueprint_id,
-                    blueprint_version,
-                    context_id,
-                    source,
-                )?),
+                rule_body(blueprint_id, blueprint_version, context_id, source)?,
             )
             .await
         }
@@ -156,95 +125,60 @@ pub(crate) async fn rule_command(
             context_id,
             source,
         } => {
-            request(
-                client,
-                server,
-                Method::POST,
+            api.post_json(
                 &format!("/rules/{}/versions", segment(rule_id)),
-                Some(rule_body(
-                    blueprint_id,
-                    blueprint_version,
-                    context_id,
-                    source,
-                )?),
+                rule_body(blueprint_id, blueprint_version, context_id, source)?,
             )
             .await
         }
         RuleCommand::Publish { rule_id, version } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                &format!("/rules/{rule_id}/versions/{version}/publish"),
-                None,
-            )
-            .await
+            api.post(&format!("/rules/{rule_id}/versions/{version}/publish"))
+                .await
         }
         RuleCommand::Enable {
             rule_id,
             version,
             accept_existing_violations,
         } => {
-            request(
-                client,
-                server,
-                Method::POST,
+            api.post_json(
                 &format!("/rules/{rule_id}/versions/{version}/enable"),
-                Some(json!({ "accept_existing_violations": accept_existing_violations })),
+                json!({ "accept_existing_violations": accept_existing_violations }),
             )
             .await
         }
         RuleCommand::Disable { rule_id } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                &format!("/rules/{}/disable", segment(rule_id)),
-                None,
-            )
-            .await
+            api.post(&format!("/rules/{}/disable", segment(rule_id)))
+                .await
         }
         RuleCommand::RunNow {
             rule_id,
             idempotency_key,
             record_id,
             dry_run,
-        } => request(
-            client,
-            server,
-            Method::POST,
-            &format!("/rules/{}/run-now", segment(rule_id)),
-            Some(
+        } => {
+            api.post_json(
+                &format!("/rules/{}/run-now", segment(rule_id)),
                 json!({"idempotency_key":idempotency_key,"record_id":record_id,"dry_run":dry_run}),
-            ),
-        )
-        .await,
-        RuleCommand::RunList => request(client, server, Method::GET, "/rule-runs", None).await,
-        RuleCommand::RunReplay { run_id } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                &format!("/rule-runs/{}/replay", segment(run_id)),
-                None,
             )
             .await
         }
+        RuleCommand::RunList => api.get("/rule-runs").await,
+        RuleCommand::RunReplay { run_id } => {
+            api.post(&format!("/rule-runs/{}/replay", segment(run_id)))
+                .await
+        }
         RuleCommand::Findings { record_id } => {
-            let path = match record_id {
-                Some(id) => format!("/rule-findings?record_id={}", segment(id)),
-                None => "/rule-findings".to_owned(),
-            };
-            request(client, server, Method::GET, &path, None).await
+            api.get(&with_query(
+                "/rule-findings",
+                [("record_id", record_id.map(|id| id.to_string()))],
+            ))
+            .await
         }
         RuleCommand::Acknowledge { finding_id } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                &format!("/rule-findings/{}/acknowledge", segment(finding_id)),
-                None,
-            )
+            api.post(&format!(
+                "/rule-findings/{}/acknowledge",
+                segment(finding_id)
+            ))
             .await
         }
     }
@@ -256,7 +190,10 @@ pub(crate) fn rule_body(
     context_id: Option<Uuid>,
     source: SourceInput,
 ) -> Result<Value, CliError> {
-    Ok(
-        json!({"blueprint_id":blueprint_id,"blueprint_version":blueprint_version,"context_id":context_id,"definition":read_source(source)?}),
-    )
+    Ok(json!({
+        "blueprint_id": blueprint_id,
+        "blueprint_version": blueprint_version,
+        "context_id": context_id,
+        "definition": read_source(source)?,
+    }))
 }

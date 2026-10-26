@@ -1,13 +1,11 @@
 use clap::Subcommand;
-use reqwest::{Client, Method};
 use serde_json::json;
-use url::Url;
 use uuid::Uuid;
 
 use crate::cli::SourceInput;
 use crate::error::CliError;
 use crate::input::read_source;
-use crate::transport::{request, segment};
+use crate::transport::{Api, segment};
 
 #[derive(Subcommand)]
 pub(crate) enum WorkflowCommand {
@@ -58,75 +56,47 @@ pub(crate) enum WorkflowCommand {
 }
 
 pub(crate) async fn workflow_command(
-    client: &Client,
-    server: &Url,
+    api: &Api,
     command: WorkflowCommand,
 ) -> Result<String, CliError> {
     match command {
-        WorkflowCommand::List => request(client, server, Method::GET, "/workflows", None).await,
+        WorkflowCommand::List => api.get("/workflows").await,
         WorkflowCommand::Validate(source) => {
-            request(
-                client,
-                server,
-                Method::POST,
+            api.post_json(
                 "/workflows/validate",
-                Some(json!({"definition":read_source(source)?})),
+                json!({"definition":read_source(source)?}),
             )
             .await
         }
         WorkflowCommand::Create(source) => {
-            request(
-                client,
-                server,
-                Method::POST,
-                "/workflows",
-                Some(json!({"definition":read_source(source)?})),
-            )
-            .await
+            api.post_json("/workflows", json!({"definition":read_source(source)?}))
+                .await
         }
         WorkflowCommand::Get { workflow_id } => {
-            request(
-                client,
-                server,
-                Method::GET,
-                &format!("/workflows/{}", segment(workflow_id)),
-                None,
-            )
-            .await
+            api.get(&format!("/workflows/{}", segment(workflow_id)))
+                .await
         }
         WorkflowCommand::RevisionList { workflow_id } => {
-            request(
-                client,
-                server,
-                Method::GET,
-                &format!("/workflows/{}/versions", segment(workflow_id)),
-                None,
-            )
-            .await
+            api.get(&format!("/workflows/{}/versions", segment(workflow_id)))
+                .await
         }
         WorkflowCommand::VersionGet {
             workflow_id,
             version,
         } => {
-            request(
-                client,
-                server,
-                Method::GET,
-                &format!("/workflows/{}/versions/{version}", segment(workflow_id)),
-                None,
-            )
+            api.get(&format!(
+                "/workflows/{}/versions/{version}",
+                segment(workflow_id)
+            ))
             .await
         }
         WorkflowCommand::Revision {
             workflow_id,
             source,
         } => {
-            request(
-                client,
-                server,
-                Method::POST,
+            api.post_json(
                 &format!("/workflows/{}/versions", segment(workflow_id)),
-                Some(json!({"definition":read_source(source)?})),
+                json!({"definition":read_source(source)?}),
             )
             .await
         }
@@ -134,80 +104,45 @@ pub(crate) async fn workflow_command(
             workflow_id,
             version,
         } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                &format!(
-                    "/workflows/{}/versions/{version}/publish",
-                    segment(workflow_id)
-                ),
-                None,
-            )
+            api.post(&format!(
+                "/workflows/{}/versions/{version}/publish",
+                segment(workflow_id)
+            ))
             .await
         }
         WorkflowCommand::Enable {
             workflow_id,
             version,
         } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                &format!(
-                    "/workflows/{}/versions/{version}/enable",
-                    segment(workflow_id)
-                ),
-                None,
-            )
+            api.post(&format!(
+                "/workflows/{}/versions/{version}/enable",
+                segment(workflow_id)
+            ))
             .await
         }
         WorkflowCommand::Disable { workflow_id } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                &format!("/workflows/{}/disable", segment(workflow_id)),
-                None,
-            )
-            .await
+            api.post(&format!("/workflows/{}/disable", segment(workflow_id)))
+                .await
         }
         WorkflowCommand::RunNow {
             workflow_id,
             record_id,
             idempotency_key,
         } => {
-            request(
-                client,
-                server,
-                Method::POST,
+            api.post_json(
                 &format!("/workflows/{}/run-now", segment(workflow_id)),
-                Some(json!({"record_id":record_id,"idempotency_key":idempotency_key})),
+                json!({"record_id":record_id,"idempotency_key":idempotency_key}),
             )
             .await
         }
-        WorkflowCommand::RunList => {
-            request(client, server, Method::GET, "/workflow-runs", None).await
-        }
+        WorkflowCommand::RunList => api.get("/workflow-runs").await,
         WorkflowCommand::RunTargets { run_id } => {
-            request(
-                client,
-                server,
-                Method::GET,
-                &format!("/workflow-runs/{}/targets", segment(run_id)),
-                None,
-            )
-            .await
+            api.get(&format!("/workflow-runs/{}/targets", segment(run_id)))
+                .await
         }
         WorkflowCommand::RunReplay { run_id } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                &format!("/workflow-runs/{}/replay", segment(run_id)),
-                None,
-            )
-            .await
+            api.post(&format!("/workflow-runs/{}/replay", segment(run_id)))
+                .await
         }
     }
 }

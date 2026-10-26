@@ -291,7 +291,7 @@ acli workflow run-replay <run-id>
 ```sh
 acli workspace member list
 acli workspace member set-state <member-id> --state active|inactive
-acli workspace member grant <member-id> --role-id <id> --scope-type <scope> --scope-target-id <id>
+acli workspace member grant <member-id> --role-id <id> --scope-type workspace|blueprint-family|record|context-subtree --scope-target-id <id>
 acli workspace member revoke-grant <member-id> <grant-id>
 acli workspace member transfer-ownership <member-id>
 acli workspace role list | permission list | assignable-role list
@@ -300,7 +300,7 @@ acli workspace role update <role-id> --code <code> --permissions <json>
 acli workspace role duplicate <role-id> --code <code>
 acli workspace role retire <role-id> [--replacement-role-id <id>]
 acli workspace invitation list
-acli workspace invitation create --email <email> --role-id <id> --scope-type <scope> --scope-target-id <id> --expires-at <rfc3339>
+acli workspace invitation create --email <email> --role-id <id> --scope-type workspace|blueprint-family|record|context-subtree --scope-target-id <id> --expires-at <rfc3339>
 acli workspace invitation revoke <invitation-id>
 acli workspace invitation accept --secret-stdin
 acli workspace user create --email <email> [--display-name <name>]
@@ -310,7 +310,7 @@ acli workspace agent get
 acli workspace agent set [--bulk-edits per-proposal|per-record] [--bulk-edit-max-records <1-5000>]
 acli workspace publication-channel list
 acli workspace publication-channel set <context-id> --enabled true|false
-acli workspace grant-target list <scope-type>
+acli workspace grant-target list workspace|blueprint-family|record|context-subtree
 acli workspace token-permission list
 acli directory
 acli team list

@@ -32,11 +32,32 @@ use crate::commands::workspace::WorkspaceCommand;
 
 pub(crate) const DEFAULT_SERVER_URL: &str = "http://127.0.0.1:3000/api";
 
-pub(crate) const DEFAULT_LIST_LIMIT: u16 = 25;
+/// Page size `acli` asks for when a command needs one and none is given.
+pub(crate) const DEFAULT_LIST_LIMIT: u32 = 25;
 
-pub(crate) const MAX_LIST_LIMIT: u16 = 100;
-
+/// The deepest offset any paged API endpoint accepts.
 pub(crate) const MAX_LIST_OFFSET: u16 = 10_000;
+
+/// Offset paging. Omitted values use the endpoint's default, and the endpoint
+/// enforces its own maximum page size.
+#[derive(Args, Clone, Copy, Default)]
+pub(crate) struct PageArgs {
+    /// Items per page.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..))]
+    pub(crate) limit: Option<u16>,
+    /// Items to skip.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(0..=i64::from(MAX_LIST_OFFSET)))]
+    pub(crate) offset: Option<u16>,
+}
+
+impl PageArgs {
+    pub(crate) fn query(self) -> [(&'static str, Option<String>); 2] {
+        [
+            ("limit", self.limit.map(|limit| limit.to_string())),
+            ("offset", self.offset.map(|offset| offset.to_string())),
+        ]
+    }
+}
 
 #[derive(Parser)]
 #[command(
@@ -48,7 +69,8 @@ pub(crate) struct Cli {
     /// API base URL, including its `/api` path.
     #[arg(long, global = true, env = "ATTRICAT_API_URL", default_value = DEFAULT_SERVER_URL)]
     pub(crate) server: Url,
-    /// Personal API token. Prefer ATTRICAT_TOKEN or --token-stdin to avoid exposing it in process arguments.
+    /// Personal API token. Prefer ATTRICAT_TOKEN or --token-stdin to avoid
+    /// exposing it in process arguments.
     #[arg(
         long,
         global = true,

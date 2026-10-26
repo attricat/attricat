@@ -1,9 +1,7 @@
 use clap::Subcommand;
-use reqwest::{Client, Method};
-use url::Url;
 
 use crate::error::CliError;
-use crate::transport::request;
+use crate::transport::{Api, with_query};
 
 #[derive(Subcommand)]
 pub(crate) enum DataHealthCommand {
@@ -25,8 +23,7 @@ pub(crate) enum DataHealthCommand {
 }
 
 pub(crate) async fn data_health_command(
-    client: &Client,
-    server: &Url,
+    api: &Api,
     command: DataHealthCommand,
 ) -> Result<String, CliError> {
     let path = match command {
@@ -43,15 +40,15 @@ pub(crate) async fn data_health_command(
         DataHealthCommand::Storage => "/data-health/storage".to_owned(),
         DataHealthCommand::BackgroundProcessing => "/data-health/background-processing".to_owned(),
         DataHealthCommand::Refresh => {
-            return request(client, server, Method::POST, "/data-health/refresh", None).await;
+            return api.post("/data-health/refresh").await;
         }
     };
-    request(client, server, Method::GET, &path, None).await
+    api.get(&path).await
 }
 
 pub(crate) fn data_health_path(name: &str, days: Option<u16>) -> String {
-    match days {
-        Some(days) => format!("/data-health/{name}?stale_after_days={days}"),
-        None => format!("/data-health/{name}"),
-    }
+    with_query(
+        &format!("/data-health/{name}"),
+        [("stale_after_days", days.map(|days| days.to_string()))],
+    )
 }

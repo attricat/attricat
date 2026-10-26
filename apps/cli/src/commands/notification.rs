@@ -3,7 +3,8 @@ use reqwest::Method;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::transport::segment;
+use crate::error::CliError;
+use crate::transport::{Api, flag, segment, with_query};
 
 #[derive(Subcommand)]
 pub(crate) enum NotificationCommand {
@@ -42,20 +43,14 @@ pub(crate) fn notification_request(
             before_time,
             before_id,
         } => {
-            let mut params = url::form_urlencoded::Serializer::new(String::new());
-            if unread {
-                params.append_pair("unread_only", "true");
-            }
-            if let (Some(time), Some(id)) = (before_time, before_id) {
-                params.append_pair("before_time", &time);
-                params.append_pair("before_id", &id.to_string());
-            }
-            let query = params.finish();
-            let path = if query.is_empty() {
-                "/notifications".to_owned()
-            } else {
-                format!("/notifications?{query}")
-            };
+            let path = with_query(
+                "/notifications",
+                [
+                    ("unread_only", flag(unread)),
+                    ("before_time", before_time),
+                    ("before_id", before_id.map(|id| id.to_string())),
+                ],
+            );
             (Method::GET, path, None)
         }
         NotificationCommand::Count => (Method::GET, "/notifications/unread-count".to_owned(), None),
@@ -83,4 +78,12 @@ pub(crate) fn notification_request(
             None,
         ),
     }
+}
+
+pub(crate) async fn notification_command(
+    api: &Api,
+    command: NotificationCommand,
+) -> Result<String, CliError> {
+    let (method, path, body) = notification_request(command);
+    api.send(method, &path, body).await
 }

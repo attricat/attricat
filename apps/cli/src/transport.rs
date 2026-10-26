@@ -27,77 +27,221 @@ pub(crate) const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 /// Media type of extension and solution-pack archives.
 pub(crate) const ZSTD_MEDIA_TYPE: &str = "application/zstd";
 
-pub(crate) async fn raw_upload(
-    client: &Client,
-    server: &Url,
-    path: &str,
-    file: &PathBuf,
-    content_type: &str,
-) -> Result<String, CliError> {
-    let stream =
-        tokio_util::io::ReaderStream::new(tokio::fs::File::open(file).await.map_err(|error| {
-            CliError::Input(format!("cannot read {}: {error}", file.display()))
-        })?);
-    raw_response(
-        client
-            .request(Method::POST, endpoint(server, path)?)
-            .header(reqwest::header::CONTENT_TYPE, content_type)
-            .body(reqwest::Body::wrap_stream(stream))
-            .timeout(TRANSFER_TIMEOUT)
-            .send()
-            .await
-            .map_err(|error| CliError::Transport(error.to_string()))?,
-    )
-    .await
+/// The configured client and API base URL every command sends requests through.
+pub(crate) struct Api {
+    client: Client,
+    server: Url,
 }
 
-pub(crate) async fn multipart_upload(
-    client: &Client,
-    server: &Url,
-    path: &str,
-    files: Vec<PathBuf>,
-    context_id: Option<Uuid>,
-) -> Result<String, CliError> {
-    let mut form = reqwest::multipart::Form::new();
-    if let Some(context_id) = context_id {
-        form = form.text("context_id", context_id.to_string());
+impl Api {
+    pub(crate) fn new(client: Client, server: Url) -> Self {
+        Self { client, server }
     }
-    for path in files {
-        let length = fs::metadata(&path)
-            .map_err(|error| CliError::Input(format!("cannot read {}: {error}", path.display())))?
-            .len();
-        let filename = path
-            .file_name()
-            .and_then(|v| v.to_str())
-            .ok_or_else(|| CliError::Input("file name must be UTF-8".to_owned()))?
-            .to_owned();
-        let stream =
-            tokio_util::io::ReaderStream::new(tokio::fs::File::open(&path).await.map_err(
-                |error| CliError::Input(format!("cannot read {}: {error}", path.display())),
-            )?);
-        let part = reqwest::multipart::Part::stream_with_length(
-            reqwest::Body::wrap_stream(stream),
-            length,
-        )
-        .file_name(filename)
-        .mime_str(
-            mime_guess::from_path(&path)
-                .first_or_octet_stream()
-                .as_ref(),
-        )
-        .map_err(|error| CliError::Input(format!("invalid file MIME type: {error}")))?;
-        form = form.part("files", part);
+
+    pub(crate) fn url(&self, path: &str) -> Result<Url, CliError> {
+        endpoint(&self.server, path)
     }
-    raw_response(
-        client
-            .post(endpoint(server, path)?)
+
+    /// Sends a JSON request and returns the unread response, for callers
+    /// that need its headers.
+    pub(crate) async fn send_raw(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<Value>,
+    ) -> Result<reqwest::Response, CliError> {
+        let mut request = self
+            .client
+            .request(method, self.url(path)?)
+            .timeout(REQUEST_TIMEOUT);
+        if let Some(body) = body {
+            request = request.json(&body);
+        }
+        send(request).await
+    }
+
+    /// Sends a JSON request and returns the response body unchanged.
+    pub(crate) async fn send(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<Value>,
+    ) -> Result<String, CliError> {
+        raw_response(self.send_raw(method, path, body).await?).await
+    }
+
+    /// Sends a JSON request and parses the response.
+    pub(crate) async fn send_value(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<Value>,
+    ) -> Result<Value, CliError> {
+        let response = self.send(method, path, body).await?;
+        serde_json::from_str(&response).map_err(|_| CliError::InvalidResponse)
+    }
+
+    pub(crate) async fn get(&self, path: &str) -> Result<String, CliError> {
+        self.send(Method::GET, path, None).await
+    }
+
+    pub(crate) async fn get_value(&self, path: &str) -> Result<Value, CliError> {
+        self.send_value(Method::GET, path, None).await
+    }
+
+    pub(crate) async fn delete(&self, path: &str) -> Result<String, CliError> {
+        self.send(Method::DELETE, path, None).await
+    }
+
+    /// Posts without a body.
+    pub(crate) async fn post(&self, path: &str) -> Result<String, CliError> {
+        self.send(Method::POST, path, None).await
+    }
+
+    pub(crate) async fn post_json(&self, path: &str, body: Value) -> Result<String, CliError> {
+        self.send(Method::POST, path, Some(body)).await
+    }
+
+    pub(crate) async fn put_json(&self, path: &str, body: Value) -> Result<String, CliError> {
+        self.send(Method::PUT, path, Some(body)).await
+    }
+
+    pub(crate) async fn patch_json(&self, path: &str, body: Value) -> Result<String, CliError> {
+        self.send(Method::PATCH, path, Some(body)).await
+    }
+
+    /// Streams a local file as the raw request body.
+    pub(crate) async fn upload(
+        &self,
+        path: &str,
+        file: &Path,
+        content_type: &str,
+    ) -> Result<String, CliError> {
+        let stream = tokio_util::io::ReaderStream::new(tokio::fs::File::open(file).await.map_err(
+            |error| CliError::Input(format!("cannot read {}: {error}", file.display())),
+        )?);
+        let request = self
+            .client
+            .post(self.url(path)?)
+            .header(reqwest::header::CONTENT_TYPE, content_type)
+            .body(reqwest::Body::wrap_stream(stream))
+            .timeout(TRANSFER_TIMEOUT);
+        raw_response(send(request).await?).await
+    }
+
+    /// Sends a multipart form with the transfer timeout.
+    pub(crate) async fn send_form(
+        &self,
+        method: Method,
+        path: &str,
+        form: reqwest::multipart::Form,
+    ) -> Result<String, CliError> {
+        let request = self
+            .client
+            .request(method, self.url(path)?)
             .multipart(form)
-            .timeout(TRANSFER_TIMEOUT)
-            .send()
-            .await
-            .map_err(|error| CliError::Transport(error.to_string()))?,
-    )
-    .await
+            .timeout(TRANSFER_TIMEOUT);
+        raw_response(send(request).await?).await
+    }
+
+    /// Uploads files as `files` parts, with an optional `context_id` part.
+    pub(crate) async fn multipart(
+        &self,
+        path: &str,
+        files: Vec<PathBuf>,
+        context_id: Option<Uuid>,
+    ) -> Result<String, CliError> {
+        let mut form = reqwest::multipart::Form::new();
+        if let Some(context_id) = context_id {
+            form = form.text("context_id", context_id.to_string());
+        }
+        for file in files {
+            form = form.part("files", file_part(&file).await?);
+        }
+        self.send_form(Method::POST, path, form).await
+    }
+
+    /// Streams a response body into `output`, replacing it only on success.
+    pub(crate) async fn download(
+        &self,
+        path: &str,
+        output: &Path,
+        range: Option<&str>,
+    ) -> Result<String, CliError> {
+        let mut request = self.client.get(self.url(path)?);
+        if let Some(range) = range {
+            request = request.header(reqwest::header::RANGE, range);
+        }
+        let response = send(request.timeout(TRANSFER_TIMEOUT)).await?;
+        if !response.status().is_success() {
+            return raw_response(response).await;
+        }
+        let mut temporary = temporary_file(output, "download")?;
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|error| CliError::Transport(error.to_string()))?;
+            std::io::Write::write_all(temporary.as_file_mut(), &chunk).map_err(|error| {
+                CliError::Input(format!("cannot write {}: {error}", output.display()))
+            })?;
+        }
+        temporary.as_file_mut().sync_all().map_err(|error| {
+            CliError::Input(format!("cannot sync {}: {error}", output.display()))
+        })?;
+        persist_temporary_file(temporary, output, "download")?;
+        Ok("null".to_owned())
+    }
+}
+
+pub(crate) async fn send(request: reqwest::RequestBuilder) -> Result<reqwest::Response, CliError> {
+    request
+        .send()
+        .await
+        .map_err(|error| CliError::Transport(error.to_string()))
+}
+
+/// A streamed multipart file part named after the file, with a guessed type.
+pub(crate) async fn file_part(path: &Path) -> Result<reqwest::multipart::Part, CliError> {
+    let length = fs::metadata(path)
+        .map_err(|error| CliError::Input(format!("cannot read {}: {error}", path.display())))?
+        .len();
+    let filename = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| CliError::Input("file name must be UTF-8".to_owned()))?
+        .to_owned();
+    let stream =
+        tokio_util::io::ReaderStream::new(tokio::fs::File::open(path).await.map_err(|error| {
+            CliError::Input(format!("cannot read {}: {error}", path.display()))
+        })?);
+    reqwest::multipart::Part::stream_with_length(reqwest::Body::wrap_stream(stream), length)
+        .file_name(filename)
+        .mime_str(mime_guess::from_path(path).first_or_octet_stream().as_ref())
+        .map_err(|error| CliError::Input(format!("invalid file MIME type: {error}")))
+}
+
+/// A `true` query value for a set boolean flag, or none.
+pub(crate) fn flag(set: bool) -> Option<String> {
+    set.then(|| "true".to_owned())
+}
+
+/// Appends the present query parameters to `path`.
+pub(crate) fn with_query<'a>(
+    path: &str,
+    parameters: impl IntoIterator<Item = (&'a str, Option<String>)>,
+) -> String {
+    let mut query = url::form_urlencoded::Serializer::new(String::new());
+    let mut empty = true;
+    for (name, value) in parameters {
+        if let Some(value) = value {
+            query.append_pair(name, &value);
+            empty = false;
+        }
+    }
+    if empty {
+        path.to_owned()
+    } else {
+        format!("{path}?{}", query.finish())
+    }
 }
 
 pub(crate) fn temporary_file(
@@ -129,41 +273,6 @@ pub(crate) fn persist_temporary_file(
         ))
     })?;
     Ok(())
-}
-
-pub(crate) async fn raw_download(
-    client: &Client,
-    server: &Url,
-    path: &str,
-    output: &Path,
-    range: Option<&str>,
-) -> Result<String, CliError> {
-    let mut request = client.get(endpoint(server, path)?);
-    if let Some(range) = range {
-        request = request.header(reqwest::header::RANGE, range);
-    }
-    let response = request
-        .timeout(TRANSFER_TIMEOUT)
-        .send()
-        .await
-        .map_err(|error| CliError::Transport(error.to_string()))?;
-    if !response.status().is_success() {
-        return raw_response(response).await;
-    }
-    let mut temporary = temporary_file(output, "download")?;
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|error| CliError::Transport(error.to_string()))?;
-        std::io::Write::write_all(temporary.as_file_mut(), &chunk).map_err(|error| {
-            CliError::Input(format!("cannot write {}: {error}", output.display()))
-        })?;
-    }
-    temporary
-        .as_file_mut()
-        .sync_all()
-        .map_err(|error| CliError::Input(format!("cannot sync {}: {error}", output.display())))?;
-    persist_temporary_file(temporary, output, "download")?;
-    Ok("null".to_owned())
 }
 
 pub(crate) async fn buffered_response_body(
@@ -225,36 +334,6 @@ pub(crate) fn api_error(status: reqwest::StatusCode, body: &str) -> Result<Strin
     })
 }
 
-pub(crate) async fn request(
-    client: &Client,
-    server: &Url,
-    method: Method,
-    path: &str,
-    body: Option<Value>,
-) -> Result<String, CliError> {
-    let url = endpoint(server, path)?;
-    let mut request = client.request(method, url).timeout(REQUEST_TIMEOUT);
-    if let Some(body) = body {
-        request = request.json(&body);
-    }
-    let response = request
-        .send()
-        .await
-        .map_err(|error| CliError::Transport(error.to_string()))?;
-    raw_response(response).await
-}
-
-pub(crate) async fn request_value(
-    client: &Client,
-    server: &Url,
-    method: Method,
-    path: &str,
-    body: Option<Value>,
-) -> Result<Value, CliError> {
-    let response = request(client, server, method, path, body).await?;
-    serde_json::from_str(&response).map_err(|_| CliError::InvalidResponse)
-}
-
 pub(crate) fn is_secure_credential_transport(server: &Url) -> bool {
     if server.scheme() == "https" {
         return true;
@@ -278,8 +357,8 @@ pub(crate) fn endpoint(server: &Url, path: &str) -> Result<Url, CliError> {
         .map_err(|error| CliError::Input(format!("invalid API path: {error}")))
 }
 
-/// Bytes percent-encoded in a path segment or query value: everything but
-/// RFC 3986 unreserved characters.
+/// Bytes percent-encoded in a path segment: everything but RFC 3986
+/// unreserved characters. Query values go through [`with_query`] instead.
 pub(crate) const SEGMENT_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'-')
     .remove(b'.')

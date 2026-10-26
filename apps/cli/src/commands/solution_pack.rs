@@ -4,16 +4,13 @@ use std::{
 };
 
 use clap::{Subcommand, ValueEnum};
-use reqwest::{Client, Method};
+use reqwest::Method;
 use serde_json::{Value, json};
-use url::Url;
 use uuid::Uuid;
 
-use crate::cli::DEFAULT_LIST_LIMIT;
+use crate::cli::PageArgs;
 use crate::error::CliError;
-use crate::transport::{
-    TRANSFER_TIMEOUT, ZSTD_MEDIA_TYPE, endpoint, raw_response, raw_upload, request, segment,
-};
+use crate::transport::{Api, ZSTD_MEDIA_TYPE, flag, segment, with_query};
 
 /// Longest solution-pack logical key or existing stable code a mapping accepts.
 pub(crate) const MAX_PACK_MAPPING_KEY_BYTES: usize = 128;
@@ -43,10 +40,8 @@ pub(crate) enum SolutionPackPlanCommand {
 pub(crate) enum SolutionPackApplicationsCommand {
     /// List bounded application history for the active workspace.
     List {
-        #[arg(long, default_value_t = u32::from(DEFAULT_LIST_LIMIT))]
-        limit: u32,
-        #[arg(long, default_value_t = 0)]
-        offset: u32,
+        #[command(flatten)]
+        page: PageArgs,
     },
     /// Show one workspace-scoped application and its ordered steps.
     Show { application_id: Uuid },
@@ -61,10 +56,8 @@ pub(crate) enum SolutionPackChecksCommand {
     /// List bounded immutable check-run history.
     List {
         application_id: Uuid,
-        #[arg(long, default_value_t = u32::from(DEFAULT_LIST_LIMIT))]
-        limit: u32,
-        #[arg(long, default_value_t = 0)]
-        offset: u32,
+        #[command(flatten)]
+        page: PageArgs,
     },
     /// Show one immutable check run and its ordered results.
     Show { application_id: Uuid, run_id: Uuid },
@@ -116,20 +109,13 @@ pub(crate) enum SolutionPackCommand {
 }
 
 pub(crate) async fn solution_pack_command(
-    client: &Client,
-    server: &Url,
+    api: &Api,
     command: SolutionPackCommand,
 ) -> Result<String, CliError> {
     match command {
         SolutionPackCommand::Inspect { file } => {
-            raw_upload(
-                client,
-                server,
-                "/solution-packs/inspect",
-                &file,
-                ZSTD_MEDIA_TYPE,
-            )
-            .await
+            api.upload("/solution-packs/inspect", &file, ZSTD_MEDIA_TYPE)
+                .await
         }
         SolutionPackCommand::Plan {
             command: Some(SolutionPackPlanCommand::Show { plan_id }),
@@ -141,14 +127,8 @@ pub(crate) async fn solution_pack_command(
             context_maps,
             include_sample_data: false,
         } if blueprint_maps.is_empty() && asset_maps.is_empty() && context_maps.is_empty() => {
-            request(
-                client,
-                server,
-                Method::GET,
-                &format!("/solution-packs/plans/{}", segment(plan_id)),
-                None,
-            )
-            .await
+            api.get(&format!("/solution-packs/plans/{}", segment(plan_id)))
+                .await
         }
         SolutionPackCommand::Plan {
             command: None,
@@ -160,121 +140,114 @@ pub(crate) async fn solution_pack_command(
             context_maps,
             include_sample_data,
         } => {
-            let mut path = format!(
-                "/solution-packs/plans?prefix={}&blueprint_publication={}",
-                segment(prefix),
-                publication.as_str()
+            let path = with_query(
+                "/solution-packs/plans",
+                [
+                    ("prefix", Some(prefix)),
+                    (
+                        "blueprint_publication",
+                        Some(publication.as_str().to_owned()),
+                    ),
+                    ("include_sample_data", flag(include_sample_data)),
+                ],
             );
-            if include_sample_data {
-                path.push_str("&include_sample_data=true");
-            }
             if blueprint_maps.is_empty() && asset_maps.is_empty() && context_maps.is_empty() {
-                raw_upload(client, server, &path, &file, ZSTD_MEDIA_TYPE).await
+                api.upload(&path, &file, ZSTD_MEDIA_TYPE).await
             } else {
-                solution_pack_plan_upload(
-                    client,
-                    server,
-                    &path,
-                    &file,
-                    &blueprint_maps,
-                    &asset_maps,
-                    &context_maps,
-                )
-                .await
+                let maps = PackMappings {
+                    blueprints: &blueprint_maps,
+                    assets: &asset_maps,
+                    contexts: &context_maps,
+                };
+                solution_pack_plan_upload(api, &path, &file, maps).await
             }
         }
         SolutionPackCommand::Plan { .. } => Err(CliError::Input(
-            "solution-pack plan requires --file, --prefix, and --blueprint-publication; plan show accepts only a plan ID".to_owned(),
+            "solution-pack plan requires --file, --prefix, and --blueprint-publication; \
+             plan show accepts only a plan ID"
+                .to_owned(),
         )),
         SolutionPackCommand::Apply { plan_id } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                &format!("/solution-packs/plans/{}/apply", segment(plan_id)),
-                None,
-            )
-            .await
+            api.post(&format!("/solution-packs/plans/{}/apply", segment(plan_id)))
+                .await
         }
-        SolutionPackCommand::Applications {
-            command: SolutionPackApplicationsCommand::List { limit, offset },
-        } => {
-            request(
-                client,
-                server,
-                Method::GET,
-                &format!("/solution-packs/applications?limit={limit}&offset={offset}"),
-                None,
-            )
-            .await
-        }
-        SolutionPackCommand::Applications {
-            command: SolutionPackApplicationsCommand::Show { application_id },
-        } => {
-            request(
-                client,
-                server,
-                Method::GET,
-                &format!(
-                    "/solution-packs/applications/{}",
+        SolutionPackCommand::Applications { command } => match command {
+            SolutionPackApplicationsCommand::List { page } => {
+                api.get(&with_query(APPLICATIONS_PATH, page.query())).await
+            }
+            SolutionPackApplicationsCommand::Show { application_id } => {
+                api.get(&format!("{APPLICATIONS_PATH}/{}", segment(application_id)))
+                    .await
+            }
+            SolutionPackApplicationsCommand::Abandon { application_id } => {
+                api.post(&format!(
+                    "{APPLICATIONS_PATH}/{}/abandon",
                     segment(application_id)
-                ),
-                None,
-            )
-            .await
-        }
-        SolutionPackCommand::Applications {
-            command: SolutionPackApplicationsCommand::Abandon { application_id },
-        } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                &format!(
-                    "/solution-packs/applications/{}/abandon",
+                ))
+                .await
+            }
+        },
+        SolutionPackCommand::Checks { command } => match command {
+            SolutionPackChecksCommand::Rerun { application_id } => {
+                api.post(&format!(
+                    "{APPLICATIONS_PATH}/{}/checks",
                     segment(application_id)
-                ),
-                None,
-            )
-            .await
-        }
-        SolutionPackCommand::Checks { command: SolutionPackChecksCommand::Rerun { application_id } } => {
-            request(client, server, Method::POST, &format!("/solution-packs/applications/{}/checks", segment(application_id)), None).await
-        }
-        SolutionPackCommand::Checks { command: SolutionPackChecksCommand::List { application_id, limit, offset } } => {
-            request(client, server, Method::GET, &format!("/solution-packs/applications/{}/checks?limit={limit}&offset={offset}", segment(application_id)), None).await
-        }
-        SolutionPackCommand::Checks { command: SolutionPackChecksCommand::Show { application_id, run_id } } => {
-            request(client, server, Method::GET, &format!("/solution-packs/applications/{}/checks/{}", segment(application_id), segment(run_id)), None).await
-        }
+                ))
+                .await
+            }
+            SolutionPackChecksCommand::List {
+                application_id,
+                page,
+            } => {
+                api.get(&with_query(
+                    &format!("{APPLICATIONS_PATH}/{}/checks", segment(application_id)),
+                    page.query(),
+                ))
+                .await
+            }
+            SolutionPackChecksCommand::Show {
+                application_id,
+                run_id,
+            } => {
+                api.get(&format!(
+                    "{APPLICATIONS_PATH}/{}/checks/{}",
+                    segment(application_id),
+                    segment(run_id)
+                ))
+                .await
+            }
+        },
     }
 }
 
+const APPLICATIONS_PATH: &str = "/solution-packs/applications";
+
+/// The `LOGICAL_KEY=VALUE` reuse mappings a plan was given, by kind.
+pub(crate) struct PackMappings<'a> {
+    pub(crate) blueprints: &'a [String],
+    pub(crate) assets: &'a [String],
+    pub(crate) contexts: &'a [String],
+}
+
 pub(crate) async fn solution_pack_plan_upload(
-    client: &Client,
-    server: &Url,
+    api: &Api,
     path: &str,
     archive: &Path,
-    requested_maps: &[String],
-    requested_asset_maps: &[String],
-    requested_context_maps: &[String],
+    maps: PackMappings<'_>,
 ) -> Result<String, CliError> {
     let blueprint_maps = parse_pack_mappings(
-        requested_maps,
+        maps.blueprints,
         "--map",
         "blueprints/",
         "EXISTING_CODE",
         blueprint_mapping_value,
     )?;
-    let asset_maps = parse_pack_mappings(
-        requested_asset_maps,
-        "--map-asset",
-        "assets/",
-        "ASSET_UUID",
-        |id| Uuid::parse_str(id).ok().map(|id| json!({ "id": id })),
-    )?;
+    let asset_maps =
+        parse_pack_mappings(maps.assets, "--map-asset", "assets/", "ASSET_UUID", |id| {
+            Uuid::parse_str(id).ok().map(|id| json!({ "id": id }))
+        })?;
     let context_maps = parse_pack_mappings(
-        requested_context_maps,
+        maps.contexts,
         "--map-context",
         "contexts/",
         "EXISTING_CODE",
@@ -310,16 +283,7 @@ pub(crate) async fn solution_pack_plan_upload(
             form = form.text(field, mapping);
         }
     }
-    raw_response(
-        client
-            .post(endpoint(server, path)?)
-            .multipart(form)
-            .timeout(TRANSFER_TIMEOUT)
-            .send()
-            .await
-            .map_err(|error| CliError::Transport(error.to_string()))?,
-    )
-    .await
+    api.send_form(Method::POST, path, form).await
 }
 
 // Match the solution-pack planner's stable-code contract, including codes it

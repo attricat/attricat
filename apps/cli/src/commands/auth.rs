@@ -5,14 +5,13 @@ use std::{
 };
 
 use clap::Subcommand;
-use reqwest::{Client, Method};
+use reqwest::Method;
 use serde_json::json;
-use url::Url;
 
 use crate::error::CliError;
-use crate::input::{read_secret_stdin, read_two_secrets_stdin};
+use crate::input::{read_secret_stdin, read_stdin_lines};
 use crate::session::save_session_response;
-use crate::transport::{REQUEST_TIMEOUT, endpoint, raw_response, request};
+use crate::transport::{Api, raw_response};
 
 #[derive(Subcommand)]
 pub(crate) enum AuthCommand {
@@ -64,19 +63,15 @@ pub(crate) enum AuthCommand {
 }
 
 pub(crate) async fn auth_command(
-    client: &Client,
-    server: &Url,
+    api: &Api,
     command: AuthCommand,
     session_file: Option<&PathBuf>,
 ) -> Result<String, CliError> {
     match command {
         AuthCommand::Discover { login_identifier } => {
-            request(
-                client,
-                server,
-                Method::POST,
+            api.post_json(
                 "/auth/discover",
-                Some(json!({ "login_identifier": login_identifier })),
+                json!({ "login_identifier": login_identifier }),
             )
             .await
         }
@@ -90,28 +85,19 @@ pub(crate) async fn auth_command(
                     "login requires --password-stdin".to_owned(),
                 ));
             }
-            let response = client
-                .post(endpoint(server, "/auth/login")?)
-                .timeout(REQUEST_TIMEOUT)
-                .json(&json!({
-                    "login_identifier": login_identifier,
-                    "email": email,
-                    "password": read_secret_stdin("password")?,
-                }))
-                .send()
-                .await
-                .map_err(|error| CliError::Transport(error.to_string()))?;
+            let body = json!({
+                "login_identifier": login_identifier,
+                "email": email,
+                "password": read_secret_stdin("password")?,
+            });
+            let response = api
+                .send_raw(Method::POST, "/auth/login", Some(body))
+                .await?;
             save_session_response(response, session_file).await
         }
         AuthCommand::PasswordReset { email } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                "/auth/password-reset",
-                Some(json!({ "email": email })),
-            )
-            .await
+            api.post_json("/auth/password-reset", json!({ "email": email }))
+                .await
         }
         AuthCommand::PasswordResetConfirm {
             reset_token_stdin,
@@ -123,46 +109,26 @@ pub(crate) async fn auth_command(
                         .to_owned(),
                 ));
             }
-            let (token, password) = read_two_secrets_stdin("reset token", "password")?;
-            request(
-                client,
-                server,
-                Method::POST,
+            let [token, password] = read_stdin_lines(["reset token", "password"])?;
+            api.post_json(
                 "/auth/password-reset/confirm",
-                Some(json!({
+                json!({
                     "token": token, "password": password,
-                })),
+                }),
             )
             .await
         }
-        AuthCommand::Session => request(client, server, Method::GET, "/auth/session", None).await,
+        AuthCommand::Session => api.get("/auth/session").await,
         AuthCommand::Preferences { time_zone, .. } => {
-            request(
-                client,
-                server,
-                Method::PATCH,
-                "/auth/preferences",
-                Some(json!({ "time_zone": time_zone })),
-            )
-            .await
+            api.patch_json("/auth/preferences", json!({ "time_zone": time_zone }))
+                .await
         }
         AuthCommand::DisplayName { name } => {
-            request(
-                client,
-                server,
-                Method::PUT,
-                "/auth/display-name",
-                Some(json!({ "display_name": name })),
-            )
-            .await
+            api.put_json("/auth/display-name", json!({ "display_name": name }))
+                .await
         }
         AuthCommand::Logout => {
-            let response = client
-                .post(endpoint(server, "/auth/logout")?)
-                .timeout(REQUEST_TIMEOUT)
-                .send()
-                .await
-                .map_err(|error| CliError::Transport(error.to_string()))?;
+            let response = api.send_raw(Method::POST, "/auth/logout", None).await?;
             let output = raw_response(response).await?;
             if let Some(path) = session_file {
                 match fs::remove_file(path) {
@@ -179,12 +145,7 @@ pub(crate) async fn auth_command(
             Ok(output)
         }
         AuthCommand::Renew => {
-            let response = client
-                .post(endpoint(server, "/auth/renew")?)
-                .timeout(REQUEST_TIMEOUT)
-                .send()
-                .await
-                .map_err(|error| CliError::Transport(error.to_string()))?;
+            let response = api.send_raw(Method::POST, "/auth/renew", None).await?;
             save_session_response(response, session_file).await
         }
     }

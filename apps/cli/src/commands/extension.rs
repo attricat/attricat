@@ -1,14 +1,13 @@
 use std::path::PathBuf;
 
 use clap::Subcommand;
-use reqwest::{Client, Method};
+use reqwest::Method;
 use serde_json::{Value, json};
-use url::Url;
 use uuid::Uuid;
 
 use crate::error::CliError;
 use crate::input::{json_input, json_object_input};
-use crate::transport::{ZSTD_MEDIA_TYPE, raw_download, raw_upload, request, segment};
+use crate::transport::{Api, ZSTD_MEDIA_TYPE, segment, with_query};
 
 pub(crate) const MIN_SCHEDULE_INTERVAL_SECONDS: i32 = 60;
 
@@ -205,16 +204,21 @@ pub(crate) enum ExtensionScheduleCommand {
         input: String,
         #[arg(long)]
         input_file_id: Option<Uuid>,
-        #[arg(long, value_parser = clap::value_parser!(i32).range(i64::from(MIN_SCHEDULE_INTERVAL_SECONDS)..=i64::from(MAX_SCHEDULE_INTERVAL_SECONDS)))]
+        #[arg(long, value_parser = schedule_interval_seconds())]
         interval_seconds: i32,
     },
     Update {
         schedule_id: Uuid,
         #[arg(long, action = clap::ArgAction::Set)]
         enabled: bool,
-        #[arg(long, value_parser = clap::value_parser!(i32).range(i64::from(MIN_SCHEDULE_INTERVAL_SECONDS)..=i64::from(MAX_SCHEDULE_INTERVAL_SECONDS)))]
+        #[arg(long, value_parser = schedule_interval_seconds())]
         interval_seconds: i32,
     },
+}
+
+fn schedule_interval_seconds() -> clap::builder::RangedI64ValueParser<i32> {
+    clap::value_parser!(i32)
+        .range(i64::from(MIN_SCHEDULE_INTERVAL_SECONDS)..=i64::from(MAX_SCHEDULE_INTERVAL_SECONDS))
 }
 
 #[derive(Subcommand)]
@@ -230,130 +234,242 @@ pub(crate) enum ConnectorJobCommand {
 }
 
 pub(crate) async fn extension_registry_command(
-    client: &Client,
-    server: &Url,
+    api: &Api,
     command: ExtensionRegistryCommand,
 ) -> Result<String, CliError> {
     match command {
-        ExtensionRegistryCommand::List => {
-            request(client, server, Method::GET, "/extension-registries", None).await
-        }
+        ExtensionRegistryCommand::List => api.get("/extension-registries").await,
         ExtensionRegistryCommand::Add { source } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                "/extension-registries",
-                Some(json!({"source":source})),
-            )
-            .await
+            api.post_json("/extension-registries", json!({ "source": source }))
+                .await
         }
         ExtensionRegistryCommand::Remove { registry_id } => {
-            request(
-                client,
-                server,
-                Method::DELETE,
-                &format!("/extension-registries/{}", segment(registry_id)),
-                None,
-            )
-            .await
+            api.delete(&format!("/extension-registries/{}", segment(registry_id)))
+                .await
         }
-        ExtensionRegistryCommand::Discover => {
-            request(
-                client,
-                server,
-                Method::GET,
-                "/extension-registries/discover",
-                None,
-            )
-            .await
-        }
+        ExtensionRegistryCommand::Discover => api.get("/extension-registries/discover").await,
         ExtensionRegistryCommand::Details { owner, repository } => {
-            request(
-                client,
-                server,
-                Method::GET,
-                &format!(
-                    "/extension-registries/extensions/{}/{}",
-                    segment(&owner),
-                    segment(&repository)
-                ),
-                None,
-            )
+            api.get(&format!(
+                "/extension-registries/extensions/{}/{}",
+                segment(&owner),
+                segment(&repository)
+            ))
             .await
         }
     }
 }
 
 pub(crate) async fn extension_command(
-    client: &Client,
-    server: &Url,
+    api: &Api,
     command: ExtensionCommand,
 ) -> Result<String, CliError> {
     match command {
-    ExtensionCommand::List => request(client,server,Method::GET,"/extensions",None).await,
-    ExtensionCommand::Detail { extension_id } => request(client,server,Method::GET,&format!("/extensions/{}",segment(&extension_id)),None).await,
-    ExtensionCommand::Remove { extension_id } => request(client,server,Method::DELETE,&format!("/extensions/{}",segment(&extension_id)),None).await,
-    ExtensionCommand::Runtime => request(client,server,Method::GET,"/extensions/runtime",None).await,
-    ExtensionCommand::WorkspaceMode { enabled } => request(client,server,Method::PUT,"/workspace/extensions-mode",Some(json!({"enabled":enabled}))).await,
-    ExtensionCommand::Install { owner, repository, release_id } => request(client,server,Method::POST,"/extensions",Some(json!({"owner":owner,"repository":repository,"release_id":release_id}))).await,
-    ExtensionCommand::Sideload { file } => raw_upload(client,server,"/extensions/sideload",&file,ZSTD_MEDIA_TYPE).await,
-    ExtensionCommand::Upgrade { extension_id, owner, repository, release_id } => request(client,server,Method::POST,&format!("/extensions/{}/upgrade",segment(&extension_id)),Some(json!({"owner":owner,"repository":repository,"release_id":release_id}))).await,
-    ExtensionCommand::Configure { extension_id, configuration } => request(client,server,Method::PUT,&format!("/extensions/{}/configure",segment(&extension_id)),Some(json!({"configuration":json_input(&configuration,"--configuration")?}))).await,
-    ExtensionCommand::Grant { extension_id, grant_kind, grant_id } => request(client,server,Method::POST,&format!("/extensions/{}/grants",segment(&extension_id)),Some(json!({"grant_kind":grant_kind,"grant_id":grant_id}))).await,
-    ExtensionCommand::Revoke { extension_id, grant_kind, grant_id } => request(client,server,Method::DELETE,&format!("/extensions/{}/grants/{}/{}",segment(&extension_id),segment(&grant_kind),segment(&grant_id)),None).await,
-    ExtensionCommand::Enable { extension_id } => request(client,server,Method::POST,&format!("/extensions/{}/enable",segment(&extension_id)),None).await,
-    ExtensionCommand::Disable { extension_id } => request(client,server,Method::POST,&format!("/extensions/{}/disable",segment(&extension_id)),None).await,
-    ExtensionCommand::Quarantine { extension_id, diagnostic_code } => request(client,server,Method::POST,&format!("/extensions/{}/quarantine",segment(&extension_id)),Some(json!({"diagnostic_code":diagnostic_code}))).await,
-    ExtensionCommand::Artifact { extension_id, contribution_id, output } => raw_download(client,server,&format!("/extensions/{}/{}/artifact",segment(&extension_id),segment(&contribution_id)),&output,None).await,
-    ExtensionCommand::Storage { extension_id, contribution_id, release_id, body } => request(client,server,Method::POST,&format!("/extensions/{}/{}/storage/{}",segment(&extension_id),segment(&contribution_id),segment(release_id)),Some(json_input(&body,"--body")?)).await,
-    ExtensionCommand::AnnotationNamespace { extension_id, adopt } => request(client,server,if adopt { Method::POST } else { Method::GET },&format!("/extensions/{}/annotation-namespace",segment(&extension_id)),None).await,
-    ExtensionCommand::RepairAnnotations { extension_id, record_id, patch } => request(client,server,Method::POST,&format!("/extensions/{}/annotation-namespace/records/{}",segment(&extension_id),segment(record_id)),Some(json_object_input(&patch, "--patch")?)).await,
-    ExtensionCommand::Command { extension_id, contribution_id, release_id, command_id, payload } => request(client,server,Method::POST,&format!("/extensions/{}/{}/command",segment(&extension_id),segment(&contribution_id)),Some(json!({"release_id":release_id,"command_id":command_id,"payload":json_input(&payload,"--payload")?}))).await,
-}
+        ExtensionCommand::List => api.get("/extensions").await,
+        ExtensionCommand::Detail { extension_id } => {
+            api.get(&format!("/extensions/{}", segment(&extension_id)))
+                .await
+        }
+        ExtensionCommand::Remove { extension_id } => {
+            api.delete(&format!("/extensions/{}", segment(&extension_id)))
+                .await
+        }
+        ExtensionCommand::Runtime => api.get("/extensions/runtime").await,
+        ExtensionCommand::WorkspaceMode { enabled } => {
+            api.put_json("/workspace/extensions-mode", json!({ "enabled": enabled }))
+                .await
+        }
+        ExtensionCommand::Install {
+            owner,
+            repository,
+            release_id,
+        } => {
+            api.post_json(
+                "/extensions",
+                json!({ "owner": owner, "repository": repository, "release_id": release_id }),
+            )
+            .await
+        }
+        ExtensionCommand::Sideload { file } => {
+            api.upload("/extensions/sideload", &file, ZSTD_MEDIA_TYPE)
+                .await
+        }
+        ExtensionCommand::Upgrade {
+            extension_id,
+            owner,
+            repository,
+            release_id,
+        } => {
+            api.post_json(
+                &format!("/extensions/{}/upgrade", segment(&extension_id)),
+                json!({ "owner": owner, "repository": repository, "release_id": release_id }),
+            )
+            .await
+        }
+        ExtensionCommand::Configure {
+            extension_id,
+            configuration,
+        } => {
+            api.put_json(
+                &format!("/extensions/{}/configure", segment(&extension_id)),
+                json!({"configuration":json_input(&configuration,"--configuration")?}),
+            )
+            .await
+        }
+        ExtensionCommand::Grant {
+            extension_id,
+            grant_kind,
+            grant_id,
+        } => {
+            api.post_json(
+                &format!("/extensions/{}/grants", segment(&extension_id)),
+                json!({ "grant_kind": grant_kind, "grant_id": grant_id }),
+            )
+            .await
+        }
+        ExtensionCommand::Revoke {
+            extension_id,
+            grant_kind,
+            grant_id,
+        } => {
+            api.delete(&format!(
+                "/extensions/{}/grants/{}/{}",
+                segment(&extension_id),
+                segment(&grant_kind),
+                segment(&grant_id)
+            ))
+            .await
+        }
+        ExtensionCommand::Enable { extension_id } => {
+            api.post(&format!("/extensions/{}/enable", segment(&extension_id)))
+                .await
+        }
+        ExtensionCommand::Disable { extension_id } => {
+            api.post(&format!("/extensions/{}/disable", segment(&extension_id)))
+                .await
+        }
+        ExtensionCommand::Quarantine {
+            extension_id,
+            diagnostic_code,
+        } => {
+            api.post_json(
+                &format!("/extensions/{}/quarantine", segment(&extension_id)),
+                json!({ "diagnostic_code": diagnostic_code }),
+            )
+            .await
+        }
+        ExtensionCommand::Artifact {
+            extension_id,
+            contribution_id,
+            output,
+        } => {
+            api.download(
+                &format!(
+                    "/extensions/{}/{}/artifact",
+                    segment(&extension_id),
+                    segment(&contribution_id)
+                ),
+                &output,
+                None,
+            )
+            .await
+        }
+        ExtensionCommand::Storage {
+            extension_id,
+            contribution_id,
+            release_id,
+            body,
+        } => {
+            api.post_json(
+                &format!(
+                    "/extensions/{}/{}/storage/{}",
+                    segment(&extension_id),
+                    segment(&contribution_id),
+                    segment(release_id)
+                ),
+                json_input(&body, "--body")?,
+            )
+            .await
+        }
+        ExtensionCommand::AnnotationNamespace {
+            extension_id,
+            adopt,
+        } => {
+            api.send(
+                if adopt { Method::POST } else { Method::GET },
+                &format!(
+                    "/extensions/{}/annotation-namespace",
+                    segment(&extension_id)
+                ),
+                None,
+            )
+            .await
+        }
+        ExtensionCommand::RepairAnnotations {
+            extension_id,
+            record_id,
+            patch,
+        } => {
+            api.post_json(
+                &format!(
+                    "/extensions/{}/annotation-namespace/records/{}",
+                    segment(&extension_id),
+                    segment(record_id)
+                ),
+                json_object_input(&patch, "--patch")?,
+            )
+            .await
+        }
+        ExtensionCommand::Command {
+            extension_id,
+            contribution_id,
+            release_id,
+            command_id,
+            payload,
+        } => {
+            let body = json!({
+                "release_id": release_id,
+                "command_id": command_id,
+                "payload": json_input(&payload, "--payload")?,
+            });
+            api.post_json(
+                &format!(
+                    "/extensions/{}/{}/command",
+                    segment(&extension_id),
+                    segment(&contribution_id)
+                ),
+                body,
+            )
+            .await
+        }
+    }
 }
 
 pub(crate) async fn extension_run_command(
-    client: &Client,
-    server: &Url,
+    api: &Api,
     command: ExtensionRunCommand,
 ) -> Result<String, CliError> {
     match command {
         ExtensionRunCommand::List { extension_id } => {
-            let path = match extension_id {
-                Some(id) => format!("/extension-runs?extension_id={}", segment(id)),
-                None => "/extension-runs".to_owned(),
-            };
-            request(client, server, Method::GET, &path, None).await
+            api.get(&with_query(
+                "/extension-runs",
+                [("extension_id", extension_id)],
+            ))
+            .await
         }
         ExtensionRunCommand::Show { run_id } => {
-            request(
-                client,
-                server,
-                Method::GET,
-                &format!("/extension-runs/{}", segment(run_id)),
-                None,
-            )
-            .await
+            api.get(&format!("/extension-runs/{}", segment(run_id)))
+                .await
         }
         ExtensionRunCommand::Cancel { run_id } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                &format!("/extension-runs/{}/cancel", segment(run_id)),
-                None,
-            )
-            .await
+            api.post(&format!("/extension-runs/{}/cancel", segment(run_id)))
+                .await
         }
         ExtensionRunCommand::Download {
             run_id,
             artifact_id,
             output,
         } => {
-            raw_download(
-                client,
-                server,
+            api.download(
                 &format!(
                     "/extension-runs/{}/artifacts/{}/download",
                     segment(run_id),
@@ -368,80 +484,110 @@ pub(crate) async fn extension_run_command(
 }
 
 pub(crate) async fn extension_operation_command(
-    client: &Client,
-    server: &Url,
+    api: &Api,
     command: ExtensionOperationCommand,
 ) -> Result<String, CliError> {
     match command {
-        ExtensionOperationCommand::Start { extension_id, operation_id, input, idempotency_key, input_file_id } => {
-            request(client, server, Method::POST,
+        ExtensionOperationCommand::Start {
+            extension_id,
+            operation_id,
+            input,
+            idempotency_key,
+            input_file_id,
+        } => {
+            let body = json!({
+                "operation_id": operation_id,
+                "input": json_object_input(&input, "--input")?,
+                "idempotency_key": idempotency_key,
+                "source_reference": operation_source(input_file_id),
+                "destination_reference": {},
+            });
+            api.post_json(
                 &format!("/extensions/{}/operations", segment(extension_id)),
-                Some(json!({"operation_id":operation_id,"input":json_object_input(&input, "--input")?,
-                    "idempotency_key":idempotency_key,"source_reference":operation_source(input_file_id),
-                    "destination_reference":{}}))).await
+                body,
+            )
+            .await
         }
-        ExtensionOperationCommand::List => request(client, server, Method::GET, "/extension-operation-runs", None).await,
-        ExtensionOperationCommand::Show { run_id } => request(client, server, Method::GET, &format!("/extension-operation-runs/{}", segment(run_id)), None).await,
-        ExtensionOperationCommand::Artifacts { run_id } => request(client, server, Method::GET, &format!("/extension-operation-runs/{}/artifacts", segment(run_id)), None).await,
-        ExtensionOperationCommand::Deliveries { run_id } => request(client, server, Method::GET, &format!("/extension-operation-runs/{}/deliveries", segment(run_id)), None).await,
-        ExtensionOperationCommand::Download { run_id, artifact_id, output } => raw_download(client, server, &format!("/extension-operation-runs/{}/artifacts/{}/download", segment(run_id), segment(artifact_id)), &output, None).await,
-        ExtensionOperationCommand::Cancel { run_id } => request(client, server, Method::POST, &format!("/extension-operation-runs/{}/cancel", segment(run_id)), None).await,
-        ExtensionOperationCommand::Replay { run_id } => request(client, server, Method::POST, &format!("/extension-operation-runs/{}/replay", segment(run_id)), None).await,
+        ExtensionOperationCommand::List => api.get(OPERATION_RUNS_PATH).await,
+        ExtensionOperationCommand::Show { run_id } => {
+            api.get(&format!("{OPERATION_RUNS_PATH}/{}", segment(run_id)))
+                .await
+        }
+        ExtensionOperationCommand::Artifacts { run_id } => {
+            api.get(&format!(
+                "{OPERATION_RUNS_PATH}/{}/artifacts",
+                segment(run_id)
+            ))
+            .await
+        }
+        ExtensionOperationCommand::Deliveries { run_id } => {
+            api.get(&format!(
+                "{OPERATION_RUNS_PATH}/{}/deliveries",
+                segment(run_id)
+            ))
+            .await
+        }
+        ExtensionOperationCommand::Download {
+            run_id,
+            artifact_id,
+            output,
+        } => {
+            let path = format!(
+                "{OPERATION_RUNS_PATH}/{}/artifacts/{}/download",
+                segment(run_id),
+                segment(artifact_id)
+            );
+            api.download(&path, &output, None).await
+        }
+        ExtensionOperationCommand::Cancel { run_id } => {
+            api.post(&format!("{OPERATION_RUNS_PATH}/{}/cancel", segment(run_id)))
+                .await
+        }
+        ExtensionOperationCommand::Replay { run_id } => {
+            api.post(&format!("{OPERATION_RUNS_PATH}/{}/replay", segment(run_id)))
+                .await
+        }
     }
 }
 
+const OPERATION_RUNS_PATH: &str = "/extension-operation-runs";
+
 pub(crate) fn operation_source(file_id: Option<Uuid>) -> Value {
     match file_id {
-        Some(id) => json!({"input_file_id":id}),
+        Some(id) => json!({ "input_file_id": id }),
         None => json!({}),
     }
 }
 
 pub(crate) async fn extension_schedule_command(
-    client: &Client,
-    server: &Url,
+    api: &Api,
     command: ExtensionScheduleCommand,
 ) -> Result<String, CliError> {
     match command {
-        ExtensionScheduleCommand::List => {
-            request(
-                client,
-                server,
-                Method::GET,
-                "/extension-operation-schedules",
-                None,
-            )
-            .await
-        }
+        ExtensionScheduleCommand::List => api.get("/extension-operation-schedules").await,
         ExtensionScheduleCommand::Create {
             extension_id,
             operation_id,
             input,
             input_file_id,
             interval_seconds,
-        } => request(
-            client,
-            server,
-            Method::POST,
-            &format!("/extensions/{}/operation-schedules", segment(extension_id)),
-            Some(
+        } => {
+            api.post_json(
+                &format!("/extensions/{}/operation-schedules", segment(extension_id)),
                 json!({"operation_id":operation_id,"input":json_object_input(&input, "--input")?,
                     "source_reference":operation_source(input_file_id),"destination_reference":{},
                     "interval_seconds":interval_seconds}),
-            ),
-        )
-        .await,
+            )
+            .await
+        }
         ExtensionScheduleCommand::Update {
             schedule_id,
             enabled,
             interval_seconds,
         } => {
-            request(
-                client,
-                server,
-                Method::PATCH,
+            api.patch_json(
                 &format!("/extension-operation-schedules/{}", segment(schedule_id)),
-                Some(json!({"enabled":enabled,"interval_seconds":interval_seconds})),
+                json!({ "enabled": enabled, "interval_seconds": interval_seconds }),
             )
             .await
         }
@@ -449,31 +595,24 @@ pub(crate) async fn extension_schedule_command(
 }
 
 pub(crate) async fn connector_job_command(
-    client: &Client,
-    server: &Url,
+    api: &Api,
     command: ConnectorJobCommand,
 ) -> Result<String, CliError> {
     match command {
         ConnectorJobCommand::List { blueprint_id } => {
-            request(
-                client,
-                server,
-                Method::GET,
-                &format!("/blueprints/{}/connector-jobs", segment(blueprint_id)),
-                None,
-            )
+            api.get(&format!(
+                "/blueprints/{}/connector-jobs",
+                segment(blueprint_id)
+            ))
             .await
         }
         ConnectorJobCommand::Run {
             job_id,
             idempotency_key,
         } => {
-            request(
-                client,
-                server,
-                Method::POST,
+            api.post_json(
                 &format!("/blueprint-connector-jobs/{}/run", segment(job_id)),
-                Some(json!({"idempotency_key":idempotency_key})),
+                json!({ "idempotency_key": idempotency_key }),
             )
             .await
         }

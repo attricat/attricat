@@ -1,12 +1,10 @@
 use clap::Subcommand;
-use reqwest::{Client, Method};
 use serde_json::json;
-use url::Url;
 use uuid::Uuid;
 
 use crate::error::CliError;
 use crate::input::json_string_array_input;
-use crate::transport::{request, segment};
+use crate::transport::{Api, segment};
 
 pub(crate) const GENERATOR_TOKEN_LABEL: &str = "catalog-generator";
 
@@ -48,15 +46,9 @@ pub(crate) enum TokenCommand {
     },
 }
 
-pub(crate) async fn token_command(
-    client: &Client,
-    server: &Url,
-    command: TokenCommand,
-) -> Result<String, CliError> {
+pub(crate) async fn token_command(api: &Api, command: TokenCommand) -> Result<String, CliError> {
     match command {
-        TokenCommand::List => {
-            request(client, server, Method::GET, "/personal-access-tokens", None).await
-        }
+        TokenCommand::List => api.get("/personal-access-tokens").await,
         TokenCommand::Create {
             generator,
             label,
@@ -82,26 +74,15 @@ pub(crate) async fn token_command(
                     json_string_array_input(&permissions, "--permissions")?,
                 )
             };
-            request(
-                client,
-                server,
-                Method::POST,
+            api.post_json(
                 "/personal-access-tokens",
-                Some(
-                    json!({ "label": label, "permissions": permissions, "expires_at": expires_at }),
-                ),
+                json!({ "label": label, "permissions": permissions, "expires_at": expires_at }),
             )
             .await
         }
         TokenCommand::Revoke { token_id } => {
-            request(
-                client,
-                server,
-                Method::DELETE,
-                &format!("/personal-access-tokens/{}", segment(token_id)),
-                None,
-            )
-            .await
+            api.delete(&format!("/personal-access-tokens/{}", segment(token_id)))
+                .await
         }
     }
 }

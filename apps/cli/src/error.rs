@@ -35,32 +35,31 @@ impl CliError {
         }
     }
 
-    pub(crate) fn json(&self) -> Value {
+    /// The API's error code, or `acli`'s own code for failures it detects.
+    fn code(&self) -> &str {
         match self {
-            Self::Input(message) => {
-                json!({ "error": { "code": "invalid_input", "message": message, "status": null } })
-            }
-            Self::Transport(message) => {
-                json!({ "error": { "code": "request_failed", "message": message, "status": null } })
-            }
-            Self::Api {
-                status,
-                code,
-                message,
-                details,
-            } => {
-                let mut error = json!({ "code": code, "message": message, "status": status });
-                if let Some(details) = details {
-                    error["details"] = details.clone();
-                }
-                json!({ "error": error })
-            }
-            Self::InvalidResponse => {
-                json!({ "error": { "code": "invalid_response", "message": self.to_string(), "status": null } })
-            }
-            Self::ResponseTooLarge => {
-                json!({ "error": { "code": "response_too_large", "message": self.to_string(), "status": null } })
-            }
+            Self::Input(_) => "invalid_input",
+            Self::Transport(_) => "request_failed",
+            Self::Api { code, .. } => code,
+            Self::InvalidResponse => "invalid_response",
+            Self::ResponseTooLarge => "response_too_large",
         }
+    }
+
+    pub(crate) fn json(&self) -> Value {
+        let status = match self {
+            Self::Api { status, .. } => json!(status),
+            _ => Value::Null,
+        };
+        let mut error =
+            json!({ "code": self.code(), "message": self.to_string(), "status": status });
+        if let Self::Api {
+            details: Some(details),
+            ..
+        } = self
+        {
+            error["details"] = details.clone();
+        }
+        json!({ "error": error })
     }
 }

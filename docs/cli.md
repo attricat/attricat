@@ -48,7 +48,7 @@ acli --session-file session.json auth session|logout|renew
 acli auth preferences --time-zone <iana-zone>|--clear-time-zone
 acli metrics get --output metrics.prom
 
-acli audit list [--limit 25 --offset 0] [--occurred-after <rfc3339>] [--occurred-before <rfc3339>] [--actor-user-id <uuid>] [--action-category <category>] [--target-type <type>] [--executor-type human|agent] [--agent-run-id <uuid>] [--agent-tool-call-id <uuid>]
+acli audit list [--limit <n>] [--offset <n>] [--occurred-after <rfc3339>] [--occurred-before <rfc3339>] [--actor-user-id <uuid>] [--action-category <category>] [--target-type <type>] [--executor-type human|agent] [--agent-run-id <uuid>] [--agent-tool-call-id <uuid>]
 acli data-health summary [--stale-after-days <days>]
 acli data-health blueprints [--stale-after-days <days>]
 acli data-health freshness|completeness|contexts|relationships|storage|background-processing
@@ -135,12 +135,12 @@ acli workspace navigation set --entries <json-or-file>
 acli workspace agent get
 acli workspace agent set [--bulk-edits per-proposal|per-record] [--bulk-edit-max-records <1-5000>]
 acli workspace token-permission list
-acli workspace grant-target list <scope-type>
+acli workspace grant-target list workspace|blueprint-family|record|context-subtree
 acli workspace publication-channel list
 acli workspace publication-channel set <context-id> --enabled true|false
 acli workspace member list
 acli workspace member set-state <member-id> --state active|inactive
-acli workspace member grant <member-id> --role-id <role-id> --scope-type <scope> --scope-target-id <id>
+acli workspace member grant <member-id> --role-id <role-id> --scope-type workspace|blueprint-family|record|context-subtree --scope-target-id <id>
 acli workspace member revoke-grant <member-id> <grant-id>
 acli workspace member transfer-ownership <member-id>
 acli workspace role list
@@ -151,10 +151,10 @@ acli workspace role update <role-id> --code <code> --permissions <json-or-file>
 acli workspace role duplicate <role-id> --code <code>
 acli workspace role retire <role-id> [--replacement-role-id <role-id>]
 acli workspace invitation list
-acli workspace invitation create --email <email> --role-id <role-id> --scope-type <scope> --scope-target-id <id> --expires-at <rfc3339>
+acli workspace invitation create --email <email> --role-id <role-id> --scope-type workspace|blueprint-family|record|context-subtree --scope-target-id <id> --expires-at <rfc3339>
 acli workspace invitation revoke <invitation-id>
 acli workspace invitation accept --secret-stdin
-acli workspace user create --email <email> [--display-name <name>] [--invite-role-id <role-id> --scope-type <scope> --scope-target-id <id> --expires-at <rfc3339>]
+acli workspace user create --email <email> [--display-name <name>] [--invite-role-id <role-id> --scope-type workspace|blueprint-family|record|context-subtree --scope-target-id <id> --expires-at <rfc3339>]
 acli workspace user set-password --onboarding-secret-stdin --invitation-secret-stdin --password-stdin
 
 acli token list
@@ -198,13 +198,13 @@ acli solution-pack inspect --file pack.tar.zst
 acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... --map-context logical_key=existing_code ...]
 acli solution-pack plan show <plan-id>
 acli solution-pack apply <plan-id>
-acli solution-pack applications list [--limit 25 --offset 0]
+acli solution-pack applications list [--limit <n>] [--offset <n>]
 acli solution-pack applications show <application-id>
 acli solution-pack applications abandon <application-id>
 acli solution-pack checks rerun <application-id>
-acli solution-pack checks list <application-id> [--limit 25 --offset 0]
+acli solution-pack checks list <application-id> [--limit <n>] [--offset <n>]
 acli solution-pack checks show <application-id> <run-id>
-acli presentation-asset list [--limit 25 --offset 0]
+acli presentation-asset list [--limit <n>] [--offset <n>]
 acli presentation-asset show <asset-id>
 acli presentation-asset download <asset-id> --output <path>
 
@@ -213,6 +213,10 @@ acli file metadata <file-id>
 acli file download-original <file-id> --output original.bin [--range 'bytes=0-1023']
 acli file download-variant <file-id> <kind> --output preview.webp [--range 'bytes=0-1023']
 ```
+
+Commands that page with `--limit` and `--offset` use the endpoint's default
+page size when you omit them; each endpoint enforces its own maximum, and
+offsets stop at 10,000.
 
 
 ## Teams and assignments

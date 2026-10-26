@@ -3,7 +3,8 @@ use reqwest::Method;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::transport::segment;
+use crate::error::CliError;
+use crate::transport::{Api, segment};
 
 #[derive(Subcommand)]
 pub(crate) enum TeamCommand {
@@ -72,4 +73,9 @@ pub(crate) fn team_request(command: TeamCommand) -> (Method, String, Option<Valu
             None,
         ),
     }
+}
+
+pub(crate) async fn team_command(api: &Api, command: TeamCommand) -> Result<String, CliError> {
+    let (method, path, body) = team_request(command);
+    api.send(method, &path, body).await
 }

@@ -1,12 +1,10 @@
 use std::path::PathBuf;
 
 use clap::Subcommand;
-use reqwest::{Client, Method};
-use url::Url;
 use uuid::Uuid;
 
 use crate::error::CliError;
-use crate::transport::{multipart_upload, raw_download, request, segment};
+use crate::transport::{Api, segment};
 
 #[derive(Subcommand)]
 pub(crate) enum FileCommand {
@@ -38,11 +36,7 @@ pub(crate) enum FileCommand {
     },
 }
 
-pub(crate) async fn file_command(
-    client: &Client,
-    server: &Url,
-    command: FileCommand,
-) -> Result<String, CliError> {
+pub(crate) async fn file_command(api: &Api, command: FileCommand) -> Result<String, CliError> {
     match command {
         FileCommand::Upload {
             record_id,
@@ -50,9 +44,7 @@ pub(crate) async fn file_command(
             files,
             context_id,
         } => {
-            multipart_upload(
-                client,
-                server,
+            api.multipart(
                 &format!(
                     "/records/{}/file-attributes/{}/uploads",
                     segment(record_id),
@@ -63,24 +55,13 @@ pub(crate) async fn file_command(
             )
             .await
         }
-        FileCommand::Metadata { file_id } => {
-            request(
-                client,
-                server,
-                Method::GET,
-                &format!("/files/{}", segment(file_id)),
-                None,
-            )
-            .await
-        }
+        FileCommand::Metadata { file_id } => api.get(&format!("/files/{}", segment(file_id))).await,
         FileCommand::DownloadOriginal {
             file_id,
             output,
             range,
         } => {
-            raw_download(
-                client,
-                server,
+            api.download(
                 &format!("/files/{}/download", segment(file_id)),
                 &output,
                 range.as_deref(),
@@ -93,9 +74,7 @@ pub(crate) async fn file_command(
             output,
             range,
         } => {
-            raw_download(
-                client,
-                server,
+            api.download(
                 &format!(
                     "/files/{}/variants/{}/download",
                     segment(file_id),

@@ -1,14 +1,12 @@
 use clap::{Subcommand, ValueEnum};
-use reqwest::{Client, Method};
 use serde_json::{Value, json};
-use url::Url;
 use uuid::Uuid;
 
 use crate::error::CliError;
 use crate::input::{
-    json_array_input, json_string_array_input, read_secret_stdin, read_three_secrets_stdin,
+    json_array_input, json_string_array_input, read_secret_stdin, read_stdin_lines,
 };
-use crate::transport::{request, request_value, segment};
+use crate::transport::{Api, segment};
 
 pub(crate) const MAX_BULK_EDIT_RECORDS: u32 = 5000;
 
@@ -58,14 +56,22 @@ pub(crate) enum WorkspaceCommand {
 pub(crate) enum AgentSettingsCommand {
     Get,
     /// Change the given settings and keep the others.
-    #[command(group(clap::ArgGroup::new("change").required(true).multiple(true).args(["bulk_edits", "bulk_edit_max_records"])))]
+    #[command(group(
+        clap::ArgGroup::new("change")
+            .required(true)
+            .multiple(true)
+            .args(["bulk_edits", "bulk_edit_max_records"])
+    ))]
     Set {
         /// per-proposal: one approval covers a whole bulk edit; per-record:
         /// the agent is not offered bulk edits and each record is approved.
         #[arg(long, value_enum)]
         bulk_edits: Option<BulkEditPolicyArgument>,
         /// The most records one bulk edit may change (1-5000).
-        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=i64::from(MAX_BULK_EDIT_RECORDS)))]
+        #[arg(
+            long,
+            value_parser = clap::value_parser!(u32).range(1..=i64::from(MAX_BULK_EDIT_RECORDS))
+        )]
         bulk_edit_max_records: Option<u32>,
     },
 }
@@ -102,6 +108,41 @@ pub(crate) fn changed_agent_settings(
     Ok(current)
 }
 
+/// What a role grant or invitation applies to.
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum GrantScope {
+    Workspace,
+    BlueprintFamily,
+    Record,
+    ContextSubtree,
+}
+
+impl GrantScope {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Workspace => "workspace",
+            Self::BlueprintFamily => "blueprint_family",
+            Self::Record => "record",
+            Self::ContextSubtree => "context_subtree",
+        }
+    }
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum MemberState {
+    Active,
+    Inactive,
+}
+
+impl MemberState {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Inactive => "inactive",
+        }
+    }
+}
+
 #[derive(Subcommand)]
 pub(crate) enum NavigationCommand {
     Get,
@@ -119,7 +160,10 @@ pub(crate) enum TokenPermissionCommand {
 
 #[derive(Subcommand)]
 pub(crate) enum GrantTargetCommand {
-    List { scope_type: String },
+    List {
+        #[arg(value_enum)]
+        scope_type: GrantScope,
+    },
 }
 
 #[derive(Subcommand)]
@@ -137,15 +181,15 @@ pub(crate) enum MemberCommand {
     List,
     SetState {
         member_id: Uuid,
-        #[arg(long, value_parser = ["active", "inactive"])]
-        state: String,
+        #[arg(long, value_enum)]
+        state: MemberState,
     },
     Grant {
         member_id: Uuid,
         #[arg(long)]
         role_id: Uuid,
-        #[arg(long)]
-        scope_type: String,
+        #[arg(long, value_enum)]
+        scope_type: GrantScope,
         #[arg(long)]
         scope_target_id: Uuid,
     },
@@ -212,8 +256,8 @@ pub(crate) enum InvitationCommand {
         email: String,
         #[arg(long)]
         role_id: Uuid,
-        #[arg(long)]
-        scope_type: String,
+        #[arg(long, value_enum)]
+        scope_type: GrantScope,
         #[arg(long)]
         scope_target_id: Uuid,
         #[arg(long)]
@@ -237,8 +281,8 @@ pub(crate) enum UserCommand {
         display_name: Option<String>,
         #[arg(long, requires_all = ["scope_type", "scope_target_id", "expires_at"])]
         invite_role_id: Option<Uuid>,
-        #[arg(long, requires_all = ["invite_role_id", "scope_target_id", "expires_at"])]
-        scope_type: Option<String>,
+        #[arg(long, value_enum, requires_all = ["invite_role_id", "scope_target_id", "expires_at"])]
+        scope_type: Option<GrantScope>,
         #[arg(long, requires_all = ["invite_role_id", "scope_type", "expires_at"])]
         scope_target_id: Option<Uuid>,
         #[arg(long, requires_all = ["invite_role_id", "scope_type", "scope_target_id"])]
@@ -255,62 +299,236 @@ pub(crate) enum UserCommand {
 }
 
 pub(crate) async fn workspace_command(
-    client: &Client,
-    server: &Url,
+    api: &Api,
     command: WorkspaceCommand,
 ) -> Result<String, CliError> {
     match command {
-        WorkspaceCommand::Navigation { command } => match command {
-            NavigationCommand::Get => request(client, server, Method::GET, "/workspace/navigation", None).await,
-            NavigationCommand::Set { entries } => request(client, server, Method::PUT, "/workspace/navigation", Some(json!({"explore_navigation": json_array_input(&entries, "--entries")?}))).await,
-            NavigationCommand::Sidebar => request(client, server, Method::GET, "/workspace/navigation/sidebar", None).await,
-        },
+        WorkspaceCommand::Navigation { command } => navigation_command(api, command).await,
         WorkspaceCommand::Agent { command } => match command {
-            AgentSettingsCommand::Get => request(client, server, Method::GET, "/workspace/agent-settings", None).await,
-            AgentSettingsCommand::Set { bulk_edits, bulk_edit_max_records } => {
-                let current = request_value(client, server, Method::GET, "/workspace/agent-settings", None).await?;
+            AgentSettingsCommand::Get => api.get(AGENT_SETTINGS_PATH).await,
+            AgentSettingsCommand::Set {
+                bulk_edits,
+                bulk_edit_max_records,
+            } => {
+                let current = api.get_value(AGENT_SETTINGS_PATH).await?;
                 let changed = changed_agent_settings(current, bulk_edits, bulk_edit_max_records)?;
-                request(client, server, Method::PUT, "/workspace/agent-settings", Some(changed)).await
+                api.put_json(AGENT_SETTINGS_PATH, changed).await
             }
         },
-        WorkspaceCommand::TokenPermission { command: TokenPermissionCommand::List } => request(client, server, Method::GET, "/workspace/token-permissions", None).await,
-        WorkspaceCommand::GrantTarget { command: GrantTargetCommand::List { scope_type } } => request(client, server, Method::GET, &format!("/workspace/grant-targets/{}", segment(&scope_type)), None).await,
+        WorkspaceCommand::TokenPermission {
+            command: TokenPermissionCommand::List,
+        } => api.get("/workspace/token-permissions").await,
+        WorkspaceCommand::GrantTarget {
+            command: GrantTargetCommand::List { scope_type },
+        } => {
+            api.get(&format!("/workspace/grant-targets/{}", scope_type.as_str()))
+                .await
+        }
         WorkspaceCommand::PublicationChannel { command } => match command {
-            PublicationChannelCommand::List => request(client, server, Method::GET, "/publication-channels", None).await,
-            PublicationChannelCommand::Set { context_id, enabled } => request(client, server, Method::PUT, &format!("/publication-channels/{}", segment(context_id)), Some(json!({"enabled":enabled}))).await,
+            PublicationChannelCommand::List => api.get("/publication-channels").await,
+            PublicationChannelCommand::Set {
+                context_id,
+                enabled,
+            } => {
+                api.put_json(
+                    &format!("/publication-channels/{}", segment(context_id)),
+                    json!({ "enabled": enabled }),
+                )
+                .await
+            }
         },
-        WorkspaceCommand::Member { command } => match command {
-            MemberCommand::List => request(client, server, Method::GET, "/workspace/members", None).await,
-            MemberCommand::SetState { member_id, state } => request(client, server, Method::PUT, &format!("/workspace/members/{}", segment(member_id)), Some(json!({ "state": state }))).await,
-            MemberCommand::Grant { member_id, role_id, scope_type, scope_target_id } => request(client, server, Method::POST, &format!("/workspace/members/{}/grants", segment(member_id)), Some(json!({ "role_id": role_id, "scope_type": scope_type, "scope_target_id": scope_target_id }))).await,
-            MemberCommand::RevokeGrant { member_id, grant_id } => request(client, server, Method::DELETE, &format!("/workspace/members/{}/grants/{}", segment(member_id), segment(grant_id)), None).await,
-            MemberCommand::TransferOwnership { member_id } => request(client, server, Method::POST, &format!("/workspace/members/{}/transfer-ownership", segment(member_id)), None).await,
-        },
-        WorkspaceCommand::Role { command } => match command {
-            RoleCommand::List => request(client, server, Method::GET, "/workspace/roles", None).await,
-            RoleCommand::Permission { command: PermissionCommand::List } => request(client, server, Method::GET, "/workspace/permissions", None).await,
-            RoleCommand::AssignableRole { command: AssignableRoleCommand::List } => request(client, server, Method::GET, "/workspace/assignable-roles", None).await,
-            RoleCommand::Create { code, permissions } => request(client, server, Method::POST, "/workspace/roles", Some(json!({ "code": code, "permissions": json_string_array_input(&permissions, "--permissions")? }))).await,
-            RoleCommand::Update { role_id, code, permissions } => request(client, server, Method::PUT, &format!("/workspace/roles/{}", segment(role_id)), Some(json!({ "code": code, "permissions": json_string_array_input(&permissions, "--permissions")? }))).await,
-            RoleCommand::Duplicate { role_id, code } => request(client, server, Method::POST, &format!("/workspace/roles/{}/duplicate", segment(role_id)), Some(json!({ "code": code }))).await,
-            RoleCommand::Retire { role_id, replacement_role_id } => request(client, server, Method::POST, &format!("/workspace/roles/{}/retire", segment(role_id)), Some(json!({ "replacement_role_id": replacement_role_id }))).await,
-        },
+        WorkspaceCommand::Member { command } => member_command(api, command).await,
+        WorkspaceCommand::Role { command } => role_command(api, command).await,
         WorkspaceCommand::User { command } => match command {
-            UserCommand::Create { email, display_name, invite_role_id, scope_type, scope_target_id, expires_at } => request(client, server, Method::POST, "/workspace/users", Some(json!({ "email": email, "display_name": display_name, "role_id": invite_role_id, "scope_type": scope_type, "scope_target_id": scope_target_id, "expires_at": expires_at }))).await,
-            UserCommand::SetPassword { onboarding_secret_stdin, invitation_secret_stdin, password_stdin } => {
-                if !onboarding_secret_stdin || !invitation_secret_stdin || !password_stdin { return Err(CliError::Input("password setup requires --onboarding-secret-stdin, --invitation-secret-stdin, and --password-stdin".to_owned())); }
-                let values = read_three_secrets_stdin()?;
-                request(client, server, Method::POST, "/onboarding/complete", Some(json!({ "onboarding_secret": values.0, "invitation_secret": values.1, "password": values.2 }))).await
+            UserCommand::Create {
+                email,
+                display_name,
+                invite_role_id,
+                scope_type,
+                scope_target_id,
+                expires_at,
+            } => {
+                let body = json!({
+                    "email": email,
+                    "display_name": display_name,
+                    "role_id": invite_role_id,
+                    "scope_type": scope_type.map(GrantScope::as_str),
+                    "scope_target_id": scope_target_id,
+                    "expires_at": expires_at,
+                });
+                api.post_json("/workspace/users", body).await
+            }
+            UserCommand::SetPassword {
+                onboarding_secret_stdin,
+                invitation_secret_stdin,
+                password_stdin,
+            } => {
+                if !onboarding_secret_stdin || !invitation_secret_stdin || !password_stdin {
+                    return Err(CliError::Input(
+                        "password setup requires --onboarding-secret-stdin, \
+                         --invitation-secret-stdin, and --password-stdin"
+                            .to_owned(),
+                    ));
+                }
+                let [onboarding_secret, invitation_secret, password] =
+                    read_stdin_lines(["onboarding secret", "invitation secret", "password"])?;
+                let body = json!({
+                    "onboarding_secret": onboarding_secret,
+                    "invitation_secret": invitation_secret,
+                    "password": password,
+                });
+                api.post_json("/onboarding/complete", body).await
             }
         },
         WorkspaceCommand::Invitation { command } => match command {
-            InvitationCommand::List => request(client, server, Method::GET, "/workspace/invitations", None).await,
-            InvitationCommand::Create { email, role_id, scope_type, scope_target_id, expires_at } => request(client, server, Method::POST, "/workspace/invitations", Some(json!({ "email": email, "role_id": role_id, "scope_type": scope_type, "scope_target_id": scope_target_id, "expires_at": expires_at }))).await,
-            InvitationCommand::Revoke { invitation_id } => request(client, server, Method::DELETE, &format!("/workspace/invitations/{}", segment(invitation_id)), None).await,
+            InvitationCommand::List => api.get("/workspace/invitations").await,
+            InvitationCommand::Create {
+                email,
+                role_id,
+                scope_type,
+                scope_target_id,
+                expires_at,
+            } => {
+                let body = json!({
+                    "email": email,
+                    "role_id": role_id,
+                    "scope_type": scope_type.as_str(),
+                    "scope_target_id": scope_target_id,
+                    "expires_at": expires_at,
+                });
+                api.post_json("/workspace/invitations", body).await
+            }
+            InvitationCommand::Revoke { invitation_id } => {
+                api.delete(&format!(
+                    "/workspace/invitations/{}",
+                    segment(invitation_id)
+                ))
+                .await
+            }
             InvitationCommand::Accept { secret_stdin } => {
-                if !secret_stdin { return Err(CliError::Input("invitation acceptance requires --secret-stdin".to_owned())); }
-                request(client, server, Method::POST, "/workspace/invitations/accept", Some(json!({ "secret": read_secret_stdin("invitation secret")? }))).await
+                if !secret_stdin {
+                    return Err(CliError::Input(
+                        "invitation acceptance requires --secret-stdin".to_owned(),
+                    ));
+                }
+                let secret = read_secret_stdin("invitation secret")?;
+                api.post_json("/workspace/invitations/accept", json!({ "secret": secret }))
+                    .await
             }
         },
+    }
+}
+
+const AGENT_SETTINGS_PATH: &str = "/workspace/agent-settings";
+
+async fn navigation_command(api: &Api, command: NavigationCommand) -> Result<String, CliError> {
+    match command {
+        NavigationCommand::Get => api.get("/workspace/navigation").await,
+        NavigationCommand::Set { entries } => {
+            let entries = json_array_input(&entries, "--entries")?;
+            api.put_json(
+                "/workspace/navigation",
+                json!({ "explore_navigation": entries }),
+            )
+            .await
+        }
+        NavigationCommand::Sidebar => api.get("/workspace/navigation/sidebar").await,
+    }
+}
+
+async fn member_command(api: &Api, command: MemberCommand) -> Result<String, CliError> {
+    match command {
+        MemberCommand::List => api.get("/workspace/members").await,
+        MemberCommand::SetState { member_id, state } => {
+            api.put_json(
+                &format!("/workspace/members/{}", segment(member_id)),
+                json!({ "state": state.as_str() }),
+            )
+            .await
+        }
+        MemberCommand::Grant {
+            member_id,
+            role_id,
+            scope_type,
+            scope_target_id,
+        } => {
+            let body = json!({
+                "role_id": role_id,
+                "scope_type": scope_type.as_str(),
+                "scope_target_id": scope_target_id,
+            });
+            api.post_json(
+                &format!("/workspace/members/{}/grants", segment(member_id)),
+                body,
+            )
+            .await
+        }
+        MemberCommand::RevokeGrant {
+            member_id,
+            grant_id,
+        } => {
+            api.delete(&format!(
+                "/workspace/members/{}/grants/{}",
+                segment(member_id),
+                segment(grant_id)
+            ))
+            .await
+        }
+        MemberCommand::TransferOwnership { member_id } => {
+            api.post(&format!(
+                "/workspace/members/{}/transfer-ownership",
+                segment(member_id)
+            ))
+            .await
+        }
+    }
+}
+
+async fn role_command(api: &Api, command: RoleCommand) -> Result<String, CliError> {
+    match command {
+        RoleCommand::List => api.get("/workspace/roles").await,
+        RoleCommand::Permission {
+            command: PermissionCommand::List,
+        } => api.get("/workspace/permissions").await,
+        RoleCommand::AssignableRole {
+            command: AssignableRoleCommand::List,
+        } => api.get("/workspace/assignable-roles").await,
+        RoleCommand::Create { code, permissions } => {
+            let permissions = json_string_array_input(&permissions, "--permissions")?;
+            api.post_json(
+                "/workspace/roles",
+                json!({ "code": code, "permissions": permissions }),
+            )
+            .await
+        }
+        RoleCommand::Update {
+            role_id,
+            code,
+            permissions,
+        } => {
+            let permissions = json_string_array_input(&permissions, "--permissions")?;
+            api.put_json(
+                &format!("/workspace/roles/{}", segment(role_id)),
+                json!({ "code": code, "permissions": permissions }),
+            )
+            .await
+        }
+        RoleCommand::Duplicate { role_id, code } => {
+            api.post_json(
+                &format!("/workspace/roles/{}/duplicate", segment(role_id)),
+                json!({ "code": code }),
+            )
+            .await
+        }
+        RoleCommand::Retire {
+            role_id,
+            replacement_role_id,
+        } => {
+            api.post_json(
+                &format!("/workspace/roles/{}/retire", segment(role_id)),
+                json!({ "replacement_role_id": replacement_role_id }),
+            )
+            .await
+        }
     }
 }

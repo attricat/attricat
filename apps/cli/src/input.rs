@@ -99,63 +99,39 @@ pub(crate) fn json_array_argument(input: Option<&str>, label: &str) -> Result<Va
         .map(|value| value.unwrap_or_else(|| json!([])))
 }
 
-pub(crate) fn read_three_secrets_stdin() -> Result<(String, String, String), CliError> {
-    let mut values = String::new();
+/// Reads exactly one non-empty standard-input line per label, in order.
+pub(crate) fn read_stdin_lines<const N: usize>(labels: [&str; N]) -> Result<[String; N], CliError> {
+    let mut input = String::new();
     io::stdin()
-        .read_to_string(&mut values)
+        .read_to_string(&mut input)
         .map_err(|error| CliError::Input(error.to_string()))?;
-    let mut lines = values.lines();
-    let onboarding = lines
-        .next()
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            CliError::Input("onboarding secret must be the first stdin line".to_owned())
-        })?;
-    let invitation = lines
-        .next()
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            CliError::Input("invitation secret must be the second stdin line".to_owned())
-        })?;
-    let password = lines
-        .next()
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| CliError::Input("password must be the third stdin line".to_owned()))?;
-    if lines.next().is_some() {
-        return Err(CliError::Input(
-            "stdin must contain exactly three lines".to_owned(),
-        ));
-    }
-    Ok((
-        onboarding.to_owned(),
-        invitation.to_owned(),
-        password.to_owned(),
-    ))
+    parse_stdin_lines(&input, labels)
 }
 
-pub(crate) fn read_two_secrets_stdin(
-    first_label: &str,
-    second_label: &str,
-) -> Result<(String, String), CliError> {
-    let mut values = String::new();
-    io::stdin()
-        .read_to_string(&mut values)
-        .map_err(|error| CliError::Input(error.to_string()))?;
-    let mut lines = values.lines();
-    let first = lines
-        .next()
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| CliError::Input(format!("{first_label} must be the first stdin line")))?;
-    let second = lines
-        .next()
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| CliError::Input(format!("{second_label} must be the second stdin line")))?;
+pub(crate) fn parse_stdin_lines<const N: usize>(
+    input: &str,
+    labels: [&str; N],
+) -> Result<[String; N], CliError> {
+    let mut lines = input.lines();
+    let values = labels.map(|label| {
+        lines
+            .next()
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+            .ok_or(label)
+    });
     if lines.next().is_some() {
-        return Err(CliError::Input(
-            "stdin must contain exactly two lines".to_owned(),
-        ));
+        return Err(CliError::Input(format!(
+            "stdin must contain exactly {N} lines"
+        )));
     }
-    Ok((first.to_owned(), second.to_owned()))
+    let mut output = Vec::with_capacity(N);
+    for (position, value) in values.into_iter().enumerate() {
+        output.push(value.map_err(|label| {
+            CliError::Input(format!("{label} must be stdin line {}", position + 1))
+        })?);
+    }
+    Ok(output.try_into().expect("one value per label"))
 }
 
 pub(crate) fn read_secret_stdin(label: &str) -> Result<String, CliError> {
@@ -190,9 +166,11 @@ pub(crate) fn read_source(input: SourceInput) -> Result<String, CliError> {
 
 pub(crate) fn context_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
     let input: ContextFile = parse_toml_file(path)?;
-    Ok(
-        json!({ "code": input.code, "data": toml_to_json(input.data)?, "parent_id": input.parent_id }),
-    )
+    Ok(json!({
+        "code": input.code,
+        "data": toml_to_json(input.data)?,
+        "parent_id": input.parent_id,
+    }))
 }
 
 pub(crate) fn values_body_from_file(
