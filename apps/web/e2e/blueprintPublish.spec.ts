@@ -86,7 +86,8 @@ test('authors, publishes, revises and migrates a blueprint in the browser', asyn
   const batches = page.getByRole('table', { name: 'Record migration batches' });
   await expect(async () => {
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-    await expect(batches.getByText('Completed')).toBeVisible({
+    // The status chip, not the column of the same name.
+    await expect(batches.locator('tbody').getByText('Completed')).toBeVisible({
       timeout: 1_000,
     });
   }).toPass();
