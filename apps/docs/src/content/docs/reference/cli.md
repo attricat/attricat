@@ -164,7 +164,9 @@ acli blueprint publish <blueprint-id> <version>
 acli blueprint get <blueprint-id>
 acli blueprint get-version <blueprint-id> <version>
 acli blueprint resolve <code> [--version <version>] [--include-drafts]
+acli blueprint migration-impact <blueprint-id> <version>
 acli blueprint safe-migration-batch <blueprint-id> <version>
+acli blueprint migration-batches <blueprint-id>
 acli blueprint publish-records <blueprint-id> <version> --context-id <channel>
 acli blueprint publish-records-all <blueprint-id> <version>
 
@@ -299,9 +301,11 @@ acli rule publish <rule-id> <version>
 acli rule enable <rule-id> <version> [--accept-existing-violations]
 acli rule disable <rule-id>
 acli rule run-now <rule-id> --idempotency-key <key> [--record-id <id>] [--dry-run]
-acli rule run-list
+acli rule run-list [--record-id <id>] [--limit <n>] [--offset <n>]
 acli rule run-replay <run-id>
-acli rule findings [--record-id <id>]
+acli rule findings [--record-id <id>] [--rule-id <id>] [--blueprint-id <id>] [--context-id <id>] [--severity info|warning|error|critical] [--state open|acknowledged|resolved] [--unresolved] [--limit <n>] [--offset <n>]
+acli rule finding-count [--record-id <id>]
+acli rule recheck --record-id <id> --idempotency-key <key>
 acli rule acknowledge <finding-id>
 
 acli workflow validate | create --file workflow.toml
@@ -310,7 +314,7 @@ acli workflow create-version <workflow-id> --file workflow.toml
 acli workflow publish | enable <workflow-id> <version>
 acli workflow disable <workflow-id>
 acli workflow run-now <workflow-id> --record-id <id> --idempotency-key <key>
-acli workflow run-list
+acli workflow run-list [--limit <n>] [--offset <n>]
 acli workflow run-targets <run-id>
 acli workflow run-replay <run-id>
 ```
@@ -380,6 +384,7 @@ acli extension schedule create <extension-id> --operation-id <id> --input <json>
 acli extension schedule update <schedule-id> --enabled true|false --interval-seconds <n>
 acli extension connector-job list <blueprint-id>
 acli extension connector-job run <job-id> --idempotency-key <key>
+acli extension connector-job resync <job-id> --idempotency-key <key> [--record-id <id> ... | --status pending|retrying|uncertain|rejected|synced|withdrawn]
 ```
 
 ### Solution packs

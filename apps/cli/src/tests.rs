@@ -940,6 +940,13 @@ async fn rule_routes_forward_definition_and_run_options() {
         &api,
         RuleCommand::Findings {
             record_id: Some(id),
+            rule_id: None,
+            blueprint_id: None,
+            context_id: None,
+            severity: None,
+            state: None,
+            unresolved: false,
+            page: PageArgs::default(),
         },
     )
     .await
@@ -2359,5 +2366,82 @@ async fn reusable_attribute_commands_build_requests() {
     assert_eq!(
         group["body"],
         json!({ "code": "ids", "name": "IDs", "position": 0, "reusable_attribute_revision_ids": [id] })
+    );
+}
+
+#[tokio::test]
+async fn rule_finding_and_connector_job_commands_build_requests() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let findings = echo(&[
+        "rule",
+        "findings",
+        "--rule-id",
+        id,
+        "--severity",
+        "critical",
+        "--state",
+        "open",
+        "--unresolved",
+        "--limit",
+        "50",
+    ])
+    .await;
+    assert_eq!(
+        findings["query"],
+        format!("rule_id={id}&severity=critical&state=open&unresolved=true&limit=50")
+    );
+    let recheck = echo(&[
+        "rule",
+        "recheck",
+        "--record-id",
+        id,
+        "--idempotency-key",
+        "k",
+    ])
+    .await;
+    assert_eq!(recheck["path"], "/rule-findings/recheck");
+    assert_eq!(
+        recheck["body"],
+        json!({ "record_id": id, "idempotency_key": "k" })
+    );
+    let resync = echo(&[
+        "extension",
+        "connector-job",
+        "resync",
+        id,
+        "--idempotency-key",
+        "k",
+        "--status",
+        "rejected",
+    ])
+    .await;
+    assert_eq!(
+        resync["path"],
+        format!("/blueprint-connector-jobs/{id}/resync")
+    );
+    assert_eq!(
+        resync["body"],
+        json!({ "idempotency_key": "k", "status": "rejected" })
+    );
+    assert!(
+        Cli::try_parse_from([
+            "acli",
+            "extension",
+            "connector-job",
+            "resync",
+            id,
+            "--idempotency-key",
+            "k",
+            "--status",
+            "rejected",
+            "--record-id",
+            id,
+        ])
+        .is_err()
+    );
+    let impact = echo(&["blueprint", "migration-impact", id, "2"]).await;
+    assert_eq!(
+        impact["path"],
+        format!("/blueprints/{id}/versions/2/safe-migration-impact")
     );
 }

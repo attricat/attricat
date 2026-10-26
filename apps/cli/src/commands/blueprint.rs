@@ -53,6 +53,15 @@ pub(crate) enum BlueprintCommand {
         blueprint_id: Uuid,
         version: i64,
     },
+    /// Show how a version's safe migration would affect existing records.
+    MigrationImpact {
+        blueprint_id: Uuid,
+        version: i64,
+    },
+    /// List the blueprint's migration batches and their progress.
+    MigrationBatches {
+        blueprint_id: Uuid,
+    },
     SafeMigrationBatch {
         blueprint_id: Uuid,
         version: i64,
@@ -154,6 +163,23 @@ pub(crate) async fn blueprint_command(
         } => {
             api.post(&format!(
                 "/blueprints/{}/versions/{version}/record-publications/publish-all",
+                segment(blueprint_id)
+            ))
+            .await
+        }
+        BlueprintCommand::MigrationImpact {
+            blueprint_id,
+            version,
+        } => {
+            api.get(&format!(
+                "/blueprints/{}/versions/{version}/safe-migration-impact",
+                segment(blueprint_id)
+            ))
+            .await
+        }
+        BlueprintCommand::MigrationBatches { blueprint_id } => {
+            api.get(&format!(
+                "/blueprints/{}/migration-batches",
                 segment(blueprint_id)
             ))
             .await

@@ -2,10 +2,10 @@ use clap::Subcommand;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::cli::SourceInput;
+use crate::cli::{PageArgs, SourceInput};
 use crate::error::CliError;
 use crate::input::read_source;
-use crate::transport::{Api, segment};
+use crate::transport::{Api, segment, with_query};
 
 #[derive(Subcommand)]
 pub(crate) enum WorkflowCommand {
@@ -45,7 +45,10 @@ pub(crate) enum WorkflowCommand {
         #[arg(long)]
         idempotency_key: String,
     },
-    RunList,
+    RunList {
+        #[command(flatten)]
+        page: PageArgs,
+    },
     /// Per-target outcomes of `referencing_records_update` actions in a run.
     RunTargets {
         run_id: Uuid,
@@ -135,7 +138,9 @@ pub(crate) async fn workflow_command(
             )
             .await
         }
-        WorkflowCommand::RunList => api.get("/workflow-runs").await,
+        WorkflowCommand::RunList { page } => {
+            api.get(&with_query("/workflow-runs", page.query())).await
+        }
         WorkflowCommand::RunTargets { run_id } => {
             api.get(&format!("/workflow-runs/{}/targets", segment(run_id)))
                 .await

@@ -64,7 +64,9 @@ acli blueprint list-versions <blueprint-id>
 acli blueprint publish <blueprint-id> <version>
 acli blueprint publish-records <blueprint-id> <version> --context-id <context-id>
 acli blueprint publish-records-all <blueprint-id> <version>
+acli blueprint migration-impact <blueprint-id> <version>
 acli blueprint safe-migration-batch <blueprint-id> <version>
+acli blueprint migration-batches <blueprint-id>
 acli blueprint get <blueprint-id>
 acli blueprint get-version <blueprint-id> <version>
 acli blueprint resolve <code> [--include-drafts]
@@ -133,7 +135,7 @@ acli workflow create-version <workflow-id> --file workflow-v2.toml
 acli workflow publish|enable <workflow-id> <version>
 acli workflow disable <workflow-id>
 acli workflow run-now <workflow-id> --record-id <record-id> --idempotency-key <key>
-acli workflow run-list
+acli workflow run-list [--limit <n>] [--offset <n>]
 acli workflow run-targets <run-id>
 acli workflow run-replay <run-id>
 
@@ -146,9 +148,11 @@ acli rule publish <rule-id> <version>
 acli rule enable <rule-id> <version> [--accept-existing-violations]
 acli rule disable <rule-id>
 acli rule run-now <rule-id> --idempotency-key <key> [--record-id <uuid>] [--dry-run]
-acli rule run-list
+acli rule run-list [--record-id <uuid>] [--limit <n>] [--offset <n>]
 acli rule run-replay <run-id>
-acli rule findings [--record-id <uuid>]
+acli rule findings [--record-id <uuid>] [--rule-id <uuid>] [--blueprint-id <uuid>] [--context-id <uuid>] [--severity info|warning|error|critical] [--state open|acknowledged|resolved] [--unresolved] [--limit <n>] [--offset <n>]
+acli rule finding-count [--record-id <uuid>]
+acli rule recheck --record-id <uuid> --idempotency-key <key>
 acli rule acknowledge <finding-id>
 
 acli workspace navigation get|sidebar
@@ -214,6 +218,7 @@ acli extension schedule create <extension-id> --operation-id <id> --input <json-
 acli extension schedule update <schedule-id> --enabled true|false --interval-seconds <60-2592000>
 acli extension connector-job list <blueprint-id>
 acli extension connector-job run <job-id> --idempotency-key <key>
+acli extension connector-job resync <job-id> --idempotency-key <key> [--record-id <id> ... | --status pending|retrying|uncertain|rejected|synced|withdrawn]
 
 acli solution-pack inspect --file pack.tar.zst
 acli solution-pack plan create --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... --map-context logical_key=existing_code ...]

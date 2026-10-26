@@ -1,11 +1,11 @@
-use clap::Subcommand;
+use clap::{Subcommand, ValueEnum};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::cli::SourceInput;
+use crate::cli::{PageArgs, SourceInput};
 use crate::error::CliError;
 use crate::input::read_source;
-use crate::transport::{Api, segment, with_query};
+use crate::transport::{Api, flag, segment, with_query};
 
 #[derive(Subcommand)]
 pub(crate) enum RuleCommand {
@@ -71,13 +71,45 @@ pub(crate) enum RuleCommand {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
-    RunList,
+    RunList {
+        #[arg(long)]
+        record_id: Option<Uuid>,
+        #[command(flatten)]
+        page: PageArgs,
+    },
     RunReplay {
         run_id: Uuid,
     },
     Findings {
         #[arg(long)]
         record_id: Option<Uuid>,
+        #[arg(long)]
+        rule_id: Option<Uuid>,
+        #[arg(long)]
+        blueprint_id: Option<Uuid>,
+        #[arg(long)]
+        context_id: Option<Uuid>,
+        #[arg(long, value_enum)]
+        severity: Option<FindingSeverity>,
+        #[arg(long, value_enum)]
+        state: Option<FindingState>,
+        /// Leave out resolved findings.
+        #[arg(long)]
+        unresolved: bool,
+        #[command(flatten)]
+        page: PageArgs,
+    },
+    /// Count unresolved findings, optionally of one record.
+    FindingCount {
+        #[arg(long)]
+        record_id: Option<Uuid>,
+    },
+    /// Re-check one record against every enabled rule of its blueprint.
+    Recheck {
+        #[arg(long)]
+        record_id: Uuid,
+        #[arg(long)]
+        idempotency_key: String,
     },
     Acknowledge {
         finding_id: Uuid,
@@ -162,24 +194,114 @@ pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<Stri
             )
             .await
         }
-        RuleCommand::RunList => api.get("/rule-runs").await,
+        RuleCommand::RunList { record_id, page } => {
+            let [limit, offset] = page.query();
+            api.get(&with_query(
+                "/rule-runs",
+                [
+                    ("record_id", record_id.map(|id| id.to_string())),
+                    limit,
+                    offset,
+                ],
+            ))
+            .await
+        }
         RuleCommand::RunReplay { run_id } => {
             api.post(&format!("/rule-runs/{}/replay", segment(run_id)))
                 .await
         }
-        RuleCommand::Findings { record_id } => {
+        RuleCommand::Findings {
+            record_id,
+            rule_id,
+            blueprint_id,
+            context_id,
+            severity,
+            state,
+            unresolved,
+            page,
+        } => {
+            let id = |id: Option<Uuid>| id.map(|id| id.to_string());
+            let [limit, offset] = page.query();
             api.get(&with_query(
-                "/rule-findings",
+                FINDINGS_PATH,
+                [
+                    ("record_id", id(record_id)),
+                    ("rule_id", id(rule_id)),
+                    ("blueprint_id", id(blueprint_id)),
+                    ("context_id", id(context_id)),
+                    (
+                        "severity",
+                        severity.map(|severity| severity.as_str().to_owned()),
+                    ),
+                    ("state", state.map(|state| state.as_str().to_owned())),
+                    ("unresolved", flag(unresolved)),
+                    limit,
+                    offset,
+                ],
+            ))
+            .await
+        }
+        RuleCommand::FindingCount { record_id } => {
+            api.get(&with_query(
+                &format!("{FINDINGS_PATH}/count"),
                 [("record_id", record_id.map(|id| id.to_string()))],
             ))
             .await
         }
+        RuleCommand::Recheck {
+            record_id,
+            idempotency_key,
+        } => {
+            api.post_json(
+                &format!("{FINDINGS_PATH}/recheck"),
+                json!({ "record_id": record_id, "idempotency_key": idempotency_key }),
+            )
+            .await
+        }
         RuleCommand::Acknowledge { finding_id } => {
             api.post(&format!(
-                "/rule-findings/{}/acknowledge",
+                "{FINDINGS_PATH}/{}/acknowledge",
                 segment(finding_id)
             ))
             .await
+        }
+    }
+}
+
+const FINDINGS_PATH: &str = "/rule-findings";
+
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum FindingSeverity {
+    Info,
+    Warning,
+    Error,
+    Critical,
+}
+
+impl FindingSeverity {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Info => "info",
+            Self::Warning => "warning",
+            Self::Error => "error",
+            Self::Critical => "critical",
+        }
+    }
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum FindingState {
+    Open,
+    Acknowledged,
+    Resolved,
+}
+
+impl FindingState {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::Acknowledged => "acknowledged",
+            Self::Resolved => "resolved",
         }
     }
 }
