@@ -125,7 +125,7 @@ export const CompactSideNavigation = ({
             selected={
               item.to === navigationRoutes.explore
                 ? exploreLinkProps.allRecordsSelected
-                : pathname.startsWith(item.to)
+                : isWithinRoute(pathname, item.to)
             }
             to={item.to}
           />
@@ -282,7 +282,7 @@ export const MobileSideNavigation = ({
                   key={item.to}
                   label={t(item.labelKey)}
                   onClick={onNavigate}
-                  selected={pathname.startsWith(item.to)}
+                  selected={isWithinRoute(pathname, item.to)}
                   to={item.to}
                 />
               ))}

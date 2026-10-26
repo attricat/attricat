@@ -1,3 +1,4 @@
+import { isWithinRoute } from './sideNavigationLayout';
 import { Divider, List, useTheme } from '@mui/material';
 import { LogOutIcon, MoonIcon, SunIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -66,7 +67,7 @@ export const NavigationFooter = ({
           }
           label={t(profileNavigationItem.labelKey)}
           onClick={onProfileClick}
-          selected={pathname.startsWith(profileNavigationItem.to)}
+          selected={isWithinRoute(pathname, profileNavigationItem.to)}
           to={profileNavigationItem.to}
         />
         <NavigationItem
