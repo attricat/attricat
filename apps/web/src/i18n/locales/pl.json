@@ -264,12 +264,10 @@
     "resetPassword": "Zresetuj hasło",
     "resetPasswordPrompt": "Wpisz adres e-mail, aby otrzymać link do zresetowania hasła.",
     "resetPasswordSent": "Jeśli konto z tym adresem e-mail istnieje, wysłano link do zresetowania hasła.",
-    "requestResetFailed": "Nie udało się poprosić o zresetowanie hasła",
     "sendResetLink": "Wyślij link do zresetowania hasła",
     "backToSignIn": "Powrót do logowania",
     "chooseNewPassword": "Wybierz nowe hasło",
     "invalidResetLink": "Ten link do zresetowania hasła jest nieprawidłowy lub wygasł",
-    "resetPasswordFailed": "Nie udało się zresetować hasła",
     "passwordResetSuccess": "Hasło zostało zresetowane. Zaloguj się nowym hasłem.",
     "goToSignIn": "Przejdź do logowania",
     "newPassword": "Nowe hasło"

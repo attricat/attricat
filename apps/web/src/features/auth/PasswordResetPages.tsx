@@ -1,36 +1,26 @@
 import { Button, TextField, Typography } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { errorMessage } from '../../api/errors';
 import { ArrowLeftIcon } from 'lucide-react';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 import { AuthFormShell } from './AuthFormShell';
 import { confirmPasswordReset, requestPasswordReset } from './api';
 
 export const PasswordResetRequestPage = () => {
   const { t } = useTranslation();
-  const [error, setError] = useState<string>();
-  const [submitted, setSubmitted] = useState(false);
+  const request = useExclusiveMutation({
+    mutationFn: (email: string) => requestPasswordReset(email),
+  });
   const form = useForm({
     defaultValues: { email: '' },
-    onSubmit: async ({ value }) => {
-      try {
-        await requestPasswordReset(value.email);
-        setSubmitted(true);
-      } catch (reason) {
-        setError(
-          reason instanceof Error
-            ? errorMessage(reason)
-            : t('auth.requestResetFailed'),
-        );
-      }
-    },
+    onSubmit: ({ value }) => request.submit(value.email),
   });
   return (
-    <PasswordResetShell onSubmit={() => form.handleSubmit()}>
+    <AuthFormShell onSubmit={() => form.handleSubmit()}>
       <Typography variant="h5">{t('auth.resetPassword')}</Typography>
-      {submitted ? (
+      {request.isSuccess ? (
         <Typography>{t('auth.resetPasswordSent')}</Typography>
       ) : (
         <>
@@ -46,8 +36,12 @@ export const PasswordResetRequestPage = () => {
               />
             )}
           </form.Field>
-          {error && <Typography color="error">{error}</Typography>}
-          <Button type="submit" variant="contained">
+          <ApiErrorAlert error={request.error} />
+          <Button
+            disabled={request.isPending}
+            type="submit"
+            variant="contained"
+          >
             {t('auth.sendResetLink')}
           </Button>
         </>
@@ -60,7 +54,7 @@ export const PasswordResetRequestPage = () => {
       >
         {t('auth.backToSignIn')}
       </Button>
-    </PasswordResetShell>
+    </AuthFormShell>
   );
 };
 
@@ -71,31 +65,20 @@ export const PasswordResetConfirmationPage = ({
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [error, setError] = useState<string>();
-  const [submitted, setSubmitted] = useState(false);
-  const form = useForm({
-    defaultValues: { password: '' },
-    onSubmit: async ({ value }) => {
-      if (!token) {
-        setError(t('auth.invalidResetLink'));
-        return;
-      }
-      try {
-        await confirmPasswordReset(token, value.password);
-        setSubmitted(true);
-      } catch (reason) {
-        setError(
-          reason instanceof Error
-            ? errorMessage(reason)
-            : t('auth.resetPasswordFailed'),
-        );
-      }
+  const confirm = useExclusiveMutation({
+    mutationFn: (password: string) => {
+      if (!token) throw new Error(t('auth.invalidResetLink'));
+      return confirmPasswordReset(token, password);
     },
   });
+  const form = useForm({
+    defaultValues: { password: '' },
+    onSubmit: ({ value }) => confirm.submit(value.password),
+  });
   return (
-    <PasswordResetShell onSubmit={() => form.handleSubmit()}>
+    <AuthFormShell onSubmit={() => form.handleSubmit()}>
       <Typography variant="h5">{t('auth.chooseNewPassword')}</Typography>
-      {submitted ? (
+      {confirm.isSuccess ? (
         <>
           <Typography>{t('auth.passwordResetSuccess')}</Typography>
           <Button
@@ -118,20 +101,16 @@ export const PasswordResetConfirmationPage = ({
               />
             )}
           </form.Field>
-          {error && <Typography color="error">{error}</Typography>}
-          <Button type="submit" variant="contained">
+          <ApiErrorAlert error={confirm.error} />
+          <Button
+            disabled={confirm.isPending}
+            type="submit"
+            variant="contained"
+          >
             {t('auth.resetPassword')}
           </Button>
         </>
       )}
-    </PasswordResetShell>
+    </AuthFormShell>
   );
 };
-
-const PasswordResetShell = ({
-  children,
-  onSubmit,
-}: {
-  children: ReactNode;
-  onSubmit: () => void;
-}) => <AuthFormShell onSubmit={onSubmit}>{children}</AuthFormShell>;

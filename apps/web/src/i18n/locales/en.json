@@ -260,12 +260,10 @@
     "resetPassword": "Reset your password",
     "resetPasswordPrompt": "Enter your email address to receive a password reset link.",
     "resetPasswordSent": "If an eligible account uses that email address, a reset link has been sent.",
-    "requestResetFailed": "Unable to request a password reset",
     "sendResetLink": "Send reset link",
     "backToSignIn": "Back to sign in",
     "chooseNewPassword": "Choose a new password",
     "invalidResetLink": "This password reset link is invalid or expired",
-    "resetPasswordFailed": "Unable to reset password",
     "passwordResetSuccess": "Your password has been reset. Sign in with your new password.",
     "goToSignIn": "Go to sign in",
     "newPassword": "New password"
