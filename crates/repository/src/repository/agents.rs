@@ -22,6 +22,20 @@ pub struct Conversation {
     pub archived_at: Option<DateTime<Utc>>,
 }
 
+/// Which conversations a listing includes, by the record they are about.
+#[derive(Clone, Copy, Debug)]
+pub enum ConversationScope {
+    /// Every conversation, whether or not it is about a record.
+    All,
+    /// Only conversations that are not about a record.
+    Unattached,
+    /// Only conversations about this record, optionally in one context.
+    Record {
+        record_id: Uuid,
+        context_id: Option<Uuid>,
+    },
+}
+
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct ConversationMessage {
     pub id: Uuid,
@@ -784,22 +798,27 @@ impl AttricatRepository {
 }
 
 impl AttricatRepository {
-    pub async fn list_conversations(&self) -> Result<Vec<Conversation>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, created_at, updated_at, archived_at FROM conversations WHERE workspace_id = $1 AND archived_at IS NULL ORDER BY updated_at DESC")
-            .bind(self.workspace_id.0).fetch_all(&self.pool).await?)
-    }
-
     pub async fn search_conversations(
         &self,
         query: &str,
+        scope: ConversationScope,
         before: Option<(DateTime<Utc>, Uuid)>,
         limit: i64,
     ) -> Result<Vec<Conversation>, RepositoryError> {
         let (before_date, before_id) =
             before.map_or((None, None), |(date, id)| (Some(date), Some(id)));
-        Ok(sqlx::query_as("SELECT c.id, c.workspace_id, c.created_by_user_id, c.title, c.title_source, c.record_id, c.context_id, c.created_at, c.updated_at, c.archived_at FROM conversations c WHERE c.workspace_id = $1 AND c.archived_at IS NULL AND ($2 = '' OR position(lower($2) in lower(c.title)) > 0 OR EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user' AND position(lower($2) in lower(m.content::text)) > 0)) AND ($3::timestamptz IS NULL OR (c.updated_at, c.id) < ($3, $4)) ORDER BY c.updated_at DESC, c.id DESC LIMIT $5")
+        let (unattached_only, record_id, context_id) = match scope {
+            ConversationScope::All => (false, None, None),
+            ConversationScope::Unattached => (true, None, None),
+            ConversationScope::Record {
+                record_id,
+                context_id,
+            } => (false, Some(record_id), context_id),
+        };
+        Ok(sqlx::query_as("SELECT c.id, c.workspace_id, c.created_by_user_id, c.title, c.title_source, c.record_id, c.context_id, c.created_at, c.updated_at, c.archived_at FROM conversations c WHERE c.workspace_id = $1 AND c.archived_at IS NULL AND ($2 = '' OR position(lower($2) in lower(c.title)) > 0 OR EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user' AND position(lower($2) in lower(m.content::text)) > 0)) AND ($3::timestamptz IS NULL OR (c.updated_at, c.id) < ($3, $4)) AND (NOT $6 OR c.record_id IS NULL) AND ($7::uuid IS NULL OR c.record_id = $7) AND ($8::uuid IS NULL OR c.context_id = $8) ORDER BY c.updated_at DESC, c.id DESC LIMIT $5")
             .bind(self.workspace_id.0)
             .bind(query).bind(before_date).bind(before_id).bind(limit)
+            .bind(unattached_only).bind(record_id).bind(context_id)
             .fetch_all(&self.pool).await?)
     }
 

@@ -332,7 +332,8 @@ See [Translate labels](/builders/translations/).
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET`, `POST` | `/agent/conversations` | List or create conversations. |
+| `POST` | `/agent/conversations` | Create a conversation, optionally about a record (`record_id`, `context_id`). |
+| `GET` | `/agent/conversations/search` | Pages of conversations, newest first. `q` matches titles and user messages. Lists conversations not about a record unless `scope=all`; `record_id` (and optionally `context_id`) lists the conversations about one record. |
 | `GET`, `PATCH`, `DELETE` | `/agent/conversations/{id}` | Read, rename, or archive. |
 | `GET`, `POST` | `/agent/conversations/{id}/messages` | Messages. Posting starts a run and returns `202`. |
 | `POST` | `/agent/conversations/{id}/uploads` | Upload an attachment. |

@@ -2,7 +2,16 @@ export const agentRoutes = {
   list: '/agents',
   create: '/agents/new',
   detail: '/agents/$conversationId',
+  record: '/records/$recordId',
 } as const;
+
+/** Which conversations the agents list includes, by the record they are about. */
+export const conversationScopes = {
+  unattached: 'unattached',
+  all: 'all',
+} as const;
+export type ConversationScope =
+  (typeof conversationScopes)[keyof typeof conversationScopes];
 
 export const messageRoles = {
   user: 'user',

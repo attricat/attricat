@@ -1035,7 +1035,7 @@ async fn agent_conversation_reads_and_persisted_sse_replay(pool: PgPool) {
         .unwrap();
     let conversation_id = conversation["id"].as_str().unwrap();
     let conversations: Value = client
-        .get(format!("{base_url}/agent/conversations"))
+        .get(format!("{base_url}/agent/conversations/search"))
         .send()
         .await
         .unwrap()
@@ -1044,7 +1044,7 @@ async fn agent_conversation_reads_and_persisted_sse_replay(pool: PgPool) {
         .json()
         .await
         .unwrap();
-    assert_eq!(conversations[0]["id"], conversation["id"]);
+    assert_eq!(conversations["items"][0]["id"], conversation["id"]);
 
     let message_id = Uuid::new_v4();
     let file_id = Uuid::new_v4();
@@ -1327,6 +1327,76 @@ async fn record_conversations_validate_their_context_and_record(pool: PgPool) {
         .unwrap();
     assert_eq!(loaded["record_id"], record["id"]);
     assert_eq!(loaded["context_id"], selected_context["id"]);
+
+    let second: Value = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title":"Another question","record_id":record["id"]}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let unattached: Value = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title":"General question"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let list = |query: Vec<(&'static str, String)>| {
+        let request = client
+            .get(format!("{base_url}/agent/conversations/search"))
+            .query(&query);
+        async move {
+            let page: Value = request
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            page["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| item["id"].clone())
+                .collect::<Vec<_>>()
+        }
+    };
+    let record_id = record["id"].as_str().unwrap().to_owned();
+    assert_eq!(list(vec![]).await, vec![unattached["id"].clone()]);
+    assert_eq!(
+        list(vec![("record_id", record_id.clone())]).await,
+        vec![second["id"].clone(), created["id"].clone()]
+    );
+    assert_eq!(
+        list(vec![
+            ("record_id", record_id.clone()),
+            (
+                "context_id",
+                selected_context["id"].as_str().unwrap().to_owned()
+            ),
+        ])
+        .await,
+        vec![created["id"].clone()]
+    );
+    assert_eq!(list(vec![("scope", "all".into())]).await.len(), 3);
+    let orphan_context = client
+        .get(format!("{base_url}/agent/conversations/search"))
+        .query(&[("context_id", selected_context["id"].as_str().unwrap())])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(orphan_context.status(), StatusCode::UNPROCESSABLE_ENTITY);
     server.abort();
 }
 

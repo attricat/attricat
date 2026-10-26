@@ -1,4 +1,5 @@
 import { useForm, useStore } from '@tanstack/react-form';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import { Alert, Box, Button } from '@mui/material';
@@ -11,9 +12,12 @@ import { useMessageAttachments } from './useMessageAttachments';
 import { errorMessage } from '../../api/errors';
 
 type ConversationComposerProps = {
-  conversationId: string;
+  /** `null` until the first message creates the conversation. */
+  conversationId: string | null;
+  /** Creates the conversation for the first message; returns its ID. */
+  createConversation?: (content: string) => Promise<string>;
   onSendingChange: (isSending: boolean) => void;
-  onSent: () => void;
+  onSent: (conversationId: string) => void;
   sendDraft?: (
     content: string,
     conversationId: string,
@@ -23,6 +27,7 @@ type ConversationComposerProps = {
 
 export const ConversationComposer = ({
   conversationId,
+  createConversation,
   onSendingChange,
   onSent,
   sendDraft,
@@ -31,6 +36,8 @@ export const ConversationComposer = ({
   const form = useForm({ defaultValues: { content: '' } });
   const content = useStore(form.store, (state) => state.values.content);
   const attachments = useMessageAttachments();
+  // Kept so a retry after a failed send does not create a second conversation.
+  const [createdId, setCreatedId] = useState<string | null>(null);
   const send = useMutation({
     meta: { toast: false },
     mutationFn: async ({
@@ -42,21 +49,30 @@ export const ConversationComposer = ({
       files: File[];
       previousAttachmentIds: string[];
     }) => {
+      let id = conversationId ?? createdId;
+      if (!id) {
+        if (!createConversation) {
+          throw new Error('A conversation is required to send a message');
+        }
+        id = await createConversation(content);
+        setCreatedId(id);
+      }
       let attachmentIds = previousAttachmentIds;
       if (files.length > 0 && attachmentIds.length === 0) {
-        const uploaded = await uploadConversationFiles(conversationId, files);
+        const uploaded = await uploadConversationFiles(id, files);
         attachmentIds = uploaded.files.map((file) => file.id);
         attachments.setUploadedIds(attachmentIds);
       }
-      return sendDraft
-        ? sendDraft(content, conversationId, attachmentIds)
-        : sendMessage(conversationId, content, attachmentIds);
+      await (sendDraft
+        ? sendDraft(content, id, attachmentIds)
+        : sendMessage(id, content, attachmentIds));
+      return id;
     },
     onMutate: () => onSendingChange(true),
-    onSuccess: () => {
+    onSuccess: (id) => {
       form.reset();
       attachments.reset();
-      onSent();
+      onSent(id);
     },
     onSettled: () => onSendingChange(false),
   });

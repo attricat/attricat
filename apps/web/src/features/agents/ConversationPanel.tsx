@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box } from '@mui/material';
 import { decideApproval } from './api';
@@ -15,6 +15,8 @@ import {
 } from './queryOptions';
 import { useConversationLiveUpdates } from './useConversationLiveUpdates';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { useInitialFocus } from '../../components/initialFocus';
+import { ThinkingIndicator } from './ThinkingIndicator';
 
 export type DraftContext = {
   recordId: string;
@@ -91,21 +93,64 @@ export const ConversationPanel = ({
         conversationId={conversationId}
         onSendingChange={setIsSending}
         onSent={invalidate}
-        sendDraft={
-          draft
-            ? (content, id, attachmentIds) =>
-                smartFillRecordForm({
-                  record_id: draft.recordId,
-                  context_id: draft.contextId,
-                  is_default_context:
-                    draft.contextId === draft.defaultContextId,
-                  content,
-                  conversation_id: id,
-                  draft_values: draft.getDraftValues(),
-                  attachment_ids: attachmentIds,
-                })
-            : undefined
-        }
+        sendDraft={draftSender(draft)}
+      />
+    </Box>
+  );
+};
+
+/** Sends messages that may propose values for the unsaved record form. */
+const draftSender = (draft?: DraftContext) =>
+  draft
+    ? (content: string, id: string, attachmentIds: string[]) =>
+        smartFillRecordForm({
+          record_id: draft.recordId,
+          context_id: draft.contextId,
+          is_default_context: draft.contextId === draft.defaultContextId,
+          content,
+          conversation_id: id,
+          draft_values: draft.getDraftValues(),
+          attachment_ids: attachmentIds,
+        })
+    : undefined;
+
+/**
+ * A conversation that does not exist yet: the first message creates it, so
+ * opening and closing the panel leaves nothing behind.
+ */
+export const StartConversationPanel = ({
+  createConversation,
+  draft,
+  empty,
+  onStarted,
+}: {
+  createConversation: (content: string) => Promise<string>;
+  draft?: DraftContext;
+  /** Shown above the composer until the first message is sent. */
+  empty: ReactNode;
+  onStarted: (conversationId: string) => void;
+}) => {
+  const [isSending, setIsSending] = useState(false);
+  const ref = useInitialFocus<HTMLDivElement>();
+  return (
+    <Box
+      ref={ref}
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        flexGrow: 1,
+        minHeight: 0,
+      }}
+    >
+      <Box sx={{ flexGrow: 1, overflowY: 'auto', pt: 2 }}>
+        {isSending ? <ThinkingIndicator /> : empty}
+      </Box>
+      <ConversationComposer
+        conversationId={null}
+        createConversation={createConversation}
+        onSendingChange={setIsSending}
+        onSent={onStarted}
+        sendDraft={draftSender(draft)}
       />
     </Box>
   );

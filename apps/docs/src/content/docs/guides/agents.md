@@ -15,7 +15,7 @@ Open **Agents** in the sidebar and choose **New conversation**. Give the thread 
 
 You can also start a conversation from:
 
-- **Ask about this record** on a record page;
+- **Ask about this record** on a record page. These conversations are listed on the record's **Conversations** tab; turn on **Show record conversations** to include them in the **Agents** list;
 - **Send to agent conversation** after selecting records in the Explorer.
 
 Attach files with **Add files**, up to 16 per message. Images up to 5 MiB are sent to the provider so the agent can see them. Other files are described by name and type, and the agent can open them with its file tools.

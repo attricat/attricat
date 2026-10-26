@@ -187,6 +187,7 @@ pub use system_users::{SYSTEM_USER_DISPLAY_NAME, system_user_email};
 
 pub use agents::{
     AgentRun, AgentRunEvent, AgentToolCall, ApprovalDecision, Conversation, ConversationMessage,
+    ConversationScope,
 };
 pub use attricat_cache::QueryCache;
 pub use attricat_domain::model::{FileMetadata, FileVariantMetadata};

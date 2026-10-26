@@ -23,7 +23,7 @@ use crate::{
     agents::{
         MAX_CONVERSATION_ATTACHMENTS, MAX_CONVERSATION_MESSAGE_BYTES, MAX_CONVERSATION_TITLE_BYTES,
     },
-    repository::ApprovalDecision,
+    repository::{ApprovalDecision, ConversationScope},
 };
 use attricat_domain::permissions::Permission;
 
@@ -204,22 +204,27 @@ async fn retain_readable<T>(
         .collect())
 }
 
-pub(super) async fn list_conversations(
-    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
-    ActiveWorkspace(workspace): ActiveWorkspace,
-    ScopedRepository(repository): ScopedRepository,
-) -> Result<Json<Vec<crate::repository::Conversation>>, ApiError> {
-    let conversations = repository.list_conversations().await?;
-    Ok(Json(
-        retain_readable(&repository, user, workspace, conversations, |c| c.record_id).await?,
-    ))
-}
-
 #[derive(Deserialize, Default)]
 pub(super) struct ConversationSearchQuery {
     #[serde(default)]
     q: String,
     cursor: Option<String>,
+    /// Only conversations about this record; `scope` does not apply.
+    record_id: Option<Uuid>,
+    /// Narrows `record_id` to one context.
+    context_id: Option<Uuid>,
+    #[serde(default)]
+    scope: ConversationListScope,
+}
+
+/// Which conversations a listing without `record_id` includes.
+#[derive(Deserialize, Default, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum ConversationListScope {
+    /// Conversations about a record are listed on that record instead.
+    #[default]
+    Unattached,
+    All,
 }
 
 #[derive(Serialize)]
@@ -262,8 +267,42 @@ pub(super) async fn search_conversations(
             Ok::<_, ApiError>((date, id))
         })
         .transpose()?;
+    let scope = match (query.record_id, query.context_id) {
+        (Some(record_id), context_id) => {
+            if !repository
+                .principal_may(
+                    request_actor(&repository, user),
+                    workspace,
+                    Permission::RecordsRead,
+                    Some(record_id),
+                    None,
+                )
+                .await?
+            {
+                return Err(ApiError::forbidden());
+            }
+            ConversationScope::Record {
+                record_id,
+                context_id,
+            }
+        }
+        (None, Some(_)) => {
+            return Err(ApiError::invalid_input(
+                "context_id requires record_id".into(),
+            ));
+        }
+        (None, None) => match query.scope {
+            ConversationListScope::Unattached => ConversationScope::Unattached,
+            ConversationListScope::All => ConversationScope::All,
+        },
+    };
     let mut rows = repository
-        .search_conversations(search, before, (CONVERSATION_SEARCH_PAGE_SIZE + 1) as i64)
+        .search_conversations(
+            search,
+            scope,
+            before,
+            (CONVERSATION_SEARCH_PAGE_SIZE + 1) as i64,
+        )
         .await?;
     let has_more = rows.len() > CONVERSATION_SEARCH_PAGE_SIZE;
     rows.truncate(CONVERSATION_SEARCH_PAGE_SIZE);

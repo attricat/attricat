@@ -132,7 +132,9 @@ Jeśli rozszerzenie eksportuje rekordy do marketplace'u lub sklepu internetowego
 
 ## Pytanie do agenta
 
-**Zapytaj o ten rekord** rozpoczyna [rozmowę z agentem](/pl/guides/agents/) o rekordzie, który właśnie przeglądasz.
+**Zapytaj o ten rekord** otwiera panel, w którym możesz rozpocząć nową [rozmowę z agentem](/pl/guides/agents/) o rekordzie, który właśnie przeglądasz. Wpisz pytanie; rozmowa powstaje w chwili wysłania.
+
+Rekord może mieć dowolnie wiele rozmów. Karta **Rozmowy** wyświetla je od najnowszej wszystkim, którzy mogą odczytać rekord. Wybierz rozmowę, aby kontynuować ją w panelu, albo otwórz ją na stronie **Agenci**. Rozmowy o rekordach nie pojawiają się na głównej liście **Agenci**, chyba że włączysz **Pokaż rozmowy o rekordach**.
 
 ## Usuwanie rekordu
 

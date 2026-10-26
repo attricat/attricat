@@ -15,7 +15,7 @@ Otwórz **Agenci** na pasku bocznym i wybierz **Nowa rozmowa**. Nadaj wątkowi t
 
 Rozmowę możesz też rozpocząć:
 
-- przyciskiem **Zapytaj o ten rekord** na stronie rekordu;
+- przyciskiem **Zapytaj o ten rekord** na stronie rekordu. Takie rozmowy są wyświetlane na karcie **Rozmowy** rekordu; włącz **Pokaż rozmowy o rekordach**, aby uwzględnić je na liście **Agenci**;
 - przyciskiem **Wyślij do rozmowy z agentem** po zaznaczeniu rekordów w **Przeglądarce rekordów**.
 
 Dołącz pliki przyciskiem **Dodaj pliki**, maksymalnie 16 na wiadomość. Obrazy do 5 MiB są wysyłane do dostawcy, aby agent mógł je zobaczyć. Pozostałe pliki są opisywane nazwą i typem, a agent może je otworzyć swoimi narzędziami do plików.

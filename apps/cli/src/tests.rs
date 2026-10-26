@@ -2646,6 +2646,11 @@ async fn agent_commands_build_requests() {
     );
     let search = echo(&["agent", "conversation", "search", "--query", "linen shirts"]).await;
     assert_eq!(search["query"], "q=linen+shirts");
+    let record = echo(&["agent", "conversation", "list", "--record-id", id]).await;
+    assert_eq!(record["path"], "/agent/conversations/search");
+    assert_eq!(record["query"], format!("record_id={id}"));
+    let every = echo(&["agent", "conversation", "list", "--all"]).await;
+    assert_eq!(every["query"], "scope=all");
     let approve = echo(&["agent", "approval", "approve", id]).await;
     assert_eq!(approve["path"], format!("/agent/tool-calls/{id}/approve"));
     let fill = echo(&[

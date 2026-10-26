@@ -332,7 +332,8 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
-| `GET`, `POST` | `/agent/conversations` | Wyświetla lub tworzy rozmowy. |
+| `POST` | `/agent/conversations` | Tworzy rozmowę, opcjonalnie o rekordzie (`record_id`, `context_id`). |
+| `GET` | `/agent/conversations/search` | Strony rozmów, od najnowszej. `q` dopasowuje tytuły i wiadomości użytkowników. Wyświetla rozmowy niezwiązane z rekordem, chyba że podano `scope=all`; `record_id` (i opcjonalnie `context_id`) wyświetla rozmowy o jednym rekordzie. |
 | `GET`, `PATCH`, `DELETE` | `/agent/conversations/{id}` | Odczytuje, zmienia nazwę lub archiwizuje. |
 | `GET`, `POST` | `/agent/conversations/{id}/messages` | Wiadomości. Wysłanie wiadomości rozpoczyna uruchomienie i zwraca `202`. |
 | `POST` | `/agent/conversations/{id}/uploads` | Przesyła załącznik. |

@@ -160,4 +160,37 @@ describe('ConversationComposer', () => {
       expect(sendMessage).toHaveBeenCalledWith(conversationId, 'Review', []),
     );
   });
+
+  it('creates the conversation on the first send and reuses it on retry', async () => {
+    const user = userEvent.setup();
+    const onSent = vi.fn();
+    const createConversation = vi.fn().mockResolvedValue(conversationId);
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { mutations: { retry: false } } })
+        }
+      >
+        <ConversationComposer
+          conversationId={null}
+          createConversation={createConversation}
+          onSendingChange={vi.fn()}
+          onSent={onSent}
+        />
+      </QueryClientProvider>,
+    );
+    vi.mocked(sendMessage)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({
+        id: '123e4567-e89b-12d3-a456-426614174002',
+        status: 'queued',
+      });
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Hi');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await user.click(await screen.findByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(onSent).toHaveBeenCalledWith(conversationId));
+    expect(createConversation).toHaveBeenCalledOnce();
+    expect(createConversation).toHaveBeenCalledWith('Hi');
+    expect(sendMessage).toHaveBeenLastCalledWith(conversationId, 'Hi', []);
+  });
 });
