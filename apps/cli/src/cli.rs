@@ -19,6 +19,7 @@ use crate::commands::lexicon::LexiconCommand;
 use crate::commands::notification::NotificationCommand;
 use crate::commands::presentation_asset::PresentationAssetCommand;
 use crate::commands::record::RecordCommand;
+use crate::commands::reusable_attribute::ReusableAttributeCommand;
 use crate::commands::rule::RuleCommand;
 use crate::commands::saved_view::SavedViewCommand;
 use crate::commands::solution_pack::SolutionPackCommand;
@@ -135,6 +136,11 @@ pub(crate) enum Command {
     Context {
         #[command(subcommand)]
         command: ContextCommand,
+    },
+    /// Attribute definitions shared across blueprints and added to records.
+    ReusableAttribute {
+        #[command(subcommand)]
+        command: ReusableAttributeCommand,
     },
     Record {
         #[command(subcommand)]

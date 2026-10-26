@@ -167,6 +167,16 @@ acli blueprint resolve <code> [--version <version>] [--include-drafts]
 acli blueprint safe-migration-batch <blueprint-id> <version>
 acli blueprint publish-records <blueprint-id> <version> --context-id <channel>
 acli blueprint publish-records-all <blueprint-id> <version>
+
+acli reusable-attribute list [--include-drafts]
+acli reusable-attribute create --file gtin.toml
+acli reusable-attribute validate [--definition-id <definition-id>] --file gtin.toml
+acli reusable-attribute create-version <definition-id> --file gtin-v2.toml
+acli reusable-attribute publish <revision-id>
+acli reusable-attribute apply <record-id> --revision-id <revision-id>
+acli reusable-attribute group list
+acli reusable-attribute group create --code <code> --name <name> [--position <n>] --revision-id <revision-id> [--revision-id <revision-id> ...]
+acli reusable-attribute group apply <record-id> <group-id>
 ```
 
 ### Contexts

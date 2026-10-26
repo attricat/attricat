@@ -11,6 +11,7 @@ pub(crate) mod lexicon;
 pub(crate) mod notification;
 pub(crate) mod presentation_asset;
 pub(crate) mod record;
+pub(crate) mod reusable_attribute;
 pub(crate) mod rule;
 pub(crate) mod saved_view;
 pub(crate) mod solution_pack;

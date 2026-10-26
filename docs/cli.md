@@ -70,6 +70,16 @@ acli blueprint get-version <blueprint-id> <version>
 acli blueprint resolve <code> [--include-drafts]
 acli blueprint resolve <code> --version <version>
 
+acli reusable-attribute list [--include-drafts]
+acli reusable-attribute create --file gtin.toml
+acli reusable-attribute validate [--definition-id <definition-id>] --file gtin.toml
+acli reusable-attribute create-version <definition-id> --file gtin-v2.toml
+acli reusable-attribute publish <revision-id>
+acli reusable-attribute apply <record-id> --revision-id <revision-id>
+acli reusable-attribute group list
+acli reusable-attribute group create --code <code> --name <name> [--position <n>] --revision-id <revision-id> [--revision-id <revision-id> ...]
+acli reusable-attribute group apply <record-id> <group-id>
+
 acli context list
 acli context create --file locale.toml
 acli context create --code en_GB --data '{"language":"en-GB"}' [--parent-id <context-id>]

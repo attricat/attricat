@@ -2314,3 +2314,50 @@ async fn file_reference_and_hold_commands_build_requests() {
         format!("/files/{file}/retention-holds/{id}/release")
     );
 }
+
+#[tokio::test]
+async fn reusable_attribute_commands_build_requests() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let file = tempfile::NamedTempFile::new().unwrap();
+    fs::write(file.path(), "code = \"gtin\"").unwrap();
+    let path = file.path().to_str().unwrap();
+    let validate = echo(&[
+        "reusable-attribute",
+        "validate",
+        "--definition-id",
+        id,
+        "--file",
+        path,
+    ])
+    .await;
+    assert_eq!(
+        validate["path"],
+        format!("/reusable-attributes/{id}/versions/validate")
+    );
+    assert_eq!(validate["body"], json!({ "definition": "code = \"gtin\"" }));
+    let apply = echo(&["reusable-attribute", "apply", id, "--revision-id", id]).await;
+    assert_eq!(
+        apply["path"],
+        format!("/v1/records/{id}/reusable-attributes")
+    );
+    assert_eq!(
+        apply["body"],
+        json!({ "reusable_attribute_revision_id": id })
+    );
+    let group = echo(&[
+        "reusable-attribute",
+        "group",
+        "create",
+        "--code",
+        "ids",
+        "--name",
+        "IDs",
+        "--revision-id",
+        id,
+    ])
+    .await;
+    assert_eq!(
+        group["body"],
+        json!({ "code": "ids", "name": "IDs", "position": 0, "reusable_attribute_revision_ids": [id] })
+    );
+}

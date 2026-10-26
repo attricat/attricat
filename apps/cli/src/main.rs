@@ -17,6 +17,7 @@ use crate::commands::lexicon::lexicon_command;
 use crate::commands::notification::notification_command;
 use crate::commands::presentation_asset::presentation_asset_command;
 use crate::commands::record::record_command;
+use crate::commands::reusable_attribute::reusable_attribute_command;
 use crate::commands::rule::rule_command;
 use crate::commands::saved_view::saved_view_command;
 use crate::commands::solution_pack::solution_pack_command;
@@ -147,6 +148,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         Command::Event { command } => event_command(&api, command).await,
         Command::Blueprint { command } => blueprint_command(&api, command).await,
         Command::Context { command } => context_command(&api, command).await,
+        Command::ReusableAttribute { command } => reusable_attribute_command(&api, command).await,
         Command::Record { command } => record_command(&api, command).await,
         Command::Value { command } => value_command(&api, command).await,
         Command::Workspace { command } => workspace_command(&api, command).await,
