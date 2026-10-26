@@ -1,5 +1,6 @@
+import { useExtensionRuntime } from '../extensions/useExtensionRuntime';
 import { useNavigate } from '@tanstack/react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { getCoreRowModel, useLegacyTable } from '@tanstack/react-table/legacy';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Paper } from '@mui/material';
@@ -16,9 +17,6 @@ import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes, RecordItem } from '../records/api';
 import { DeleteRecordDialog } from '../records/components/DeleteRecordDialog';
 import { DuplicateRecordDialog } from '../records/components/DuplicateRecordDialog';
-import { getExtensionRuntime } from '../extensions/api';
-import { extensionRuntimeRefetchInterval } from '../extensions/constants';
-import { extensionQueryKeys } from '../extensions/queryKeys';
 import {
   estimatedResultRowHeight,
   maximumExplorerCellFrames,
@@ -218,12 +216,7 @@ export const ExplorerResultsTable = ({
     columnIds,
   );
   const timeZone = useTimeZone();
-  const runtime = useQuery({
-    queryKey: extensionQueryKeys.runtime(),
-    queryFn: () => getExtensionRuntime(),
-    refetchInterval: extensionRuntimeRefetchInterval,
-    retry: false,
-  });
+  const runtime = useExtensionRuntime();
   // Rows render only when their own data changes, so the column definitions
   // and every callback they close over keep their identity across renders.
   const sortChange = useLatestCallback(onSortChange);

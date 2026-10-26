@@ -1,9 +1,8 @@
+import { recordExportStatusOptions } from './queryOptions';
 import { Chip } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { recordExportStatus } from './api';
 import { exportProblemStatuses } from './constants';
-import { extensionExportQueryKeys } from './queryKeys';
 
 /**
  * Warns that a record's export to a destination was rejected, is uncertain
@@ -18,8 +17,7 @@ export const RecordExportStatusChip = ({
 }) => {
   const { t } = useTranslation();
   const status = useQuery({
-    queryKey: extensionExportQueryKeys.record(recordId),
-    queryFn: () => recordExportStatus(recordId),
+    ...recordExportStatusOptions(recordId),
   });
   const problems =
     status.data?.statuses.filter((mapping) =>

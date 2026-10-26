@@ -1,11 +1,10 @@
+import { workspaceExportStatusOptions } from './queryOptions';
 import { Paper, Stack, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import { workspaceExportStatus } from './api';
 import { exportProblemStatuses } from './constants';
 import { ExportStatusChip } from './ExportStatusChip';
-import { extensionExportQueryKeys } from './queryKeys';
 
 /**
  * Export health on the Data Health page: per export extension, how many
@@ -14,8 +13,7 @@ import { extensionExportQueryKeys } from './queryKeys';
 export const ExportHealthCard = () => {
   const { t } = useTranslation();
   const overview = useQuery({
-    queryKey: extensionExportQueryKeys.workspace(),
-    queryFn: workspaceExportStatus,
+    ...workspaceExportStatusOptions(),
   });
   const destinations = overview.data?.destinations ?? [];
   const extensions = [

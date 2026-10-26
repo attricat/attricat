@@ -1,3 +1,4 @@
+import { extensionConnectionsOptions } from './queryOptions';
 import {
   Alert,
   Box,
@@ -25,7 +26,7 @@ import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { ExportIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
-import { extensionExportStatus, listConnections, retryExports } from './api';
+import { extensionExportStatus, retryExports } from './api';
 import {
   exportMappingExtensionOutlet,
   exportStatuses,
@@ -84,8 +85,7 @@ export const ExtensionExportStatusSection = ({
   });
   // A connection without exports yet can be picked too.
   const connections = useQuery({
-    queryKey: extensionExportQueryKeys.connections(extensionId),
-    queryFn: () => listConnections(extensionId),
+    ...extensionConnectionsOptions(extensionId),
     enabled: exports.length > 0,
   });
   const connection =

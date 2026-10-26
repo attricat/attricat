@@ -1,3 +1,4 @@
+import { extensionConnectionsOptions } from './queryOptions';
 import {
   Alert,
   Box,
@@ -27,7 +28,6 @@ import {
   connectionAction,
   deleteConnection,
   exchangeAuthorizationCode,
-  listConnections,
   startBrowserAuthorization,
   updateConnection,
 } from './api';
@@ -365,8 +365,7 @@ export const ExtensionConnectionsSection = ({
   const kinds = manifest.server?.connections ?? [];
   const [creating, setCreating] = useState(false);
   const connections = useQuery({
-    queryKey: extensionExportQueryKeys.connections(extensionId),
-    queryFn: () => listConnections(extensionId),
+    ...extensionConnectionsOptions(extensionId),
     enabled: kinds.length > 0,
   });
   if (!kinds.length) return null;
