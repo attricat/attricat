@@ -229,7 +229,10 @@
       "contexts_write": "You are not authorized to create contexts in this workspace.",
       "records_write": "You are not authorized to create records in this workspace.",
       "extensions_read": "You are not authorized to view extensions.",
-      "extensions_manage": "You are not authorized to manage extensions."
+      "extensions_manage": "You are not authorized to manage extensions.",
+      "rules_read": "You are not authorized to view data quality rules.",
+      "workflows_read": "You are not authorized to view workflows in this workspace.",
+      "workflows_manage": "You are not authorized to manage workflows in this workspace."
     },
     "signIn": "Sign in",
     "signInTo": "Sign in to {{identifier}}",
@@ -1287,8 +1290,6 @@
     "validationSucceeded": "Valid: {{name}} has {{triggers}} triggers and {{actions}} actions.",
     "tomlDefinition": "Workflow TOML definition",
     "loading": "Loading workflows…",
-    "notAuthorizedRead": "You are not authorized to view workflows in this workspace.",
-    "notAuthorizedManage": "You are not authorized to manage workflows in this workspace.",
     "readOnly": "You have read-only workflow access. Management actions are unavailable.",
     "empty": "No workflows have been created yet.",
     "lifecycle": "Lifecycle",
@@ -1811,7 +1812,6 @@
     "description": "Inspect attricat-owned rule definitions, findings, and durable evaluation runs.",
     "inspectionTabs": "Rule inspection",
     "loading": "Loading rules…",
-    "notAuthorized": "You are not authorized to view data quality rules.",
     "sections": {
       "rules": "Rules",
       "findings": "Findings",

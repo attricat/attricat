@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createLink } from '@tanstack/react-router';
-import { Alert, Box, Button, Tab, Tabs, Typography } from '@mui/material';
+import { Alert, Box, Button, Tab, Tabs } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { ApiRequestError } from '../../api/request';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -36,7 +36,6 @@ import { RulesSection } from './RulesSection';
 import { RunsSection } from './RunsSection';
 import { RuleIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
-import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
 
 const RouterTab = createLink(Tab);
@@ -48,21 +47,19 @@ export const RuleInspectionPage = ({
 }) => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const session = useQuery(sessionOptions());
-  const canRead = useCan(capabilities.rulesRead);
   const canManage = useCan(capabilities.rulesManage);
   // Findings and runs name their rule revision from the definitions.
-  const rules = useQuery({ ...ruleDefinitionsOptions(), enabled: canRead });
+  const rules = useQuery(ruleDefinitionsOptions());
   const revisions = ruleRevisionsByKey(rules.data ?? []);
   const findings = useQuery({
     queryKey: ruleQueryKeys.findings(),
     queryFn: () => listFindings(),
-    enabled: canRead && section === RULE_SECTION_FINDINGS,
+    enabled: section === RULE_SECTION_FINDINGS,
   });
   const runs = useQuery({
     queryKey: ruleQueryKeys.runs(),
     queryFn: listRuleRuns,
-    enabled: canRead && section === RULE_SECTION_RUNS,
+    enabled: section === RULE_SECTION_RUNS,
   });
   // Name the records the visible findings and runs refer to.
   const recordLabels = useRecordLabels(
@@ -109,22 +106,6 @@ export const RuleInspectionPage = ({
     toggle.variables
       ? toggle.variables
       : undefined;
-
-  if (session.isPending) {
-    return (
-      <PageContainer>
-        <Typography>{t('rules.loading')}</Typography>
-      </PageContainer>
-    );
-  }
-
-  if (!canRead) {
-    return (
-      <PageContainer>
-        <Alert severity="error">{t('rules.notAuthorized')}</Alert>
-      </PageContainer>
-    );
-  }
 
   const activeSectionIndex = RULE_SECTIONS.findIndex(
     (item) => item.key === section,

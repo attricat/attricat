@@ -233,7 +233,10 @@
       "contexts_write": "Nie masz uprawnień do tworzenia kontekstów w tym obszarze roboczym.",
       "records_write": "Nie masz uprawnień do tworzenia rekordów w tym obszarze roboczym.",
       "extensions_read": "Nie masz uprawnień do wyświetlania rozszerzeń.",
-      "extensions_manage": "Nie masz uprawnień do zarządzania rozszerzeniami."
+      "extensions_manage": "Nie masz uprawnień do zarządzania rozszerzeniami.",
+      "rules_read": "Nie masz uprawnień do wyświetlania reguł jakości danych.",
+      "workflows_read": "Nie masz uprawnień do wyświetlania przepływów pracy w tym obszarze roboczym.",
+      "workflows_manage": "Nie masz uprawnień do zarządzania przepływami pracy w tym obszarze roboczym."
     },
     "signIn": "Zaloguj się",
     "signInTo": "Zaloguj się do {{identifier}}",
@@ -1345,8 +1348,6 @@
     "validationSucceeded": "Poprawnie: {{name}} ma {{triggers}} wyzwalaczy i {{actions}} akcji.",
     "tomlDefinition": "Definicja przepływu pracy TOML",
     "loading": "Wczytywanie przepływów pracy…",
-    "notAuthorizedRead": "Nie masz uprawnień do wyświetlania przepływów pracy w tym obszarze roboczym.",
-    "notAuthorizedManage": "Nie masz uprawnień do zarządzania przepływami pracy w tym obszarze roboczym.",
     "readOnly": "Masz dostęp tylko do odczytu. Akcje zarządzania są niedostępne.",
     "empty": "Nie utworzono jeszcze żadnych przepływów pracy.",
     "lifecycle": "Cykl życia",
@@ -1887,7 +1888,6 @@
     "description": "Przeglądaj definicje reguł katalogu, ustalenia i trwałe przebiegi ewaluacji.",
     "inspectionTabs": "Inspekcja reguł",
     "loading": "Wczytywanie reguł…",
-    "notAuthorized": "Nie masz uprawnień do wyświetlania reguł jakości danych.",
     "sections": {
       "rules": "Reguły",
       "findings": "Ustalenia",

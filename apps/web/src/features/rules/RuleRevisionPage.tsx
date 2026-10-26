@@ -8,15 +8,12 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { RuleIcon } from '../../components/systemIcons';
-import { useCan } from '../auth/useCan';
 import { getBlueprintRevision } from '../blueprints/api';
 import { blueprintQueryKeys } from '../blueprints/queryKeys';
 import { lexiconText } from '../lexicon/lexicon';
 import { SHORT_RECORD_ID_LENGTH } from './constants';
 import { ruleDefinitionsOptions } from './queryOptions';
 import { RuleLifecycleChip } from './RuleCells';
-import { sessionOptions } from '../auth/queryOptions';
-import { capabilities } from '../auth/capabilities';
 
 /** One rule revision with the definition its findings were checked against. */
 export const RuleRevisionPage = ({
@@ -28,9 +25,7 @@ export const RuleRevisionPage = ({
   version: number | undefined;
 }) => {
   const { t } = useTranslation();
-  const session = useQuery(sessionOptions());
-  const canRead = useCan(capabilities.rulesRead);
-  const rules = useQuery({ ...ruleDefinitionsOptions(), enabled: canRead });
+  const rules = useQuery(ruleDefinitionsOptions());
   const rule = rules.data?.find(
     (candidate) => candidate.id === ruleId && candidate.version === version,
   );
@@ -56,18 +51,10 @@ export const RuleRevisionPage = ({
     </Button>
   );
 
-  if (session.isPending || (canRead && rules.isPending)) {
+  if (rules.isPending) {
     return (
       <PageContainer>
         <Typography>{t('rules.loading')}</Typography>
-      </PageContainer>
-    );
-  }
-
-  if (!canRead) {
-    return (
-      <PageContainer>
-        <Alert severity="error">{t('rules.notAuthorized')}</Alert>
       </PageContainer>
     );
   }

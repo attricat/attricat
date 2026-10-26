@@ -5,6 +5,8 @@ import { forwardRef, type ComponentPropsWithoutRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
 import { currentSession } from '../auth/api';
+import { RequireCapability } from '../auth/RequireCapability';
+import { capabilities } from '../auth/capabilities';
 import { listWorkflowRuns, listWorkflows } from './api';
 import { WorkflowsPage } from './WorkflowsPage';
 
@@ -21,7 +23,10 @@ vi.mock('@tanstack/react-router', () => ({
     );
   }),
 }));
-vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
+vi.mock('../auth/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../auth/api')>()),
+  currentSession: vi.fn(),
+}));
 vi.mock('./api', () => ({ listWorkflowRuns: vi.fn(), listWorkflows: vi.fn() }));
 
 describe('WorkflowsPage', () => {
@@ -30,7 +35,7 @@ describe('WorkflowsPage', () => {
     await i18n.changeLanguage('en');
   });
 
-  it('shows the host-owned unauthorized state without loading workflow data', async () => {
+  it('is refused by its route guard without loading workflow data', async () => {
     vi.mocked(currentSession).mockResolvedValue({
       capabilities: { workflows_manage: false, workflows_read: false },
     } as Awaited<ReturnType<typeof currentSession>>);
@@ -40,7 +45,9 @@ describe('WorkflowsPage', () => {
 
     render(
       <QueryClientProvider client={client}>
-        <WorkflowsPage />
+        <RequireCapability capability={capabilities.workflowsRead}>
+          <WorkflowsPage />
+        </RequireCapability>
       </QueryClientProvider>,
     );
 

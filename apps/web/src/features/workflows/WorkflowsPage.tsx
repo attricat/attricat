@@ -28,7 +28,6 @@ import { Timestamp } from '../../time/Timestamp';
 import { EmptyState } from '../../components/EmptyState';
 import { WorkflowIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
-import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
@@ -39,18 +38,14 @@ const WorkflowDetailLink = Link as unknown as ComponentType<{
 
 export const WorkflowsPage = () => {
   const { t } = useTranslation();
-  const session = useQuery(sessionOptions());
-  const canRead = useCan(capabilities.workflowsRead);
   const canManage = useCan(capabilities.workflowsManage);
   const workflows = useQuery({
     queryKey: workflowQueryKeys.all(),
     queryFn: listWorkflows,
-    enabled: canRead,
   });
   const runs = useQuery({
     queryKey: workflowQueryKeys.runs(),
     queryFn: listWorkflowRuns,
-    enabled: canRead,
   });
   const families = Object.values(
     (workflows.data ?? []).reduce<Record<string, Workflow>>(
@@ -81,19 +76,6 @@ export const WorkflowsPage = () => {
     if (run.created_at > summary.latest.created_at) summary.latest = run;
     runSummaries.set(run.workflow_id, summary);
   }
-
-  if (session.isPending)
-    return (
-      <PageContainer>
-        <Typography>{t('workflows.loading')}</Typography>
-      </PageContainer>
-    );
-  if (!canRead)
-    return (
-      <PageContainer>
-        <Alert severity="error">{t('workflows.notAuthorizedRead')}</Alert>
-      </PageContainer>
-    );
 
   return (
     <PageContainer>

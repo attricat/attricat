@@ -5,6 +5,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { currentSession } from '../auth/api';
+import { RequireCapability } from '../auth/RequireCapability';
+import { capabilities } from '../auth/capabilities';
 import { createWorkflow, getWorkflowRevision, validateWorkflow } from './api';
 import { workflowQueryKeys } from './queryKeys';
 import { WorkflowEditorPage } from './WorkflowEditorPage';
@@ -30,7 +32,10 @@ vi.mock('@monaco-editor/react', () => ({
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
 }));
-vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
+vi.mock('../auth/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../auth/api')>()),
+  currentSession: vi.fn(),
+}));
 vi.mock('./api', () => ({
   createWorkflow: vi.fn(),
   createWorkflowRevision: vi.fn(),
@@ -86,7 +91,9 @@ describe('WorkflowEditorPage', () => {
     });
     render(
       <QueryClientProvider client={client}>
-        <WorkflowEditorPage workflowId="workflow-1" sourceVersion={1} />
+        <RequireCapability capability={capabilities.workflowsManage}>
+          <WorkflowEditorPage workflowId="workflow-1" sourceVersion={1} />
+        </RequireCapability>
       </QueryClientProvider>,
     );
     expect(

@@ -32,7 +32,6 @@ import { WorkflowRunTable } from './WorkflowRunTable';
 import { WorkflowSourcePanel } from './WorkflowSourcePanel';
 import { WorkflowIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
-import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
@@ -44,18 +43,14 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   );
   const [leftVersion, setLeftVersion] = useState<number>();
   const tabId = useTabAccessibility();
-  const session = useQuery(sessionOptions());
-  const canRead = useCan(capabilities.workflowsRead);
   const canManage = useCan(capabilities.workflowsManage);
   const revisions = useQuery({
     queryKey: workflowQueryKeys.revisions(workflowId),
     queryFn: () => listWorkflowRevisions(workflowId),
-    enabled: canRead,
   });
   const runs = useQuery({
     queryKey: workflowQueryKeys.runs(),
     queryFn: listWorkflowRuns,
-    enabled: canRead,
   });
   const refresh = async () => {
     await Promise.all([
@@ -98,16 +93,10 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const mutationError =
     publish.error ?? enable.error ?? runNow.error ?? disable.error;
 
-  if (session.isPending || revisions.isPending)
+  if (revisions.isPending)
     return (
       <PageContainer>
         <Typography>{t('workflows.loading')}</Typography>
-      </PageContainer>
-    );
-  if (!canRead)
-    return (
-      <PageContainer>
-        <Alert severity="error">{t('workflows.notAuthorizedRead')}</Alert>
       </PageContainer>
     );
   if (revisions.isError)
