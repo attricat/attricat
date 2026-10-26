@@ -1813,6 +1813,7 @@
   },
   "views": {
     "tabHasErrors": "Zawiera pola wymagające uwagi",
+    "tabHasFindings": "Zawiera pola z problemami z jakością danych",
     "emailInvalid": "Wprowadź jeden adres e-mail, na przykład imie@example.com.",
     "phoneHelp": "Dodaj + i numer kierunkowy kraju, aby umożliwić połączenie. Numer wewnętrzny można poprzedzić ext. lub x.",
     "urlInvalid": "Wpisz pełny adres HTTP lub HTTPS bez spacji i danych logowania.",

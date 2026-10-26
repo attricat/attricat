@@ -13,10 +13,13 @@ import { lexiconText } from '../../lexicon/lexicon';
 import { compactIconSize } from '../../../components/iconSizes';
 import { useFieldRevealRequest } from '../fieldReveal';
 import { nodesPlacedFields } from '../viewFieldComponents';
+import { useFieldDiagnostics } from '../../records/fieldDiagnostics';
+import { layoutMarker, layoutMarkerDescriptions } from '../layoutMarker';
 
 /**
  * One accordion section of a view. It opens for a field the user asks to see
- * and, like a tab, is marked while it holds a field with an error.
+ * and, like a tab, is marked while it holds a field with an error or with
+ * data quality findings.
  */
 export const ViewAccordionSection = ({
   invalidFields,
@@ -34,25 +37,25 @@ export const ViewAccordionSection = ({
   useFieldRevealRequest((code) => {
     if (nodesPlacedFields(nodes).has(code)) setExpanded(true);
   });
-  const invalid =
-    Boolean(invalidFields?.size) &&
-    [...nodesPlacedFields(nodes)].some((code) => invalidFields!.has(code));
+  const marker = layoutMarker(nodes, invalidFields, useFieldDiagnostics());
   return (
     <Accordion expanded={expanded} onChange={(_, next) => setExpanded(next)}>
       <AccordionSummary
-        aria-description={invalid ? t('views.tabHasErrors') : undefined}
+        aria-description={
+          marker ? t(layoutMarkerDescriptions[marker.reason]) : undefined
+        }
         expandIcon={<ChevronDownIcon />}
       >
         <Box
           sx={{
             alignItems: 'center',
-            color: invalid ? 'error.main' : undefined,
+            color: marker?.color,
             display: 'flex',
             gap: 1.5,
           }}
         >
           <Typography color="inherit">{lexiconText(label)}</Typography>
-          {invalid && <CircleAlertIcon aria-hidden size={compactIconSize} />}
+          {marker && <CircleAlertIcon aria-hidden size={compactIconSize} />}
         </Box>
       </AccordionSummary>
       <AccordionDetails>{children}</AccordionDetails>

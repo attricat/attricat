@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import type { ViewNode } from '../../records/api';
 import { lexiconText } from '../../lexicon/lexicon';
 import { nodesPlacedFields } from '../viewFieldComponents';
+import { useFieldDiagnostics } from '../../records/fieldDiagnostics';
+import { layoutMarker, layoutMarkerDescriptions } from '../layoutMarker';
 import { compactIconSize } from '../../../components/iconSizes';
 import { VIEW_TAB_PANEL_SPACING } from '../constants';
 import { useFieldRevealRequest } from '../fieldReveal';
@@ -15,7 +17,10 @@ export const ViewTabs = ({
   tabs,
   render,
 }: {
-  /** Fields with errors; tabs holding one are marked, as only one renders. */
+  /**
+   * Fields with errors; tabs holding one are marked, as only one renders.
+   * Tabs holding a field with data quality findings are marked too.
+   */
   invalidFields?: ReadonlySet<string>;
   /** Space above the panel, larger when it opens on an editable field. */
   panelSpacing?: number;
@@ -31,9 +36,7 @@ export const ViewTabs = ({
     );
     if (index >= 0) setValue(index);
   });
-  const tabHasErrors = (children: readonly ViewNode[]) =>
-    Boolean(invalidFields?.size) &&
-    [...nodesPlacedFields(children)].some((code) => invalidFields!.has(code));
+  const diagnostics = useFieldDiagnostics();
   return (
     <>
       <Tabs
@@ -55,13 +58,15 @@ export const ViewTabs = ({
         variant="scrollable"
       >
         {tabs.map((tab, index) => {
-          const invalid = tabHasErrors(tab.children);
+          const marker = layoutMarker(tab.children, invalidFields, diagnostics);
           return (
             <Tab
               aria-controls={`${tabId}-tabpanel-${index}`}
-              aria-description={invalid ? t('views.tabHasErrors') : undefined}
+              aria-description={
+                marker ? t(layoutMarkerDescriptions[marker.reason]) : undefined
+              }
               icon={
-                invalid ? <CircleAlertIcon size={compactIconSize} /> : undefined
+                marker ? <CircleAlertIcon size={compactIconSize} /> : undefined
               }
               iconPosition="end"
               id={`${tabId}-tab-${index}`}
@@ -80,7 +85,7 @@ export const ViewTabs = ({
                     borderBottomColor: 'transparent',
                   },
                 },
-                invalid && { color: 'error.main', minHeight: 48 },
+                marker ? { color: marker.color, minHeight: 48 } : false,
               ]}
             />
           );
