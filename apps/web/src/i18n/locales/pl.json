@@ -592,7 +592,6 @@
     "viewRecordId": "Wyświetl identyfikator rekordu",
     "viewRecordIdWithId": "Wyświetl identyfikator rekordu {{recordId}}",
     "copyRecordId": "Kopiuj identyfikator rekordu",
-    "default": "Domyślny",
     "fieldConnections": {
       "required": "Wymagane przez schemat rekordu.",
       "schemaConditionSource": "Od tego pola zależą wymagania schematu rekordu dla: <fields/>.",
@@ -640,6 +639,7 @@
       "findings": "Jakość danych",
       "noFindings": "Brak otwartych problemów w tym kontekście."
     },
+    "default": "Domyślny",
     "loadingContexts": "Wczytywanie kontekstów...",
     "resolvingValues": "Rozwiązywanie wartości...",
     "viewExtensionContent": "Wyświetl zawartość rozszerzenia dla {{attribute}}",

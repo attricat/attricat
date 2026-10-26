@@ -572,7 +572,6 @@
     "viewRecordId": "View record ID",
     "viewRecordIdWithId": "View record ID {{recordId}}",
     "copyRecordId": "Copy record ID",
-    "default": "Default",
     "fieldConnections": {
       "required": "Required by the record schema.",
       "schemaConditionSource": "The record schema's requirements for <fields/> depend on it.",
@@ -616,6 +615,7 @@
       "findings": "Data quality",
       "noFindings": "No open findings in this context."
     },
+    "default": "Default",
     "loadingContexts": "Loading contexts...",
     "resolvingValues": "Resolving values...",
     "viewExtensionContent": "View extension content for {{attribute}}",
