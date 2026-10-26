@@ -62,6 +62,12 @@ export const attributeCardinalities = {
   many: 'many',
 } as const;
 
+/** How a self-referencing relationship may link records to each other. */
+export const attributeHierarchies = {
+  acyclic: 'acyclic',
+  tree: 'tree',
+} as const;
+
 export const attributeContextEditability = {
   all: 'all',
   default: 'default',

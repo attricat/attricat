@@ -4,8 +4,14 @@ import { attributeContextSchema } from '../contexts/schemas';
 import { fileMetadataSchema } from '../files/schemas';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 import { jsonObjectSchema, viewsSchema } from '../views/schemas';
+import { revisionStatusSchema } from '../../api/revisionStatus';
 import {
+  attributeCardinalities,
+  attributeContextEditability,
+  attributeContextFallbacks,
   attributeFilterOperators,
+  attributeHierarchies,
+  publicationStatuses,
   SMART_FILL_MAX_ATTACHMENTS,
   SMART_FILL_MAX_CONTENT_LENGTH,
   statusTransitionDenialCodes,
@@ -34,11 +40,11 @@ export const attributeSchema = z
     target_blueprint_code: z.string().nullable().optional(),
     /** Every allowed target blueprint; empty means any blueprint. */
     target_blueprint_codes: z.array(z.string()).optional(),
-    cardinality: z.enum(['one', 'many']).nullable().optional(),
-    target_cardinality: z.enum(['one', 'many']).nullable().optional(),
-    hierarchy: z.enum(['acyclic', 'tree']).nullable().optional(),
-    context_fallback: z.enum(['default', 'none']).optional(),
-    context_editable: z.enum(['all', 'default']).optional(),
+    cardinality: z.enum(attributeCardinalities).nullable().optional(),
+    target_cardinality: z.enum(attributeCardinalities).nullable().optional(),
+    hierarchy: z.enum(attributeHierarchies).nullable().optional(),
+    context_fallback: z.enum(attributeContextFallbacks).optional(),
+    context_editable: z.enum(attributeContextEditability).optional(),
     readonly: z.boolean().optional(),
     tags: z.array(z.string()).optional(),
     value_schema: jsonSchemaSchema.nullish(),
@@ -55,7 +61,7 @@ export const attributeSchema = z
       .optional(),
     file_policy: z
       .object({
-        cardinality: z.enum(['one', 'many']),
+        cardinality: z.enum(attributeCardinalities),
         ordered: z.boolean(),
         allowed_mime_groups: z.array(z.string()),
         allowed_extensions: z.array(z.string()),
@@ -73,7 +79,7 @@ export const blueprintSchema = z
     code: z.string(),
     name: z.string(),
     version: z.number().int().positive(),
-    status: z.enum(['draft', 'published']),
+    status: revisionStatusSchema,
     views: viewsSchema.default({}),
     record_schema: jsonSchemaSchema.nullish(),
   })
@@ -127,7 +133,7 @@ const attributeValueSelectorSchema = z.object({
 export const recordPublicationStatusSchema = z.object({
   context_id: uuidSchema,
   context_code: z.string(),
-  status: z.enum(['not_published', 'published']),
+  status: z.enum(publicationStatuses),
   published_at: z.string().datetime().nullable(),
   published_by_user_id: uuidSchema.nullable(),
 });
