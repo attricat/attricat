@@ -372,12 +372,12 @@ acli extension grant <extension-id> --grant-kind capability|host_permission|even
 acli extension revoke <extension-id> --grant-kind <grant-kind> --grant-id <grant-id>
 acli extension quarantine <extension-id> --diagnostic-code <code>
 acli extension workspace-mode --enabled true|false
-acli extension operation start <extension-id> --operation-id <id> --input <json> --idempotency-key <key> [--input-file-id <id>]
+acli extension operation start <extension-id> --operation-id <id> --input <json> --idempotency-key <key> [--input-file-id <id>] [--destination <json>]
 acli extension operation list
 acli extension operation get | artifacts | deliveries | cancel | replay <run-id>
 acli extension operation download <run-id> <artifact-id> --output <path>
 acli extension run list [--extension-id <id>]
-acli extension run get | cancel <run-id>
+acli extension run get | cancel <run-id> [--own]
 acli extension run download <run-id> <artifact-id> --output <path>
 acli extension annotations namespace|adopt <extension-id>
 acli extension annotations repair <extension-id> <record-id> --patch <json>
@@ -387,7 +387,27 @@ acli extension schedule update <schedule-id> --enabled true|false --interval-sec
 acli extension connector-job list <blueprint-id>
 acli extension connector-job run <job-id> --idempotency-key <key>
 acli extension connector-job resync <job-id> --idempotency-key <key> [--record-id <id> ... | --status pending|retrying|uncertain|rejected|synced|withdrawn]
+acli extension run start <extension-id> <contribution-id> --release-id <id> --operation-id <id> --input <json> --idempotency-key <key> --blueprint-id <id> --blueprint-version <n> [--context-id <id>] --record-id <id> [--record-id <id> ...]
+acli extension connection list <extension-id>
+acli extension connection create <extension-id> --connection <name> --kind <kind> --display-name <name> --grant-type refresh-token|client-credentials|device-code|authorization-code --token-url <url> --client-id <id> [--device-authorization-url <url>] [--authorization-url <url>] [--scope <scope>] [--parameters <json>] [--client-secret-stdin] [--refresh-token-stdin]
+acli extension connection update <extension-id> <connection> [--display-name <name>] [--token-url <url>] [--device-authorization-url <url>] [--authorization-url <url>] [--scope <scope>] [--parameters <json>] [--client-secret-stdin] [--refresh-token-stdin]
+acli extension connection delete | device-authorization | poll | authorize | test <extension-id> <connection>
+acli extension connection exchange-code <extension-id> <connection> --code <code> --redirect-uri <url> [--code-verifier <verifier>]
+acli extension export summary
+acli extension export status <extension-id> [--connection <name>] [--status <state>] [--after <id>] [--limit <n>]
+acli extension export retry <extension-id> [--connection <name>] [--record-id <id> ... | --status <state>] [--run --idempotency-key <key>]
+acli extension export preview <extension-id> <export-id> --record-id <id> [--connection <name>]
+acli extension budget list <extension-id>
+acli extension budget set <extension-id> <host-permission-id> --requests <n> --per-seconds <n>
+acli extension budget reset <extension-id> <host-permission-id>
+acli extension secret list
+acli extension secret set <name> --value-stdin
+acli extension secret delete <name>
+acli extension layout get
+acli extension layout set --layout <json-or-file>
 ```
+
+Sekrety połączeń i wartości sekretów obszaru roboczego są czytane ze standardowego wejścia, więc nigdy nie trafiają do argumentów procesu; z `--client-secret-stdin` i `--refresh-token-stdin` jednocześnie podaj sekret klienta w pierwszym wierszu. `connection authorize` działa tylko z sesją przeglądarki (`--session-file`).
 
 ### Pakiety rozwiązań
 

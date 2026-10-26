@@ -1,4 +1,6 @@
+pub(crate) mod connection;
 pub(crate) mod connector_job;
+pub(crate) mod export;
 pub(crate) mod operation;
 pub(crate) mod registry;
 pub(crate) mod run;
@@ -11,9 +13,11 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::error::CliError;
-use crate::input::{json_input, json_object_input};
+use crate::input::{json_input, json_object_input, read_secret_stdin};
 use crate::transport::{Api, ZSTD_MEDIA_TYPE, segment};
+use connection::{ConnectionCommand, connection_command};
 use connector_job::{ConnectorJobCommand, connector_job_command};
+use export::{ExportCommand, export_command};
 use operation::{ExtensionOperationCommand, extension_operation_command};
 use registry::{ExtensionRegistryCommand, extension_registry_command};
 use run::{ExtensionRunCommand, extension_run_command};
@@ -138,6 +142,78 @@ pub(crate) enum ExtensionCommand {
     ConnectorJob {
         #[command(subcommand)]
         command: ConnectorJobCommand,
+    },
+    /// Credentials an extension uses to reach an external system.
+    Connection {
+        #[command(subcommand)]
+        command: ConnectionCommand,
+    },
+    /// Where connector exports sent records, and resending them.
+    Export {
+        #[command(subcommand)]
+        command: ExportCommand,
+    },
+    /// Request budgets for an extension's outbound hosts, lowered below what
+    /// it declares.
+    Budget {
+        #[command(subcommand)]
+        command: BudgetCommand,
+    },
+    /// Workspace secrets that extension configuration can reference.
+    Secret {
+        #[command(subcommand)]
+        command: SecretCommand,
+    },
+    /// The order and visibility of extension contributions in each outlet.
+    Layout {
+        #[command(subcommand)]
+        command: LayoutCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum BudgetCommand {
+    List {
+        extension_id: String,
+    },
+    /// Allow at most `--requests` per `--per-seconds` to one host.
+    Set {
+        extension_id: String,
+        host_permission_id: String,
+        #[arg(long)]
+        requests: i32,
+        #[arg(long)]
+        per_seconds: i32,
+    },
+    /// Return a host to the budget the extension declares.
+    Reset {
+        extension_id: String,
+        host_permission_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum SecretCommand {
+    /// List secret names; values are never returned.
+    List,
+    /// Create or replace a secret with the value on standard input.
+    Set {
+        name: String,
+        #[arg(long, required = true)]
+        value_stdin: bool,
+    },
+    Delete {
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum LayoutCommand {
+    Get,
+    /// Replace the layout with a JSON document or a file containing it.
+    Set {
+        #[arg(long)]
+        layout: String,
     },
 }
 
@@ -293,7 +369,70 @@ pub(crate) async fn extension_command(
         ExtensionCommand::Run { command } => extension_run_command(api, command).await,
         ExtensionCommand::Schedule { command } => extension_schedule_command(api, command).await,
         ExtensionCommand::ConnectorJob { command } => connector_job_command(api, command).await,
+        ExtensionCommand::Connection { command } => connection_command(api, command).await,
+        ExtensionCommand::Export { command } => export_command(api, command).await,
+        ExtensionCommand::Budget { command } => budget_command(api, command).await,
+        ExtensionCommand::Secret { command } => match command {
+            SecretCommand::List => api.get(SECRETS_PATH).await,
+            SecretCommand::Set { name, .. } => {
+                let value = read_secret_stdin("secret value")?;
+                api.put_json(
+                    &format!("{SECRETS_PATH}/{}", segment(&name)),
+                    json!({ "value": value }),
+                )
+                .await
+            }
+            SecretCommand::Delete { name } => {
+                api.delete(&format!("{SECRETS_PATH}/{}", segment(&name)))
+                    .await
+            }
+        },
+        ExtensionCommand::Layout { command } => match command {
+            LayoutCommand::Get => api.get(LAYOUT_PATH).await,
+            LayoutCommand::Set { layout } => {
+                api.put_json(LAYOUT_PATH, json_input(&layout, "--layout")?)
+                    .await
+            }
+        },
     }
+}
+
+const SECRETS_PATH: &str = "/workspace/extension-secrets";
+const LAYOUT_PATH: &str = "/workspace/extension-layout";
+
+async fn budget_command(api: &Api, command: BudgetCommand) -> Result<String, CliError> {
+    match command {
+        BudgetCommand::List { extension_id } => {
+            api.get(&extension_path(&extension_id, "/host-permission-budgets"))
+                .await
+        }
+        BudgetCommand::Set {
+            extension_id,
+            host_permission_id,
+            requests,
+            per_seconds,
+        } => {
+            api.put_json(
+                &budget_path(&extension_id, &host_permission_id),
+                json!({ "requests": requests, "per_seconds": per_seconds }),
+            )
+            .await
+        }
+        BudgetCommand::Reset {
+            extension_id,
+            host_permission_id,
+        } => {
+            api.delete(&budget_path(&extension_id, &host_permission_id))
+                .await
+        }
+    }
+}
+
+fn budget_path(extension_id: &str, host_permission_id: &str) -> String {
+    extension_path(
+        extension_id,
+        &format!("/host-permission-budgets/{}", segment(host_permission_id)),
+    )
 }
 
 async fn annotation_command(api: &Api, command: AnnotationCommand) -> Result<String, CliError> {
@@ -329,7 +468,7 @@ pub(crate) fn extension_path(extension_id: &str, rest: &str) -> String {
 }
 
 /// `/extensions/{extension_id}/{contribution_id}` followed by `rest`.
-fn contribution_path(extension_id: &str, contribution_id: &str, rest: &str) -> String {
+pub(crate) fn contribution_path(extension_id: &str, contribution_id: &str, rest: &str) -> String {
     extension_path(
         extension_id,
         &format!("/{}{rest}", segment(contribution_id)),

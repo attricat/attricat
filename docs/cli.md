@@ -204,21 +204,39 @@ acli extension quarantine <extension-id> --diagnostic-code <code>
 acli extension artifact <extension-id> <contribution-id> --output contribution.js
 acli extension storage <extension-id> <contribution-id> <release-id> --body <json-or-file>
 acli extension command <extension-id> <contribution-id> --release-id <release-uuid> --command-id <id> --payload <json-or-file>
-acli extension operation start <extension-id> --operation-id <id> --input <json-object-or-file> --idempotency-key <key> [--input-file-id <uuid>]
+acli extension operation start <extension-id> --operation-id <id> --input <json-object-or-file> --idempotency-key <key> [--input-file-id <uuid>] [--destination <json-object-or-file>]
 acli extension operation list
 acli extension operation get|artifacts|deliveries|cancel|replay <run-id>
 acli extension operation download <run-id> <artifact-id> --output <path>
 acli extension run list [--extension-id <id>]
-acli extension run get|cancel <run-id>
+acli extension run get|cancel <run-id> [--own]
 acli extension run download <run-id> <artifact-id> --output <path>
 acli extension annotations namespace|adopt <extension-id>
 acli extension annotations repair <extension-id> <record-id> --patch <json-object-or-file>
 acli extension schedule list
-acli extension schedule create <extension-id> --operation-id <id> --input <json-object-or-file> --interval-seconds <60-2592000> [--input-file-id <uuid>]
+acli extension schedule create <extension-id> --operation-id <id> --input <json-object-or-file> --interval-seconds <60-2592000> [--input-file-id <uuid>] [--destination <json-object-or-file>]
 acli extension schedule update <schedule-id> --enabled true|false --interval-seconds <60-2592000>
 acli extension connector-job list <blueprint-id>
 acli extension connector-job run <job-id> --idempotency-key <key>
 acli extension connector-job resync <job-id> --idempotency-key <key> [--record-id <id> ... | --status pending|retrying|uncertain|rejected|synced|withdrawn]
+acli extension run start <extension-id> <contribution-id> --release-id <id> --operation-id <id> --input <json> --idempotency-key <key> --blueprint-id <id> --blueprint-version <n> [--context-id <id>] --record-id <id> [--record-id <id> ...]
+acli extension connection list <extension-id>
+acli extension connection create <extension-id> --connection <name> --kind <kind> --display-name <name> --grant-type refresh-token|client-credentials|device-code|authorization-code --token-url <url> --client-id <id> [--device-authorization-url <url>] [--authorization-url <url>] [--scope <scope>] [--parameters <json>] [--client-secret-stdin] [--refresh-token-stdin]
+acli extension connection update <extension-id> <connection> [--display-name <name>] [--token-url <url>] [--device-authorization-url <url>] [--authorization-url <url>] [--scope <scope>] [--parameters <json>] [--client-secret-stdin] [--refresh-token-stdin]
+acli extension connection delete | device-authorization | poll | authorize | test <extension-id> <connection>
+acli extension connection exchange-code <extension-id> <connection> --code <code> --redirect-uri <url> [--code-verifier <verifier>]
+acli extension export summary
+acli extension export status <extension-id> [--connection <name>] [--status <state>] [--after <id>] [--limit <n>]
+acli extension export retry <extension-id> [--connection <name>] [--record-id <id> ... | --status <state>] [--run --idempotency-key <key>]
+acli extension export preview <extension-id> <export-id> --record-id <id> [--connection <name>]
+acli extension budget list <extension-id>
+acli extension budget set <extension-id> <host-permission-id> --requests <n> --per-seconds <n>
+acli extension budget reset <extension-id> <host-permission-id>
+acli extension secret list
+acli extension secret set <name> --value-stdin
+acli extension secret delete <name>
+acli extension layout get
+acli extension layout set --layout <json-or-file>
 
 acli solution-pack inspect --file pack.tar.zst
 acli solution-pack plan create --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... --map-context logical_key=existing_code ...]

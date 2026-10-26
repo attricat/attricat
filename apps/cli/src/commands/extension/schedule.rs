@@ -2,7 +2,7 @@ use clap::Subcommand;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::commands::extension::operation::operation_source;
+use crate::commands::extension::operation::{destination_reference, operation_source};
 use crate::error::CliError;
 use crate::input::json_object_input;
 use crate::transport::{Api, segment};
@@ -24,6 +24,10 @@ pub(crate) enum ExtensionScheduleCommand {
         input: String,
         #[arg(long)]
         input_file_id: Option<Uuid>,
+        /// Where the operation delivers its output: a JSON object or a file
+        /// containing it, interpreted by the extension.
+        #[arg(long)]
+        destination: Option<String>,
         #[arg(long, value_parser = schedule_interval_seconds())]
         interval_seconds: i32,
     },
@@ -52,13 +56,14 @@ pub(crate) async fn extension_schedule_command(
             operation_id,
             input,
             input_file_id,
+            destination,
             interval_seconds,
         } => {
             let body = json!({
                 "operation_id": operation_id,
                 "input": json_object_input(&input, "--input")?,
                 "source_reference": operation_source(input_file_id),
-                "destination_reference": {},
+                "destination_reference": destination_reference(destination.as_deref())?,
                 "interval_seconds": interval_seconds,
             });
             api.post_json(

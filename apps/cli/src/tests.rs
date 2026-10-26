@@ -1155,6 +1155,7 @@ async fn operation_commands_forward_bounded_requests() {
                 input: "{\"limit\":1}".into(),
                 idempotency_key: "once".into(),
                 input_file_id: Some(id),
+                destination: None,
             },
         )
         .await
@@ -1173,6 +1174,7 @@ async fn operation_commands_forward_bounded_requests() {
                 operation_id: "export".into(),
                 input: "{}".into(),
                 input_file_id: None,
+                destination: None,
                 interval_seconds: 60,
             },
         )
@@ -2444,4 +2446,111 @@ async fn rule_finding_and_connector_job_commands_build_requests() {
         impact["path"],
         format!("/blueprints/{id}/versions/2/safe-migration-impact")
     );
+}
+
+#[tokio::test]
+async fn extension_connection_export_and_run_commands_build_requests() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let created = echo(&[
+        "extension",
+        "connection",
+        "create",
+        "acme.erp",
+        "--connection",
+        "erp",
+        "--kind",
+        "erp",
+        "--display-name",
+        "ERP",
+        "--grant-type",
+        "device-code",
+        "--token-url",
+        "https://erp.test/token",
+        "--client-id",
+        "attricat",
+        "--scope",
+        "read",
+    ])
+    .await;
+    assert_eq!(created["path"], "/extensions/acme.erp/connections");
+    assert_eq!(
+        created["body"],
+        json!({
+            "connection": "erp", "kind": "erp", "display_name": "ERP",
+            "grant_type": "device_code", "token_url": "https://erp.test/token",
+            "client_id": "attricat", "scope": "read",
+        })
+    );
+    let cleared = echo(&[
+        "extension",
+        "connection",
+        "update",
+        "acme.erp",
+        "erp",
+        "--scope",
+        "",
+    ])
+    .await;
+    assert_eq!(cleared["method"], "PATCH");
+    assert_eq!(cleared["body"], json!({ "scope": "" }));
+    let retry = echo(&[
+        "extension",
+        "export",
+        "retry",
+        "acme.erp",
+        "--status",
+        "rejected",
+        "--run",
+        "--idempotency-key",
+        "k",
+    ])
+    .await;
+    assert_eq!(retry["path"], "/extensions/acme.erp/export-status/retry");
+    assert_eq!(
+        retry["body"],
+        json!({ "run": true, "status": "rejected", "idempotency_key": "k" })
+    );
+    let started = echo(&[
+        "extension",
+        "run",
+        "start",
+        "acme.erp",
+        "send",
+        "--release-id",
+        id,
+        "--operation-id",
+        "send",
+        "--input",
+        "{}",
+        "--idempotency-key",
+        "k",
+        "--blueprint-id",
+        id,
+        "--blueprint-version",
+        "3",
+        "--record-id",
+        id,
+    ])
+    .await;
+    assert_eq!(started["path"], "/extensions/acme.erp/send/operations");
+    assert_eq!(started["body"]["selection"]["record_ids"], json!([id]));
+    let own = echo(&["extension", "run", "get", id, "--own"]).await;
+    assert_eq!(own["query"], "scope=own");
+    let budget = echo(&[
+        "extension",
+        "budget",
+        "set",
+        "acme.erp",
+        "erp-api",
+        "--requests",
+        "10",
+        "--per-seconds",
+        "60",
+    ])
+    .await;
+    assert_eq!(
+        budget["path"],
+        "/extensions/acme.erp/host-permission-budgets/erp-api"
+    );
+    assert!(Cli::try_parse_from(["acli", "extension", "secret", "set", "token"]).is_err());
 }

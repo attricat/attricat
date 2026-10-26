@@ -21,6 +21,10 @@ pub(crate) enum ExtensionOperationCommand {
         idempotency_key: String,
         #[arg(long)]
         input_file_id: Option<Uuid>,
+        /// Where the operation delivers its output: a JSON object or a file
+        /// containing it, interpreted by the extension.
+        #[arg(long)]
+        destination: Option<String>,
     },
     List,
     Get {
@@ -59,13 +63,14 @@ pub(crate) async fn extension_operation_command(
             input,
             idempotency_key,
             input_file_id,
+            destination,
         } => {
             let body = json!({
                 "operation_id": operation_id,
                 "input": json_object_input(&input, "--input")?,
                 "idempotency_key": idempotency_key,
                 "source_reference": operation_source(input_file_id),
-                "destination_reference": {},
+                "destination_reference": destination_reference(destination.as_deref())?,
             });
             api.post_json(
                 &format!("/extensions/{}/operations", segment(extension_id)),
@@ -113,6 +118,14 @@ pub(crate) async fn extension_operation_command(
                 .await
         }
     }
+}
+
+/// The operation's `destination_reference`: `--destination`, or none.
+pub(crate) fn destination_reference(destination: Option<&str>) -> Result<Value, CliError> {
+    destination.map_or_else(
+        || Ok(json!({})),
+        |destination| json_object_input(destination, "--destination"),
+    )
 }
 
 /// The operation's `source_reference`: the uploaded input file, if any.
