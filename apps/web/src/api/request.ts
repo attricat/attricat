@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import i18n from 'i18next';
-import { apiFetch, csrfToken } from './fetch';
+import { apiFetch, csrfHeader, csrfToken } from './fetch';
 import { httpStatus, isSuccessStatus } from './httpStatus';
 
 const apiErrorSchema = z.object({
@@ -62,17 +62,9 @@ export const jsonRequest = (method: string, body?: unknown): RequestInit => ({
   ...(body === undefined ? {} : { body: JSON.stringify(body) }),
 });
 
-export const request = async <T>(
-  path: string,
-  schema: z.ZodType<T>,
-  init?: RequestInit,
-): Promise<T> => {
-  const response = await responseFor(path, init);
-  const result = schema.safeParse(
-    response.status === httpStatus.noContent
-      ? undefined
-      : await response.json(),
-  );
+/** The body as `schema` describes it, or an error naming what differs. */
+const parseResponse = <T>(schema: z.ZodType<T>, body: unknown): T => {
+  const result = schema.safeParse(body);
   if (!result.success)
     throw new Error(
       i18n.t('errors.invalidApiResponse', {
@@ -80,6 +72,20 @@ export const request = async <T>(
       }),
     );
   return result.data;
+};
+
+export const request = async <T>(
+  path: string,
+  schema: z.ZodType<T>,
+  init?: RequestInit,
+): Promise<T> => {
+  const response = await responseFor(path, init);
+  return parseResponse(
+    schema,
+    response.status === httpStatus.noContent
+      ? undefined
+      : await response.json(),
+  );
 };
 
 /** Offset of the next page of a list returned as a bare array. */
@@ -95,17 +101,11 @@ export const requestOffsetPage = async <T>(
   init?: RequestInit,
 ): Promise<{ items: T[]; nextOffset?: number }> => {
   const response = await responseFor(path, init);
-  const result = schema.safeParse(await response.json());
-  if (!result.success)
-    throw new Error(
-      i18n.t('errors.invalidApiResponse', {
-        details: z.prettifyError(result.error),
-      }),
-    );
+  const items = parseResponse(schema, await response.json());
   // `Number('')` is 0, which would load the first page again.
   const next = response.headers.get(nextOffsetHeader)?.trim();
   return {
-    items: result.data,
+    items,
     nextOffset: next && /^\d+$/.test(next) ? Number(next) : undefined,
   };
 };
@@ -135,7 +135,7 @@ export const requestUpload = async <T>(
     upload.open(method, path);
     upload.withCredentials = true;
     const csrf = csrfToken();
-    if (csrf) upload.setRequestHeader('X-Attricat-Csrf', csrf);
+    if (csrf) upload.setRequestHeader(csrfHeader, csrf);
     upload.upload.onprogress = (event) => {
       if (event.lengthComputable)
         onProgress?.(Math.round((event.loaded / event.total) * 100));
@@ -153,19 +153,15 @@ export const requestUpload = async <T>(
         reject(apiRequestError(upload.status, body));
         return;
       }
-      const result = schema.safeParse(body);
-      if (!result.success) {
-        reject(
-          new Error(
-            i18n.t('errors.invalidApiResponse', {
-              details: z.prettifyError(result.error),
-            }),
-          ),
-        );
+      let result: T;
+      try {
+        result = parseResponse(schema, body);
+      } catch (error) {
+        reject(error);
         return;
       }
       onProgress?.(100);
-      resolve(result.data);
+      resolve(result);
     };
     upload.send(data);
   });
