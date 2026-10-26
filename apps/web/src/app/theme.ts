@@ -45,6 +45,9 @@ declare module '@mui/material/styles' {
 
 export const monoFontFamily = typography.families.mono;
 
+/** The design system's fully rounded radius, for pill-shaped controls. */
+export const pillRadius = radius.pill;
+
 /** The design system's code role: mono at caption size. */
 export const codeTypography = {
   fontFamily: monoFontFamily,
@@ -66,6 +69,7 @@ export const makeTheme = (mode: DesignMode) => {
     letterSpacing: r.tracking,
   });
   const border = `1px solid ${c.border.default}`;
+  const subtleBorder = `1px solid ${c.border.subtle}`;
 
   return createTheme({
     palette: {
@@ -161,7 +165,6 @@ export const makeTheme = (mode: DesignMode) => {
             fontWeight: 600,
             minHeight: 36,
             paddingInline: 14,
-            textTransform: 'none',
           },
           outlined: {
             borderColor: c.border.default,
@@ -206,10 +209,10 @@ export const makeTheme = (mode: DesignMode) => {
               borderColor: c.border.strong,
             },
           },
-          input: { fontSize: 14 },
+          input: { fontSize: role.body.size },
         },
       },
-      MuiInputLabel: { styleOverrides: { root: { fontSize: 14 } } },
+      MuiInputLabel: { styleOverrides: { root: { fontSize: role.body.size } } },
       MuiCheckbox: {
         defaultProps: { size: 'small' },
         styleOverrides: { root: { padding: 6 } },
@@ -218,7 +221,11 @@ export const makeTheme = (mode: DesignMode) => {
       MuiChip: {
         defaultProps: { deleteIcon: createElement(CircleXIcon), size: 'small' },
         styleOverrides: {
-          root: { borderRadius: radius.small, fontSize: 12, fontWeight: 600 },
+          root: {
+            borderRadius: radius.small,
+            fontSize: role.caption.size,
+            fontWeight: 600,
+          },
           outlined: { borderColor: c.border.default },
           colorWarning: {
             '&.MuiChip-outlined': {
@@ -255,11 +262,7 @@ export const makeTheme = (mode: DesignMode) => {
       MuiCard: {
         defaultProps: { variant: 'outlined' },
         styleOverrides: {
-          root: {
-            borderColor: c.border.default,
-            borderRadius: radius.surface,
-            backgroundImage: 'none',
-          },
+          root: { borderRadius: radius.surface },
         },
       },
       MuiPaper: {
@@ -293,14 +296,14 @@ export const makeTheme = (mode: DesignMode) => {
             color: c.text.primary,
             border,
             boxShadow: elevation[mode].raised,
-            fontSize: 12,
+            fontSize: role.caption.size,
           },
           arrow: { color: c.background.elevated },
         },
       },
       MuiTabs: {
         styleOverrides: {
-          root: { minHeight: 40, borderBottom: `1px solid ${c.border.subtle}` },
+          root: { minHeight: 40, borderBottom: subtleBorder },
           indicator: { height: 2 },
         },
       },
@@ -308,7 +311,6 @@ export const makeTheme = (mode: DesignMode) => {
         defaultProps: { iconPosition: 'start' },
         styleOverrides: {
           root: {
-            textTransform: 'none',
             minHeight: 40,
             minWidth: 0,
             padding: '8px 16px',
@@ -322,9 +324,8 @@ export const makeTheme = (mode: DesignMode) => {
         defaultProps: { elevation: 0, color: 'default' },
         styleOverrides: {
           root: {
-            backgroundImage: 'none',
             backgroundColor: c.background.surface,
-            borderBottom: `1px solid ${c.border.subtle}`,
+            borderBottom: subtleBorder,
           },
         },
       },
@@ -332,8 +333,7 @@ export const makeTheme = (mode: DesignMode) => {
         styleOverrides: {
           paper: {
             backgroundColor: c.background.surface,
-            backgroundImage: 'none',
-            borderRight: `1px solid ${c.border.subtle}`,
+            borderRight: subtleBorder,
           },
         },
       },
@@ -342,12 +342,12 @@ export const makeTheme = (mode: DesignMode) => {
       MuiTableCell: {
         styleOverrides: {
           root: {
-            borderBottom: `1px solid ${c.border.subtle}`,
+            borderBottom: subtleBorder,
             padding: '10px 16px',
           },
           head: {
             color: c.text.secondary,
-            fontSize: 12,
+            fontSize: role.caption.size,
             fontWeight: 600,
             backgroundColor: c.background.inset,
             whiteSpace: 'nowrap',
@@ -369,7 +369,7 @@ export const makeTheme = (mode: DesignMode) => {
         },
       },
       MuiMenuItem: {
-        styleOverrides: { root: { fontSize: 14, minHeight: 36 } },
+        styleOverrides: { root: { fontSize: role.body.size, minHeight: 36 } },
       },
       MuiDivider: {
         styleOverrides: { root: { borderColor: c.border.subtle } },

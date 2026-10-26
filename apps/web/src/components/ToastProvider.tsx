@@ -1,3 +1,4 @@
+import { pillRadius } from '../app/theme';
 import { Alert, Box, Stack } from '@mui/material';
 import { useEffect, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -71,7 +72,7 @@ const ToastAlert = ({
             bgcolor: 'background.paper',
             border: '1px solid',
             borderColor: 'divider',
-            borderRadius: '999px',
+            borderRadius: `${pillRadius}px`,
             boxShadow: 2,
             color: 'text.primary',
             fontSize: '0.75rem',
