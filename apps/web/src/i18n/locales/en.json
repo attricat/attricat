@@ -2129,6 +2129,7 @@
     "memberSince": "Member since",
     "noTeams": "Not a member of any team",
     "editOwnProfile": "Edit your profile",
+    "userProfile": "User profile",
     "notFoundTitle": "User not found",
     "notFound": "This user is not a member of the workspace."
   },

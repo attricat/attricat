@@ -1,3 +1,4 @@
+import { useResourcePageTitle } from '../../app/useResourcePageTitle';
 import { defaultQueryRetries } from '../../api/queryRetries';
 import { personName } from '../../components/personName';
 import { useQuery } from '@tanstack/react-query';
@@ -61,6 +62,7 @@ export const UserProfilePage = ({ userId }: { userId: string }) => {
   const session = useQuery(sessionOptions());
   const user = profile.data;
   const name = user ? personName(user.display_name, user.email) : undefined;
+  useResourcePageTitle(name, t('users.userProfile'));
   const isSelf = session.data?.user_id === userId;
   const notFound =
     profile.error instanceof ApiRequestError &&
