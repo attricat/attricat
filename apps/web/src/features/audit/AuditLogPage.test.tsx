@@ -130,6 +130,34 @@ describe('AuditLogPage', () => {
     );
   });
 
+  it('adds the next page below the events already shown', async () => {
+    await i18n.changeLanguage('en');
+    const second = { ...event, id: `${event.id.slice(0, -1)}9` };
+    vi.mocked(listAuditEvents)
+      .mockResolvedValueOnce({ events: [event], limit: 1, offset: 0, total: 2 })
+      .mockResolvedValueOnce({
+        events: [second],
+        limit: 1,
+        offset: 1,
+        total: 2,
+      });
+    const user = userEvent.setup();
+
+    renderPage();
+
+    expect(await screen.findByText('Showing 1-1 of 2')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(await screen.findByText('Showing 1-2 of 2')).toBeTruthy();
+    expect(listAuditEvents).toHaveBeenLastCalledWith({ limit: 50, offset: 1 });
+    expect(
+      screen.getAllByRole('button', { name: /^View details for/ }),
+    ).toHaveLength(2);
+    expect(
+      (screen.getByRole('button', { name: 'Load more' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
   it('uses the resolved locale for dates and translates Polish fallback labels', async () => {
     await i18n.changeLanguage('pl');
     vi.mocked(listAuditEvents).mockResolvedValue({
