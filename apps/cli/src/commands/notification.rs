@@ -3,6 +3,7 @@ use reqwest::Method;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+use crate::cli::BeforeArgs;
 use crate::error::CliError;
 use crate::transport::{Api, flag, segment, with_query};
 
@@ -13,12 +14,8 @@ pub(crate) enum NotificationCommand {
         /// Only list unread notifications.
         #[arg(long)]
         unread: bool,
-        /// Continue after a page: the created_at of its last item.
-        #[arg(long, requires = "before_id")]
-        before_time: Option<String>,
-        /// Continue after a page: the id of its last item.
-        #[arg(long, requires = "before_time")]
-        before_id: Option<Uuid>,
+        #[command(flatten)]
+        before: BeforeArgs,
     },
     /// Print the number of unread notifications.
     Count,
@@ -38,18 +35,11 @@ pub(crate) fn notification_request(
     command: NotificationCommand,
 ) -> (Method, String, Option<Value>) {
     match command {
-        NotificationCommand::List {
-            unread,
-            before_time,
-            before_id,
-        } => {
+        NotificationCommand::List { unread, before } => {
+            let [before_time, before_id] = before.query();
             let path = with_query(
                 "/notifications",
-                [
-                    ("unread_only", flag(unread)),
-                    ("before_time", before_time),
-                    ("before_id", before_id.map(|id| id.to_string())),
-                ],
+                [("unread_only", flag(unread)), before_time, before_id],
             );
             (Method::GET, path, None)
         }

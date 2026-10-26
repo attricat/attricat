@@ -184,8 +184,9 @@ acli context delete <context-id>
 
 ```sh
 acli record create --blueprint <code> --values values.toml [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]
-acli record get | form | delete <record-id>
-acli record update <record-id> [--values f.toml] [--relationships f.toml] [--remove-values f.toml] [--context-id <id>]
+acli record get | form | delete | duplicate | export-status <record-id>
+acli record labels --record-id <id> [--record-id <id> ...]
+acli record update <record-id> [--values f.toml] [--relationships f.toml] [--remove-values f.toml] [--context-id <id>] [--expected-updated-at <t>]
 acli record batch --operations <json-or-file>
 acli record preview <record-id> [--relationship-depth <n>] [--relationship-limit <n>]
 acli record resolved-preview <record-id> --context-id <id>
@@ -194,13 +195,22 @@ acli record facet-children --blueprint <code> --source-relationship-field <f> --
 acli record list --blueprint <code> --related-from <record-id> --relationship <attribute>
 acli record incoming-relationships <record-id> --relationships <json>
 acli record hierarchy <record-id> --context-id <id> --field <relationship>
-acli record changes | value-history <record-id>
-acli record restore-value <record-id> <history-id>
-acli record migrate <record-id>
+acli record changes | value-history <record-id> [--limit <n>] [--offset <n>]
+acli record restore-value <record-id> <history-id> [--expected-updated-at <t>]
+acli record migrate <record-id> [--expected-updated-at <t>]
+acli record transitions <record-id> [--context-id <id>]
+acli record transition <record-id> --attribute <status> --to <option> [--context-id <id>] [--expected-updated-at <t>]
+acli record unlock <record-id> --attribute <status> --to <option> --expected-updated-at <t> [--context-id <id>]
+acli record approvals | retention-holds <record-id> [--before-time <t> --before-id <id>]
+acli record comment list <record-id> [--before-time <t> --before-id <id>]
+acli record comment add <record-id> --body <text>
+acli record comment count <record-id>
+acli record comment edit <record-id> <comment-id> --body <text> --revision <n>
 acli record migrate-bulk --blueprint <code> --from-version <n> [--dry-run]
 acli record publication list <record-id>
 acli record publication publish | unpublish <record-id> --context-id <channel>
-acli record publication publish-all <record-id>
+acli record publication publish-all | readiness <record-id>
+acli record publication status --record-id <id> [--record-id <id> ...]
 
 acli value current <record-id>
 acli value append <record-id> --file values.toml --context-id <id>
@@ -208,6 +218,8 @@ acli value replace-relationships | remove-relationships <record-id> --file relat
 ```
 
 `record batch` takes a JSON array of create, update, and delete operations, inline or in a file, and saves them all or none. See [Batch changes](/reference/api/#batch-changes) for the operation format.
+
+With `--expected-updated-at`, a write fails instead of overwriting a record that changed after that time. `record transition` sets a status like the web app does, so workflow and approval rules apply; `record unlock` needs the `records.unlock` permission. Comment, approval, and retention-hold lists are newest first: pass the last item's `created_at` and `id` as `--before-time` and `--before-id` for the next page.
 
 ### Files
 

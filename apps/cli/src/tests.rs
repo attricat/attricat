@@ -2137,3 +2137,131 @@ fn stdin_secrets_need_exactly_one_non_empty_line_each() {
     assert_eq!(error.to_string(), "password must be stdin line 2");
     assert!(parse_stdin_lines("a\nb\nc\n", ["reset token", "password"]).is_err());
 }
+
+/// Runs an `acli` command line against a server that answers every request
+/// with `{method, path, query, body}` and returns that echo.
+async fn echo(args: &[&str]) -> Value {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = axum::Router::new().fallback(
+        |method: axum::http::Method, uri: axum::http::Uri, body: axum::body::Bytes| async move {
+            let body = serde_json::from_slice::<Value>(&body)
+                .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&body).into_owned()));
+            axum::Json(json!({
+                "method": method.as_str(),
+                "path": uri.path(),
+                "query": uri.query(),
+                "body": body,
+            }))
+        },
+    );
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let url = format!("http://{address}");
+    let mut command = vec!["acli", "--server", &url];
+    command.extend_from_slice(args);
+    let output = run(Cli::try_parse_from(command).unwrap()).await.unwrap();
+    server.abort();
+    serde_json::from_str(&output).unwrap()
+}
+
+#[tokio::test]
+async fn record_status_comment_and_history_commands_build_requests() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let comment = "00000000-0000-4000-8000-000000000002";
+    assert_eq!(
+        echo(&[
+            "record",
+            "transition",
+            id,
+            "--attribute",
+            "status",
+            "--to",
+            "approved"
+        ])
+        .await,
+        json!({
+            "method": "PUT",
+            "path": format!("/v1/records/{id}"),
+            "query": null,
+            "body": {
+                "expected_updated_at": null,
+                "values": [{
+                    "kind": "scalar",
+                    "attribute_code": "status",
+                    "context_id": null,
+                    "value": "approved",
+                }],
+            },
+        })
+    );
+    let unlock = echo(&[
+        "record",
+        "unlock",
+        id,
+        "--attribute",
+        "status",
+        "--to",
+        "draft",
+        "--expected-updated-at",
+        "2026-10-01T00:00:00Z",
+    ])
+    .await;
+    assert_eq!(unlock["path"], format!("/v1/records/{id}/status-unlock"));
+    assert_eq!(
+        unlock["body"]["expected_updated_at"],
+        "2026-10-01T00:00:00Z"
+    );
+    let restore = echo(&[
+        "record",
+        "restore-value",
+        id,
+        comment,
+        "--expected-updated-at",
+        "2026-10-01T00:00:00Z",
+    ])
+    .await;
+    assert_eq!(
+        restore["query"],
+        "expected_updated_at=2026-10-01T00%3A00%3A00Z"
+    );
+    let history = echo(&[
+        "record",
+        "value-history",
+        id,
+        "--limit",
+        "10",
+        "--offset",
+        "20",
+    ])
+    .await;
+    assert_eq!(history["query"], "limit=10&offset=20");
+    let edit = echo(&[
+        "record",
+        "comment",
+        "edit",
+        id,
+        comment,
+        "--body",
+        "Fixed",
+        "--revision",
+        "2",
+    ])
+    .await;
+    assert_eq!(edit["method"], "PATCH");
+    assert_eq!(edit["path"], format!("/v1/records/{id}/comments/{comment}"));
+    assert_eq!(edit["body"], json!({ "body": "Fixed", "revision": 2 }));
+    let labels = echo(&[
+        "record",
+        "labels",
+        "--record-id",
+        id,
+        "--record-id",
+        comment,
+    ])
+    .await;
+    assert_eq!(labels["body"], json!({ "record_ids": [id, comment] }));
+    assert!(Cli::try_parse_from(["acli", "record", "labels"]).is_err());
+    assert!(
+        Cli::try_parse_from(["acli", "record", "approvals", id, "--before-time", "x"]).is_err()
+    );
+}

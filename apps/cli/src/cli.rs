@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 use url::Url;
+use uuid::Uuid;
 
 use crate::commands::audit::AuditCommand;
 use crate::commands::auth::AuthCommand;
@@ -45,6 +46,27 @@ pub(crate) struct PageArgs {
     /// Items to skip.
     #[arg(long, value_parser = clap::value_parser!(u16).range(0..=i64::from(MAX_LIST_OFFSET)))]
     pub(crate) offset: Option<u16>,
+}
+
+/// Keyset paging for newest-first lists: pass the `created_at` and `id` of a
+/// page's last item to continue after it.
+#[derive(Args, Clone, Default)]
+pub(crate) struct BeforeArgs {
+    /// Continue after a page: the created_at of its last item.
+    #[arg(long, requires = "before_id")]
+    pub(crate) before_time: Option<String>,
+    /// Continue after a page: the id of its last item.
+    #[arg(long, requires = "before_time")]
+    pub(crate) before_id: Option<Uuid>,
+}
+
+impl BeforeArgs {
+    pub(crate) fn query(self) -> [(&'static str, Option<String>); 2] {
+        [
+            ("before_time", self.before_time),
+            ("before_id", self.before_id.map(|id| id.to_string())),
+        ]
+    }
 }
 
 impl PageArgs {

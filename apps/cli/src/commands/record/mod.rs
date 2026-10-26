@@ -1,3 +1,5 @@
+mod comment;
+
 use std::path::PathBuf;
 
 use clap::{Subcommand, ValueEnum};
@@ -5,13 +7,14 @@ use reqwest::Method;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::cli::DEFAULT_LIST_LIMIT;
+use crate::cli::{BeforeArgs, DEFAULT_LIST_LIMIT, PageArgs};
 use crate::error::CliError;
 use crate::input::{
     form_update_body, json_array_argument, json_array_input, json_object_input,
     json_string_array_input, values_body_from_file,
 };
 use crate::transport::{Api, segment, with_query};
+use comment::{CommentCommand, comment_command};
 
 /// Records `migrate-bulk` reads per search page.
 const MIGRATE_BULK_PAGE_SIZE: u32 = 100;
@@ -134,6 +137,10 @@ pub(crate) enum RecordCommand {
         /// JSON object of agent/operator-owned metadata. Omit to retain existing metadata.
         #[arg(long)]
         system_metadata: Option<String>,
+        /// Fail instead of overwriting when the record changed after this
+        /// `updated_at` (RFC 3339).
+        #[arg(long)]
+        expected_updated_at: Option<String>,
     },
     Migrate {
         record_id: Uuid,
@@ -146,6 +153,10 @@ pub(crate) enum RecordCommand {
         /// JSON array or file of attribute codes to discard.
         #[arg(long)]
         discard_attributes: Option<String>,
+        /// Fail instead of overwriting when the record changed after this
+        /// `updated_at` (RFC 3339).
+        #[arg(long)]
+        expected_updated_at: Option<String>,
     },
     Hierarchy {
         record_id: Uuid,
@@ -192,13 +203,89 @@ pub(crate) enum RecordCommand {
     },
     Changes {
         record_id: Uuid,
+        #[command(flatten)]
+        page: PageArgs,
     },
     ValueHistory {
         record_id: Uuid,
+        #[command(flatten)]
+        page: PageArgs,
     },
     RestoreValue {
         record_id: Uuid,
         history_id: Uuid,
+        /// Fail instead of overwriting when the record changed after this
+        /// `updated_at` (RFC 3339).
+        #[arg(long)]
+        expected_updated_at: Option<String>,
+    },
+    /// Copy a record, with its values, as a new draft record.
+    Duplicate {
+        record_id: Uuid,
+    },
+    /// Display labels of several records; ones you cannot read are left out.
+    Labels {
+        /// Record ID; repeat for several (at most 100).
+        #[arg(long = "record-id", required = true)]
+        record_ids: Vec<Uuid>,
+    },
+    /// List the status transitions of a record and whether each is allowed.
+    Transitions {
+        record_id: Uuid,
+        #[arg(long)]
+        context_id: Option<Uuid>,
+    },
+    /// Move a status attribute to another status option.
+    Transition {
+        record_id: Uuid,
+        /// Status attribute code.
+        #[arg(long)]
+        attribute: String,
+        /// Target status option code.
+        #[arg(long)]
+        to: String,
+        #[arg(long)]
+        context_id: Option<Uuid>,
+        /// Fail instead of overwriting when the record changed after this
+        /// `updated_at` (RFC 3339).
+        #[arg(long)]
+        expected_updated_at: Option<String>,
+    },
+    /// Move a locked status out of its final state (requires `records.unlock`).
+    Unlock {
+        record_id: Uuid,
+        /// Status attribute code.
+        #[arg(long)]
+        attribute: String,
+        /// Target status option code.
+        #[arg(long)]
+        to: String,
+        #[arg(long)]
+        context_id: Option<Uuid>,
+        /// The record's current `updated_at` (RFC 3339).
+        #[arg(long)]
+        expected_updated_at: String,
+    },
+    /// List a record's approval decisions, newest first.
+    Approvals {
+        record_id: Uuid,
+        #[command(flatten)]
+        before: BeforeArgs,
+    },
+    /// List the retention holds on a record's files, newest first.
+    RetentionHolds {
+        record_id: Uuid,
+        #[command(flatten)]
+        before: BeforeArgs,
+    },
+    /// Read and write a record's comments.
+    Comment {
+        #[command(subcommand)]
+        command: CommentCommand,
+    },
+    /// Show where connector exports sent a record and their state.
+    ExportStatus {
+        record_id: Uuid,
     },
     MigrateBulk {
         #[arg(long)]
@@ -229,6 +316,16 @@ pub(crate) enum RecordPublicationCommand {
     },
     PublishAll {
         record_id: Uuid,
+    },
+    /// Check whether a record can be published to each channel.
+    Readiness {
+        record_id: Uuid,
+    },
+    /// Publication states of several records.
+    Status {
+        /// Record ID; repeat for several (at most 100).
+        #[arg(long = "record-id", required = true)]
+        record_ids: Vec<Uuid>,
     },
 }
 
@@ -361,6 +458,7 @@ pub(crate) async fn record_command(api: &Api, command: RecordCommand) -> Result<
             context_id,
             system_tags,
             system_metadata,
+            expected_updated_at,
         } => {
             let mut body = form_update_body(
                 values.as_ref(),
@@ -369,6 +467,7 @@ pub(crate) async fn record_command(api: &Api, command: RecordCommand) -> Result<
                 context_id,
             )?;
             add_system_fields(&mut body, system_tags, system_metadata)?;
+            body["expected_updated_at"] = json!(expected_updated_at);
             api.put_json(&format!("/v1/records/{}", segment(record_id)), body)
                 .await
         }
@@ -433,40 +532,124 @@ pub(crate) async fn record_command(api: &Api, command: RecordCommand) -> Result<
             .await
         }
         RecordCommand::Publication { command } => record_publication_command(api, command).await,
-        RecordCommand::Changes { record_id } => {
-            api.get(&format!("/records/{}/changes", segment(record_id)))
-                .await
+        RecordCommand::Changes { record_id, page } => {
+            api.get(&with_query(
+                &format!("/records/{}/changes", segment(record_id)),
+                page.query(),
+            ))
+            .await
         }
-        RecordCommand::ValueHistory { record_id } => {
-            api.get(&format!("/records/{}/values/history", segment(record_id)))
-                .await
+        RecordCommand::ValueHistory { record_id, page } => {
+            api.get(&with_query(
+                &format!("/records/{}/values/history", segment(record_id)),
+                page.query(),
+            ))
+            .await
         }
         RecordCommand::RestoreValue {
             record_id,
             history_id,
+            expected_updated_at,
         } => {
-            api.post(&format!(
-                "/records/{}/values/history/{}/restore",
-                segment(record_id),
-                segment(history_id)
+            api.post(&with_query(
+                &format!(
+                    "/records/{}/values/history/{}/restore",
+                    segment(record_id),
+                    segment(history_id)
+                ),
+                [("expected_updated_at", expected_updated_at)],
             ))
             .await
+        }
+        RecordCommand::Duplicate { record_id } => {
+            api.post(&format!("/v1/records/{}/duplicate", segment(record_id)))
+                .await
+        }
+        RecordCommand::Labels { record_ids } => {
+            api.post_json("/v1/records/labels", json!({ "record_ids": record_ids }))
+                .await
+        }
+        RecordCommand::Transitions {
+            record_id,
+            context_id,
+        } => {
+            api.get(&with_query(
+                &format!("/v1/records/{}/status-transitions", segment(record_id)),
+                [("context_id", context_id.map(|id| id.to_string()))],
+            ))
+            .await
+        }
+        RecordCommand::Transition {
+            record_id,
+            attribute,
+            to,
+            context_id,
+            expected_updated_at,
+        } => {
+            let body = json!({
+                "expected_updated_at": expected_updated_at,
+                "values": [{
+                    "kind": "scalar",
+                    "attribute_code": attribute,
+                    "context_id": context_id,
+                    "value": to,
+                }],
+            });
+            api.put_json(&format!("/v1/records/{}", segment(record_id)), body)
+                .await
+        }
+        RecordCommand::Unlock {
+            record_id,
+            attribute,
+            to,
+            context_id,
+            expected_updated_at,
+        } => {
+            let body = json!({
+                "attribute_code": attribute,
+                "context_id": context_id,
+                "to": to,
+                "expected_updated_at": expected_updated_at,
+            });
+            api.post_json(
+                &format!("/v1/records/{}/status-unlock", segment(record_id)),
+                body,
+            )
+            .await
+        }
+        RecordCommand::Approvals { record_id, before } => {
+            api.get(&with_query(
+                &format!("/v1/records/{}/approvals", segment(record_id)),
+                before.query(),
+            ))
+            .await
+        }
+        RecordCommand::RetentionHolds { record_id, before } => {
+            api.get(&with_query(
+                &format!("/v1/records/{}/retention-holds", segment(record_id)),
+                before.query(),
+            ))
+            .await
+        }
+        RecordCommand::Comment { command } => comment_command(api, command).await,
+        RecordCommand::ExportStatus { record_id } => {
+            api.get(&format!("/v1/records/{}/export-status", segment(record_id)))
+                .await
         }
         RecordCommand::Migrate {
             record_id,
             values,
             relationships,
             discard_attributes,
+            expected_updated_at,
         } => {
-            let result = migrate_record(
-                api,
-                record_id,
-                false,
-                values.as_deref(),
-                relationships.as_deref(),
-                discard_attributes.as_deref(),
-            )
-            .await?;
+            let remediation = MigrationRemediation {
+                values: values.as_deref(),
+                relationships: relationships.as_deref(),
+                discard_attributes: discard_attributes.as_deref(),
+                expected_updated_at: expected_updated_at.as_deref(),
+            };
+            let result = migrate_record(api, record_id, false, remediation).await?;
             Ok(result.to_string())
         }
         RecordCommand::MigrateBulk {
@@ -529,6 +712,39 @@ pub(crate) async fn record_publication_command(
             ))
             .await
         }
+        RecordPublicationCommand::Readiness { record_id } => {
+            api.get(&format!(
+                "/v1/records/{}/publications/readiness",
+                segment(record_id)
+            ))
+            .await
+        }
+        RecordPublicationCommand::Status { record_ids } => {
+            api.post_json(
+                "/v1/records/publications",
+                json!({ "record_ids": record_ids }),
+            )
+            .await
+        }
+    }
+}
+
+/// Caller-supplied input for a record migration that needs it.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct MigrationRemediation<'a> {
+    /// JSON array or file of scalar migration values.
+    pub(crate) values: Option<&'a str>,
+    /// JSON array or file of relationship migration sets.
+    pub(crate) relationships: Option<&'a str>,
+    /// JSON array or file of attribute codes to discard.
+    pub(crate) discard_attributes: Option<&'a str>,
+    /// Fail when the record changed after this `updated_at`.
+    pub(crate) expected_updated_at: Option<&'a str>,
+}
+
+impl MigrationRemediation<'_> {
+    fn is_empty(&self) -> bool {
+        self.values.is_none() && self.relationships.is_none() && self.discard_attributes.is_none()
     }
 }
 
@@ -536,9 +752,7 @@ pub(crate) async fn migrate_record(
     api: &Api,
     record_id: Uuid,
     dry_run: bool,
-    values: Option<&str>,
-    relationships: Option<&str>,
-    discard_attributes: Option<&str>,
+    remediation: MigrationRemediation<'_>,
 ) -> Result<Value, CliError> {
     let preview = api
         .send_value(
@@ -556,13 +770,7 @@ pub(crate) async fn migrate_record(
     // Bulk migration supplies no remediation input, so a needs-input preview is
     // a classification result, not a migration request. Manual migration may
     // submit the caller's explicit remediation arrays.
-    if status == "blocked"
-        || dry_run
-        || (status == "needs_input"
-            && values.is_none()
-            && relationships.is_none()
-            && discard_attributes.is_none())
-    {
+    if status == "blocked" || dry_run || (status == "needs_input" && remediation.is_empty()) {
         return Ok(json!({
             "record_id": record_id,
             "status": status,
@@ -575,18 +783,24 @@ pub(crate) async fn migrate_record(
     let target_version = preview["target"]["blueprint"]["version"]
         .as_i64()
         .ok_or(CliError::InvalidResponse)?;
-    api.send_value(
-        Method::POST,
+    let body = json!({
+        "migration_id": migration_id,
+        "expected_target_version": target_version,
+        "values": json_array_argument(remediation.values, "--values")?,
+        "relationships": json_array_argument(remediation.relationships, "--relationships")?,
+        "discard_attributes": json_array_argument(
+            remediation.discard_attributes,
+            "--discard-attributes",
+        )?,
+    });
+    let path = with_query(
         &format!("/v1/records/{}/blueprint-migration", segment(record_id)),
-        Some(json!({
-            "migration_id": migration_id,
-            "expected_target_version": target_version,
-            "values": json_array_argument(values, "--values")?,
-            "relationships": json_array_argument(relationships, "--relationships")?,
-            "discard_attributes": json_array_argument(discard_attributes, "--discard-attributes")?,
-        })),
-    )
-    .await
+        [(
+            "expected_updated_at",
+            remediation.expected_updated_at.map(str::to_owned),
+        )],
+    );
+    api.send_value(Method::POST, &path, Some(body)).await
 }
 
 pub(crate) async fn migrate_records(
@@ -636,7 +850,7 @@ pub(crate) async fn migrate_records(
                 .ok_or(CliError::InvalidResponse)?
                 .parse::<Uuid>()
                 .map_err(|_| CliError::InvalidResponse)?;
-            match migrate_record(api, record_id, dry_run, None, None, None).await {
+            match migrate_record(api, record_id, dry_run, MigrationRemediation::default()).await {
                 Ok(result) => match result["status"].as_str() {
                     Some("ready") => ready += 1,
                     Some("needs_input") => needs_input.push(result),

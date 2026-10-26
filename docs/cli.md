@@ -78,7 +78,8 @@ acli context update <context-id> --parent-id <context-id> --data '{"language":"e
 acli context delete <context-id>
 
 acli record create --blueprint product --values values.toml [--version <version>] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
-acli record get|delete|form <record-id>
+acli record get|delete|form|duplicate|export-status <record-id>
+acli record labels --record-id <record-id> [--record-id <record-id> ...]
 acli record batch --operations <json-or-file>
 acli record list --blueprint <code> --related-from <record-id> --relationship <attribute-code> [--limit <limit>] [--cursor <cursor>]
 acli record preview <record-id> [--relationship-depth <depth>] [--relationship-limit <limit>]
@@ -87,14 +88,24 @@ acli record hierarchy <record-id> --context-id <context-id> --field <relationshi
 acli record incoming-relationships <record-id> --relationships <json-or-file> [--size <size>] [--cursor <opaque-cursor>]
 acli record facet-children --blueprint <code> [--source-relationship-field <field>] --context-id <context-id> [--version <version>] [--query <text>] [--hierarchy-field <field>] [--parent-id <record-id>] [--cursor <record-id>] [--selected-target-ids <json-or-file>] [--include-ids <json-or-file>]
 acli record search --blueprint <code> [--version <version>] [--query <text>] [--size <size>] [--cursor <cursor>] [--system-tags <json>] [--filters <json-or-file>] [--outdated] [--include-total] [--relationship-tree-facets <json-or-file>] [--sort-field <field> --sort-direction asc|desc]
-acli record update <record-id> [--values values.toml] [--relationships relationships.toml] [--remove-values removals.toml] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
-acli record changes|value-history <record-id>
-acli record restore-value <record-id> <history-id>
+acli record update <record-id> [--values values.toml] [--relationships relationships.toml] [--remove-values removals.toml] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>] [--expected-updated-at <rfc3339>]
+acli record changes|value-history <record-id> [--limit <n>] [--offset <n>]
+acli record restore-value <record-id> <history-id> [--expected-updated-at <rfc3339>]
+acli record transitions <record-id> [--context-id <context-id>]
+acli record transition <record-id> --attribute <status-code> --to <option-code> [--context-id <context-id>] [--expected-updated-at <rfc3339>]
+acli record unlock <record-id> --attribute <status-code> --to <option-code> --expected-updated-at <rfc3339> [--context-id <context-id>]
+acli record approvals|retention-holds <record-id> [--before-time <rfc3339> --before-id <id>]
+acli record comment list <record-id> [--before-time <rfc3339> --before-id <id>]
+acli record comment add <record-id> --body <text>
+acli record comment count <record-id>
+acli record comment edit <record-id> <comment-id> --body <text> --revision <n>
 acli record publication list <record-id>
 acli record publication publish <record-id> --context-id <context-id>
 acli record publication unpublish <record-id> --context-id <context-id>
 acli record publication publish-all <record-id>
-acli record migrate <record-id> [--values <json-or-file>] [--relationships <json-or-file>] [--discard-attributes <json-or-file>]
+acli record publication readiness <record-id>
+acli record publication status --record-id <record-id> [--record-id <record-id> ...]
+acli record migrate <record-id> [--values <json-or-file>] [--relationships <json-or-file>] [--discard-attributes <json-or-file>] [--expected-updated-at <rfc3339>]
 acli record migrate-bulk --blueprint <code> --from-version <version> [--size <size>] [--dry-run]
 
 acli value append <record-id> --file values.toml --context-id <context-id>
@@ -217,6 +228,14 @@ acli file download-variant <file-id> <kind> --output preview.webp [--range 'byte
 Commands that page with `--limit` and `--offset` use the endpoint's default
 page size when you omit them; each endpoint enforces its own maximum, and
 offsets stop at 10,000.
+
+`--expected-updated-at` makes `record update`, `transition`, `migrate` and
+`restore-value` fail instead of overwriting a record someone changed after
+that `updated_at`. `record transition` writes the status option as a scalar
+value, so it follows the same workflow and approval rules as the web app;
+`record unlock` needs `records.unlock`. Comment, approval and retention-hold
+lists are newest first: pass the last item's `created_at` and `id` as
+`--before-time` and `--before-id` for the next page.
 
 
 ## Teams and assignments
