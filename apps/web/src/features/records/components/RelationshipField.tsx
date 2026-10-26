@@ -1,21 +1,16 @@
-import { forwardRef, useId, useRef, useState, type ReactNode } from 'react';
+import { forwardRef, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Box,
   Button,
   InputAdornment,
-  List,
-  MenuItem,
   Stack,
   TextField,
-  Typography,
   type InputBaseComponentProps,
   type SxProps,
   type Theme,
 } from '@mui/material';
 import { compactOutlinedActionButtonSx } from '../../../components/CompactOutlinedActionButton';
-import { LoadMoreButton } from '../../../components/LoadMoreButton';
-import { RelationshipSelectorDialog } from '../../../components/RelationshipSelectorDialog';
 import {
   RelationshipIcon,
   RelationshipPickerIcon,
@@ -28,19 +23,13 @@ import {
 } from '../recordForm';
 import { useRelatedRecordPreview } from '../linkedRecord';
 import { attributeLabel } from '../recordDisplay';
-import { RelationshipDraftSelection } from './RelationshipDraftSelection';
 import {
   RelatedRecordPreviewDetails,
   RelatedRecordPreviewToggle,
 } from './RelatedRecordPreview';
+import { RelationshipPickerDialog } from './RelationshipPickerDialog';
 import { RelationshipSelectionPills } from './RelationshipSelectionPills';
-import { RelationshipTargetOption } from './RelationshipTargetOption';
 import { useRelationshipSelectionLabels } from './useRelationshipSelectionLabels';
-import { useRelationshipTargets } from './useRelationshipTargets';
-import {
-  scrollRelationshipPickerToTop,
-  useRecentlyPreviewedRecords,
-} from './useRecentlyPreviewedRecords';
 import { smallIconSize } from '../../../components/iconSizes';
 import { FieldHint } from '../../../components/FieldHint';
 
@@ -127,35 +116,16 @@ export const RelationshipField = ({
   const { t } = useTranslation();
   const fieldId = useId();
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [draftIds, setDraftIds] = useState<string[]>([]);
-  const [knownLabels, setKnownLabels] = useState<Record<string, string>>({});
-  const pickerContentRoot = useRef<HTMLDivElement>(null);
+  // Each opening mounts a fresh picker, starting from the field's value.
+  const [openings, setOpenings] = useState(0);
   const allowedTargets = allowedTargetBlueprints(attribute);
-  const [activeTarget, setActiveTarget] = useState<string>();
-  // A relationship may allow several blueprints; the picker searches one at a time.
-  const targetBlueprint =
-    activeTarget && allowedTargets.includes(activeTarget)
-      ? activeTarget
-      : allowedTargets[0];
+  const targetBlueprint = allowedTargets[0];
   const selectedIds = relationshipIdsForField(value);
   const isSingle = attribute.cardinality === attributeCardinalities.one;
   const selectorOpen = open && !disabled;
   const selectionLabels = useRelationshipSelectionLabels(
     allowedTargets,
     selectedIds,
-  );
-  const { isPreviewed, markPreviewed, openPreview, previewHref } =
-    useRecentlyPreviewedRecords((id) => {
-      setDraftIds((current) =>
-        isSingle ? [id] : current.includes(id) ? current : [...current, id],
-      );
-      scrollRelationshipPickerToTop(pickerContentRoot.current);
-    });
-  const { labelById, options, targetLabel, targets } = useRelationshipTargets(
-    targetBlueprint,
-    query,
-    selectorOpen,
   );
   const preview = useRelatedRecordPreview(
     attribute,
@@ -186,35 +156,12 @@ export const RelationshipField = ({
     );
   }
 
-  const labelForId = (id: string) =>
-    knownLabels[id] ?? labelById.get(id) ?? selectionLabels.get(id) ?? id;
   const previewLabel = preview
     ? (selectionLabels.get(preview.recordId) ?? preview.recordId)
     : '';
-  const availableOptions = options.filter(
-    (target) => !draftIds.includes(target.id),
-  );
-  const removeDraftId = (id: string) =>
-    setDraftIds((current) => current.filter((selectedId) => selectedId !== id));
   const openSelector = () => {
-    setDraftIds(isSingle ? selectedIds.slice(0, 1) : selectedIds);
-    setKnownLabels({});
-    setQuery('');
+    setOpenings((count) => count + 1);
     setOpen(true);
-  };
-  const selectTarget = (id: string, label: string) => {
-    setKnownLabels((current) => ({ ...current, [id]: label }));
-    setDraftIds((current) =>
-      isSingle
-        ? [id]
-        : current.includes(id)
-          ? current.filter((selectedId) => selectedId !== id)
-          : [...current, id],
-    );
-  };
-  const applySelection = () => {
-    if (!disabled) onChange(draftIds.join(RELATIONSHIP_ID_JOINER));
-    setOpen(false);
   };
 
   return (
@@ -293,100 +240,19 @@ export const RelationshipField = ({
           inputLabel: { shrink: true },
         }}
       />
-      <RelationshipSelectorDialog
-        actions={{
-          applyLabel: t('records.applyRelationshipSelection'),
-          cancelLabel: t('records.cancelRelationshipSelection'),
-          clearLabel: t('records.clearRelationshipSelection'),
-          onApply: applySelection,
-          onClear: () => setDraftIds([]),
+      <RelationshipPickerDialog
+        allowedTargets={allowedTargets}
+        initialIds={selectedIds}
+        isSingle={isSingle}
+        key={openings}
+        onApply={(ids) => {
+          if (!disabled) onChange(ids.join(RELATIONSHIP_ID_JOINER));
+          setOpen(false);
         }}
-        closeLabel={t('records.closeRelationshipSelector')}
         onClose={() => setOpen(false)}
         open={selectorOpen}
-        selectedLabel={t('records.relationshipSelected', {
-          count: draftIds.length,
-        })}
-        title={t(
-          isSingle
-            ? 'records.selectOneRelationship'
-            : 'records.selectRelationships',
-          { blueprint: allowedTargets.join(', ') },
-        )}
-      >
-        <Stack ref={pickerContentRoot} spacing={2}>
-          {allowedTargets.length > 1 && (
-            <TextField
-              fullWidth
-              label={t('records.relationshipTargetBlueprint')}
-              onChange={(event) => setActiveTarget(event.target.value)}
-              select
-              value={targetBlueprint}
-            >
-              {allowedTargets.map((code) => (
-                <MenuItem key={code} value={code}>
-                  {code}
-                </MenuItem>
-              ))}
-            </TextField>
-          )}
-          <TextField
-            fullWidth
-            label={t('records.searchRelationshipOptions')}
-            onChange={(event) => setQuery(event.target.value)}
-            value={query}
-          />
-          <RelationshipDraftSelection
-            ids={draftIds}
-            labelForId={labelForId}
-            onRemove={removeDraftId}
-          />
-          <Stack spacing={0.5}>
-            <Typography variant="subtitle2">
-              {t('records.relationshipOptions')}
-            </Typography>
-            <List dense disablePadding>
-              {availableOptions.map((target) => (
-                <RelationshipTargetOption
-                  isSample={target.is_sample === true}
-                  key={target.id}
-                  label={targetLabel(target)}
-                  onPreview={() => openPreview(target.id)}
-                  onPreviewLinkClick={() => markPreviewed(target.id)}
-                  onSelect={() => selectTarget(target.id, targetLabel(target))}
-                  previewHref={previewHref(target.id)}
-                  previewed={isPreviewed(target.id)}
-                />
-              ))}
-            </List>
-            {!targets.isPending &&
-              !targets.isError &&
-              availableOptions.length === 0 && (
-                <Typography color="text.secondary" variant="body2">
-                  {t('records.noRelationshipOptions')}
-                </Typography>
-              )}
-            {targets.hasNextPage && (
-              <LoadMoreButton
-                isLoading={targets.isFetchingNextPage}
-                onLoadMore={() => void targets.fetchNextPage()}
-              />
-            )}
-            {targets.isPending && (
-              <Typography variant="caption">
-                {t('records.loadingOptions')}
-              </Typography>
-            )}
-            {targets.isError && (
-              <Typography color="error" variant="caption">
-                {t('records.couldNotLoadRecords', {
-                  blueprint: targetBlueprint,
-                })}
-              </Typography>
-            )}
-          </Stack>
-        </Stack>
-      </RelationshipSelectorDialog>
+        selectionLabels={selectionLabels}
+      />
     </>
   );
 };
