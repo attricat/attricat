@@ -1134,6 +1134,7 @@
     "discardSearchChanges": "Odrzuć zmiany",
     "deleteSavedSearch": "Usuń zapisane wyszukiwanie",
     "deleteSavedSearchConfirm": "Usunąć zapisane wyszukiwanie?",
+    "confirmDeleteSavedSearch": "Usuń",
     "linkCopied": "Skopiowano link",
     "savedSearches": "Zapisane wyszukiwania",
     "filterByCellValue": "Filtruj: {{field}} = {{value}}…",

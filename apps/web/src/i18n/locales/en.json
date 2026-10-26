@@ -1082,6 +1082,7 @@
     "discardSearchChanges": "Discard changes",
     "deleteSavedSearch": "Delete saved search",
     "deleteSavedSearchConfirm": "Delete this saved search?",
+    "confirmDeleteSavedSearch": "Delete",
     "linkCopied": "Link copied",
     "savedSearches": "Saved searches",
     "filterByCellValue": "Filter by {{field}} = {{value}}…",

@@ -32,6 +32,7 @@ import { savedViewQueryKeys } from './queryKeys';
 import type { SavedSearchActions } from './useSavedSearchActions';
 import { useDebouncedValue } from '../../components/useDebouncedValue';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 export const SavedSearchesDialog = ({
   actions,
@@ -47,6 +48,8 @@ export const SavedSearchesDialog = ({
   const { t } = useTranslation();
   const { busy, canDelete, canEdit, isDraft } = actions;
   const [filter, setFilter] = useState('');
+  // The saved search the user asked to delete, until they confirm or cancel.
+  const [deletingId, setDeletingId] = useState<string>();
   const searchText = useDebouncedValue(
     filter.trim(),
     SAVED_VIEW_SEARCH_DEBOUNCE_MS,
@@ -113,7 +116,7 @@ export const SavedSearchesDialog = ({
                             color="error"
                             disabled={busy}
                             edge="end"
-                            onClick={() => void actions.remove(view.id)}
+                            onClick={() => setDeletingId(view.id)}
                             size="small"
                           >
                             <Trash2Icon size={smallIconSize} />
@@ -201,6 +204,23 @@ export const SavedSearchesDialog = ({
           {t('explorer.saveCurrentSearch')}
         </Button>
       </DialogActions>
+      <ConfirmDialog
+        confirmLabel={t('explorer.confirmDeleteSavedSearch')}
+        destructive
+        error={null}
+        isPending={busy}
+        onClose={() => setDeletingId(undefined)}
+        onConfirm={() => {
+          if (!deletingId) return;
+          void actions
+            .remove(deletingId)
+            .finally(() => setDeletingId(undefined));
+        }}
+        open={deletingId !== undefined}
+        title={t('explorer.deleteSavedSearch')}
+      >
+        {t('explorer.deleteSavedSearchConfirm')}
+      </ConfirmDialog>
     </Dialog>
   );
 };

@@ -103,10 +103,9 @@ export const useSavedSearchActions = ({
   };
   const canDelete = (view: SavedView) =>
     Boolean(userId && view.owner_user_id === userId);
-  const remove = (id: string) => {
-    if (!window.confirm(t('explorer.deleteSavedSearchConfirm')))
-      return Promise.resolve();
-    return runBusy(async () => {
+  // The caller confirms first; failures are reported as a toast.
+  const remove = (id: string) =>
+    runBusy(async () => {
       await deleteSavedView(id);
       // Leave the deleted search first, so the refresh below does not refetch
       // it while it is still open and replace the Explorer with a 404.
@@ -118,7 +117,6 @@ export const useSavedSearchActions = ({
       client.removeQueries({ queryKey: savedViewQueryKeys.detail(id, false) });
       await client.invalidateQueries({ queryKey: savedViewQueryKeys.all() });
     });
-  };
   const copyLink = () =>
     runBusy(async () => {
       const url = new URL(window.location.href);
