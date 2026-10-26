@@ -13,15 +13,16 @@ port 3000.
 
 By default, `acli` loads `.env` from the current directory without replacing
 variables already exported by the shell. In a worktree, its `ATTRICAT_API_URL`
-therefore supplies the API URL. The precedence is `--server`, `ATTRICAT_SERVER`,
-`ATTRICAT_API_URL`, then `http://127.0.0.1:3000/api`. Each is the API base URL,
-including its `/api` path. Pass `--no-env` to skip loading that file.
+therefore supplies the API URL. The precedence is `--server`, `ATTRICAT_API_URL`,
+then `http://127.0.0.1:3000/api`. Each is the API base URL, including its `/api`
+path. `--server`, `--token`, `--token-stdin` and `--session-file` may appear
+before or after the subcommand. Pass `--no-env` to skip loading that file.
 
 ```sh
 acli health
 source .worktree
 acli --no-env --server "http://127.0.0.1:$API_PORT/api" health
-ATTRICAT_SERVER="http://127.0.0.1:$API_PORT/api" acli health
+ATTRICAT_API_URL="http://127.0.0.1:$API_PORT/api" acli health
 ```
 
 During development, run the workspace binary without installing it:
@@ -42,7 +43,7 @@ acli health
 acli auth discover <workspace-login-identifier>
 acli auth login <workspace-login-identifier> --email <email> --password-stdin
 acli auth password-reset --email <email>
-acli auth password-reset-confirm --token-stdin --password-stdin
+acli auth password-reset-confirm --reset-token-stdin --password-stdin
 acli --session-file session.json auth session|logout|renew
 acli auth preferences --time-zone <iana-zone>|--clear-time-zone
 acli metrics get --output metrics.prom
@@ -274,14 +275,14 @@ need `blueprints.write`.
 
 ## Saved searches
 
-`acli saved-view list [--query <text>]`, `acli saved-view get <id>`, `acli saved-view create --name <name> --state <json-or-file> [--visibility private|workspace] [--description <text>]`, `acli saved-view update <id> --name <name> --state <json-or-file>`, `acli saved-view delete <id>`, and `acli saved-view link --state <json-or-file>` operate on Explorer saved views. The state must contain at least a blueprint code, for example:
+`acli saved-view list [--query <text>]`, `acli saved-view get <id>`, `acli saved-view create --name <name> --state <json-or-file> [--visibility private|workspace] [--description <text>]`, `acli saved-view update <id> [--name <name>] [--state <json-or-file>] [--visibility private|workspace] [--description <text>]` (keeps the fields you omit), `acli saved-view delete <id>`, and `acli saved-view link --state <json-or-file>` operate on Explorer saved views. The state must contain at least a blueprint code, for example:
 
 ```sh
 acli saved-view create --name 'Active assets' --visibility workspace \
   --state '{"blueprint":"asset","attributeFilters":[{"field":"status","operator":"eq","value":"active"}]}'
 ```
 
-The CLI returns JSON with an `id`; set `ATTRICAT_WEB_URL` (or `WEB_PORT` from `.worktree`) to also include a short Explorer `url`. The link command creates an unnamed shareable snapshot. Both commands require workspace access and `records.read` (a link does not grant catalog permissions). See [saved views](saved-views.md).
+The CLI returns JSON with an `id`; set `ATTRICAT_WEB_URL` to also include a short Explorer `url`. The link command creates an unnamed shareable snapshot. Both commands require workspace access and `records.read` (a link does not grant catalog permissions). See [saved views](saved-views.md).
 
 ## JSON, workflow, and binary inputs
 
@@ -306,7 +307,7 @@ fixed.
 
 The `auth` group supports the browser-session API without exposing passwords or
 reset tokens in argv. `login --password-stdin` reads one password from stdin.
-`password-reset-confirm --token-stdin --password-stdin` reads the delivered
+`password-reset-confirm --reset-token-stdin --password-stdin` reads the delivered
 reset token and the new password as exactly two stdin lines, in that order.
 Password-reset requests intentionally return JSON `null` whether or not the
 email has a resettable credential.

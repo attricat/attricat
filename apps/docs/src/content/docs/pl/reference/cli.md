@@ -26,14 +26,14 @@ Instalator umieszcza `acli` w `~/.local/bin` (lub `$XDG_BIN_HOME`). Aby zainstal
 `acli` jest też dołączony do obrazu kontenera:
 
 ```sh
-docker run --rm -e ATTRICAT_SERVER -e ATTRICAT_TOKEN ghcr.io/attricat/attricat@sha256:… acli health
+docker run --rm -e ATTRICAT_API_URL -e ATTRICAT_TOKEN ghcr.io/attricat/attricat@sha256:… acli health
 ```
 
 ## Konfiguracja
 
 | Ustawienie | Flaga | Zmienna środowiskowa | Opis |
 | --- | --- | --- | --- |
-| Adres serwera | `--server` | `ATTRICAT_SERVER`, potem `ATTRICAT_API_URL` | Bazowy adres URL API razem z `/api`. Domyślnie `http://127.0.0.1:3000/api`. |
+| Adres serwera | `--server` | `ATTRICAT_API_URL` | Bazowy adres URL API razem z `/api`. Domyślnie `http://127.0.0.1:3000/api`. |
 | Token | `--token`, `--token-stdin` | `ATTRICAT_TOKEN` | Osobisty token API. |
 | Plik sesji | `--session-file` | `ATTRICAT_SESSION_FILE` | Przechowuje sesję przeglądarki między poleceniami. |
 | Adres aplikacji webowej | | `ATTRICAT_WEB_URL` | Gdy jest ustawiony, polecenia zapisanych wyszukiwań wypisują też krótki link do przeglądarki rekordów. |
@@ -148,7 +148,7 @@ acli auth discover <workspace-identifier>
 acli auth login <workspace-identifier> --email <email> --password-stdin
 acli auth session | renew | logout
 acli auth password-reset --email <email>
-acli auth password-reset-confirm --token-stdin --password-stdin
+acli auth password-reset-confirm --reset-token-stdin --password-stdin
 acli token list
 acli token create --label <label> --permissions <json> [--expires-at <rfc3339>]
 acli token revoke <token-id>
@@ -226,12 +226,12 @@ acli file download-variant <file-id> thumbnail|display --output preview.webp
 acli saved-view list [--query <text>]
 acli saved-view get <id>
 acli saved-view create --name <name> --state <json> [--visibility private|workspace] [--description <text>]
-acli saved-view update <id> --name <name> --state <json>
+acli saved-view update <id> [--name <name>] [--state <json>] [--visibility private|workspace] [--description <text>]
 acli saved-view delete <id>
 acli saved-view link --state <json>
 ```
 
-Stan musi zawierać co najmniej kod schematu, np. `{"blueprint":"product","query":"linen"}`.
+Stan musi zawierać co najmniej kod schematu, np. `{"blueprint":"product","query":"linen"}`. `update` zachowuje pominięte pola.
 
 ### Powiadomienia
 

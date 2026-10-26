@@ -8,6 +8,7 @@ use std::{
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use futures_util::StreamExt;
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use reqwest::{Client, Method};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -55,21 +56,27 @@ const GENERATOR_TOKEN_PERMISSIONS: &[&str] = &[
 )]
 struct Cli {
     /// API base URL, including its `/api` path.
-    #[arg(long, env = "ATTRICAT_SERVER")]
-    server: Option<Url>,
+    #[arg(long, global = true, env = "ATTRICAT_API_URL", default_value = DEFAULT_SERVER_URL)]
+    server: Url,
     /// Personal API token. Prefer ATTRICAT_TOKEN or --token-stdin to avoid exposing it in process arguments.
     #[arg(
         long,
+        global = true,
         env = "ATTRICAT_TOKEN",
         hide_env_values = true,
         conflicts_with = "token_stdin"
     )]
     token: Option<String>,
     /// Read the personal API token from standard input.
-    #[arg(long, conflicts_with = "token")]
+    #[arg(long, global = true, conflicts_with = "token")]
     token_stdin: bool,
     /// Persist browser session and CSRF cookies for the auth commands.
-    #[arg(long, env = "ATTRICAT_SESSION_FILE", value_name = "PATH")]
+    #[arg(
+        long,
+        global = true,
+        env = "ATTRICAT_SESSION_FILE",
+        value_name = "PATH"
+    )]
     session_file: Option<PathBuf>,
     /// Do not load environment variables from a .env file in the current directory.
     #[arg(long, global = true)]
@@ -331,23 +338,27 @@ enum SavedViewCommand {
     Create {
         #[arg(long)]
         name: String,
+        /// Explorer state JSON object, or a file containing it.
         #[arg(long)]
         state: String,
-        #[arg(long, default_value = "private")]
-        visibility: String,
+        #[arg(long, value_enum, default_value_t = SavedViewVisibility::Private)]
+        visibility: SavedViewVisibility,
         #[arg(long, default_value = "")]
         description: String,
     },
+    /// Change the given fields and keep the others.
+    #[command(group(clap::ArgGroup::new("change").required(true).multiple(true).args(["name", "state", "visibility", "description"])))]
     Update {
         id: Uuid,
         #[arg(long)]
-        name: String,
+        name: Option<String>,
+        /// Explorer state JSON object, or a file containing it.
         #[arg(long)]
-        state: String,
-        #[arg(long, default_value = "private")]
-        visibility: String,
-        #[arg(long, default_value = "")]
-        description: String,
+        state: Option<String>,
+        #[arg(long, value_enum)]
+        visibility: Option<SavedViewVisibility>,
+        #[arg(long)]
+        description: Option<String>,
     },
     Delete {
         id: Uuid,
@@ -358,6 +369,24 @@ enum SavedViewCommand {
         state: String,
     },
 }
+
+#[derive(Clone, Copy, ValueEnum)]
+enum SavedViewVisibility {
+    Private,
+    Workspace,
+}
+
+impl SavedViewVisibility {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Private => "private",
+            Self::Workspace => "workspace",
+        }
+    }
+}
+
+/// The only saved-view kind the API stores.
+const SAVED_VIEW_KIND: &str = "explorer_search";
 
 #[derive(Subcommand)]
 enum AuthCommand {
@@ -381,7 +410,7 @@ enum AuthCommand {
     },
     PasswordResetConfirm {
         #[arg(long)]
-        token_stdin: bool,
+        reset_token_stdin: bool,
         #[arg(long)]
         password_stdin: bool,
     },
@@ -1693,15 +1722,7 @@ fn load_dotenv() -> Result<(), CliError> {
 }
 
 async fn run(cli: Cli) -> Result<String, CliError> {
-    let server = match cli.server {
-        Some(server) => server,
-        None => match std::env::var("ATTRICAT_API_URL") {
-            Ok(value) => Url::parse(&value).map_err(|error| {
-                CliError::Input(format!("ATTRICAT_API_URL is not a valid URL: {error}"))
-            })?,
-            Err(_) => Url::parse(DEFAULT_SERVER_URL).expect("valid default URL"),
-        },
-    };
+    let server = cli.server;
     let session_file = cli.session_file;
     // A personal token is the explicit automation credential. Do not even
     // read a saved browser session when one is supplied: it takes precedence
@@ -1761,7 +1782,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
             request(&client, &server, Method::GET, "/directory", None).await
         }
         Command::Directory { user: Some(id) } => {
-            request(&client, &server, Method::GET, &format!("/directory/users/{id}"), None).await
+            request(&client, &server, Method::GET, &format!("/directory/users/{}", segment(id)), None).await
         }
         Command::Notification { command } => {
             let (method, path, payload) = notification_request(command);
@@ -1789,7 +1810,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     (Method::GET, path, None, None)
                 }
                 SavedViewCommand::Get { id } => {
-                    (Method::GET, format!("/saved-views/{id}"), None, None)
+                    (Method::GET, format!("/saved-views/{}", segment(id)), None, None)
                 }
                 SavedViewCommand::Create {
                     name,
@@ -1799,7 +1820,13 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 } => (
                     Method::POST,
                     "/saved-views".to_owned(),
-                    Some(saved_view_payload(&name, &description, &visibility, &state)?),
+                    Some(json!({
+                        "kind": SAVED_VIEW_KIND,
+                        "name": name,
+                        "description": description,
+                        "visibility": visibility.as_str(),
+                        "state": json_object_input(&state, "--state")?,
+                    })),
                     Some("savedView"),
                 ),
                 SavedViewCommand::Update {
@@ -1808,19 +1835,26 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     state,
                     visibility,
                     description,
-                } => (
-                    Method::PUT,
-                    format!("/saved-views/{id}"),
-                    Some(saved_view_payload(&name, &description, &visibility, &state)?),
-                    Some("savedView"),
-                ),
+                } => {
+                    let path = format!("/saved-views/{}", segment(id));
+                    let current = request_value(&client, &server, Method::GET, &path, None).await?;
+                    let state = state
+                        .map(|state| json_object_input(&state, "--state"))
+                        .transpose()?;
+                    (
+                        Method::PUT,
+                        path,
+                        Some(changed_saved_view(&current, name, description, visibility, state)?),
+                        Some("savedView"),
+                    )
+                }
                 SavedViewCommand::Delete { id } => {
-                    (Method::DELETE, format!("/saved-views/{id}"), None, None)
+                    (Method::DELETE, format!("/saved-views/{}", segment(id)), None, None)
                 }
                 SavedViewCommand::Link { state } => (
                     Method::POST,
                     "/view-state-links".to_owned(),
-                    Some(json!({"kind": "explorer_search", "state": json_object_argument(&state)?})),
+                    Some(json!({"kind": SAVED_VIEW_KIND, "state": json_object_input(&state, "--state")?})),
                     Some("viewState"),
                 ),
             };
@@ -1828,13 +1862,8 @@ async fn run(cli: Cli) -> Result<String, CliError> {
             if let Some(key) = url_key {
                 let mut output: Value =
                     serde_json::from_str(&body).map_err(|_| CliError::InvalidResponse)?;
-                if let Some(id) = output.get("id").and_then(Value::as_str).map(str::to_owned) {
-                    let web = std::env::var("ATTRICAT_WEB_URL").ok().or_else(|| {
-                        std::env::var("WEB_PORT")
-                            .ok()
-                            .map(|port| format!("http://127.0.0.1:{port}/"))
-                    });
-                    if let Some(web) = web {
+                if let Some(id) = output.get("id").and_then(Value::as_str).map(str::to_owned)
+                    && let Ok(web) = std::env::var("ATTRICAT_WEB_URL") {
                         let mut url = Url::parse(&web).map_err(|error| {
                             CliError::Input(format!("invalid ATTRICAT_WEB_URL: {error}"))
                         })?;
@@ -1842,7 +1871,6 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                         url.set_query(Some(&format!("{key}={id}")));
                         output["url"] = json!(url.to_string());
                     }
-                }
                 Ok(output.to_string())
             } else {
                 Ok(body)
@@ -2016,8 +2044,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     (Some(file), None, None, None) => context_body_from_file(&file)?,
                     (None, Some(code), Some(data), parent_id) => json!({
                         "code": code,
-                        "data": serde_json::from_str::<Value>(&data)
-                            .map_err(|error| CliError::Input(format!("invalid --data JSON: {error}")))?,
+                        "data": json_input(&data, "--data")?,
                         "parent_id": parent_id,
                     }),
                     _ => {
@@ -2049,8 +2076,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 &format!("/contexts/id/{}", segment(context_id)),
                 Some(json!({
                     "parent_id": parent_id,
-                    "data": serde_json::from_str::<Value>(&data)
-                        .map_err(|error| CliError::Input(format!("invalid --data JSON: {error}")))?,
+                    "data": json_input(&data, "--data")?,
                 })),
             )
             .await,
@@ -2079,10 +2105,10 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     "values": values_body_from_file(&values, context_id)?["values"].clone(),
                 });
                 if let Some(tags) = system_tags {
-                    body["system_tags"] = json_tags_argument(&tags)?;
+                    body["system_tags"] = json_string_array_input(&tags, "--system-tags")?;
                 }
                 if let Some(metadata) = system_metadata {
-                    body["system_metadata"] = json_object_argument(&metadata)?;
+                    body["system_metadata"] = json_object_input(&metadata, "--system-metadata")?;
                 }
                 request(&client, &server, Method::POST, "/v1/records", Some(body)).await
             }
@@ -2210,7 +2236,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     body["sort"] = json!({ "field": field, "direction": sort_direction.unwrap_or_else(|| "asc".to_owned()) });
                 }
                 if let Some(tags) = system_tags {
-                    body["system_tags"] = json_tags_argument(&tags)?;
+                    body["system_tags"] = json_string_array_input(&tags, "--system-tags")?;
                 }
                 request(
                     &client,
@@ -2247,10 +2273,10 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     context_id,
                 )?;
                 if let Some(tags) = system_tags {
-                    body["system_tags"] = json_tags_argument(&tags)?;
+                    body["system_tags"] = json_string_array_input(&tags, "--system-tags")?;
                 }
                 if let Some(metadata) = system_metadata {
-                    body["system_metadata"] = json_object_argument(&metadata)?;
+                    body["system_metadata"] = json_object_input(&metadata, "--system-metadata")?;
                 }
                 request(
                     &client,
@@ -2465,12 +2491,12 @@ async fn auth_command(
             .await
         }
         AuthCommand::PasswordResetConfirm {
-            token_stdin,
+            reset_token_stdin,
             password_stdin,
         } => {
-            if !token_stdin || !password_stdin {
+            if !reset_token_stdin || !password_stdin {
                 return Err(CliError::Input(
-                    "password reset confirmation requires --token-stdin and --password-stdin"
+                    "password reset confirmation requires --reset-token-stdin and --password-stdin"
                         .to_owned(),
                 ));
             }
@@ -2603,8 +2629,8 @@ async fn workspace_command(
             RoleCommand::List => request(client, server, Method::GET, "/workspace/roles", None).await,
             RoleCommand::Permission { command: PermissionCommand::List } => request(client, server, Method::GET, "/workspace/permissions", None).await,
             RoleCommand::AssignableRole { command: AssignableRoleCommand::List } => request(client, server, Method::GET, "/workspace/assignable-roles", None).await,
-            RoleCommand::Create { code, permissions } => request(client, server, Method::POST, "/workspace/roles", Some(json!({ "code": code, "permissions": permissions_input(&permissions)? }))).await,
-            RoleCommand::Update { role_id, code, permissions } => request(client, server, Method::PUT, &format!("/workspace/roles/{}", segment(role_id)), Some(json!({ "code": code, "permissions": permissions_input(&permissions)? }))).await,
+            RoleCommand::Create { code, permissions } => request(client, server, Method::POST, "/workspace/roles", Some(json!({ "code": code, "permissions": json_string_array_input(&permissions, "--permissions")? }))).await,
+            RoleCommand::Update { role_id, code, permissions } => request(client, server, Method::PUT, &format!("/workspace/roles/{}", segment(role_id)), Some(json!({ "code": code, "permissions": json_string_array_input(&permissions, "--permissions")? }))).await,
             RoleCommand::Duplicate { role_id, code } => request(client, server, Method::POST, &format!("/workspace/roles/{}/duplicate", segment(role_id)), Some(json!({ "code": code }))).await,
             RoleCommand::Retire { role_id, replacement_role_id } => request(client, server, Method::POST, &format!("/workspace/roles/{}/retire", segment(role_id)), Some(json!({ "replacement_role_id": replacement_role_id }))).await,
         },
@@ -2657,7 +2683,10 @@ async fn token_command(
                         "--permissions is required unless --generator is used".to_owned(),
                     )
                 })?;
-                (label, permissions_input(&permissions)?)
+                (
+                    label,
+                    json_string_array_input(&permissions, "--permissions")?,
+                )
             };
             request(
                 client,
@@ -2935,7 +2964,7 @@ async fn rule_command(
     match command {
         RuleCommand::List { blueprint_id } => {
             let path = match blueprint_id {
-                Some(id) => format!("/rules?blueprint_id={id}"),
+                Some(id) => format!("/rules?blueprint_id={}", segment(id)),
                 None => "/rules".to_owned(),
             };
             request(client, server, Method::GET, &path, None).await
@@ -2945,7 +2974,7 @@ async fn rule_command(
                 client,
                 server,
                 Method::GET,
-                &format!("/rules/{rule_id}"),
+                &format!("/rules/{}", segment(rule_id)),
                 None,
             )
             .await
@@ -3001,7 +3030,7 @@ async fn rule_command(
                 client,
                 server,
                 Method::POST,
-                &format!("/rules/{rule_id}/versions"),
+                &format!("/rules/{}/versions", segment(rule_id)),
                 Some(rule_body(
                     blueprint_id,
                     blueprint_version,
@@ -3040,7 +3069,7 @@ async fn rule_command(
                 client,
                 server,
                 Method::POST,
-                &format!("/rules/{rule_id}/disable"),
+                &format!("/rules/{}/disable", segment(rule_id)),
                 None,
             )
             .await
@@ -3054,7 +3083,7 @@ async fn rule_command(
             client,
             server,
             Method::POST,
-            &format!("/rules/{rule_id}/run-now"),
+            &format!("/rules/{}/run-now", segment(rule_id)),
             Some(
                 json!({"idempotency_key":idempotency_key,"record_id":record_id,"dry_run":dry_run}),
             ),
@@ -3066,14 +3095,14 @@ async fn rule_command(
                 client,
                 server,
                 Method::POST,
-                &format!("/rule-runs/{run_id}/replay"),
+                &format!("/rule-runs/{}/replay", segment(run_id)),
                 None,
             )
             .await
         }
         RuleCommand::Findings { record_id } => {
             let path = match record_id {
-                Some(id) => format!("/rule-findings?record_id={id}"),
+                Some(id) => format!("/rule-findings?record_id={}", segment(id)),
                 None => "/rule-findings".to_owned(),
             };
             request(client, server, Method::GET, &path, None).await
@@ -3083,7 +3112,7 @@ async fn rule_command(
                 client,
                 server,
                 Method::POST,
-                &format!("/rule-findings/{finding_id}/acknowledge"),
+                &format!("/rule-findings/{}/acknowledge", segment(finding_id)),
                 None,
             )
             .await
@@ -3181,7 +3210,7 @@ async fn extension_command(
     ExtensionCommand::Artifact { extension_id, contribution_id, output } => raw_download(client,server,&format!("/extensions/{}/{}/artifact",segment(&extension_id),segment(&contribution_id)),&output,None).await,
     ExtensionCommand::Storage { extension_id, contribution_id, release_id, body } => request(client,server,Method::POST,&format!("/extensions/{}/{}/storage/{}",segment(&extension_id),segment(&contribution_id),segment(release_id)),Some(json_input(&body,"--body")?)).await,
     ExtensionCommand::AnnotationNamespace { extension_id, adopt } => request(client,server,if adopt { Method::POST } else { Method::GET },&format!("/extensions/{}/annotation-namespace",segment(&extension_id)),None).await,
-    ExtensionCommand::RepairAnnotations { extension_id, record_id, patch } => request(client,server,Method::POST,&format!("/extensions/{}/annotation-namespace/records/{record_id}",segment(&extension_id)),Some(json_object_argument(&patch)?)).await,
+    ExtensionCommand::RepairAnnotations { extension_id, record_id, patch } => request(client,server,Method::POST,&format!("/extensions/{}/annotation-namespace/records/{}",segment(&extension_id),segment(record_id)),Some(json_object_input(&patch, "--patch")?)).await,
     ExtensionCommand::Command { extension_id, contribution_id, release_id, command_id, payload } => request(client,server,Method::POST,&format!("/extensions/{}/{}/command",segment(&extension_id),segment(&contribution_id)),Some(json!({"release_id":release_id,"command_id":command_id,"payload":json_input(&payload,"--payload")?}))).await,
 }
 }
@@ -3204,7 +3233,7 @@ async fn extension_run_command(
                 client,
                 server,
                 Method::GET,
-                &format!("/extension-runs/{run_id}"),
+                &format!("/extension-runs/{}", segment(run_id)),
                 None,
             )
             .await
@@ -3214,7 +3243,7 @@ async fn extension_run_command(
                 client,
                 server,
                 Method::POST,
-                &format!("/extension-runs/{run_id}/cancel"),
+                &format!("/extension-runs/{}/cancel", segment(run_id)),
                 None,
             )
             .await
@@ -3227,7 +3256,11 @@ async fn extension_run_command(
             raw_download(
                 client,
                 server,
-                &format!("/extension-runs/{run_id}/artifacts/{artifact_id}/download"),
+                &format!(
+                    "/extension-runs/{}/artifacts/{}/download",
+                    segment(run_id),
+                    segment(artifact_id)
+                ),
                 &output,
                 None,
             )
@@ -3245,17 +3278,17 @@ async fn extension_operation_command(
         ExtensionOperationCommand::Start { extension_id, operation_id, input, idempotency_key, input_file_id } => {
             request(client, server, Method::POST,
                 &format!("/extensions/{}/operations", segment(extension_id)),
-                Some(json!({"operation_id":operation_id,"input":json_object_argument(&input)?,
+                Some(json!({"operation_id":operation_id,"input":json_object_input(&input, "--input")?,
                     "idempotency_key":idempotency_key,"source_reference":operation_source(input_file_id),
                     "destination_reference":{}}))).await
         }
         ExtensionOperationCommand::List => request(client, server, Method::GET, "/extension-operation-runs", None).await,
-        ExtensionOperationCommand::Show { run_id } => request(client, server, Method::GET, &format!("/extension-operation-runs/{run_id}"), None).await,
-        ExtensionOperationCommand::Artifacts { run_id } => request(client, server, Method::GET, &format!("/extension-operation-runs/{run_id}/artifacts"), None).await,
-        ExtensionOperationCommand::Deliveries { run_id } => request(client, server, Method::GET, &format!("/extension-operation-runs/{run_id}/deliveries"), None).await,
-        ExtensionOperationCommand::Download { run_id, artifact_id, output } => raw_download(client, server, &format!("/extension-operation-runs/{run_id}/artifacts/{artifact_id}/download"), &output, None).await,
-        ExtensionOperationCommand::Cancel { run_id } => request(client, server, Method::POST, &format!("/extension-operation-runs/{run_id}/cancel"), None).await,
-        ExtensionOperationCommand::Replay { run_id } => request(client, server, Method::POST, &format!("/extension-operation-runs/{run_id}/replay"), None).await,
+        ExtensionOperationCommand::Show { run_id } => request(client, server, Method::GET, &format!("/extension-operation-runs/{}", segment(run_id)), None).await,
+        ExtensionOperationCommand::Artifacts { run_id } => request(client, server, Method::GET, &format!("/extension-operation-runs/{}/artifacts", segment(run_id)), None).await,
+        ExtensionOperationCommand::Deliveries { run_id } => request(client, server, Method::GET, &format!("/extension-operation-runs/{}/deliveries", segment(run_id)), None).await,
+        ExtensionOperationCommand::Download { run_id, artifact_id, output } => raw_download(client, server, &format!("/extension-operation-runs/{}/artifacts/{}/download", segment(run_id), segment(artifact_id)), &output, None).await,
+        ExtensionOperationCommand::Cancel { run_id } => request(client, server, Method::POST, &format!("/extension-operation-runs/{}/cancel", segment(run_id)), None).await,
+        ExtensionOperationCommand::Replay { run_id } => request(client, server, Method::POST, &format!("/extension-operation-runs/{}/replay", segment(run_id)), None).await,
     }
 }
 
@@ -3288,20 +3321,18 @@ async fn extension_schedule_command(
             input,
             input_file_id,
             interval_seconds,
-        } => {
-            request(
-                client,
-                server,
-                Method::POST,
-                &format!("/extensions/{}/operation-schedules", segment(extension_id)),
-                Some(
-                    json!({"operation_id":operation_id,"input":json_object_argument(&input)?,
+        } => request(
+            client,
+            server,
+            Method::POST,
+            &format!("/extensions/{}/operation-schedules", segment(extension_id)),
+            Some(
+                json!({"operation_id":operation_id,"input":json_object_input(&input, "--input")?,
                     "source_reference":operation_source(input_file_id),"destination_reference":{},
                     "interval_seconds":interval_seconds}),
-                ),
-            )
-            .await
-        }
+            ),
+        )
+        .await,
         ExtensionScheduleCommand::Update {
             schedule_id,
             enabled,
@@ -3311,7 +3342,7 @@ async fn extension_schedule_command(
                 client,
                 server,
                 Method::PATCH,
-                &format!("/extension-operation-schedules/{schedule_id}"),
+                &format!("/extension-operation-schedules/{}", segment(schedule_id)),
                 Some(json!({"enabled":enabled,"interval_seconds":interval_seconds})),
             )
             .await
@@ -3330,7 +3361,7 @@ async fn connector_job_command(
                 client,
                 server,
                 Method::GET,
-                &format!("/blueprints/{blueprint_id}/connector-jobs"),
+                &format!("/blueprints/{}/connector-jobs", segment(blueprint_id)),
                 None,
             )
             .await
@@ -3343,7 +3374,7 @@ async fn connector_job_command(
                 client,
                 server,
                 Method::POST,
-                &format!("/blueprint-connector-jobs/{job_id}/run"),
+                &format!("/blueprint-connector-jobs/{}/run", segment(job_id)),
                 Some(json!({"idempotency_key":idempotency_key})),
             )
             .await
@@ -3994,24 +4025,6 @@ fn api_error(status: reqwest::StatusCode, body: &str) -> Result<String, CliError
     })
 }
 
-fn permissions_input(input: &str) -> Result<Value, CliError> {
-    let source = match fs::read_to_string(input) {
-        Ok(source) => source,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => input.to_owned(),
-        Err(error) => {
-            return Err(CliError::Input(format!(
-                "cannot read --permissions file: {error}"
-            )));
-        }
-    };
-    let permissions = serde_json::from_str::<Vec<String>>(&source).map_err(|error| {
-        CliError::Input(format!(
-            "--permissions must be a JSON array of strings or a readable JSON file: {error}"
-        ))
-    })?;
-    Ok(json!(permissions))
-}
-
 fn read_three_secrets_stdin() -> Result<(String, String, String), CliError> {
     let mut values = String::new();
     io::stdin()
@@ -4355,33 +4368,22 @@ fn relationships_body(
     Ok(json!({ "relationships": relationships }))
 }
 
-fn json_tags_argument(input: &str) -> Result<Value, CliError> {
-    let value: Value = serde_json::from_str(input)
-        .map_err(|error| CliError::Input(format!("invalid --system-tags JSON: {error}")))?;
-    if !value.is_array()
-        || !value
-            .as_array()
-            .is_some_and(|tags| tags.iter().all(Value::is_string))
-    {
-        return Err(CliError::Input(
-            "--system-tags must be a JSON array of strings".to_owned(),
-        ));
-    }
-    Ok(value)
-}
-
-fn saved_view_payload(
-    name: &str,
-    description: &str,
-    visibility: &str,
-    state: &str,
+/// The saved view `acli saved-view update` sends: the current view with the
+/// given changes, since the API replaces every field.
+fn changed_saved_view(
+    current: &Value,
+    name: Option<String>,
+    description: Option<String>,
+    visibility: Option<SavedViewVisibility>,
+    state: Option<Value>,
 ) -> Result<Value, CliError> {
+    let field = |key: &str| current.get(key).cloned().ok_or(CliError::InvalidResponse);
     Ok(json!({
-        "kind": "explorer_search",
-        "name": name,
-        "description": description,
-        "visibility": visibility,
-        "state": json_object_argument(state)?,
+        "kind": field("kind")?,
+        "name": name.map_or_else(|| field("name"), |name| Ok(json!(name)))?,
+        "description": description.map_or_else(|| field("description"), |text| Ok(json!(text)))?,
+        "visibility": visibility.map_or_else(|| field("visibility"), |value| Ok(json!(value.as_str())))?,
+        "state": state.map_or_else(|| field("state"), Ok)?,
     }))
 }
 
@@ -4409,15 +4411,17 @@ fn notification_request(command: NotificationCommand) -> (Method, String, Option
             (Method::GET, path, None)
         }
         NotificationCommand::Count => (Method::GET, "/notifications/unread-count".to_owned(), None),
-        NotificationCommand::Get { id } => (Method::GET, format!("/notifications/{id}"), None),
+        NotificationCommand::Get { id } => {
+            (Method::GET, format!("/notifications/{}", segment(id)), None)
+        }
         NotificationCommand::Read { id } => (
             Method::PATCH,
-            format!("/notifications/{id}"),
+            format!("/notifications/{}", segment(id)),
             Some(json!({"read": true})),
         ),
         NotificationCommand::Unread { id } => (
             Method::PATCH,
-            format!("/notifications/{id}"),
+            format!("/notifications/{}", segment(id)),
             Some(json!({"read": false})),
         ),
         NotificationCommand::ReadAll => (
@@ -4425,9 +4429,11 @@ fn notification_request(command: NotificationCommand) -> (Method, String, Option
             "/notifications/read-all".to_owned(),
             Some(json!({})),
         ),
-        NotificationCommand::Delete { id } => {
-            (Method::DELETE, format!("/notifications/{id}"), None)
-        }
+        NotificationCommand::Delete { id } => (
+            Method::DELETE,
+            format!("/notifications/{}", segment(id)),
+            None,
+        ),
     }
 }
 
@@ -4458,11 +4464,15 @@ fn team_request(command: TeamCommand) -> (Method, String, Option<Value>) {
             }
             (
                 Method::PATCH,
-                format!("/workspace/teams/{id}"),
+                format!("/workspace/teams/{}", segment(id)),
                 Some(Value::Object(body)),
             )
         }
-        TeamCommand::Delete { id } => (Method::DELETE, format!("/workspace/teams/{id}"), None),
+        TeamCommand::Delete { id } => (
+            Method::DELETE,
+            format!("/workspace/teams/{}", segment(id)),
+            None,
+        ),
     }
 }
 
@@ -4553,15 +4563,27 @@ fn lexicon_file(path: &PathBuf) -> Result<Value, CliError> {
     }
 }
 
-fn json_object_argument(input: &str) -> Result<Value, CliError> {
-    let value: Value = serde_json::from_str(input)
-        .map_err(|error| CliError::Input(format!("invalid --system-metadata JSON: {error}")))?;
-    if !value.is_object() {
-        return Err(CliError::Input(
-            "--system-metadata must be a JSON object".to_owned(),
-        ));
+fn json_object_input(input: &str, label: &str) -> Result<Value, CliError> {
+    let value = json_input(input, label)?;
+    if value.is_object() {
+        Ok(value)
+    } else {
+        Err(CliError::Input(format!("{label} must be a JSON object")))
     }
-    Ok(value)
+}
+
+fn json_string_array_input(input: &str, label: &str) -> Result<Value, CliError> {
+    let value = json_input(input, label)?;
+    if value
+        .as_array()
+        .is_some_and(|items| items.iter().all(Value::is_string))
+    {
+        Ok(value)
+    } else {
+        Err(CliError::Input(format!(
+            "{label} must be a JSON array of strings"
+        )))
+    }
 }
 
 fn form_update_body(
@@ -4695,8 +4717,16 @@ fn endpoint(server: &Url, path: &str) -> Result<Url, CliError> {
         .map_err(|error| CliError::Input(format!("invalid API path: {error}")))
 }
 
+/// Bytes percent-encoded in a path segment or query value: everything but
+/// RFC 3986 unreserved characters.
+const SEGMENT_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~');
+
 fn segment(value: impl std::fmt::Display) -> String {
-    url::form_urlencoded::byte_serialize(value.to_string().as_bytes()).collect()
+    utf8_percent_encode(&value.to_string(), SEGMENT_ENCODE_SET).to_string()
 }
 
 #[cfg(test)]
@@ -4943,7 +4973,7 @@ mod tests {
             parse(&["acli", "team", "update", team, "--name", "Quality"]),
             (
                 Method::PATCH,
-                format!("/workspace/teams/{team}"),
+                format!("/workspace/teams/{}", segment(team)),
                 Some(json!({"name": "Quality"}))
             )
         );
@@ -5047,7 +5077,7 @@ mod tests {
         );
         assert!(Cli::try_parse_from(["acli", "saved-view", "get", "not-a-uuid"]).is_err());
         assert_eq!(
-            json_object_argument("{\"blueprint\":\"asset\"}").unwrap(),
+            json_object_input("{\"blueprint\":\"asset\"}", "--state").unwrap(),
             json!({"blueprint":"asset"})
         );
     }
@@ -5233,23 +5263,61 @@ value = "Blue shirt"
             url.as_str(),
             "https://example.test/attricat-api/contexts/en%2FGB%3F%23"
         );
+        // A path segment keeps `+` literal, so spaces must not become `+`.
+        assert_eq!(segment("a b+c~d"), "a%20b%2Bc~d");
+    }
+
+    #[test]
+    fn saved_view_update_keeps_unchanged_fields() {
+        let current = json!({
+            "id": Uuid::from_u128(1), "kind": "explorer_search", "name": "Assets",
+            "description": "Shared", "visibility": "workspace", "state": {"blueprint": "asset"},
+        });
+        assert_eq!(
+            changed_saved_view(&current, Some("Renamed".into()), None, None, None).unwrap(),
+            json!({
+                "kind": "explorer_search", "name": "Renamed", "description": "Shared",
+                "visibility": "workspace", "state": {"blueprint": "asset"},
+            })
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "saved-view",
+                "update",
+                &Uuid::from_u128(1).to_string()
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn json_input_errors_name_the_flag() {
+        let error = json_object_input("[]", "--state").unwrap_err().to_string();
+        assert_eq!(error, "--state must be a JSON object");
+        let error = json_string_array_input("[1]", "--system-tags")
+            .unwrap_err()
+            .to_string();
+        assert_eq!(error, "--system-tags must be a JSON array of strings");
     }
 
     #[test]
     fn accepts_only_a_json_string_array_or_file_for_permissions() {
         assert_eq!(
-            permissions_input("[\"records.read\"]").unwrap(),
+            json_string_array_input("[\"records.read\"]", "--permissions").unwrap(),
             json!(["records.read"])
         );
         let file = tempfile::NamedTempFile::new().unwrap();
         fs::write(file.path(), "[\"members.manage\"]").unwrap();
         assert_eq!(
-            permissions_input(file.path().to_str().unwrap()).unwrap(),
+            json_string_array_input(file.path().to_str().unwrap(), "--permissions").unwrap(),
             json!(["members.manage"])
         );
-        assert!(permissions_input("not-json").is_err());
-        assert!(permissions_input("{\"permission\": \"records.read\"}").is_err());
-        assert!(permissions_input("[\"records.read\", 1]").is_err());
+        assert!(json_string_array_input("not-json", "--permissions").is_err());
+        assert!(
+            json_string_array_input("{\"permission\": \"records.read\"}", "--permissions").is_err()
+        );
+        assert!(json_string_array_input("[\"records.read\", 1]", "--permissions").is_err());
     }
 
     #[test]
@@ -5713,7 +5781,7 @@ value = "Blue shirt"
             ])
             .is_ok()
         );
-        assert!(json_object_argument("[]").is_err());
+        assert!(json_object_input("[]", "--patch").is_err());
         assert_eq!(
             operation_source(Some(Uuid::from_u128(1))),
             json!({"input_file_id":Uuid::from_u128(1)})
@@ -5859,7 +5927,7 @@ value = "Blue shirt"
                 "acli",
                 "auth",
                 "password-reset-confirm",
-                "--token-stdin",
+                "--reset-token-stdin",
                 "--password-stdin",
             ])
             .is_ok()
@@ -6102,7 +6170,7 @@ value = "Blue shirt"
         fs::write(archive.path(), b"opaque archive bytes").unwrap();
 
         let body = run(Cli {
-            server: Some(Url::parse(&format!("http://{address}")).unwrap()),
+            server: Url::parse(&format!("http://{address}")).unwrap(),
             token: None,
             token_stdin: false,
             session_file: None,
@@ -6606,7 +6674,7 @@ value = "Blue shirt"
         assert_eq!(
             received.lock().unwrap().take().unwrap(),
             (
-                "prefix=shop+prefix&blueprint_publication=publish".to_owned(),
+                "prefix=shop%20prefix&blueprint_publication=publish".to_owned(),
                 "application/zstd".to_owned(),
                 b"opaque archive bytes".to_vec()
             )
@@ -6708,7 +6776,7 @@ value = "Blue shirt"
         });
 
         let body = run(Cli {
-            server: Some(Url::parse(&format!("http://{address}")).unwrap()),
+            server: Url::parse(&format!("http://{address}")).unwrap(),
             token: Some("personal-token".to_owned()),
             token_stdin: false,
             session_file: Some(session_file.path().to_path_buf()),
@@ -6738,7 +6806,7 @@ value = "Blue shirt"
         });
 
         let body = run(Cli {
-            server: Some(Url::parse(&format!("http://{address}")).unwrap()),
+            server: Url::parse(&format!("http://{address}")).unwrap(),
             token: None,
             token_stdin: false,
             session_file: None,

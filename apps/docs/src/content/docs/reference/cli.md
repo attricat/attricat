@@ -24,14 +24,14 @@ The installer puts `acli` in `~/.local/bin` (or `$XDG_BIN_HOME`). To install a s
 `acli` is also included in the container image:
 
 ```sh
-docker run --rm -e ATTRICAT_SERVER -e ATTRICAT_TOKEN ghcr.io/attricat/attricat@sha256:… acli health
+docker run --rm -e ATTRICAT_API_URL -e ATTRICAT_TOKEN ghcr.io/attricat/attricat@sha256:… acli health
 ```
 
 ## Configuration
 
 | Setting | Flag | Environment | Description |
 | --- | --- | --- | --- |
-| Server URL | `--server` | `ATTRICAT_SERVER`, then `ATTRICAT_API_URL` | API base URL, including `/api`. Defaults to `http://127.0.0.1:3000/api`. |
+| Server URL | `--server` | `ATTRICAT_API_URL` | API base URL, including `/api`. Defaults to `http://127.0.0.1:3000/api`. |
 | Token | `--token`, `--token-stdin` | `ATTRICAT_TOKEN` | Personal API token. |
 | Session file | `--session-file` | `ATTRICAT_SESSION_FILE` | Stores a browser session between commands. |
 | Web URL | | `ATTRICAT_WEB_URL` | When set, saved-search commands also print a short Explorer link. |
@@ -146,7 +146,7 @@ acli auth discover <workspace-identifier>
 acli auth login <workspace-identifier> --email <email> --password-stdin
 acli auth session | renew | logout
 acli auth password-reset --email <email>
-acli auth password-reset-confirm --token-stdin --password-stdin
+acli auth password-reset-confirm --reset-token-stdin --password-stdin
 acli token list
 acli token create --label <label> --permissions <json> [--expires-at <rfc3339>]
 acli token revoke <token-id>
@@ -224,12 +224,12 @@ acli file download-variant <file-id> thumbnail|display --output preview.webp
 acli saved-view list [--query <text>]
 acli saved-view get <id>
 acli saved-view create --name <name> --state <json> [--visibility private|workspace] [--description <text>]
-acli saved-view update <id> --name <name> --state <json>
+acli saved-view update <id> [--name <name>] [--state <json>] [--visibility private|workspace] [--description <text>]
 acli saved-view delete <id>
 acli saved-view link --state <json>
 ```
 
-The state needs at least a blueprint code, for example `{"blueprint":"product","query":"linen"}`.
+The state needs at least a blueprint code, for example `{"blueprint":"product","query":"linen"}`. `update` keeps every field you omit.
 
 ### Notifications
 

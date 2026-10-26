@@ -401,7 +401,7 @@ returns `403`. Unsafe **cookie-authenticated** requests also require the
 Browser sessions are scoped to the workspace resolved from the submitted login
 identifier. Clients do not provide a workspace UUID or tenancy header.
 
-The CLI resolves its API URL in this order: `--server`, `ATTRICAT_SERVER`,
+The CLI resolves its API URL in this order: `--server`, then
 `ATTRICAT_API_URL` from the environment or worktree `.env`, then
 `http://127.0.0.1:3000/api`. See [the CLI guide](cli.md#start-locally).
 

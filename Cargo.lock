@@ -11,6 +11,7 @@ dependencies = [
  "dotenvy",
  "futures-util",
  "mime_guess",
+ "percent-encoding",
  "reqwest",
  "serde",
  "serde_json",
