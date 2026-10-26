@@ -508,3 +508,103 @@ async fn record_changes_and_rechecks_run_every_enabled_rule_for_the_record(pool:
     assert_eq!(missing.status(), 404);
     server.abort();
 }
+
+/// The findings list narrows by rule, blueprint, context, severity and
+/// state, and pages through what matches.
+#[sqlx::test]
+async fn findings_filter_by_rule_blueprint_context_severity_and_state(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
+    let mut record_ids = Vec::new();
+    for (key, severity, state) in [
+        ("critical-open", "critical", "open"),
+        ("warning-acknowledged", "warning", "acknowledged"),
+        ("info-resolved", "info", "resolved"),
+    ] {
+        let record = create_record(&client, &base_url, &blueprint).await;
+        let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
+        sqlx::query("INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,record_id,evaluation_key,severity,message,state) VALUES ($1,$2,$3,1,$4,$5,$6,$5,$7)")
+            .bind(Uuid::new_v4())
+            .bind(Uuid::parse_str(support::BOOTSTRAP_WORKSPACE_ID).unwrap())
+            .bind(rule_id)
+            .bind(record_id)
+            .bind(key)
+            .bind(severity)
+            .bind(state)
+            .execute(&pool)
+            .await
+            .unwrap();
+        record_ids.push(record_id);
+    }
+    let messages = |query: String| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        async move {
+            let findings: Value = client
+                .get(format!("{base_url}/rule-findings?{query}"))
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            findings
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|finding| finding["message"].as_str().unwrap().to_owned())
+                .collect::<Vec<_>>()
+        }
+    };
+    let all = ["critical-open", "warning-acknowledged", "info-resolved"];
+    assert_eq!(messages(String::new()).await, all);
+    assert_eq!(messages(format!("rule_id={rule_id}")).await, all);
+    assert_eq!(messages(format!("blueprint_id={blueprint_id}")).await, all);
+    let other = Uuid::new_v4();
+    for field in ["rule_id", "blueprint_id", "context_id", "record_id"] {
+        assert!(messages(format!("{field}={other}")).await.is_empty());
+    }
+    assert_eq!(
+        messages(format!("record_id={}", record_ids[1])).await,
+        ["warning-acknowledged"]
+    );
+    assert_eq!(messages("severity=info".into()).await, ["info-resolved"]);
+    assert_eq!(
+        messages("state=acknowledged".into()).await,
+        ["warning-acknowledged"]
+    );
+    assert_eq!(
+        messages("unresolved=true".into()).await,
+        ["critical-open", "warning-acknowledged"]
+    );
+    assert!(
+        messages("unresolved=true&state=resolved".into())
+            .await
+            .is_empty()
+    );
+
+    // Pages follow the filter and advertise the next offset.
+    let page = client
+        .get(format!("{base_url}/rule-findings?unresolved=true&limit=1"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(page.headers()["x-next-offset"], "1");
+    assert_eq!(
+        messages("unresolved=true&limit=1&offset=1".into()).await,
+        ["warning-acknowledged"]
+    );
+
+    for query in ["severity=fatal", "state=closed", "colour=red"] {
+        let refused = client
+            .get(format!("{base_url}/rule-findings?{query}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(refused.status(), 400, "{query}");
+    }
+    server.abort();
+}

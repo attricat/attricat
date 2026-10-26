@@ -16,7 +16,27 @@ export const RULE_TAB_ID_PREFIX = 'rule-inspection-tab';
 export const RULE_TABPANEL_ID_PREFIX = 'rule-inspection-tabpanel';
 
 export const FINDING_STATE_OPEN = 'open';
+export const FINDING_STATE_ACKNOWLEDGED = 'acknowledged';
 export const FINDING_STATE_RESOLVED = 'resolved';
+/**
+ * Which findings the findings page lists by state. Unresolved, the default,
+ * is open and acknowledged findings together.
+ */
+export const findingStateFilters = {
+  unresolved: 'unresolved',
+  open: FINDING_STATE_OPEN,
+  acknowledged: FINDING_STATE_ACKNOWLEDGED,
+  resolved: FINDING_STATE_RESOLVED,
+  all: 'all',
+} as const;
+export type FindingStateFilter =
+  (typeof findingStateFilters)[keyof typeof findingStateFilters];
+/** Findings the findings page lists at a time. */
+export const FINDINGS_PAGE_SIZE = 50;
+/** The value of a findings filter that is not set. */
+export const ANY_FINDING_FILTER = '';
+/** Keeps the findings filters readable when their labels are short. */
+export const FINDING_FILTER_MIN_WIDTH = 180;
 export const findingSeverities = {
   info: 'info',
   warning: 'warning',

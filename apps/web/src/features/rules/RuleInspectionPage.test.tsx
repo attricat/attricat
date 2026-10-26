@@ -12,16 +12,19 @@ import {
   acknowledgeFinding,
   disableRule,
   enableRuleRevision,
-  listFindings,
+  listFindingsPage,
   listRuleRuns,
   listRules,
   runRuleNow,
   type Finding,
+  type FindingsSearch,
   type Rule,
 } from './api';
 import { RuleInspectionPage } from './RuleInspectionPage';
 
+const navigate = vi.fn();
 vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => navigate,
   Link: ({
     children,
     params,
@@ -48,11 +51,17 @@ vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
 vi.mock('../records/api', () => ({
   getRecordLabels: vi.fn(() => Promise.resolve({ items: [] })),
 }));
+vi.mock('../blueprints/api', () => ({
+  listBlueprints: vi.fn(() => Promise.resolve([])),
+}));
+vi.mock('../contexts/api', () => ({
+  listContexts: vi.fn(() => Promise.resolve([])),
+}));
 vi.mock('./api', () => ({
   acknowledgeFinding: vi.fn(),
   disableRule: vi.fn(),
   enableRuleRevision: vi.fn(),
-  listFindings: vi.fn(),
+  listFindingsPage: vi.fn(),
   listRuleRuns: vi.fn(),
   listRules: vi.fn(),
   runRuleNow: vi.fn(),
@@ -93,13 +102,16 @@ const finding: Finding = {
   created_at: '',
   updated_at: '',
 };
-const renderPage = (section: 'rules' | 'findings' | 'runs') => {
+const renderPage = (
+  section: 'rules' | 'findings' | 'runs',
+  findingsSearch?: FindingsSearch,
+) => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <RuleInspectionPage section={section} />
+      <RuleInspectionPage findingsSearch={findingsSearch} section={section} />
     </QueryClientProvider>,
   );
 };
@@ -149,23 +161,25 @@ describe('RuleInspectionPage', () => {
     vi.mocked(currentSession).mockResolvedValue({
       capabilities: { rules_read: true, rules_manage: true },
     } as Awaited<ReturnType<typeof currentSession>>);
-    vi.mocked(listFindings).mockResolvedValue([
-      {
-        id,
-        rule_id: id,
-        rule_version: 1,
-        record_id: id,
-        context_id: null,
-        severity: 'warning',
-        message: 'Check failed',
-        evidence: {},
-        state: 'open',
-        acknowledged_at: null,
-        resolved_at: null,
-        created_at: '',
-        updated_at: '',
-      },
-    ]);
+    vi.mocked(listFindingsPage).mockResolvedValue({
+      items: [
+        {
+          id,
+          rule_id: id,
+          rule_version: 1,
+          record_id: id,
+          context_id: null,
+          severity: 'warning',
+          message: 'Check failed',
+          evidence: {},
+          state: 'open',
+          acknowledged_at: null,
+          resolved_at: null,
+          created_at: '',
+          updated_at: '',
+        },
+      ],
+    });
     vi.mocked(acknowledgeFinding).mockImplementation(
       () => new Promise(() => {}),
     );
@@ -198,7 +212,7 @@ describe('RuleInspectionPage', () => {
 
   it('shows why an acknowledgement was refused', async () => {
     vi.mocked(currentSession).mockResolvedValue(manager);
-    vi.mocked(listFindings).mockResolvedValue([finding]);
+    vi.mocked(listFindingsPage).mockResolvedValue({ items: [finding] });
     vi.mocked(acknowledgeFinding).mockRejectedValue(
       new Error('finding was already resolved'),
     );
@@ -285,9 +299,9 @@ describe('RuleInspectionPage', () => {
   it('names the rule revision and links the record of each finding', async () => {
     const recordId = '223e4567-e89b-42d3-a456-426614174000';
     vi.mocked(currentSession).mockResolvedValue(manager);
-    vi.mocked(listFindings).mockResolvedValue([
-      { ...finding, record_id: recordId },
-    ]);
+    vi.mocked(listFindingsPage).mockResolvedValue({
+      items: [{ ...finding, record_id: recordId }],
+    });
     vi.mocked(getRecordLabels).mockResolvedValue({
       items: [
         {
@@ -356,5 +370,51 @@ describe('RuleInspectionPage', () => {
     expect(
       within(scoped).getByRole('link', { name: `Record ${id}` }).textContent,
     ).toBe(id.slice(0, 8));
+  });
+
+  it('lists the findings that match the filters in the URL', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listFindingsPage).mockResolvedValue({ items: [] });
+    renderPage('findings', { severity: 'error', rule: id });
+    expect(await screen.findByText('No findings match these filters.'));
+    expect(listFindingsPage).toHaveBeenCalledWith(
+      { severity: 'error', rule: id },
+      0,
+    );
+  });
+
+  it('keeps a changed filter in the URL', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listFindingsPage).mockResolvedValue({ items: [finding] });
+    renderPage('findings', { state: 'resolved' });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('combobox', { name: 'Severity' }));
+    await user.click(screen.getByRole('option', { name: 'Critical' }));
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/manage/rules/findings',
+      search: { state: 'resolved', severity: 'critical' },
+    });
+    await user.click(screen.getByRole('combobox', { name: 'Rule' }));
+    await user.click(screen.getByRole('option', { name: 'Check' }));
+    expect(navigate).toHaveBeenLastCalledWith({
+      to: '/manage/rules/findings',
+      search: { state: 'resolved', rule: id },
+    });
+  });
+
+  it('loads the next page of findings', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    const second = { ...finding, id: crypto.randomUUID(), message: 'Later' };
+    vi.mocked(listFindingsPage)
+      .mockResolvedValueOnce({ items: [finding], nextOffset: 1 })
+      .mockResolvedValueOnce({ items: [second] });
+    renderPage('findings');
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Load more' }));
+    expect(await screen.findByText('Later')).toBeTruthy();
+    expect(screen.getByText('Check failed')).toBeTruthy();
+    expect(listFindingsPage).toHaveBeenLastCalledWith({}, 1);
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
   });
 });

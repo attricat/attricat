@@ -4,6 +4,9 @@ use super::{
     pagination::{ArrayPage, array_response},
 };
 use crate::model::{CreateManualRuleRun, CreateRule, EnableRule, Rule, RuleFinding};
+use crate::repository::RuleFindingFilter;
+use attricat_domain::states::RuleFindingState;
+use attricat_rules::Severity;
 use axum::{Json, http::StatusCode, response::Response};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -107,8 +110,14 @@ pub(super) async fn disable(
     Ok(Json(repo.disable_rule(id).await?))
 }
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FindingsQuery {
     record_id: Option<Uuid>,
+    rule_id: Option<Uuid>,
+    blueprint_id: Option<Uuid>,
+    context_id: Option<Uuid>,
+    severity: Option<Severity>,
+    state: Option<RuleFindingState>,
     /// Leaves out resolved findings.
     #[serde(default)]
     unresolved: bool,
@@ -120,9 +129,16 @@ pub(super) async fn findings(
     ApiQuery(query): ApiQuery<FindingsQuery>,
 ) -> Result<Response, ApiError> {
     let (limit, offset) = ArrayPage::new(query.limit, query.offset).bounds()?;
-    let page_items = repo
-        .rule_findings_page(query.record_id, query.unresolved, limit, offset)
-        .await?;
+    let filter = RuleFindingFilter {
+        record_id: query.record_id,
+        rule_id: query.rule_id,
+        blueprint_id: query.blueprint_id,
+        context_id: query.context_id,
+        severity: query.severity,
+        state: query.state,
+        unresolved: query.unresolved,
+    };
+    let page_items = repo.rule_findings_page(&filter, limit, offset).await?;
     Ok(array_response(page_items, (limit, offset)))
 }
 #[derive(Deserialize)]

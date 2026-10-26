@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { revisionStatusSchema } from '../../api/revisionStatus';
+import { findingSeverities, findingStateFilters } from './constants';
 
 export const ruleSchema = z.object({
   id: z.uuid(),
@@ -54,6 +55,18 @@ export const findingEvidenceSchema = z.object({
   contexts: z.array(z.string()).optional(),
   attribute_code: z.string().optional(),
 });
+/** The findings page's filters, kept in its URL. Unset filters match all. */
+export const findingsSearchSchema = z.object({
+  severity: z
+    .enum(Object.values(findingSeverities))
+    .optional()
+    .catch(undefined),
+  state: z.enum(Object.values(findingStateFilters)).optional().catch(undefined),
+  rule: z.uuid().optional().catch(undefined),
+  blueprint: z.uuid().optional().catch(undefined),
+  context: z.uuid().optional().catch(undefined),
+});
+export type FindingsSearch = z.infer<typeof findingsSearchSchema>;
 export type Rule = z.infer<typeof ruleSchema>;
 export type RuleRun = z.infer<typeof ruleRunSchema>;
 export type Finding = z.infer<typeof findingSchema>;

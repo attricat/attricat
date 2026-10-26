@@ -1888,7 +1888,20 @@
     "dryRun": "Dry run",
     "runNow": "Run now",
     "acknowledge": "Acknowledge",
-    "activeFindings": "Active findings",
+    "filters": {
+      "label": "Filter findings",
+      "any": "Any",
+      "blueprint": "Blueprint",
+      "context": "Context",
+      "noMatches": "No findings match these filters.",
+      "states": {
+        "unresolved": "Unresolved",
+        "open": "Open",
+        "acknowledged": "Acknowledged",
+        "resolved": "Resolved",
+        "all": "All"
+      }
+    },
     "runHistory": "Run history",
     "dryRunSuffix": "{{source}} (dry run)",
     "severities": {

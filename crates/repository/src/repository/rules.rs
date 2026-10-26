@@ -6,7 +6,7 @@ use crate::{
     model::{CreateManualRuleRun, CreateRule, Rule, RuleFinding, RuleRun},
     task_queue::{TaskInsert, TaskKind},
 };
-use attricat_domain::states::RunStatus;
+use attricat_domain::states::{RuleFindingState, RunStatus};
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -736,19 +736,30 @@ impl AttricatRepository {
         Ok((rows.into_domain(), has_more))
     }
 
-    /// Findings, most severe first and then newest first, optionally of one
-    /// record and leaving out resolved ones. The order does not depend on
-    /// re-checks, so offset pages stay stable while rules run again.
+    /// Findings matching `filter`, most severe first and then newest first.
+    /// The order does not depend on re-checks, so offset pages stay stable
+    /// while rules run again.
     pub async fn rule_findings_page(
         &self,
-        record_id: Option<Uuid>,
-        unresolved: bool,
+        filter: &RuleFindingFilter,
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<RuleFinding>, bool), RepositoryError> {
         let ws = self.workspace_id.0;
-        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,record_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR record_id=$2) AND (NOT $3 OR state <> 'resolved') ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'error' THEN 1 WHEN 'warning' THEN 2 WHEN 'info' THEN 3 ELSE 4 END,created_at DESC,id DESC LIMIT $4 OFFSET $5")
-            .bind(ws).bind(record_id).bind(unresolved).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
+        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT f.id,f.rule_id,f.rule_version,f.record_id,f.context_id,f.severity,f.message,f.evidence,f.state,f.acknowledged_at,f.resolved_at,f.created_at,f.updated_at FROM rule_findings f WHERE f.workspace_id=$1 AND ($2::uuid IS NULL OR f.record_id=$2) AND (NOT $3 OR f.state <> $4) AND ($5::uuid IS NULL OR f.rule_id=$5) AND ($6::uuid IS NULL OR f.context_id=$6) AND ($7::text IS NULL OR f.severity=$7) AND ($8::text IS NULL OR f.state=$8) AND ($9::uuid IS NULL OR EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=f.workspace_id AND r.id=f.record_id AND r.blueprint_id=$9)) ORDER BY CASE f.severity WHEN 'critical' THEN 0 WHEN 'error' THEN 1 WHEN 'warning' THEN 2 WHEN 'info' THEN 3 ELSE 4 END,f.created_at DESC,f.id DESC LIMIT $10 OFFSET $11")
+            .bind(ws)
+            .bind(filter.record_id)
+            .bind(filter.unresolved)
+            .bind(RuleFindingState::Resolved.as_str())
+            .bind(filter.rule_id)
+            .bind(filter.context_id)
+            .bind(filter.severity.as_ref().map(severity_code))
+            .bind(filter.state.map(RuleFindingState::as_str))
+            .bind(filter.blueprint_id)
+            .bind(limit + 1)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
         Ok((rows.into_domain(), has_more))
@@ -1142,6 +1153,21 @@ fn dry_run_enable_gate(
         }
         Some(_) => Ok(()),
     }
+}
+
+/// Which findings a page lists. Every set field narrows it.
+#[derive(Clone, Debug, Default)]
+pub struct RuleFindingFilter {
+    pub record_id: Option<Uuid>,
+    pub rule_id: Option<Uuid>,
+    /// Findings about records of this blueprint.
+    pub blueprint_id: Option<Uuid>,
+    /// Findings for this context; record-wide findings have none.
+    pub context_id: Option<Uuid>,
+    pub severity: Option<attricat_rules::Severity>,
+    pub state: Option<RuleFindingState>,
+    /// Leaves out resolved findings.
+    pub unresolved: bool,
 }
 
 /// The `rule_findings.severity` code, spelled as in rule definitions.

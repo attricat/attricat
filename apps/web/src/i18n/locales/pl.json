@@ -1968,7 +1968,20 @@
     "dryRun": "Próbny przebieg",
     "runNow": "Uruchom teraz",
     "acknowledge": "Potwierdź",
-    "activeFindings": "Aktywne ustalenia",
+    "filters": {
+      "label": "Filtruj ustalenia",
+      "any": "Wszystkie",
+      "blueprint": "Schemat",
+      "context": "Kontekst",
+      "noMatches": "Żadne ustalenia nie pasują do tych filtrów.",
+      "states": {
+        "unresolved": "Nierozwiązane",
+        "open": "Otwarte",
+        "acknowledged": "Potwierdzone",
+        "resolved": "Rozwiązane",
+        "all": "Wszystkie"
+      }
+    },
     "runHistory": "Historia przebiegów",
     "dryRunSuffix": "{{source}} (próbny przebieg)",
     "severities": {

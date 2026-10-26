@@ -67,6 +67,17 @@ crate::code_enum! {
 }
 
 crate::code_enum! {
+    /// Where a rule finding stands. A re-check that no longer finds the
+    /// problem resolves it.
+    pub enum RuleFindingState (UnknownRuleFindingState: "rule finding state") {
+        Open => "open",
+        /// Seen by someone who manages rules; it stays until resolved.
+        Acknowledged => "acknowledged",
+        Resolved => "resolved",
+    }
+}
+
+crate::code_enum! {
     /// Whether a workspace membership grants access. Only active memberships
     /// are authorized.
     pub enum MembershipState (UnknownMembershipState: "membership state") {
@@ -298,6 +309,11 @@ mod tests {
             FileStatus::ALL,
             FileStatus::as_str,
             FileStatus::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            RuleFindingState::ALL,
+            RuleFindingState::as_str,
+            RuleFindingState::parse,
         );
         crate::codes::assert_codes_round_trip(
             MembershipState::ALL,

@@ -1,10 +1,20 @@
 import { z } from 'zod';
 import { request, requestOffsetPage, jsonRequest } from '../../api/request';
-import { RECORD_FINDINGS_PAGE_SIZE, RECORD_RULE_RUNS_LIMIT } from './constants';
-import { findingSchema, ruleRunSchema, ruleSchema } from './schemas';
+import {
+  FINDINGS_PAGE_SIZE,
+  findingStateFilters,
+  RECORD_FINDINGS_PAGE_SIZE,
+  RECORD_RULE_RUNS_LIMIT,
+} from './constants';
+import {
+  findingSchema,
+  ruleRunSchema,
+  ruleSchema,
+  type FindingsSearch,
+} from './schemas';
 import { uuidSegment, versionSegment } from '../../api/pathSegments';
 import { randomUuid } from '../../components/randomUuid';
-export type { Finding, Rule, RuleRun } from './schemas';
+export type { Finding, FindingsSearch, Rule, RuleRun } from './schemas';
 export const listRules = () => request('/api/rules', z.array(ruleSchema));
 export const listRuleRuns = () =>
   request('/api/rule-runs', z.array(ruleRunSchema));
@@ -24,13 +34,26 @@ export const recheckRecord = (recordId: string) =>
       idempotency_key: randomUuid(),
     }),
   );
-export const listFindings = (recordId?: string) =>
-  request(
-    recordId
-      ? `/api/rule-findings?record_id=${uuidSegment(recordId)}`
-      : '/api/rule-findings',
+/** One page of the workspace's findings that match the findings page's filters. */
+export const listFindingsPage = (search: FindingsSearch, offset = 0) => {
+  const params = new URLSearchParams({
+    limit: String(FINDINGS_PAGE_SIZE),
+    offset: String(offset),
+  });
+  const state = search.state ?? findingStateFilters.unresolved;
+  if (state === findingStateFilters.unresolved)
+    params.set('unresolved', 'true');
+  else if (state !== findingStateFilters.all) params.set('state', state);
+  if (search.severity) params.set('severity', search.severity);
+  if (search.rule) params.set('rule_id', z.uuid().parse(search.rule));
+  if (search.blueprint)
+    params.set('blueprint_id', z.uuid().parse(search.blueprint));
+  if (search.context) params.set('context_id', z.uuid().parse(search.context));
+  return requestOffsetPage(
+    `/api/rule-findings?${params}`,
     z.array(findingSchema),
   );
+};
 /** One page of a record's open and acknowledged findings, newest change first. */
 export const listUnresolvedRecordFindings = (recordId: string, offset = 0) =>
   requestOffsetPage(

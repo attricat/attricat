@@ -9,6 +9,12 @@ export const migrationBatchStatuses = {
   superseded: 'superseded',
 } as const satisfies Record<string, BlueprintMigrationBatchStatus['status']>;
 
+/** What a blueprint describes: records, or attributes other blueprints include. */
+export const blueprintKinds = {
+  record: 'record',
+  mixin: 'mixin',
+} as const;
+
 /** Approves archival of stored values for attributes removed by a migration. */
 export const archiveRemovalDisposition = 'archive';
 export type RemovalDisposition = typeof archiveRemovalDisposition;

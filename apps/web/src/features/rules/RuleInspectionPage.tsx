@@ -1,5 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createLink } from '@tanstack/react-router';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { createLink, useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Button, Tab, Tabs } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { ApiRequestError } from '../../api/request';
@@ -11,13 +16,13 @@ import {
   acknowledgeFinding,
   disableRule,
   enableRuleRevision,
-  listFindings,
+  listFindingsPage,
   listRuleRuns,
   runRuleNow,
+  type FindingsSearch,
   type Rule,
 } from './api';
 import {
-  FINDING_STATE_RESOLVED,
   RULE_HAS_EXISTING_VIOLATIONS,
   RULE_SECTION_FINDINGS,
   RULE_SECTION_RULES,
@@ -37,24 +42,45 @@ import { RunsSection } from './RunsSection';
 import { RuleIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
+import { blueprintCatalogueOptions } from '../blueprints/queryOptions';
+import { contextListOptions } from '../contexts/queryOptions';
 
 const RouterTab = createLink(Tab);
 
+const noFindingsSearch: FindingsSearch = {};
+
 export const RuleInspectionPage = ({
   section,
+  findingsSearch = noFindingsSearch,
 }: {
   section: RuleInspectionSection;
+  /** The findings section's filters, from its URL. */
+  findingsSearch?: FindingsSearch;
 }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const canManage = useCan(capabilities.rulesManage);
   // Findings and runs name their rule revision from the definitions.
   const rules = useQuery(ruleDefinitionsOptions());
   const revisions = ruleRevisionsByKey(rules.data ?? []);
-  const findings = useQuery({
-    queryKey: ruleQueryKeys.findings(),
-    queryFn: () => listFindings(),
-    enabled: section === RULE_SECTION_FINDINGS,
+  const findingsShown = section === RULE_SECTION_FINDINGS;
+  const findings = useInfiniteQuery({
+    queryKey: ruleQueryKeys.findingsPage(findingsSearch),
+    queryFn: ({ pageParam }) => listFindingsPage(findingsSearch, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (page) => page.nextOffset,
+    enabled: findingsShown,
+  });
+  const findingItems = findings.data?.pages.flatMap((page) => page.items);
+  // The findings filters offer the workspace's blueprints and contexts.
+  const blueprints = useQuery({
+    ...blueprintCatalogueOptions(),
+    enabled: findingsShown,
+  });
+  const contexts = useQuery({
+    ...contextListOptions(),
+    enabled: findingsShown,
   });
   const runs = useQuery({
     queryKey: ruleQueryKeys.runs(),
@@ -63,10 +89,8 @@ export const RuleInspectionPage = ({
   });
   // Name the records the visible findings and runs refer to.
   const recordLabels = useRecordLabels(
-    section === RULE_SECTION_FINDINGS
-      ? (findings.data ?? [])
-          .filter((finding) => finding.state !== FINDING_STATE_RESOLVED)
-          .map((finding) => finding.record_id)
+    findingsShown
+      ? (findingItems ?? []).map((finding) => finding.record_id)
       : section === RULE_SECTION_RUNS
         ? (runs.data ?? []).flatMap((run) =>
             run.scope_record_id ? [run.scope_record_id] : [],
@@ -193,9 +217,22 @@ export const RuleInspectionPage = ({
             onAcknowledge={(id) => acknowledge.mutate(id)}
             acknowledging={acknowledge.isPending}
             canManage={canManage}
-            error={findings.isError}
+            error={findings.isError && !findings.isFetchNextPageError}
             recordLabels={recordLabels}
-            findings={findings.data}
+            findings={findingItems}
+            filters={findingsSearch}
+            onFiltersChange={(search) =>
+              void navigate({ to: '/manage/rules/findings', search })
+            }
+            rules={rules.data ?? []}
+            blueprints={blueprints.data ?? []}
+            contexts={contexts.data ?? []}
+            hasNextPage={findings.hasNextPage}
+            isFetchingNextPage={findings.isFetchingNextPage}
+            nextPageError={
+              findings.isFetchNextPageError ? findings.error : null
+            }
+            onLoadMore={() => void findings.fetchNextPage()}
             revisions={revisions}
           />
         )}
