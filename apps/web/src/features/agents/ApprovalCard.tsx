@@ -9,7 +9,8 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { CheckIcon, XIcon } from 'lucide-react';
-import { bulkEditProposalSchema, bulkEditToolName } from './bulkEdits';
+import { bulkEditToolName } from './bulkEdits';
+import { bulkEditProposalSchema } from './schemas';
 import { BulkEditPreview } from './BulkEditPreview';
 import { JsonBlock } from '../../components/JsonValue';
 import type { AgentToolCall } from './schemas';

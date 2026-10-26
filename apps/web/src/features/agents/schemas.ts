@@ -78,3 +78,54 @@ export type Conversation = z.infer<typeof conversationSchema>;
 export type ConversationMessage = z.infer<typeof messageSchema>;
 export type AgentRun = z.infer<typeof runSchema>;
 export type AgentToolCall = z.infer<typeof toolCallSchema>;
+
+const bulkEditNamedCodeSchema = z.object({
+  code: z.string(),
+  name: z.string(),
+});
+
+/** The resolved proposal a bulk edit's approval covers. */
+export const bulkEditProposalSchema = z.object({
+  blueprint: bulkEditNamedCodeSchema.nullable(),
+  attributes: z.array(bulkEditNamedCodeSchema),
+  records: z.array(
+    z.object({
+      record_id: id,
+      blueprint_code: z.string(),
+      label: z.string().nullable(),
+      values: z.array(
+        z.object({
+          attribute_code: z.string(),
+          context_id: id.nullable(),
+          value: z.unknown(),
+          previous: z.unknown(),
+        }),
+      ),
+    }),
+  ),
+});
+
+export const bulkEditResultSchema = z.object({
+  applied: z.array(id),
+  failed: z.array(
+    z.object({ record_id: id, code: z.string(), message: z.string() }),
+  ),
+  not_run: z.array(id),
+});
+
+export const bulkProgressSchema = z.object({
+  run_id: id,
+  payload: z.object({
+    tool_call_id: id,
+    record_id: id,
+    state: z.enum(['applied', 'failed']),
+    applied: z.number().int().nonnegative(),
+    total: z.number().int().positive(),
+  }),
+});
+
+export type BulkEditProposal = z.infer<typeof bulkEditProposalSchema>;
+export type BulkEditResult = z.infer<typeof bulkEditResultSchema>;
+export type BulkProgress = z.infer<typeof bulkProgressSchema>['payload'] & {
+  run_id: string;
+};

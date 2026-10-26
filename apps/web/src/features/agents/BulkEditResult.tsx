@@ -10,7 +10,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { apiErrorText } from '../../api/errors';
 import { useRecordLabels } from '../records/useRecordLabels';
-import type { BulkEditResult as BulkEditOutcome } from './bulkEdits';
+import type { BulkEditResult as BulkEditOutcome } from './schemas';
 import { BulkEditRecordLink } from './BulkEditRecordLink';
 
 const RecordList = ({

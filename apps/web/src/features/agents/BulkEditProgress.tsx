@@ -1,6 +1,6 @@
 import { LinearProgress, Paper, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import type { BulkProgress } from './bulkEdits';
+import type { BulkProgress } from './schemas';
 
 /** How far an approved bulk edit has got while it runs. */
 export const BulkEditProgress = ({ progress }: { progress: BulkProgress }) => {

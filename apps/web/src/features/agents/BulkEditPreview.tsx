@@ -15,11 +15,8 @@ import {
 import { ArrowRightIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
-import {
-  bulkEditPreviewRows,
-  formatBulkValue,
-  type BulkEditProposal,
-} from './bulkEdits';
+import { bulkEditPreviewRows, formatBulkValue } from './bulkEdits';
+import { type BulkEditProposal } from './schemas';
 import { BulkEditRecordLink } from './BulkEditRecordLink';
 
 const BulkValue = ({ value }: { value: unknown }) => {

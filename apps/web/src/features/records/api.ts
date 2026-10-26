@@ -11,7 +11,6 @@ import {
   recordLabelsResponseSchema,
   createRecordRequestSchema,
   recordHierarchySchema,
-  recordAuditChangeSchema,
   recordFormResponseSchema,
   recordMigrationPreviewSchema,
   recordPreviewResponseSchema,
@@ -36,6 +35,8 @@ import {
   retentionHoldSchema,
   statusTransitionAccessSchema,
   uuidSchema,
+  recordChangesPageSchema,
+  recordsPublicationsResponseSchema,
 } from './schemas';
 
 import type { RecordControlCursor } from './schemas';
@@ -245,10 +246,7 @@ export const getCurrentBlueprint = (id: string) =>
 export const getRecordChanges = (id: string, offset: number) =>
   request(
     `/api/records/${uuidSegment(id)}/changes?limit=${RECORD_CHANGES_PAGE_SIZE}&offset=${offset}`,
-    z.object({
-      items: z.array(recordAuditChangeSchema),
-      next_offset: z.number().int().nonnegative().nullable(),
-    }),
+    recordChangesPageSchema,
   );
 export const getRecordForm = (id: string, signal?: AbortSignal) =>
   request(recordPath(id), recordFormResponseSchema, { signal });
@@ -292,14 +290,6 @@ export const getRecordPublications = (id: string, signal?: AbortSignal) =>
     z.array(recordPublicationStatusSchema),
     { signal },
   );
-const recordsPublicationsResponseSchema = z.object({
-  items: z.array(
-    z.object({
-      record_id: uuidSchema,
-      publications: z.array(recordPublicationStatusSchema),
-    }),
-  ),
-});
 /** Statuses of up to 100 records; unreadable and unknown records are left out. */
 export const getRecordsPublications = (
   recordIds: string[],

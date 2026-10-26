@@ -570,3 +570,24 @@ export type RecordControlCursor = { before_time: string; before_id: string };
 /** Unwraps an `{ items: [...] }` collection response. */
 export const itemsResponseSchema = <T extends z.ZodType>(item: T) =>
   z.object({ items: z.array(item) }).transform(({ items }) => items);
+
+/** One page of a record's change history. */
+export const recordChangesPageSchema = z.object({
+  items: z.array(recordAuditChangeSchema),
+  next_offset: z.number().int().nonnegative().nullable(),
+});
+
+/** Publication statuses of several records, keyed by record. */
+export const recordsPublicationsResponseSchema = z.object({
+  items: z.array(
+    z.object({
+      record_id: uuidSchema,
+      publications: z.array(recordPublicationStatusSchema),
+    }),
+  ),
+});
+
+/** The `details` of a `record_schema_mismatch` rejection. */
+export const schemaMismatchDetailsSchema = z.object({
+  instance_path: z.string().default(''),
+});

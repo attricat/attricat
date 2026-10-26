@@ -85,6 +85,7 @@ export const roleInputSchema = z.object({
 });
 
 export type WorkspaceRole = z.infer<typeof roleSchema>;
+export type Invitation = z.infer<typeof invitationSchema>;
 export type GrantTarget = z.infer<typeof grantTargetSchema>;
 export type ScopeType = z.infer<typeof scopeTypeSchema>;
 export type GrantInput = z.infer<typeof grantInputSchema>;

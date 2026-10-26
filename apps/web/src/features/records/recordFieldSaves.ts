@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { ApiRequestError } from '../../api/request';
 import type { Attribute, updateRecord } from './api';
 import {
@@ -8,6 +7,7 @@ import {
 } from './recordForm';
 import { RECORD_SCHEMA_MISMATCH_ERROR_CODE } from './constants';
 import { attributeValueTypes } from './valueTypes';
+import { schemaMismatchDetailsSchema } from './schemas';
 
 type FieldSaveRequest = Omit<
   Parameters<typeof updateRecord>[1],
@@ -49,9 +49,6 @@ export const fieldSaveRequest = (
   };
 };
 
-const schemaMismatchDetailsSchema = z.object({
-  instance_path: z.string().default(''),
-});
 const requiredPropertyPattern = /"([^"]+)" is a required property/;
 const forbiddenPropertyPattern = /"([^"]+)" is not allowed/;
 

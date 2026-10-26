@@ -9,7 +9,8 @@ import {
   Typography,
 } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
-import { bulkEditResultSchema, bulkEditToolName } from './bulkEdits';
+import { bulkEditToolName } from './bulkEdits';
+import { bulkEditResultSchema } from './schemas';
 import { BulkEditResult } from './BulkEditResult';
 import { useTranslation } from 'react-i18next';
 import '../../i18n';

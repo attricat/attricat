@@ -2,11 +2,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { agentRunEventsUrl } from './api';
-import {
-  bulkProgressEvent,
-  bulkProgressSchema,
-  type BulkProgress,
-} from './bulkEdits';
+import { bulkProgressEvent } from './bulkEdits';
+import { bulkProgressSchema, type BulkProgress } from './schemas';
 import {
   activeRunStatuses,
   conversationEventBatchDelayMs,

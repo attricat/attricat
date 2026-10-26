@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Box, CircularProgress, Stack, Typography } from '@mui/material';
 import { ApprovalCard } from './ApprovalCard';
-import type { BulkProgress } from './bulkEdits';
+import type { BulkProgress } from './schemas';
 import { BulkEditProgress } from './BulkEditProgress';
 import { loadingProgressSize, transcriptEndScrollMargin } from './constants';
 import type { AgentRun, AgentToolCall, ConversationMessage } from './schemas';

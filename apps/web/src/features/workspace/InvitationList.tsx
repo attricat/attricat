@@ -3,15 +3,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { errorMessage } from '../../api/errors';
 import { Timestamp } from '../../time/Timestamp';
 import { revokeInvitation } from './api';
-
-type Invitation = {
-  accepted_at?: string | null;
-  expires_at: string;
-  id: string;
-  invitee_email: string;
-  revoked_at?: string | null;
-  role_code: string;
-};
+import type { Invitation } from './schemas';
 
 export const InvitationList = ({
   invitations,
