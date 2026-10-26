@@ -60,3 +60,5 @@ export const useRecordPublications = (
     },
   };
 };
+
+export type RecordPublications = ReturnType<typeof useRecordPublications>;

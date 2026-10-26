@@ -295,14 +295,8 @@ export const RecordPreview = ({
               onDuplicate={() => setDuplicateOpen(true)}
               canDelete={canDeleteRecords && Boolean(resolved.data)}
               onDelete={() => setDeleteOpen(true)}
-              publication={publications.publication}
               canPublish={canPublish}
-              readiness={publications.readiness}
-              notReadyChannels={publications.notReadyChannels}
-              onPublish={publications.publish}
-              onPublishAll={publications.publishAll}
-              onUnpublish={publications.unpublish}
-              publicationPending={publications.isPending}
+              publications={publications}
             />
             {contexts.isPending && (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>

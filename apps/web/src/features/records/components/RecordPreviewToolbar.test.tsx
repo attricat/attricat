@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
 import type { RecordPublicationReadiness } from '../schemas';
 import { RecordPreviewToolbar } from './RecordPreviewToolbar';
+import type { RecordPublications } from './useRecordPublications';
 
 vi.mock('@tanstack/react-router', () => ({
   createLink: (component: unknown) => component,
@@ -34,6 +35,20 @@ const notReady: RecordPublicationReadiness = {
   ],
 };
 
+const publications = (
+  overrides: Partial<RecordPublications>,
+): RecordPublications => ({
+  error: null,
+  isPending: false,
+  notReadyChannels: [],
+  publication: undefined,
+  publish: vi.fn(),
+  publishAll: vi.fn(),
+  readiness: undefined,
+  unpublish: vi.fn(),
+  ...overrides,
+});
+
 const renderToolbar = (
   readiness: RecordPublicationReadiness,
   onPublish = vi.fn(),
@@ -52,23 +67,22 @@ const renderToolbar = (
         canWrite
         recordId="123e4567-e89b-12d3-a456-426614174001"
         extensionPanelOpen={false}
-        notReadyChannels={readiness.ready ? [] : [readiness]}
         onDelete={vi.fn()}
         onDuplicate={vi.fn()}
         onOpenAgent={vi.fn()}
         onOpenExtensions={vi.fn()}
-        onPublish={onPublish}
-        onPublishAll={vi.fn()}
-        onUnpublish={vi.fn()}
-        publication={{
-          context_id: storefront,
-          context_code: 'storefront',
-          status: 'not_published',
-          published_at: null,
-          published_by_user_id: null,
-        }}
-        publicationPending={false}
-        readiness={readiness}
+        publications={publications({
+          notReadyChannels: readiness.ready ? [] : [readiness],
+          publication: {
+            context_id: storefront,
+            context_code: 'storefront',
+            status: 'not_published',
+            published_at: null,
+            published_by_user_id: null,
+          },
+          publish: onPublish,
+          readiness,
+        })}
         showExtensions={false}
       />,
     ),
@@ -141,10 +155,7 @@ describe('record actions menu', () => {
           onDuplicate={vi.fn()}
           onOpenAgent={vi.fn()}
           onOpenExtensions={vi.fn()}
-          onPublish={vi.fn()}
-          onPublishAll={vi.fn()}
-          onUnpublish={vi.fn()}
-          publicationPending={false}
+          publications={publications({})}
           showExtensions={false}
           {...props}
         />
