@@ -1,9 +1,9 @@
+import { invalidInputErrorCode } from '../../api/errors';
 import { keepPreviousData, useQueries } from '@tanstack/react-query';
 import { ApiRequestError, searchRecords, type Blueprint } from '../records/api';
 import { recordQueryKeys } from '../records/queryKeys';
 import {
   defaultQueryRetries,
-  invalidInputErrorCode,
   overviewConcurrentSearches,
   overviewRecordsPerBlueprint,
   overviewStaleTimeMs,

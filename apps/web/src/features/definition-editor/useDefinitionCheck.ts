@@ -17,6 +17,11 @@ export type DefinitionCheck<T> = {
   status: CheckStatus;
   /** The server's error for the current definition, while it is invalid. */
   error?: string;
+  /**
+   * The server's untranslated message for `error`, which names what it rejects
+   * the same way in every language; only for finding where the error points.
+   */
+  serverMessage?: string;
   /** The most recent definition that passed, for the preview. */
   result?: T;
   /** Whether `result` comes from an earlier version of the definition. */
@@ -74,9 +79,10 @@ export const useDefinitionCheck = <T>({
       : query.isError
         ? checkStatuses.invalid
         : checkStatuses.valid;
+  const failure = status === checkStatuses.invalid ? query.error : null;
   return {
-    error:
-      status === checkStatuses.invalid ? errorMessage(query.error) : undefined,
+    error: failure ? errorMessage(failure) : undefined,
+    serverMessage: failure?.message,
     result: lastValid?.result,
     stale: lastValid !== undefined && lastValid.definition !== definition,
     status,

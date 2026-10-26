@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ApiRequestError, type Blueprint } from '../records/api';
-import { invalidInputErrorCode } from './constants';
+import { invalidInputErrorCode } from '../../api/errors';
 import { ExplorerOverview } from './ExplorerOverview';
 import { useExplorerOverview } from './useExplorerOverview';
 

@@ -11,6 +11,8 @@ export type ApiErrorCode =
 
 /** The error code of a missing (or unreadable) resource. */
 export const notFoundErrorCode = 'not_found' satisfies ApiErrorCode;
+/** A rejected request, such as a query naming fields its blueprint lacks. */
+export const invalidInputErrorCode = 'invalid_input' satisfies ApiErrorCode;
 
 /** Translation key prefix of API error codes (`apiErrors.<code>`). */
 const API_ERROR_KEY_PREFIX = 'apiErrors';

@@ -121,10 +121,10 @@ export const DefinitionWorkspace = ({
   });
   const errorRange = useMemo(
     () =>
-      check.error === undefined
+      check.serverMessage === undefined
         ? undefined
-        : locateDefinitionError(value, check.error),
-    [check.error, value],
+        : locateDefinitionError(value, check.serverMessage),
+    [check.serverMessage, value],
   );
   const errorLine = errorRange && lineOf(value, errorRange.start);
 
