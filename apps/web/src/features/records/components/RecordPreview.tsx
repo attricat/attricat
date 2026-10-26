@@ -47,6 +47,7 @@ import { RecordExportStatusPanel } from '../../extension-exports/RecordExportSta
 import { DeleteRecordDialog } from './DeleteRecordDialog';
 import { DuplicateRecordDialog } from './DuplicateRecordDialog';
 import { RecordAgentDrawer } from './RecordAgentDrawer';
+import { RecordConversationsPanel } from '../../agents/RecordConversationsPanel';
 import { RecordBlueprintHeaderActions } from './RecordBlueprintHeaderActions';
 import { RecordExtensionDrawer } from './RecordExtensionDrawer';
 import { RecordHeading } from './RecordHeading';
@@ -122,6 +123,10 @@ export const RecordPreview = ({
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
+  // The conversation in the agent panel, or `null` to start a new one.
+  const [agentConversationId, setAgentConversationId] = useState<string | null>(
+    null,
+  );
   const inlineFieldsRef = useRef<RecordInlineFieldsHandle>(null);
   // Leads to a field from its save status, a connected field's diagnostics
   // or a data quality finding about it.
@@ -200,6 +205,22 @@ export const RecordPreview = ({
         resolvedRecord.blueprint_version
       : undefined;
   const actionError = publications.error;
+  const contextCodes = useMemo(
+    () =>
+      new Map(
+        (contexts.data ?? []).map((context) => [context.id, context.code]),
+      ),
+    [contexts.data],
+  );
+  const openAgent = (conversationId: string | null) => {
+    setAgentConversationId(conversationId);
+    setExtensionPanelOpen(false);
+    setAgentPanelOpen(true);
+  };
+  const showTab = (key: RecordPreviewTabKey) => {
+    setTab(key);
+    setTabReveal((count) => count + 1);
+  };
   const loaded = resolved.data && blueprint.data;
 
   return (
@@ -223,17 +244,11 @@ export const RecordPreview = ({
           >
             <DataQualityFindingsChip
               recordId={recordId}
-              onOpen={() => {
-                setTab(recordPreviewTabs.dataQuality);
-                setTabReveal((count) => count + 1);
-              }}
+              onOpen={() => showTab(recordPreviewTabs.dataQuality)}
             />
             <RecordExportStatusChip
               recordId={recordId}
-              onOpen={() => {
-                setTab(recordPreviewTabs.exports);
-                setTabReveal((count) => count + 1);
-              }}
+              onOpen={() => showTab(recordPreviewTabs.exports)}
             />
           </RecordBlueprintHeaderActions>
         ),
@@ -298,10 +313,7 @@ export const RecordPreview = ({
                   setExtensionPanelOpen(true);
                 }}
                 agentPanelOpen={agentPanelOpen}
-                onOpenAgent={() => {
-                  setExtensionPanelOpen(false);
-                  setAgentPanelOpen(true);
-                }}
+                onOpenAgent={() => openAgent(null)}
                 schemaOutdated={schemaOutdated}
                 showExtensions={Boolean(loaded)}
                 canWrite={recordForm.data?.can_write === true}
@@ -425,6 +437,23 @@ export const RecordPreview = ({
                           },
                         ]
                       : []),
+                    ...(canAskAgent
+                      ? [
+                          {
+                            key: recordPreviewTabs.conversations,
+                            label: t('records.agentConversations.title'),
+                            content: (
+                              <RecordConversationsPanel
+                                key={recordId}
+                                contextCodes={contextCodes}
+                                onOpen={openAgent}
+                                onStart={() => openAgent(null)}
+                                recordId={recordId}
+                              />
+                            ),
+                          },
+                        ]
+                      : []),
                     {
                       key: recordPreviewTabs.recordControl,
                       label: t('records.recordControls.title'),
@@ -472,6 +501,13 @@ export const RecordPreview = ({
         key={`${recordId}:${selectedContextId ?? ''}`}
         recordId={recordId}
         contextId={selectedContextId}
+        conversationId={agentConversationId}
+        onConversationChange={setAgentConversationId}
+        onShowAll={
+          resolvedRecord
+            ? () => showTab(recordPreviewTabs.conversations)
+            : undefined
+        }
         offset={drawerOffset}
         onClose={() => setAgentPanelOpen(false)}
         open={agentPanelOpen}

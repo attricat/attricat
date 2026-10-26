@@ -11,14 +11,25 @@ import {
   toolCallSchema,
 } from './schemas';
 import { uuidSegment } from '../../api/pathSegments';
+import type { ConversationScope } from './constants';
 
 const queryParam = (value: string) => encodeURIComponent(value);
 
-export const listConversations = () =>
-  request('/api/agent/conversations', z.array(conversationSchema));
-export const searchConversations = (query: string, cursor?: string) => {
+export type ConversationFilter = {
+  /** Only conversations about this record. */
+  recordId?: string;
+  /** Include conversations about records; ignored with `recordId`. */
+  scope?: ConversationScope;
+};
+export const searchConversations = (
+  query: string,
+  cursor?: string,
+  filter: ConversationFilter = {},
+) => {
   const params = new URLSearchParams({ q: query });
   if (cursor) params.set('cursor', cursor);
+  if (filter.recordId) params.set('record_id', filter.recordId);
+  else if (filter.scope) params.set('scope', filter.scope);
   return request(
     `/api/agent/conversations/search?${params}`,
     conversationSearchPageSchema,

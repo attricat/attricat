@@ -361,7 +361,9 @@
       "notRunRecords_many": "Pokaż pominięte rekordy ({{count}})",
       "notRunRecords_other": "Pokaż pominięte rekordy ({{count}})",
       "recordWithoutLabel": "Rekord {{id}}"
-    }
+    },
+    "showRecordConversations": "Pokaż rozmowy o rekordach",
+    "openRecord": "Otwórz rekord"
   },
   "inbox": {
     "title": "Powiadomienia",
@@ -580,7 +582,6 @@
     "context": "Kontekst",
     "moreContexts": "Więcej kontekstów",
     "askAboutRecord": "Zapytaj o ten rekord",
-    "startRecordConversation": "Rozpocznij rozmowę",
     "draftChanged": "Pominięto pola zmienione od czasu sugestii: {{fields}}. Poproś agenta o odświeżenie propozycji.",
     "applySmartFill": "Zastosuj wartości",
     "relatedRecordPreview": "Szczegóły: {{record}}",
@@ -668,7 +669,6 @@
     "blueprintLabel": "Schemat: {{name}}",
     "blueprintOption": "{{name}} ({{code}})",
     "reusableAttributeOption": "{{qualifiedCode}} · {{name}} v{{version}}",
-    "recordConversationTitle": "Zapytaj o ten rekord · {{recordId}}",
     "changeKind": {
       "set": "ustawienie",
       "replace": "zastąpienie",
@@ -843,7 +843,15 @@
     "fieldsChanged_few": "{{count}} pola zmienione",
     "fieldsChanged_many": "{{count}} pól zmienionych",
     "fieldsChanged_other": "{{count}} pola zmienionego",
-    "recordTabs": "Sekcje rekordu"
+    "recordTabs": "Sekcje rekordu",
+    "agentConversations": {
+      "title": "Rozmowy",
+      "showAll": "Wszystkie rozmowy o tym rekordzie",
+      "startHint": "Zapytaj agenta o ten rekord. Rozmowa rozpocznie się po wysłaniu pierwszej wiadomości.",
+      "empty": "Brak rozmów",
+      "emptyDescription": "Zapytaj agenta o ten rekord, aby rozpocząć rozmowę. Rozmowy o rekordzie widzi każdy, kto może go odczytać.",
+      "openPage": "Otwórz na stronie Agenci"
+    }
   },
   "exports": {
     "title": "Eksporty",

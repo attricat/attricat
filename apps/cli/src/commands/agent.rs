@@ -64,13 +64,16 @@ pub(crate) enum AgentCommand {
 
 #[derive(Subcommand)]
 pub(crate) enum ConversationCommand {
-    List,
+    /// Conversations not about a record, newest first.
+    List {
+        #[command(flatten)]
+        filter: ConversationFilter,
+    },
     Search {
         #[arg(long)]
         query: Option<String>,
-        /// Continue after a page: its `next_cursor`.
-        #[arg(long)]
-        cursor: Option<String>,
+        #[command(flatten)]
+        filter: ConversationFilter,
     },
     Create {
         #[arg(long)]
@@ -93,6 +96,39 @@ pub(crate) enum ConversationCommand {
     Delete {
         conversation_id: Uuid,
     },
+}
+
+#[derive(clap::Args)]
+pub(crate) struct ConversationFilter {
+    /// Only conversations about this record.
+    #[arg(long, conflicts_with = "all")]
+    record_id: Option<Uuid>,
+    #[arg(long, requires = "record_id")]
+    context_id: Option<Uuid>,
+    /// Include conversations about records.
+    #[arg(long)]
+    all: bool,
+    /// Continue after a page: its `next_cursor`.
+    #[arg(long)]
+    cursor: Option<String>,
+}
+
+const CONVERSATION_SCOPE_ALL: &str = "all";
+
+fn search_conversations_path(query: Option<String>, filter: ConversationFilter) -> String {
+    with_query(
+        &format!("{CONVERSATIONS_PATH}/search"),
+        [
+            ("q", query),
+            ("record_id", filter.record_id.map(|id| id.to_string())),
+            ("context_id", filter.context_id.map(|id| id.to_string())),
+            (
+                "scope",
+                filter.all.then(|| CONVERSATION_SCOPE_ALL.to_owned()),
+            ),
+            ("cursor", filter.cursor),
+        ],
+    )
 }
 
 #[derive(Subcommand)]
@@ -222,13 +258,11 @@ pub(crate) async fn agent_command(api: &Api, command: AgentCommand) -> Result<St
 
 async fn conversation_command(api: &Api, command: ConversationCommand) -> Result<String, CliError> {
     match command {
-        ConversationCommand::List => api.get(CONVERSATIONS_PATH).await,
-        ConversationCommand::Search { query, cursor } => {
-            api.get(&with_query(
-                &format!("{CONVERSATIONS_PATH}/search"),
-                [("q", query), ("cursor", cursor)],
-            ))
-            .await
+        ConversationCommand::List { filter } => {
+            api.get(&search_conversations_path(None, filter)).await
+        }
+        ConversationCommand::Search { query, filter } => {
+            api.get(&search_conversations_path(query, filter)).await
         }
         ConversationCommand::Create {
             title,

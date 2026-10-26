@@ -43,6 +43,7 @@ export const RECORD_PREVIEW_QUERY = {
 export const recordPreviewTabs = {
   dataQuality: 'data-quality',
   comments: 'comments',
+  conversations: 'conversations',
   recordControl: 'record-control',
   exports: 'exports',
 } as const;
@@ -122,7 +123,6 @@ export const CONTEXT_MENU_WIDTH = 180;
 export const RELATIONSHIP_PICKER_ACTION_MIN_WIDTH = 300;
 
 /** Number of record ID characters included in a new conversation title. */
-export const CONVERSATION_RECORD_ID_PREFIX_LENGTH = 8;
 
 /** Version of the extension context passed to record header actions. */
 export const RECORD_HEADER_CONTEXT_VERSION = 1;

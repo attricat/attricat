@@ -179,6 +179,16 @@ async fn queued_agent_runs_retain_and_enforce_the_initiating_token(pool: PgPool)
             .status(),
         StatusCode::FORBIDDEN
     );
+    assert_eq!(
+        limited
+            .get(format!("{base}/agent/conversations/search"))
+            .query(&[("record_id", record["id"].as_str().unwrap())])
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
     assert_eq!(limited.post(format!("{base}/agent/smart-fill"))
         .json(&json!({"record_id":record["id"], "is_default_context":true, "content":"Read private values"}))
         .send().await.unwrap().status(), StatusCode::FORBIDDEN);

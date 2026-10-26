@@ -345,7 +345,9 @@
       "notRunRecords_one": "Show the record that was not changed",
       "notRunRecords_other": "Show the {{count}} records that were not changed",
       "recordWithoutLabel": "Record {{id}}"
-    }
+    },
+    "showRecordConversations": "Show record conversations",
+    "openRecord": "Open record"
   },
   "inbox": {
     "title": "Inbox",
@@ -560,7 +562,6 @@
     "context": "Context",
     "moreContexts": "More contexts",
     "askAboutRecord": "Ask about this record",
-    "startRecordConversation": "Start conversation",
     "draftChanged": "Skipped fields changed since this suggestion: {{fields}}. Ask the agent to refresh its proposal.",
     "applySmartFill": "Apply values",
     "relatedRecordPreview": "Details of {{record}}",
@@ -642,7 +643,6 @@
     "blueprintLabel": "Blueprint: {{name}}",
     "blueprintOption": "{{name}} ({{code}})",
     "reusableAttributeOption": "{{qualifiedCode}} · {{name}} v{{version}}",
-    "recordConversationTitle": "Ask about this record · {{recordId}}",
     "changeKind": {
       "set": "set",
       "replace": "replace",
@@ -793,7 +793,15 @@
     "changeBlueprintConfirm": "Discard and change",
     "fieldsChanged_one": "{{count}} field changed",
     "fieldsChanged_other": "{{count}} fields changed",
-    "recordTabs": "Record sections"
+    "recordTabs": "Record sections",
+    "agentConversations": {
+      "title": "Conversations",
+      "showAll": "All conversations about this record",
+      "startHint": "Ask the agent about this record. The conversation starts when you send your first message.",
+      "empty": "No conversations yet",
+      "emptyDescription": "Ask the agent about this record to start one. Everyone who can read the record sees its conversations.",
+      "openPage": "Open on the Agents page"
+    }
   },
   "exports": {
     "title": "Exports",

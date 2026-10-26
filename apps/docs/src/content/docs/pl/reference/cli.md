@@ -334,8 +334,8 @@ acli workflow run-replay <run-id>
 ### Agent
 
 ```sh
-acli agent conversation list
-acli agent conversation search [--query <text>] [--cursor <cursor>]
+acli agent conversation list [--record-id <id> [--context-id <id>] | --all] [--cursor <cursor>]
+acli agent conversation search [--query <text>] [--record-id <id> [--context-id <id>] | --all] [--cursor <cursor>]
 acli agent conversation create [--title <title>] [--record-id <id> [--context-id <id>]]
 acli agent conversation get | delete <conversation-id>
 acli agent conversation rename <conversation-id> --title <title>

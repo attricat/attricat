@@ -4,41 +4,56 @@ import { useState } from 'react';
 import {
   Box,
   Button,
+  FormControlLabel,
   List,
   ListItem,
   ListItemText,
   Paper,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
-import { RouterListItemButton } from '../../components/RouterLink';
+import {
+  RouterButton,
+  RouterListItemButton,
+} from '../../components/RouterLink';
 import { searchConversations } from './api';
 import { Trans, useTranslation } from 'react-i18next';
 import { PlusIcon, SearchIcon } from 'lucide-react';
 import { Timestamp } from '../../time/Timestamp';
-import { agentRoutes, maximumSearchLength } from './constants';
+import {
+  agentRoutes,
+  conversationScopes,
+  maximumSearchLength,
+} from './constants';
 import { agentQueryKeys } from './queryKeys';
 import { titlePollInterval } from './titlePolling';
 import { EmptyState } from '../../components/EmptyState';
 import { AgentIcon } from '../../components/systemIcons';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
-export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
+export const ConversationsPage = ({
+  search,
+}: {
+  search: { q?: string; scope?: typeof conversationScopes.all };
+}) => {
   const { t } = useTranslation();
   const navigate = useNavigate({ from: '/agents/' });
   const [draftQuery, setDraftQuery] = useState(search.q ?? '');
   const submitSearch = () =>
     void navigate({
       to: agentRoutes.list,
-      search: { q: draftQuery.trim() || undefined },
+      search: { q: draftQuery.trim() || undefined, scope: search.scope },
     });
   const query = search.q ?? '';
+  const scope = search.scope ?? conversationScopes.unattached;
   const conversations = useInfiniteQuery({
-    queryKey: agentQueryKeys.conversationSearch(query),
-    queryFn: ({ pageParam }) => searchConversations(query, pageParam),
+    queryKey: agentQueryKeys.conversationSearch(query, scope),
+    queryFn: ({ pageParam }) =>
+      searchConversations(query, pageParam, { scope }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.next_cursor ?? undefined,
     refetchInterval: (query) =>
@@ -81,11 +96,46 @@ export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
           {t('agents.search')}
         </Button>
       </Box>
+      <FormControlLabel
+        control={
+          <Switch
+            checked={scope === conversationScopes.all}
+            onChange={(event) =>
+              void navigate({
+                to: agentRoutes.list,
+                search: {
+                  q: search.q,
+                  scope: event.target.checked
+                    ? conversationScopes.all
+                    : undefined,
+                },
+              })
+            }
+          />
+        }
+        label={t('agents.showRecordConversations')}
+        sx={{ mt: 1 }}
+      />
       <ApiErrorAlert error={conversations.error} sx={{ mt: 3 }} />
       <Paper sx={{ mt: 3 }}>
         <List disablePadding>
           {items.map((conversation) => (
-            <ListItem disablePadding divider key={conversation.id}>
+            <ListItem
+              disablePadding
+              divider
+              key={conversation.id}
+              secondaryAction={
+                conversation.record_id && (
+                  <RouterButton
+                    params={{ recordId: conversation.record_id }}
+                    size="small"
+                    to={agentRoutes.record}
+                  >
+                    {t('agents.openRecord')}
+                  </RouterButton>
+                )
+              }
+            >
               <RouterListItemButton
                 params={{ conversationId: conversation.id }}
                 sx={{ width: '100%' }}

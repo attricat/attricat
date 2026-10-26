@@ -53,7 +53,8 @@ export const parsePrincipalReference = (
     : undefined;
 };
 
-const principalReference = (kind: PrincipalKind, id: string) => `${kind}:${id}`;
+export const principalReference = (kind: PrincipalKind, id: string) =>
+  `${kind}:${id}`;
 
 export const userLabel = (user: DirectoryUser) =>
   user.display_name?.trim() || user.email;

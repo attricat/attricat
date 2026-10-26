@@ -132,7 +132,9 @@ If an extension exports records to a marketplace or storefront, the record's **E
 
 ## Ask an agent
 
-**Ask about this record** starts an [agent conversation](/guides/agents/) about the record you are looking at.
+**Ask about this record** opens a panel where you can start a new [agent conversation](/guides/agents/) about the record you are looking at. Type your question; the conversation is created when you send it.
+
+A record can have any number of conversations. The **Conversations** tab lists them, newest first, for everyone who can read the record. Select one to continue it in the panel, or open it on the **Agents** page. Conversations about a record do not appear in the main **Agents** list unless you turn on **Show record conversations**.
 
 ## Delete a record
 

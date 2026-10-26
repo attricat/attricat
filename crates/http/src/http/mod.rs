@@ -381,10 +381,7 @@ pub fn router(state: AppState) -> Router {
         .with_state(state.clone());
     let api = Router::new()
         .route("/metrics", get(metrics))
-        .route(
-            "/agent/conversations",
-            get(agents::list_conversations).post(agents::create_conversation),
-        )
+        .route("/agent/conversations", post(agents::create_conversation))
         .route(
             "/agent/conversations/search",
             get(agents::search_conversations),

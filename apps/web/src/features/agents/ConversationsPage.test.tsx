@@ -25,6 +25,13 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigate,
 }));
 vi.mock('../../components/RouterLink', () => ({
+  RouterButton: ({
+    children,
+    params,
+  }: {
+    children: React.ReactNode;
+    params: { recordId: string };
+  }) => <a href={`/records/${params.recordId}`}>{children}</a>,
   RouterListItemButton: ({
     children,
     sx,
@@ -39,23 +46,27 @@ vi.mock('../../components/RouterLink', () => ({
 }));
 vi.mock('./api', () => ({ searchConversations: vi.fn() }));
 
-const conversation = (id: string, title: string) => ({
+const conversation = (
+  id: string,
+  title: string,
+  recordId: string | null = null,
+) => ({
   id,
   title,
   title_source: 'generated',
-  record_id: null,
+  record_id: recordId,
   context_id: null,
   created_at: '2026-09-28T00:00:00Z',
   updated_at: '2026-09-28T00:00:00Z',
 });
-const renderPage = (q?: string) =>
+const renderPage = (q?: string, scope?: 'all') =>
   render(
     <QueryClientProvider
       client={
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <ConversationsPage search={{ q }} />
+      <ConversationsPage search={{ q, scope }} />
     </QueryClientProvider>,
   );
 
@@ -78,13 +89,17 @@ describe('ConversationsPage', () => {
     const user = userEvent.setup();
     renderPage('product');
     expect(await screen.findByText('Pricing review')).toBeTruthy();
-    expect(searchConversations).toHaveBeenCalledWith('product', undefined);
+    expect(searchConversations).toHaveBeenCalledWith('product', undefined, {
+      scope: 'unattached',
+    });
     const link = screen.getByText('Pricing review').closest('a');
     expect(link?.className).toContain('MuiListItemButton-root');
     expect(window.getComputedStyle(link!).width).toBe('100%');
     await user.click(screen.getByRole('button', { name: 'Load more' }));
     expect(await screen.findByText('Product notes')).toBeTruthy();
-    expect(searchConversations).toHaveBeenCalledWith('product', 'cursor');
+    expect(searchConversations).toHaveBeenCalledWith('product', 'cursor', {
+      scope: 'unattached',
+    });
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
   });
 
@@ -103,6 +118,29 @@ describe('ConversationsPage', () => {
     expect(navigate).toHaveBeenCalledWith({
       to: '/agents',
       search: { q: 'pricing' },
+    });
+  });
+
+  it('includes record conversations when asked and links their record', async () => {
+    vi.mocked(searchConversations).mockResolvedValue({
+      items: [conversation('one', 'Sizing question', 'record-1')] as never,
+      next_cursor: null,
+    });
+    const user = userEvent.setup();
+    renderPage(undefined, 'all');
+    expect(await screen.findByText('Sizing question')).toBeTruthy();
+    expect(searchConversations).toHaveBeenCalledWith('', undefined, {
+      scope: 'all',
+    });
+    expect(
+      screen.getByRole('link', { name: 'Open record' }).getAttribute('href'),
+    ).toBe('/records/record-1');
+    await user.click(
+      screen.getByRole('switch', { name: 'Show record conversations' }),
+    );
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/agents',
+      search: { q: undefined, scope: undefined },
     });
   });
 });
