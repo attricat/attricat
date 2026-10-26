@@ -349,7 +349,7 @@ acli agent approval approve | reject <tool-call-id>
 acli agent smart-fill --record-id <id> --content <text> [--default-context] [--context-id <id>] [--conversation-id <id>] [--draft-values <json>] [--attachment-id <id> ...]
 ```
 
-`run events` i `message send --follow` wypisują jeden wiersz JSON na każde zdarzenie przebiegu, aż przebieg się zakończy, i wznawiają odczyt od miejsca przerwania, jeśli serwer zamknie strumień. Każdą zmianę zaproponowaną przez agenta zatwierdź lub odrzuć poleceniem `approval approve` albo `approval reject`. Zobacz [Agenci i zatwierdzenia](/pl/guides/agents/).
+`run events` i `message send --follow` wypisują jeden wiersz JSON na każde zdarzenie wykonania, aż wykonanie się zakończy, i wznawiają odczyt od miejsca przerwania, jeśli serwer zamknie strumień. Każdą zmianę zaproponowaną przez agenta zatwierdź lub odrzuć poleceniem `approval approve` albo `approval reject`. Zobacz [Agenci i zatwierdzenia](/pl/guides/agents/).
 
 ### Obszar roboczy
 

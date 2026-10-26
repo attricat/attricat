@@ -81,7 +81,7 @@
     "comment_conflict": "Komentarz się zmienił. Wczytaj go ponownie przed kolejnym zapisem.",
     "conflict": "Zmiana koliduje z istniejącymi danymi: {{message}}",
     "context_cycle": "Kontekst nie może być własnym potomkiem.",
-    "context_in_use": "Ten kontekst nadal ma potomków, wartości lub przebiegi rozszerzeń, więc nie można go usunąć.",
+    "context_in_use": "Ten kontekst nadal ma potomków, wartości lub wykonania rozszerzeń, więc nie można go usunąć.",
     "csrf_failed": "Brakuje tokenu sesji lub wygasł. Odśwież stronę i spróbuj ponownie.",
     "default_context_only": "Ten atrybut można edytować tylko w kontekście domyślnym.",
     "default_context_protected": "Kontekstu domyślnego nie można zmienić ani usunąć.",
@@ -145,9 +145,9 @@
     "reserved_context_code": "Kod kontekstu „default” jest zarezerwowany.",
     "reusable_attribute_already_attached": "Rekord ma już ten atrybut wielokrotnego użytku.",
     "reusable_attribute_not_published": "Opublikuj rewizję atrybutu wielokrotnego użytku, zanim go dołączysz lub dodasz do grupy.",
-    "rule_dry_run_required": "Przed włączeniem tej rewizji reguły wykonaj pełny próbny przebieg.",
+    "rule_dry_run_required": "Przed włączeniem tej rewizji reguły przeprowadź pełne próbne wykonanie.",
     "rule_has_existing_violations": "Rekordy już naruszają tę regułę (naruszenia: {{existing_violations}}). Popraw je albo zaakceptuj istniejące naruszenia.",
-    "rule_not_enabled": "Reguła nie ma włączonej rewizji. Włącz ją albo uruchom próbny przebieg.",
+    "rule_not_enabled": "Reguła nie ma włączonej rewizji. Włącz ją albo uruchom próbne wykonanie.",
     "rule_not_published": "Opublikuj rewizję reguły przed jej włączeniem.",
     "rule_violation": "Zmiana narusza egzekwowane reguły.",
     "service_unavailable": "Usługa jest niedostępna: {{message}}",
@@ -1415,6 +1415,11 @@
     "disable": "Wyłącz",
     "revisions": "Historia wersji",
     "source": "Źródło",
+    "runSources": {
+      "event": "Zdarzenie",
+      "manual": "Ręczne",
+      "schedule": "Harmonogram"
+    },
     "compare": "Porównaj",
     "compareRevision": "Wersja do porównania",
     "runDiagnostics": "Diagnostyka uruchomień",
@@ -1932,18 +1937,18 @@
   },
   "rules": {
     "title": "Reguły jakości danych",
-    "description": "Przeglądaj definicje reguł katalogu, ustalenia i trwałe przebiegi ewaluacji.",
+    "description": "Przeglądaj definicje reguł katalogu, ustalenia i trwałe wykonania ewaluacji.",
     "inspectionTabs": "Inspekcja reguł",
     "loading": "Wczytywanie reguł…",
     "sections": {
       "rules": "Reguły",
       "findings": "Ustalenia",
-      "runs": "Historia przebiegów"
+      "runs": "Historia wykonań"
     },
     "errors": {
       "definitions": "Nie udało się wczytać definicji reguł.",
       "findings": "Nie udało się wczytać ustaleń reguł.",
-      "runs": "Nie udało się wczytać historii przebiegów reguł."
+      "runs": "Nie udało się wczytać historii wykonań reguł."
     },
     "columns": {
       "rule": "Reguła",
@@ -1958,14 +1963,15 @@
       "evaluated": "Ocenione",
       "findings": "Ustalenia",
       "record": "Rekord",
-      "scope": "Zakres"
+      "scope": "Zakres",
+      "executed": "Wykonano"
     },
     "enabled": "Włączona",
     "disabled": "Wyłączona",
     "draft": "Szkic",
     "toggleRule": "Włącz {{name}} v{{version}}",
     "enableAnyway": "Włącz mimo to",
-    "dryRun": "Próbny przebieg",
+    "dryRun": "Próbne wykonanie",
     "runNow": "Uruchom teraz",
     "acknowledge": "Potwierdź",
     "filters": {
@@ -1982,8 +1988,16 @@
         "all": "Wszystkie"
       }
     },
-    "runHistory": "Historia przebiegów",
-    "dryRunSuffix": "{{source}} (próbny przebieg)",
+    "runHistory": "Historia wykonań",
+    "lastExecuted": "Ostatnie wykonanie",
+    "neverExecuted": "Jeszcze nie wykonano",
+    "runSources": {
+      "manual": "Ręczne",
+      "schedule": "Harmonogram",
+      "event": "Zdarzenie",
+      "post_import": "Po imporcie"
+    },
+    "dryRunSuffix": "{{source}} (próbne wykonanie)",
     "severities": {
       "info": "Informacja",
       "warning": "Ostrzeżenie",

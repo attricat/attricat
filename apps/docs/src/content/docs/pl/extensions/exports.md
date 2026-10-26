@@ -1,6 +1,6 @@
 ---
 title: Konektory eksportu
-description: Synchronizuj katalog z marketplace'em lub sklepem internetowym za pomocą połączeń, mapowań eksportu, przebiegów uruchamianych zmianami, odrzuceń, wycofań i ponownych synchronizacji.
+description: Synchronizuj katalog z marketplace'em lub sklepem internetowym za pomocą połączeń, mapowań eksportu, wykonań uruchamianych zmianami, odrzuceń, wycofań i ponownych synchronizacji.
 ---
 
 Konektor eksportu wysyła rekordy katalogu do zewnętrznego miejsca docelowego, np. sklepu Shopify, konta sprzedawcy Amazon lub marketplace'u, i utrzymuje je w synchronizacji. Attricat zapewnia konektorom elementy, które trudno dobrze zrobić samodzielnie:
@@ -8,7 +8,7 @@ Konektor eksportu wysyła rekordy katalogu do zewnętrznego miejsca docelowego, 
 - **Połączenia** przechowują dane uwierzytelniające miejsca docelowego i przeprowadzają przepływ OAuth. Twój komponent nigdy nie widzi sekretu ani tokenu.
 - **Mapowania eksportu** zapamiętują dla każdego rekordu i połączenia zewnętrzny identyfikator i to, co wysłano ostatnio. Ich status to stan eksportu rekordu, który użytkownicy widzą w Attricat.
 - **Zadania konektorów** decydują, kiedy eksportować: według harmonogramu, po zmianach rekordów albo gdy operator poprosi o ponowną synchronizację lub ponowienie.
-- **Typowane wyniki** pozwalają komponentowi odrzucić jeden rekord albo poczekać na miejsce docelowe bez przerywania całego przebiegu.
+- **Typowane wyniki** pozwalają komponentowi odrzucić jeden rekord albo poczekać na miejsce docelowe bez przerywania całego wykonania.
 
 Wszystko na tej stronie wymaga API hosta 1.1 (`"host_api": "^1.1"`).
 
@@ -56,13 +56,13 @@ input = {}
 
 ## Pętla wysyłania
 
-Każda partia przebiegu eksportu przechodzi te same kroki:
+Każda partia wykonania eksportu przechodzi te same kroki:
 
-1. **Odczytaj zakres.** `api.call("connector.scope.v1", "{}")` podaje [połączenie, kanał i tryb](#zakres-przebiegu) przebiegu.
+1. **Odczytaj zakres.** `api.call("connector.scope.v1", "{}")` podaje [połączenie, kanał i tryb](#zakres-wykonania) wykonania.
 2. **Odczytaj stronę.** `attricat.page-v2` zwraca do 16 wierszy opublikowanych rekordów z wartościami rozwiązanymi w kontekście kanału i `content_revision` każdego rekordu. Zobacz [Odczyt rekordów do eksportu](#odczyt-rekordów-do-eksportu).
 3. **Zajmij każdy rekord.** Wywołaj `mappings.begin.v1` z `record_id` i `content_revision` wiersza. Pomiń rekord przy `stale` (nie ma nic nowego do wysłania) lub `busy` (wysyła go ktoś inny). Przy `proceed` zachowaj `lease_token`.
 4. **Pomiń niezmienioną treść.** Oblicz skrót ładunku, który chcesz wysłać. Jeśli jest równy `content_hash` mapowania, zatwierdź `synced` bez wywoływania miejsca docelowego. Ma to największe znaczenie przy ponownej synchronizacji.
-5. **Wyślij.** Wyślij rekord przez `network.request.v2` z `connection` przebiegu.
+5. **Wyślij.** Wyślij rekord przez `network.request.v2` z `connection` wykonania.
 6. **Zapisz wynik** przez `mappings.commit.v1` z tokenem dzierżawy:
    - powodzenie: `status: "synced"`, `external_id` i `content_hash`;
    - miejsce docelowe odrzuca rekord: zwróć [niepowodzenie](/pl/extensions/server/#typowane-wyniki) `rejected` wskazujące `record-id`. Stan eksportu rekordu zmienia się na `rejected` z Twoim kodem i komunikatem, a partia uruchamia się ponownie i zastaje ten rekord jako rozstrzygnięty;
@@ -73,15 +73,15 @@ Każda partia przebiegu eksportu przechodzi te same kroki:
 
 Ponieważ partia może wykonać się dwukrotnie z tym samym kluczem partii, każdy krok musi być bezpieczny do powtórzenia. `begin` i `commit` załatwiają większość z tego za Ciebie: rekord już zatwierdzony w swojej rewizji odpowiada `stale`.
 
-## Zakres przebiegu
+## Zakres wykonania
 
-`api.call("connector.scope.v1", "{}")` zwraca zadanie, Schemat, wersję, kontekst, kanał, połączenie i tryb przebiegu albo `null` poza przebiegiem konektora. Tryb to `incremental` dla przebiegu z harmonogramu lub ręcznego, `triggered` dla przebiegu [uruchomionego zmianami](#eksport-po-zmianach) albo `resync`.
+`api.call("connector.scope.v1", "{}")` zwraca zadanie, Schemat, wersję, kontekst, kanał, połączenie i tryb wykonania albo `null` poza wykonaniem konektora. Tryb to `incremental` dla wykonania z harmonogramu lub ręcznego, `triggered` dla wykonania [uruchomionego zmianami](#eksport-po-zmianach) albo `resync`.
 
-Przebieg konektora jest ograniczony do swojego zakresu. Odczytuje tylko opublikowane rekordy swojego Schematu, zapisuje tylko mapowania własnego połączenia i wysyła tylko token tego połączenia. Przebieg domyślnego miejsca docelowego, bez `connection` w zadaniu, nie wysyła żadnego tokenu połączenia. Przebiegi eksportu nie mogą zapisywać wartości. Mogą zapisywać [adnotacje](/pl/extensions/operations/#adnotacje-rekordów) rekordów Schematu zadania, aby zewnętrzne identyfikatory lub stan synchronizacji były widoczne dla kontroli i w przeglądarce rekordów.
+Wykonanie konektora jest ograniczone do swojego zakresu. Odczytuje tylko opublikowane rekordy swojego Schematu, zapisuje tylko mapowania własnego połączenia i wysyła tylko token tego połączenia. Wykonanie domyślnego miejsca docelowego, bez `connection` w zadaniu, nie wysyła żadnego tokenu połączenia. Wykonania eksportu nie mogą zapisywać wartości. Mogą zapisywać [adnotacje](/pl/extensions/operations/#adnotacje-rekordów) rekordów Schematu zadania, aby zewnętrzne identyfikatory lub stan synchronizacji były widoczne dla kontroli i w przeglądarce rekordów.
 
 ## Odczyt rekordów do eksportu
 
-`attricat.page-v2({"cursor", "limit", "expand"?})` odczytuje od 1 do 16 wierszy Schematu, kontekstu i kanału przebiegu. Każdy wiersz ma `record_id`, `content_revision`, `blueprint_version`, `updated_at` oraz:
+`attricat.page-v2({"cursor", "limit", "expand"?})` odczytuje od 1 do 16 wierszy Schematu, kontekstu i kanału wykonania. Każdy wiersz ma `record_id`, `content_revision`, `blueprint_version`, `updated_at` oraz:
 
 - `values`: wartości skalarne rozwiązane przez łańcuch kontekstów zastępczych, więc obejmują też wartości odziedziczone z kontekstów nadrzędnych;
 - `relationships`: cele relacji według kodu atrybutu;
@@ -92,7 +92,7 @@ Z `expand` pole `content_revision` wiersza to najnowsza rewizja rekordu i osadzo
 
 ### Rewizje rekordów
 
-Każdy rekord ma `content_revision`: numer sekwencyjny ostatniego zdarzenia, które zmieniło jego wartości, relacje, publikację lub cykl życia. Ta wartość tylko rośnie. Zmiany adnotacji jej nie zwiększają, więc Twoje własne zapisy pomocnicze nigdy nie sprawiają, że rekord wygląda na zmieniony. Zmiany publikacji liczą się tylko dla odczytywanego kanału: wiersz strony konektora uwzględnia zmiany w kanale przebiegu, a odczyt bez kanału nie uwzględnia żadnych, więc publikacja w innym kanale nigdy nie sprawia, że eksport wygląda na nieaktualny. Zawierają ją odczyty typowane, wiersze stron i dostarczenia do `event-handler`. Dostarczenie zdarzenia publikacji lub wycofania publikacji zawiera rewizję bez zmian publikacji, tak jak odczyt bez kanału.
+Każdy rekord ma `content_revision`: numer sekwencyjny ostatniego zdarzenia, które zmieniło jego wartości, relacje, publikację lub cykl życia. Ta wartość tylko rośnie. Zmiany adnotacji jej nie zwiększają, więc Twoje własne zapisy pomocnicze nigdy nie sprawiają, że rekord wygląda na zmieniony. Zmiany publikacji liczą się tylko dla odczytywanego kanału: wiersz strony konektora uwzględnia zmiany w kanale wykonania, a odczyt bez kanału nie uwzględnia żadnych, więc publikacja w innym kanale nigdy nie sprawia, że eksport wygląda na nieaktualny. Zawierają ją odczyty typowane, wiersze stron i dostarczenia do `event-handler`. Dostarczenie zdarzenia publikacji lub wycofania publikacji zawiera rewizję bez zmian publikacji, tak jak odczyt bez kanału.
 
 ## Mapowania eksportu
 
@@ -100,7 +100,7 @@ Z `exports.mappings` Attricat przechowuje jedno mapowanie na instalację, połą
 
 Status mapowania to stan eksportu rekordu, widoczny na stronie rekordu, w przeglądarce rekordów i na stronie Stan danych. Statusy to `pending`, `synced`, `rejected`, `retrying`, `uncertain` i `withdrawn`.
 
-Poniższe operacje `api.call` działają tak samo w procedurach obsługi zdarzeń i w przebiegach operacji. `connection` jest wszędzie opcjonalne; bez niego mapowanie należy do domyślnego miejsca docelowego rozszerzenia.
+Poniższe operacje `api.call` działają tak samo w procedurach obsługi zdarzeń i w wykonaniach operacji. `connection` jest wszędzie opcjonalne; bez niego mapowanie należy do domyślnego miejsca docelowego rozszerzenia.
 
 | Operacja | Żądanie | Wynik |
 | --- | --- | --- |
@@ -111,7 +111,7 @@ Poniższe operacje `api.call` działają tak samo w procedurach obsługi zdarze�
 | `mappings.release.v1` | `{connection?, record_id, lease_token}` | `{released}` |
 | `mappings.delete.v1` | `{connection?, record_id}` | `{deleted}` |
 
-W przebiegu operacji `begin`, `commit`, `release` i `delete` przyjmują tylko rekordy objęte przebiegiem: rekordy Schematu przebiegu konektora (także usunięte lub nieopublikowane, które wycofuje) albo rekordy wybrane w przebiegu interaktywnym. Przebieg ograniczony do wybranych rekordów zapisuje tylko ich mapowania.
+W wykonaniu operacji `begin`, `commit`, `release` i `delete` przyjmują tylko rekordy objęte wykonaniem: rekordy Schematu wykonania konektora (także usunięte lub nieopublikowane, które wycofuje) albo rekordy wybrane w wykonaniu interaktywnym. Wykonanie ograniczone do wybranych rekordów zapisuje tylko ich mapowania.
 
 ### Begin i commit
 
@@ -119,9 +119,9 @@ Wywołaj `begin` przed wysłaniem rekordu. Chroni ono przed pracą wykonaną w z
 
 - Odpowiada `stale` dla rewizji starszej niż rewizja mapowania, niezależnie od jego statusu, ponieważ zatwierdzenie zostałoby odrzucone po wysłaniu. Odpowiada też `stale` dla usuniętego rekordu, którego mapowanie przyjmuje tylko zatwierdzenie `withdrawn`.
 - Dla rewizji samego mapowania odpowiada `stale`, gdy mapowanie ma już status `synced` lub `rejected`, chyba że operator poprosił o ponowienie albo przekazujesz `force`. Rekord `withdrawn` opublikowany ponownie bez zmian wraca z tą samą rewizją i jest wysyłany ponownie.
-- W przeciwnym razie dzierżawi rekord na `lease_ms` (domyślnie dwie minuty, najwyżej 15), aby procedura obsługi zdarzeń i przebieg konektora nigdy nie wysyłały tego samego rekordu jednocześnie. Odpowiada `busy`, dopóki dzierżawę trzyma ktoś inny. Ponowiona partia lub dostarczenie odzyskuje własną wcześniejszą dzierżawę.
+- W przeciwnym razie dzierżawi rekord na `lease_ms` (domyślnie dwie minuty, najwyżej 15), aby procedura obsługi zdarzeń i wykonanie konektora nigdy nie wysyłały tego samego rekordu jednocześnie. Odpowiada `busy`, dopóki dzierżawę trzyma ktoś inny. Ponowiona partia lub dostarczenie odzyskuje własną wcześniejszą dzierżawę.
 
-`commit` zapisuje wynik i zwalnia dzierżawę. Bez tokenu dzierżawy kończy się błędem, gdy inny proces trzyma ważną dzierżawę, a wynik `synced` nigdy nie zastępuje nowszej zsynchronizowanej rewizji. Jeśli partia się nie powiedzie, zwolnij dzierżawy, które trzyma; dzierżawy, które host zastanie nierozstrzygnięte, gdy przebieg staje się martwą wiadomością, przechodzą w stan `retrying`.
+`commit` zapisuje wynik i zwalnia dzierżawę. Bez tokenu dzierżawy kończy się błędem, gdy inny proces trzyma ważną dzierżawę, a wynik `synced` nigdy nie zastępuje nowszej zsynchronizowanej rewizji. Jeśli partia się nie powiedzie, zwolnij dzierżawy, które trzyma; dzierżawy, które host zastanie nierozstrzygnięte, gdy wykonanie staje się martwą wiadomością, przechodzą w stan `retrying`.
 
 Duże dane referencyjne miejsca docelowego, takie jak drzewa kategorii czy definicje typów produktów, przechowuj w [magazynie rozszerzenia](/pl/extensions/server/#magazyn), a nie w mapowaniach.
 
@@ -140,11 +140,11 @@ Aby wywołać miejsce docelowe, przekaż `connection` do [`network.request.v2`](
 
 ## Wycofania
 
-`attricat.withdrawn(cursor, limit)` zwraca od 1 do 100 rekordów Schematu zadania, które wycofano z publikacji w kanale przebiegu (i nadal są niepublikowane), w kolejności zdarzeń. Elementy mają postać `{record_id, reason, record_revision, occurred_at}`, wraz z `next_cursor` i `more`.
+`attricat.withdrawn(cursor, limit)` zwraca od 1 do 100 rekordów Schematu zadania, które wycofano z publikacji w kanale wykonania (i nadal są niepublikowane), w kolejności zdarzeń. Elementy mają postać `{record_id, reason, record_revision, occurred_at}`, wraz z `next_cursor` i `more`.
 
 - Usunięcie rekordu wycofuje go z każdego kanału, w którym był opublikowany, więc jest zgłaszany z powodem `deleted`. Rekord nigdy nieopublikowany w kanale nie jest zgłaszany.
-- Pusty kursor zaczyna od najstarszej zmiany. Zapisz kursor, np. w magazynie rozszerzenia dla każdego zadania i kanału, aby następny przebieg kontynuował od miejsca, w którym skończył ten.
-- Przebieg ograniczony do wybranych rekordów dostaje zamiast tego ostatnie wycofanie każdego z nich, strona po stronie z `more`. Jego kursor zachowuje pozycję kanału, więc kolejne przebiegi nadal widzą pozostałe wycofania.
+- Pusty kursor zaczyna od najstarszej zmiany. Zapisz kursor, np. w magazynie rozszerzenia dla każdego zadania i kanału, aby następne wykonanie kontynuowało od miejsca, w którym skończyło poprzednie.
+- Wykonanie ograniczone do wybranych rekordów dostaje zamiast tego ostatnie wycofanie każdego z nich, strona po stronie z `more`. Jego kursor zachowuje pozycję kanału, więc kolejne wykonania nadal widzą pozostałe wycofania.
 - Gdy Attricat jest zajęty zapisywaniem zdarzeń, strona może wrócić bez rekordów, ale z `more: true` i tym samym kursorem. Wywołaj ją ponownie; to nie jest koniec.
 
 Usuń każdą pozycję z miejsca docelowego i zatwierdź jej mapowanie jako `withdrawn`.
@@ -165,9 +165,9 @@ Niektóre miejsca docelowe same pobierają obrazy, czasem kilka godzin po zgłos
 { "file_id": "…", "record_id": "…", "expires_in_seconds": 86400 }
 ```
 
-Zwraca `{"url": "…", "expires_at": "…"}`. Link jest ważny od 60 sekund do 7 dni. W przebiegu operacji można linkować tylko rekordy objęte przebiegiem: wybór przebiegu konektora (a w eksporcie do kanału opublikowane rekordy) i aktywne rekordy, do których one linkują, albo rekordy wybrane w przebiegu interaktywnym. Każdy, kto ma link, może pobrać plik, dopóki link nie wygasł, a rozszerzenie jest włączone i ma wszystkie trzy uprawnienia. Usunięcie rekordu lub zastąpienie pliku natychmiast unieważnia link. Przechowywany jest tylko skrót tokenu. Wdrożenie musi ustawić [`EXTENSION_PUBLIC_FILE_BASE_URL`](/pl/reference/configuration/#rozszerzenia); w przeciwnym razie wywołanie kończy się błędem.
+Zwraca `{"url": "…", "expires_at": "…"}`. Link jest ważny od 60 sekund do 7 dni. W wykonaniu operacji można linkować tylko rekordy objęte wykonaniem: wybór wykonania konektora (a w eksporcie do kanału opublikowane rekordy) i aktywne rekordy, do których one linkują, albo rekordy wybrane w wykonaniu interaktywnym. Każdy, kto ma link, może pobrać plik, dopóki link nie wygasł, a rozszerzenie jest włączone i ma wszystkie trzy uprawnienia. Usunięcie rekordu lub zastąpienie pliku natychmiast unieważnia link. Przechowywany jest tylko skrót tokenu. Wdrożenie musi ustawić [`EXTENSION_PUBLIC_FILE_BASE_URL`](/pl/reference/configuration/#rozszerzenia); w przeciwnym razie wywołanie kończy się błędem.
 
-Aby zamiast tego samodzielnie przesłać bajty, skopiuj plik do przebiegu przez [`transfer.open-record-file`](/pl/extensions/operations/#przesyłanie-plików) i wyślij go przez `transfer.deliver-output-v2`.
+Aby zamiast tego samodzielnie przesłać bajty, skopiuj plik do wykonania przez [`transfer.open-record-file`](/pl/extensions/operations/#przesyłanie-plików) i wyślij go przez `transfer.deliver-output-v2`.
 
 ## Eksport po zmianach
 
@@ -184,13 +184,13 @@ trigger = { events = ["record.updated.v1", "attribute_value.changed.v1"], deboun
 input = {}
 ```
 
-Przebieg rusza, gdy od najnowszego pasującego zdarzenia rekordów Schematu minie `debounce_seconds` sekund, więc seria edycji daje jeden przebieg. Ciągłe edycje nie mogą go wstrzymywać w nieskończoność: przebieg rusza także wtedy, gdy najstarsza oczekująca zmiana ma dziesięciokrotność `debounce_seconds`. Jeśli przebieg nie może wystartować, np. gdy rozszerzenie jest wyłączone, zmiany czekają i zostaną wyeksportowane, gdy będzie to możliwe. Pasujące zdarzenie rekordu, do którego rekord Schematu odwołuje się przez relację, liczy się jako zmiana rekordu odwołującego się, bo `page-v2` może go osadzić. Przebieg obejmuje tylko zmienione rekordy, do 10 000; przy większej liczbie zmian wykonuje całe zadanie. Dozwolone zdarzenia wymienia sekcja [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów).
+Wykonanie rusza, gdy od najnowszego pasującego zdarzenia rekordów Schematu minie `debounce_seconds` sekund, więc seria edycji daje jedno wykonanie. Ciągłe edycje nie mogą go wstrzymywać w nieskończoność: wykonanie rusza także wtedy, gdy najstarsza oczekująca zmiana ma dziesięciokrotność `debounce_seconds`. Jeśli wykonanie nie może wystartować, np. gdy rozszerzenie jest wyłączone, zmiany czekają i zostaną wyeksportowane, gdy będzie to możliwe. Pasujące zdarzenie rekordu, do którego rekord Schematu odwołuje się przez relację, liczy się jako zmiana rekordu odwołującego się, bo `page-v2` może go osadzić. Wykonanie obejmuje tylko zmienione rekordy, do 10 000; przy większej liczbie zmian wykonuje całe zadanie. Dozwolone zdarzenia wymienia sekcja [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów).
 
 Ponieważ mapowania eksportu przechowują jeden stan na rekord i połączenie, zadanie eksportu rozszerzenia z `exports.mappings` musi wskazać swój kanał jako `context`, gdy obszar roboczy ma kilka włączonych kanałów.
 
 ### Eksport z procedury obsługi zdarzeń
 
-Przebieg konektora odczytuje strony rekordów i sprawdza się przy katalogach dowolnej wielkości. Dla miejsc docelowych, które oczekują jednego wywołania na zmianę, `event-handler` może sam wysłać rekord: opóźnij go przez [`debounce_ms`](/pl/extensions/server/#łączenie-serii-zdarzeń), wywołaj `begin` z `record-revision` dostarczenia, wyślij i zatwierdź. Obie ścieżki korzystają z tych samych mapowań i dzierżaw, więc zadanie i procedura obsługi nigdy nie wysyłają tego samego rekordu jednocześnie.
+Wykonanie konektora odczytuje strony rekordów i sprawdza się przy katalogach dowolnej wielkości. Dla miejsc docelowych, które oczekują jednego wywołania na zmianę, `event-handler` może sam wysłać rekord: opóźnij go przez [`debounce_ms`](/pl/extensions/server/#łączenie-serii-zdarzeń), wywołaj `begin` z `record-revision` dostarczenia, wyślij i zatwierdź. Obie ścieżki korzystają z tych samych mapowań i dzierżaw, więc zadanie i procedura obsługi nigdy nie wysyłają tego samego rekordu jednocześnie.
 
 ## Ponowienia
 
@@ -200,7 +200,7 @@ Operatorzy ponawiają rekordy w sekcji **Stan eksportu** rozszerzenia albo na ka
 { "record_id": "…", "extension_id": "acme.shopify", "connection": "shop-eu" }
 ```
 
-Zasubskrybuj to zdarzenie procedurą obsługi, aby od razu wysłać rekord, albo pozwól, aby następny przebieg podjął oczekujące rekordy. Operator może też poprosić, aby ponowienie uruchomiło ponowną synchronizację tylko tych rekordów w każdym Twoim zadaniu eksportu dla tego połączenia.
+Zasubskrybuj to zdarzenie procedurą obsługi, aby od razu wysłać rekord, albo pozwól, aby następne wykonanie podjęło oczekujące rekordy. Operator może też poprosić, aby ponowienie uruchomiło ponowną synchronizację tylko tych rekordów w każdym Twoim zadaniu eksportu dla tego połączenia.
 
 ## Ponowna synchronizacja
 
@@ -211,7 +211,7 @@ POST /api/blueprint-connector-jobs/{id}/resync
 {"idempotency_key": "resync-2026-03-01", "status": "rejected"}
 ```
 
-Przekaż `record_ids` dla wybranych rekordów albo `status` dla rekordów z tym stanem eksportu w połączeniu zadania, ale nie oba naraz. Bez żadnego z nich eksportowany jest każdy opublikowany rekord. Ponowna synchronizacja odczytuje te same wiersze co każdy przebieg, ale `begin` dzierżawi rekordy rozstrzygnięte przed rozpoczęciem przebiegu, więc eksporter powinien pominąć rekordy, których zapisany skrót treści się nie zmienił, i wysłać pozostałe. Klucz idempotencji obejmuje wybór: ten sam klucz z innymi `record_ids` lub innym `status` uruchamia nową synchronizację.
+Przekaż `record_ids` dla wybranych rekordów albo `status` dla rekordów z tym stanem eksportu w połączeniu zadania, ale nie oba naraz. Bez żadnego z nich eksportowany jest każdy opublikowany rekord. Ponowna synchronizacja odczytuje te same wiersze co każde wykonanie, ale `begin` dzierżawi rekordy rozstrzygnięte przed rozpoczęciem wykonania, więc eksporter powinien pominąć rekordy, których zapisany skrót treści się nie zmienił, i wysłać pozostałe. Klucz idempotencji obejmuje wybór: ten sam klucz z innymi `record_ids` lub innym `status` uruchamia nową synchronizację.
 
 ## Podgląd i edytory mapowań
 

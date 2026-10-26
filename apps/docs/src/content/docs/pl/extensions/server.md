@@ -20,7 +20,7 @@ Zbuduj komponent dla jednego z tych światów:
 
 `outcome-extension` eksportuje interfejsy z wersji 1.1, które zgłaszają [typowane wyniki](#typowane-wyniki) zamiast zwykłego błędu. Gdy komponent eksportuje interfejs z 1.1, host wywołuje go zamiast jego poprzednika z 1.0. Komponent, który potrzebuje tylko części z tych trzech eksportów, zwraca z pozostałych błąd `fault`.
 
-Wszystkie importy są zawsze dostępne, ale część działa tylko we właściwym miejscu. Interfejsy operacji (`artifacts`, `attricat-data`, `attricat`, `transfer`, `selection`) zwracają błąd poza przebiegiem operacji. W przebiegu błąd zwracają typowane funkcje `read` i `write` oraz wywołania `attricat.read.v1` i `attricat.command.v1`; używaj wtedy interfejsów katalogu przypisanych do przebiegu.
+Wszystkie importy są zawsze dostępne, ale część działa tylko we właściwym miejscu. Interfejsy operacji (`artifacts`, `attricat-data`, `attricat`, `transfer`, `selection`) zwracają błąd poza wykonaniem operacji. W wykonaniu błąd zwracają typowane funkcje `read` i `write` oraz wywołania `attricat.read.v1` i `attricat.command.v1`; używaj wtedy interfejsów katalogu przypisanych do wykonania.
 
 Kolejne wersje 1.x tylko rozszerzają 1.0. Komponent zbudowany dla wcześniejszej wersji 1.x działa na nowszych hostach bez przebudowy. Jak zbudować komponent, opisuje sekcja [Zbuduj komponent serwerowy](/pl/extensions/build/#zbuduj-komponent-serwerowy).
 
@@ -44,7 +44,7 @@ let response = api::call("storage.get.v1", r#"{"key":"last-sync"}"#)?;
 | `connections.list.v1`, `connections.get.v1` | `connections.use` | [Konektory eksportu](/pl/extensions/exports/#połączenia) |
 | `mappings.*.v1` | `exports.mappings` | [Konektory eksportu](/pl/extensions/exports/#mapowania-eksportu) |
 | `files.link.v1` | `attricat.files.public_links` | [Konektory eksportu](/pl/extensions/exports/#publiczne-linki-do-plików) |
-| `connector.scope.v1` | | [Konektory eksportu](/pl/extensions/exports/#zakres-przebiegu) |
+| `connector.scope.v1` | | [Konektory eksportu](/pl/extensions/exports/#zakres-wykonania) |
 
 Host sprawdza uprawnienie przy każdym wywołaniu, więc uprawnienie cofnięte w trakcie działania Twojego kodu obowiązuje od jego następnego wywołania. Odrzucone wywołanie zwraca błąd, np. `missing capability 'storage.extension'`, a nieznana nazwa zwraca `unknown host operation`. Żądania i odpowiedzi są ograniczone do 64 KiB JSON.
 

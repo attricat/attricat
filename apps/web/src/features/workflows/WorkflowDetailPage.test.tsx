@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { forwardRef, type ComponentPropsWithoutRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -191,7 +191,11 @@ describe('WorkflowDetailPage', () => {
     });
 
     await user.click(screen.getByRole('tab', { name: 'Run diagnostics' }));
-    await user.click(await screen.findByRole('button', { name: /Replay/ }));
+    const replay = await screen.findByRole('button', { name: /Replay/ });
+    expect(
+      within(replay.closest('tr') as HTMLElement).getByText('Event'),
+    ).toBeTruthy();
+    await user.click(replay);
     expect(replayWorkflowRun).toHaveBeenCalledWith(run.id);
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: workflowQueryKeys.runs(),

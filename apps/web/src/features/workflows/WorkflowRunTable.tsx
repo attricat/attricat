@@ -62,7 +62,7 @@ export const WorkflowRunTable = ({
                     size="small"
                   />
                 </TableCell>
-                <TableCell>{run.source}</TableCell>
+                <TableCell>{t(`workflows.runSources.${run.source}`)}</TableCell>
                 <TableCell>{run.attempts}</TableCell>
                 <TableCell>
                   <Timestamp

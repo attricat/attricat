@@ -18,6 +18,8 @@ type TimestampProps = {
    * nested tab stop; the tooltip remains available on hover.
    */
   focusable?: boolean;
+  /** Follows the instant with its distance from now, e.g. `(3 days ago)`. */
+  relative?: boolean;
 };
 
 /**
@@ -29,8 +31,9 @@ export const Timestamp = ({
   style,
   fallback,
   focusable = true,
+  relative = false,
 }: TimestampProps) => {
-  const { format } = useInstantFormat();
+  const { format, formatRelative } = useInstantFormat();
   if (value === null || value === undefined || value === '')
     return <>{fallback}</>;
   const date = parseInstant(value);
@@ -50,7 +53,22 @@ export const Timestamp = ({
           },
         }}
       >
-        {format(date, style)}
+        {relative ? (
+          // Each part wraps as a whole, so a narrow cell breaks between them.
+          <>
+            <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
+              {format(date, style)}
+            </Box>{' '}
+            <Box
+              component="span"
+              sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}
+            >
+              ({formatRelative(date)})
+            </Box>
+          </>
+        ) : (
+          format(date, style)
+        )}
       </Box>
     </Tooltip>
   );

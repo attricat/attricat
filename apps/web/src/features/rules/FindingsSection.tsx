@@ -22,6 +22,8 @@ import { LoadMoreButton } from '../../components/LoadMoreButton';
 import type { Blueprint } from '../blueprints/api';
 import type { AttributeContext } from '../contexts/api';
 import { blueprintKinds } from '../blueprints/constants';
+import { defaultContextCode } from '../contexts/constants';
+import { lexiconText } from '../lexicon/lexicon';
 import type { Finding, FindingsSearch, Rule } from './api';
 import { RecordIdLink, RuleRevisionCell } from './RuleCells';
 import type { RuleRevisions } from './ruleRevisions';
@@ -190,7 +192,7 @@ export const FindingsSection = ({
               .filter((blueprint) => blueprint.kind === blueprintKinds.record)
               .map((blueprint) => ({
                 value: blueprint.id,
-                label: blueprint.name,
+                label: lexiconText(blueprint.name),
               }))
               .sort((a, b) => a.label.localeCompare(b.label))}
             value={filters.blueprint}
@@ -201,7 +203,10 @@ export const FindingsSection = ({
             onChange={setFilter('context')}
             options={contexts.map((context) => ({
               value: context.id,
-              label: context.code,
+              label:
+                context.code === defaultContextCode
+                  ? t('records.default')
+                  : context.code,
             }))}
             value={filters.context}
           />

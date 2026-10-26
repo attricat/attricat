@@ -1351,6 +1351,11 @@
     "disable": "Disable",
     "revisions": "Revision history",
     "source": "Source",
+    "runSources": {
+      "event": "Event",
+      "manual": "Manual",
+      "schedule": "Schedule"
+    },
     "compare": "Compare",
     "compareRevision": "Revision to compare",
     "runDiagnostics": "Run diagnostics",
@@ -1878,7 +1883,8 @@
       "evaluated": "Evaluated",
       "findings": "Findings",
       "record": "Record",
-      "scope": "Scope"
+      "scope": "Scope",
+      "executed": "Executed"
     },
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -1903,6 +1909,14 @@
       }
     },
     "runHistory": "Run history",
+    "lastExecuted": "Last executed",
+    "neverExecuted": "Not executed yet",
+    "runSources": {
+      "manual": "Manual",
+      "schedule": "Schedule",
+      "event": "Event",
+      "post_import": "After import"
+    },
     "dryRunSuffix": "{{source}} (dry run)",
     "severities": {
       "info": "Info",

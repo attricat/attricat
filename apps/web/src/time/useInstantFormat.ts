@@ -3,6 +3,7 @@ import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   formatInstant,
+  formatRelativeInstant,
   formatUtcInstant,
   type InstantStyle,
   type InstantValue,
@@ -47,8 +48,13 @@ export const useInstantFormat = () => {
       `${format(value, style)} (${formatUtcInstant(value)})`,
     [format],
   );
+  /** The distance from now, e.g. `3 days ago`; it does not depend on zone. */
+  const formatRelative = useCallback(
+    (value: InstantValue) => formatRelativeInstant(value, locale),
+    [locale],
+  );
   return useMemo(
-    () => ({ format, formatWithUtc, locale, timeZone }),
-    [format, formatWithUtc, locale, timeZone],
+    () => ({ format, formatRelative, formatWithUtc, locale, timeZone }),
+    [format, formatRelative, formatWithUtc, locale, timeZone],
   );
 };

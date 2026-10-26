@@ -130,6 +130,46 @@ export const formatInstant = (
     : formatted;
 };
 
+// Units from largest to smallest; an instant is described in the largest
+// unit that fits into its distance from now.
+const relativeUnits = [
+  ['year', 365 * dayMilliseconds],
+  ['month', 30 * dayMilliseconds],
+  ['week', 7 * dayMilliseconds],
+  ['day', dayMilliseconds],
+  ['hour', 3_600_000],
+  ['minute', 60_000],
+  ['second', secondMilliseconds],
+] as const satisfies readonly (readonly [
+  Intl.RelativeTimeFormatUnit,
+  number,
+])[];
+const relativeFormatters = new Map<string, Intl.RelativeTimeFormat>();
+
+/**
+ * How long before or after `now` an instant is, in its largest whole unit,
+ * e.g. `3 days ago` or `yesterday`. Values that are not instants are returned
+ * unchanged.
+ */
+export const formatRelativeInstant = (
+  value: InstantValue,
+  locale: string,
+  now: number = Date.now(),
+) => {
+  const date = parseInstant(value);
+  if (!date) return String(value);
+  const elapsed = date.getTime() - now;
+  const [unit, length] =
+    relativeUnits.find(([, length]) => Math.abs(elapsed) >= length) ??
+    relativeUnits[relativeUnits.length - 1];
+  let cached = relativeFormatters.get(locale);
+  if (!cached) {
+    cached = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+    relativeFormatters.set(locale, cached);
+  }
+  return cached.format(Math.trunc(elapsed / length), unit);
+};
+
 /**
  * Formats a calendar date (`YYYY-MM-DD`). Calendar dates are not instants, so
  * they are never shifted into the user's zone.

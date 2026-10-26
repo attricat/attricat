@@ -139,17 +139,17 @@ Wszystkie wartości muszą być dodatnimi liczbami całkowitymi. Zero lub warto�
 
 ## Retencja danych
 
-Co minutę API usuwa w małych partiach stare dane operacyjne: zakończoną pracę w tle, dostarczone zdarzenia, zakończone sesje i podobne wpisy. Grupy tabel są czyszczone po kolei, więc duża zaległość w jednej nie wstrzymuje pozostałych. Wpisy, które wciąż czekają lub trwają, oraz wszystko, czego potrzebuje bieżąca praca, nigdy nie są usuwane. Nieudane czyszczenie trafia do logu i jest ponawiane przy następnym przebiegu; nie zatrzymuje API.
+Co minutę API usuwa w małych partiach stare dane operacyjne: zakończoną pracę w tle, dostarczone zdarzenia, zakończone sesje i podobne wpisy. Grupy tabel są czyszczone po kolei, więc duża zaległość w jednej nie wstrzymuje pozostałych. Wpisy, które wciąż czekają lub trwają, oraz wszystko, czego potrzebuje bieżąca praca, nigdy nie są usuwane. Nieudane czyszczenie trafia do logu i jest ponawiane przy następnym wykonaniu; nie zatrzymuje API.
 
 | Zmienna | Domyślnie | Co jest usuwane po tylu dniach |
 | --- | --- | --- |
 | `RETENTION_SWEEP_INTERVAL_SECONDS` | `60` | Jak często startuje czyszczenie, od 1 do 86400 sekund. |
 | `RETENTION_SWEEP_BUDGET_SECONDS` | `10` | Najdłuższy czas jednego czyszczenia, od 1 do 3600 sekund i nie dłużej niż odstęp. |
-| `RETENTION_BATCH_ROWS` | `1000` | Najwięcej wierszy usuwanych z tabeli w jednej transakcji, od 1 do 10000. Każda instrukcja musi zakończyć się w ciągu 2 sekund, więc najpierw zwiększ limit czasu przebiegu. |
+| `RETENTION_BATCH_ROWS` | `1000` | Najwięcej wierszy usuwanych z tabeli w jednej transakcji, od 1 do 10000. Każda instrukcja musi zakończyć się w ciągu 2 sekund, więc najpierw zwiększ limit czasu wykonania. |
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Wcześniejsze wartości atrybutów. Bieżące wartości nigdy nie są usuwane. |
 | `TASK_RETENTION_DAYS` | `7` | Wpisy zakończonych zadań w tle. Ostatnia nieudana próba zostaje do usunięcia jej uruchomienia, aby można ją było ponowić. |
 | `RULE_RUN_RECORD_RETENTION_DAYS` | `7` | Zakończone sprawdzenia reguł dla pojedynczego rekordu. |
-| `RULE_RUN_RETENTION_DAYS` | `90` | Zakończone pełne uruchomienia reguł oraz nieudane uruchomienia. Każda wersja reguły zachowuje swoje ostatnie uruchomienie i ostatni ukończony przebieg próbny, więc ponowne włączenie nie wymaga nowego przebiegu próbnego. |
+| `RULE_RUN_RETENTION_DAYS` | `90` | Zakończone pełne uruchomienia reguł oraz nieudane uruchomienia. Każda wersja reguły zachowuje swoje ostatnie uruchomienie i ostatnie ukończone próbne wykonanie, więc ponowne włączenie nie wymaga nowego próbnego wykonania. |
 | `WORKFLOW_RUN_RETENTION_DAYS` | `90` | Zakończone uruchomienia przepływów pracy. |
 | `EXTENSION_OPERATION_RUN_RETENTION_DAYS` | `90` | Zakończone operacje rozszerzeń, których wyniki już wygasły. |
 | `AGENT_RUN_EVENT_RETENTION_DAYS` | `90` | Strumień postępu zakończonych uruchomień agentów. Rozmowy, ich wiadomości i wywołania narzędzi zostają. |

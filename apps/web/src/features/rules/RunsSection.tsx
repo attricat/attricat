@@ -10,9 +10,25 @@ import {
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import type { listRuleRuns } from './api';
+import { Timestamp } from '../../time/Timestamp';
+import type { RuleRun } from './api';
 import { RecordIdLink, RuleRevisionCell } from './RuleCells';
 import type { RuleRevisions } from './ruleRevisions';
+
+/** When a run finished, or when it was queued while it has not. */
+const runTime = (run: RuleRun) => run.completed_at ?? run.created_at;
+
+/** The most recent run time, or `undefined` before the first run. */
+const lastRunTime = (runs: readonly RuleRun[]) =>
+  runs
+    .map(runTime)
+    .reduce<string | undefined>(
+      (latest, time) =>
+        latest === undefined || Date.parse(time) > Date.parse(latest)
+          ? time
+          : latest,
+      undefined,
+    );
 
 export const RunsSection = ({
   recordLabels,
@@ -23,9 +39,10 @@ export const RunsSection = ({
   recordLabels: ReadonlyMap<string, string>;
   error: boolean;
   revisions: RuleRevisions;
-  runs: Awaited<ReturnType<typeof listRuleRuns>> | undefined;
+  runs: readonly RuleRun[] | undefined;
 }) => {
   const { t } = useTranslation();
+  const lastRun = lastRunTime(runs ?? []);
   return (
     <>
       {error && (
@@ -36,10 +53,21 @@ export const RunsSection = ({
       <Paper component="section" sx={{ mt: 3 }}>
         <Box sx={{ p: 2 }}>
           <Typography variant="h6">{t('rules.runHistory')}</Typography>
+          {runs && (
+            <Typography color="text.secondary" variant="body2">
+              {t('rules.lastExecuted')}:{' '}
+              <Timestamp
+                fallback={t('rules.neverExecuted')}
+                relative
+                value={lastRun}
+              />
+            </Typography>
+          )}
         </Box>
         <Table size="small">
           <TableHead>
             <TableRow>
+              <TableCell>{t('rules.columns.executed')}</TableCell>
               <TableCell>{t('rules.columns.rule')}</TableCell>
               <TableCell>{t('rules.columns.scope')}</TableCell>
               <TableCell>{t('rules.columns.source')}</TableCell>
@@ -51,6 +79,9 @@ export const RunsSection = ({
           <TableBody>
             {(runs ?? []).map((item) => (
               <TableRow key={item.id}>
+                <TableCell>
+                  <Timestamp relative value={runTime(item)} />
+                </TableCell>
                 <TableCell>
                   <RuleRevisionCell
                     revisions={revisions}
@@ -70,8 +101,10 @@ export const RunsSection = ({
                 </TableCell>
                 <TableCell>
                   {item.dry_run
-                    ? t('rules.dryRunSuffix', { source: item.source })
-                    : item.source}
+                    ? t('rules.dryRunSuffix', {
+                        source: t(`rules.runSources.${item.source}`),
+                      })
+                    : t(`rules.runSources.${item.source}`)}
                 </TableCell>
                 <TableCell>
                   {t(`rules.runStatuses.${item.status}`, {

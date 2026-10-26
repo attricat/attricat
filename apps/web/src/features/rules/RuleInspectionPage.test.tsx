@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ApiRequestError } from '../../api/request';
 import { currentSession } from '../auth/api';
+import { listBlueprints, type Blueprint } from '../blueprints/api';
+import { listContexts, type AttributeContext } from '../contexts/api';
 import { getRecordLabels } from '../records/api';
 import {
   acknowledgeFinding,
@@ -118,7 +120,10 @@ const renderPage = (
 
 describe('RuleInspectionPage', () => {
   beforeEach(() => vi.mocked(listRules).mockResolvedValue([rule]));
-  afterEach(() => vi.clearAllMocks());
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
 
   it('disables both run variants while a run is pending', async () => {
     vi.mocked(currentSession).mockResolvedValue({
@@ -400,6 +405,69 @@ describe('RuleInspectionPage', () => {
       to: '/manage/rules/findings',
       search: { state: 'resolved', rule: id },
     });
+  });
+
+  it('shows when each run and the latest run executed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-26T12:00:00Z'));
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    const run = {
+      id,
+      rule_id: id,
+      rule_version: 1,
+      source: 'schedule',
+      dry_run: true,
+      scope_record_id: null,
+      status: 'completed',
+      candidate_cursor: null,
+      candidates_evaluated: 2,
+      findings_created: 1,
+      findings_resolved: 0,
+      attempts: 1,
+      last_error: null,
+      completed_at: '2026-10-24T12:00:00Z',
+      created_at: '2026-10-24T11:59:00Z',
+    } as const;
+    vi.mocked(listRuleRuns).mockResolvedValue([
+      run,
+      {
+        ...run,
+        id: crypto.randomUUID(),
+        source: 'event',
+        dry_run: false,
+        completed_at: null,
+        created_at: '2026-10-26T09:00:00Z',
+      },
+    ]);
+    renderPage('runs');
+    await screen.findAllByText('Check v1');
+    const [, scheduled, queued] = screen.getAllByRole('row');
+    expect(within(scheduled).getByText('(2 days ago)')).toBeTruthy();
+    expect(within(scheduled).getByText('Schedule (dry run)')).toBeTruthy();
+    expect(within(queued).getByText('(3 hours ago)')).toBeTruthy();
+    expect(within(queued).getByText('Event')).toBeTruthy();
+    const summary = screen.getByText(/Last executed/);
+    expect(within(summary).getByText('(3 hours ago)')).toBeTruthy();
+  });
+
+  it('names blueprints and the default context in their filters', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listFindingsPage).mockResolvedValue({ items: [] });
+    vi.mocked(listBlueprints).mockResolvedValueOnce([
+      { id, kind: 'record', name: '{{Brand}}' } as Blueprint,
+    ]);
+    vi.mocked(listContexts).mockResolvedValueOnce([
+      { id, code: 'default' } as AttributeContext,
+    ]);
+    renderPage('findings');
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole('combobox', { name: 'Blueprint' }),
+    );
+    expect(await screen.findByRole('option', { name: 'Brand' }));
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('combobox', { name: 'Context' }));
+    expect(await screen.findByRole('option', { name: 'Default' }));
   });
 
   it('loads the next page of findings', async () => {

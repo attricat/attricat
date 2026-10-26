@@ -97,7 +97,7 @@ predicate = { type = "one_of", attribute_code = "state", values = ["open"] }
 
 ### Wygasanie i inne kontrole zależne od czasu
 
-`relative_date` porównuje datę z chwilą uruchomienia reguły. Nadaj takiej regule wyzwalacz `schedule`: rekord, którego nikt nie edytuje, może wygasnąć w nocy, a zauważy to tylko przebieg według harmonogramu.
+`relative_date` porównuje datę z chwilą uruchomienia reguły. Nadaj takiej regule wyzwalacz `schedule`: rekord, którego nikt nie edytuje, może wygasnąć w nocy, a zauważy to tylko wykonanie według harmonogramu.
 
 ```toml
 format_version = 1
@@ -125,7 +125,7 @@ Reguła powiązana z kontekstem sprawdza rozstrzygnięte wartości rekordu w tym
 
 ### Zmiany w powiązanych rekordach
 
-`linked` i `referenced_by` zależą od innych rekordów. Gdy zmieni się rekord powiązany lub wskazujący, reguły z wyzwalaczem zdarzenia uruchamiają się też ponownie dla maksymalnie 100 zależnych od niego rekordów, dzięki czemu ich ustalenia pozostają aktualne. Dotyczy to też rekordu, który rekord wskazujący przestaje wskazywać, na przykład gdy działanie korygujące zostanie przeniesione do innej niezgodności, zgodnie z [faktami](/pl/reference/events/#które-zmiany-tworzą-fakty) zdarzenia. Migracja Schematu, która usuwa relację lub zmienia jej cele, nie zapisuje faktów, ale jej zdarzenie `record.migrated.v1` wymienia zwolnione rekordy, więc dla nich reguły również uruchamiają się ponownie. Reguły wyzwalane tylko harmonogramem lub ręcznie zauważą zmianę przy następnym przebiegu.
+`linked` i `referenced_by` zależą od innych rekordów. Gdy zmieni się rekord powiązany lub wskazujący, reguły z wyzwalaczem zdarzenia uruchamiają się też ponownie dla maksymalnie 100 zależnych od niego rekordów, dzięki czemu ich ustalenia pozostają aktualne. Dotyczy to też rekordu, który rekord wskazujący przestaje wskazywać, na przykład gdy działanie korygujące zostanie przeniesione do innej niezgodności, zgodnie z [faktami](/pl/reference/events/#które-zmiany-tworzą-fakty) zdarzenia. Migracja Schematu, która usuwa relację lub zmienia jej cele, nie zapisuje faktów, ale jej zdarzenie `record.migrated.v1` wymienia zwolnione rekordy, więc dla nich reguły również uruchamiają się ponownie. Reguły wyzwalane tylko harmonogramem lub ręcznie zauważą zmianę przy następnym wykonaniu.
 
 Zasady porównywania dla każdego typu oraz limity zagnieżdżania i powiązanych rekordów opisuje [dokumentacja Schematu](/pl/reference/blueprint/#predykaty).
 
@@ -164,9 +164,9 @@ acli rule run-now <rule-id> --idempotency-key check-one --record-id <uuid>
 acli rule run-now <rule-id> --idempotency-key preview --dry-run
 ```
 
-Przebieg próbny (dry run) podaje, ile rekordów nie spełniłoby reguły, i nie zapisuje żadnych ustaleń. Ponowne użycie klucza idempotencji zwraca pierwotny przebieg zamiast rozpoczynać nowy.
+Próbne wykonanie (dry run) podaje, ile rekordów nie spełniłoby reguły, i nie zapisuje żadnych ustaleń. Ponowne użycie klucza idempotencji zwraca pierwotne wykonanie zamiast rozpoczynać nowe.
 
-Każdy przebieg przetwarza kandydatów stronami po 500 i zatrzymuje się po 10 000. Harmonogram nigdy nie nakłada się sam na siebie: jeśli poprzedni przebieg wciąż oczekuje, kolejne wystąpienie jest pomijane.
+Każde wykonanie przetwarza kandydatów stronami po 500 i zatrzymuje się po 10 000. Harmonogram nigdy nie nakłada się sam na siebie: jeśli poprzednie wykonanie wciąż oczekuje, kolejne wystąpienie jest pomijane.
 
 ## Egzekwowanie reguły
 
@@ -203,28 +203,28 @@ Reguła powiązana z kontekstem jest egzekwowana tylko w tym kontekście. Reguł
 
 Zapis naruszający egzekwowaną regułę zostaje odrzucony z `422 rule_violation` i nic nie jest zapisywane. Odpowiedź wymienia każdą naruszoną regułę, konteksty i atrybuty, których dotyczy. Zobacz [Walidacja](/pl/builders/validation/#błędy-i-ich-naprawa).
 
-### Przebieg próbny przed włączeniem
+### Próbne wykonanie przed włączeniem
 
-Egzekwowanie reguły na istniejących danych może zablokować osoby, które nic złego nie zrobiły. Dlatego gdy wersja Schematu reguły ma już rekordy, Attricat wymaga ukończonego **pełnego przebiegu próbnego** dokładnie tej wersji reguły, którą włączasz. W przeciwnym razie włączenie kończy się błędem `409 rule_dry_run_required`.
+Egzekwowanie reguły na istniejących danych może zablokować osoby, które nic złego nie zrobiły. Dlatego gdy wersja Schematu reguły ma już rekordy, Attricat wymaga ukończonego **pełnego próbnego wykonania** dokładnie tej wersji reguły, którą włączasz. W przeciwnym razie włączenie kończy się błędem `409 rule_dry_run_required`.
 
 1. Opublikuj wersję.
-2. Uruchom przebieg próbny dla wszystkich rekordów, bez `--record-id`, i poczekaj, aż zakończy się na karcie **Historia przebiegów**. Przebieg próbny może dotyczyć opublikowanej wersji, która nie jest jeszcze włączona.
+2. Uruchom próbne wykonanie dla wszystkich rekordów, bez `--record-id`, i poczekaj, aż zakończy się na karcie **Historia wykonań**. Próbne wykonanie może dotyczyć opublikowanej wersji, która nie jest jeszcze włączona.
 
    ```sh
    acli rule run-now <rule-id> --idempotency-key enforce-preview --dry-run
    ```
 
-   CLI uruchamia przebieg próbny włączonej wersji albo najnowszej opublikowanej, jeśli żadna nie jest włączona. Aby sprawdzić konkretną wersję, gdy włączona jest inna, wywołaj `POST /rules/{id}/run-now` z `{"dry_run": true, "idempotency_key": "…", "version": 2}`.
+   CLI uruchamia próbne wykonanie włączonej wersji albo najnowszej opublikowanej, jeśli żadna nie jest włączona. Aby sprawdzić konkretną wersję, gdy włączona jest inna, wywołaj `POST /rules/{id}/run-now` z `{"dry_run": true, "idempotency_key": "…", "version": 2}`.
 3. Włącz wersję.
 
-Jeśli przebieg próbny znalazł naruszenia, włączenie kończy się błędem `409 rule_has_existing_violations`, a `details.existing_violations` podaje ich liczbę. Popraw te rekordy i powtórz przebieg próbny albo zaakceptuj naruszenia jawnie przez API:
+Jeśli próbne wykonanie znalazło naruszenia, włączenie kończy się błędem `409 rule_has_existing_violations`, a `details.existing_violations` podaje ich liczbę. Popraw te rekordy i powtórz próbne wykonanie albo zaakceptuj naruszenia jawnie przez API:
 
 ```http
 POST /rules/{id}/versions/{version}/enable
 {"accept_existing_violations": true}
 ```
 
-Przebieg próbny zatrzymuje się po 10 000 rekordów. Gdy wersja Schematu ma ich więcej, przebieg nie obejmuje pozostałych, więc włączenie nadal kończy się błędem `409 rule_dry_run_required`, chyba że wyślesz `accept_existing_violations`, jak powyżej. W takim przypadku komunikat błędu informuje, że przebieg zatrzymał się przed czasem, a `details` ma postać `{"truncated": true, "existing_violations": …}` i podaje liczbę naruszeń znalezionych wśród sprawdzonych rekordów. Taki przebieg ma w `GET /rule-runs` pole `"truncated": true`.
+Próbne wykonanie zatrzymuje się po 10 000 rekordów. Gdy wersja Schematu ma ich więcej, wykonanie nie obejmuje pozostałych, więc włączenie nadal kończy się błędem `409 rule_dry_run_required`, chyba że wyślesz `accept_existing_violations`, jak powyżej. W takim przypadku komunikat błędu informuje, że wykonanie zatrzymało się przed czasem, a `details` ma postać `{"truncated": true, "existing_violations": …}` i podaje liczbę naruszeń znalezionych wśród sprawdzonych rekordów. Takie wykonanie ma w `GET /rule-runs` pole `"truncated": true`.
 
 Rekordu, który już narusza egzekwowaną regułę, nie można zapisać, dopóki zapis nie usunie naruszenia.
 
@@ -241,8 +241,8 @@ acli rule findings --record-id <uuid>
 acli rule acknowledge <finding-id>
 ```
 
-Karta **Historia przebiegów** pokazuje historię przebiegów i błędy. Przebieg, który zakończy się niepowodzeniem pięć razy, staje się martwą wiadomością (dead letter); usuń przyczynę i odtwórz go poleceniem `acli rule run-replay <run-id>`.
+Karta **Historia wykonań** pokazuje historię wykonań i błędy. Wykonanie, które zakończy się niepowodzeniem pięć razy, staje się martwą wiadomością (dead letter); usuń przyczynę i odtwórz je poleceniem `acli rule run-replay <run-id>`.
 
 ## Uprawnienia
 
-`rules.read` pozwala wyświetlać reguły, przebiegi i ustalenia. `rules.manage` pozwala tworzyć, publikować, włączać, wyłączać i uruchamiać reguły oraz potwierdzać ustalenia. Oba uprawnienia są domyślnie przyznane rolom właściciela i administratora.
+`rules.read` pozwala wyświetlać reguły, wykonania i ustalenia. `rules.manage` pozwala tworzyć, publikować, włączać, wyłączać i uruchamiać reguły oraz potwierdzać ustalenia. Oba uprawnienia są domyślnie przyznane rolom właściciela i administratora.

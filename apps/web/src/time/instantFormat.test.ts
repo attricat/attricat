@@ -3,6 +3,7 @@ import {
   browserTimeZone,
   formatCalendarDate,
   formatInstant,
+  formatRelativeInstant,
   formatUtcInstant,
   isoToZonedDateTime,
   isValidTimeZone,
@@ -157,5 +158,40 @@ describe('zonedDateTimeToIso', () => {
         'Europe/Warsaw',
       ),
     ).toBe('2026-10-25T03:30:00.000Z');
+  });
+});
+
+describe('formatRelativeInstant', () => {
+  const now = Date.parse('2026-10-26T12:00:00Z');
+
+  it('uses the largest whole unit of the distance from now', () => {
+    expect(formatRelativeInstant('2026-10-26T11:59:30Z', 'en', now)).toBe(
+      '30 seconds ago',
+    );
+    expect(formatRelativeInstant('2026-10-26T09:10:00Z', 'en', now)).toBe(
+      '2 hours ago',
+    );
+    expect(formatRelativeInstant('2026-10-25T08:00:00Z', 'en', now)).toBe(
+      'yesterday',
+    );
+    expect(formatRelativeInstant('2026-10-21T12:00:00Z', 'en', now)).toBe(
+      '5 days ago',
+    );
+    expect(formatRelativeInstant('2026-06-01T12:00:00Z', 'en', now)).toBe(
+      '4 months ago',
+    );
+    expect(formatRelativeInstant('2026-10-26T12:00:00Z', 'en', now)).toBe(
+      'now',
+    );
+  });
+
+  it('uses the active language', () => {
+    expect(formatRelativeInstant('2026-10-23T12:00:00Z', 'pl', now)).toBe(
+      '3 dni temu',
+    );
+  });
+
+  it('keeps malformed values visible instead of throwing', () => {
+    expect(formatRelativeInstant('soon', 'en', now)).toBe('soon');
   });
 });

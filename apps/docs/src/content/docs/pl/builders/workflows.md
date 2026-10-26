@@ -34,7 +34,7 @@ acli workflow publish <workflow-id> 1
 acli workflow enable <workflow-id> 1
 ```
 
-Włączenie zapisuje bieżący punkt w strumieniu zdarzeń. Przebiegi uruchamiają tylko zdarzenia po tym punkcie; przepływ pracy nie przetwarza historii.
+Włączenie zapisuje bieżący punkt w strumieniu zdarzeń. Wykonania uruchamiają tylko zdarzenia po tym punkcie; przepływ pracy nie przetwarza historii.
 
 ## Definicja
 
@@ -72,7 +72,7 @@ Akcje przepływu pracy wyzwolonego zdarzeniem dotyczą rekordu, którego dotyczy
 
 ### Reaguj tylko na wybrane atrybuty
 
-`attributes` to lista od 1 do 100 kodów atrybutów. Wyzwalacz uruchamia przebieg tylko wtedy, gdy w zdarzeniu zmienił się co najmniej jeden z tych atrybutów, niezależnie od jego miejsca wśród faktów zdarzenia:
+`attributes` to lista od 1 do 100 kodów atrybutów. Wyzwalacz uruchamia wykonanie tylko wtedy, gdy w zdarzeniu zmienił się co najmniej jeden z tych atrybutów, niezależnie od jego miejsca wśród faktów zdarzenia:
 
 ```toml
 [[triggers]]
@@ -84,11 +84,11 @@ event_type = "relationship.changed.v1"
 attributes = ["license"]
 ```
 
-- Zmiana to fakt w zdarzeniu. Zapisanie wartości identycznej z bieżącą nie tworzy faktu, więc nie uruchamia przebiegu.
+- Zmiana to fakt w zdarzeniu. Zapisanie wartości identycznej z bieżącą nie tworzy faktu, więc nie uruchamia wykonania.
 - Jeden zapis może wygenerować `attribute_value.changed.v1`, `relationship.changed.v1` albo `record.updated.v1`, zależnie od tego, co zawiera. Wymień każdy typ zdarzenia, przez który mogą zmienić się dane atrybuty, jak w przykładzie powyżej.
 - `record.created.v1` traktuje każdą wartość, z którą powstaje nowy rekord, łącznie z domyślnymi, jako zmienioną.
 - **Atrybuty relacji:** dodanie lub usunięcie celu jest zmianą atrybutu relacji. Każdy dodany lub usunięty cel to osobny fakt z `change_kind` równym `relationship_add` lub `relationship_remove`. Zmiany samego powiązanego rekordu są zdarzeniami tamtego rekordu, nie tego.
-- **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików trafia do dziennika audytu, ale nie tworzy zdarzenia, więc atrybut plikowy w `attributes` nigdy nie uruchamia przebiegu. Śledź zmiany plików atrybutem skalarnym, który zmienia się razem z nimi, np. numerem rewizji.
+- **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików trafia do dziennika audytu, ale nie tworzy zdarzenia, więc atrybut plikowy w `attributes` nigdy nie uruchamia wykonania. Śledź zmiany plików atrybutem skalarnym, który zmienia się razem z nimi, np. numerem rewizji.
 - `attributes` nie działa z `record.migrated.v1`, które nie zawiera faktów. Łączy się z `envelope` i `facts`: wszystkie muszą pasować.
 
 ## Wyzwalacze ręczne i harmonogramowe
@@ -114,10 +114,10 @@ type = "system_metadata_merge"
 values = { last_nightly_check = "done" }
 ```
 
-- **Ręczny**: uruchom przebieg dla jednego rekordu ze strony przepływu pracy albo poleceniem `acli workflow run-now <workflow-id> --record-id <uuid> --idempotency-key <key>`. Zawsze używa włączonej wersji.
-- **Harmonogram**: sześciopolowy cron w UTC. `timezone` musi mieć wartość `"UTC"`, co zapobiega powtórzonym lub pominiętym przebiegom przy zmianie czasu. `target_record_id` to rekord, do którego stosowane są akcje. Jeśli serwer nie działał w chwili, gdy przebieg był zaplanowany, wystąpienia opóźnione o więcej niż pięć minut są pomijane i zapisywane. Wystąpienie jest też pomijane, dopóki poprzedni przebieg wciąż oczekuje.
+- **Ręczny**: uruchom wykonanie dla jednego rekordu ze strony przepływu pracy albo poleceniem `acli workflow run-now <workflow-id> --record-id <uuid> --idempotency-key <key>`. Zawsze używa włączonej wersji.
+- **Harmonogram**: sześciopolowy cron w UTC. `timezone` musi mieć wartość `"UTC"`, co zapobiega powtórzonym lub pominiętym wykonaniom przy zmianie czasu. `target_record_id` to rekord, do którego stosowane są akcje. Jeśli serwer nie działał w chwili, gdy wykonanie było zaplanowane, wystąpienia opóźnione o więcej niż pięć minut są pomijane i zapisywane. Wystąpienie jest też pomijane, dopóki poprzednie wykonanie wciąż oczekuje.
 
-Przebiegi ręczne i harmonogramowe nie mają zdarzenia, więc ich akcje muszą używać stałych wartości.
+Wykonania ręczne i harmonogramowe nie mają zdarzenia, więc ich akcje muszą używać stałych wartości.
 
 ## Akcje
 
@@ -164,16 +164,16 @@ tags = ["needs-review"]
 - Akcja ma od 1 do 20 akcji zagnieżdżonych. Mogą one ustawiać statusy i inne atrybuty stałymi wartościami oraz dodawać lub usuwać tagi i metadane systemowe. Nie mogą używać `event_field` ani zawierać kolejnego `referencing_records_update`.
 - `max_targets` domyślnie wynosi 100, a maksymalnie 500. Jeśli z rekordem wyzwalającym łączy się więcej rekordów, akcja kończy się błędem, zanim zmieni kolejny rekord. Zwiększ limit lub zawęź relację.
 - Każdy rekord jest aktualizowany osobnym zapisem, z tymi samymi kontrolami co każda inna edycja: schematami, sprawdzeniami, kluczami unikalnymi, egzekwującymi regułami i przejściami statusów, łącznie z ich warunkami, [blokadami oraz wymaganymi uprawnieniami lub rolami](/pl/builders/validation/#kontroluj-cykl-życia-rekordu). Wymagania przejść są sprawdzane względem osoby, której zmiana uruchomiła przepływ pracy. Rekord, który nie przejdzie którejś z tych kontroli, na przykład zablokowany lub którego status nie pozwala na dane przejście, kończy się błędem sam; pozostałe rekordy są nadal aktualizowane.
-- Jeśli którykolwiek rekord się nie powiedzie, przebieg jest ponawiany. Ponowienie wraca tylko do rekordów, które się nie powiodły lub do których nie dotarto; już zaktualizowane rekordy nigdy nie są zmieniane dwukrotnie. Rekord, który do tego czasu nie istnieje lub nie łączy się już z rekordem wyzwalającym, jest pomijany.
-- Wynik dla każdego rekordu, wraz z ostatnim błędem, zobaczysz poleceniem `acli workflow run-targets <run-id>` albo przez `GET /workflow-runs/{id}/targets`. Lista przebiegów pokazuje ogólny błąd przebiegu, gdy stanie się on martwą wiadomością.
+- Jeśli którykolwiek rekord się nie powiedzie, wykonanie jest ponawiane. Ponowienie wraca tylko do rekordów, które się nie powiodły lub do których nie dotarto; już zaktualizowane rekordy nigdy nie są zmieniane dwukrotnie. Rekord, który do tego czasu nie istnieje lub nie łączy się już z rekordem wyzwalającym, jest pomijany.
+- Wynik dla każdego rekordu, wraz z ostatnim błędem, zobaczysz poleceniem `acli workflow run-targets <run-id>` albo przez `GET /workflow-runs/{id}/targets`. Lista wykonań pokazuje ogólny błąd wykonania, gdy stanie się ono martwą wiadomością.
 - Zmiany tych rekordów nie uruchamiają przepływów pracy, tak jak każda inna zmiana wprowadzona przez przepływ pracy.
 
-## Jak działają przebiegi
+## Jak działają wykonania
 
-- Każdy przebieg używa wersji, która była włączona w chwili jego rozpoczęcia, nawet jeśli później zostanie włączona nowsza.
-- Dostarczanie odbywa się co najmniej raz. Każda akcja jest zapisywana wraz z przebiegiem, więc ponowienie nigdy nie zastosuje jej dwukrotnie. Akcja `referencing_records_update` zapisuje też każdy aktualizowany rekord.
-- Nieudany przebieg jest ponawiany z rosnącymi opóźnieniami i po pięciu próbach staje się martwą wiadomością (dead letter). Odtwórz go z listy przebiegów przepływu pracy albo poleceniem `acli workflow run-replay <run-id>`.
-- Wyłączenie przepływu pracy anuluje jego przebiegi oczekujące w kolejce i trwające.
+- Każde wykonanie używa wersji, która była włączona w chwili jego rozpoczęcia, nawet jeśli później zostanie włączona nowsza.
+- Dostarczanie odbywa się co najmniej raz. Każda akcja jest zapisywana wraz z wykonaniem, więc ponowienie nigdy nie zastosuje jej dwukrotnie. Akcja `referencing_records_update` zapisuje też każdy aktualizowany rekord.
+- Nieudane wykonanie jest ponawiane z rosnącymi opóźnieniami i po pięciu próbach staje się martwą wiadomością (dead letter). Odtwórz je z listy wykonań przepływu pracy albo poleceniem `acli workflow run-replay <run-id>`.
+- Wyłączenie przepływu pracy anuluje jego wykonania oczekujące w kolejce i trwające.
 - Zmiany wprowadzone przez przepływ pracy domyślnie nie wyzwalają ponownie przepływów pracy, a łańcuchy są ograniczone do głębokości ośmiu.
 
 ## Jeszcze niedostępne
@@ -183,4 +183,4 @@ tags = ["needs-review"]
 
 ## Uprawnienia
 
-`workflows.read` pozwala wyświetlać przepływy pracy i historię przebiegów. `workflows.manage` pozwala je tworzyć, publikować, włączać, wyłączać, uruchamiać i odtwarzać. Oba uprawnienia są domyślnie przyznane rolom właściciela i administratora.
+`workflows.read` pozwala wyświetlać przepływy pracy i historię wykonań. `workflows.manage` pozwala je tworzyć, publikować, włączać, wyłączać, uruchamiać i odtwarzać. Oba uprawnienia są domyślnie przyznane rolom właściciela i administratora.
