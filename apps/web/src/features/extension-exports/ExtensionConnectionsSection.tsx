@@ -44,6 +44,124 @@ const statusColors = {
   revoked: 'default',
 } as const satisfies Record<ExtensionConnection['status'], string>;
 
+type ConnectionFormProps = {
+  /** Another action on the connection is running. */
+  busy: boolean;
+  connection: ExtensionConnection;
+  extensionId: string;
+};
+
+/** Exchanges a code the provider issued for the connection's tokens. */
+const AuthorizationCodeForm = ({
+  busy,
+  connection,
+  extensionId,
+  onExchanged,
+}: ConnectionFormProps & { onExchanged: () => Promise<void> }) => {
+  const { t } = useTranslation();
+  const [code, setCode] = useState('');
+  const [redirectUri, setRedirectUri] = useState('');
+  const exchange = useMutation({
+    mutationFn: () =>
+      exchangeAuthorizationCode(extensionId, connection.connection, {
+        code,
+        redirect_uri: redirectUri,
+      }),
+    onSuccess: () => {
+      setCode('');
+      return onExchanged();
+    },
+  });
+  return (
+    <Box sx={{ mt: 1 }}>
+      <ApiErrorAlert error={exchange.error} sx={{ mb: 1 }} />
+      <Stack
+        component="form"
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={1}
+        onSubmit={(event) => {
+          event.preventDefault();
+          exchange.mutate();
+        }}
+      >
+        <TextField
+          label={t('extensionExports.authorizationCode')}
+          required
+          size="small"
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+        />
+        <TextField
+          label={t('extensionExports.redirectUri')}
+          required
+          size="small"
+          type="url"
+          value={redirectUri}
+          onChange={(event) => setRedirectUri(event.target.value)}
+        />
+        <Button disabled={busy || exchange.isPending} type="submit">
+          {t('extensionExports.exchangeCode')}
+        </Button>
+      </Stack>
+    </Box>
+  );
+};
+
+/** Replaces the connection's write-only client secret or refresh token. */
+const ReplaceSecretForm = ({
+  busy,
+  connection,
+  extensionId,
+  onReplaced,
+}: ConnectionFormProps & { onReplaced: () => Promise<void> }) => {
+  const { t } = useTranslation();
+  const [secret, setSecret] = useState('');
+  const refreshToken =
+    connection.grant_type === connectionGrantTypes.refreshToken;
+  const rotate = useMutation({
+    mutationFn: () =>
+      updateConnection(
+        extensionId,
+        connection.connection,
+        refreshToken ? { refresh_token: secret } : { client_secret: secret },
+      ),
+    onSuccess: () => {
+      setSecret('');
+      return onReplaced();
+    },
+  });
+  return (
+    <Box sx={{ mt: 1 }}>
+      <ApiErrorAlert error={rotate.error} sx={{ mb: 1 }} />
+      <Stack
+        component="form"
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={1}
+        onSubmit={(event) => {
+          event.preventDefault();
+          rotate.mutate();
+        }}
+      >
+        <TextField
+          autoComplete="new-password"
+          label={
+            refreshToken
+              ? t('extensionExports.replaceRefreshToken')
+              : t('extensionExports.replaceSecret')
+          }
+          size="small"
+          type="password"
+          value={secret}
+          onChange={(event) => setSecret(event.target.value)}
+        />
+        <Button disabled={busy || rotate.isPending || !secret} type="submit">
+          {t('extensionExports.replace')}
+        </Button>
+      </Stack>
+    </Box>
+  );
+};
+
 const ConnectionRow = ({
   canManage,
   connection,
@@ -55,9 +173,6 @@ const ConnectionRow = ({
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [code, setCode] = useState('');
-  const [redirectUri, setRedirectUri] = useState('');
-  const [secret, setSecret] = useState('');
   const refresh = () =>
     client.invalidateQueries({
       queryKey: extensionExportQueryKeys.connections(extensionId),
@@ -68,17 +183,6 @@ const ConnectionRow = ({
     ) => connectionAction(extensionId, connection.connection, name),
     onSuccess: refresh,
   });
-  const exchange = useMutation({
-    mutationFn: () =>
-      exchangeAuthorizationCode(extensionId, connection.connection, {
-        code,
-        redirect_uri: redirectUri,
-      }),
-    onSuccess: () => {
-      setCode('');
-      return refresh();
-    },
-  });
   // The provider sends the operator back to this page after approving.
   const authorize = useMutation({
     mutationFn: () =>
@@ -87,36 +191,12 @@ const ConnectionRow = ({
       window.location.assign(authorization_url);
     },
   });
-  const rotate = useMutation({
-    mutationFn: () =>
-      updateConnection(
-        extensionId,
-        connection.connection,
-        connection.grant_type === connectionGrantTypes.refreshToken
-          ? { refresh_token: secret }
-          : { client_secret: secret },
-      ),
-    onSuccess: () => {
-      setSecret('');
-      return refresh();
-    },
-  });
   const remove = useMutation({
     mutationFn: () => deleteConnection(extensionId, connection.connection),
     onSuccess: refresh,
   });
-  const error =
-    action.error ??
-    authorize.error ??
-    exchange.error ??
-    rotate.error ??
-    remove.error;
-  const busy =
-    action.isPending ||
-    authorize.isPending ||
-    exchange.isPending ||
-    rotate.isPending ||
-    remove.isPending;
+  const error = action.error ?? authorize.error ?? remove.error;
+  const busy = action.isPending || authorize.isPending || remove.isPending;
   return (
     <Box sx={{ borderTop: 1, borderColor: 'divider', py: 2 }}>
       <Stack
@@ -246,64 +326,21 @@ const ConnectionRow = ({
       )}
       {canManage &&
         connection.grant_type === connectionGrantTypes.authorizationCode && (
-          <Stack
-            component="form"
-            direction={{ xs: 'column', sm: 'row' }}
-            spacing={1}
-            sx={{ mt: 1 }}
-            onSubmit={(event) => {
-              event.preventDefault();
-              exchange.mutate();
-            }}
-          >
-            <TextField
-              label={t('extensionExports.authorizationCode')}
-              required
-              size="small"
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-            />
-            <TextField
-              label={t('extensionExports.redirectUri')}
-              required
-              size="small"
-              type="url"
-              value={redirectUri}
-              onChange={(event) => setRedirectUri(event.target.value)}
-            />
-            <Button disabled={busy} type="submit">
-              {t('extensionExports.exchangeCode')}
-            </Button>
-          </Stack>
+          <AuthorizationCodeForm
+            busy={busy}
+            connection={connection}
+            extensionId={extensionId}
+            onExchanged={refresh}
+          />
         )}
       {canManage &&
         connection.grant_type !== connectionGrantTypes.deviceCode && (
-          <Stack
-            component="form"
-            direction={{ xs: 'column', sm: 'row' }}
-            spacing={1}
-            sx={{ mt: 1 }}
-            onSubmit={(event) => {
-              event.preventDefault();
-              rotate.mutate();
-            }}
-          >
-            <TextField
-              autoComplete="new-password"
-              label={
-                connection.grant_type === connectionGrantTypes.refreshToken
-                  ? t('extensionExports.replaceRefreshToken')
-                  : t('extensionExports.replaceSecret')
-              }
-              size="small"
-              type="password"
-              value={secret}
-              onChange={(event) => setSecret(event.target.value)}
-            />
-            <Button disabled={busy || !secret} type="submit">
-              {t('extensionExports.replace')}
-            </Button>
-          </Stack>
+          <ReplaceSecretForm
+            busy={busy}
+            connection={connection}
+            extensionId={extensionId}
+            onReplaced={refresh}
+          />
         )}
     </Box>
   );
