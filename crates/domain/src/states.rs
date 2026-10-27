@@ -339,6 +339,16 @@ mod tests {
             RuleFindingState::parse,
         );
         crate::codes::assert_codes_round_trip(
+            RuleFindingSeverity::ALL,
+            RuleFindingSeverity::as_str,
+            RuleFindingSeverity::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            DataQualityFilter::ALL,
+            DataQualityFilter::as_str,
+            DataQualityFilter::parse,
+        );
+        crate::codes::assert_codes_round_trip(
             MembershipState::ALL,
             MembershipState::as_str,
             MembershipState::parse,

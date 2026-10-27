@@ -243,7 +243,7 @@ export const RuleInspectionPage = ({
             findings={findingItems}
             filters={findingsSearch}
             onFiltersChange={(search) =>
-              void navigate({ to: '/manage/rules/findings', search })
+              void navigate({ to: ruleRoutes.findings, search })
             }
             rules={rules.data ?? []}
             blueprints={blueprints.data ?? []}

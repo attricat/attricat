@@ -1272,10 +1272,10 @@ pub struct RuleFindingFilter {
 /// The `rule_findings.severity` code, spelled as in rule definitions.
 fn severity_code(severity: &attricat_rules::Severity) -> &'static str {
     match severity {
-        attricat_rules::Severity::Info => "info",
-        attricat_rules::Severity::Warning => "warning",
-        attricat_rules::Severity::Error => "error",
-        attricat_rules::Severity::Critical => "critical",
+        attricat_rules::Severity::Info => RuleFindingSeverity::Info.as_str(),
+        attricat_rules::Severity::Warning => RuleFindingSeverity::Warning.as_str(),
+        attricat_rules::Severity::Error => RuleFindingSeverity::Error.as_str(),
+        attricat_rules::Severity::Critical => RuleFindingSeverity::Critical.as_str(),
     }
 }
 

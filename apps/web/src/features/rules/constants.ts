@@ -4,10 +4,19 @@ export const RULE_SECTION_RULES = 'rules';
 export const RULE_SECTION_FINDINGS = 'findings';
 export const RULE_SECTION_RUNS = 'runs';
 
+export const ruleRoutes = {
+  list: '/manage/rules',
+  findings: '/manage/rules/findings',
+  runs: '/manage/rules/runs',
+  create: '/manage/rules/new',
+  revision: '/manage/rules/$ruleId/revisions/$version',
+  newRevision: '/manage/rules/$ruleId/revisions/$version/new',
+} as const;
+
 export const RULE_SECTIONS = [
-  { key: RULE_SECTION_RULES, to: '/manage/rules' },
-  { key: RULE_SECTION_FINDINGS, to: '/manage/rules/findings' },
-  { key: RULE_SECTION_RUNS, to: '/manage/rules/runs' },
+  { key: RULE_SECTION_RULES, to: ruleRoutes.list },
+  { key: RULE_SECTION_FINDINGS, to: ruleRoutes.findings },
+  { key: RULE_SECTION_RUNS, to: ruleRoutes.runs },
 ] as const;
 
 export type RuleInspectionSection = (typeof RULE_SECTIONS)[number]['key'];
@@ -57,12 +66,6 @@ export const ruleTriggerTypes = {
   schedule: 'schedule',
   event: 'event',
   postImport: 'post_import',
-} as const;
-export const ruleRoutes = {
-  list: '/manage/rules',
-  create: '/manage/rules/new',
-  revision: '/manage/rules/$ruleId/revisions/$version',
-  newRevision: '/manage/rules/$ruleId/revisions/$version/new',
 } as const;
 /** Keeps the rule scope selectors readable when their labels are short. */
 export const RULE_SCOPE_SELECT_MIN_WIDTH = 220;
