@@ -2606,29 +2606,36 @@ async fn agent_run_events_resume_after_the_last_event_until_terminal() {
     let resumed_after = Arc::new(Mutex::new(Vec::new()));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    let app = axum::Router::new().route(
-        "/agent/runs/{run_id}/events",
-        axum::routing::get({
-            let resumed_after = resumed_after.clone();
-            move |headers: axum::http::HeaderMap| {
+    let app = axum::Router::new()
+        .route(
+            "/agent/runs/{run_id}/events",
+            axum::routing::get({
                 let resumed_after = resumed_after.clone();
-                async move {
-                    let last = headers
-                        .get("last-event-id")
-                        .map(|value| value.to_str().unwrap().to_owned());
-                    resumed_after.lock().unwrap().push(last.clone());
-                    let body = match last {
-                        None => "id: 7\nevent: status\ndata: {\"status\":\"running\"}\n\n",
-                        Some(_) => "id: 8\nevent: terminal\ndata: {\"status\":\"completed\"}\n\n",
-                    };
-                    (
-                        [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
-                        body,
-                    )
+                move |headers: axum::http::HeaderMap| {
+                    let resumed_after = resumed_after.clone();
+                    async move {
+                        let last = headers
+                            .get("last-event-id")
+                            .map(|value| value.to_str().unwrap().to_owned());
+                        resumed_after.lock().unwrap().push(last.clone());
+                        let body = match last {
+                            None => "id: 7\nevent: status\ndata: {\"status\":\"running\"}\n\n",
+                            Some(_) => {
+                                "id: 8\nevent: terminal\ndata: {\"status\":\"completed\"}\n\n"
+                            }
+                        };
+                        (
+                            [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                            body,
+                        )
+                    }
                 }
-            }
-        }),
-    );
+            }),
+        )
+        .route(
+            "/agent/runs/{run_id}",
+            axum::routing::get(|| async { axum::Json(json!({"status": "running"})) }),
+        );
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let api = Api::new(
         Client::new(),
@@ -2645,26 +2652,34 @@ async fn agent_run_events_resume_after_the_last_event_until_terminal() {
     server.abort();
 }
 
-/// Serves fixed SSE bodies for one run's events, one per connection, and
-/// returns the API pointed at it.
-async fn sse_server(bodies: Vec<&'static str>) -> (Api, tokio::task::JoinHandle<()>) {
+/// Serves fixed SSE bodies for one run's events, one per connection, and the
+/// run itself with `run_status`, and returns the API pointed at it.
+async fn sse_server(
+    bodies: Vec<&'static str>,
+    run_status: &'static str,
+) -> (Api, tokio::task::JoinHandle<()>) {
     use std::sync::{Arc, Mutex};
 
     let bodies = Arc::new(Mutex::new(bodies.into_iter()));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    let app = axum::Router::new().route(
-        "/agent/runs/{run_id}/events",
-        axum::routing::get(move || {
-            let body = bodies.lock().unwrap().next().expect("no further stream");
-            async move {
-                (
-                    [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
-                    body,
-                )
-            }
-        }),
-    );
+    let app = axum::Router::new()
+        .route(
+            "/agent/runs/{run_id}/events",
+            axum::routing::get(move || {
+                let body = bodies.lock().unwrap().next().expect("no further stream");
+                async move {
+                    (
+                        [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                        body,
+                    )
+                }
+            }),
+        )
+        .route(
+            "/agent/runs/{run_id}",
+            axum::routing::get(move || async move { axum::Json(json!({"status": run_status})) }),
+        );
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let api = Api::new(
         Client::new(),
@@ -2674,17 +2689,35 @@ async fn sse_server(bodies: Vec<&'static str>) -> (Api, tokio::task::JoinHandle<
 }
 
 #[tokio::test]
+async fn agent_run_events_stop_when_a_finished_runs_stream_ends_without_terminal() {
+    // The run's events were purged, or the stream resumed after its terminal
+    // event: the server closes cleanly with nothing to send.
+    let (api, server) = sse_server(vec![": keep-alive\n\n", ""], "completed").await;
+    let followed = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        follow_run(&api, Uuid::from_u128(1), Some("8".to_owned())),
+    )
+    .await
+    .expect("follow_run kept reconnecting");
+    assert_eq!(followed.unwrap(), "");
+    server.abort();
+}
+
+#[tokio::test]
 async fn agent_run_events_print_a_failed_runs_error_event_and_continue_to_terminal() {
     let (api, server) = sse_server(vec![
         "id: 7\nevent: error\ndata: {\"type\":\"error\"}\n\nid: 8\nevent: terminal\ndata: {\"status\":\"failed\"}\n\n",
-    ])
+    ], "failed")
     .await;
     assert_eq!(
         follow_run(&api, Uuid::from_u128(1), None).await.unwrap(),
         ""
     );
-    let (api2, server2) =
-        sse_server(vec!["event: error\ndata: agent run event stream failed\n\n"]).await;
+    let (api2, server2) = sse_server(
+        vec!["event: error\ndata: agent run event stream failed\n\n"],
+        "running",
+    )
+    .await;
     assert!(matches!(
         follow_run(&api2, Uuid::from_u128(1), None).await,
         Err(CliError::Transport(message)) if message == "agent run event stream failed"

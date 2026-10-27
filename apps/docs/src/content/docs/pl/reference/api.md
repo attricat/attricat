@@ -385,6 +385,7 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 | `GET`, `POST` | `/agent/conversations/{id}/messages` | Wiadomości. Wysłanie wiadomości rozpoczyna uruchomienie i zwraca `202`. |
 | `POST` | `/agent/conversations/{id}/uploads` | Przesyła załącznik. |
 | `GET` | `/agent/conversations/{id}/runs` | Uruchomienia. |
+| `GET` | `/agent/runs/{run_id}` | Jedno uruchomienie i jego status. |
 | `GET` | `/agent/runs/{run_id}/events` | Zdarzenia wysyłane przez serwer (SSE). Połącz ponownie z `Last-Event-ID`. |
 | `GET` | `/agent/approvals` | Oczekujące zatwierdzenia. |
 | `POST` | `/agent/tool-calls/{id}/approve`, `/reject` | Decyzja. |

@@ -406,6 +406,7 @@ pub fn router(state: AppState) -> Router {
             "/agent/conversations/{conversation_id}/runs",
             get(agents::list_runs),
         )
+        .route("/agent/runs/{run_id}", get(agents::get_run))
         .route("/agent/runs/{run_id}/events", get(agents::stream_events))
         .route("/agent/approvals", get(agents::list_pending_approvals))
         .route(

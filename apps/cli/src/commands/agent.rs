@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use clap::Subcommand;
 use futures_util::StreamExt;
+use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
@@ -184,6 +185,37 @@ const TERMINAL_EVENT: &str = "terminal";
 /// the server's own notice that it stopped the stream abnormally, which has
 /// none.
 const ERROR_EVENT: &str = "error";
+/// Where an agent run stands, as the API reports it.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum AgentRunStatus {
+    Queued,
+    Running,
+    AwaitingApproval,
+    Completed,
+    Failed,
+    Cancelled,
+    Skipped,
+    /// A status this `acli` does not know; treated as still running.
+    #[serde(other)]
+    Unknown,
+}
+
+impl AgentRunStatus {
+    /// Whether the run has finished and its status will not change.
+    fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            Self::Completed | Self::Failed | Self::Cancelled | Self::Skipped
+        )
+    }
+}
+
+#[derive(Deserialize)]
+struct AgentRun {
+    status: AgentRunStatus,
+}
+
 /// Pause before resuming a stream the server closed before the run ended.
 const STREAM_RECONNECT_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
 
@@ -330,17 +362,25 @@ async fn message_command(api: &Api, command: MessageCommand) -> Result<String, C
 }
 
 /// Prints a run's events as JSON lines until its terminal event, resuming
-/// with `Last-Event-ID` when the server ends the stream early. Returns no
-/// further output.
+/// with `Last-Event-ID` when the server ends the stream early. A stream that
+/// ends without a terminal event because none remains to send (the run's
+/// events were purged, or the stream resumed after its terminal event) stops
+/// once the run itself is terminal. Returns no further output.
 pub(crate) async fn follow_run(
     api: &Api,
     run_id: Uuid,
     mut last_event_id: Option<String>,
 ) -> Result<String, CliError> {
-    let path = format!("/agent/runs/{}/events", segment(run_id));
+    let run_path = format!("/agent/runs/{}", segment(run_id));
+    let path = format!("{run_path}/events");
     let mut resumed = false;
     loop {
         if resumed {
+            let run: AgentRun = serde_json::from_value(api.get_value(&run_path).await?)
+                .map_err(|_| CliError::InvalidResponse)?;
+            if run.status.is_terminal() {
+                return Ok(String::new());
+            }
             tokio::time::sleep(STREAM_RECONNECT_DELAY).await;
         }
         resumed = true;

@@ -385,6 +385,7 @@ See [Translate labels](/builders/translations/).
 | `GET`, `POST` | `/agent/conversations/{id}/messages` | Messages. Posting starts a run and returns `202`. |
 | `POST` | `/agent/conversations/{id}/uploads` | Upload an attachment. |
 | `GET` | `/agent/conversations/{id}/runs` | Runs. |
+| `GET` | `/agent/runs/{run_id}` | One run and its status. |
 | `GET` | `/agent/runs/{run_id}/events` | Server-sent events. Reconnect with `Last-Event-ID`. |
 | `GET` | `/agent/approvals` | Pending approvals. |
 | `POST` | `/agent/tool-calls/{id}/approve`, `/reject` | Decide. |

@@ -287,7 +287,10 @@ server-sent run event until the run's `terminal` event, reconnecting with
 `Last-Event-ID` if the server ends the stream first. A failed run's stored
 `error` event (it has an event id) is printed like any other; only an `error`
 event without an id, the server's notice that the stream itself failed, ends
-the command with `request_failed`.
+the command with `request_failed`. When a stream ends without a `terminal`
+event, `acli` reads the run (`GET /agent/runs/{run_id}`) and stops with exit
+code 0 if it has finished, for example when its events were purged by
+retention or `--last-event-id` named its terminal event.
 
 
 ## Teams and assignments

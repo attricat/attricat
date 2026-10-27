@@ -975,7 +975,8 @@ conversation. `GET /agent/conversations/search` pages them newest first
 conversations about one record. `GET`/`PATCH`/`DELETE /agent/conversations/{id}` reads,
 renames, or archives a thread; it exposes ordered messages at
 `/agent/conversations/{id}/messages` and run history at
-`/agent/conversations/{id}/runs`. The single-conversation `GET` also returns
+`/agent/conversations/{id}/runs`; `GET /agent/runs/{run_id}` reads one run
+and its status. The single-conversation `GET` also returns
 `read_only`, which is `true` when `ATTRICAT_DEMO_MODE` limits the agent to read
 tools. Posting a message creates a durable queued run and returns `202`. The API worker executes the run independently of the
 HTTP request.
@@ -985,7 +986,11 @@ tool, approval, error, terminal, and schedule events. Each SSE `id` is the
 persisted event UUID. Reconnect with `Last-Event-ID` to replay only later
 ordered events. Credentials, `agents.run`, and the conversation's record-read
 access are rechecked before each event batch, including idle polls. Losing
-access ends an already-open stream with an error event.
+access ends an already-open stream with an error event. That stream-failure
+event has no SSE `id`, unlike a failed run's stored `error` event. A stream
+that has nothing left to send for a finished run (its events were purged, or
+`Last-Event-ID` named its terminal event) closes without a `terminal` event;
+read the run to tell this apart from an early close.
 
 `GET /agent/approvals` lists pending tool calls from live runs
 (optionally by `conversation_id`). Approve/reject routes durably record each
