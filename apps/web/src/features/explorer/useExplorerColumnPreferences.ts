@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   clearExplorerColumnPreferences,
+  defaultExplorerColumnPreferences,
   getExplorerColumnPreferences,
   setExplorerColumnPreferences,
   type ExplorerColumnPreferences,
@@ -23,7 +24,7 @@ export const useExplorerColumnPreferences = (
   };
   const clear = () => {
     clearExplorerColumnPreferences(blueprintId);
-    setPreferences({ hidden: [], order: columnIds });
+    setPreferences(defaultExplorerColumnPreferences(columnIds));
   };
   return { clear, preferences, update };
 };
