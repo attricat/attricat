@@ -37,4 +37,16 @@ describe('useExplorerColumnPreferences', () => {
       order: columns,
     });
   });
+
+  it('shows columns that appear while mounted as a new viewer sees them', () => {
+    const { result, rerender } = renderHook(
+      ({ ids }) => useExplorerColumnPreferences(blueprintId, ids),
+      { initialProps: { ids: columns } },
+    );
+    rerender({ ids: [...columns, explorerColumnIds.dataQuality] });
+    expect(result.current.preferences).toEqual({
+      hidden: [explorerColumnIds.systemTags],
+      order: [...columns, explorerColumnIds.dataQuality],
+    });
+  });
 });

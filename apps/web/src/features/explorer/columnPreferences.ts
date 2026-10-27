@@ -26,7 +26,11 @@ export const defaultExplorerColumnPreferences = (
   order: columnIds,
 });
 
-const normalizePreferences = (
+/**
+ * Fits preferences to the table's current columns: unknown ones are dropped
+ * and new ones appended as a new viewer would see them.
+ */
+export const normalizeExplorerColumnPreferences = (
   preferences: ExplorerColumnPreferences,
   columnIds: string[],
 ): ExplorerColumnPreferences => {
@@ -64,7 +68,7 @@ export const getExplorerColumnPreferences = (
     preferencesSchema,
   );
   return stored
-    ? normalizePreferences(stored, columnIds)
+    ? normalizeExplorerColumnPreferences(stored, columnIds)
     : defaultExplorerColumnPreferences(columnIds);
 };
 
