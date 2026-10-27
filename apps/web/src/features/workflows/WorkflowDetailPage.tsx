@@ -18,8 +18,6 @@ import { useCan } from '../auth/useCan';
 import {
   disableWorkflow,
   enableWorkflowRevision,
-  listWorkflowRevisions,
-  listWorkflowRuns,
   publishWorkflowRevision,
   runWorkflowNow,
 } from './api';
@@ -35,6 +33,10 @@ import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { randomUuid } from '../../components/randomUuid';
+import {
+  workflowRevisionListOptions,
+  workflowRunListOptions,
+} from './queryOptions';
 
 export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const { t } = useTranslation();
@@ -45,14 +47,8 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const [leftVersion, setLeftVersion] = useState<number>();
   const tabId = useTabAccessibility();
   const canManage = useCan(capabilities.workflowsManage);
-  const revisions = useQuery({
-    queryKey: workflowQueryKeys.revisions(workflowId),
-    queryFn: () => listWorkflowRevisions(workflowId),
-  });
-  const runs = useQuery({
-    queryKey: workflowQueryKeys.runs(),
-    queryFn: listWorkflowRuns,
-  });
+  const revisions = useQuery(workflowRevisionListOptions(workflowId));
+  const runs = useQuery(workflowRunListOptions());
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: workflowQueryKeys.all() }),

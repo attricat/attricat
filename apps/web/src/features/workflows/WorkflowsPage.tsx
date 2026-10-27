@@ -20,8 +20,7 @@ import { PlusIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
-import { listWorkflowRuns, listWorkflows } from './api';
-import { workflowQueryKeys } from './queryKeys';
+import { listWorkflowRuns } from './api';
 import { workflowRoutes, workflowRunStatus } from './constants';
 import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
@@ -30,18 +29,13 @@ import { WorkflowIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { workflowListOptions, workflowRunListOptions } from './queryOptions';
 
 export const WorkflowsPage = () => {
   const { t } = useTranslation();
   const canManage = useCan(capabilities.workflowsManage);
-  const workflows = useQuery({
-    queryKey: workflowQueryKeys.all(),
-    queryFn: listWorkflows,
-  });
-  const runs = useQuery({
-    queryKey: workflowQueryKeys.runs(),
-    queryFn: listWorkflowRuns,
-  });
+  const workflows = useQuery(workflowListOptions());
+  const runs = useQuery(workflowRunListOptions());
   const families = latestRevisions(
     workflows.data ?? [],
     (workflow) => workflow.id,
