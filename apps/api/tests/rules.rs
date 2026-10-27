@@ -931,3 +931,83 @@ async fn needs_attention_tag_follows_open_findings_and_is_reserved(pool: PgPool)
     assert!(tags(record_id).await.is_empty());
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn needs_attention_tag_survives_a_concurrent_finding_commit(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
+    let repository = AttricatRepository::new(pool.clone(), workspace);
+    manual_run(&base_url, rule_id, Some(record_id), "needs-attention-race").await;
+    let task = repository
+        .claim_task("needs-attention-race", Duration::from_secs(30))
+        .await
+        .unwrap()
+        .unwrap();
+    rule_runtime::task_handler(repository.clone())
+        .handle(task)
+        .await
+        .unwrap();
+    let finding: Uuid = sqlx::query_scalar("SELECT id FROM rule_findings WHERE record_id=$1")
+        .bind(record_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    // Another run opens a second finding and holds the record lock while the
+    // first finding is acknowledged.
+    let mut other = pool.begin().await.unwrap();
+    sqlx::query(
+        "INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,record_id,context_id,evaluation_key,severity,message,evidence)
+         SELECT $1,workspace_id,rule_id,rule_version,record_id,context_id,'concurrent',severity,message,evidence
+           FROM rule_findings WHERE id=$2",
+    )
+    .bind(Uuid::new_v4())
+    .bind(finding)
+    .execute(&mut *other)
+    .await
+    .unwrap();
+    sqlx::query("SELECT id FROM records WHERE id=$1 FOR NO KEY UPDATE")
+        .bind(record_id)
+        .execute(&mut *other)
+        .await
+        .unwrap();
+    let acknowledge = tokio::spawn({
+        let client = client.clone();
+        let base_url = base_url.clone();
+        async move {
+            client
+                .post(format!("{base_url}/rule-findings/{finding}/acknowledge"))
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap();
+        }
+    });
+    loop {
+        let waiting: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+                            WHERE datname = current_database() AND wait_event_type = 'Lock')",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        if waiting {
+            break;
+        }
+        sleep(Duration::from_millis(10)).await;
+    }
+    other.commit().await.unwrap();
+    acknowledge.await.unwrap();
+
+    let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM records WHERE id=$1")
+        .bind(record_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(tags, vec!["attricat.needs_attention".to_owned()]);
+    server.abort();
+}

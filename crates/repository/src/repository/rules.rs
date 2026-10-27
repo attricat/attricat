@@ -1325,6 +1325,13 @@ const NEEDS_ATTENTION_RECONCILE_PAGE: i64 = 1_000;
 /// whether each record has an open finding. Rows are locked in ID order so
 /// concurrent rule pages cannot deadlock. `updated_at` stays: the tag follows
 /// the findings and is not an edit.
+///
+/// The lock and the update are separate statements on purpose: under READ
+/// COMMITTED a single statement evaluates the open-finding `EXISTS` against
+/// its starting snapshot even after waiting for a newer row version, so a
+/// concurrent run that committed a finding meanwhile would be missed and the
+/// tag dropped. Locking first makes the second statement's fresh snapshot see
+/// every finding committed by the transactions it waited for.
 pub(super) async fn sync_needs_attention_tags(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     workspace_id: Uuid,
@@ -1334,20 +1341,28 @@ pub(super) async fn sync_needs_attention_tags(
         return Ok(());
     }
     sqlx::query(
-        "WITH locked AS (
+        "SELECT e.id FROM records e
+          WHERE e.workspace_id = $1 AND e.id = ANY($2)
+          ORDER BY e.id
+            FOR NO KEY UPDATE",
+    )
+    .bind(workspace_id)
+    .bind(record_ids)
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(
+        "WITH state AS (
              SELECT e.id, $3 = ANY(e.system_tags) AS tagged,
                     EXISTS (SELECT 1 FROM rule_findings f
                              WHERE f.workspace_id = e.workspace_id AND f.record_id = e.id
                                AND f.state = $4) AS open
                FROM records e
-              WHERE e.workspace_id = $1 AND e.id = ANY($2)
-              ORDER BY e.id
-                FOR NO KEY UPDATE)
+              WHERE e.workspace_id = $1 AND e.id = ANY($2))
          UPDATE records e
-            SET system_tags = CASE WHEN locked.open THEN array_append(e.system_tags, $3)
+            SET system_tags = CASE WHEN state.open THEN array_append(e.system_tags, $3)
                                    ELSE array_remove(e.system_tags, $3) END
-           FROM locked
-          WHERE e.workspace_id = $1 AND e.id = locked.id AND locked.tagged <> locked.open",
+           FROM state
+          WHERE e.workspace_id = $1 AND e.id = state.id AND state.tagged <> state.open",
     )
     .bind(workspace_id)
     .bind(record_ids)
