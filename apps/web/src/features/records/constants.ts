@@ -16,6 +16,13 @@ export const retentionHoldSources = {
 
 export const RECORD_SEARCH_PAGE_SIZE = 25;
 /**
+ * System tag of solution-pack sample records. Records show it as the sample
+ * badge, and search filters cannot name it.
+ */
+export const SAMPLE_SYSTEM_TAG = 'attricat.sample';
+/** Most tags one system tag facet request lists; the API caps it at 100. */
+export const SYSTEM_TAG_FACET_LIMIT = 50;
+/**
  * Operators a record search filter compares an attribute value with; `isSet`
  * distinguishes an absent value from a present one.
  */
@@ -45,6 +52,7 @@ export const recordPreviewTabs = {
   comments: 'comments',
   conversations: 'conversations',
   recordControl: 'record-control',
+  systemAnnotations: 'system-annotations',
   exports: 'exports',
 } as const;
 export type RecordPreviewTabKey =

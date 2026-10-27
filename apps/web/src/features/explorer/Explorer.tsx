@@ -215,6 +215,8 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
               onUpdateFacet={actions.updateFacet}
               exportStatus={search.exportStatus}
               onExportStatusChange={actions.setExportStatus}
+              systemTags={search.systemTags}
+              onSystemTagsChange={actions.setSystemTags}
               pathAttributes={selectedBlueprint.data?.table_path_attributes}
               relationshipAttributes={relationshipFields}
             />
@@ -271,6 +273,7 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
                 <ExplorerResults
                   data={data}
                   onFilterCell={requestFilter}
+                  onFilterSystemTag={actions.addSystemTag}
                   onOpenPanel={isWideDesktop ? openPanel : undefined}
                   onShowAllVersions={actions.showAllVersions}
                   onSortChange={actions.toggleSort}

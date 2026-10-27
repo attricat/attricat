@@ -20,9 +20,14 @@ import {
   type AttributeFilterDraft,
   type AttributeFilterRequest,
 } from './attributeFilterValues';
-import { explorerVisibilityScope, maximumAttributeFilters } from './constants';
+import {
+  explorerVisibilityScope,
+  maximumAttributeFilters,
+  maximumSystemTagFilters,
+} from './constants';
 import { ExplorerFilterChip } from './ExplorerFilterChip';
 import { RelationshipFacetChip } from './RelationshipFacetChip';
+import { SystemTagFilterPicker } from './SystemTagFilterPicker';
 import type {
   ExplorerRelationshipFacet,
   RelationshipFacetUpdate,
@@ -55,7 +60,12 @@ type Props = {
   onUpdateFacet?: (field: string, updates: RelationshipFacetUpdate) => void;
   exportStatus?: ExportStatusFilterValue;
   onExportStatusChange?: (value: ExportStatusFilterValue | undefined) => void;
+  systemTags?: string[];
+  onSystemTagsChange?: (tags: string[]) => void;
 };
+
+/** Chip keys of system tags, apart from attribute and relationship fields. */
+const systemTagChipKey = (tag: string) => `system-tag:${tag}`;
 
 type EditorState = {
   // Remounts the dialog form for every opening so it starts from its draft.
@@ -96,6 +106,8 @@ export const ExplorerFilterBar = ({
   onUpdateFacet = () => undefined,
   exportStatus,
   onExportStatusChange,
+  systemTags = [],
+  onSystemTagsChange,
 }: Props) => {
   const { t } = useTranslation();
   const timeZone = useTimeZone();
@@ -111,6 +123,7 @@ export const ExplorerFilterBar = ({
   const chipKeys = [
     ...filters.map((filter, index) => attributeFilterKey(filter, index)),
     ...selectedFacets.map((facet) => facet.sourceRelationship.code),
+    ...systemTags.map(systemTagChipKey),
   ];
   const chipRefs = useRef(new Map<string, HTMLDivElement>());
   const chipRef = (key: string) => (element: HTMLDivElement | null) => {
@@ -118,6 +131,7 @@ export const ExplorerFilterBar = ({
     else chipRefs.current.delete(key);
   };
   const addButtonRef = useRef<HTMLButtonElement>(null);
+  const addTagButtonRef = useRef<HTMLButtonElement>(null);
   const removedPosition = useRef<number | null>(null);
   // Deleting a chip removes the focused element. Move focus to the chip that
   // took its place, else the previous one, else Add filter, so keyboard focus
@@ -128,7 +142,12 @@ export const ExplorerFilterBar = ({
     removedPosition.current = null;
     const key = chipKeys[Math.min(position, chipKeys.length - 1)];
     const next = key === undefined ? undefined : chipRefs.current.get(key);
-    (next ?? addButtonRef.current ?? emptyFocusTarget?.current)?.focus();
+    (
+      next ??
+      addButtonRef.current ??
+      addTagButtonRef.current ??
+      emptyFocusTarget?.current
+    )?.focus();
   });
   const removeChip = (position: number, remove: () => void) => {
     removedPosition.current = position;
@@ -283,6 +302,25 @@ export const ExplorerFilterBar = ({
           />
         );
       })}
+      {systemTags.map((tag) => {
+        const key = systemTagChipKey(tag);
+        const label = t('explorer.systemTagFilterChip', { tag });
+        return (
+          <ExplorerFilterChip
+            chipRef={chipRef(key)}
+            key={key}
+            label={label}
+            onDelete={() =>
+              removeChip(chipKeys.indexOf(key), () =>
+                onSystemTagsChange?.(systemTags.filter((item) => item !== tag)),
+              )
+            }
+            removeLabel={t('explorer.removeSystemTagFilter', {
+              filter: label,
+            })}
+          />
+        );
+      })}
       {filterableAttributes.length > 0 && (
         <Button
           color="primary"
@@ -295,6 +333,15 @@ export const ExplorerFilterBar = ({
         >
           {t('explorer.addAttributeFilter')}
         </Button>
+      )}
+      {onSystemTagsChange && (
+        <SystemTagFilterPicker
+          blueprint={blueprint}
+          buttonRef={addTagButtonRef}
+          disabled={systemTags.length >= maximumSystemTagFilters}
+          onAdd={(tag) => onSystemTagsChange([...systemTags, tag])}
+          selected={systemTags}
+        />
       )}
       {onExportStatusChange && (
         <ExportStatusFilterControl

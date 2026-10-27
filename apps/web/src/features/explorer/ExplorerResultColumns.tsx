@@ -31,6 +31,7 @@ import {
   RecordDisplayCell,
   PublicationStatusCell,
   SchemaVersionCell,
+  SystemTagsCell,
   type ActionMenuPosition,
   type OpenRecordPanel,
 } from './ExplorerTableCells';
@@ -56,6 +57,7 @@ type ColumnOptions = {
   runtime: ExtensionRuntime | undefined;
   onSortChange: (field: string) => void;
   onFilterCell?: (draft: AttributeFilterDraft) => void;
+  onFilterSystemTag?: (tag: string) => void;
   onOpenActions: (recordId: string, position: ActionMenuPosition) => void;
   onOpenPanel?: OpenRecordPanel;
   onPrefetchPanel?: (record: RecordItem) => void;
@@ -93,6 +95,7 @@ export const buildExplorerColumnDefinitions = ({
   runtime,
   onSortChange,
   onFilterCell,
+  onFilterSystemTag,
   onOpenActions,
   onOpenPanel,
   onPrefetchPanel,
@@ -202,6 +205,16 @@ export const buildExplorerColumnDefinitions = ({
         />
       ),
       cell: (info) => <SchemaVersionCell record={info.row.original} />,
+    }) as ExplorerColumnDef,
+    columnHelper.display({
+      id: explorerColumnIds.systemTags,
+      header: t('explorer.systemTags'),
+      cell: (info) => (
+        <SystemTagsCell
+          onFilterTag={onFilterSystemTag}
+          record={info.row.original}
+        />
+      ),
     }) as ExplorerColumnDef,
     ...configuredColumns,
     columnHelper.display({

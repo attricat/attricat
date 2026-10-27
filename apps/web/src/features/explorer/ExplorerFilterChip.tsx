@@ -5,7 +5,8 @@ import type { Ref } from 'react';
 type Props = {
   chipRef: Ref<HTMLDivElement>;
   label: string;
-  onClick: () => void;
+  /** Opens the filter's editor; filters without one are only removed. */
+  onClick?: () => void;
   onDelete: () => void;
   /** Accessible name of the delete icon, which the chip's Delete key also triggers. */
   removeLabel: string;

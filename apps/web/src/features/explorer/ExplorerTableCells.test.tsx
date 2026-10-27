@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import type { RecordItem } from '../records/api';
 import { recordPanelOpenerAttribute } from './constants';
-import { RecordDisplayCell } from './ExplorerTableCells';
+import { RecordDisplayCell, SystemTagsCell } from './ExplorerTableCells';
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -86,5 +86,32 @@ describe('RecordDisplayCell', () => {
 
     expect(fireEvent.click(link)).toBe(true);
     expect(link.hasAttribute(recordPanelOpenerAttribute)).toBe(false);
+  });
+});
+
+describe('SystemTagsCell', () => {
+  const tagged = {
+    ...record,
+    system_tags: ['attricat.sample', 'needs-review'],
+  } as RecordItem;
+
+  it('filters by a clicked tag', () => {
+    const onFilterTag = vi.fn();
+    render(<SystemTagsCell onFilterTag={onFilterTag} record={tagged} />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Filter by tag needs-review' }),
+    );
+
+    expect(onFilterTag).toHaveBeenCalledWith('needs-review');
+    // The sample marker is the sample badge, not a tag chip.
+    expect(screen.queryByText('attricat.sample')).toBeNull();
+  });
+
+  it('shows plain tags without a filter', () => {
+    render(<SystemTagsCell record={tagged} />);
+
+    expect(screen.getByText('needs-review')).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
   });
 });

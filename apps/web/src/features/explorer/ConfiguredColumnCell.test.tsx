@@ -10,6 +10,7 @@ const record: RecordItem = {
   blueprint_version: 1,
   schema_outdated: false,
   is_sample: false,
+  system_tags: [],
   display: {},
   preview: {},
   table_values: {},

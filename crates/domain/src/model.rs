@@ -381,6 +381,9 @@ pub struct RecordPreview {
     pub blueprint_version: i64,
     pub schema_outdated: bool,
     pub is_sample: bool,
+    /// Agent- and operator-owned tags; they are outside the blueprint data.
+    #[serde(default)]
+    pub system_tags: Vec<String>,
     #[serde(skip_serializing)]
     pub created_at: DateTime<Utc>,
     /// Omitted when a search excludes previews.
@@ -622,6 +625,31 @@ pub struct RelationshipTreeFacetChildrenResponse {
     /// so a client can open and page to the branches that lead to it.
     pub selected_paths: Vec<Vec<Uuid>>,
     pub next_cursor: Option<Uuid>,
+}
+
+/// Lists the system tags carried by a blueprint's records, most used first.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SystemTagFacetRequest {
+    pub blueprint: SearchBlueprint,
+    /// Only tags starting with this text, ignoring case.
+    #[serde(default)]
+    pub prefix: Option<String>,
+    #[serde(default)]
+    pub limit: Option<u32>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct SystemTagCount {
+    pub tag: String,
+    pub count: i64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct SystemTagFacetResponse {
+    pub items: Vec<SystemTagCount>,
+    /// More tags match than `items` lists.
+    pub truncated: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]

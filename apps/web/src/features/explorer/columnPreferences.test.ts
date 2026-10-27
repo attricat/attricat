@@ -56,6 +56,28 @@ describe('explorer column preferences', () => {
     });
   });
 
+  it('hides the system tags column until a viewer chooses it', () => {
+    const withTags = [...columns, 'systemTags'];
+    expect(getExplorerColumnPreferences(blueprintId, withTags)).toEqual({
+      hidden: ['systemTags'],
+      order: withTags,
+    });
+
+    // Preferences stored before the column existed hide it too.
+    setExplorerColumnPreferences(blueprintId, { hidden: [], order: columns });
+    expect(getExplorerColumnPreferences(blueprintId, withTags)).toEqual({
+      hidden: ['systemTags'],
+      order: withTags,
+    });
+
+    // Once a viewer shows it, it stays shown.
+    setExplorerColumnPreferences(blueprintId, { hidden: [], order: withTags });
+    expect(getExplorerColumnPreferences(blueprintId, withTags)).toEqual({
+      hidden: [],
+      order: withTags,
+    });
+  });
+
   it('clears saved choices for a blueprint', () => {
     setExplorerColumnPreferences(blueprintId, {
       hidden: ['schema'],

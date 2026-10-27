@@ -1054,6 +1054,10 @@ pub fn router(state: AppState) -> Router {
             "/v1/records/facets/relationship-tree/children",
             post(record_reads::relationship_tree_facet_children),
         )
+        .route(
+            "/v1/records/facets/system-tags",
+            post(record_reads::system_tag_facet),
+        )
         .route("/v1/records", post(records::create_record_form))
         .route("/v1/records/batch", post(records::apply_record_batch))
         .route(

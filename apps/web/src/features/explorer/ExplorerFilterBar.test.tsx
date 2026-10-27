@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import {
   getBlueprintByCode,
+  getSystemTagFacet,
   searchRecords,
   type BlueprintWithAttributes,
   type RecordSearchResponse,
@@ -23,7 +24,12 @@ import type { AttributeFilter } from './search';
 
 vi.mock('../records/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../records/api')>();
-  return { ...actual, getBlueprintByCode: vi.fn(), searchRecords: vi.fn() };
+  return {
+    ...actual,
+    getBlueprintByCode: vi.fn(),
+    getSystemTagFacet: vi.fn(),
+    searchRecords: vi.fn(),
+  };
 });
 
 vi.mock('../records/components/useRelationshipSelectionLabels', () => ({
@@ -56,6 +62,7 @@ const targetPage: RecordSearchResponse = {
       display: { default: 'Acme' },
       id: targetId,
       is_sample: false,
+      system_tags: [],
       match_explanations: [],
       preview: {},
       schema_outdated: false,
@@ -419,6 +426,54 @@ describe('ExplorerFilterBar', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     rerender(bar(request));
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('adds a system tag filter from the tags in use and removes it from its chip', async () => {
+    const user = userEvent.setup();
+    vi.mocked(getSystemTagFacet).mockResolvedValue({
+      items: [
+        { tag: 'needs-review', count: 12 },
+        { tag: 'imported', count: 3 },
+      ],
+      truncated: false,
+    });
+    const TaggedBar = () => {
+      const [tags, setTags] = useState<string[]>(['imported']);
+      return (
+        <ExplorerFilterBar
+          attributes={[]}
+          blueprint="product"
+          filters={[]}
+          onAdd={vi.fn()}
+          onRemove={vi.fn()}
+          onSystemTagsChange={setTags}
+          onUpdate={vi.fn()}
+          systemTags={tags}
+        />
+      );
+    };
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <TaggedBar />
+      </QueryClientProvider>,
+    );
+
+    expect(getSystemTagFacet).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Tag' }));
+    const option = await screen.findByRole('option', { name: /needs-review/ });
+    expect(option.textContent).toContain('12 records');
+    // Tags already filtered by are not offered again.
+    expect(screen.queryByRole('option', { name: /imported/ })).toBeNull();
+    expect(getSystemTagFacet).toHaveBeenCalledWith(
+      { blueprint: { code: 'product' }, limit: 50 },
+      expect.anything(),
+    );
+    await user.click(option);
+
+    expect(screen.getByText('Tag: needs-review')).toBeTruthy();
+    await user.click(screen.getByLabelText('Remove tag filter Tag: imported'));
+    expect(screen.queryByText('Tag: imported')).toBeNull();
+    expect(screen.getByText('Tag: needs-review')).toBeTruthy();
   });
 
   it('says when the filter limit is reached', () => {

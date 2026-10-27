@@ -10,6 +10,8 @@ import { recordPanelOpenerAttribute } from './constants';
 import { compactIconSize } from '../../components/iconSizes';
 import { emptyValuePlaceholder } from '../../components/placeholders';
 import { publicationStatuses } from '../records/constants';
+import { SystemTagChips } from '../records/components/SystemTagChips';
+import { visibleSystemTags } from '../records/systemTags';
 
 export type ActionMenuPosition = { left: number; top: number };
 
@@ -110,6 +112,26 @@ export const SchemaVersionCell = ({ record }: { record: RecordItem }) => {
       })}
       size="small"
     />
+  );
+};
+
+export const SystemTagsCell = ({
+  record,
+  onFilterTag,
+}: {
+  record: RecordItem;
+  /** Filters the results by a clicked tag. */
+  onFilterTag?: (tag: string) => void;
+}) => {
+  const { t } = useTranslation();
+  return visibleSystemTags(record.system_tags).length ? (
+    <SystemTagChips
+      onSelect={onFilterTag}
+      selectLabel={(tag) => t('explorer.filterBySystemTag', { tag })}
+      tags={record.system_tags}
+    />
+  ) : (
+    emptyValuePlaceholder
   );
 };
 

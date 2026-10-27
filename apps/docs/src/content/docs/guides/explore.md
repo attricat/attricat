@@ -59,6 +59,8 @@ You can also start a filter from the table: open a cell's menu and choose **Filt
 
 Every active filter shows as a pill under the search box. All filters, facets, and the search query must match together.
 
+**Tag** narrows results to records with a [system tag](/builders/modeling/#system-tags-and-metadata), such as one a workflow or an agent added. The list shows the tags the blueprint's records carry, the most used first, with how many records have each; type to find others. Each tag you pick adds a pill, and results must have every picked tag.
+
 **Export status** appears when an extension exports records. It narrows results to records with one status, such as **Rejected**, at one destination. It needs the `data_health.read` permission.
 
 ## Relationship facets
@@ -95,7 +97,7 @@ Click a column header to sort. A column can be sorted when it holds a single sca
 
 In **All versions**, sorting on a related value works only when every matching record is on the same revision.
 
-**Columns** lets you show, hide, and reorder columns. The arrangement is saved in your browser.
+**Columns** lets you show, hide, and reorder columns. The arrangement is saved in your browser. The **System tags** column is hidden until you turn it on; click a tag in it to filter by that tag.
 
 ## Save and share searches
 

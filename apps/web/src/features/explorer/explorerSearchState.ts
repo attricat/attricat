@@ -176,6 +176,7 @@ export const explorerResultsQueryKey = (
     sort,
     version,
     exportStatus: search.exportStatus,
+    systemTags: search.systemTags,
   });
 
 /** The search request's export status filter. */

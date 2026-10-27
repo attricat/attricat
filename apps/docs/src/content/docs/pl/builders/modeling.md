@@ -182,6 +182,6 @@ Dokładne zasady opisuje sekcja [Przypisania użytkowników i zespołów](/pl/re
 
 ## Tagi systemowe i metadane
 
-Każdy rekord ma też `system_tags` (zbiór łańcuchów znaków) i `system_metadata` (obiekt JSON do 64 KiB). Znajdują się poza schematem, nie są wersjonowane i nie są pokazywane w widokach. Służą automatyzacji: oznaczaniu partii do przetworzenia, zapisywaniu źródła importu lub oznaczaniu rekordu do przeglądu. Przepływy pracy i reguły mogą je odczytywać i zapisywać. Wyszukiwanie może filtrować po tagach systemowych.
+Każdy rekord ma też `system_tags` (zbiór łańcuchów znaków) i `system_metadata` (obiekt JSON do 64 KiB). Znajdują się poza schematem, nie są wersjonowane i nie są pokazywane w widokach. Służą automatyzacji: oznaczaniu partii do przetworzenia, zapisywaniu źródła importu lub oznaczaniu rekordu do przeglądu. Przepływy pracy i reguły mogą je odczytywać i zapisywać. Wyszukiwanie może filtrować po tagach systemowych. Użytkownicy widzą je na stronie rekordu (bez możliwości edycji) i mogą filtrować po nich Przeglądarkę; zobacz [Znaczniki i metadane](/pl/guides/records/#znaczniki-i-metadane).
 
 Do wszystkiego, co człowiek ma widzieć lub edytować, używaj atrybutów.

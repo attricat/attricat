@@ -137,6 +137,7 @@ mod solution_packs;
 mod status;
 mod structural_constraints;
 mod system_annotations;
+mod system_tag_facets;
 mod system_users;
 mod tasks;
 mod teams;
@@ -183,6 +184,7 @@ pub use record_comments::{COMMENT_PAGE_SIZE, RecordComment};
 pub use rules::RuleFindingFilter;
 pub use saved_views::SavedView;
 pub use structural_constraints::UniqueKeyDuplicate;
+pub use system_tag_facets::{DEFAULT_SYSTEM_TAG_FACET_LIMIT, MAX_SYSTEM_TAG_FACET_LIMIT};
 pub use system_users::{SYSTEM_USER_DISPLAY_NAME, system_user_email};
 
 pub use agents::{

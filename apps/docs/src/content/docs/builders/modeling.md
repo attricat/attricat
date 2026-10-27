@@ -180,6 +180,6 @@ See [User or team assignments](/reference/blueprint/#user-or-team-assignments) f
 
 ## System tags and metadata
 
-Every record also has `system_tags` (a set of strings) and `system_metadata` (a JSON object up to 64 KiB). They sit outside the blueprint, are not versioned, and are not shown in views. They exist for automation: marking a batch for processing, recording an import source, or flagging a record for review. Workflows and rules can read and write them. Search can filter by system tags.
+Every record also has `system_tags` (a set of strings) and `system_metadata` (a JSON object up to 64 KiB). They sit outside the blueprint, are not versioned, and are not shown in views. They exist for automation: marking a batch for processing, recording an import source, or flagging a record for review. Workflows and rules can read and write them. Search can filter by system tags. People see them read-only on the record page and can filter the Explorer by tag; see [Tags and metadata](/guides/records/#tags-and-metadata).
 
 Use attributes for anything a person should see or edit.

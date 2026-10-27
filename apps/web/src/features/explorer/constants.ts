@@ -3,6 +3,12 @@ import type { ApiErrorCode } from '../../api/errors';
 
 // Search and filter limits.
 export const maximumAttributeFilters = 20;
+/** Most system tags one search filters by; saved searches store as many. */
+export const maximumSystemTagFilters = 20;
+/** Delay before a typed tag prefix asks the server for matching tags. */
+export const systemTagSearchDebounceMs = 250;
+/** How long listed tag counts stay fresh while the filter is reopened. */
+export const systemTagFacetStaleTimeMs = 30_000;
 export const maximumAgentSelection = 50;
 export const maximumAgentInstructionsLength = 1_000;
 export const maximumAgentConversationBlueprintNameLength = 120;
@@ -55,6 +61,7 @@ export const explorerColumnIds = {
   publication: 'publication',
   schema: 'schema',
   select: 'select',
+  systemTags: 'systemTags',
 } as const;
 
 export const builtInConfigurableColumnIds: string[] = [
@@ -62,6 +69,12 @@ export const builtInConfigurableColumnIds: string[] = [
   explorerColumnIds.display,
   explorerColumnIds.publication,
   explorerColumnIds.schema,
+  explorerColumnIds.systemTags,
+];
+
+/** Built-in columns a viewer shows only after choosing them. */
+export const defaultHiddenColumnIds: readonly string[] = [
+  explorerColumnIds.systemTags,
 ];
 
 // Extension integration literals.
@@ -103,6 +116,7 @@ export const browseRailToggleWidth = 28;
 export const idColumnWidth = 48;
 export const blueprintSelectWidth = 280;
 export const searchScopePopoverWidth = 280;
+export const systemTagPickerWidth = 320;
 export const searchSyntaxPopoverMaxWidth = 440;
 export const resultsLoadingIndicatorSize = 80;
 export const columnPreferencesListMaxHeight = 480;

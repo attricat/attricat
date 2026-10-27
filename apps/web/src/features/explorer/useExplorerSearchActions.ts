@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { defaultContextCode } from '../contexts/constants';
+import { maximumSystemTagFilters } from './constants';
 import {
   explorerResultsQueryKey,
   requestSort,
@@ -48,6 +49,18 @@ export const useExplorerSearchActions = (
   return {
     setExportStatus: (exportStatus: ExportStatusFilter | undefined) =>
       go({ ...search, exportStatus }),
+    setSystemTags: (systemTags: string[]) =>
+      go({ ...search, systemTags: systemTags.length ? systemTags : undefined }),
+    /** A tag already filtered by, or one past the limit, changes nothing. */
+    addSystemTag: (tag: string) => {
+      const systemTags = search.systemTags ?? [];
+      if (
+        systemTags.includes(tag) ||
+        systemTags.length >= maximumSystemTagFilters
+      )
+        return;
+      go({ ...search, systemTags: [...systemTags, tag] });
+    },
     addAttributeFilter: (filter: AttributeFilter) =>
       go({
         ...search,

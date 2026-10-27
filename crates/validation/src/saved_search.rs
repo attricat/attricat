@@ -1,6 +1,7 @@
 //! The Explorer search state stored by named views, share links and saved
 //! searches that solution packs install. Every write path validates and
 //! normalizes the state here, so equal searches are stored identically.
+use crate::predicate::MAX_TAG_LENGTH;
 use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_domain::states::ExportStatus;
@@ -29,6 +30,7 @@ pub(crate) const STATE_KEYS: &[&str] = &[
     "attributeFilters",
     "browseBy",
     "exportStatus",
+    "systemTags",
 ];
 pub const FILTER_OPERATOR_IS_SET: &str = "is_set";
 pub const FILTER_OPERATORS: &[&str] = &[
@@ -67,6 +69,18 @@ fn valid_attribute_filter(filter: &Value) -> bool {
                     value.is_string() || value.is_number() || value.is_boolean()
                 }
             })
+    })
+}
+
+/// Unique, non-empty system tags that every result must carry.
+fn valid_system_tags(tags: &Value) -> bool {
+    tags.as_array().is_some_and(|tags| {
+        tags.len() <= MAX_FILTERS
+            && tags.iter().all(|tag| {
+                tag.as_str()
+                    .is_some_and(|tag| !tag.trim().is_empty() && tag.len() <= MAX_TAG_LENGTH)
+            })
+            && tags.iter().collect::<std::collections::HashSet<_>>().len() == tags.len()
     })
 }
 
@@ -189,6 +203,9 @@ pub fn validate_state(kind: &str, state: &Value) -> Result<(), String> {
             .get("exportStatus")
             .is_some_and(|value| !valid_export_status(value))
         || object
+            .get("systemTags")
+            .is_some_and(|value| !valid_system_tags(value))
+        || object
             .get("version")
             .is_some_and(|version| version.as_u64().is_none_or(|version| version == 0))
         || ["allVersions", "locked"]
@@ -222,7 +239,7 @@ pub fn normalize_state(state: &Value) -> Value {
             object.remove(key);
         }
     }
-    for key in ["attributeFilters", "relationshipFacets"] {
+    for key in ["attributeFilters", "relationshipFacets", "systemTags"] {
         if object
             .get(key)
             .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
@@ -298,6 +315,29 @@ mod tests {
             json!({"extension": "acme.shop", "status": "synced", "extra": 1}),
         ] {
             assert!(validate_state(EXPLORER_SEARCH_KIND, &filtered(invalid)).is_err());
+        }
+    }
+
+    #[test]
+    fn system_tag_filters_are_saved_and_checked() {
+        let tagged = |tags| json!({"blueprint": "product", "systemTags": tags});
+        let state = tagged(json!(["needs-review", "acme.shop:pending"]));
+        validate_state(EXPLORER_SEARCH_KIND, &state).unwrap();
+        assert_eq!(normalize_state(&state), state);
+        assert_eq!(
+            normalize_state(&tagged(json!([]))),
+            json!({"blueprint": "product"})
+        );
+        for invalid in [
+            json!("needs-review"),
+            json!([""]),
+            json!(["  "]),
+            json!(["a", "a"]),
+            json!([1]),
+            json!(["x".repeat(MAX_TAG_LENGTH + 1)]),
+            json!((0..=MAX_FILTERS).map(|n| n.to_string()).collect::<Vec<_>>()),
+        ] {
+            assert!(validate_state(EXPLORER_SEARCH_KIND, &tagged(invalid)).is_err());
         }
     }
 

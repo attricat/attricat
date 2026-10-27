@@ -101,6 +101,7 @@ export const explorerColumnLabel = (
       context: publicationContextCode,
     });
   if (id === explorerColumnIds.schema) return t('explorer.schema');
+  if (id === explorerColumnIds.systemTags) return t('explorer.systemTags');
   return (
     tableColumns.find((column) => column.field === id)?.label ??
     humanizeField(id)
