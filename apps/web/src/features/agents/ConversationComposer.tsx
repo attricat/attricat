@@ -13,11 +13,17 @@ import { MessageInputBox } from './MessageInputBox';
 import { useMessageAttachments } from './useMessageAttachments';
 import { errorMessage } from '../../api/errors';
 
-type ConversationComposerProps = {
-  /** `null` until the first message creates the conversation. */
-  conversationId: string | null;
-  /** Creates the conversation for the first message; returns its ID. */
-  createConversation?: (content: string) => Promise<string>;
+/** The conversation messages go to, or how the first message starts one. */
+type ComposerConversation =
+  | { conversationId: string; createConversation?: never }
+  | {
+      /** `null` until the first message creates the conversation. */
+      conversationId: null;
+      /** Creates the conversation for the first message; returns its ID. */
+      createConversation: (content: string) => Promise<string>;
+    };
+
+type ConversationComposerProps = ComposerConversation & {
   /** Focuses the message box when the composer starts a page of its own. */
   formRef?: Ref<HTMLFormElement>;
   minRows?: number;
@@ -37,16 +43,15 @@ type ConversationComposerProps = {
   sticky?: boolean;
 };
 
-export const ConversationComposer = ({
-  conversationId,
-  createConversation,
-  formRef,
-  minRows = composerMinRows,
-  onSendingChange,
-  onSent,
-  sendDraft,
-  sticky = true,
-}: ConversationComposerProps) => {
+export const ConversationComposer = (props: ConversationComposerProps) => {
+  const {
+    formRef,
+    minRows = composerMinRows,
+    onSendingChange,
+    onSent,
+    sendDraft,
+    sticky = true,
+  } = props;
   const { t } = useTranslation();
   const client = useQueryClient();
   const form = useForm({ defaultValues: { content: '' } });
@@ -54,6 +59,17 @@ export const ConversationComposer = ({
   const attachments = useMessageAttachments();
   // Kept so a retry after a failed send does not create a second conversation.
   const [createdId, setCreatedId] = useState<string | null>(null);
+  const conversationFor = async (content: string) => {
+    if (props.conversationId !== null) return props.conversationId;
+    if (createdId) return createdId;
+    const id = await props.createConversation(content);
+    setCreatedId(id);
+    // Listed now, even if sending the first message fails.
+    void client.invalidateQueries({
+      queryKey: agentQueryKeys.conversations(),
+    });
+    return id;
+  };
   const send = useMutation({
     meta: { toast: false },
     mutationFn: async ({
@@ -65,18 +81,7 @@ export const ConversationComposer = ({
       files: File[];
       previousAttachmentIds: string[];
     }) => {
-      let id = conversationId ?? createdId;
-      if (!id) {
-        if (!createConversation) {
-          throw new Error('A conversation is required to send a message');
-        }
-        id = await createConversation(content);
-        setCreatedId(id);
-        // Listed now, even if sending the first message fails.
-        void client.invalidateQueries({
-          queryKey: agentQueryKeys.conversations(),
-        });
-      }
+      const id = await conversationFor(content);
       let attachmentIds = previousAttachmentIds;
       if (files.length > 0 && attachmentIds.length === 0) {
         const uploaded = await uploadConversationFiles(id, files);

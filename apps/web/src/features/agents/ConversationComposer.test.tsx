@@ -232,6 +232,13 @@ describe('ConversationComposer', () => {
     expect(sendMessage).toHaveBeenLastCalledWith(conversationId, 'Hi', []);
   });
 
+  it('needs a way to create the conversation when there is none', () => {
+    // Checked by the type checker: no send can lack a conversation.
+    // @ts-expect-error A composer without a conversation must create one.
+    const missing = <ConversationComposer conversationId={null} />;
+    expect(missing).toBeTruthy();
+  });
+
   it('lists a created conversation even when its first message fails', async () => {
     const user = userEvent.setup();
     const queryClient = new QueryClient({
