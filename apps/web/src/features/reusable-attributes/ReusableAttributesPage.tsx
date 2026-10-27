@@ -6,11 +6,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import {
-  listReusableAttributeGroups,
-  listReusableAttributes,
-  publishReusableAttributeRevision,
-} from './api';
+import { publishReusableAttributeRevision } from './api';
 import { latestReusableAttributeRevisions } from './latestRevisions';
 import { reusableAttributeQueryKeys } from './queryKeys';
 import { ReusableAttributeGroupDialog } from './ReusableAttributeGroupDialog';
@@ -20,6 +16,10 @@ import { ReusableAttributeIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import {
+  reusableAttributeListOptions,
+  reusableAttributeGroupListOptions,
+} from './queryOptions';
 
 export const ReusableAttributesPage = () => {
   const { t } = useTranslation();
@@ -27,14 +27,8 @@ export const ReusableAttributesPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [groupOpen, setGroupOpen] = useState(false);
-  const attributes = useQuery({
-    queryKey: reusableAttributeQueryKeys.definitions(true),
-    queryFn: ({ signal }) => listReusableAttributes(true, signal),
-  });
-  const groups = useQuery({
-    queryKey: reusableAttributeQueryKeys.groups(),
-    queryFn: ({ signal }) => listReusableAttributeGroups(signal),
-  });
+  const attributes = useQuery(reusableAttributeListOptions(true));
+  const groups = useQuery(reusableAttributeGroupListOptions());
   const publish = useMutation({
     mutationFn: publishReusableAttributeRevision,
     onSuccess: () =>
