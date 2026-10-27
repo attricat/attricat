@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { exportStatuses } from '../extension-exports/constants';
+import { dataQualityFilters } from '../rules/constants';
 import { recordSearchFilterSchema } from '../records/schemas';
 import {
   maximumAttributeFilters,
@@ -78,6 +79,7 @@ export const explorerSearchSchema = z.object({
     .max(maximumSystemTagFilters)
     .optional()
     .catch(undefined),
+  dataQuality: z.enum(dataQualityFilters).optional().catch(undefined),
 });
 
 export type AttributeFilter = z.infer<typeof attributeFilterSearchSchema>;

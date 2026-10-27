@@ -211,6 +211,7 @@ POST /api/v1/records/search
   }],
   "system_tags": ["needs-review"],
   "export_status": { "extension_id": "acme.shopify", "connection": "shop-eu", "status": "rejected" },
+  "data_quality": "open",
   "context_code": "PL",
   "sort": { "field": "title", "direction": "asc" },
   "page": { "size": 50, "cursor": null }
@@ -222,11 +223,12 @@ POST /api/v1/records/search
 - `source_relationship_field` może być ścieżką relacji o maksymalnie trzech krokach, na przykład `model.brand`. Każdy krok musi mieć jeden schemat docelowy i `cardinality = "one"` i jest rozstrzygany w kontekście fasety z własnym dziedziczeniem kontekstu. Punkt końcowy elementów podrzędnych przyjmuje te same ścieżki.
 - Element `relationship_tree_facets` bez `source_relationship_field` filtruje przeszukiwany schemat według jego własnego `hierarchy_field`: rekord pasuje, gdy jest wybranym węzłem lub jednym z jego potomków. Punkt końcowy elementów podrzędnych przyjmuje to samo pominięcie, aby wyświetlić własne drzewo schematu, licząc każdy węzeł wraz ze wszystkim, co znajduje się pod nim.
 - `export_status` zostawia rekordy z danym stanem eksportu w połączeniu jednego rozszerzenia albo w jego domyślnym miejscu docelowym, gdy pominięto `connection`. `status` to `pending`, `synced`, `rejected`, `retrying`, `uncertain` lub `withdrawn`. Łączy się z pozostałymi filtrami jak każdy z nich i nie ma limitu liczby rekordów w danym stanie.
+- `data_quality` zostawia rekordy według ich nierozwiązanych ustaleń reguł: `open` (co najmniej jedno otwarte ustalenie), `acknowledged` (nierozwiązane ustalenia, wszystkie potwierdzone) lub `clean` (brak). Wymaga `rules.read`; bez niego żądanie zwraca `403`.
 - Operatory filtrów to `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt` i `lte`. `field` może być ścieżką relacji o maksymalnie trzech krokach.
 - `context_code` (domyślnie `default`) to kontekst, w którym rozstrzygane są filtry, sortowanie i `table_values`, z dziedziczeniem z kontekstów nadrzędnych zależnie od atrybutu. `query` dopasowuje wartości we wszystkich kontekstach.
-- `sort.field` musi być kolumną skalarną w widoku tabeli schematu, `blueprint_version` lub `publication_status` (z `sort.context_code` wskazującym kanał).
-- `system_tags` zostawia rekordy, które mają wszystkie podane tagi. Nie można podać `attricat.sample`.
-- Odpowiedzi zawierają `items`, `next_cursor`, `result_version_scope`, a dla każdego elementu `system_tags`, `table_values` i `match_explanations`. Przekaż `next_cursor` z powrotem jako `page.cursor` przy tym samym sortowaniu.
+- `sort.field` musi być kolumną skalarną w widoku tabeli schematu, `blueprint_version`, `system_tag:<tag>` lub `publication_status` (z `sort.context_code` wskazującym kanał). `system_tag:<tag>` oddziela rekordy z tym tagiem od pozostałych, w każdej grupie według ID rekordu.
+- `system_tags` zostawia rekordy, które mają wszystkie podane tagi, także [tagi Core](#tagi-systemowe), takie jak `attricat.needs_attention`.
+- Odpowiedzi zawierają `items`, `next_cursor`, `result_version_scope`, a dla każdego elementu `system_tags`, `table_values` i `match_explanations`. Dla wywołujących z `rules.read` każdy element ma też `data_quality`: `checked` (czy włączona reguła sprawdza rewizję schematu rekordu) i `findings`, czyli nierozwiązane ustalenia policzone według `state` i `severity`, od najpoważniejszych. Przekaż `next_cursor` z powrotem jako `page.cursor` przy tym samym sortowaniu.
 - `include_total` zwraca łączną liczbę wyników dla pierwszej strony, ograniczoną do 500.
 - `include_blueprint: false` pomija `blueprint` w odpowiedzi, na przykład na kolejnych stronach, gdy klient ma już blueprint z pierwszej strony.
 - `include_previews: false` pomija `preview` i rekordy `related` każdego elementu, chyba że kolumna tabeli używa renderera z rozszerzenia. `display` i `table_values` są zwracane zawsze.
@@ -247,6 +249,28 @@ POST /api/v1/records/facets/system-tags
 - `limit` wynosi od 1 do 100 (domyślnie 50). `truncated` ma wartość `true`, gdy pasuje więcej tagów.
 - `attricat.sample` nigdy nie jest wyświetlany; rekordy pokazują go jako plakietkę danych przykładowych.
 - Faseta odczytuje każdy rekord schematu, więc wywołuj ją, gdy ktoś otwiera wybór tagu, a nie przy każdym wyszukiwaniu. Gdy `truncated` ma wartość `false`, odpowiedź zawiera wszystkie tagi, więc filtruj ją samodzielnie podczas wpisywania; to samo dotyczy pełnej odpowiedzi dla krótszego prefiksu.
+
+#### Tagi systemowe
+
+Rekord może mieć do 100 tagów systemowych, każdy o długości do 128 bajtów. Ich
+postać mówi, kto jest ich właścicielem:
+
+| Postać | Właściciel | Przykład |
+|---|---|---|
+| Dowolny tag bez prefiksu `attricat.` | Ty, przez `system_tags` przy zapisie rekordu, oraz akcje przepływów pracy | `needs-review` |
+| `<id-rozszerzenia>:<tag>` | Rozszerzenie, przez swoje adnotacje | `acme.shop:pending` |
+| `attricat.<nazwa>`, bez `:` | Attricat Core | `attricat.needs_attention` |
+
+Tagi Core są zastrzeżone. Zapis, który dodaje lub usuwa taki tag, kończy się
+błędem `invalid_system_tags`, a zapis zastępujący całą listę `system_tags`
+zachowuje tagi Core rekordu, nawet jeśli lista ich nie zawiera. Jedynym
+wyjątkiem jest znacznik danych przykładowych, który zapis może usunąć. Według
+tagów Core nadal można filtrować i sortować:
+
+- `attricat.sample` oznacza dane przykładowe zainstalowane przez pakiet rozwiązań.
+- `attricat.needs_attention` oznacza rekord z co najmniej jednym otwartym
+  ustaleniem reguły. Zmienia się po sprawdzeniu rekordu i gdy ktoś potwierdzi
+  jego ostatnie otwarte ustalenie.
 
 ### Pliki
 

@@ -43,6 +43,8 @@ import {
   ExportStatusFilterControl,
   type ExportStatusFilterValue,
 } from '../extension-exports/ExportStatusFilterControl';
+import { DataQualityFilterControl } from '../rules/DataQualityFilterControl';
+import type { DataQualityFilter } from '../rules/constants';
 
 type Props = {
   filters: AttributeFilter[];
@@ -63,6 +65,8 @@ type Props = {
   onExportStatusChange?: (value: ExportStatusFilterValue | undefined) => void;
   systemTags?: string[];
   onSystemTagsChange?: (tags: string[]) => void;
+  dataQuality?: DataQualityFilter;
+  onDataQualityChange?: (value: DataQualityFilter | undefined) => void;
 };
 
 /** Chip keys of system tags, apart from attribute and relationship fields. */
@@ -109,6 +113,8 @@ export const ExplorerFilterBar = ({
   onExportStatusChange,
   systemTags = [],
   onSystemTagsChange,
+  dataQuality,
+  onDataQualityChange,
 }: Props) => {
   const { t } = useTranslation();
   const timeZone = useTimeZone();
@@ -350,6 +356,12 @@ export const ExplorerFilterBar = ({
         <ExportStatusFilterControl
           value={exportStatus}
           onChange={onExportStatusChange}
+        />
+      )}
+      {onDataQualityChange && (
+        <DataQualityFilterControl
+          value={dataQuality}
+          onChange={onDataQualityChange}
         />
       )}
       {maximumReached && (

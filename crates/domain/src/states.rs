@@ -78,6 +78,29 @@ crate::code_enum! {
 }
 
 crate::code_enum! {
+    /// How prominently a rule finding is reported, least severe first.
+    pub enum RuleFindingSeverity (UnknownRuleFindingSeverity: "rule finding severity") {
+        Info => "info",
+        Warning => "warning",
+        Error => "error",
+        Critical => "critical",
+    }
+}
+
+crate::code_enum! {
+    /// Records by their unresolved rule findings. Every record falls in
+    /// exactly one.
+    pub enum DataQualityFilter (UnknownDataQualityFilter: "data quality filter") {
+        /// At least one open finding.
+        Open => "open",
+        /// Unresolved findings, every one acknowledged.
+        Acknowledged => "acknowledged",
+        /// No unresolved findings.
+        Clean => "clean",
+    }
+}
+
+crate::code_enum! {
     /// Whether a workspace membership grants access. Only active memberships
     /// are authorized.
     pub enum MembershipState (UnknownMembershipState: "membership state") {

@@ -53,7 +53,7 @@ import { useTimeZone } from '../../time/useInstantFormat';
 import { lexiconText } from '../lexicon/lexicon';
 import { EmptyState } from '../../components/EmptyState';
 import { RecordIcon } from '../../components/systemIcons';
-import { useCanOn } from '../auth/useCan';
+import { useCan, useCanOn } from '../auth/useCan';
 import { useLatestCallback } from '../../components/useLatestCallback';
 import { capabilities, accessTargetKinds } from '../auth/capabilities';
 
@@ -220,7 +220,8 @@ export const ExplorerResultsTable = ({
     () => buildExplorerTableColumns(blueprint, relationshipSortAvailable),
     [blueprint, relationshipSortAvailable],
   );
-  const columnIds = configurableColumnIds(tableColumns);
+  const dataQualityAvailable = useCan(capabilities.rulesRead);
+  const columnIds = configurableColumnIds(tableColumns, dataQualityAvailable);
   const columnPreferences = useExplorerColumnPreferences(
     blueprint.blueprint.id,
     columnIds,
@@ -270,6 +271,7 @@ export const ExplorerResultsTable = ({
         publicationContextCode,
         publicationContextId,
         publicationSortAvailable,
+        dataQualityAvailable,
         runtime: runtime.data,
         onSortChange: sortChange,
         onFilterCell: hasCellFilter ? filterCell : undefined,
@@ -284,6 +286,7 @@ export const ExplorerResultsTable = ({
     [
       blueprint,
       contextCodes,
+      dataQualityAvailable,
       filterCell,
       filterSystemTag,
       hasCellFilter,

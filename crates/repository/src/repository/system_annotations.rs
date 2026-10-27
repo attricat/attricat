@@ -3,6 +3,7 @@
 
 use super::{RepositoryError, SAMPLE_SYSTEM_TAG};
 use crate::model::{Record, SystemAnnotationPatch};
+use attricat_validation::system_tags::is_core_system_tag;
 use serde_json::{Map, Value};
 use std::collections::HashSet;
 
@@ -14,21 +15,34 @@ pub(super) fn validate_system_annotations(
     validate_system_metadata(metadata)
 }
 
-pub(super) fn validate_system_tag_update(
+/// The tags a whole-field write of `requested` leaves on a record. Core tags
+/// stay as they are: `requested` cannot add one, and leaving one out keeps it,
+/// except that the sample marker may be dropped.
+pub(super) fn resolve_system_tag_update(
     current: &[String],
     requested: &[String],
-) -> Result<(), RepositoryError> {
-    let marker = SAMPLE_SYSTEM_TAG;
-    if requested.iter().any(|tag| tag == marker) && !current.iter().any(|tag| tag == marker) {
+) -> Result<Vec<String>, RepositoryError> {
+    let (core, ordinary): (Vec<_>, Vec<_>) = requested
+        .iter()
+        .cloned()
+        .partition(|tag| is_core_system_tag(tag));
+    if core.iter().any(|tag| !current.contains(tag)) {
         return Err(RepositoryError::InvalidSystemTags);
     }
-    validate_system_tags(
-        &requested
+    validate_system_tags(&ordinary)?;
+    let mut tags = ordinary;
+    tags.extend(
+        current
             .iter()
-            .filter(|tag| tag.as_str() != marker)
-            .cloned()
-            .collect::<Vec<_>>(),
-    )
+            .filter(|tag| {
+                is_core_system_tag(tag) && (tag.as_str() != SAMPLE_SYSTEM_TAG || core.contains(tag))
+            })
+            .cloned(),
+    );
+    if tags.len() > MAX_SYSTEM_TAGS {
+        return Err(RepositoryError::InvalidSystemTags);
+    }
+    Ok(tags)
 }
 
 /// The effective changes of one [`SystemAnnotationPatch`].
@@ -134,11 +148,21 @@ pub(super) use attricat_validation::predicate::{
 };
 pub(super) const MAX_SYSTEM_METADATA_BYTES: usize = 64 * 1024;
 
+/// Checks tags a caller writes: well formed, unique, and none reserved for
+/// Core.
 pub(super) fn validate_system_tags(tags: &[String]) -> Result<(), RepositoryError> {
+    if tags.iter().any(|tag| is_core_system_tag(tag)) {
+        return Err(RepositoryError::InvalidSystemTags);
+    }
+    validate_system_tag_filter(tags)
+}
+
+/// Checks tags a search requires. Core tags are allowed.
+pub(super) fn validate_system_tag_filter(tags: &[String]) -> Result<(), RepositoryError> {
     if tags.len() > MAX_SYSTEM_TAGS
-        || tags.iter().any(|tag| {
-            tag.trim().is_empty() || tag.len() > MAX_SYSTEM_TAG_BYTES || tag == SAMPLE_SYSTEM_TAG
-        })
+        || tags
+            .iter()
+            .any(|tag| tag.trim().is_empty() || tag.len() > MAX_SYSTEM_TAG_BYTES)
         || tags.iter().collect::<HashSet<_>>().len() != tags.len()
     {
         return Err(RepositoryError::InvalidSystemTags);

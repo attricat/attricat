@@ -14,6 +14,7 @@ use super::{
 use crate::model::{
     ExportStatusFilter, RecordSearchResponse, SearchResultVersionScope, SearchSort,
 };
+use attricat_domain::states::DataQualityFilter;
 
 /// Totals and hidden-outdated counts stop at this many records.
 pub const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
@@ -24,6 +25,10 @@ pub struct SearchPageRequest<'a> {
     pub system_tags: &'a [String],
     pub outdated: bool,
     pub export_status: Option<&'a ExportStatusFilter>,
+    pub data_quality: Option<DataQualityFilter>,
+    /// Summarize each row's unresolved rule findings. Callers set it only
+    /// for principals who may read rules.
+    pub include_data_quality: bool,
     pub sort: Option<&'a SearchSort>,
     pub cursor: Option<&'a str>,
     pub limit: i64,
@@ -70,6 +75,7 @@ impl AttricatRepository {
             system_tags: request.system_tags,
             outdated: request.outdated,
             export_status: request.export_status,
+            data_quality: request.data_quality,
             current_blueprint_version: current.blueprint.version,
         };
         let include_total = request.include_total && request.cursor.is_none();
@@ -167,6 +173,7 @@ impl AttricatRepository {
                     system_tags: &[],
                     outdated: true,
                     export_status: None,
+                    data_quality: None,
                     ..records
                 },
                 SEARCH_TOTAL_COUNT_CAP + 1,
@@ -176,6 +183,16 @@ impl AttricatRepository {
         };
         let ((mut items, next_cursor), hidden_outdated_count) =
             tokio::try_join!(page, hidden_outdated)?;
+        if request.include_data_quality {
+            let ids = items.iter().map(|item| item.id).collect::<Vec<_>>();
+            let mut quality = self
+                .record_data_quality(&ids)
+                .instrument(tracing::info_span!("sql.operation", label = "data-quality"))
+                .await?;
+            for item in &mut items {
+                item.data_quality = Some(quality.remove(&item.id).unwrap_or_default());
+            }
+        }
         on_phase(SearchPhase::Page(page_started));
         for item in &mut items {
             item.schema_outdated = item.blueprint_version != current.blueprint.version;

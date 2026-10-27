@@ -1,4 +1,8 @@
-import { attributeFilterOperators } from '../records/constants';
+import {
+  attributeFilterOperators,
+  NEEDS_ATTENTION_SYSTEM_TAG,
+  SYSTEM_TAG_SORT_PREFIX,
+} from '../records/constants';
 import type { ApiErrorCode } from '../../api/errors';
 
 // Search and filter limits.
@@ -48,6 +52,8 @@ export const sortDirections = {
 
 export const explorerSortFields = {
   blueprintVersion: 'blueprint_version',
+  /** Records that need attention, apart from the rest. */
+  dataQuality: `${SYSTEM_TAG_SORT_PREFIX}${NEEDS_ATTENTION_SYSTEM_TAG}`,
   publicationStatus: 'publication_status',
 } as const;
 
@@ -56,6 +62,7 @@ export const relationshipPathSortErrorCode =
 
 export const explorerColumnIds = {
   actions: 'actions',
+  dataQuality: 'data-quality',
   display: 'display',
   id: 'id',
   publication: 'publication',

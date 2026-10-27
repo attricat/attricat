@@ -63,6 +63,8 @@ Każdy aktywny filtr jest widoczny jako etykieta pod polem wyszukiwania. Wszystk
 
 **Stan eksportu** pojawia się, gdy jakieś rozszerzenie eksportuje rekordy. Zawęża wyniki do rekordów z jednym stanem, np. **Odrzucony**, w jednym miejscu docelowym. Wymaga uprawnienia `data_health.read`.
 
+**Jakość danych** zawęża wyniki według nierozwiązanych [ustaleń reguł](/pl/builders/rules/#pracuj-z-ustaleniami): **Otwarte problemy**, **Tylko potwierdzone problemy** lub **Bez problemów**. Każdy rekord pasuje do dokładnie jednej z tych opcji. Wymaga uprawnienia `rules.read`.
+
 ## Fasety relacji
 
 Na szerokich ekranach panel **Przeglądaj według** obok wyników wyświetla cele jednego atrybutu relacji wraz z licznikami. Kliknij cel, aby zachować tylko powiązane z nim rekordy. Kliknij go ponownie lub wybierz **Wszystkie**, aby wyczyścić wybór. Wybór pojawia się jako pigułka filtra, tak jak inne filtry.
@@ -98,6 +100,17 @@ Kliknij nagłówek kolumny, aby sortować. Kolumnę można sortować, gdy zawier
 W widoku **Wszystkie wersje** sortowanie według powiązanej wartości działa tylko wtedy, gdy wszystkie pasujące rekordy są w tej samej wersji.
 
 **Kolumny** pozwalają pokazywać, ukrywać i zmieniać kolejność kolumn. Układ jest zapisywany w przeglądarce. Kolumna **Znaczniki systemowe** jest ukryta, dopóki jej nie włączysz; kliknij w niej tag, aby filtrować według niego.
+
+Jeśli masz uprawnienie `rules.read`, kolumna **Jakość danych** pokazuje nierozwiązane [ustalenia reguł](/pl/builders/rules/#pracuj-z-ustaleniami) każdego rekordu jako ikonę. Po najechaniu na nią zobaczysz ustalenia policzone według ważności i stanu.
+
+- Kolorowa ikona ostrzeżenia oznacza, że rekord ma otwarte ustalenia. Jej kolor odpowiada najpoważniejszemu otwartemu ustaleniu.
+- Szara ikona ostrzeżenia oznacza, że wszystkie ustalenia zostały potwierdzone.
+- Znacznik wyboru oznacza, że włączona reguła sprawdza rekord i niczego nie znalazła.
+- Pusta komórka oznacza, że żadna włączona reguła nie sprawdza rewizji schematu rekordu.
+
+Posortuj według tej kolumny, aby rekordy wymagające uwagi znalazły się na początku (malejąco) albo na końcu (rosnąco). Rekord wymaga uwagi, gdy ma otwarte ustalenie; rekordy, których wszystkie ustalenia potwierdzono, są sortowane razem z rekordami bez problemów. Ustalenia aktualizują się po zakończeniu sprawdzania rekordu, więc właśnie zapisany rekord może przez chwilę pokazywać poprzedni stan.
+
+Rekordy wymagające uwagi mają też [tag systemowy](/pl/builders/modeling/#tagi-systemowe-i-metadane) `attricat.needs_attention`, więc każdy może filtrować według niego przez **Znacznik**, także bez `rules.read`.
 
 ## Zapisywanie i udostępnianie wyszukiwań
 

@@ -4,7 +4,7 @@
 use crate::predicate::MAX_TAG_LENGTH;
 use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
-use attricat_domain::states::ExportStatus;
+use attricat_domain::states::{DataQualityFilter, ExportStatus};
 use attricat_domain::value_type::ValueType;
 use serde_json::Value;
 
@@ -31,6 +31,7 @@ pub(crate) const STATE_KEYS: &[&str] = &[
     "browseBy",
     "exportStatus",
     "systemTags",
+    "dataQuality",
 ];
 pub const FILTER_OPERATOR_IS_SET: &str = "is_set";
 pub const FILTER_OPERATORS: &[&str] = &[
@@ -45,6 +46,21 @@ pub const FILTER_OPERATORS: &[&str] = &[
 ];
 /// Explorer sort fields that are not attribute paths.
 pub const SYSTEM_SORT_FIELDS: &[&str] = &["blueprint_version", "publication_status"];
+/// Sorts records that carry the system tag after this prefix apart from the
+/// rest, for example `system_tag:attricat.needs_attention`.
+pub const SYSTEM_TAG_SORT_PREFIX: &str = "system_tag:";
+
+/// The tag a `system_tag:` sort field orders by, when it names one.
+pub fn system_tag_sort(field: &str) -> Option<&str> {
+    field
+        .strip_prefix(SYSTEM_TAG_SORT_PREFIX)
+        .filter(|tag| !tag.trim().is_empty() && tag.len() <= MAX_TAG_LENGTH)
+}
+
+/// Whether `field` sorts by record state rather than an attribute path.
+pub fn is_system_sort_field(field: &str) -> bool {
+    SYSTEM_SORT_FIELDS.contains(&field) || field.starts_with(SYSTEM_TAG_SORT_PREFIX)
+}
 
 fn non_empty_str(value: Option<&Value>) -> Option<&str> {
     value
@@ -202,6 +218,11 @@ pub fn validate_state(kind: &str, state: &Value) -> Result<(), String> {
         || object
             .get("exportStatus")
             .is_some_and(|value| !valid_export_status(value))
+        || object.get("dataQuality").is_some_and(|value| {
+            value
+                .as_str()
+                .is_none_or(|filter| DataQualityFilter::parse(filter).is_none())
+        })
         || object
             .get("systemTags")
             .is_some_and(|value| !valid_system_tags(value))
@@ -338,6 +359,17 @@ mod tests {
             json!((0..=MAX_FILTERS).map(|n| n.to_string()).collect::<Vec<_>>()),
         ] {
             assert!(validate_state(EXPLORER_SEARCH_KIND, &tagged(invalid)).is_err());
+        }
+    }
+
+    #[test]
+    fn data_quality_filters_are_saved_and_checked() {
+        let filtered = |filter| json!({"blueprint": "product", "dataQuality": filter});
+        for filter in DataQualityFilter::codes() {
+            validate_state(EXPLORER_SEARCH_KIND, &filtered(json!(filter))).unwrap();
+        }
+        for invalid in [json!("broken"), json!(true), json!(["open"])] {
+            assert!(validate_state(EXPLORER_SEARCH_KIND, &filtered(invalid)).is_err());
         }
     }
 

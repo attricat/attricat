@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { request, requestNoContent, jsonRequest } from '../../api/request';
 import { activeLanguage } from '../../i18n';
+import type { DataQualityFilter } from '../rules/constants';
 import {
   RECORD_CHANGES_PAGE_SIZE,
   RECORD_PREVIEW_QUERY,
@@ -115,6 +116,8 @@ type SearchRecordsOptions = {
   };
   /** Only records that carry every one of these system tags. */
   systemTags?: string[];
+  /** Only records with these unresolved findings; needs `rules.read`. */
+  dataQuality?: DataQualityFilter;
 };
 
 const searchRecordsInit = (
@@ -133,6 +136,7 @@ const searchRecordsInit = (
     version,
     exportStatus,
     systemTags = [],
+    dataQuality,
   }: SearchRecordsOptions,
   include: { include_blueprint?: boolean; include_previews?: boolean } = {},
 ): RequestInit => {
@@ -151,6 +155,7 @@ const searchRecordsInit = (
       : {}),
     ...(exportStatus ? { export_status: exportStatus } : {}),
     ...(systemTags.length ? { system_tags: systemTags } : {}),
+    ...(dataQuality ? { data_quality: dataQuality } : {}),
     sort,
     ...(contextCode === undefined ? {} : { context_code: contextCode }),
     ...(includeTotal ? { include_total: true } : {}),

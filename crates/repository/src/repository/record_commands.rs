@@ -3,7 +3,7 @@ use super::record_search::empty_projections;
 use super::record_values::{ContextTree, RecordValues};
 use super::structural_constraints::{UniqueKeyScope, enforced_unique_keys};
 use super::system_annotations::{
-    validate_system_annotations, validate_system_metadata, validate_system_tag_update,
+    resolve_system_tag_update, validate_system_annotations, validate_system_metadata,
 };
 use super::values::NativeValue;
 use super::write_context::WriteContext;
@@ -16,6 +16,7 @@ use crate::domain_events::{
 use crate::model::{NewFileAttributeValue, UpdateRecordFormRequest};
 use crate::persistence_rows::{Db, IntoDomain};
 use attricat_domain::attribute_options::{Cardinality, ContextEditable};
+use attricat_validation::system_tags::is_core_system_tag;
 use attricat_validation::validate_json_schema;
 use chrono::Utc;
 use serde_json::{Map, Value};
@@ -441,7 +442,7 @@ impl AttricatRepository {
         let system_tags = source
             .system_tags
             .into_iter()
-            .filter(|tag| tag != SAMPLE_SYSTEM_TAG)
+            .filter(|tag| !is_core_system_tag(tag))
             .collect();
         let (system_tags, system_metadata) = self
             .without_claimed_annotations(system_tags, source.system_metadata)
@@ -621,9 +622,9 @@ impl AttricatRepository {
         {
             Self::check_status_precondition(&write, &record, expected_updated_at)?;
         }
-        if let Some(tags) = &system_tags {
-            validate_system_tag_update(&record.system_tags, tags)?;
-        }
+        let system_tags = system_tags
+            .map(|tags| resolve_system_tag_update(&record.system_tags, &tags))
+            .transpose()?;
         if system_tags.is_some() || system_metadata.is_some() {
             // Whole-field annotation writes may change unrelated tags and keys
             // but never a claimed extension namespace.

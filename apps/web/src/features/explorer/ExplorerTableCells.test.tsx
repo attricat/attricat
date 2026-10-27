@@ -5,7 +5,11 @@ import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import type { RecordItem } from '../records/api';
 import { recordPanelOpenerAttribute } from './constants';
-import { RecordDisplayCell, SystemTagsCell } from './ExplorerTableCells';
+import {
+  DataQualityCell,
+  RecordDisplayCell,
+  SystemTagsCell,
+} from './ExplorerTableCells';
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -113,5 +117,55 @@ describe('SystemTagsCell', () => {
 
     expect(screen.getByText('needs-review')).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
+  });
+});
+
+describe('DataQualityCell', () => {
+  const withQuality = (data_quality: RecordItem['data_quality']) =>
+    ({ ...record, data_quality }) as RecordItem;
+
+  it('shows nothing to viewers who may not read rules', () => {
+    const { container } = render(
+      <DataQualityCell record={withQuality(undefined)} />,
+    );
+    expect(container.childElementCount).toBe(0);
+  });
+
+  it('only claims a record is clean when a rule checks it', () => {
+    render(
+      <DataQualityCell record={withQuality({ checked: true, findings: [] })} />,
+    );
+    screen.getByRole('img', { name: 'No data quality findings' });
+  });
+
+  it('leaves records no rule checks empty', () => {
+    render(
+      <DataQualityCell
+        record={withQuality({ checked: false, findings: [] })}
+      />,
+    );
+    expect(screen.queryByRole('img')).toBeNull();
+  });
+
+  it('counts unresolved findings and lists them on hover', async () => {
+    render(
+      <DataQualityCell
+        record={withQuality({
+          checked: true,
+          findings: [
+            { state: 'acknowledged', severity: 'critical', count: 1 },
+            { state: 'open', severity: 'warning', count: 2 },
+          ],
+        })}
+      />,
+    );
+    const icon = screen.getByRole('img', {
+      name: '3 data quality findings',
+    });
+    // The most severe open finding colours the icon, not the acknowledged one.
+    expect(getComputedStyle(icon).color).toBe('rgb(237, 108, 2)');
+    fireEvent.mouseOver(icon);
+    await screen.findByText('Critical, Acknowledged: 1');
+    screen.getByText('Warning, Open: 2');
   });
 });

@@ -1336,7 +1336,17 @@
       "empty": "Nothing to browse",
       "expand": "Expand {{item}}",
       "collapse": "Collapse {{item}}"
-    }
+    },
+    "dataQuality": "Data quality",
+    "dataQualityClean": "No data quality findings",
+    "dataQualityFindingCount": "{{severity}}, {{state}}: {{count}}",
+    "dataQualityFilterChip": "Data quality: {{filter}}",
+    "dataQualityFilters": {
+      "open": "Open findings",
+      "acknowledged": "Only acknowledged findings",
+      "clean": "No findings"
+    },
+    "removeDataQualityFilter": "Remove filter {{filter}}"
   },
   "audit": {
     "title": "Activity / Audit log",

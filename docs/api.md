@@ -437,6 +437,20 @@ or disabled context returns `422`. The opaque cursor binds to the context, so
 switching channels requires starting at the first page. The agent
 `search_records` tool accepts the same sort object.
 
+The built-in `system_tag:<tag>` sort puts records that carry the tag apart from
+the rest: `{"sort":{"field":"system_tag:attricat.needs_attention","direction":"desc"}}`
+lists records that need attention first. Record ID orders each group. The tag
+check reads the record row, so the sort costs about as much as sorting by
+`blueprint_version`. The Explorer's **Data quality** column sorts this way, and
+the agent `search_records` tool accepts the same sort.
+
+The `data_quality` filter keeps records with `open` findings, only
+`acknowledged` ones, or `clean` records without unresolved findings, and
+requires `rules.read` (`403` otherwise). `open` reads the needs-attention tag. For callers with `rules.read`, every search item carries
+`data_quality`: `checked`, whether an enabled rule checks the record's
+blueprint revision, and `findings`, unresolved findings counted by `state` and
+`severity`, most severe first. Callers without it get no `data_quality` field.
+
 The built-in `blueprint_version` field is also sortable without blueprint
 configuration: `{"sort":{"field":"blueprint_version","direction":"asc"}}`
 orders older revisions first when the blueprint version is omitted (all
@@ -729,7 +743,22 @@ to projections or views.
 
 `POST /v1/records` accepts both fields; omitted values default to `[]` and
 `{}`. `PUT /v1/records/{id}` accepts either field independently; omitted fields
-are retained, while `[]` or `{}` clears the corresponding value. Search accepts
+are retained, while `[]` or `{}` clears the corresponding value.
+
+Tags have three forms. Ordinary tags are free text without the `attricat.`
+prefix. Extension tags are `<extension-id>:<tag>`, written through annotations.
+Core tags start with `attricat.` and contain no `:`
+(`attricat_validation::system_tags`). No caller may add or remove a Core tag:
+a write that names one the record lacks fails with `invalid_system_tags`, and a
+whole-list write keeps the record's Core tags, except that it may drop the sample
+marker. Record copies drop Core tags. Search may filter and sort by them. Core
+sets:
+
+- `attricat.sample` on sample records a solution pack installs.
+- `attricat.needs_attention` on records with at least one open rule finding.
+  Rule runs and finding acknowledgements update it in the transaction that
+  changes the findings, without touching `updated_at` or emitting events, and
+  workspace initialization at startup reconciles it with the findings. Search accepts
 `system_tags`; returned records must contain every supplied tag, making it
 suitable for finding a marked batch before applying a bulk workflow. Search
 result items include each record's `system_tags`.
@@ -739,8 +768,8 @@ carry with their record counts, most used first:
 `{"blueprint": {"code", "version"?}, "prefix"?, "limit"?}` returns
 `{"items": [{"tag", "count"}], "truncated"}`. `prefix` matches the start of a
 tag case-insensitively, `limit` is 1 to 100 (default 50), and `truncated` says
-more tags match. `attricat.sample` is never listed, since search filters cannot
-name it. The query unnests every record's tag array, which the GIN index does
+more tags match. `attricat.sample` is never listed; records show it as the
+sample badge. The query unnests every record's tag array, which the GIN index does
 not serve, so clients call it when a tag picker opens, not with every search.
 The Explorer's picker filters a complete (`truncated: false`) answer in the
 browser as the person types, and sends a `prefix` only when the first answer

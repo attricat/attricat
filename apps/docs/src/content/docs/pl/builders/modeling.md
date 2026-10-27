@@ -184,4 +184,6 @@ Dokładne zasady opisuje sekcja [Przypisania użytkowników i zespołów](/pl/re
 
 Każdy rekord ma też `system_tags` (zbiór łańcuchów znaków) i `system_metadata` (obiekt JSON do 64 KiB). Znajdują się poza schematem, nie są wersjonowane i nie są pokazywane w widokach. Służą automatyzacji: oznaczaniu partii do przetworzenia, zapisywaniu źródła importu lub oznaczaniu rekordu do przeglądu. Przepływy pracy i reguły mogą je odczytywać i zapisywać. Wyszukiwanie może filtrować po tagach systemowych. Użytkownicy widzą je na stronie rekordu (bez możliwości edycji) i mogą filtrować po nich Przeglądarkę; zobacz [Znaczniki i metadane](/pl/guides/records/#znaczniki-i-metadane).
 
+Tagi zaczynające się od `attricat.` należą do Attricat, który sam je dodaje i usuwa. Przepływy pracy, rozszerzenia i zapisy przez API nie mogą ich dodawać ani usuwać, ale można według nich filtrować i sortować. Attricat ustawia `attricat.sample` na danych przykładowych z pakietu rozwiązań oraz `attricat.needs_attention` na rekordach z co najmniej jednym otwartym [ustaleniem reguły](/pl/builders/rules/#pracuj-z-ustaleniami). Tagi rozszerzeń mają postać `<id-rozszerzenia>:<tag>`; zobacz [dokumentację API](/pl/reference/api/#tagi-systemowe).
+
 Do wszystkiego, co człowiek ma widzieć lub edytować, używaj atrybutów.

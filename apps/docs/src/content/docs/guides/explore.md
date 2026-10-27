@@ -63,6 +63,8 @@ Every active filter shows as a pill under the search box. All filters, facets, a
 
 **Export status** appears when an extension exports records. It narrows results to records with one status, such as **Rejected**, at one destination. It needs the `data_health.read` permission.
 
+**Data quality** narrows results by the records' unresolved [rule findings](/builders/rules/#work-with-findings): **Open findings**, **Only acknowledged findings**, or **No findings**. Every record matches exactly one of them. It needs the `rules.read` permission.
+
 ## Relationship facets
 
 On wide screens, the **Browse by** panel next to the results lists the targets of one relationship attribute, with a count beside each. Click a target to keep only records linked to it, click it again or choose **All** to clear it. The choice shows as a filter pill, like any other filter.
@@ -98,6 +100,17 @@ Click a column header to sort. A column can be sorted when it holds a single sca
 In **All versions**, sorting on a related value works only when every matching record is on the same revision.
 
 **Columns** lets you show, hide, and reorder columns. The arrangement is saved in your browser. The **System tags** column is hidden until you turn it on; click a tag in it to filter by that tag.
+
+If you have the `rules.read` permission, the **Data quality** column shows each record's unresolved [rule findings](/builders/rules/#work-with-findings) as an icon. Hover it for the findings counted by severity and status.
+
+- A coloured warning icon means the record has open findings. The colour is that of the most severe open finding.
+- A grey warning icon means every finding has been acknowledged.
+- A check means an enabled rule checks the record and found nothing.
+- An empty cell means no enabled rule checks the record's blueprint revision.
+
+Sort by the column to bring the records that need attention to the top (descending) or to the bottom (ascending). A record needs attention when it has an open finding; records whose findings are all acknowledged sort with the clean ones. Findings update after a record's checks run, so a record you just saved may briefly show its earlier state.
+
+Records that need attention also carry the `attricat.needs_attention` [system tag](/builders/modeling/#system-tags-and-metadata), so anyone can filter by it with **Tag**, even without `rules.read`.
 
 ## Save and share searches
 
