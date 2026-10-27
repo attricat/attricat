@@ -1,5 +1,9 @@
 import { queryOptions, skipToken } from '@tanstack/react-query';
-import { getBlueprintRevision, listBlueprints } from './api';
+import {
+  getBlueprintRevision,
+  listBlueprintRevisions,
+  listBlueprints,
+} from './api';
 import { blueprintQueryKeys } from './queryKeys';
 
 /** The workspace's blueprints, latest revision of each. */
@@ -20,4 +24,13 @@ export const blueprintRevisionOptions = (
       id && version
         ? ({ signal }) => getBlueprintRevision(id, version, signal)
         : skipToken,
+  });
+
+/** Every revision of a blueprint, newest first, once it is known. */
+export const blueprintRevisionListOptions = (id: string | undefined) =>
+  queryOptions({
+    queryKey: blueprintQueryKeys.revisions(id ?? ''),
+    queryFn: id
+      ? ({ signal }) => listBlueprintRevisions(id, signal)
+      : skipToken,
   });
