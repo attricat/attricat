@@ -1,12 +1,5 @@
+import { readStored, storageAreas } from '../../components/browserStorage';
 import { INSPECTOR_ENABLED_STORAGE_KEY } from './constants';
-
-const storedFlagEnabled = () => {
-  try {
-    return localStorage.getItem(INSPECTOR_ENABLED_STORAGE_KEY) === 'true';
-  } catch {
-    return false;
-  }
-};
 
 /**
  * Development servers started with `ATTRICAT_DEVTOOLS=true` always show the
@@ -15,4 +8,5 @@ const storedFlagEnabled = () => {
  * the flag takes effect on the next page load.
  */
 export const inspectorEnabled =
-  (import.meta.env.DEV && __ATTRICAT_DEVTOOLS__) || storedFlagEnabled();
+  (import.meta.env.DEV && __ATTRICAT_DEVTOOLS__) ||
+  readStored(storageAreas.local, INSPECTOR_ENABLED_STORAGE_KEY) === 'true';
