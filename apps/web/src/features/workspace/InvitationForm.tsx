@@ -115,7 +115,9 @@ export const InvitationForm = ({
       sx={{ p: 2 }}
     >
       <Stack spacing={2}>
-        <Typography variant="h6">{title}</Typography>
+        <Typography component="h2" variant="h6">
+          {title}
+        </Typography>
         {createUser && (
           <Alert severity="info">{t('workspace.inviteEmailInfo')}</Alert>
         )}

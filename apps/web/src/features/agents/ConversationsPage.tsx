@@ -11,11 +11,10 @@ import {
   Paper,
   Switch,
   TextField,
-  Typography,
 } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { LoadMoreButton } from '../../components/LoadMoreButton';
+import { NextPageButton } from '../../components/LoadMoreButton';
 import {
   RouterButton,
   RouterListItemButton,
@@ -32,6 +31,7 @@ import { conversationSearchOptions } from './queryOptions';
 import { EmptyState } from '../../components/EmptyState';
 import { AgentIcon } from '../../components/systemIcons';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { LoadingState } from '../../components/LoadingState';
 
 export const ConversationsPage = ({
   search,
@@ -156,7 +156,7 @@ export const ConversationsPage = ({
           ))}
           {conversations.isPending && (
             <ListItem>
-              <Typography>{t('agents.loadingConversations')}</Typography>
+              <LoadingState>{t('agents.loadingConversations')}</LoadingState>
             </ListItem>
           )}
           {!conversations.isPending &&
@@ -181,14 +181,7 @@ export const ConversationsPage = ({
             )}
         </List>
       </Paper>
-      {conversations.hasNextPage && (
-        <Box sx={{ mt: 2 }}>
-          <LoadMoreButton
-            isLoading={conversations.isFetchingNextPage}
-            onLoadMore={() => void conversations.fetchNextPage()}
-          />
-        </Box>
-      )}
+      <NextPageButton query={conversations} sx={{ mt: 2 }} />
     </PageContainer>
   );
 };

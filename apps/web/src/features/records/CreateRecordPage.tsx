@@ -3,7 +3,7 @@ import { Button } from '@mui/material';
 import { useRef, useState } from 'react';
 import { useCanGoBack, useNavigate, useRouter } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import { defaultContextCode } from '../contexts/constants';
+import { findDefaultContextId } from '../contexts/defaultContext';
 import { draftEditors } from '../drafts/constants';
 import {
   QueuedFileUploadsContext,
@@ -48,9 +48,7 @@ export const CreateRecordPage = ({
       `${blueprint.data.blueprint.id}:${blueprint.data.blueprint.version}`,
   );
   const contexts = useQuery(contextListOptions());
-  const defaultContextId = contexts.data?.find(
-    (context) => context.code === defaultContextCode,
-  )?.id;
+  const defaultContextId = findDefaultContextId(contexts.data) ?? undefined;
   const create = useMutation({
     // Says which record was created instead of the generic notice.
     meta: { toast: false },

@@ -23,6 +23,7 @@ import { ruleQueryKeys } from './queryKeys';
 import { shortId } from '../../components/shortId';
 import { ruleDefinitionsOptions } from './queryOptions';
 import { RuleLifecycleChip } from './RuleCells';
+import { LoadingState } from '../../components/LoadingState';
 
 const ignoreChange = () => undefined;
 
@@ -65,7 +66,7 @@ export const RuleRevisionPage = ({
   if (rules.isPending) {
     return (
       <PageContainer>
-        <Typography>{t('rules.loading')}</Typography>
+        <LoadingState>{t('rules.loading')}</LoadingState>
       </PageContainer>
     );
   }

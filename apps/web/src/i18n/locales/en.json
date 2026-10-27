@@ -392,7 +392,8 @@
     "metadata": "Metadata",
     "invalidMetadataJson": "Metadata must be valid JSON.",
     "metadataMustBeObject": "Metadata must be a JSON object.",
-    "invalidCode": "Use only letters, numbers, hyphens, and underscores"
+    "invalidCode": "Use only letters, numbers, hyphens, and underscores",
+    "defaultContext": "Default"
   },
   "dataHealth": {
     "title": "Data health",
@@ -612,7 +613,6 @@
       "findings": "Data quality",
       "noFindings": "No open findings in this context."
     },
-    "default": "Default",
     "loadingContexts": "Loading contexts...",
     "resolvingValues": "Resolving values...",
     "viewExtensionContent": "View extension content for {{attribute}}",
@@ -1224,7 +1224,6 @@
     },
     "recordActionsFor": "Record actions for {{recordId}}",
     "viewRecordIdWithId": "View record ID {{recordId}}",
-    "default": "Default",
     "collapse": "Collapse {{item}}",
     "expand": "Expand {{item}}",
     "searchInfo": "Search info",
@@ -1278,7 +1277,6 @@
     "attributeFilterPill": "{{field}} {{operator}} {{value}}",
     "schemaVersionStatus": "v{{version}} · {{status}}",
     "unsortableColumnLabel": "{{column}}. {{reason}}",
-    "publicationContextUnavailable": "Publication context is unavailable",
     "selectedCountForBlueprint_one": "{{count}} selected · {{blueprint}}",
     "selectedCountForBlueprint_other": "{{count}} selected · {{blueprint}}",
     "agentRecordListItem": "{{label}} · {{recordId}}",
@@ -1757,7 +1755,8 @@
     "bulkEditLimitHelp": "The agent must narrow a proposal that selects more records.",
     "bulkEditLimitInvalid": "Enter a whole number from 1 to {{max}}.",
     "saveAgentSettings": "Save agent settings",
-    "agentSettingsSaved": "Agent settings saved."
+    "agentSettingsSaved": "Agent settings saved.",
+    "notAuthorizedTeams": "You are not authorized to manage teams."
   },
   "views": {
     "tabHasErrors": "Contains fields that need attention",

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { defaultContextCode } from '../contexts/constants';
+import { findDefaultContextId } from '../contexts/defaultContext';
 import { resolvedRecordPreviewOptions } from './queryOptions';
 import { contextListOptions } from '../contexts/queryOptions';
 
@@ -11,9 +11,7 @@ import { contextListOptions } from '../contexts/queryOptions';
 export const useRecordContextSelection = (initialContextId?: string) => {
   const [selectedContext, setSelectedContext] = useState('');
   const contexts = useQuery(contextListOptions());
-  const defaultContextId =
-    contexts.data?.find((context) => context.code === defaultContextCode)?.id ??
-    null;
+  const defaultContextId = findDefaultContextId(contexts.data);
   return {
     contextId: selectedContext || initialContextId || defaultContextId,
     contexts,

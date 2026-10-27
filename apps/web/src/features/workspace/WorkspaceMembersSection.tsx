@@ -201,7 +201,9 @@ export const WorkspaceMembersSection = ({
           sx={{ p: 2 }}
         >
           <Stack spacing={2}>
-            <Typography variant="h6">{t('workspace.addRoleGrant')}</Typography>
+            <Typography component="h2" variant="h6">
+              {t('workspace.addRoleGrant')}
+            </Typography>
             <form.Field name="member_id">
               {(field) => (
                 <TextField

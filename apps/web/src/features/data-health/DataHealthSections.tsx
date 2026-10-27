@@ -36,7 +36,9 @@ export const StorageSection = ({ query }: SectionProps<StorageHealth>) => {
 
   return (
     <Paper sx={{ mt: 4, p: 2 }}>
-      <Typography variant="h5">{t('dataHealth.storage')}</Typography>
+      <Typography component="h2" variant="h5">
+        {t('dataHealth.storage')}
+      </Typography>
       <ApiErrorAlert error={query.error} />
       <Table size="small">
         <TableHead>
@@ -66,7 +68,9 @@ export const BlueprintHealthSection = ({
   return (
     <Paper sx={{ mt: 4, overflowX: 'auto' }}>
       <Box sx={{ p: 2 }}>
-        <Typography variant="h5">{t('dataHealth.blueprintHealth')}</Typography>
+        <Typography component="h2" variant="h5">
+          {t('dataHealth.blueprintHealth')}
+        </Typography>
       </Box>
       <ApiErrorAlert error={query.error} />
       <Table size="small">
@@ -114,7 +118,7 @@ export const FreshnessSection = ({ query }: SectionProps<FreshnessBand>) => {
 
   return (
     <Paper sx={{ mt: 4, p: 2 }}>
-      <Typography variant="h5">
+      <Typography component="h2" variant="h5">
         {t('dataHealth.freshnessDistribution')}
       </Typography>
       <ApiErrorAlert error={query.error} />
@@ -143,9 +147,15 @@ const LazyAccordion = ({
   sx?: { mt: number };
   title: string;
 }) => (
-  <Accordion onChange={(_, expanded) => onExpandedChange(expanded)} sx={sx}>
+  <Accordion
+    onChange={(_, expanded) => onExpandedChange(expanded)}
+    slotProps={{ heading: { component: 'h2' } }}
+    sx={sx}
+  >
     <AccordionSummary expandIcon={<ChevronDownIcon />}>
-      <Typography variant="h5">{title}</Typography>
+      <Typography component="span" variant="h5">
+        {title}
+      </Typography>
     </AccordionSummary>
     <AccordionDetails>{children}</AccordionDetails>
   </Accordion>

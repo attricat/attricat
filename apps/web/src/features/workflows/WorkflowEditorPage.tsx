@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -7,6 +6,7 @@ import { WorkflowDefinitionForm } from './WorkflowDefinitionForm';
 import { WorkflowIcon } from '../../components/systemIcons';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { workflowRevisionOptions } from './queryOptions';
+import { LoadingState } from '../../components/LoadingState';
 
 export const WorkflowEditorPage = ({
   workflowId,
@@ -21,7 +21,7 @@ export const WorkflowEditorPage = ({
   if (workflowId && source.isPending)
     return (
       <PageContainer>
-        <Typography>{t('workflows.loading')}</Typography>
+        <LoadingState>{t('workflows.loading')}</LoadingState>
       </PageContainer>
     );
 

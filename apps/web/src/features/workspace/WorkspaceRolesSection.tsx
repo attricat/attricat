@@ -129,7 +129,7 @@ export const WorkspaceRolesSection = ({
         sx={{ p: 2 }}
       >
         <Stack>
-          <Typography variant="h6">
+          <Typography component="h2" variant="h6">
             {t('workspace.createCustomRole')}
           </Typography>
           <form.Field

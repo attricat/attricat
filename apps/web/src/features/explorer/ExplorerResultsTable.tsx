@@ -200,12 +200,19 @@ export const ExplorerResultsTable = ({
     accessTargetKinds.record,
     activeActionRecord?.id,
   );
-  const { error, publicationsByRecordId, publish, readiness, unpublish } =
-    useRecordPublicationActions(
-      [...publicationItems.values()],
-      publicationContextId,
-      canPublish ? activeActionRecord?.id : undefined,
-    );
+  const {
+    error,
+    publicationsByRecordId,
+    publish,
+    publishing,
+    readiness,
+    unpublish,
+    unpublishing,
+  } = useRecordPublicationActions(
+    [...publicationItems.values()],
+    publicationContextId,
+    canPublish ? activeActionRecord?.id : undefined,
+  );
   const tableColumns = useMemo(
     () => buildExplorerTableColumns(blueprint, relationshipSortAvailable),
     [blueprint, relationshipSortAvailable],
@@ -376,12 +383,12 @@ export const ExplorerResultsTable = ({
           position={actionMenu.position}
           publication={publicationsByRecordId.get(activeActionRecord.id)}
           publicationContextId={publicationContextId}
-          publish={() => publish.mutate(activeActionRecord.id)}
-          publishing={publish.isPending}
+          publish={() => publish(activeActionRecord.id)}
+          publishing={publishing}
           readiness={readiness}
           duplicate={() => setDuplicateRecordId(activeActionRecord.id)}
-          unpublish={() => unpublish.mutate(activeActionRecord.id)}
-          unpublishing={unpublish.isPending}
+          unpublish={() => unpublish(activeActionRecord.id)}
+          unpublishing={unpublishing}
         />
       )}
       {duplicateRecordId && (

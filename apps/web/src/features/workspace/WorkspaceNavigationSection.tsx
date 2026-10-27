@@ -92,7 +92,9 @@ export const WorkspaceNavigationSection = ({
     );
   return (
     <Stack spacing={2} sx={{ mt: 3 }}>
-      <Typography variant="h6">{t('workspace.navigationTitle')}</Typography>
+      <Typography component="h2" variant="h6">
+        {t('workspace.navigationTitle')}
+      </Typography>
       <Typography color="text.secondary">
         {t('workspace.navigationDescription')}
       </Typography>

@@ -5,20 +5,12 @@ import { useNavigate } from '@tanstack/react-router';
 import { Box } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import {
-  getDataHealthBlueprints,
-  getDataHealthCompleteness,
-  getDataHealthContexts,
-  getDataHealthFreshness,
-  getDataHealthRelationships,
-  getDataHealthStorage,
-  getDataHealthSummary,
-  refreshDataHealth,
-} from './api';
+import { refreshDataHealth } from './api';
+import { dataHealthOptions } from './queryOptions';
 import { dataHealthQueryKeys } from './queryKeys';
 import { DataHealthControls } from './DataHealthControls';
 import { DataHealthSummaryCards } from './DataHealthSummaryCards';
-import { dataHealthStaleTime, defaultStaleAfterDays } from './constants';
+import { defaultStaleAfterDays } from './constants';
 import {
   BlueprintHealthSection,
   CompletenessSection,
@@ -45,43 +37,21 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   const [showCompleteness, setShowCompleteness] = useState(false);
   const [showContexts, setShowContexts] = useState(false);
   const [showRelationships, setShowRelationships] = useState(false);
-  const summary = useQuery({
-    queryKey: dataHealthQueryKeys.summary(staleAfterDays),
-    queryFn: () => getDataHealthSummary(staleAfterDays),
-    staleTime: dataHealthStaleTime,
-  });
-  const blueprints = useQuery({
-    queryKey: dataHealthQueryKeys.blueprints(staleAfterDays),
-    queryFn: () => getDataHealthBlueprints(staleAfterDays),
-    staleTime: dataHealthStaleTime,
-  });
-  const freshness = useQuery({
-    queryKey: dataHealthQueryKeys.freshness(),
-    queryFn: getDataHealthFreshness,
-    staleTime: dataHealthStaleTime,
-  });
-  const storage = useQuery({
-    queryKey: dataHealthQueryKeys.storage(),
-    queryFn: getDataHealthStorage,
-    staleTime: dataHealthStaleTime,
-  });
+  const summary = useQuery(dataHealthOptions.summary(staleAfterDays));
+  const blueprints = useQuery(dataHealthOptions.blueprints(staleAfterDays));
+  const freshness = useQuery(dataHealthOptions.freshness());
+  const storage = useQuery(dataHealthOptions.storage());
   const completeness = useQuery({
-    queryKey: dataHealthQueryKeys.completeness(),
-    queryFn: getDataHealthCompleteness,
+    ...dataHealthOptions.completeness(),
     enabled: showCompleteness,
-    staleTime: dataHealthStaleTime,
   });
   const contexts = useQuery({
-    queryKey: dataHealthQueryKeys.contexts(),
-    queryFn: getDataHealthContexts,
+    ...dataHealthOptions.contexts(),
     enabled: showContexts,
-    staleTime: dataHealthStaleTime,
   });
   const relationships = useQuery({
-    queryKey: dataHealthQueryKeys.relationships(),
-    queryFn: getDataHealthRelationships,
+    ...dataHealthOptions.relationships(),
     enabled: showRelationships,
-    staleTime: dataHealthStaleTime,
   });
   const refresh = useMutation({
     mutationFn: refreshDataHealth,

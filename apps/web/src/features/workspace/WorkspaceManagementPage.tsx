@@ -73,9 +73,8 @@ export const WorkspaceManagementPage = ({
   const { t } = useTranslation();
   const session = useQuery(sessionOptions());
   const capabilities = session.data?.capabilities;
-  const allowedSections = sections.filter(
-    (item) => capabilities?.[item.capability] === true,
-  );
+  const can = (capability: Capability) => capabilities?.[capability] === true;
+  const allowedSections = sections.filter((item) => can(item.capability));
   const fallback = allowedSections[0] ?? sections[0];
   if (!requestedSection && session.data)
     return <Navigate replace to={fallback.to} />;
@@ -109,40 +108,35 @@ export const WorkspaceManagementPage = ({
         <>
           {section === 'members' && (
             <WorkspaceMembersSection
-              canManage={capabilities?.[capabilityCodes.membersManage] === true}
-              canGrantRoles={
-                capabilities?.[capabilityCodes.rolesGrant] === true
-              }
+              canManage={can(capabilityCodes.membersManage)}
+              canGrantRoles={can(capabilityCodes.rolesGrant)}
               currentUserId={session.data?.user_id}
               workspaceId={session.data?.workspace_id}
             />
           )}
           {section === 'teams' && (
             <WorkspaceTeamsSection
-              canManage={capabilities?.[capabilityCodes.membersManage] === true}
+              canManage={can(capabilityCodes.membersManage)}
             />
           )}
           {section === 'roles' && (
             <WorkspaceRolesSection
-              canManage={capabilities?.[capabilityCodes.rolesManage] === true}
+              canManage={can(capabilityCodes.rolesManage)}
             />
           )}
           {section === 'navigation' && (
             <WorkspaceNavigationSection
-              canManage={
-                capabilities?.[capabilityCodes.workspaceNavigationManage] ===
-                true
-              }
+              canManage={can(capabilityCodes.workspaceNavigationManage)}
             />
           )}
           {section === 'agent' && (
             <WorkspaceAgentSection
-              canManage={capabilities?.[capabilityCodes.agentsManage] === true}
+              canManage={can(capabilityCodes.agentsManage)}
             />
           )}
           {section === 'invitations' && (
             <WorkspaceInvitationsSection
-              canManage={capabilities?.[capabilityCodes.membersManage] === true}
+              canManage={can(capabilityCodes.membersManage)}
               workspaceId={session.data?.workspace_id}
             />
           )}

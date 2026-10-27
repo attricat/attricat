@@ -1,6 +1,6 @@
 import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Chip, Stack, Tab, Tabs, Typography } from '@mui/material';
+import { Alert, Box, Chip, Stack, Tab, Tabs } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -29,7 +29,6 @@ import { WorkflowRevisionTable } from './WorkflowRevisionTable';
 import { WorkflowRunTable } from './WorkflowRunTable';
 import { WorkflowSourcePanel } from './WorkflowSourcePanel';
 import { WorkflowIcon } from '../../components/systemIcons';
-import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { randomUuid } from '../../components/randomUuid';
@@ -37,6 +36,8 @@ import {
   workflowRevisionListOptions,
   workflowRunListOptions,
 } from './queryOptions';
+import { RunsUnavailableAlert } from './RunsUnavailableAlert';
+import { LoadingState } from '../../components/LoadingState';
 
 export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const { t } = useTranslation();
@@ -93,7 +94,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   if (revisions.isPending)
     return (
       <PageContainer>
-        <Typography>{t('workflows.loading')}</Typography>
+        <LoadingState>{t('workflows.loading')}</LoadingState>
       </PageContainer>
     );
   if (revisions.isError)
@@ -148,13 +149,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
         </Alert>
       )}
       <ApiErrorAlert error={mutationError} sx={{ mt: 2 }} />
-      {runs.isError && (
-        <Alert severity="warning" sx={{ mt: 2 }}>
-          {t('workflows.runsUnavailable', {
-            message: errorMessage(runs.error),
-          })}
-        </Alert>
-      )}
+      <RunsUnavailableAlert error={runs.error} sx={{ mt: 2 }} />
       <Tabs
         allowScrollButtonsMobile
         onChange={(_, value: WorkflowDetailTab) => setTab(value)}

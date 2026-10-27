@@ -23,7 +23,7 @@ import { LoadMoreButton } from '../../components/LoadMoreButton';
 import type { Blueprint } from '../blueprints/api';
 import type { AttributeContext } from '../contexts/api';
 import { blueprintKinds } from '../blueprints/constants';
-import { contextLabel } from '../contexts/contextLabel';
+import { contextLabel } from '../contexts/defaultContext';
 import { lexiconText } from '../lexicon/lexicon';
 import type { Finding, FindingsSearch, Rule } from './api';
 import { RecordIdLink } from '../../components/RecordIdLink';
@@ -200,7 +200,7 @@ export const FindingsSection = ({
             onChange={setFilter('context')}
             options={contexts.map((context) => ({
               value: context.id,
-              label: contextLabel(context, t('records.default')),
+              label: contextLabel(t, context.code),
             }))}
             value={filters.context}
           />

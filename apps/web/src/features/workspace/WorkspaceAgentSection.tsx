@@ -172,7 +172,9 @@ export const WorkspaceAgentSection = ({
     );
   return (
     <Stack spacing={2} sx={{ mt: 3 }}>
-      <Typography variant="h6">{t('workspace.agentSettingsTitle')}</Typography>
+      <Typography component="h2" variant="h6">
+        {t('workspace.agentSettingsTitle')}
+      </Typography>
       <Typography color="text.secondary">
         {t('workspace.agentSettingsDescription')}
       </Typography>

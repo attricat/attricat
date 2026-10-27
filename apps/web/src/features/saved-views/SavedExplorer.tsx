@@ -4,9 +4,8 @@ import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Explorer } from '../explorer/Explorer';
 import type { ExplorerSearch } from '../explorer/search';
-import { getSavedView } from './api';
-import { savedViewQueryKeys } from './queryKeys';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { savedViewOptions } from './queryOptions';
 
 // Memoized so that changes of the route that leave the search alone, such as
 // opening a record in the panel, do not re-render the results.
@@ -19,8 +18,7 @@ export const SavedExplorer = memo(function SavedExplorer({
   const id = search.savedView ?? search.viewState ?? '';
   const link = Boolean(search.viewState && !search.savedView);
   const view = useQuery({
-    queryKey: savedViewQueryKeys.detail(id, link),
-    queryFn: ({ signal }) => getSavedView(id, link, signal),
+    ...savedViewOptions(id, link),
     enabled: Boolean(id),
   });
   const savedSearch = useMemo(

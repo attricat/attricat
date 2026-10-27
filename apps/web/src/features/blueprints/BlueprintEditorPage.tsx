@@ -1,7 +1,7 @@
 import { blueprintRevisionOptions } from './queryOptions';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, Typography } from '@mui/material';
+import { Alert } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -17,8 +17,6 @@ import {
 } from './api';
 import { blueprintTemplates } from './blueprintEditorUtils';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
-import { recordQueryKeys } from '../records/queryKeys';
-import { blueprintQueryKeys } from './queryKeys';
 import { BlueprintIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 import { useDefinitionEditor } from '../definition-editor/useDefinitionEditor';
@@ -28,6 +26,8 @@ import {
   DefinitionTemplatesButton,
 } from '../definition-editor/DefinitionEditorControls';
 import { extensionOutlets } from '../extensions/constants';
+import { invalidateBlueprintLists } from './invalidateBlueprints';
+import { LoadingState } from '../../components/LoadingState';
 
 export const BlueprintEditorPage = ({
   blueprintId,
@@ -67,22 +67,7 @@ export const BlueprintEditorPage = ({
         : createBlueprint(definition),
     onSuccess: async ({ blueprint }) => {
       editor.clearDraft();
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: blueprintQueryKeys.catalogue(),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: blueprintQueryKeys.revisions(blueprint.id),
-        }),
-        // The Explorer, navigation and relationship pickers keep these lists
-        // until something in the app invalidates them.
-        queryClient.invalidateQueries({
-          queryKey: recordQueryKeys.blueprintsByCode(),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: recordQueryKeys.blueprints(),
-        }),
-      ]);
+      await invalidateBlueprintLists(queryClient, blueprint.id);
       navigate({
         params: { blueprintId: blueprint.id },
         to: '/manage/blueprints/$blueprintId',
@@ -103,7 +88,7 @@ export const BlueprintEditorPage = ({
   if (blueprintId && source.isPending) {
     return (
       <PageContainer>
-        <Typography>{t('blueprints.loadingBlueprintSource')}</Typography>
+        <LoadingState>{t('blueprints.loadingBlueprintSource')}</LoadingState>
       </PageContainer>
     );
   }

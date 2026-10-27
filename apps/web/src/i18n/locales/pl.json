@@ -408,7 +408,8 @@
     "metadata": "Metadane",
     "invalidMetadataJson": "Metadane muszą być poprawnym JSON-em.",
     "metadataMustBeObject": "Metadane muszą być obiektem JSON.",
-    "invalidCode": "Używaj tylko liter, cyfr, łączników i podkreśleń"
+    "invalidCode": "Używaj tylko liter, cyfr, łączników i podkreśleń",
+    "defaultContext": "Domyślny"
   },
   "dataHealth": {
     "title": "Stan danych",
@@ -636,7 +637,6 @@
       "findings": "Jakość danych",
       "noFindings": "Brak otwartych problemów w tym kontekście."
     },
-    "default": "Domyślny",
     "loadingContexts": "Wczytywanie kontekstów...",
     "resolvingValues": "Rozwiązywanie wartości...",
     "viewExtensionContent": "Wyświetl zawartość rozszerzenia dla {{attribute}}",
@@ -1278,7 +1278,6 @@
     },
     "recordActionsFor": "Akcje rekordu {{recordId}}",
     "viewRecordIdWithId": "Wyświetl identyfikator rekordu {{recordId}}",
-    "default": "Domyślny",
     "collapse": "Zwiń {{item}}",
     "expand": "Rozwiń {{item}}",
     "searchInfo": "Informacje o wyszukiwaniu",
@@ -1338,7 +1337,6 @@
     "attributeFilterPill": "{{field}} {{operator}} {{value}}",
     "schemaVersionStatus": "v{{version}} · {{status}}",
     "unsortableColumnLabel": "{{column}}. {{reason}}",
-    "publicationContextUnavailable": "Kontekst publikacji jest niedostępny",
     "selectedCountForBlueprint_one": "Wybrano {{count}} rekord · {{blueprint}}",
     "selectedCountForBlueprint_few": "Wybrano {{count}} rekordy · {{blueprint}}",
     "selectedCountForBlueprint_many": "Wybrano {{count}} rekordów · {{blueprint}}",
@@ -1833,7 +1831,8 @@
     "bulkEditLimitHelp": "Agent musi zawęzić propozycję, która obejmuje więcej rekordów.",
     "bulkEditLimitInvalid": "Wpisz liczbę całkowitą od 1 do {{max}}.",
     "saveAgentSettings": "Zapisz ustawienia agenta",
-    "agentSettingsSaved": "Zapisano ustawienia agenta."
+    "agentSettingsSaved": "Zapisano ustawienia agenta.",
+    "notAuthorizedTeams": "Nie masz uprawnień do zarządzania zespołami."
   },
   "views": {
     "tabHasErrors": "Zawiera pola wymagające uwagi",

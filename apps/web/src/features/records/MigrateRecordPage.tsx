@@ -5,7 +5,7 @@ import { ArrowLeftIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
-import { defaultContextCode } from '../contexts/constants';
+import { findDefaultContextId } from '../contexts/defaultContext';
 import { migrateRecord, previewRecordMigration } from './api';
 import { RecordForm } from './components/RecordForm';
 import { RecordPage } from './components/RecordPage';
@@ -56,9 +56,7 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
         : [],
     ),
   );
-  const defaultContextId =
-    contexts.data?.find((context) => context.code === defaultContextCode)?.id ??
-    null;
+  const defaultContextId = findDefaultContextId(contexts.data);
   const { inlineIssues, standaloneIssues } = partitionMigrationIssues(
     preview.data,
   );

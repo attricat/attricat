@@ -8,6 +8,7 @@ import {
 } from './api';
 import { allPublicationChannels, type RemovalDisposition } from './constants';
 import { blueprintQueryKeys } from './queryKeys';
+import { invalidateBlueprintLists } from './invalidateBlueprints';
 
 /** Mutations started from the blueprint detail page and its dialogs. */
 export const useBlueprintDetailActions = (
@@ -29,21 +30,9 @@ export const useBlueprintDetailActions = (
     onSuccess: async (_, version) => {
       onPublished();
       await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: blueprintQueryKeys.catalogue(),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: blueprintQueryKeys.revisions(blueprintId),
-        }),
+        invalidateBlueprintLists(queryClient, blueprintId),
         queryClient.invalidateQueries({
           queryKey: blueprintQueryKeys.revision(blueprintId, version),
-        }),
-        // Views that load the latest revision by code keep it for a while.
-        queryClient.invalidateQueries({
-          queryKey: recordQueryKeys.blueprintsByCode(),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: recordQueryKeys.blueprints(),
         }),
       ]);
     },

@@ -2,7 +2,6 @@ import { latestRevisions } from '../../api/revisionStatus';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
-  Alert,
   Box,
   Chip,
   Paper,
@@ -26,12 +25,13 @@ import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
 import { EmptyState } from '../../components/EmptyState';
 import { WorkflowIcon } from '../../components/systemIcons';
-import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { workflowListOptions, workflowRunListOptions } from './queryOptions';
 import { runStatuses } from '../../api/runStatus';
 import { RunStatusChip } from '../../components/RunStatusChip';
+import { RunsUnavailableAlert } from './RunsUnavailableAlert';
+import { LoadingState } from '../../components/LoadingState';
 
 export const WorkflowsPage = () => {
   const { t } = useTranslation();
@@ -78,15 +78,9 @@ export const WorkflowsPage = () => {
         title={t('workflows.title')}
       />
       <ApiErrorAlert error={workflows.error} sx={{ mt: 3 }} />
-      {runs.isError && (
-        <Alert severity="warning" sx={{ mt: 3 }}>
-          {t('workflows.runsUnavailable', {
-            message: errorMessage(runs.error),
-          })}
-        </Alert>
-      )}
+      <RunsUnavailableAlert error={runs.error} sx={{ mt: 3 }} />
       {workflows.isPending && (
-        <Typography sx={{ mt: 3 }}>{t('workflows.loading')}</Typography>
+        <LoadingState sx={{ mt: 3 }}>{t('workflows.loading')}</LoadingState>
       )}
       {workflows.data && (
         <Paper component="section" sx={{ mt: 3 }}>

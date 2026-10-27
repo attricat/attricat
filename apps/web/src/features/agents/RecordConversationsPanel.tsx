@@ -16,7 +16,7 @@ import { agentRoutes } from './constants';
 import { conversationSearchOptions } from './queryOptions';
 import { EmptyState } from '../../components/EmptyState';
 import { AgentIcon } from '../../components/systemIcons';
-import { LoadMoreButton } from '../../components/LoadMoreButton';
+import { NextPageButton } from '../../components/LoadMoreButton';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { RouterIconButton } from '../../components/RouterLink';
 import { Timestamp } from '../../time/Timestamp';
@@ -139,14 +139,7 @@ export const RecordConversationsPanel = ({
           })}
         </List>
       )}
-      {conversations.hasNextPage && (
-        <Box sx={{ mt: 2 }}>
-          <LoadMoreButton
-            isLoading={conversations.isFetchingNextPage}
-            onLoadMore={() => void conversations.fetchNextPage()}
-          />
-        </Box>
-      )}
+      <NextPageButton query={conversations} sx={{ mt: 2 }} />
     </Box>
   );
 };

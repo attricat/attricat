@@ -8,6 +8,11 @@ import { createContext, listContexts } from './api';
 import { CreateContextPage } from './CreateContextPage';
 
 vi.mock('@tanstack/react-router', () => ({
+  createLink:
+    (Component: React.ElementType) =>
+    ({ to, ...props }: { to: string } & Record<string, unknown>) => (
+      <Component href={to} {...props} />
+    ),
   Link: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),

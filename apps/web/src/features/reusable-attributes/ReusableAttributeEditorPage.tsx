@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, Typography } from '@mui/material';
+import { Alert } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -27,6 +27,7 @@ import {
   DefinitionTemplatesButton,
 } from '../definition-editor/DefinitionEditorControls';
 import { reusableAttributeListOptions } from './queryOptions';
+import { LoadingState } from '../../components/LoadingState';
 
 export const ReusableAttributeEditorPage = ({
   definitionId,
@@ -82,7 +83,7 @@ export const ReusableAttributeEditorPage = ({
   if (definitionId && attributes.isPending) {
     return (
       <PageContainer>
-        <Typography>{t('reusableAttributes.editor.loading')}</Typography>
+        <LoadingState>{t('reusableAttributes.editor.loading')}</LoadingState>
       </PageContainer>
     );
   }

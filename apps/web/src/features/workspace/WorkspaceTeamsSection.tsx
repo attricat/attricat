@@ -158,9 +158,7 @@ export const WorkspaceTeamsSection = ({
     if (!remove.isPending) hideDelete();
   };
   if (!canManage)
-    return (
-      <Alert severity="error">{t('workspace.notAuthorizedMembers')}</Alert>
-    );
+    return <Alert severity="error">{t('workspace.notAuthorizedTeams')}</Alert>;
   const users = directory.data?.users ?? [];
   const memberNames = (team: Team) =>
     team.member_user_ids

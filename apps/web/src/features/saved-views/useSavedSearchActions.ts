@@ -9,12 +9,7 @@ import {
   inlineExplorerSearchParams,
   type ExplorerSearch,
 } from '../explorer/search';
-import {
-  createViewStateLink,
-  deleteSavedView,
-  getSavedView,
-  updateSavedView,
-} from './api';
+import { createViewStateLink, deleteSavedView, updateSavedView } from './api';
 import {
   MAXIMUM_INLINE_LINK_LENGTH,
   SAVED_VIEW_PARAM,
@@ -26,6 +21,7 @@ import {
 import { savedViewQueryKeys } from './queryKeys';
 import { useCreateSavedView } from './useCreateSavedView';
 import type { SavedView } from './schemas';
+import { savedViewOptions } from './queryOptions';
 
 export const useSavedSearchActions = ({
   savedView,
@@ -43,9 +39,7 @@ export const useSavedSearchActions = ({
   const [saveOpen, setSaveOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const originalView = useQuery({
-    queryKey: savedViewQueryKeys.detail(search.sourceView ?? '', false),
-    queryFn: ({ signal }) =>
-      getSavedView(search.sourceView ?? '', false, signal),
+    ...savedViewOptions(search.sourceView ?? '', false),
     enabled: Boolean(search.sourceView && !savedView),
   });
   const sourceView = search.sourceView
@@ -76,7 +70,9 @@ export const useSavedSearchActions = ({
     if (!search.sourceView) return Promise.resolve();
     const sourceView = search.sourceView;
     return runBusy(async () => {
-      const original = savedView ?? (await getSavedView(sourceView, false));
+      const original =
+        savedView ??
+        (await client.fetchQuery(savedViewOptions(sourceView, false)));
       await updateSavedView(
         original.id,
         original.name ?? '',

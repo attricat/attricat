@@ -4,7 +4,8 @@ import {
   type SxProps,
   type Theme,
 } from '@mui/material';
-import type { ReactNode } from 'react';
+import type { UseInfiniteQueryResult } from '@tanstack/react-query';
+import type { ComponentProps, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { progressSizes } from './iconSizes';
 
@@ -51,3 +52,21 @@ export const LoadMoreButton = ({
     </Button>
   );
 };
+
+/** Loads an infinite query's next page; nothing is shown on its last page. */
+export const NextPageButton = ({
+  query,
+  ...props
+}: Omit<ComponentProps<typeof LoadMoreButton>, 'isLoading' | 'onLoadMore'> & {
+  query: Pick<
+    UseInfiniteQueryResult,
+    'fetchNextPage' | 'hasNextPage' | 'isFetchingNextPage'
+  >;
+}) =>
+  query.hasNextPage ? (
+    <LoadMoreButton
+      isLoading={query.isFetchingNextPage}
+      onLoadMore={() => void query.fetchNextPage()}
+      {...props}
+    />
+  ) : null;

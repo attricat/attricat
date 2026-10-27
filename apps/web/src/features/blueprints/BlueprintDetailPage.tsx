@@ -4,7 +4,7 @@ import {
 } from './queryOptions';
 import { revisionStatuses } from '../../api/revisionStatus';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Box, Tab, Tabs, Typography } from '@mui/material';
+import { Alert, Box, Tab, Tabs } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -40,6 +40,7 @@ import {
   extensionOutlets,
   supportedOutletContextVersion,
 } from '../extensions/constants';
+import { LoadingState } from '../../components/LoadingState';
 
 type BlueprintDetailDialog = 'publish' | 'publishRecords' | 'safeMigration';
 
@@ -97,7 +98,7 @@ export const BlueprintDetailPage = ({
   return (
     <PageContainer>
       {revisions.isPending && (
-        <Typography>{t('blueprints.loadingBlueprint')}</Typography>
+        <LoadingState>{t('blueprints.loadingBlueprint')}</LoadingState>
       )}
       <ApiErrorAlert error={revisions.error} />
       {blueprint && (
@@ -160,7 +161,7 @@ export const BlueprintDetailPage = ({
           {pageTab === blueprintDetailTabs.metadata && (
             <Box {...tabId.panel(blueprintDetailTabs.metadata)}>
               {metadata.isPending && (
-                <Typography>{t('blueprints.loadingBlueprint')}</Typography>
+                <LoadingState>{t('blueprints.loadingBlueprint')}</LoadingState>
               )}
               <ApiErrorAlert error={metadata.error} />
               {metadataRevision && (
