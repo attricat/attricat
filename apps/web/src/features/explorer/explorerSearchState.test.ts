@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  dataQualityRequest,
+  explorerResultsQueryKey,
   exportStatusRequest,
   relationshipFiltersFromSearch,
   relationshipTreeFacetsRequest,
@@ -151,5 +153,42 @@ describe('export status filter', () => {
       },
     });
     expect(parsed.exportStatus).toBeUndefined();
+  });
+});
+
+describe('data quality filter', () => {
+  const filtered: ExplorerSearch = {
+    blueprint: 'product',
+    dataQuality: 'open',
+  };
+  const key = (canReadRules: boolean) =>
+    explorerResultsQueryKey(
+      filtered,
+      [],
+      1,
+      undefined,
+      'default',
+      canReadRules,
+    );
+
+  it('is sent and cached apart for viewers who may read rules', () => {
+    expect(dataQualityRequest(filtered, true)).toBe('open');
+    expect(key(true)[1]).toMatchObject({ dataQuality: 'open' });
+  });
+
+  it('is dropped for viewers who may not read rules', () => {
+    // A link or saved view may carry the filter; the server would refuse it
+    // and these viewers have no chip to remove it.
+    expect(dataQualityRequest(filtered, false)).toBeUndefined();
+    expect(key(false)).toEqual(
+      explorerResultsQueryKey(
+        { blueprint: 'product' },
+        [],
+        1,
+        undefined,
+        'default',
+        false,
+      ),
+    );
   });
 });
