@@ -10,9 +10,10 @@ use attricat_domain::value_type::ValueType;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use uuid::Uuid;
 
+use attricat_validation::predicate::MAX_SYSTEM_TAGS;
 use attricat_validation::saved_search::{
     EXPLORER_SEARCH_KIND, MAX_BLUEPRINT_BYTES, MAX_SELECTED_IDS, MAX_STATE_BYTES,
 };
@@ -98,7 +99,6 @@ pub(crate) const MAX_REMOVE_VALUES: usize = 20;
 /// Relationship sets per relationship mutation, and targets per set.
 const MAX_RELATIONSHIP_SETS: usize = 20;
 const MAX_RELATIONSHIP_TARGETS: usize = 100;
-const MAX_SYSTEM_TAGS: usize = 100;
 const MAX_SAVED_SEARCH_NAME_BYTES: usize = 120;
 const MAX_SAVED_SEARCH_DESCRIPTION_BYTES: usize = 500;
 const MAX_SAVED_SEARCH_QUERY_BYTES: usize = 4_096;
@@ -242,6 +242,151 @@ fn relationship_targets_parameters() -> Value {
 
 fn relationship_filter_parameters() -> Value {
     json!({"type":"array","maxItems":MAX_SEARCH_FILTERS,"items":{"type":"object","required":["field","selected_target_ids"],"properties":{"field":{"type":"string"},"selected_target_ids":{"type":"array","minItems":1,"maxItems":MAX_SELECTED_IDS,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}})
+}
+
+/// How `update_record_annotations` changes a record. A patch changes only
+/// the tags and keys it names, applied to the record's state at approval; a
+/// replacement sets the whole `system_tags` and/or `system_metadata` field.
+#[derive(Debug, PartialEq)]
+enum AnnotationEdit {
+    Patch(crate::model::SystemAnnotationPatch),
+    Replace {
+        system_tags: Option<Vec<String>>,
+        system_metadata: Option<Value>,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AnnotationFields {
+    system_tags: Option<Vec<String>>,
+    system_metadata: Option<Value>,
+    #[serde(default)]
+    add_tags: Vec<String>,
+    #[serde(default)]
+    remove_tags: Vec<String>,
+    #[serde(default)]
+    set_metadata: BTreeMap<String, Value>,
+    #[serde(default)]
+    remove_metadata: Vec<String>,
+}
+
+impl AnnotationEdit {
+    /// Decodes the edit from `update_record_annotations` arguments, ignoring
+    /// the record and version fields every record tool shares.
+    fn from_arguments(arguments: &Value) -> Result<Self, ToolError> {
+        let mut fields = arguments
+            .as_object()
+            .cloned()
+            .ok_or_else(|| ToolError::InvalidArguments("arguments must be an object".into()))?;
+        fields.remove("record_id");
+        fields.remove("expected_updated_at");
+        let fields: AnnotationFields = decode(Value::Object(fields))?;
+        let patch = crate::model::SystemAnnotationPatch {
+            add_tags: fields.add_tags,
+            remove_tags: fields.remove_tags,
+            set_metadata: fields.set_metadata,
+            remove_metadata: fields.remove_metadata,
+        };
+        let replaces = fields.system_tags.is_some() || fields.system_metadata.is_some();
+        let edit = match (replaces, patch.operations() > 0) {
+            (true, true) => {
+                return Err(ToolError::InvalidArguments(
+                    "use either add_tags, remove_tags, set_metadata and remove_metadata, or system_tags and system_metadata, not both".into(),
+                ));
+            }
+            (false, false) => {
+                return Err(ToolError::InvalidArguments(
+                    "provide tags and/or metadata".into(),
+                ));
+            }
+            (true, false) => Self::Replace {
+                system_tags: fields.system_tags,
+                system_metadata: fields.system_metadata,
+            },
+            (false, true) => Self::Patch(patch),
+        };
+        edit.validate()?;
+        Ok(edit)
+    }
+
+    fn validate(&self) -> Result<(), ToolError> {
+        match self {
+            Self::Replace {
+                system_tags,
+                system_metadata,
+            } => {
+                if system_tags
+                    .as_ref()
+                    .is_some_and(|tags| tags.len() > MAX_SYSTEM_TAGS)
+                    || system_metadata
+                        .as_ref()
+                        .is_some_and(|metadata| !metadata.is_object())
+                {
+                    return Err(ToolError::InvalidArguments(format!(
+                        "tags must have at most {MAX_SYSTEM_TAGS} entries and metadata must be an object"
+                    )));
+                }
+            }
+            Self::Patch(patch) => {
+                if patch.add_tags.len() > MAX_SYSTEM_TAGS
+                    || patch.remove_tags.len() > MAX_SYSTEM_TAGS
+                {
+                    return Err(ToolError::InvalidArguments(format!(
+                        "add_tags and remove_tags may each name at most {MAX_SYSTEM_TAGS} tags"
+                    )));
+                }
+                // The patch applies removals first, so a name in both lists
+                // would silently mean "add"; the approver must see one intent.
+                if patch
+                    .add_tags
+                    .iter()
+                    .any(|tag| patch.remove_tags.contains(tag))
+                    || patch
+                        .remove_metadata
+                        .iter()
+                        .any(|key| patch.set_metadata.contains_key(key))
+                {
+                    return Err(ToolError::InvalidArguments(
+                        "a tag or metadata key cannot be both added and removed".into(),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The approver-facing description of the change.
+    fn summary(&self) -> String {
+        match self {
+            Self::Replace {
+                system_tags,
+                system_metadata,
+            } => format!(
+                "Replace {}",
+                match (system_tags.is_some(), system_metadata.is_some()) {
+                    (true, true) => "system tags and metadata",
+                    (true, false) => "system tags",
+                    _ => "system metadata",
+                }
+            ),
+            Self::Patch(patch) => {
+                let list = |items: &[String]| items.join(", ");
+                let set_keys: Vec<String> = patch.set_metadata.keys().cloned().collect();
+                [
+                    ("add tags", list(&patch.add_tags)),
+                    ("remove tags", list(&patch.remove_tags)),
+                    ("set metadata", list(&set_keys)),
+                    ("remove metadata", list(&patch.remove_metadata)),
+                ]
+                .into_iter()
+                .filter(|(_, items)| !items.is_empty())
+                .map(|(verb, items)| format!("{verb} {items}"))
+                .collect::<Vec<_>>()
+                .join("; ")
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -706,10 +851,15 @@ pub fn definitions() -> Vec<ToolDefinition> {
         definition(
             "update_record_annotations",
             concat!(
-                "Replace specified system_tags and/or system_metadata on a record without changing values or relationships. Omitted fields remain unchanged; [] or {} clears a field. Inspect get_record first. Requires approval.",
+                "Change a record's system tags and system metadata without changing values or relationships. Prefer the patch fields, which apply to the record's current annotations and leave everything they do not name unchanged: add_tags, remove_tags, set_metadata (keys to set, each replacing that key's whole value) and remove_metadata (keys to delete). A tag or key cannot be both added and removed. Only to replace a whole field, pass system_tags and/or system_metadata instead ([] or {} clears it); do not combine them with patch fields. Inspect get_record first. Requires approval.",
                 pinned_note!()
             ),
-            json!({"type":"object","required":["record_id"],"properties":{"record_id":{"type":"string","format":"uuid"},"expected_updated_at":expected_updated_at_parameter(),"system_tags":{"type":"array","maxItems":MAX_SYSTEM_TAGS,"items":{"type":"string"}},"system_metadata":{"type":"object"}},"additionalProperties":false}),
+            json!({"type":"object","required":["record_id"],"properties":{"record_id":{"type":"string","format":"uuid"},"expected_updated_at":expected_updated_at_parameter(),
+                "add_tags":{"type":"array","maxItems":MAX_SYSTEM_TAGS,"items":{"type":"string"}},
+                "remove_tags":{"type":"array","maxItems":MAX_SYSTEM_TAGS,"items":{"type":"string"}},
+                "set_metadata":{"type":"object"},
+                "remove_metadata":{"type":"array","items":{"type":"string"}},
+                "system_tags":{"type":"array","maxItems":MAX_SYSTEM_TAGS,"items":{"type":"string"}},"system_metadata":{"type":"object"}},"additionalProperties":false}),
         ),
         definition(
             "update_context",
@@ -1025,19 +1175,8 @@ pub fn change_summary_named(
         )),
         crate::bulk_edits::TOOL => crate::bulk_edits::change_summary(arguments),
         "update_record_annotations" => Ok(format!(
-            "Update {} on record {}.",
-            match (
-                arguments.get("system_tags"),
-                arguments.get("system_metadata")
-            ) {
-                (Some(_), Some(_)) => "system tags and metadata",
-                (Some(_), None) => "system tags",
-                (None, Some(_)) => "system metadata",
-                (None, None) =>
-                    return Err(ToolError::InvalidArguments(
-                        "provide tags and/or metadata".into()
-                    )),
-            },
+            "{} on record {}.",
+            AnnotationEdit::from_arguments(arguments)?.summary(),
             named("record_id")?
         )),
         "update_context" => Ok(format!(
@@ -2742,49 +2881,41 @@ pub async fn execute_mutation(
             json!({"id":view.id,"name":view.name,"url":format!("/?savedView={}",view.id),"visibility":view.visibility,"state":view.state})
         }
         "update_record_annotations" => {
-            #[derive(Deserialize)]
-            #[serde(deny_unknown_fields)]
-            struct Input {
-                record_id: Uuid,
-                expected_updated_at: Option<DateTime<Utc>>,
-                system_tags: Option<Vec<String>>,
-                system_metadata: Option<Value>,
-            }
-            let input: Input = decode(arguments)?;
-            if input.system_tags.is_none() && input.system_metadata.is_none() {
-                return Err(ToolError::InvalidArguments(
-                    "provide tags and/or metadata".into(),
-                ));
-            }
-            if input
-                .system_tags
-                .as_ref()
-                .is_some_and(|tags| tags.len() > MAX_SYSTEM_TAGS)
-                || input
-                    .system_metadata
-                    .as_ref()
-                    .is_some_and(|metadata| !metadata.is_object())
-            {
-                return Err(ToolError::InvalidArguments(format!(
-                    "tags must have at most {MAX_SYSTEM_TAGS} entries and metadata must be an object"
-                )));
-            }
-            serde_json::to_value(
-                AttricatMutationService::new(repository)
-                    .update_record(
-                        input.record_id,
-                        crate::model::UpdateRecordFormRequest {
-                            expected_updated_at: input.expected_updated_at,
-                            values: vec![],
-                            relationships: vec![],
-                            remove_values: vec![],
-                            system_tags: input.system_tags,
-                            system_metadata: input.system_metadata,
-                        },
-                    )
-                    .await?,
-            )
-            .expect("record serializes")
+            let edit = AnnotationEdit::from_arguments(&arguments)?;
+            let record_id = parse_uuid(&arguments, "record_id")?;
+            let expected_updated_at: Option<DateTime<Utc>> = decode(
+                arguments
+                    .get("expected_updated_at")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            )?;
+            let service = AttricatMutationService::new(repository);
+            let record = match edit {
+                AnnotationEdit::Patch(patch) => {
+                    service
+                        .patch_record_annotations(record_id, &patch, expected_updated_at)
+                        .await?
+                }
+                AnnotationEdit::Replace {
+                    system_tags,
+                    system_metadata,
+                } => {
+                    service
+                        .update_record(
+                            record_id,
+                            crate::model::UpdateRecordFormRequest {
+                                expected_updated_at,
+                                values: vec![],
+                                relationships: vec![],
+                                remove_values: vec![],
+                                system_tags,
+                                system_metadata,
+                            },
+                        )
+                        .await?
+                }
+            };
+            serde_json::to_value(record).expect("record serializes")
         }
         "update_context" => {
             #[derive(Deserialize)]
@@ -3400,6 +3531,49 @@ mod tests {
         assert_eq!(kind("get_context").unwrap(), ToolKind::Read);
         assert_eq!(kind("get_workspace_directory").unwrap(), ToolKind::Read);
         assert!(change_summary("update_record_annotations", &json!({"record_id":"id"})).is_err());
+        assert_eq!(
+            change_summary(
+                "update_record_annotations",
+                &json!({"record_id":"id","add_tags":["reviewed","eu"],"remove_tags":["draft"],"set_metadata":{"source":"agent"}})
+            )
+            .unwrap(),
+            "add tags reviewed, eu; remove tags draft; set metadata source on record id."
+        );
+        assert_eq!(
+            change_summary(
+                "update_record_annotations",
+                &json!({"record_id":"id","system_tags":[]})
+            )
+            .unwrap(),
+            "Replace system tags on record id."
+        );
+    }
+
+    #[test]
+    fn annotation_edits_are_either_a_patch_or_a_replacement() {
+        assert_eq!(
+            super::AnnotationEdit::from_arguments(
+                &json!({"record_id":"id","expected_updated_at":null,"remove_metadata":["old"]})
+            )
+            .unwrap(),
+            super::AnnotationEdit::Patch(crate::model::SystemAnnotationPatch {
+                remove_metadata: vec!["old".into()],
+                ..Default::default()
+            })
+        );
+        for invalid in [
+            json!({"record_id":"id","system_tags":["a"],"add_tags":["b"]}),
+            json!({"record_id":"id","add_tags":["a"],"remove_tags":["a"]}),
+            json!({"record_id":"id","set_metadata":{"k":1},"remove_metadata":["k"]}),
+            json!({"record_id":"id","add_tags":[]}),
+            json!({"record_id":"id","system_metadata":[]}),
+            json!({"record_id":"id","tags":["a"]}),
+        ] {
+            assert!(
+                super::AnnotationEdit::from_arguments(&invalid).is_err(),
+                "{invalid}"
+            );
+        }
         assert_eq!(
             change_summary("update_context", &json!({"context_id":"id"})).unwrap(),
             "Replace parent and data on context id."

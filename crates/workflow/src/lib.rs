@@ -1,5 +1,8 @@
 //! Strict, inert workflow definition parsing. Execution is owned by the API runtime.
-use attricat_validation::{is_valid_code, predicate::MAX_TAG_LENGTH};
+use attricat_validation::{
+    is_valid_code,
+    predicate::{MAX_SYSTEM_TAGS, MAX_TAG_LENGTH},
+};
 use cron::Schedule;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -170,8 +173,6 @@ pub(crate) const MAX_REFERENCING_TARGETS: u32 = 500;
 const MAX_NESTED_ACTIONS: usize = 20;
 const MAX_TRIGGER_ATTRIBUTES: usize = 100;
 const MAX_EXTENSION_PROVIDER_BYTES: usize = 128;
-/// Tags one system tag action may add or remove.
-const MAX_TAGS_PER_ACTION: usize = 100;
 /// Keys one system metadata delete action may remove.
 const MAX_METADATA_KEYS_PER_ACTION: usize = 100;
 /// Fields of a schedule cron expression, including seconds.
@@ -401,10 +402,10 @@ const ENVELOPE_FIELDS: &[&str] = &["event_type", "aggregate_kind", "source_kind"
 fn action(a: RawAction) -> Result<Action, WorkflowError> {
     match a {
         RawAction::SystemTagsAdd { tags } => Ok(Action::SystemTagsAdd {
-            tags: limited_strings(tags, "tag", MAX_TAGS_PER_ACTION)?,
+            tags: system_tags(tags)?,
         }),
         RawAction::SystemTagsRemove { tags } => Ok(Action::SystemTagsRemove {
-            tags: limited_strings(tags, "tag", MAX_TAGS_PER_ACTION)?,
+            tags: system_tags(tags)?,
         }),
         RawAction::SystemMetadataMerge { values } => {
             if values.is_empty() {
@@ -597,16 +598,22 @@ fn limited_strings(
     let mut seen = HashSet::new();
     for v in &values {
         non_empty(v, name)?;
-        if name == "tag" && v.len() > MAX_TAG_LENGTH {
-            return Err(WorkflowError::Invalid(format!(
-                "tag must be no longer than {MAX_TAG_LENGTH} bytes"
-            )));
-        }
         if !seen.insert(v) {
             return Err(WorkflowError::Invalid(format!("duplicate {name}")));
         }
     }
     Ok(values)
+}
+/// A tag action's tags: no more than a record may carry, each within the
+/// stored system-tag length.
+fn system_tags(tags: Vec<String>) -> Result<Vec<String>, WorkflowError> {
+    let tags = limited_strings(tags, "tag", MAX_SYSTEM_TAGS)?;
+    if tags.iter().any(|tag| tag.len() > MAX_TAG_LENGTH) {
+        return Err(WorkflowError::Invalid(format!(
+            "tag must be no longer than {MAX_TAG_LENGTH} bytes"
+        )));
+    }
+    Ok(tags)
 }
 #[cfg(test)]
 mod tests {

@@ -161,6 +161,17 @@ impl<'a> AttricatMutationService<'a> {
         self.repository.duplicate_record(record_id).await
     }
 
+    pub async fn patch_record_annotations(
+        &self,
+        record_id: Uuid,
+        patch: &crate::model::SystemAnnotationPatch,
+        expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<Record, RepositoryError> {
+        self.repository
+            .patch_record_annotations(record_id, patch, expected_updated_at)
+            .await
+    }
+
     pub async fn update_record(
         &self,
         record_id: Uuid,

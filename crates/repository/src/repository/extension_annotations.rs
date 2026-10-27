@@ -516,7 +516,7 @@ impl AttricatRepository {
         let changes = system_annotations::apply_tag_metadata_patch(
             &mut tags,
             &mut namespace,
-            &system_annotations::TagMetadataPatch {
+            &crate::model::SystemAnnotationPatch {
                 add_tags: qualify(&patch.add_tags),
                 remove_tags: qualify(&patch.remove_tags),
                 set_metadata: patch.set_metadata.clone(),

@@ -511,6 +511,40 @@ impl AttricatRepository {
         Ok(record)
     }
 
+    /// Applies `patch` to the record's current tags and metadata as one
+    /// ordinary record update, so it is validated, audited and published like
+    /// any other write. Only the fields the patch changes are replaced.
+    pub async fn patch_record_annotations(
+        &self,
+        record_id: Uuid,
+        patch: &crate::model::SystemAnnotationPatch,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<Record, RepositoryError> {
+        let prefetch = self.write_prefetch().await?;
+        let mut transaction = self.pool.begin().await?;
+        let record = self.lock_record(&mut transaction, record_id).await?;
+        let mut annotations = super::system_annotations::PatchedAnnotations::default();
+        annotations.apply(&record, patch)?;
+        let (record, changes, event) = self
+            .update_record_in_transaction_with(
+                &mut transaction,
+                record_id,
+                UpdateRecordFormRequest {
+                    expected_updated_at,
+                    values: Vec::new(),
+                    relationships: Vec::new(),
+                    remove_values: Vec::new(),
+                    system_tags: annotations.system_tags,
+                    system_metadata: annotations.system_metadata,
+                },
+                prefetch.as_ref(),
+            )
+            .await?;
+        self.commit_record_mutation(transaction, changes, event)
+            .await?;
+        Ok(record)
+    }
+
     /// Caller-transaction seam for a record update; see
     /// [`Self::create_record_in_transaction`] for the shared contract.
     /// `system_tags` and `system_metadata` replace the whole field.

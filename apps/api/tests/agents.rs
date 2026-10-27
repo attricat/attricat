@@ -705,6 +705,21 @@ async fn agent_annotation_and_context_edits_use_attricat_validation(pool: PgPool
         json!({"record_id":record_id,"system_tags":["reviewed"],"system_metadata":{"source":"agent"}})).await.unwrap();
     assert_eq!(updated["system_tags"], json!(["reviewed"]));
     assert_eq!(updated["system_metadata"]["source"], "agent");
+    let patched = execute_mutation(&repository, actor, "update_record_annotations",
+        json!({"record_id":record_id,"add_tags":["approved"],"remove_tags":["reviewed"],"set_metadata":{"stage":"final"}})).await.unwrap();
+    assert_eq!(patched["system_tags"], json!(["approved"]));
+    assert_eq!(patched["system_metadata"]["source"], "agent");
+    assert_eq!(patched["system_metadata"]["stage"], "final");
+    let patched = execute_mutation(
+        &repository,
+        actor,
+        "update_record_annotations",
+        json!({"record_id":record_id,"remove_metadata":["source"]}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(patched["system_tags"], json!(["approved"]));
+    assert_eq!(patched["system_metadata"], json!({"stage":"final"}));
     let context = execute_mutation(
         &repository,
         actor,

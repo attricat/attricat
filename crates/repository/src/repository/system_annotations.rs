@@ -2,8 +2,9 @@
 //! shared by record writes, workflow actions and extension annotations.
 
 use super::{RepositoryError, SAMPLE_SYSTEM_TAG};
+use crate::model::{Record, SystemAnnotationPatch};
 use serde_json::{Map, Value};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 
 pub(super) fn validate_system_annotations(
     tags: &[String],
@@ -30,16 +31,7 @@ pub(super) fn validate_system_tag_update(
     )
 }
 
-/// A tag and metadata patch, applied by [`apply_tag_metadata_patch`].
-#[derive(Default)]
-pub(super) struct TagMetadataPatch {
-    pub add_tags: Vec<String>,
-    pub remove_tags: Vec<String>,
-    pub set_metadata: BTreeMap<String, Value>,
-    pub remove_metadata: Vec<String>,
-}
-
-/// The effective changes of one [`TagMetadataPatch`].
+/// The effective changes of one [`SystemAnnotationPatch`].
 pub(super) struct TagMetadataChanges {
     pub added_tags: Vec<String>,
     pub removed_tags: Vec<String>,
@@ -62,7 +54,7 @@ impl TagMetadataChanges {
 pub(super) fn apply_tag_metadata_patch(
     tags: &mut Vec<String>,
     metadata: &mut Map<String, Value>,
-    patch: &TagMetadataPatch,
+    patch: &SystemAnnotationPatch,
 ) -> TagMetadataChanges {
     let removed_tags = patch
         .remove_tags
@@ -99,9 +91,47 @@ pub(super) fn apply_tag_metadata_patch(
     }
 }
 
+/// A record's tags and metadata after one or more patches. A field stays
+/// `None` until a patch changes it, so the resulting record update replaces
+/// only the fields that were patched.
+#[derive(Default)]
+pub(super) struct PatchedAnnotations {
+    pub system_tags: Option<Vec<String>>,
+    pub system_metadata: Option<Value>,
+}
+
+impl PatchedAnnotations {
+    /// Applies `patch` on top of `record`'s annotations and earlier patches.
+    pub fn apply(
+        &mut self,
+        record: &Record,
+        patch: &SystemAnnotationPatch,
+    ) -> Result<(), RepositoryError> {
+        if patch.changes_tags() {
+            let tags = self
+                .system_tags
+                .get_or_insert_with(|| record.system_tags.clone());
+            apply_tag_metadata_patch(tags, &mut Map::new(), patch);
+        }
+        if patch.changes_metadata() {
+            let mut metadata = self
+                .system_metadata
+                .as_ref()
+                .unwrap_or(&record.system_metadata)
+                .as_object()
+                .cloned()
+                .ok_or(RepositoryError::InvalidSystemMetadata)?;
+            apply_tag_metadata_patch(&mut Vec::new(), &mut metadata, patch);
+            self.system_metadata = Some(Value::Object(metadata));
+        }
+        Ok(())
+    }
+}
+
 /// Longest stored system tag, including an extension namespace prefix.
-pub(super) const MAX_SYSTEM_TAG_BYTES: usize = 128;
-pub(super) const MAX_SYSTEM_TAGS: usize = 100;
+pub(super) use attricat_validation::predicate::{
+    MAX_SYSTEM_TAGS, MAX_TAG_LENGTH as MAX_SYSTEM_TAG_BYTES,
+};
 pub(super) const MAX_SYSTEM_METADATA_BYTES: usize = 64 * 1024;
 
 pub(super) fn validate_system_tags(tags: &[String]) -> Result<(), RepositoryError> {
