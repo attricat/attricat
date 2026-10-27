@@ -272,6 +272,33 @@ describe('RelationshipField', () => {
     );
   });
 
+  it('names the blueprint whose records could not be loaded', async () => {
+    vi.mocked(getBlueprintByCode).mockResolvedValue({
+      blueprint: {
+        code: 'product',
+        id: blueprintId,
+        name: 'Catalog product',
+        status: 'published',
+        version: 1,
+        views: {},
+      },
+      attributes: [],
+      table_path_attributes: [],
+    });
+    vi.mocked(searchRecords).mockRejectedValue(new Error('offline'));
+    renderField();
+    const user = userEvent.setup();
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Choose related products' }),
+    );
+    await screen.findByRole('dialog', { name: /^Select Catalog product/ });
+
+    expect(
+      await screen.findByText('Could not load Catalog product records.'),
+    ).toBeTruthy();
+  });
+
   it('labels sample relationship options', async () => {
     vi.mocked(searchRecords).mockResolvedValue(
       page([{ id: firstId, label: 'First product', isSample: true }], null),

@@ -205,7 +205,7 @@ export const RelationshipPickerDialog = ({
           {targets.isError && (
             <Typography color="error" variant="caption">
               {t('records.couldNotLoadRecords', {
-                blueprint: targetBlueprint,
+                blueprint: blueprintName(targetBlueprint),
               })}
             </Typography>
           )}
