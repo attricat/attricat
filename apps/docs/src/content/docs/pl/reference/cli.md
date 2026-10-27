@@ -34,7 +34,7 @@ docker run --rm -e ATTRICAT_API_URL -e ATTRICAT_TOKEN ghcr.io/attricat/attricat@
 | Adres serwera | `--server` | `ATTRICAT_API_URL` | Bazowy adres URL API razem z `/api`. Domyślnie `http://127.0.0.1:3000/api`. |
 | Token | `--token`, `--token-stdin` | `ATTRICAT_TOKEN` | Osobisty token API. |
 | Plik sesji | `--session-file` | `ATTRICAT_SESSION_FILE` | Przechowuje sesję przeglądarki między poleceniami. |
-| Adres aplikacji webowej | | `ATTRICAT_WEB_URL` | Gdy jest ustawiony, polecenia zapisanych wyszukiwań wypisują też krótki link do przeglądarki rekordów. |
+| Adres aplikacji webowej | | `ATTRICAT_WEB_URL` | Adres główny (origin) aplikacji webowej, np. `https://attricat.example.com`, bez ścieżki. Gdy jest ustawiony, polecenia zapisanych wyszukiwań wypisują też krótki link do przeglądarki rekordów. |
 | Pominięcie `.env` | `--no-env` | | Nie odczytuje `.env` z bieżącego katalogu. |
 
 Domyślnie `acli` odczytuje `.env` z bieżącego katalogu, nie nadpisując zmiennych już ustawionych w powłoce.

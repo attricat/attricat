@@ -380,7 +380,7 @@ acli saved-view create --name 'Active assets' --visibility workspace \
   --state '{"blueprint":"asset","attributeFilters":[{"field":"status","operator":"eq","value":"active"}]}'
 ```
 
-The CLI returns JSON with an `id`; set `ATTRICAT_WEB_URL` to also include a short Explorer `url`. The link command creates an unnamed shareable snapshot. Both commands require workspace access and `records.read` (a link does not grant catalog permissions). See [saved views](saved-views.md).
+The CLI returns JSON with an `id`; set `ATTRICAT_WEB_URL` to the web app's origin (for example `https://attricat.example.com`, with no path) to also include a short Explorer `url`; a URL with a path, query or fragment is rejected because the web app is served only from the root. The link command creates an unnamed shareable snapshot. Both commands require workspace access and `records.read` (a link does not grant catalog permissions). See [saved views](saved-views.md).
 
 ## JSON, workflow, and binary inputs
 

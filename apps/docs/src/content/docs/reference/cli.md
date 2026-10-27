@@ -34,7 +34,7 @@ docker run --rm -e ATTRICAT_API_URL -e ATTRICAT_TOKEN ghcr.io/attricat/attricat@
 | Server URL | `--server` | `ATTRICAT_API_URL` | API base URL, including `/api`. Defaults to `http://127.0.0.1:3000/api`. |
 | Token | `--token`, `--token-stdin` | `ATTRICAT_TOKEN` | Personal API token. |
 | Session file | `--session-file` | `ATTRICAT_SESSION_FILE` | Stores a browser session between commands. |
-| Web URL | | `ATTRICAT_WEB_URL` | When set, saved-search commands also print a short Explorer link. |
+| Web URL | | `ATTRICAT_WEB_URL` | The web app's origin, such as `https://attricat.example.com`, with no path. When set, saved-search commands also print a short Explorer link. |
 | Skip `.env` | `--no-env` | | Do not read `.env` from the current directory. |
 
 By default, `acli` reads `.env` from the current directory without overriding variables already set in the shell.

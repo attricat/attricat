@@ -18,7 +18,7 @@ use crate::commands::lexicon::lexicon_request;
 use crate::commands::notification::notification_request;
 use crate::commands::record::migrate_records;
 use crate::commands::rule::{RuleCommand, rule_command};
-use crate::commands::saved_view::changed_saved_view;
+use crate::commands::saved_view::{changed_saved_view, explorer_link};
 use crate::commands::solution_pack::{
     BlueprintPublicationArgument, SolutionPackApplicationsCommand, SolutionPackChecksCommand,
     SolutionPackCommand, SolutionPackPlanCommand, blueprint_mapping_value, parse_pack_mappings,
@@ -570,6 +570,27 @@ fn preserves_base_path_and_encodes_dynamic_segments() {
     );
     // A path segment keeps `+` literal, so spaces must not become `+`.
     assert_eq!(segment("a b+c~d"), "a%20b%2Bc~d");
+}
+
+#[test]
+fn explorer_links_need_the_web_apps_origin() {
+    for web in ["https://app.example.test", "https://app.example.test/"] {
+        assert_eq!(
+            explorer_link(web, "view", "v1").unwrap().as_str(),
+            "https://app.example.test/?view=v1"
+        );
+    }
+    for web in [
+        "https://example.test/attricat",
+        "https://example.test/attricat/",
+        "https://example.test/?tab=1",
+        "https://example.test/#top",
+    ] {
+        assert!(
+            matches!(explorer_link(web, "view", "v1"), Err(CliError::Input(_))),
+            "{web}"
+        );
+    }
 }
 
 #[test]
