@@ -293,7 +293,9 @@ describe('ExplorerFilterBar', () => {
     await user.click(await screen.findByRole('option', { name: /brand/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /^Select brand/ });
-    const recordLink = await screen.findByRole('link', { name: 'Acme' });
+    const recordLink = await screen.findByRole('link', {
+      name: 'Preview Acme in a new tab',
+    });
     expect(recordLink.getAttribute('target')).toBe('_blank');
     const href = recordLink.getAttribute('href');
     if (!href) throw new Error('Record link is missing its href');

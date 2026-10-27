@@ -1,10 +1,27 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { List, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import {
+  InputAdornment,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { useQueries } from '@tanstack/react-query';
+import { SearchIcon } from 'lucide-react';
+import { EmptyState } from '../../../components/EmptyState';
+import { IconLabel } from '../../../components/IconLabel';
+import { smallIconSize } from '../../../components/iconSizes';
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { RelationshipSelectorDialog } from '../../../components/RelationshipSelectorDialog';
+import { BlueprintIcon, RecordIcon } from '../../../components/systemIcons';
+import { lexiconText } from '../../lexicon/lexicon';
+import { blueprintByCodeOptions } from '../queryOptions';
 import { RelationshipDraftSelection } from './RelationshipDraftSelection';
-import { RelationshipTargetOption } from './RelationshipTargetOption';
+import {
+  RelationshipTargetList,
+  RelationshipTargetOption,
+} from './RelationshipTargetOption';
 import { useRelationshipTargets } from './useRelationshipTargets';
 import {
   scrollRelationshipPickerToTop,
@@ -42,9 +59,10 @@ export const RelationshipPickerDialog = ({
   );
   const [knownLabels, setKnownLabels] = useState<Record<string, string>>({});
   const contentRoot = useRef<HTMLDivElement>(null);
+  const optionName = useId();
   // A relationship may allow several blueprints; the picker searches one at a time.
   const [targetBlueprint, setTargetBlueprint] = useState(allowedTargets[0]);
-  const { isPreviewed, markPreviewed, openPreview, previewHref } =
+  const { isPreviewed, markPreviewed, previewHref } =
     useRecentlyPreviewedRecords((id) => {
       setDraftIds((current) =>
         isSingle ? [id] : current.includes(id) ? current : [...current, id],
@@ -56,11 +74,20 @@ export const RelationshipPickerDialog = ({
     query,
     open,
   );
+  const blueprints = useQueries({
+    queries: allowedTargets.map((code) => ({
+      ...blueprintByCodeOptions(code),
+      enabled: open,
+    })),
+  });
+  const blueprintName = (code: string) => {
+    const name = blueprints.find(
+      (blueprint) => blueprint.data?.blueprint.code === code,
+    )?.data?.blueprint.name;
+    return name ? lexiconText(name) : code;
+  };
   const labelForId = (id: string) =>
     knownLabels[id] ?? labelById.get(id) ?? selectionLabels.get(id) ?? id;
-  const availableOptions = options.filter(
-    (target) => !draftIds.includes(target.id),
-  );
   const selectTarget = (id: string, label: string) => {
     setKnownLabels((current) => ({ ...current, [id]: label }));
     setDraftIds((current) =>
@@ -90,7 +117,7 @@ export const RelationshipPickerDialog = ({
         isSingle
           ? 'records.selectOneRelationship'
           : 'records.selectRelationships',
-        { blueprint: allowedTargets.join(', ') },
+        { blueprint: allowedTargets.map(blueprintName).join(', ') },
       )}
     >
       <Stack ref={contentRoot} spacing={2}>
@@ -104,7 +131,9 @@ export const RelationshipPickerDialog = ({
           >
             {allowedTargets.map((code) => (
               <MenuItem key={code} value={code}>
-                {code}
+                <IconLabel icon={BlueprintIcon}>
+                  {blueprintName(code)}
+                </IconLabel>
               </MenuItem>
             ))}
           </TextField>
@@ -113,6 +142,15 @@ export const RelationshipPickerDialog = ({
           fullWidth
           label={t('records.searchRelationshipOptions')}
           onChange={(event) => setQuery(event.target.value)}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon aria-hidden size={smallIconSize} />
+                </InputAdornment>
+              ),
+            },
+          }}
           value={query}
         />
         <RelationshipDraftSelection
@@ -128,27 +166,31 @@ export const RelationshipPickerDialog = ({
           <Typography variant="subtitle2">
             {t('records.relationshipOptions')}
           </Typography>
-          <List dense disablePadding>
-            {availableOptions.map((target) => (
+          <RelationshipTargetList
+            isSingle={isSingle}
+            label={t('records.relationshipOptions')}
+          >
+            {options.map((target) => (
               <RelationshipTargetOption
                 isSample={target.is_sample === true}
+                isSingle={isSingle}
                 key={target.id}
                 label={targetLabel(target)}
-                onPreview={() => openPreview(target.id)}
-                onPreviewLinkClick={() => markPreviewed(target.id)}
+                name={optionName}
+                onPreview={() => markPreviewed(target.id)}
                 onSelect={() => selectTarget(target.id, targetLabel(target))}
                 previewHref={previewHref(target.id)}
                 previewed={isPreviewed(target.id)}
+                selected={draftIds.includes(target.id)}
               />
             ))}
-          </List>
-          {!targets.isPending &&
-            !targets.isError &&
-            availableOptions.length === 0 && (
-              <Typography color="text.secondary" variant="body2">
-                {t('records.noRelationshipOptions')}
-              </Typography>
-            )}
+          </RelationshipTargetList>
+          {!targets.isPending && !targets.isError && options.length === 0 && (
+            <EmptyState
+              icon={RecordIcon}
+              title={t('records.noRelationshipOptions')}
+            />
+          )}
           {targets.hasNextPage && (
             <LoadMoreButton
               isLoading={targets.isFetchingNextPage}

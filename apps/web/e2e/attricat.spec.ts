@@ -407,7 +407,7 @@ test('edits scalar values and replaces a typed relationship', async ({
   // A relationship choice saves as soon as it is applied.
   const relationshipSaved = recordSave(page, record.id);
   await page.getByRole('button', { name: 'Choose categories' }).click();
-  await page.getByRole('button', { name: 'Select Sale' }).click();
+  await page.getByRole('checkbox', { name: 'Sale' }).check();
   await page.getByRole('button', { name: 'Apply' }).click();
   expect((await relationshipSaved).ok()).toBe(true);
 

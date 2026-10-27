@@ -83,18 +83,10 @@ export const useRecentlyPreviewedRecords = (
       `/records/${encodeURIComponent(id)}?${relationshipPickerSearchParameter}=${encodeURIComponent(pickerToken)}`,
     [pickerToken],
   );
-  const openPreview = useCallback(
-    (id: string) => {
-      markPreviewed(id);
-      window.open(previewHref(id), '_blank');
-    },
-    [markPreviewed, previewHref],
-  );
 
   return {
     isPreviewed: (id: string) => previewedIds.has(id),
     markPreviewed,
-    openPreview,
     previewHref,
   };
 };

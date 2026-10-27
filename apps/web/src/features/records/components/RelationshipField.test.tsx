@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
@@ -88,7 +94,7 @@ const openSelector = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.click(
     await screen.findByRole('button', { name: 'Choose related products' }),
   );
-  return screen.findByRole('dialog', { name: /^Select product/ });
+  return screen.findByRole('dialog', { name: /^Select product/i });
 };
 
 describe('RelationshipField', () => {
@@ -182,27 +188,23 @@ describe('RelationshipField', () => {
     await openSelector(user);
     const search = screen.getByRole('textbox', { name: 'Search options' });
     await user.type(search, 'later');
-    await screen.findByRole('button', { name: 'Select later product' });
-    const recordLink = screen.getByRole('link', { name: 'later product' });
-    expect(recordLink.getAttribute('target')).toBe('_blank');
-    const openPreview = vi.spyOn(window, 'open').mockImplementation(() => null);
-    const previewButton = screen.getByRole('button', {
+    await screen.findByRole('checkbox', { name: 'later product' });
+    const preview = screen.getByRole('link', {
       name: 'Preview later product in a new tab',
     });
-    await user.click(previewButton);
-    expect(openPreview).toHaveBeenCalledWith(
-      expect.stringMatching(
-        new RegExp(`^/records/${firstId}\\?relationshipPicker=`),
-      ),
-      '_blank',
+    expect(preview.getAttribute('target')).toBe('_blank');
+    expect(preview.getAttribute('href')).toMatch(
+      new RegExp(`^/records/${firstId}\\?relationshipPicker=`),
     );
-    expect(previewButton.className).toContain('MuiButton-colorSecondary');
-    openPreview.mockRestore();
+    fireEvent.click(preview);
+    expect(preview.className).toContain('MuiIconButton-colorSecondary');
 
     await user.click(screen.getByRole('button', { name: 'Load more' }));
-    await user.click(
-      await screen.findByRole('button', { name: 'Select Later product' }),
-    );
+    const later = await screen.findByRole('checkbox', {
+      name: 'Later product',
+    });
+    await user.click(later);
+    expect((later as HTMLInputElement).checked).toBe(true);
 
     expect(onChange).not.toHaveBeenCalled();
     expect(
@@ -223,6 +225,20 @@ describe('RelationshipField', () => {
   });
 
   it('searches one allowed target blueprint at a time', async () => {
+    vi.mocked(getBlueprintByCode).mockImplementation((code) =>
+      Promise.resolve({
+        blueprint: {
+          code,
+          id: blueprintId,
+          name: code === 'product' ? 'Product' : 'Material',
+          status: 'published',
+          version: 1,
+          views: {},
+        },
+        attributes: [],
+        table_path_attributes: [],
+      }),
+    );
     vi.mocked(searchRecords).mockResolvedValue(
       page([{ id: firstId, label: 'First option' }], null),
     );
@@ -237,7 +253,7 @@ describe('RelationshipField', () => {
       await screen.findByRole('button', { name: 'Choose related products' }),
     );
     const dialog = await screen.findByRole('dialog', {
-      name: /^Select product, material/,
+      name: /^Select Product, Material/,
     });
     await waitFor(() =>
       expect(searchRecords).toHaveBeenLastCalledWith(
@@ -247,7 +263,7 @@ describe('RelationshipField', () => {
     await user.click(
       within(dialog).getByRole('combobox', { name: 'Target blueprint' }),
     );
-    await user.click(await screen.findByRole('option', { name: 'material' }));
+    await user.click(await screen.findByRole('option', { name: 'Material' }));
     await waitFor(() =>
       expect(searchRecords).toHaveBeenLastCalledWith(
         expect.objectContaining({ blueprint: 'material' }),
@@ -275,7 +291,7 @@ describe('RelationshipField', () => {
 
     await openSelector(user);
     await user.click(
-      await screen.findByRole('button', { name: 'Select First product' }),
+      await screen.findByRole('checkbox', { name: 'First product' }),
     );
     await user.click(
       screen.getByRole('button', { name: 'Close relationship selector' }),
@@ -305,14 +321,16 @@ describe('RelationshipField', () => {
     await user.click(
       await screen.findByRole('button', { name: 'Choose related products' }),
     );
-    await screen.findByRole('dialog', { name: /^Select one product/ });
-    expect(screen.queryByRole('radio')).toBeNull();
+    await screen.findByRole('dialog', { name: /^Select one product/i });
+    expect(screen.queryByRole('checkbox')).toBeNull();
     await user.click(
-      await screen.findByRole('button', { name: 'Select First product' }),
+      await screen.findByRole('radio', { name: 'First product' }),
     );
-    await user.click(
-      screen.getByRole('button', { name: 'Select Later product' }),
-    );
+    await user.click(screen.getByRole('radio', { name: 'Later product' }));
+    expect(
+      (screen.getByRole('radio', { name: 'First product' }) as HTMLInputElement)
+        .checked,
+    ).toBe(false);
 
     const selectedSection = screen.getByText('Selected').parentElement!;
     expect(

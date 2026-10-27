@@ -1,13 +1,27 @@
-import { Box, Chip, List, Stack, TextField, Typography } from '@mui/material';
-import { useRef, useState } from 'react';
+import {
+  Box,
+  Chip,
+  InputAdornment,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { SearchIcon } from 'lucide-react';
+import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { EmptyState } from '../../components/EmptyState';
+import { smallIconSize } from '../../components/iconSizes';
 import { NextPageButton } from '../../components/LoadMoreButton';
+import { RecordIcon } from '../../components/systemIcons';
 import { useRelationshipSelectionLabels } from '../records/components/useRelationshipSelectionLabels';
 import {
   scrollRelationshipPickerToTop,
   useRecentlyPreviewedRecords,
 } from '../records/components/useRecentlyPreviewedRecords';
-import { RelationshipTargetOption } from '../records/components/RelationshipTargetOption';
+import {
+  RelationshipTargetList,
+  RelationshipTargetOption,
+} from '../records/components/RelationshipTargetOption';
 import { useRelationshipTargets } from '../records/components/useRelationshipTargets';
 import { errorMessage } from '../../api/errors';
 
@@ -25,7 +39,8 @@ export const RelationshipTargetPicker = ({
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const pickerContentRoot = useRef<HTMLDivElement>(null);
-  const { isPreviewed, markPreviewed, openPreview, previewHref } =
+  const optionName = useId();
+  const { isPreviewed, markPreviewed, previewHref } =
     useRecentlyPreviewedRecords((id) => {
       if (!selectedIds.includes(id)) onSelectedIdsChange([...selectedIds, id]);
       scrollRelationshipPickerToTop(pickerContentRoot.current);
@@ -52,6 +67,15 @@ export const RelationshipTargetPicker = ({
         fullWidth
         label={t('records.searchRelationshipOptions')}
         onChange={(event) => setQuery(event.target.value)}
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon aria-hidden size={smallIconSize} />
+              </InputAdornment>
+            ),
+          },
+        }}
         value={query}
       />
       {selectedIds.length > 0 && (
@@ -68,21 +92,31 @@ export const RelationshipTargetPicker = ({
           ))}
         </Box>
       )}
-      <List dense disablePadding>
+      <RelationshipTargetList
+        isSingle={false}
+        label={t('records.relationshipOptions')}
+      >
         {options.map((target) => (
           <RelationshipTargetOption
             isSample={target.is_sample === true}
+            isSingle={false}
             key={target.id}
             label={targetLabel(target)}
-            onPreview={() => openPreview(target.id)}
-            onPreviewLinkClick={() => markPreviewed(target.id)}
+            name={optionName}
+            onPreview={() => markPreviewed(target.id)}
             onSelect={() => toggle(target.id)}
             previewHref={previewHref(target.id)}
             previewed={isPreviewed(target.id)}
             selected={selectedIds.includes(target.id)}
           />
         ))}
-      </List>
+      </RelationshipTargetList>
+      {!targets.isPending && !targets.isError && options.length === 0 && (
+        <EmptyState
+          icon={RecordIcon}
+          title={t('records.noRelationshipOptions')}
+        />
+      )}
       <NextPageButton query={targets} />
       {targets.isPending && (
         <Typography variant="body2">{t('records.loadingOptions')}</Typography>

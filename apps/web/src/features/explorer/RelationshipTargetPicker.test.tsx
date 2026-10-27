@@ -41,7 +41,7 @@ describe('RelationshipTargetPicker', () => {
     );
 
     expect(await screen.findByText('Sample')).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: /^Remove / }));
+    await userEvent.click(screen.getByRole('checkbox', { checked: true }));
     expect(onSelectedIdsChange).toHaveBeenCalledWith([]);
   });
 });
