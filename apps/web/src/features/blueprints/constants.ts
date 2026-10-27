@@ -32,6 +32,14 @@ export const blueprintDetailTabs = {
 } as const;
 export type BlueprintDetailTab =
   (typeof blueprintDetailTabs)[keyof typeof blueprintDetailTabs];
+/** Tab names as the detail page's `tab` search parameter spells them. */
+export const blueprintDetailTabNames = {
+  metadata: 'metadata',
+  revisionHistory: 'revisionHistory',
+  compareDefinitions: 'compareDefinitions',
+  migrations: 'migrations',
+} as const satisfies { [Tab in keyof typeof blueprintDetailTabs]: Tab };
+export type BlueprintDetailTabName = keyof typeof blueprintDetailTabs;
 
 export const blueprintVersionMetadataTabs = {
   attributes: 0,

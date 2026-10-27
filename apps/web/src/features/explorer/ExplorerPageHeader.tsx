@@ -2,7 +2,9 @@ import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
 import { ExplorerIcon } from '../../components/systemIcons';
+import { Box } from '@mui/material';
 import { BlueprintLink } from '../blueprints/BlueprintLink';
+import { BlueprintMigrationBadge } from '../blueprints/BlueprintMigrationBadge';
 import { useCan } from '../auth/useCan';
 import { capabilities } from '../auth/capabilities';
 
@@ -47,10 +49,16 @@ export const ExplorerPageHeader = ({
       }
       eyebrow={
         blueprintRecord && (
-          <BlueprintLink
-            blueprint={blueprintRecord}
-            style={{ textDecoration: 'none' }}
-          />
+          <Box
+            component="span"
+            sx={{ alignItems: 'center', display: 'inline-flex', gap: 1 }}
+          >
+            <BlueprintLink
+              blueprint={blueprintRecord}
+              style={{ textDecoration: 'none' }}
+            />
+            <BlueprintMigrationBadge blueprintId={blueprintRecord.id} />
+          </Box>
         )
       }
       description={

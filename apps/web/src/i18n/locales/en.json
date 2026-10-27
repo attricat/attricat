@@ -841,6 +841,8 @@
     "allEnabledChannels": "All enabled channels",
     "migrateCompatibleRecords": "Migrate compatible records",
     "migrationInProgress": "Migration in progress",
+    "migrationBadge": "Migrating",
+    "migrationBadgeTooltip": "Records are being migrated to version {{version}}: {{processed}} of {{total}} processed. Select to see the progress.",
     "migrateCompatibleRecordsDescription": "Start a background migration from version {{source}} to version {{target}}. Each record is validated again before it is migrated.",
     "migrationImpact": "{{records}} records are eligible. Removed attributes: {{attributes}}. {{values}} stored values on {{affectedRecords}} records will be archived.",
     "archiveRemovedValues": "Starting this batch approves archival of the removed values shown above. They remain available in value history.",

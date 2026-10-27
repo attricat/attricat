@@ -1,15 +1,11 @@
-import { blueprintRevisionOptions } from './queryOptions';
+import {
+  blueprintMigrationBatchesOptions,
+  blueprintRevisionOptions,
+} from './queryOptions';
 import { useQuery } from '@tanstack/react-query';
-import {
-  getSafeBlueprintMigrationImpact,
-  listBlueprintMigrationBatches,
-} from './api';
+import { getSafeBlueprintMigrationImpact } from './api';
 import { revisionStatuses } from '../../api/revisionStatus';
-import {
-  ACTIVE_MIGRATION_POLL_INTERVAL_MS,
-  hasActiveMigrationForVersion,
-  isMigrationBatchActive,
-} from './migrationBatches';
+import { hasActiveMigrationForVersion } from './migrationBatches';
 import { blueprintQueryKeys } from './queryKeys';
 import { isSafeAutomaticMigration } from './safeMigration';
 import type { Blueprint } from './schemas';
@@ -34,14 +30,9 @@ export const useSafeBlueprintMigration = (
             revision.version < targetVersion &&
             revision.status === revisionStatuses.published,
         )?.version;
-  const migrationBatches = useQuery({
-    queryKey: blueprintQueryKeys.migrationBatches(blueprintId),
-    queryFn: () => listBlueprintMigrationBatches(blueprintId),
-    refetchInterval: (query) =>
-      query.state.data?.some(isMigrationBatchActive)
-        ? ACTIVE_MIGRATION_POLL_INTERVAL_MS
-        : false,
-  });
+  const migrationBatches = useQuery(
+    blueprintMigrationBatchesOptions(blueprintId),
+  );
   const source = useQuery(blueprintRevisionOptions(blueprintId, sourceVersion));
   const target = useQuery(blueprintRevisionOptions(blueprintId, targetVersion));
   const compatible =

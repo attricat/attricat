@@ -25,6 +25,8 @@ import {
   archiveRemovalDisposition,
   blueprintDetailTabs,
   type BlueprintDetailTab,
+  blueprintDetailTabNames,
+  type BlueprintDetailTabName,
 } from './constants';
 import { MigrationBatchStatus } from './MigrationBatchStatus';
 import { PublishBlueprintDialog } from './PublishBlueprintDialog';
@@ -46,13 +48,16 @@ type BlueprintDetailDialog = 'publish' | 'publishRecords' | 'safeMigration';
 
 export const BlueprintDetailPage = ({
   blueprintId,
+  initialTab = blueprintDetailTabNames.metadata,
 }: {
   blueprintId: string;
+  /** The tab shown first, such as Migrations when linked from progress. */
+  initialTab?: BlueprintDetailTabName;
 }) => {
   const { t } = useTranslation();
   const tabId = useTabAccessibility();
   const [pageTab, setPageTab] = useState<BlueprintDetailTab>(
-    blueprintDetailTabs.metadata,
+    blueprintDetailTabs[initialTab],
   );
   const [openDialog, setOpenDialog] = useState<BlueprintDetailDialog | null>(
     null,

@@ -893,6 +893,8 @@
     "allEnabledChannels": "Wszystkie włączone kanały",
     "migrateCompatibleRecords": "Migruj zgodne rekordy",
     "migrationInProgress": "Migracja w toku",
+    "migrationBadge": "Migracja",
+    "migrationBadgeTooltip": "Rekordy są migrowane do wersji {{version}}: przetworzono {{processed}} z {{total}}. Wybierz, aby zobaczyć postęp.",
     "migrateCompatibleRecordsDescription": "Uruchom migrację w tle z wersji {{source}} do wersji {{target}}. Każdy rekord zostanie ponownie zwalidowany przed migracją.",
     "migrationImpact": "Kwalifikujące się rekordy: {{records}}. Usunięte atrybuty: {{attributes}}. {{values}} zapisanych wartości z rekordów ({{affectedRecords}}) zostanie zarchiwizowanych.",
     "archiveRemovedValues": "Uruchomienie tej partii zatwierdza archiwizację pokazanych wyżej usuniętych wartości. Pozostaną dostępne w historii wartości.",

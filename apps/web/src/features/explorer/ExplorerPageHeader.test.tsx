@@ -29,6 +29,10 @@ vi.mock('../blueprints/BlueprintLink', () => ({
   }) => <a href={`/manage/blueprints/${blueprint.id}`}>{blueprint.name}</a>,
 }));
 
+vi.mock('../blueprints/BlueprintMigrationBadge', () => ({
+  BlueprintMigrationBadge: () => null,
+}));
+
 const createSearch = () =>
   JSON.parse(screen.getByRole('button').getAttribute('data-search')!);
 
