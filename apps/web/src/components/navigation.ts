@@ -50,7 +50,7 @@ export const navigationRoutes = {
   systemHealth: '/manage/system-health',
   reusableAttributes: '/manage/reusable-attributes',
   workflows: '/manage/workflows',
-  workspace: '/manage/workspace/members',
+  workspace: '/manage/workspace',
 } as const;
 
 // Routes rendered outside the authenticated application shell.
