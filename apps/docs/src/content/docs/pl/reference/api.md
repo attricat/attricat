@@ -68,6 +68,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `rule_violation` | 422 | Po zapisie rekord naruszałby egzekwowaną regułę. |
 | `publication_checks_failed` | 422 | Kontrole wymagane przez kanał nie przechodzą. `details.context` to kod kanału. |
 | `invalid_rule_definition` | 422 | TOML reguły jest nieprawidłowy lub nie pasuje do wersji schematu. |
+| `rule_revision_unchanged` | 409 | Nowa wersja reguły jest identyczna z najnowszą, więc nic nie zapisano. `details.version` wskazuje tę wersję. Definicję wcześniejszej wersji można zapisać ponownie. |
 | `rule_not_enabled` | 422 | Zwykłe ręczne uruchomienie wymaga włączonej wersji. Najpierw włącz regułę albo uruchom próbne wykonanie. |
 | `workflow_not_enabled` | 422 | Ręczne uruchomienie przepływu pracy wymaga włączonej wersji. Najpierw włącz przepływ pracy. |
 | `rule_dry_run_required` | 409 | Włączenie egzekwowanej reguły wymaga najpierw ukończonego pełnego próbnego wykonania tej wersji. Jeśli ostatnie próbne wykonanie zatrzymało się na limicie rekordów, `details` ma postać `{"truncated": true, "existing_violations": …}`. |

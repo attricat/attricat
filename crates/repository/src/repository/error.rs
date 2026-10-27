@@ -295,6 +295,8 @@ pub enum RepositoryError {
     RelationshipSearchTimedOut,
     #[error("the definition is identical to version {version} of this blueprint")]
     BlueprintRevisionUnchanged { version: i64 },
+    #[error("the definition is identical to version {version} of this rule")]
+    RuleRevisionUnchanged { version: i64 },
     #[error("the {0} code is already in use")]
     CodeTaken(CodedResource),
     #[error("invalid team: {0}")]

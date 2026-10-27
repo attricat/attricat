@@ -151,6 +151,7 @@
     "rule_has_existing_violations": "Records already violate this rule ({{existing_violations}}). Fix them or accept the existing violations.",
     "rule_not_enabled": "The rule has no enabled revision. Enable it or start a dry run.",
     "rule_not_published": "Publish the rule revision before enabling it.",
+    "rule_revision_unchanged": "The definition is identical to version {{version}} of this rule.",
     "rule_violation": "The change violates enforcing rules.",
     "service_unavailable": "The service is unavailable: {{message}}",
     "solution_pack_application_failed": "Applying the solution pack failed: {{message}}",

@@ -89,6 +89,7 @@
     "rule_has_existing_violations",
     "rule_not_enabled",
     "rule_not_published",
+    "rule_revision_unchanged",
     "rule_violation",
     "service_unavailable",
     "solution_pack_application_failed",

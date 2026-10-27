@@ -68,6 +68,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `rule_violation` | 422 | The write leaves the record violating an enforcing rule. |
 | `publication_checks_failed` | 422 | A channel's required checks fail. `details.context` is the channel code. |
 | `invalid_rule_definition` | 422 | The rule TOML is invalid or does not fit its blueprint revision. |
+| `rule_revision_unchanged` | 409 | A new rule revision is identical to the latest one, so nothing was saved. `details.version` is that revision. An earlier revision's definition can be saved again. |
 | `rule_not_enabled` | 422 | A normal manual run needs an enabled revision. Enable the rule first, or start a dry run. |
 | `workflow_not_enabled` | 422 | A manual workflow run needs an enabled revision. Enable the workflow first. |
 | `rule_dry_run_required` | 409 | Enabling an enforcing rule needs a completed full dry run of that revision first. If the latest dry run stopped at its record limit, `details` is `{"truncated": true, "existing_violations": …}`. |

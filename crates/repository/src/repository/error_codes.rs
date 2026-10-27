@@ -128,6 +128,7 @@ error_codes! {
     RuleHasExistingViolations = "rule_has_existing_violations",
     RuleNotEnabled = "rule_not_enabled",
     RuleNotPublished = "rule_not_published",
+    RuleRevisionUnchanged = "rule_revision_unchanged",
     RuleViolation = "rule_violation",
     ServiceUnavailable = "service_unavailable",
     SolutionPackApplicationFailed = "solution_pack_application_failed",
@@ -523,6 +524,8 @@ impl RepositoryError {
                 plain(Conflict, Code::BlueprintRevisionUnchanged)
                     .with_details(json!({ "version": version }))
             }
+            Self::RuleRevisionUnchanged { version } => plain(Conflict, Code::RuleRevisionUnchanged)
+                .with_details(json!({ "version": version })),
             Self::BlueprintNotPublished => plain(Unprocessable, Code::BlueprintNotPublished),
             Self::WorkflowNotPublished => plain(Unprocessable, Code::WorkflowNotPublished),
             Self::WorkflowNotEnabled => plain(Unprocessable, Code::WorkflowNotEnabled),

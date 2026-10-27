@@ -153,6 +153,7 @@
     "rule_has_existing_violations": "Rekordy już naruszają tę regułę (naruszenia: {{existing_violations}}). Popraw je albo zaakceptuj istniejące naruszenia.",
     "rule_not_enabled": "Reguła nie ma włączonej rewizji. Włącz ją albo uruchom próbne wykonanie.",
     "rule_not_published": "Opublikuj rewizję reguły przed jej włączeniem.",
+    "rule_revision_unchanged": "Definicja jest identyczna z rewizją {{version}} tej reguły.",
     "rule_violation": "Zmiana narusza egzekwowane reguły.",
     "service_unavailable": "Usługa jest niedostępna: {{message}}",
     "solution_pack_application_failed": "Zastosowanie pakietu rozwiązania nie powiodło się: {{message}}",

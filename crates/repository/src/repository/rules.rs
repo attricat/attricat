@@ -225,8 +225,10 @@ impl AttricatRepository {
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        let previous: Option<(i64, String, Uuid, i64, Option<Uuid>)> = sqlx::query_as("SELECT version,code,blueprint_id,blueprint_version,context_id FROM rules WHERE workspace_id=$1 AND id=$2 ORDER BY version DESC LIMIT 1 FOR UPDATE").bind(ws).bind(id).fetch_optional(&mut *tx).await?;
-        let Some((version, code, blueprint_id, blueprint_version, context_id)) = previous else {
+        let previous: Option<(i64, String, Uuid, i64, Option<Uuid>, String)> = sqlx::query_as("SELECT version,code,blueprint_id,blueprint_version,context_id,definition_hash FROM rules WHERE workspace_id=$1 AND id=$2 ORDER BY version DESC LIMIT 1 FOR UPDATE").bind(ws).bind(id).fetch_optional(&mut *tx).await?;
+        let Some((version, code, blueprint_id, blueprint_version, context_id, definition_hash)) =
+            previous
+        else {
             return Err(RepositoryError::NotFound("rule"));
         };
         if code != compiled.code
@@ -237,6 +239,11 @@ impl AttricatRepository {
             return Err(RepositoryError::InvalidRuleDefinition(
                 "rule code, blueprint revision, and context cannot change across revisions".into(),
             ));
+        }
+        // Only the latest revision counts, as for blueprints: returning to an
+        // earlier definition is a change.
+        if definition_hash == compiled.raw_definition_hash {
+            return Err(RepositoryError::RuleRevisionUnchanged { version });
         }
         Self::validate_rule_attributes(&mut tx, &compiled, blueprint_id, blueprint_version).await?;
         let plan = serde_json::to_value(&compiled)

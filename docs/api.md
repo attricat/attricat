@@ -712,6 +712,7 @@ results report the same `code`, `message` and `details`.
 | `409` | `rule_has_existing_violations` | `existing_violations` (a count); fix the records or pass `accept_existing_violations` |
 | `409` | `code_taken` | `resource`: `blueprint`, `context`, `workflow`, `rule` or `connection`, whose code or name is already in use |
 | `409` | `blueprint_revision_unchanged` | `version`: the latest revision, which the definition is identical to; an earlier revision's definition can be saved again |
+| `409` | `rule_revision_unchanged` | `version`: the latest rule revision, which the definition is identical to; an earlier revision's definition can be saved again |
 | `422` | `invalid_comment` | `max` characters |
 | `422` | `password_too_short`, `password_too_long` | `min` characters or `max` bytes |
 | `422` | `invalid_display_name` | `min` and `max` characters |

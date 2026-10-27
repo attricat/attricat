@@ -79,6 +79,39 @@ value_type = "string"
     (base_url, server, rule_id, blueprint)
 }
 
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_rule_revision_identical_to_the_latest_is_refused(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let save = |definition: &str| {
+        client
+            .post(format!("{base_url}/rules/{rule_id}/versions"))
+            .json(&json!({
+                "blueprint_id": blueprint["blueprint"]["id"],
+                "blueprint_version": blueprint["blueprint"]["version"],
+                "context_id": null,
+                "definition": definition,
+            }))
+            .send()
+    };
+    let unchanged = expect_error(
+        save(RULE).await.unwrap(),
+        StatusCode::CONFLICT,
+        "rule_revision_unchanged",
+    )
+    .await;
+    assert_eq!(unchanged["error"]["details"], json!({ "version": 1 }));
+
+    let warning = RULE.replace("severity = \"error\"", "severity = \"warning\"");
+    let changed = expect_status(save(&warning).await.unwrap(), StatusCode::CREATED).await;
+    assert_eq!(changed["version"], 2);
+    // Returning to an earlier definition is a change.
+    let restored = expect_status(save(RULE).await.unwrap(), StatusCode::CREATED).await;
+    assert_eq!(restored["version"], 3);
+
+    server.abort();
+}
+
 async fn manual_run(base_url: &str, rule_id: Uuid, record_id: Option<Uuid>, key: &str) -> Uuid {
     let run: Value = authenticated_client()
         .post(format!("{base_url}/rules/{rule_id}/run-now"))
