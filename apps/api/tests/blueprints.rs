@@ -724,6 +724,56 @@ async fn checks_an_unchanged_definition_as_the_revision_it_matches(pool: PgPool)
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_revision_can_return_to_an_earlier_definition(pool: PgPool) {
+    let repository = api::repository::AttricatRepository::new(
+        pool.clone(),
+        BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
+    let original = blueprint_with_rule("reverted");
+    let first = repository
+        .create_blueprint(api::model::CreateBlueprint {
+            definition: original.clone(),
+        })
+        .await
+        .unwrap();
+    let blueprint_id = first.blueprint.id;
+    // Adding a field keeps the embedded rule's definition as it was.
+    repository
+        .create_blueprint_revision(
+            blueprint_id,
+            api::model::CreateBlueprint {
+                definition: format!(
+                    "{original}\n[[attributes]]\ncode = \"subtitle\"\nvalue_type = \"string\"\n"
+                ),
+            },
+        )
+        .await
+        .unwrap();
+    // Removing it again matches version 1, which is not the latest.
+    let reverted = repository
+        .create_blueprint_revision(
+            blueprint_id,
+            api::model::CreateBlueprint {
+                definition: original.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(reverted.blueprint.version, 3);
+    assert!(matches!(
+        repository
+            .create_blueprint_revision(
+                blueprint_id,
+                api::model::CreateBlueprint {
+                    definition: original,
+                },
+            )
+            .await,
+        Err(api::repository::RepositoryError::BlueprintRevisionUnchanged { version: 3 })
+    ));
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn checks_running_during_a_save_number_the_revision_after_it(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
