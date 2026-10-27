@@ -1,5 +1,5 @@
 import { Box, Typography } from '@mui/material';
-import i18n from '../../../../i18n';
+import { useTranslation } from 'react-i18next';
 import { PageTitle } from '../../../../components/PageTitle';
 import { RecordIcon } from '../../../../components/systemIcons';
 import {
@@ -32,6 +32,7 @@ export const RecordHeading = ({
   values: Record<string, ResolvedValue>;
   view?: ViewDefinition;
 }) => {
+  const { t } = useTranslation();
   const heading = findRecordHeading(view);
   const title =
     heading?.type === viewBlockTypes.stack ? heading.children[0] : undefined;
@@ -55,7 +56,7 @@ export const RecordHeading = ({
   return (
     <Box>
       <FieldErrorBoundary
-        fallbackMessage={i18n.t('views.unableToRenderRecordHeading')}
+        fallbackMessage={t('views.unableToRenderRecordHeading')}
         logLabel="record heading"
       >
         <PageTitle icon={RecordIcon} {...titleProps}>
@@ -82,7 +83,7 @@ export const RecordHeading = ({
             if (Renderer)
               return (
                 <FieldErrorBoundary
-                  fallbackMessage={i18n.t('views.unableToRenderAttribute', {
+                  fallbackMessage={t('views.unableToRenderAttribute', {
                     attribute: attributeLabel(attribute),
                   })}
                   key={index}

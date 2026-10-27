@@ -25,7 +25,6 @@ export const VIEW_COMPONENT_IDS = {
 
 export const HIERARCHY_PARENT_FIELD_PROP = 'parent_field';
 export const ROOT_NODE_KEY = 'root';
-export const VIEW_COMPONENT_LOG_LABEL = 'view component';
 export const TABLE_IMAGE_SIZE = 48;
 export const VIEW_SECTION_PADDING = 2.5;
 /** A tab's height without an icon; a marked tab keeps it despite its icon. */
