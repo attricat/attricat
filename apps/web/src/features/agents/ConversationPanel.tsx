@@ -92,7 +92,6 @@ export const ConversationPanel = ({
       <ConversationComposer
         conversationId={conversationId}
         onSendingChange={setIsSending}
-        onSent={invalidate}
         sendDraft={draftSender(draft)}
       />
     </Box>

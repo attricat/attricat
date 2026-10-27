@@ -7,6 +7,7 @@ import '../../i18n';
 import { uploadConversationFiles } from '../files/api';
 import { sendMessage } from './api';
 import { ConversationComposer } from './ConversationComposer';
+import { agentQueryKeys } from './queryKeys';
 
 vi.mock('../files/api', () => ({
   uploadConversationFiles: vi.fn(),
@@ -159,6 +160,43 @@ describe('ConversationComposer', () => {
     await waitFor(() =>
       expect(sendMessage).toHaveBeenCalledWith(conversationId, 'Review', []),
     );
+  });
+
+  it('refreshes but does not lead on after it is gone mid-send', async () => {
+    const user = userEvent.setup();
+    const onSent = vi.fn();
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    let finishSend!: (value: Awaited<ReturnType<typeof sendMessage>>) => void;
+    vi.mocked(sendMessage).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishSend = resolve;
+        }),
+    );
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationComposer conversationId={conversationId} onSent={onSent} />
+      </QueryClientProvider>,
+    );
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Hi');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledOnce());
+
+    unmount();
+    finishSend({
+      id: '123e4567-e89b-12d3-a456-426614174002',
+      status: 'queued',
+    });
+
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: agentQueryKeys.conversation(conversationId),
+      }),
+    );
+    expect(onSent).not.toHaveBeenCalled();
   });
 
   it('creates the conversation on the first send and reuses it on retry', async () => {

@@ -1,12 +1,14 @@
 import { useForm, useStore } from '@tanstack/react-form';
 import { useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button } from '@mui/material';
 import { RotateCcwIcon } from 'lucide-react';
 import { uploadConversationFiles } from '../files/api';
 import { sendMessage } from './api';
 import { composerMinRows } from './constants';
+import { agentQueryKeys } from './queryKeys';
+import { invalidateConversation } from './queryOptions';
 import { MessageInputBox } from './MessageInputBox';
 import { useMessageAttachments } from './useMessageAttachments';
 import { errorMessage } from '../../api/errors';
@@ -20,7 +22,12 @@ type ConversationComposerProps = {
   formRef?: Ref<HTMLFormElement>;
   minRows?: number;
   onSendingChange?: (isSending: boolean) => void;
-  onSent: (conversationId: string) => void;
+  /**
+   * Leads on to the conversation a message was sent to. It is skipped when
+   * the composer has gone, such as after switching to another conversation
+   * while sending; the conversation is refreshed either way.
+   */
+  onSent?: (conversationId: string) => void;
   sendDraft?: (
     content: string,
     conversationId: string,
@@ -41,6 +48,7 @@ export const ConversationComposer = ({
   sticky = true,
 }: ConversationComposerProps) => {
   const { t } = useTranslation();
+  const client = useQueryClient();
   const form = useForm({ defaultValues: { content: '' } });
   const content = useStore(form.store, (state) => state.values.content);
   const attachments = useMessageAttachments();
@@ -80,18 +88,26 @@ export const ConversationComposer = ({
     onSuccess: (id) => {
       form.reset();
       attachments.reset();
-      onSent(id);
+      if (!conversationId)
+        void client.invalidateQueries({
+          queryKey: agentQueryKeys.conversations(),
+        });
+      void invalidateConversation(client, id);
     },
     onSettled: () => onSendingChange?.(false),
   });
 
   const submitMessage = () => {
     if ((content.trim() || attachments.files.length) && !send.isPending) {
-      send.mutate({
-        content,
-        files: attachments.files,
-        previousAttachmentIds: attachments.uploadedIds,
-      });
+      // Passed per call so that it does not run once the composer is gone.
+      send.mutate(
+        {
+          content,
+          files: attachments.files,
+          previousAttachmentIds: attachments.uploadedIds,
+        },
+        { onSuccess: (id) => onSent?.(id) },
+      );
     }
   };
 

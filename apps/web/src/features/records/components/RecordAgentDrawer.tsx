@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   Box,
   Button,
@@ -12,7 +12,6 @@ import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { createConversation } from '../../agents/api';
 import { conversationTitleFromFirstMessage } from '../../agents/conversationTitle';
-import { agentQueryKeys } from '../../agents/queryKeys';
 import { conversationOptions } from '../../agents/queryOptions';
 import { titlePollInterval } from '../../agents/titlePolling';
 import { RenameConversationDialog } from '../../agents/RenameConversationDialog';
@@ -54,7 +53,6 @@ export const RecordAgentDrawer = ({
 }) => {
   const { t } = useTranslation();
   const [renameOpen, setRenameOpen] = useState(false);
-  const client = useQueryClient();
   const conversation = useQuery({
     ...conversationOptions(conversationId),
     enabled: open,
@@ -163,12 +161,7 @@ export const RecordAgentDrawer = ({
                   {t('records.agentConversations.startHint')}
                 </Typography>
               }
-              onStarted={(id) => {
-                void client.invalidateQueries({
-                  queryKey: agentQueryKeys.conversations(),
-                });
-                onConversationChange(id);
-              }}
+              onStarted={onConversationChange}
             />
           ))}
       </Box>
