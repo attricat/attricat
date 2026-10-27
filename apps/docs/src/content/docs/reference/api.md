@@ -252,8 +252,8 @@ POST /api/v1/records/facets/system-tags
 
 #### System tags
 
-A record carries up to 100 system tags of at most 128 bytes each. Their form
-says who owns them:
+A record carries up to 100 system tags of at most 128 bytes each, not counting
+Core tags. Their form says who owns them:
 
 | Form | Owner | Example |
 |---|---|---|

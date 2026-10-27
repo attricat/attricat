@@ -17,6 +17,7 @@ use attricat_validation::predicate::MAX_SYSTEM_TAGS;
 use attricat_validation::saved_search::{
     EXPLORER_SEARCH_KIND, MAX_BLUEPRINT_BYTES, MAX_SELECTED_IDS, MAX_STATE_BYTES,
 };
+use attricat_validation::system_tags::{CORE_SYSTEM_TAGS, is_core_system_tag};
 
 use crate::{
     agents::MAX_TOOL_RESULT_BYTES,
@@ -316,15 +317,16 @@ impl AnnotationEdit {
                 system_tags,
                 system_metadata,
             } => {
-                if system_tags
+                // Core tags the record already carries may be listed and do
+                // not count toward the limit.
+                if system_tags.as_ref().is_some_and(|tags| {
+                    tags.iter().filter(|tag| !is_core_system_tag(tag)).count() > MAX_SYSTEM_TAGS
+                }) || system_metadata
                     .as_ref()
-                    .is_some_and(|tags| tags.len() > MAX_SYSTEM_TAGS)
-                    || system_metadata
-                        .as_ref()
-                        .is_some_and(|metadata| !metadata.is_object())
+                    .is_some_and(|metadata| !metadata.is_object())
                 {
                     return Err(ToolError::InvalidArguments(format!(
-                        "tags must have at most {MAX_SYSTEM_TAGS} entries and metadata must be an object"
+                        "tags must have at most {MAX_SYSTEM_TAGS} entries besides Core tags and metadata must be an object"
                     )));
                 }
             }
@@ -859,7 +861,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
                 "remove_tags":{"type":"array","maxItems":MAX_SYSTEM_TAGS,"items":{"type":"string"}},
                 "set_metadata":{"type":"object"},
                 "remove_metadata":{"type":"array","items":{"type":"string"}},
-                "system_tags":{"type":"array","maxItems":MAX_SYSTEM_TAGS,"items":{"type":"string"}},"system_metadata":{"type":"object"}},"additionalProperties":false}),
+                "system_tags":{"type":"array","maxItems":MAX_SYSTEM_TAGS + CORE_SYSTEM_TAGS.len(),"items":{"type":"string"}},"system_metadata":{"type":"object"}},"additionalProperties":false}),
         ),
         definition(
             "update_context",
@@ -3576,6 +3578,21 @@ mod tests {
                 "{invalid}"
             );
         }
+        // A full replacement may list the record's Core tags on top of the
+        // ordinary-tag limit.
+        let mut tags = (0..super::MAX_SYSTEM_TAGS)
+            .map(|index| format!("tag-{index}"))
+            .collect::<Vec<_>>();
+        tags.extend(super::CORE_SYSTEM_TAGS.map(str::to_owned));
+        assert!(
+            super::AnnotationEdit::from_arguments(&json!({"record_id":"id","system_tags":tags}))
+                .is_ok()
+        );
+        tags.push("one-too-many".into());
+        assert!(
+            super::AnnotationEdit::from_arguments(&json!({"record_id":"id","system_tags":tags}))
+                .is_err()
+        );
         assert_eq!(
             change_summary("update_context", &json!({"context_id":"id"})).unwrap(),
             "Replace parent and data on context id."

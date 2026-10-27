@@ -252,8 +252,8 @@ POST /api/v1/records/facets/system-tags
 
 #### Tagi systemowe
 
-Rekord może mieć do 100 tagów systemowych, każdy o długości do 128 bajtów. Ich
-postać mówi, kto jest ich właścicielem:
+Rekord może mieć do 100 tagów systemowych, każdy o długości do 128 bajtów, nie
+licząc tagów Core. Ich postać mówi, kto jest ich właścicielem:
 
 | Postać | Właściciel | Przykład |
 |---|---|---|
