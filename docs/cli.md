@@ -421,6 +421,10 @@ a login remains valid only for that invocation's HTTP client. A bearer token
 provided with `--token`, `--token-stdin`, or `ATTRICAT_TOKEN` always takes precedence over a
 session file; the CLI does not read or send saved browser cookies in that case.
 Prefer `ATTRICAT_TOKEN` or `--token-stdin` to avoid placing a secret in argv.
+`--token-stdin` reads all of standard input, so it cannot be combined with a
+command flag that also reads it (`--password-stdin`, `--value-stdin`,
+`--client-secret-stdin`, `--stdin` and the like); `acli` rejects the
+combination with `invalid_input`. Use `ATTRICAT_TOKEN` for those commands.
 Credentials are sent only over HTTPS, except to a loopback server for local development.
 When no token is supplied, the saved login session is used.
 

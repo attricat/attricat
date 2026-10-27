@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use url::Url;
 use uuid::Uuid;
 
-use crate::cli::{Cli, Command, PageArgs, SourceInput};
+use crate::cli::{Cli, Command, PageArgs, SourceInput, reject_shared_stdin};
 use crate::commands::agent::{Output, follow_run, write_line};
 use crate::commands::data_health::data_health_path;
 use crate::commands::extension::connector_job::{ConnectorJobCommand, connector_job_command};
@@ -2575,6 +2575,64 @@ async fn extension_connection_export_and_run_commands_build_requests() {
         "/extensions/acme.erp/host-permission-budgets/erp-api"
     );
     assert!(Cli::try_parse_from(["acli", "extension", "secret", "set", "token"]).is_err());
+}
+
+#[test]
+fn token_stdin_rejects_commands_that_also_read_stdin() {
+    use clap::CommandFactory;
+
+    let check = |args: &[&str]| {
+        let matches = Cli::command().try_get_matches_from(args).unwrap();
+        reject_shared_stdin(&matches)
+    };
+    let error = check(&[
+        "acli",
+        "--token-stdin",
+        "extension",
+        "secret",
+        "set",
+        "token",
+        "--value-stdin",
+    ])
+    .unwrap_err();
+    assert!(matches!(&error, CliError::Input(_)));
+    assert!(error.to_string().contains("--token-stdin"), "{error}");
+    assert!(error.to_string().contains("--value-stdin"), "{error}");
+    let error = check(&[
+        "acli",
+        "auth",
+        "login",
+        "acme",
+        "--email",
+        "a@example.com",
+        "--password-stdin",
+        "--token-stdin",
+    ])
+    .unwrap_err();
+    assert!(error.to_string().contains("--password-stdin"), "{error}");
+    let error = check(&[
+        "acli",
+        "--token-stdin",
+        "rule",
+        "validate",
+        "--blueprint-id",
+        "00000000-0000-4000-8000-000000000001",
+        "--blueprint-version",
+        "1",
+        "--stdin",
+    ]);
+    assert!(error.is_err());
+    check(&["acli", "--token-stdin", "extension", "list"]).unwrap();
+    check(&[
+        "acli",
+        "auth",
+        "login",
+        "acme",
+        "--email",
+        "a@example.com",
+        "--password-stdin",
+    ])
+    .unwrap();
 }
 
 #[test]

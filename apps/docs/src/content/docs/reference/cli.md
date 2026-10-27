@@ -52,6 +52,8 @@ acli blueprint list
 
 Prefer `ATTRICAT_TOKEN` or `--token-stdin` over `--token`, which leaves the secret in your shell history and process list.
 
+`--token-stdin` reads all of standard input, so it cannot be combined with a command flag that also reads it, such as `--password-stdin`, `--value-stdin`, `--client-secret-stdin` or `--stdin`; `acli` rejects the combination with `invalid_input`. Use `ATTRICAT_TOKEN` for those commands.
+
 **With a password session.** Sign in once and keep the session in a file:
 
 ```sh

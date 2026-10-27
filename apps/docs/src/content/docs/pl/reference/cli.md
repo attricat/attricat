@@ -52,6 +52,8 @@ acli blueprint list
 
 Zamiast `--token` wybieraj `ATTRICAT_TOKEN` lub `--token-stdin`, ponieważ `--token` pozostawia sekret w historii powłoki i na liście procesów.
 
+`--token-stdin` czyta całe standardowe wejście, więc nie można go łączyć z flagą polecenia, która również je czyta, na przykład `--password-stdin`, `--value-stdin`, `--client-secret-stdin` czy `--stdin`; `acli` odrzuca takie połączenie z kodem `invalid_input`. W tych poleceniach użyj `ATTRICAT_TOKEN`.
+
 **Sesją z hasłem.** Zaloguj się raz i zachowaj sesję w pliku:
 
 ```sh

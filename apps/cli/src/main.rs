@@ -1,9 +1,9 @@
 use std::{io, process::ExitCode};
 
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches};
 use reqwest::Client;
 
-use crate::cli::{Cli, Command, HealthCommand, MetricsCommand};
+use crate::cli::{Cli, Command, HealthCommand, MetricsCommand, reject_shared_stdin};
 use crate::commands::agent::agent_command;
 use crate::commands::audit::audit_command;
 use crate::commands::auth::auth_command;
@@ -48,8 +48,17 @@ async fn main() -> ExitCode {
         eprintln!("{}", error.json());
         return ExitCode::from(error.exit_code());
     }
-    let cli = match Cli::try_parse() {
-        Ok(cli) => cli,
+    let parsed = Cli::command()
+        .try_get_matches()
+        .and_then(|matches| Cli::from_arg_matches(&matches).map(|cli| (cli, matches)));
+    let cli = match parsed {
+        Ok((cli, matches)) => {
+            if let Err(error) = reject_shared_stdin(&matches) {
+                eprintln!("{}", error.json());
+                return ExitCode::from(error.exit_code());
+            }
+            cli
+        }
         Err(error) if error.use_stderr() => {
             let error = CliError::Input(error.to_string());
             eprintln!("{}", error.json());
