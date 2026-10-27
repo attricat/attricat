@@ -44,10 +44,8 @@ import {
 } from '../../views/viewFieldComponents';
 import { resolveEditComponent } from '../../views/components/registry';
 import { EditableRecordLayout } from '../../views/components/EditableRecordLayout';
-import { draftEditors, type DraftEditor } from '../../drafts/constants';
 import { DraftRestoreDialog } from '../../drafts/DraftRestoreDialog';
-import { formFieldsDraftSchema } from '../../drafts/schemas';
-import { useEditorDraft } from '../../drafts/useEditorDraft';
+import { useRecordFormDraft, type RecordFormDraft } from './useRecordFormDraft';
 import type { MigrationFieldReview } from '../migrationReview';
 import {
   forwardRef,
@@ -93,28 +91,9 @@ export type RecordFormHandle = {
   clearDraft: () => void;
 };
 
-/** Identifies where unsaved field values are kept across refreshes. */
-type RecordFormDraft = {
-  editor: DraftEditor;
-  resource: readonly (string | number)[];
-  /** Marker for the loaded source beyond the initial field values. */
-  source: string;
-};
-
-const draftFieldSeparator = '\n';
 /** Padding of the form's surface, which the action bar spans. */
 const formPadding = 3;
 const submitShortcut = 'Control+Enter Meta+Enter';
-
-const pickDraftFields = (
-  fields: Record<string, string>,
-  codes: readonly string[],
-) =>
-  Object.fromEntries(
-    codes.flatMap((code) =>
-      fields[code] === undefined ? [] : [[code, fields[code]]],
-    ),
-  );
 
 // Creating and migrating a record have no saved status edges, parent
 // contexts or resolved values to show.
@@ -442,38 +421,22 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       },
     });
 
-    // Files upload separately and are never kept in a draft.
-    const draftCodes = editableAttributes
-      .filter((attribute) => attribute.value_type !== attributeValueTypes.file)
-      .map((attribute) => attribute.code)
-      .join(draftFieldSeparator);
     const fields = useStore(form.store, (state) => state.values.fields);
-    const draftFields = useMemo(
-      () => pickDraftFields(fields, draftCodes.split(draftFieldSeparator)),
-      [draftCodes, fields],
-    );
-    const initialDraftFields = JSON.stringify(
-      pickDraftFields(initialFields, draftCodes.split(draftFieldSeparator)),
-    );
-    const fieldsChanged = JSON.stringify(draftFields) !== initialDraftFields;
-    const draft = useEditorDraft({
-      dirty: fieldsChanged,
-      // Unused without draft options; `ready` keeps the draft off.
-      editor: draftOptions?.editor ?? draftEditors.recordCreate,
-      ready: Boolean(draftOptions && blueprint),
-      resource: draftOptions?.resource ?? [],
-      schema: formFieldsDraftSchema,
-      source: JSON.stringify([draftOptions?.source, initialDraftFields]),
-      value: draftFields,
+    const {
+      draft,
+      fieldsChanged,
+      restore: restoredDraftFields,
+    } = useRecordFormDraft({
+      editableAttributes,
+      fields,
+      initialFields,
+      options: draftOptions,
+      ready: Boolean(blueprint),
     });
 
     const restoreDraft = () => {
-      const restored = draft.restore();
-      if (!restored) return;
-      const restoredFields = pickDraftFields(
-        restored,
-        draftCodes.split(draftFieldSeparator),
-      );
+      const restoredFields = restoredDraftFields();
+      if (!restoredFields) return;
       const nextFields = { ...form.state.values.fields, ...restoredFields };
       markTouched(Object.keys(restoredFields));
       validateFields(nextFields);
