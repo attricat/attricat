@@ -2072,7 +2072,6 @@
   "extensionRuns": {
     "description": "Background work you started from extension actions. Runs continue after you close the action, and you can return here to follow them and download their results.",
     "empty": "You have not started any extension runs yet.",
-    "loadFailed": "Extension runs could not be loaded.",
     "viewRun": "View run",
     "backToRuns": "All extension runs",
     "started": "Extension run started. It continues in the background.",
@@ -2110,8 +2109,7 @@
     "noOutputs": "This run produced no downloadable results.",
     "unnamedOutput": "Result",
     "download": "Download",
-    "cancel": "Cancel run",
-    "cancelFailed": "The run could not be cancelled."
+    "cancel": "Cancel run"
   },
   "principals": {
     "loading": "Loading…",

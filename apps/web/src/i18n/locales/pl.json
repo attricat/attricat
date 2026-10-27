@@ -2152,7 +2152,6 @@
   "extensionRuns": {
     "description": "Praca w tle uruchomiona z akcji rozszerzeń. Uruchomienia trwają po zamknięciu akcji; tutaj możesz śledzić ich postęp i pobrać wyniki.",
     "empty": "Nie uruchomiono jeszcze żadnych rozszerzeń.",
-    "loadFailed": "Nie udało się wczytać uruchomień rozszerzeń.",
     "viewRun": "Pokaż uruchomienie",
     "backToRuns": "Wszystkie uruchomienia rozszerzeń",
     "started": "Uruchomiono rozszerzenie. Praca trwa w tle.",
@@ -2198,8 +2197,7 @@
     "noOutputs": "To uruchomienie nie utworzyło wyników do pobrania.",
     "unnamedOutput": "Wynik",
     "download": "Pobierz",
-    "cancel": "Anuluj uruchomienie",
-    "cancelFailed": "Nie udało się anulować uruchomienia."
+    "cancel": "Anuluj uruchomienie"
   },
   "principals": {
     "loading": "Wczytywanie…",
