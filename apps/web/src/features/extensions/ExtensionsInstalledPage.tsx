@@ -3,7 +3,6 @@ import { Link } from '@tanstack/react-router';
 import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useCan } from '../auth/useCan';
-import { ErrorNotice } from './ExtensionErrorNotice';
 import {
   installationStateColor,
   installationStateLabelKey,
@@ -11,6 +10,7 @@ import {
 import { installedExtensions } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const ExtensionsInstalledPage = () => {
   const { t } = useTranslation();
@@ -23,7 +23,7 @@ export const ExtensionsInstalledPage = () => {
 
   return (
     <>
-      <ErrorNotice error={installed.error} />
+      <ApiErrorAlert error={installed.error} sx={{ mb: 2 }} />
       <Typography sx={{ mb: 1 }} variant="h5">
         {t('extensions.installed')}
       </Typography>

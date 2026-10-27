@@ -10,7 +10,7 @@ import {
 } from './constants';
 import { uniqueRecordIdsSchema } from './outletContextSchemas';
 
-export type SelectionSource =
+type SelectionSource =
   (typeof selectionSources)[keyof typeof selectionSources];
 
 /**

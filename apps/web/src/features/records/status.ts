@@ -20,7 +20,7 @@ const coverageSchema = z.union([
 ]);
 /** Attributes locked by a status or covered by its approval. */
 export type StatusCoverage = z.infer<typeof coverageSchema>;
-export const statusConfigurationSchema = z
+const statusConfigurationSchema = z
   .object({
     version: z.literal(1),
     options: z

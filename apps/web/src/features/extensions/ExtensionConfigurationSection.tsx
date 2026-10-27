@@ -2,12 +2,12 @@ import { Button, Paper, TextField, Typography } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
 import {
   configureExtension,
   type ExtensionInstallation,
 } from './managementApi';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 const configurationIndentation = 2;
 
@@ -38,7 +38,7 @@ export const ExtensionConfigurationSection = ({
   const client = useQueryClient();
   const config = useMutation({
     mutationFn: (value: unknown) => configureExtension(extensionId, value),
-    onSuccess: () => invalidateExtensions(client, extensionId),
+    onSuccess: () => invalidateExtensions(client),
   });
   const form = useForm({
     defaultValues: {
@@ -63,7 +63,7 @@ export const ExtensionConfigurationSection = ({
       <Typography color="text.secondary" variant="body2">
         {t('extensions.serverValidation')}
       </Typography>
-      <ErrorNotice error={config.error} />
+      <ApiErrorAlert error={config.error} sx={{ mb: 2 }} />
       <form
         onSubmit={(event) => {
           event.preventDefault();

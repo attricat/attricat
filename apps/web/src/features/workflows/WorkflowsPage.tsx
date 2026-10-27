@@ -19,7 +19,6 @@ import { PlusIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
-import { listWorkflowRuns } from './api';
 import { workflowRoutes } from './constants';
 import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
@@ -32,6 +31,7 @@ import { runStatuses } from '../../api/runStatus';
 import { RunStatusChip } from '../../components/RunStatusChip';
 import { RunsUnavailableAlert } from './RunsUnavailableAlert';
 import { LoadingState } from '../../components/LoadingState';
+import type { WorkflowRun } from './schemas';
 
 export const WorkflowsPage = () => {
   const { t } = useTranslation();
@@ -46,7 +46,7 @@ export const WorkflowsPage = () => {
     string,
     {
       deadLetters: number;
-      latest: Awaited<ReturnType<typeof listWorkflowRuns>>[number];
+      latest: WorkflowRun;
     }
   >();
   for (const run of runs.data ?? []) {

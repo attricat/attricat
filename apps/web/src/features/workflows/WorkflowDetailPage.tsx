@@ -50,15 +50,9 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const canManage = useCan(capabilities.workflowsManage);
   const revisions = useQuery(workflowRevisionListOptions(workflowId));
   const runs = useQuery(workflowRunListOptions());
-  const refresh = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: workflowQueryKeys.all() }),
-      queryClient.invalidateQueries({
-        queryKey: workflowQueryKeys.revisions(workflowId),
-      }),
-      queryClient.invalidateQueries({ queryKey: workflowQueryKeys.runs() }),
-    ]);
-  };
+  // Revisions and runs are both under the workflows root key.
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: workflowQueryKeys.all() });
   const publish = useMutation({
     mutationFn: (version: number) =>
       publishWorkflowRevision(workflowId, version),

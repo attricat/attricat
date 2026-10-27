@@ -152,9 +152,6 @@ export const CONTEXT_MENU_WIDTH = 180;
 
 export const RELATIONSHIP_PICKER_ACTION_MIN_WIDTH = 300;
 
-/** Number of record ID characters included in a new conversation title. */
-
-/** Version of the extension context passed to record header actions. */
 /** Blueprint version assumed by the extension drawer before data loads. */
 export const FALLBACK_BLUEPRINT_VERSION = 1;
 

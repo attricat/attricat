@@ -5,14 +5,14 @@ import { contextListOptions } from '../contexts/queryOptions';
 import { blueprintCatalogueOptions } from '../blueprints/queryOptions';
 import { roleListOptions } from '../workspace/queryOptions';
 
-export type ReferenceBlueprint = {
+type ReferenceBlueprint = {
   code: string;
   kind: string;
   name: string;
   version: number;
 };
 
-export type ReferenceAttribute = {
+type ReferenceAttribute = {
   code: string;
   targetBlueprint?: string;
   valueType: string;

@@ -14,7 +14,6 @@ import {
   type ExtensionReleaseReference,
 } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
-import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
 import { ExtensionConfigurationSection } from './ExtensionConfigurationSection';
 import { ExtensionInstallationStatusSection } from './ExtensionInstallationStatusSection';
@@ -27,6 +26,7 @@ import { ExtensionConnectionsSection } from '../extension-exports/ExtensionConne
 import { ExtensionExportStatusSection } from '../extension-exports/ExtensionExportStatusSection';
 import { manifestExportsSchema } from '../extension-exports/schemas';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type InstallationAction =
   | { action: ExtensionLifecycleAction }
@@ -62,7 +62,7 @@ export const InstalledExtensionPage = ({
   const action = useMutation({
     mutationFn: (input: InstallationAction) =>
       runInstallationAction(extensionId, input).then(() => undefined),
-    onSuccess: () => invalidateExtensions(client, extensionId),
+    onSuccess: () => invalidateExtensions(client),
   });
   const installation = detail.data?.installation;
   const exportManifest = manifestExportsSchema.safeParse(
@@ -83,8 +83,8 @@ export const InstalledExtensionPage = ({
         }
         actions={<Link to="/manage/extensions">{t('extensions.back')}</Link>}
       />
-      <ErrorNotice error={detail.error} />
-      <ErrorNotice error={action.error} />
+      <ApiErrorAlert error={detail.error} sx={{ mb: 2 }} />
+      <ApiErrorAlert error={action.error} sx={{ mb: 2 }} />
       {detail.data && installation && (
         <Stack spacing={3}>
           <ExtensionInstallationStatusSection
@@ -115,7 +115,7 @@ export const InstalledExtensionPage = ({
             extensionId={extensionId}
             grants={detail.data.grants}
             manifest={installation.manifest}
-            onChanged={() => invalidateExtensions(client, extensionId)}
+            onChanged={() => invalidateExtensions(client)}
           />
           {exportManifest.success && (
             <>

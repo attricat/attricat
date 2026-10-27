@@ -110,7 +110,7 @@ const blueprintSelectorSchema = z.object({
   code: z.string().min(1),
   version: z.number().int().positive().optional(),
 });
-export const newAttributeValueSchema = z.discriminatedUnion('kind', [
+const newAttributeValueSchema = z.discriminatedUnion('kind', [
   attributeValueTargetSchema.extend({
     kind: z.literal(attributeValueKinds.scalar),
     value: scalarValueSchema,
@@ -120,14 +120,14 @@ export const newAttributeValueSchema = z.discriminatedUnion('kind', [
     target_record_id: uuidSchema,
   }),
 ]);
-export const formAttributeValueSchema = z.discriminatedUnion('kind', [
+const formAttributeValueSchema = z.discriminatedUnion('kind', [
   ...newAttributeValueSchema.options,
   attributeValueTargetSchema.extend({
     kind: z.literal(attributeValueKinds.file),
     files: z.array(fileMetadataSchema),
   }),
 ]);
-export const relationshipTargetsSchema = attributeValueTargetSchema.extend({
+const relationshipTargetsSchema = attributeValueTargetSchema.extend({
   target_record_ids: z.array(uuidSchema),
 });
 const attributeValueSelectorSchema = z.object({
@@ -271,7 +271,7 @@ export const recordHierarchySchema = z.object({
   multiple_parents: z.boolean(),
   cycle_detected: z.boolean(),
 });
-export const recordAuditChangeSchema = z.object({
+const recordAuditChangeSchema = z.object({
   audit_event_id: uuidSchema,
   occurred_at: z.string(),
   actor_user_id: uuidSchema.nullable(),
@@ -427,7 +427,7 @@ const getBlueprintRevisionRequestSchema = z.object({
   id: uuidSchema,
   version: z.number().int().positive(),
 });
-export const newFileAttributeValueSchema = attributeValueTargetSchema.extend({
+const newFileAttributeValueSchema = attributeValueTargetSchema.extend({
   file_ids: z.array(uuidSchema).min(1),
 });
 export const createRecordRequestSchema = z.object({

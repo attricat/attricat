@@ -4,7 +4,7 @@ import type { SupportedLanguage } from '../i18n';
 const documentationSiteUrl = 'https://docs.attricat.com';
 
 // Paths of public documentation pages, relative to a locale root.
-export const documentationPages = {
+const documentationPages = {
   home: '',
   blueprints: 'builders/blueprints/',
   contexts: 'guides/contexts/',

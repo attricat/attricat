@@ -17,7 +17,7 @@ const recordIdPattern =
 
 type QueryToken = { text: string; start: number; end: number };
 
-export type QuerySegmentKind =
+type QuerySegmentKind =
   'field' | 'global' | 'punctuation' | 'value' | 'wildcard' | 'whitespace';
 
 export type QuerySegment = {

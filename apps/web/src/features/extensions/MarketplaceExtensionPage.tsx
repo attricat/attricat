@@ -9,10 +9,10 @@ import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
 import { installExtension, registryDetails } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
-import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
 import { ExtensionIcon } from '../../components/systemIcons';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const MarketplaceExtensionPage = ({
   owner,
@@ -44,8 +44,8 @@ export const MarketplaceExtensionPage = ({
         }
         actions={<Link to="/manage/extensions">{t('extensions.back')}</Link>}
       />
-      <ErrorNotice error={details.error} />
-      <ErrorNotice error={install.error} />
+      <ApiErrorAlert error={details.error} sx={{ mb: 2 }} />
+      <ApiErrorAlert error={install.error} sx={{ mb: 2 }} />
       {details.data && (
         <>
           <Paper sx={{ p: 2 }}>

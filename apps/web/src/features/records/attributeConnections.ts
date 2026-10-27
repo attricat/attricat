@@ -27,7 +27,7 @@ export const attributeConnectionKinds = {
   dropdownLabel: 'dropdown_label',
   include: 'include',
 } as const;
-export type AttributeConnectionKind =
+type AttributeConnectionKind =
   (typeof attributeConnectionKinds)[keyof typeof attributeConnectionKinds];
 
 export type AttributeConnection = {

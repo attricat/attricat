@@ -28,7 +28,7 @@ export const browseBySchema = z.union([
 ]);
 
 /** Records with one export status at one export extension's destination. */
-export const exportStatusFilterSchema = z.object({
+const exportStatusFilterSchema = z.object({
   extension: z.string().trim().min(1),
   // The server's connection key pattern, so a malformed link drops the
   // filter instead of failing the search.
