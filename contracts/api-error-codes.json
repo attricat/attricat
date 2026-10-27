@@ -23,6 +23,7 @@
     "default_context_only",
     "default_context_protected",
     "disabled_in_demo",
+    "export_job_resync_failed",
     "extension_already_installed",
     "file_attribute_readonly",
     "file_cardinality_exceeded",

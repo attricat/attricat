@@ -135,9 +135,19 @@ export type HostPermissionBudget = z.infer<typeof hostPermissionBudgetSchema>;
 
 export const retryResponseSchema = z.object({
   record_ids: z.array(z.uuid()),
-  /** Jobs that could not start a resync of the retried records. */
+  /**
+   * Jobs that could not start a resync of the retried records, each
+   * reported like an API error and translated by `code`.
+   */
   job_errors: z
-    .array(z.object({ job_id: z.uuid(), message: z.string() }))
+    .array(
+      z.object({
+        job_id: z.uuid(),
+        code: z.string(),
+        message: z.string(),
+        details: z.unknown().optional(),
+      }),
+    )
     .default([]),
 });
 

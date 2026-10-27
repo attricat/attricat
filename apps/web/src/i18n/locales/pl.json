@@ -87,6 +87,7 @@
     "default_context_only": "Ten atrybut można edytować tylko w kontekście domyślnym.",
     "default_context_protected": "Kontekstu domyślnego nie można zmienić ani usunąć.",
     "disabled_in_demo": "Ta czynność jest niedostępna w wersji demonstracyjnej.",
+    "export_job_resync_failed": "Zadanie eksportu {{job_code}} nie mogło uruchomić ponownej synchronizacji.",
     "extension_already_installed": "To rozszerzenie jest już zainstalowane.",
     "file_attribute_readonly": "Ten atrybut plikowy jest tylko do odczytu.",
     "file_cardinality_exceeded": "Liczba plików nie pasuje do atrybutu.",

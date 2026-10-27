@@ -85,6 +85,7 @@
     "default_context_only": "This attribute can only be edited in the default context.",
     "default_context_protected": "The default context can't be changed or deleted.",
     "disabled_in_demo": "This action isn't available in the demo.",
+    "export_job_resync_failed": "Export job {{job_code}} could not start a resync.",
     "extension_already_installed": "This extension is already installed.",
     "file_attribute_readonly": "This file attribute is read-only.",
     "file_cardinality_exceeded": "The number of files doesn't fit the attribute.",

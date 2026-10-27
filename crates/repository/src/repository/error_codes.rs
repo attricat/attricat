@@ -62,6 +62,9 @@ error_codes! {
     DefaultContextOnly = "default_context_only",
     DefaultContextProtected = "default_context_protected",
     DisabledInDemo = "disabled_in_demo",
+    // Not an error response: a job a retry could not resync, listed in its
+    // `job_errors`.
+    ExportJobResyncFailed = "export_job_resync_failed",
     ExtensionAlreadyInstalled = "extension_already_installed",
     FileAttributeReadonly = "file_attribute_readonly",
     FileCardinalityExceeded = "file_cardinality_exceeded",
