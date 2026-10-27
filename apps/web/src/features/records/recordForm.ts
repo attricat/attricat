@@ -291,3 +291,63 @@ export const relationshipTargetsForForm = (
         : [];
     });
 };
+
+/** The first of `codes` in the order the form shows its fields. */
+export const firstInFieldOrder = (
+  fieldOrder: readonly string[],
+  codes: Iterable<string>,
+) => {
+  const wanted = new Set(codes);
+  return fieldOrder.find((code) => wanted.has(code));
+};
+
+/** What the action bar reports as still blocking a save, most urgent first. */
+export const recordFormStatusKinds = {
+  errors: 'errors',
+  required: 'required',
+  confirm: 'confirm',
+} as const;
+export type RecordFormStatusKind =
+  (typeof recordFormStatusKinds)[keyof typeof recordFormStatusKinds];
+
+/**
+ * The action bar's status: errors once a save was attempted, then required
+ * fields left, then changes to confirm. `target` is the field or confirmation
+ * to go to.
+ */
+export const recordFormStatus = ({
+  errorIds,
+  fieldOrder,
+  missingRequiredCodes,
+  pendingConfirmationIds,
+  submitAttempted,
+}: {
+  /** Confirmations and field errors, in the order the summary lists them. */
+  errorIds: readonly string[];
+  fieldOrder: readonly string[];
+  missingRequiredCodes: readonly string[];
+  pendingConfirmationIds: readonly string[];
+  submitAttempted: boolean;
+}):
+  | { kind: RecordFormStatusKind; count: number; target: string | undefined }
+  | undefined => {
+  if (submitAttempted && errorIds.length > 0)
+    return {
+      kind: recordFormStatusKinds.errors,
+      count: errorIds.length,
+      target: errorIds[0],
+    };
+  if (missingRequiredCodes.length > 0)
+    return {
+      kind: recordFormStatusKinds.required,
+      count: missingRequiredCodes.length,
+      target: firstInFieldOrder(fieldOrder, missingRequiredCodes),
+    };
+  if (pendingConfirmationIds.length > 0)
+    return {
+      kind: recordFormStatusKinds.confirm,
+      count: pendingConfirmationIds.length,
+      target: pendingConfirmationIds[0],
+    };
+  return undefined;
+};

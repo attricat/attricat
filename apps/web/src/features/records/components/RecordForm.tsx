@@ -32,6 +32,10 @@ import {
   serializeAttributeValues,
   validateRecordForm,
   valuesForForm,
+  firstInFieldOrder,
+  recordFormStatus,
+  recordFormStatusKinds,
+  type RecordFormStatusKind,
 } from '../recordForm';
 import { recordFormLayout } from '../recordFormAttributes';
 import {
@@ -120,6 +124,19 @@ const noResolvedValues = {};
 const noAttributes: readonly Attribute[] = [];
 const noPendingConfirmations: readonly FormErrorSummaryItem[] = [];
 const fieldSkeletons = ['first', 'second', 'third'];
+
+// Errors stand out once a save was attempted; what is merely left to do stays
+// neutral.
+const statusColors = {
+  [recordFormStatusKinds.errors]: 'error',
+  [recordFormStatusKinds.required]: 'text.secondary',
+  [recordFormStatusKinds.confirm]: 'text.secondary',
+} as const satisfies Record<RecordFormStatusKind, string>;
+const statusLabelKeys = {
+  [recordFormStatusKinds.errors]: 'records.fieldsNeedAttention',
+  [recordFormStatusKinds.required]: 'records.requiredFieldsLeft',
+  [recordFormStatusKinds.confirm]: 'records.changesToConfirm',
+} as const satisfies Record<RecordFormStatusKind, string>;
 
 /**
  * A field the user changed carries an `action.changed` bar at its leading
@@ -400,9 +417,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           // Confirmations are shown above the fields, so they come first.
           const first =
             pendingConfirmations[0]?.id ??
-            fieldOrder.find(
-              (code) => validation.fieldErrors[code] !== undefined,
-            );
+            firstInFieldOrder(fieldOrder, Object.keys(validation.fieldErrors));
           if (first) revealField(first);
           else focusErrors();
           return;
@@ -504,8 +519,9 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     useEffect(() => {
       if (!error || error === handledError.current) return;
       handledError.current = error;
-      const first = fieldOrder.find(
-        (code) => serverFieldErrors[code] !== undefined,
+      const first = firstInFieldOrder(
+        fieldOrder,
+        Object.keys(serverFieldErrors),
       );
       if (first) revealField(first);
       else focusErrors();
@@ -543,39 +559,27 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       void form.handleSubmit();
     };
     // The action bar names what still blocks saving and goes to the first of it.
-    const statusTarget = (():
-      { color: string; label: string; target: () => void } | undefined => {
-      if (isLoadingBlueprint || !blueprint) return undefined;
-      if (submitAttempted && errorItems.length > 0)
-        return {
-          color: 'error',
-          label: t('records.fieldsNeedAttention', { count: errorItems.length }),
-          target: () => revealField(errorItems[0].id),
-        };
-      if (missingRequired.length > 0)
-        return {
-          color: 'text.secondary',
-          label: t('records.requiredFieldsLeft', {
-            count: missingRequired.length,
-          }),
-          target: () => {
-            const missing = new Set(
-              missingRequired.map((attribute) => attribute.code),
-            );
-            const first = fieldOrder.find((code) => missing.has(code));
-            if (first) revealField(first);
-          },
-        };
-      if (pendingConfirmations.length > 0)
-        return {
-          color: 'text.secondary',
-          label: t('records.changesToConfirm', {
-            count: pendingConfirmations.length,
-          }),
-          target: () => revealField(pendingConfirmations[0].id),
-        };
-      return undefined;
-    })();
+    const formStatus =
+      isLoadingBlueprint || !blueprint
+        ? undefined
+        : recordFormStatus({
+            errorIds: errorItems.map((item) => item.id),
+            fieldOrder,
+            missingRequiredCodes: missingRequired.map(
+              (attribute) => attribute.code,
+            ),
+            pendingConfirmationIds: pendingConfirmations.map(
+              (confirmation) => confirmation.id,
+            ),
+            submitAttempted,
+          });
+    const statusTarget = formStatus && {
+      color: statusColors[formStatus.kind],
+      label: t(statusLabelKeys[formStatus.kind], { count: formStatus.count }),
+      target: () => {
+        if (formStatus.target) revealField(formStatus.target);
+      },
+    };
     const status = statusTarget && (
       <Link
         color={statusTarget.color}
