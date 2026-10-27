@@ -15,6 +15,8 @@ import { ApiErrorAlert } from './ApiErrorAlert';
 /**
  * A dialog around a form that cannot be closed while it saves; a failed save
  * is shown below the fields so the user can correct them and try again.
+ * A click on the backdrop does not close it, so a stray click cannot discard
+ * what the user typed; Escape and Cancel still do.
  */
 export const FormDialog = ({
   children,
@@ -50,7 +52,9 @@ export const FormDialog = ({
       aria-describedby={description ? descriptionId : undefined}
       fullWidth
       maxWidth="sm"
-      onClose={isPending ? undefined : onClose}
+      onClose={(_, reason) => {
+        if (!isPending && reason !== 'backdropClick') onClose();
+      }}
       open
       slotProps={slotProps}
     >
