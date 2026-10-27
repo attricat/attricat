@@ -535,7 +535,7 @@ impl AttricatRepository {
         if changes.is_empty() && replaced_value.is_none() {
             return Ok(revision);
         }
-        system_annotations::validate_system_tag_update(&record.system_tags, &tags)?;
+        let tags = system_annotations::resolve_system_tag_update(&record.system_tags, &tags)?;
         system_annotations::validate_system_metadata(&metadata)?;
         self.ensure_task_fence(transaction).await?;
         // Annotation bookkeeping is not catalog data. Leaving `updated_at`

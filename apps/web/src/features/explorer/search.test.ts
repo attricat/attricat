@@ -98,6 +98,15 @@ describe('parseExplorerSearch', () => {
     ).toEqual({ blueprint: 'product', attributeFilters: undefined });
   });
 
+  it('preserves a valid data quality filter and drops an unknown one', () => {
+    expect(
+      parseExplorerSearch({ blueprint: 'product', dataQuality: 'open' }),
+    ).toEqual({ blueprint: 'product', dataQuality: 'open' });
+    expect(
+      parseExplorerSearch({ blueprint: 'product', dataQuality: 'broken' }),
+    ).toEqual({ blueprint: 'product' });
+  });
+
   it('preserves locked mode for pinned navigation shortcuts', () => {
     expect(parseExplorerSearch({ blueprint: 'product', locked: true })).toEqual(
       {

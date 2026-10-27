@@ -655,3 +655,279 @@ async fn findings_filter_by_rule_blueprint_context_severity_and_state(pool: PgPo
     }
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn search_summarizes_filters_and_sorts_by_data_quality(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let workspace = Uuid::parse_str(support::BOOTSTRAP_WORKSPACE_ID).unwrap();
+    let mut ids = Vec::new();
+    for findings in [
+        &[("critical", "open")][..],
+        &[("warning", "acknowledged")],
+        &[("info", "open"), ("critical", "acknowledged")],
+        &[("error", "resolved")],
+    ] {
+        let record = create_record(&client, &base_url, &blueprint).await;
+        let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
+        for (severity, state) in findings {
+            sqlx::query("INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,record_id,evaluation_key,severity,message,state) VALUES ($1,$2,$3,1,$4,$5,$6,$5,$7)")
+                .bind(Uuid::new_v4())
+                .bind(workspace)
+                .bind(rule_id)
+                .bind(record_id)
+                .bind(format!("{record_id}-{severity}"))
+                .bind(severity)
+                .bind(state)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        ids.push(Value::String(record_id.to_string()));
+    }
+    // The findings above bypass rule runs, so tag them as startup would.
+    AttricatRepository::system(pool.clone())
+        .reconcile_needs_attention_tags(workspace)
+        .await
+        .unwrap();
+    let search = |client: Client, body: Value| {
+        let base_url = base_url.clone();
+        async move {
+            client
+                .post(format!("{base_url}/v1/records/search"))
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+        }
+    };
+    let found = |response: &Value| {
+        let mut found = response["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["id"].clone())
+            .collect::<Vec<_>>();
+        found.sort_by_key(|id| ids.iter().position(|candidate| candidate == id));
+        found
+    };
+    let code = json!({"code": "rule_task_product"});
+
+    let all = expect_status(
+        search(client.clone(), json!({"blueprint": code})).await,
+        StatusCode::OK,
+    )
+    .await;
+    let mixed = all["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == ids[2])
+        .unwrap();
+    assert_eq!(
+        mixed["data_quality"],
+        json!({"checked": true, "findings": [
+            {"state": "acknowledged", "severity": "critical", "count": 1},
+            {"state": "open", "severity": "info", "count": 1},
+        ]})
+    );
+    let clean = all["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == ids[3])
+        .unwrap();
+    assert_eq!(
+        clean["data_quality"],
+        json!({"checked": true, "findings": []})
+    );
+
+    for (filter, expected) in [
+        ("open", vec![ids[0].clone(), ids[2].clone()]),
+        ("acknowledged", vec![ids[1].clone()]),
+        ("clean", vec![ids[3].clone()]),
+    ] {
+        let response = expect_status(
+            search(
+                client.clone(),
+                json!({"blueprint": code, "data_quality": filter, "include_total": true}),
+            )
+            .await,
+            StatusCode::OK,
+        )
+        .await;
+        assert_eq!(found(&response), expected, "{filter}");
+        assert_eq!(response["total_count"], expected.len(), "{filter}");
+    }
+
+    // Records that need attention (an open finding) come first, each group
+    // by id; keyset pages walk the whole order.
+    let mut cursor: Option<String> = None;
+    let mut sorted = Vec::new();
+    loop {
+        let page = expect_status(
+            search(
+                client.clone(),
+                json!({"blueprint": code,
+                    "sort": {"field": "system_tag:attricat.needs_attention", "direction": "desc"},
+                    "page": {"size": 1, "cursor": cursor}}),
+            )
+            .await,
+            StatusCode::OK,
+        )
+        .await;
+        sorted.push(page["items"][0]["id"].clone());
+        cursor = page["next_cursor"].as_str().map(str::to_owned);
+        if cursor.is_none() {
+            break;
+        }
+    }
+    let by_id = |mut group: Vec<Value>| {
+        group.sort_by_key(|id| id.as_str().unwrap().to_owned());
+        group
+    };
+    let mut expected = by_id(vec![ids[0].clone(), ids[2].clone()]);
+    expected.extend(by_id(vec![ids[1].clone(), ids[3].clone()]));
+    assert_eq!(sorted, expected);
+
+    // Findings belong to rules: a reader without rules.read sees no summary
+    // and cannot filter by it, but may sort by the tag it sees.
+    let reader_role = create_role(&pool, "records_reader", &["records.read"]).await;
+    let reader = client_for(member_with_role(&pool, reader_role).await);
+    let plain = expect_status(
+        search(reader.clone(), json!({"blueprint": code})).await,
+        StatusCode::OK,
+    )
+    .await;
+    assert!(plain["items"][0].get("data_quality").is_none());
+    assert_eq!(
+        search(
+            reader.clone(),
+            json!({"blueprint": code, "data_quality": "open"})
+        )
+        .await
+        .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        search(
+            reader.clone(),
+            json!({"blueprint": code,
+                "sort": {"field": "system_tag:attricat.needs_attention", "direction": "asc"}})
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn needs_attention_tag_follows_open_findings_and_is_reserved(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
+    let repository = AttricatRepository::new(pool.clone(), workspace);
+    let tags = |record_id: Uuid| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query_scalar::<_, Vec<String>>("SELECT system_tags FROM records WHERE id=$1")
+                .bind(record_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+        }
+    };
+    let tag = "attricat.needs_attention".to_owned();
+
+    // A run that opens a finding tags the record in the same transaction.
+    manual_run(&base_url, rule_id, Some(record_id), "needs-attention").await;
+    let task = repository
+        .claim_task("needs-attention", Duration::from_secs(30))
+        .await
+        .unwrap()
+        .unwrap();
+    rule_runtime::task_handler(repository.clone())
+        .handle(task)
+        .await
+        .unwrap();
+    assert_eq!(tags(record_id).await, vec![tag.clone()]);
+
+    // Callers cannot add or remove a Core tag; replacing the list keeps it.
+    let put = |body: Value| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        async move {
+            client
+                .put(format!("{base_url}/v1/records/{record_id}"))
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+        }
+    };
+    expect_status(
+        put(json!({"system_tags": ["reviewed"]})).await,
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(
+        tags(record_id).await,
+        vec!["reviewed".to_owned(), tag.clone()]
+    );
+    let other = create_record(&client, &base_url, &blueprint).await;
+    let added = client
+        .put(format!(
+            "{base_url}/v1/records/{}",
+            other["id"].as_str().unwrap()
+        ))
+        .json(&json!({"system_tags": ["attricat.anything"]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(added.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    // Search may filter by it.
+    let found = expect_status(
+        client
+            .post(format!("{base_url}/v1/records/search"))
+            .json(&json!({"blueprint": {"code": "rule_task_product"}, "system_tags": [tag]}))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(found["items"].as_array().unwrap().len(), 1);
+
+    // Acknowledging the last open finding removes the tag.
+    let finding: Uuid = sqlx::query_scalar("SELECT id FROM rule_findings WHERE record_id=$1")
+        .bind(record_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    client
+        .post(format!("{base_url}/rule-findings/{finding}/acknowledge"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(tags(record_id).await, vec!["reviewed".to_owned()]);
+
+    // Startup repairs a tag that disagrees with the findings.
+    sqlx::query("UPDATE records SET system_tags=ARRAY[$2] WHERE id=$1")
+        .bind(record_id)
+        .bind(&tag)
+        .execute(&pool)
+        .await
+        .unwrap();
+    AttricatRepository::system(pool.clone())
+        .initialize_workspace(workspace)
+        .await
+        .unwrap();
+    assert!(tags(record_id).await.is_empty());
+    server.abort();
+}

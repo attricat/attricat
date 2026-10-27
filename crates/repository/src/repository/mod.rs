@@ -153,9 +153,7 @@ mod workflows;
 mod workspace_navigation;
 mod write_context;
 
-/// System tag that marks records created as solution-pack sample data. Only
-/// the host may add it; ordinary tag writes and record copies drop it.
-pub(crate) const SAMPLE_SYSTEM_TAG: &str = "attricat.sample";
+pub(crate) use attricat_validation::system_tags::{NEEDS_ATTENTION_SYSTEM_TAG, SAMPLE_SYSTEM_TAG};
 
 /// Violations named in a summary message; the rest are omitted.
 const MAX_SUMMARIZED_VIOLATIONS: usize = 5;
@@ -1089,6 +1087,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         .execute(&self.pool)
         .await?;
         self.ensure_workspace_system_user(workspace_id).await?;
+        self.reconcile_needs_attention_tags(workspace_id).await?;
         Ok(())
     }
 

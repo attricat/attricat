@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  dataQualityFilters,
+  findingSeverities,
+  findingStates,
+} from '../rules/constants';
 import { checkViolationSchema } from '../../api/checkViolations';
 import { attributeContextSchema } from '../contexts/schemas';
 import { fileMetadataSchema } from '../files/schemas';
@@ -170,6 +175,19 @@ export const recordSchema = recordIdentitySchema
     system_metadata: jsonObjectSchema.optional(),
   })
   .passthrough();
+const recordDataQualitySchema = z.object({
+  /** Whether an enabled rule checks the record's blueprint revision. */
+  checked: z.boolean(),
+  /** Counted by state and severity, most severe first. */
+  findings: z.array(
+    z.object({
+      state: z.enum(findingStates),
+      severity: z.enum(findingSeverities),
+      count: z.number().int().positive(),
+    }),
+  ),
+});
+export type RecordDataQuality = z.infer<typeof recordDataQualitySchema>;
 const recordItemSchema = z.object({
   id: uuidSchema,
   blueprint_version: z.number().int().positive(),
@@ -214,6 +232,8 @@ const recordItemSchema = z.object({
       }),
     )
     .default([]),
+  /** Unresolved rule findings; only for viewers who may read rules. */
+  data_quality: recordDataQualitySchema.optional(),
 });
 const recordContextSchema = z.record(z.string(), jsonObjectSchema);
 export const recordPreviewResponseSchema = z.object({
@@ -400,6 +420,7 @@ export const searchRecordsRequestSchema = z.object({
       context_code: z.string().min(1).optional(),
     })
     .optional(),
+  data_quality: z.enum(dataQualityFilters).optional(),
   context_code: z.string().min(1).optional(),
   include_total: z.boolean().optional(),
   include_blueprint: z.boolean().optional(),

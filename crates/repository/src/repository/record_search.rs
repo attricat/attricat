@@ -1,7 +1,8 @@
 use super::*;
-use super::{record_projection::display_label, system_annotations::validate_system_tags};
+use super::{record_projection::display_label, system_annotations::validate_system_tag_filter};
 use crate::model::ExportStatusFilter;
 use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
+use attricat_domain::states::{DataQualityFilter, RuleFindingState};
 use attricat_validation::saved_search::MAX_RELATIONSHIP_HOPS;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
@@ -49,6 +50,9 @@ pub struct RecordSearchSort {
     pub descending: bool,
     pub effective_source_version: Option<i64>,
     pub publication_context_id: Option<Uuid>,
+    /// Set for a `system_tag:` sort: records with this tag sort as 1, others
+    /// as 0.
+    pub system_tag: Option<String>,
     /// Values are resolved for this context path; see [`SearchContext`].
     pub context: SearchContext,
 }
@@ -185,6 +189,7 @@ pub struct RecordSearchScope<'a> {
     /// Only records on an older version than `current_blueprint_version`.
     pub outdated: bool,
     pub export_status: Option<&'a ExportStatusFilter>,
+    pub data_quality: Option<DataQualityFilter>,
     pub current_blueprint_version: i64,
 }
 
@@ -961,10 +966,11 @@ impl AttricatRepository {
             system_tags,
             outdated,
             export_status,
+            data_quality,
             current_blueprint_version,
         } = scope;
-        validate_system_tags(system_tags)?;
-        let export_status_sql = export_status_clause(11, export_status);
+        validate_system_tag_filter(system_tags)?;
+        let export_status_sql = record_filter_clauses(11, export_status, data_quality);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
@@ -1021,11 +1027,12 @@ impl AttricatRepository {
             system_tags,
             outdated,
             export_status,
+            data_quality,
             current_blueprint_version,
         } = scope;
-        validate_system_tags(system_tags)?;
+        validate_system_tag_filter(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 3);
-        let export_status_sql = export_status_clause(9, export_status);
+        let export_status_sql = record_filter_clauses(9, export_status, data_quality);
         Ok(sqlx::query_scalar::<_, i64>(&format!(
             r#"SELECT COUNT(*)
                  FROM (
@@ -1066,11 +1073,12 @@ impl AttricatRepository {
             system_tags,
             outdated,
             export_status,
+            data_quality,
             current_blueprint_version,
         } = scope;
-        validate_system_tags(system_tags)?;
+        validate_system_tag_filter(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 4);
-        let export_status_sql = export_status_clause(8, export_status);
+        let export_status_sql = record_filter_clauses(8, export_status, data_quality);
         Ok(sqlx::query_scalar::<_, i64>(&format!(
             r#"SELECT e.blueprint_version
                  FROM {records}
@@ -1112,6 +1120,7 @@ impl AttricatRepository {
             system_tags,
             outdated,
             export_status,
+            data_quality,
             current_blueprint_version,
         } = scope;
         let Some(count_limit) = count_limit else {
@@ -1123,15 +1132,16 @@ impl AttricatRepository {
                     system_tags,
                     outdated,
                     export_status,
+                    data_quality,
                     current_blueprint_version,
                 })
                 .await?,
                 None,
             ));
         };
-        validate_system_tags(system_tags)?;
+        validate_system_tag_filter(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 4);
-        let export_status_sql = export_status_clause(9, export_status);
+        let export_status_sql = record_filter_clauses(9, export_status, data_quality);
         let (versions, count) = sqlx::query_as::<_, (Vec<i64>, i64)>(&format!(
             r#"WITH matches AS MATERIALIZED (
                    SELECT e.blueprint_version
@@ -1185,9 +1195,10 @@ impl AttricatRepository {
             system_tags,
             outdated,
             export_status,
+            data_quality,
             current_blueprint_version,
         } = scope;
-        validate_system_tags(system_tags)?;
+        validate_system_tag_filter(system_tags)?;
         let cursor = cursor.map(decode_sorted_search_cursor).transpose()?;
         if let Some(cursor) = &cursor
             && (cursor.field != sort.field
@@ -1208,10 +1219,12 @@ impl AttricatRepository {
             .unwrap_or(false);
         let cursor_id = cursor.as_ref().map(|cursor| cursor.id);
         let cursor_target_id = cursor.as_ref().map(|cursor| cursor.target_id);
-        if matches!(
-            sort.field.as_str(),
-            "blueprint_version" | "publication_status"
-        ) {
+        if sort.system_tag.is_some()
+            || matches!(
+                sort.field.as_str(),
+                "blueprint_version" | "publication_status"
+            )
+        {
             return self
                 .search_record_previews_sorted_system(
                     RecordSearchScope {
@@ -1221,6 +1234,7 @@ impl AttricatRepository {
                         system_tags,
                         outdated,
                         export_status,
+                        data_quality,
                         current_blueprint_version,
                     },
                     limit,
@@ -1239,6 +1253,7 @@ impl AttricatRepository {
                         system_tags,
                         outdated,
                         export_status,
+                        data_quality,
                         current_blueprint_version,
                     },
                     limit,
@@ -1269,7 +1284,7 @@ impl AttricatRepository {
                     "{value_context}",
                     &resolved_context("sort_value", "sort_attribute", "$14"),
                 );
-        let export_status_sql = export_status_clause(15, export_status);
+        let export_status_sql = record_filter_clauses(15, export_status, data_quality);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
@@ -1349,6 +1364,7 @@ impl AttricatRepository {
             system_tags,
             outdated,
             export_status,
+            data_quality,
             current_blueprint_version,
         } = scope;
         let cursor_version = cursor
@@ -1371,15 +1387,20 @@ impl AttricatRepository {
             .transpose()?;
         let comparison = if sort.descending { "<" } else { ">" };
         let direction = if sort.descending { "DESC" } else { "ASC" };
-        let (expression, join) = if sort.field == "publication_status" {
+        let (expression, join) = if sort.system_tag.is_some() {
+            (
+                "CASE WHEN $12 = ANY(e.system_tags) THEN 1 ELSE 0 END",
+                String::new(),
+            )
+        } else if sort.field == "publication_status" {
             (
                 "CASE WHEN p.published_at IS NULL THEN 0 ELSE 1 END",
-                "LEFT JOIN record_channel_publications p ON p.workspace_id = e.workspace_id AND p.record_id = e.id AND p.context_id = $12",
+                "LEFT JOIN record_channel_publications p ON p.workspace_id = e.workspace_id AND p.record_id = e.id AND p.context_id = $12".to_owned(),
             )
         } else {
-            ("e.blueprint_version", "")
+            ("e.blueprint_version", String::new())
         };
-        let export_status_sql = export_status_clause(11, export_status);
+        let export_status_sql = record_filter_clauses(11, export_status, data_quality);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                          b.views AS blueprint_views,
@@ -1411,7 +1432,9 @@ impl AttricatRepository {
             .bind(limit + 1)
             .bind(self.workspace_id.0)
             .bind(export_status_param(export_status));
-        let mut rows = if sort.field == "publication_status" {
+        let mut rows = if let Some(tag) = &sort.system_tag {
+            query.bind(tag).fetch_all(&self.pool).await?
+        } else if sort.field == "publication_status" {
             query
                 .bind(sort.publication_context_id)
                 .fetch_all(&self.pool)
@@ -1450,6 +1473,7 @@ impl AttricatRepository {
             system_tags,
             outdated,
             export_status,
+            data_quality,
             current_blueprint_version,
         } = scope;
         let (column, column_type) = native_sort_column(sort.value_type)?;
@@ -1466,8 +1490,8 @@ impl AttricatRepository {
         .fetch_all(&self.pool)
         .await?;
         let mut rows = Vec::new();
-        let leaf_export_status = export_status_clause(18, export_status);
-        let null_export_status = export_status_clause(16, export_status);
+        let leaf_export_status = record_filter_clauses(18, export_status, data_quality);
+        let null_export_status = record_filter_clauses(16, export_status, data_quality);
 
         if !cursor_is_null {
             let reverse_joins = relationship_sort_reverse_joins(sort.relationship_path.len())?;
@@ -3678,6 +3702,47 @@ fn export_status_clause(parameter: usize, filter: Option<&ExportStatusFilter>) -
     )
 }
 
+/// The export status and data quality predicates of a search scope.
+/// `parameter` is the export status filter's bind position.
+fn record_filter_clauses(
+    parameter: usize,
+    export_status: Option<&ExportStatusFilter>,
+    data_quality: Option<DataQualityFilter>,
+) -> String {
+    format!(
+        "{} {}",
+        export_status_clause(parameter, export_status),
+        data_quality_clause(data_quality)
+    )
+}
+
+/// Restricts `e` to the records in `filter`. The clause binds nothing: its
+/// codes come from closed enums. Open findings are read from the
+/// needs-attention tag, which the tags index serves.
+fn data_quality_clause(filter: Option<DataQualityFilter>) -> String {
+    let findings = |state: &str| {
+        format!(
+            "EXISTS (SELECT 1 FROM rule_findings data_quality_finding \
+              WHERE data_quality_finding.workspace_id = e.workspace_id \
+                AND data_quality_finding.record_id = e.id \
+                AND data_quality_finding.state {state})"
+        )
+    };
+    let open = format!("e.system_tags @> ARRAY['{NEEDS_ATTENTION_SYSTEM_TAG}']");
+    match filter {
+        None => String::new(),
+        Some(DataQualityFilter::Open) => format!("AND {open}"),
+        Some(DataQualityFilter::Acknowledged) => format!(
+            "AND {} AND NOT {open}",
+            findings(&format!("= '{}'", RuleFindingState::Acknowledged.as_str()))
+        ),
+        Some(DataQualityFilter::Clean) => format!(
+            "AND NOT {}",
+            findings(&format!("<> '{}'", RuleFindingState::Resolved.as_str()))
+        ),
+    }
+}
+
 /// The JSON bound for [`export_status_clause`].
 fn export_status_param(filter: Option<&ExportStatusFilter>) -> Option<Value> {
     filter.map(|filter| {
@@ -3761,6 +3826,7 @@ fn record_preview(row: RecordPreviewRow) -> RecordPreview {
         table_values: HashMap::new(),
         related: HashMap::new(),
         match_explanations: Vec::new(),
+        data_quality: None,
     }
 }
 

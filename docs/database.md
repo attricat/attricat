@@ -264,7 +264,9 @@ Records are catalog items.
   (`POST /v1/records/facets/system-tags`) unnests the arrays of every record of
   one blueprint instead; if that grows slow for very large blueprints, keep a
   per-blueprint tag count table current in the repository transactions that
-  write tags, as `record_unique_key_values` is kept.
+  write tags, as `record_unique_key_values` is kept. Tags starting with
+  `attricat.` (without `:`) are Core-owned; see
+  [API](api.md#record-system-annotations).
 
 ### Record publication
 

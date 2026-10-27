@@ -143,6 +143,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
         version: effectiveVersion,
         exportStatus: exportStatusRequest(search),
         systemTags: search.systemTags,
+        dataQuality: search.dataQuality,
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,

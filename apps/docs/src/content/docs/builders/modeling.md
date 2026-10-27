@@ -182,4 +182,6 @@ See [User or team assignments](/reference/blueprint/#user-or-team-assignments) f
 
 Every record also has `system_tags` (a set of strings) and `system_metadata` (a JSON object up to 64 KiB). They sit outside the blueprint, are not versioned, and are not shown in views. They exist for automation: marking a batch for processing, recording an import source, or flagging a record for review. Workflows and rules can read and write them. Search can filter by system tags. People see them read-only on the record page and can filter the Explorer by tag; see [Tags and metadata](/guides/records/#tags-and-metadata).
 
+Tags that start with `attricat.` belong to Attricat, which adds and removes them itself. Workflows, extensions and API writes cannot add or remove them, but you can filter and sort by them. Attricat sets `attricat.sample` on sample data from a solution pack and `attricat.needs_attention` on records with at least one open [rule finding](/builders/rules/#work-with-findings). Extension tags take the form `<extension-id>:<tag>`; see the [API reference](/reference/api/#system-tags).
+
 Use attributes for anything a person should see or edit.

@@ -3,9 +3,12 @@
 //! filters, relationship paths and `@me` mean the same thing in both.
 use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::value_type::ValueType;
+use attricat_validation::predicate::MAX_TAG_LENGTH;
 use std::collections::{HashMap, HashSet};
 
-use attricat_validation::saved_search::{FILTER_OPERATOR_IS_SET, MAX_RELATIONSHIP_HOPS};
+use attricat_validation::saved_search::{
+    FILTER_OPERATOR_IS_SET, MAX_RELATIONSHIP_HOPS, SYSTEM_TAG_SORT_PREFIX, system_tag_sort,
+};
 use thiserror::Error;
 use tracing::Instrument;
 use uuid::Uuid;
@@ -452,8 +455,8 @@ impl AttricatRepository {
     }
 
     /// Resolves a table sort against `blueprint`: a configured table column
-    /// (through single-valued relationship hops), `blueprint_version`, or
-    /// `publication_status` in an enabled channel.
+    /// (through single-valued relationship hops), `blueprint_version`,
+    /// `system_tag:<tag>`, or `publication_status` in an enabled channel.
     pub async fn resolve_search_sort(
         &self,
         blueprint: &crate::model::BlueprintWithAttributes,
@@ -490,6 +493,7 @@ impl AttricatRepository {
                 descending,
                 effective_source_version,
                 publication_context_id: Some(channel.context_id),
+                system_tag: None,
                 context: context.clone(),
             }));
         }
@@ -498,7 +502,13 @@ impl AttricatRepository {
                 "sort.context_code is only valid for publication_status".to_owned(),
             ));
         }
-        if sort.field == "blueprint_version" {
+        let system_tag = system_tag_sort(&sort.field);
+        if sort.field.starts_with(SYSTEM_TAG_SORT_PREFIX) && system_tag.is_none() {
+            return Err(invalid(format!(
+                "sort.field {SYSTEM_TAG_SORT_PREFIX} must name a tag of 1-{MAX_TAG_LENGTH} bytes"
+            )));
+        }
+        if sort.field == "blueprint_version" || system_tag.is_some() {
             return Ok(Some(RecordSearchSort {
                 field: sort.field.clone(),
                 relationship_path: Vec::new(),
@@ -508,6 +518,7 @@ impl AttricatRepository {
                 descending,
                 effective_source_version,
                 publication_context_id: None,
+                system_tag: system_tag.map(str::to_owned),
                 context: context.clone(),
             }));
         }
@@ -526,7 +537,7 @@ impl AttricatRepository {
             .unwrap_or_default();
         if !columns.contains(&sort.field.as_str()) {
             return Err(invalid(format!(
-                "sort.field must be a configured table column, blueprint_version or publication_status; {} table columns: {}",
+                "sort.field must be a configured table column, blueprint_version, system_tag:<tag> or publication_status; {} table columns: {}",
                 blueprint.blueprint.code,
                 if columns.is_empty() {
                     "none".to_owned()
@@ -589,6 +600,7 @@ impl AttricatRepository {
             descending,
             effective_source_version,
             publication_context_id: None,
+            system_tag: None,
             context: context.clone(),
         }))
     }

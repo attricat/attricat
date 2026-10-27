@@ -38,6 +38,20 @@ export const findingSeverities = {
   error: 'error',
   critical: 'critical',
 } as const;
+/**
+ * Records by their unresolved findings, as Explorer filters them. Every
+ * record falls in exactly one.
+ */
+export const dataQualityFilters = {
+  /** At least one open finding. */
+  open: 'open',
+  /** Unresolved findings, every one acknowledged. */
+  acknowledged: 'acknowledged',
+  /** No unresolved findings. */
+  clean: 'clean',
+} as const;
+export type DataQualityFilter =
+  (typeof dataQualityFilters)[keyof typeof dataQualityFilters];
 export const ruleTriggerTypes = {
   manual: 'manual',
   schedule: 'schedule',

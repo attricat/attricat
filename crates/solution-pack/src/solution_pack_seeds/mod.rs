@@ -739,7 +739,7 @@ fn validate_saved_search(
     if let Some(field) = state
         .get("sort")
         .and_then(|sort| sort["field"].as_str())
-        .filter(|field| !saved_search::SYSTEM_SORT_FIELDS.contains(field))
+        .filter(|field| !saved_search::is_system_sort_field(field))
     {
         validate_attribute_path(target, field, &by_code, &mut referenced_blueprints)
             .map_err(|reason| invalid_state(&reason))?;

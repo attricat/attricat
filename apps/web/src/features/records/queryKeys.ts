@@ -1,3 +1,4 @@
+import type { DataQualityFilter } from '../rules/constants';
 import type {
   RecordSearchFilter,
   RelationshipTreeFacetChildrenRequest,
@@ -21,6 +22,7 @@ type RecordSearchKeyOptions = {
   version?: number;
   exportStatus?: { extension: string; connection?: string; status: string };
   systemTags?: string[];
+  dataQuality?: DataQualityFilter;
 };
 
 export const recordQueryKeys = {
@@ -108,6 +110,7 @@ export const recordQueryKeys = {
     version,
     exportStatus,
     systemTags,
+    dataQuality,
   }: RecordSearchKeyOptions) =>
     [
       ...recordQueryKeys.searches(),
@@ -123,6 +126,7 @@ export const recordQueryKeys = {
         version,
         exportStatus,
         systemTags,
+        dataQuality,
       },
     ] as const,
 } as const;

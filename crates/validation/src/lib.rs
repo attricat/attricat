@@ -10,6 +10,7 @@ pub mod predicate;
 pub mod principal;
 pub mod saved_search;
 pub mod status;
+pub mod system_tags;
 pub mod unique_key;
 
 /// The JSON Schema `pattern` equivalent of [`is_valid_code`], published in

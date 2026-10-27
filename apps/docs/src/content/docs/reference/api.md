@@ -211,6 +211,7 @@ POST /api/v1/records/search
   }],
   "system_tags": ["needs-review"],
   "export_status": { "extension_id": "acme.shopify", "connection": "shop-eu", "status": "rejected" },
+  "data_quality": "open",
   "context_code": "PL",
   "sort": { "field": "title", "direction": "asc" },
   "page": { "size": 50, "cursor": null }
@@ -222,11 +223,12 @@ POST /api/v1/records/search
 - `source_relationship_field` can be a relationship path of up to three hops, such as `model.brand`. Each hop needs a single target blueprint and `cardinality = "one"`, and resolves in the facet's context with its own context fallback. The children endpoint accepts the same paths.
 - A `relationship_tree_facets` item without `source_relationship_field` filters the searched blueprint by its own `hierarchy_field`: a record matches when it is a selected node or one of its descendants. The children endpoint accepts the same omission to list the blueprint's own tree, counting each node and everything below it.
 - `export_status` keeps records with that export status at one extension's connection, or its default destination when `connection` is omitted. `status` is `pending`, `synced`, `rejected`, `retrying`, `uncertain`, or `withdrawn`. It combines with the other filters like any of them, with no limit on how many records have the status.
+- `data_quality` keeps records by their unresolved rule findings: `open` (at least one open finding), `acknowledged` (unresolved findings, all acknowledged), or `clean` (none). It requires `rules.read`; without it the request returns `403`.
 - Filter operators are `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt`, and `lte`. `field` can be a relationship path of up to three hops.
 - `context_code` (default `default`) is the context in which filters, sorting, and `table_values` are resolved, inheriting from parent contexts per attribute. `query` matches values in every context.
-- `sort.field` must be a scalar column in the blueprint's table view, `blueprint_version`, or `publication_status` (with `sort.context_code` naming a channel).
-- `system_tags` keeps records that carry every listed tag. `attricat.sample` cannot be listed.
-- Responses contain `items`, `next_cursor`, `result_version_scope`, and, for each item, `system_tags`, `table_values` and `match_explanations`. Pass `next_cursor` back as `page.cursor` with the same sort.
+- `sort.field` must be a scalar column in the blueprint's table view, `blueprint_version`, `system_tag:<tag>`, or `publication_status` (with `sort.context_code` naming a channel). `system_tag:<tag>` sorts records that carry the tag apart from the rest, by record ID within each group.
+- `system_tags` keeps records that carry every listed tag, including [Core tags](#system-tags) such as `attricat.needs_attention`.
+- Responses contain `items`, `next_cursor`, `result_version_scope`, and, for each item, `system_tags`, `table_values` and `match_explanations`. For callers with `rules.read`, each item also has `data_quality`: `checked` (whether an enabled rule checks the record's blueprint revision) and `findings`, the unresolved findings counted by `state` and `severity`, most severe first. Pass `next_cursor` back as `page.cursor` with the same sort.
 - `include_total` returns a first-page total, capped at 500.
 - `include_blueprint: false` leaves `blueprint` out of the response, for later pages when you kept the first page's.
 - `include_previews: false` leaves out each item's `preview` and `related` records, unless a table column uses an extension renderer. `display` and `table_values` are always returned.
@@ -247,6 +249,28 @@ POST /api/v1/records/facets/system-tags
 - `limit` is 1 to 100 (default 50). `truncated` is `true` when more tags match.
 - `attricat.sample` is never listed; records show it as the sample badge.
 - The facet reads every record of the blueprint, so call it when someone opens a tag picker rather than with every search. When `truncated` is `false` the answer holds every tag, so filter it yourself as the person types; the same goes for a complete answer to a shorter prefix.
+
+#### System tags
+
+A record carries up to 100 system tags of at most 128 bytes each. Their form
+says who owns them:
+
+| Form | Owner | Example |
+|---|---|---|
+| Any tag without the `attricat.` prefix | You, through `system_tags` on record writes, and workflow actions | `needs-review` |
+| `<extension-id>:<tag>` | An extension, through its annotations | `acme.shop:pending` |
+| `attricat.<name>`, without `:` | Attricat Core | `attricat.needs_attention` |
+
+Core tags are reserved. A write that adds or removes one fails with
+`invalid_system_tags`, and a write that replaces the whole `system_tags` list
+keeps the record's Core tags even when the list leaves them out. The one
+exception is the sample marker, which a write may drop. You can still filter and
+sort by Core tags:
+
+- `attricat.sample` marks sample data that a solution pack installed.
+- `attricat.needs_attention` marks a record with at least one open rule finding.
+  It changes when the record's checks run and when someone acknowledges its last
+  open finding.
 
 ### Files
 

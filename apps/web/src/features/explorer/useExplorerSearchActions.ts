@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { defaultContextCode } from '../contexts/constants';
 import { maximumSystemTagFilters } from './constants';
+import type { DataQualityFilter } from '../rules/constants';
 import {
   explorerResultsQueryKey,
   requestSort,
@@ -61,6 +62,8 @@ export const useExplorerSearchActions = (
         return;
       go({ ...search, systemTags: [...systemTags, tag] });
     },
+    setDataQuality: (dataQuality: DataQualityFilter | undefined) =>
+      go({ ...search, dataQuality }),
     addAttributeFilter: (filter: AttributeFilter) =>
       go({
         ...search,

@@ -115,6 +115,15 @@ enabled publication channel. Click once for unpublished records first and
 again for published records first. Changing the selected context sorts by
 that channel instead; the agent `search_records` tool can request the same
 order with `sort.field = "publication_status"` and `sort.context_code`.
+For viewers with `rules.read`, the built-in **Data quality** column shows each
+record's unresolved rule findings: an icon coloured by the most severe open
+finding, muted when every finding is acknowledged, a check when an enabled rule
+checks the record and found nothing, and empty when no enabled rule checks its
+revision. A tooltip counts the findings by severity and state. The column sorts
+records with an open finding apart from the rest with
+`sort.field = "system_tag:attricat.needs_attention"`, and the **Data quality** filter
+(`dataQuality` in saved searches) narrows results to `open`, `acknowledged`, or
+`clean` records.
 
 ### Table context
 

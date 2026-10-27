@@ -62,7 +62,7 @@ macro_rules! code_enum {
         impl ::std::convert::TryFrom<String> for $name {
             type Error = $error;
 
-            fn try_from(code: String) -> Result<Self, Self::Error> {
+            fn try_from(code: String) -> Result<Self, $error> {
                 Self::parse(&code).ok_or($error(code))
             }
         }
@@ -70,7 +70,7 @@ macro_rules! code_enum {
         impl ::std::str::FromStr for $name {
             type Err = $error;
 
-            fn from_str(code: &str) -> Result<Self, Self::Err> {
+            fn from_str(code: &str) -> Result<Self, $error> {
                 Self::parse(code).ok_or_else(|| $error(code.to_owned()))
             }
         }

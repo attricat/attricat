@@ -3,10 +3,13 @@ use super::*;
 use crate::persistence_rows::{Db, IntoDomain};
 use crate::{
     domain_events::DomainEvent,
-    model::{CreateManualRuleRun, CreateRule, Rule, RuleFinding, RuleRun},
+    model::{
+        CreateManualRuleRun, CreateRule, DataQualityFindingCount, RecordDataQuality, Rule,
+        RuleFinding, RuleRun,
+    },
     task_queue::{TaskInsert, TaskKind},
 };
-use attricat_domain::states::{RuleFindingState, RunStatus};
+use attricat_domain::states::{RevisionStatus, RuleFindingSeverity, RuleFindingState, RunStatus};
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -798,6 +801,70 @@ impl AttricatRepository {
             .bind(self.workspace_id.0).bind(record_id).fetch_one(&self.pool).await?)
     }
 
+    /// The unresolved findings of each of `record_ids`, for a page of search
+    /// results, and whether an enabled rule checks the record's revision.
+    pub async fn record_data_quality(
+        &self,
+        record_ids: &[Uuid],
+    ) -> Result<std::collections::HashMap<Uuid, RecordDataQuality>, RepositoryError> {
+        let ws = self.workspace_id.0;
+        let checked: Vec<(Uuid, bool)> = sqlx::query_as(
+            "SELECT e.id, EXISTS (
+                 SELECT 1 FROM rules r
+                   JOIN rule_lifecycles l ON l.rule_id = r.id AND l.workspace_id = r.workspace_id
+                    AND l.enabled_version = r.version
+                  WHERE r.workspace_id = e.workspace_id AND r.blueprint_id = e.blueprint_id
+                    AND r.blueprint_version = e.blueprint_version AND r.status = $3)
+               FROM records e
+              WHERE e.workspace_id = $1 AND e.id = ANY($2)",
+        )
+        .bind(ws)
+        .bind(record_ids)
+        .bind(RevisionStatus::Published.as_str())
+        .fetch_all(&self.pool)
+        .await?;
+        let counts: Vec<(Uuid, String, String, i64)> = sqlx::query_as(
+            "SELECT record_id, state, severity, count(*)
+               FROM rule_findings
+              WHERE workspace_id = $1 AND record_id = ANY($2) AND state <> $3
+              GROUP BY record_id, state, severity",
+        )
+        .bind(ws)
+        .bind(record_ids)
+        .bind(RuleFindingState::Resolved.as_str())
+        .fetch_all(&self.pool)
+        .await?;
+        let mut quality: std::collections::HashMap<_, _> = checked
+            .into_iter()
+            .map(|(id, checked)| {
+                (
+                    id,
+                    RecordDataQuality {
+                        checked,
+                        findings: Vec::new(),
+                    },
+                )
+            })
+            .collect();
+        for (record_id, state, severity, count) in counts {
+            quality
+                .entry(record_id)
+                .or_default()
+                .findings
+                .push(DataQualityFindingCount {
+                    state: stored_code(state)?,
+                    severity: stored_code::<RuleFindingSeverity>(severity)?,
+                    count,
+                });
+        }
+        for record in quality.values_mut() {
+            record
+                .findings
+                .sort_by(|a, b| b.severity.cmp(&a.severity).then(a.state.cmp(&b.state)));
+        }
+        Ok(quality)
+    }
+
     pub async fn acknowledge_rule_finding(&self, id: Uuid) -> Result<RuleFinding, RepositoryError> {
         let ws = self.workspace_id.0;
         let actor = self
@@ -819,6 +886,7 @@ impl AttricatRepository {
             }
         }
         let finding = sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,record_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND id=$2").bind(ws).bind(id).fetch_one(&mut *tx).await?.into_domain();
+        sync_needs_attention_tags(&mut tx, ws, &[finding.record_id]).await?;
         self.commit_mutation(tx).await?;
         Ok(finding)
     }
@@ -991,6 +1059,13 @@ impl AttricatRepository {
                         .bind(ws).bind(run.rule_id).bind(result.record_id).bind(run.id).bind(run.context_id).bind(&result.evaluation_key).execute(&mut *tx).await?.rows_affected() as i64;
                 }
             }
+        }
+        if !run.dry_run {
+            let record_ids = results
+                .iter()
+                .map(|result| result.record_id)
+                .collect::<Vec<_>>();
+            sync_needs_attention_tags(&mut tx, ws, &record_ids).await?;
         }
         sqlx::query("UPDATE rule_runs SET candidate_cursor=$2,candidates_evaluated=candidates_evaluated+$3,findings_created=findings_created+$4,findings_resolved=findings_resolved+$5,status=CASE WHEN $6 THEN 'completed' ELSE 'pending' END,completed_at=CASE WHEN $6 THEN clock_timestamp() ELSE completed_at END,truncated=$8,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$7")
             .bind(run.id).bind(next_cursor).bind(results.len() as i64).bind(created).bind(resolved).bind(done).bind(ws).bind(truncated).execute(&mut *tx).await?;
@@ -1202,6 +1277,85 @@ fn severity_code(severity: &attricat_rules::Severity) -> &'static str {
         attricat_rules::Severity::Error => "error",
         attricat_rules::Severity::Critical => "critical",
     }
+}
+
+impl<S: super::RepositoryScope> AttricatRepository<S> {
+    /// Brings every record's needs-attention tag in line with its findings,
+    /// in pages. [`Self::initialize_workspace`] runs it at startup, which
+    /// tags records whose findings predate the tag. Safe to run repeatedly.
+    pub async fn reconcile_needs_attention_tags(
+        &self,
+        workspace_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        loop {
+            let record_ids: Vec<Uuid> = sqlx::query_scalar(
+                "SELECT DISTINCT f.record_id FROM rule_findings f
+                   JOIN records e ON e.workspace_id = f.workspace_id AND e.id = f.record_id
+                  WHERE f.workspace_id = $1 AND f.state = $2
+                    AND NOT e.system_tags @> ARRAY[$3]
+                 UNION
+                 SELECT e.id FROM records e
+                  WHERE e.workspace_id = $1 AND e.system_tags @> ARRAY[$3]
+                    AND NOT EXISTS (SELECT 1 FROM rule_findings f
+                                     WHERE f.workspace_id = e.workspace_id
+                                       AND f.record_id = e.id AND f.state = $2)
+                 LIMIT $4",
+            )
+            .bind(workspace_id)
+            .bind(RuleFindingState::Open.as_str())
+            .bind(NEEDS_ATTENTION_SYSTEM_TAG)
+            .bind(NEEDS_ATTENTION_RECONCILE_PAGE)
+            .fetch_all(&self.pool)
+            .await?;
+            if record_ids.is_empty() {
+                return Ok(());
+            }
+            let mut tx = self.pool.begin().await?;
+            sync_needs_attention_tags(&mut tx, workspace_id, &record_ids).await?;
+            tx.commit().await?;
+        }
+    }
+}
+
+/// Records [`AttricatRepository::reconcile_needs_attention_tags`] fixes per
+/// transaction.
+const NEEDS_ATTENTION_RECONCILE_PAGE: i64 = 1_000;
+
+/// Adds or removes [`NEEDS_ATTENTION_SYSTEM_TAG`] on `record_ids` so it shows
+/// whether each record has an open finding. Rows are locked in ID order so
+/// concurrent rule pages cannot deadlock. `updated_at` stays: the tag follows
+/// the findings and is not an edit.
+pub(super) async fn sync_needs_attention_tags(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workspace_id: Uuid,
+    record_ids: &[Uuid],
+) -> Result<(), RepositoryError> {
+    if record_ids.is_empty() {
+        return Ok(());
+    }
+    sqlx::query(
+        "WITH locked AS (
+             SELECT e.id, $3 = ANY(e.system_tags) AS tagged,
+                    EXISTS (SELECT 1 FROM rule_findings f
+                             WHERE f.workspace_id = e.workspace_id AND f.record_id = e.id
+                               AND f.state = $4) AS open
+               FROM records e
+              WHERE e.workspace_id = $1 AND e.id = ANY($2)
+              ORDER BY e.id
+                FOR NO KEY UPDATE)
+         UPDATE records e
+            SET system_tags = CASE WHEN locked.open THEN array_append(e.system_tags, $3)
+                                   ELSE array_remove(e.system_tags, $3) END
+           FROM locked
+          WHERE e.workspace_id = $1 AND e.id = locked.id AND locked.tagged <> locked.open",
+    )
+    .bind(workspace_id)
+    .bind(record_ids)
+    .bind(NEEDS_ATTENTION_SYSTEM_TAG)
+    .bind(RuleFindingState::Open.as_str())
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 #[cfg(test)]

@@ -17,9 +17,13 @@ export const retentionHoldSources = {
 export const RECORD_SEARCH_PAGE_SIZE = 25;
 /**
  * System tag of solution-pack sample records. Records show it as the sample
- * badge, and search filters cannot name it.
+ * badge instead of a tag chip.
  */
 export const SAMPLE_SYSTEM_TAG = 'attricat.sample';
+/** System tag Core keeps on records with at least one open rule finding. */
+export const NEEDS_ATTENTION_SYSTEM_TAG = 'attricat.needs_attention';
+/** Search sorts records carrying the tag after this prefix apart from the rest. */
+export const SYSTEM_TAG_SORT_PREFIX = 'system_tag:';
 /** Most tags one system tag facet request lists; the API caps it at 100. */
 export const SYSTEM_TAG_FACET_LIMIT = 50;
 /**
