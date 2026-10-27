@@ -13,7 +13,7 @@ import {
   Typography,
 } from '@mui/material';
 import { PencilIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { httpStatus } from '../../api/httpStatus';
 import { ApiRequestError } from '../../api/request';
@@ -51,6 +51,7 @@ const ProfileDetail = ({
 /** A workspace member as every catalog reader sees them. */
 export const UserProfilePage = ({ userId }: { userId: string }) => {
   const { t } = useTranslation();
+  const teamsHeadingId = useId();
   const profile = useQuery({
     queryKey: userQueryKeys.profile(userId),
     queryFn: ({ signal }) => getUserProfile(userId, signal),
@@ -148,10 +149,10 @@ export const UserProfilePage = ({ userId }: { userId: string }) => {
                 </Box>
               </Stack>
             </Paper>
-            <Box component="section" aria-labelledby="user-profile-teams">
+            <Box component="section" aria-labelledby={teamsHeadingId}>
               <Typography
                 component="h2"
-                id="user-profile-teams"
+                id={teamsHeadingId}
                 sx={{ mb: 2 }}
                 variant="h6"
               >
