@@ -2063,6 +2063,21 @@
       "checks": "Checks",
       "predicate": "{{type}}",
       "predicateOn": "{{type}} on {{attribute}}",
+      "predicateTypes": {
+        "required": "Required value",
+        "stale": "Recently changed value",
+        "has_tag": "Has a system tag",
+        "missing_tag": "Lacks a system tag",
+        "compare": "Comparison",
+        "one_of": "Allowed values",
+        "relative_date": "Date relative to today",
+        "unique": "Unique values",
+        "linked": "Linked records",
+        "referenced_by": "Referencing records",
+        "acyclic": "No cycles",
+        "all_of": "All conditions",
+        "any_of": "Any condition"
+      },
       "runs": "Runs",
       "triggers": {
         "manual": "On demand",

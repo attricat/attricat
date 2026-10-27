@@ -2147,6 +2147,21 @@
       "checks": "Sprawdza",
       "predicate": "{{type}}",
       "predicateOn": "{{type}} dla {{attribute}}",
+      "predicateTypes": {
+        "required": "Wymagana wartość",
+        "stale": "Niedawno zmieniona wartość",
+        "has_tag": "Ma tag systemowy",
+        "missing_tag": "Nie ma tagu systemowego",
+        "compare": "Porównanie",
+        "one_of": "Dozwolone wartości",
+        "relative_date": "Data względem dzisiaj",
+        "unique": "Unikalne wartości",
+        "linked": "Powiązane rekordy",
+        "referenced_by": "Odwołujące się rekordy",
+        "acyclic": "Brak cykli",
+        "all_of": "Wszystkie warunki",
+        "any_of": "Dowolny warunek"
+      },
       "runs": "Uruchamia się",
       "triggers": {
         "manual": "Na żądanie",

@@ -23,6 +23,10 @@ const TriggerText = ({ trigger }: { trigger: RuleTrigger }) => {
 export const RulePreview = ({ rule }: { rule: CompiledRule }) => {
   const { t } = useTranslation();
   const attribute = rule.predicate.attribute_code;
+  // A predicate type added on the server before the app learns it keeps its code.
+  const type = t(`rules.preview.predicateTypes.${rule.predicate.type}`, {
+    defaultValue: rule.predicate.type,
+  });
   const transitions = rule.enforcement?.transitions ?? [];
   return (
     <Stack spacing={2} sx={{ mt: 1 }}>
@@ -47,11 +51,8 @@ export const RulePreview = ({ rule }: { rule: CompiledRule }) => {
         </Typography>
         <Typography variant="body2">
           {typeof attribute === 'string'
-            ? t('rules.preview.predicateOn', {
-                attribute,
-                type: rule.predicate.type,
-              })
-            : t('rules.preview.predicate', { type: rule.predicate.type })}
+            ? t('rules.preview.predicateOn', { attribute, type })
+            : t('rules.preview.predicate', { type })}
         </Typography>
       </Box>
       <Box>

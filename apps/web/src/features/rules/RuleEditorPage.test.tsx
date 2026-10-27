@@ -167,7 +167,7 @@ describe('RuleEditorPage', () => {
       definition: ruleTemplates[0].definition,
     };
     expect(validateRule).toHaveBeenCalledWith(scope, expect.any(AbortSignal));
-    expect(screen.getByText('required on title')).toBeTruthy();
+    expect(screen.getByText('Required value on title')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
     await waitFor(() => expect(createRule).toHaveBeenCalledWith(scope));

@@ -67,6 +67,22 @@ export const ruleTriggerTypes = {
   event: 'event',
   postImport: 'post_import',
 } as const;
+/** The `type` of each predicate a compiled rule can check. */
+export const predicateTypes = {
+  required: 'required',
+  stale: 'stale',
+  hasTag: 'has_tag',
+  missingTag: 'missing_tag',
+  compare: 'compare',
+  oneOf: 'one_of',
+  relativeDate: 'relative_date',
+  unique: 'unique',
+  linked: 'linked',
+  referencedBy: 'referenced_by',
+  acyclic: 'acyclic',
+  allOf: 'all_of',
+  anyOf: 'any_of',
+} as const;
 /** Keeps the rule scope selectors readable when their labels are short. */
 export const RULE_SCOPE_SELECT_MIN_WIDTH = 220;
 /** The value of the context selector for a rule that checks every context. */

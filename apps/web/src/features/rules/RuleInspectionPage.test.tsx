@@ -7,7 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ApiRequestError } from '../../api/request';
 import { currentSession } from '../auth/api';
-import { listBlueprints, type Blueprint } from '../blueprints/api';
+import {
+  getBlueprintRevision,
+  listBlueprints,
+  type Blueprint,
+  type BlueprintWithAttributes,
+} from '../blueprints/api';
 import { listContexts, type AttributeContext } from '../contexts/api';
 import { getRecordLabels } from '../records/api';
 import {
@@ -54,6 +59,7 @@ vi.mock('../records/api', () => ({
   getRecordLabels: vi.fn(() => Promise.resolve({ items: [] })),
 }));
 vi.mock('../blueprints/api', () => ({
+  getBlueprintRevision: vi.fn(),
   listBlueprints: vi.fn(() => Promise.resolve([])),
 }));
 vi.mock('../contexts/api', () => ({
@@ -198,6 +204,28 @@ describe('RuleInspectionPage', () => {
       (screen.getByRole('button', { name: 'Acknowledge' }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it('names the attribute a finding is about by its label', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listFindingsPage).mockResolvedValue({
+      items: [
+        {
+          ...finding,
+          message: "'title' is required",
+          evidence: { attribute_code: 'title' },
+        },
+      ],
+    });
+    vi.mocked(getBlueprintRevision).mockResolvedValue({
+      attributes: [{ code: 'title', name: 'Listing title' }],
+    } as unknown as BlueprintWithAttributes);
+    renderPage('findings');
+    expect(await screen.findByText('Listing title is required')).toBeTruthy();
+    expect(vi.mocked(getBlueprintRevision).mock.calls[0]?.slice(0, 2)).toEqual([
+      rule.blueprint_id,
+      rule.blueprint_version,
+    ]);
   });
 
   it('shows why a rule run was refused', async () => {
