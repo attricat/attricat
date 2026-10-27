@@ -14,6 +14,7 @@ import { emailHref } from './email';
 import { phoneHref } from './phone';
 import { LinkedTextValue } from './TextControl';
 import { safeUrl } from './url';
+import { valueText } from './valueText';
 
 /** Opaque hex colors show a swatch beside the stored text. */
 export const ColorValue: ValueRenderer = ({ value }) => (
@@ -41,7 +42,7 @@ export const ColorValue: ValueRenderer = ({ value }) => (
             <CopyableText value={item} />
           ) : (
             <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
-              {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+              {valueText(item)}
             </Typography>
           )}
         </Stack>
