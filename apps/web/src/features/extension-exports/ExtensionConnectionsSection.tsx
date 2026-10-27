@@ -36,7 +36,12 @@ import { extensionExportQueryKeys } from './queryKeys';
 import type { ExtensionConnection, ManifestExports } from './schemas';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { connectionGrantTypes, connectionStatuses } from './constants';
+import {
+  connectionGrantTypes,
+  connectionStatuses,
+  connectionActions,
+  type ConnectionAction,
+} from './constants';
 
 const statusColors = {
   active: 'success',
@@ -179,9 +184,8 @@ const ConnectionRow = ({
       queryKey: extensionExportQueryKeys.connections(extensionId),
     });
   const action = useMutation({
-    mutationFn: (
-      name: 'device-authorization' | 'device-authorization/poll' | 'test',
-    ) => connectionAction(extensionId, connection.connection, name),
+    mutationFn: (name: ConnectionAction) =>
+      connectionAction(extensionId, connection.connection, name),
     onSuccess: refresh,
   });
   // The provider sends the operator back to this page after approving.
@@ -301,7 +305,9 @@ const ConnectionRow = ({
                 size="small"
                 startIcon={<KeyRoundIcon />}
                 onClick={() =>
-                  start(() => action.mutate('device-authorization'))
+                  start(() =>
+                    action.mutate(connectionActions.deviceAuthorization),
+                  )
                 }
               >
                 {t('extensionExports.startAuthorization')}
@@ -312,7 +318,7 @@ const ConnectionRow = ({
                   size="small"
                   startIcon={<RefreshCwIcon />}
                   onClick={() =>
-                    start(() => action.mutate('device-authorization/poll'))
+                    start(() => action.mutate(connectionActions.devicePoll))
                   }
                 >
                   {t('extensionExports.checkAuthorization')}
@@ -325,7 +331,7 @@ const ConnectionRow = ({
               disabled={busy}
               size="small"
               startIcon={<PlayIcon />}
-              onClick={() => start(() => action.mutate('test'))}
+              onClick={() => start(() => action.mutate(connectionActions.test))}
             >
               {t('extensionExports.testConnection')}
             </Button>

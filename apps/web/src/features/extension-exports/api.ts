@@ -7,6 +7,7 @@ import {
   recordExportStatusPath,
   type ConnectionGrantType,
   type ExportStatus,
+  type ConnectionAction,
 } from './constants';
 import {
   extensionConnectionSchema,
@@ -136,7 +137,7 @@ export const deleteConnection = (extensionId: string, connection: string) =>
 export const connectionAction = (
   extensionId: string,
   connection: string,
-  action: 'device-authorization' | 'device-authorization/poll' | 'test',
+  action: ConnectionAction,
 ) =>
   request(
     `${connectionPath(extensionId, connection)}/${action}`,
