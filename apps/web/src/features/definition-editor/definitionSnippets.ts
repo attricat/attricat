@@ -141,12 +141,6 @@ const blueprintSnippets: DefinitionSnippet[] = [
     placement: snippetPlacements.section,
   },
   {
-    id: 'rule',
-    group: 'validation',
-    body: '[[rules]]\ncode = "${1:rule-code}"\nname = "${2:Rule name}"\nseverity = "${3|warning,error|}"\ntriggers = [{ type = "schedule", cron = "0 0 3 * * 1", timezone = "UTC" }]\npredicate = { type = "stale", attribute_code = "${4:code}", max_age_seconds = ${5:7776000} }',
-    placement: snippetPlacements.section,
-  },
-  {
     id: 'include',
     group: 'structure',
     body: '[[includes]]\nalias = "${1:alias}"\ncode = "${2:mixin}"\nversion = ${3:1}',

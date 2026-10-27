@@ -554,31 +554,7 @@ This does not grant any permission. See [Publishing](/guides/publishing/).
 
 ## Rules
 
-`[[rules]]` tables use the rule syntax described in [Rules](/builders/rules/), without `format_version`. Rule codes must be unique within the blueprint, and their [predicates](#predicates) are type-checked against the blueprint's attributes.
-
-```toml
-[[rules]]
-code = "released-documents-approved"
-name = "Released documents have an approver"
-severity = "error"
-triggers = [{ type = "event", event_type = "record.updated.v1" }]
-predicate = { type = "required", attribute_code = "approved_by" }
-
-[rules.enforcement]
-on_save = false
-
-[[rules.enforcement.transitions]]
-attribute_code = "status"
-from = "review"
-to = "released"
-```
-
-| Key | Type | Default | Description |
-| --- | --- | --- | --- |
-| `enforcement.on_save` | boolean | `false` | Reject every write that leaves the record violating the rule. |
-| `enforcement.transitions` | array of tables | `[]` | Up to 16 guarded status changes, each with `attribute_code`, optional `from`, and `to`. Without `from`, every change into `to` is guarded. |
-
-An `enforcement` table needs `on_save = true` or at least one transition, `severity` `error` or `critical`, and a predicate without `stale`, `unique`, or `acyclic`. Each transition's `attribute_code` must be a status attribute, and `from` and `to` must be codes of its `enum`. Violations return `422 rule_violation`. See [Enforce a rule](/builders/rules/#enforce-a-rule).
+Blueprints do not contain data quality rules. A rule is created separately and applies to the blueprint's records; see [Rules](/builders/rules/). A definition with `[[rules]]` tables is rejected.
 
 ## Predicates
 
@@ -739,7 +715,7 @@ A few compile-time rules that are easy to miss:
 - A record blueprint without `views.dropdown_option` is rejected.
 - `record_schema` on a mixin is rejected.
 - `record_schema` may only name attributes the blueprint has in its top-level `required`, `properties`, `dependentRequired`, and `dependentSchemas`.
-- Predicates in `x-attricat-checks`, transition `conditions`, and `[[rules]]` must name attributes the blueprint has, with types that suit the predicate. An ordering comparison on a string, or a comparison of a date with a number, is rejected.
+- Predicates in `x-attricat-checks` and transition `conditions` must name attributes the blueprint has, with types that suit the predicate. An ordering comparison on a string, or a comparison of a date with a number, is rejected.
 - `target_blueprint`, `target_blueprints`, `acyclic`, and `tree` on a non-relationship attribute are rejected.
 - `unique_keys` on a mixin, a key naming an unknown, `json`, file, or many-target relationship attribute, or a key listing an attribute twice is rejected.
 - `from` must be `alias.code` where `code` matches the attribute's own code.

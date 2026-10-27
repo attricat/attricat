@@ -70,7 +70,6 @@ describe('definitionCompletions', () => {
       expect.arrayContaining([
         '[[attributes]]',
         '[[includes]]',
-        '[[rules]]',
         '[views.…]',
         'record_schema',
       ]),
@@ -269,7 +268,8 @@ describe('definitionCompletions', () => {
     expect(
       (
         await complete(
-          `${header}[[rules]]\n[[rules.triggers]]\ntype = "event"\nevent_type = "|"`,
+          'format_version = 1\n[[triggers]]\ntype = "event"\nevent_type = "|"',
+          definitionKinds.rule,
         )
       ).labels,
     ).toContain('attribute_value.changed.v1');
@@ -285,7 +285,6 @@ describe('definitionCompletions', () => {
       expect.arrayContaining([
         'attributes',
         'includes',
-        'rules',
         'connector_jobs',
       ]),
     );

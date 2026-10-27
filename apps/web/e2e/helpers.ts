@@ -92,6 +92,31 @@ export const publishRevision = (blueprint: Blueprint) =>
     { method: 'POST' },
   );
 
+export type Rule = { id: string; code: string; version: number };
+
+/** Creates a published, disabled data quality rule for a blueprint. */
+export const createRule = async (blueprint: Blueprint, definition: string) => {
+  const rule = await request<Rule>('/rules', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      blueprint_id: blueprint.blueprint.id,
+      blueprint_version: blueprint.blueprint.version,
+      definition: `format_version = 1\n${definition}`,
+    }),
+  });
+  return request<Rule>(`/rules/${rule.id}/versions/${rule.version}/publish`, {
+    method: 'POST',
+  });
+};
+
+export const enableRule = (rule: Rule) =>
+  request<Rule>(`/rules/${rule.id}/versions/${rule.version}/enable`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+
 export const defaultContext = async () => {
   const contexts = await request<Context[]>('/contexts');
   const context = contexts.find(({ code }) => code === 'default');

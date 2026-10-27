@@ -774,8 +774,9 @@ context behavior, and error handling.
 
 One predicate engine (`required`, `has_tag`, `missing_tag`, `compare`,
 `one_of`, `relative_date`, `linked`, `referenced_by`, `all_of`, `any_of`, plus
-rules-only `stale`, `unique`, `acyclic`) is used in three places. Each is
-type-checked against the blueprint's attributes when it is saved.
+rules-only `stale`, `unique`, `acyclic`) is used by record checks, transition
+conditions and data quality rules. Each is type-checked against the
+blueprint's attributes when it is saved.
 
 Record checks reject saves. Put them in `record_schema` under
 `x-attricat-checks` (at most 32; `code`, optional `message`, `predicate`):
@@ -808,30 +809,10 @@ value_schema = '''{"type": "string", "enum": ["open", "closed"],
         {"code": "has-root-cause", "predicate": {"type": "required", "attribute_code": "root_cause"}}]}]}}'''
 ```
 
-Rules (`[[rules]]`) report findings and can also enforce. Enforcement needs
-`severity = "error"` or `"critical"` and a predicate without `stale`, `unique`
-or `acyclic`; transition attributes must be status attributes with those codes:
-
-```toml
-[[rules]]
-code = "release-needs-approver"
-name = "Released items have an approver"
-severity = "error"
-
-[[rules.triggers]]
-type = "manual"
-
-[rules.predicate]
-type = "required"
-attribute_code = "approver"
-
-[rules.enforcement]
-
-[[rules.enforcement.transitions]]
-attribute_code = "status"
-from = "review"
-to = "released"
-```
+Data quality rules use the same predicates but are not part of the blueprint:
+they are created separately through `/rules`, report findings, and can also
+enforce (`[enforcement]`). A blueprint definition with `[[rules]]` tables is
+rejected. See [Rules](rules.md).
 
 Failures return `422 record_check_failed`, `transition_conditions_unmet` or
 `rule_violation` with `error.details.violations`. See

@@ -171,14 +171,14 @@ pub fn compile(
         includes: definition.includes,
         views: definition.views,
         record_schema: definition.record_schema,
-        rules: definition.rules,
+        embedded_rules: definition.embedded_rules,
         unique_keys: definition.unique_keys,
         attributes,
     })
 }
 
-/// Type-checks record-schema checks, status transition conditions and rules
-/// against the effective attributes. They share one predicate engine.
+/// Type-checks record-schema checks and status transition conditions against
+/// the effective attributes. They share one predicate engine.
 fn validate_declarative_checks(
     definition: &BlueprintDefinition,
     attributes: &[EffectiveAttribute],
@@ -186,7 +186,7 @@ fn validate_declarative_checks(
     use attricat_validation::predicate::{
         MAX_RECORD_CHECKS, MAX_TRANSITION_CONDITIONS, Usage, record_checks, validate_checks,
     };
-    use attricat_validation::status::{STATUS_KEY, transition_edges};
+    use attricat_validation::status::transition_edges;
     let types: HashMap<String, ValueType> = attributes
         .iter()
         .map(|attribute| (attribute.code.clone(), attribute.value_type))
@@ -219,38 +219,6 @@ fn validate_declarative_checks(
             .map_err(|message| {
                 invalid(format!("invalid status transition conditions: {message}"))
             })?;
-        }
-    }
-    for rule in &definition.rules {
-        attricat_rules::validate_against_attributes(rule, &types).map_err(|error| {
-            BlueprintError::InvalidRule(format!("rule '{}': {error}", rule.code))
-        })?;
-        for selector in rule
-            .enforcement
-            .iter()
-            .flat_map(|enforcement| &enforcement.transitions)
-        {
-            let options = attributes
-                .iter()
-                .find(|attribute| attribute.code == selector.attribute_code)
-                .and_then(|attribute| attribute.value_schema.as_ref())
-                .filter(|schema| schema.get(STATUS_KEY).is_some())
-                .and_then(|schema| schema.get("enum"))
-                .and_then(serde_json::Value::as_array);
-            let Some(options) = options else {
-                return Err(BlueprintError::InvalidRule(format!(
-                    "rule '{}': enforcement attribute '{}' is not a status attribute",
-                    rule.code, selector.attribute_code
-                )));
-            };
-            for code in std::iter::once(&selector.to).chain(selector.from.as_ref()) {
-                if !options.iter().any(|option| option.as_str() == Some(code)) {
-                    return Err(BlueprintError::InvalidRule(format!(
-                        "rule '{}': unknown status '{code}' for '{}'",
-                        rule.code, selector.attribute_code
-                    )));
-                }
-            }
         }
     }
     Ok(())

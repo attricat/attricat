@@ -36,7 +36,7 @@ attribute_code = "title"
 
 | Key | Description |
 | --- | --- |
-| `format_version` | `1`. Omit it when the rule is embedded in a blueprint. |
+| `format_version` | `1`. |
 | `code` | Unique [code](/reference/blueprint/#codes). |
 | `name` | Display name. |
 | `severity` | `info`, `warning`, `error`, or `critical`. |
@@ -131,20 +131,7 @@ The [blueprint reference](/reference/blueprint/#predicates) has the comparison r
 
 ## Where rules live
 
-Rules can be written two ways.
-
-**Inside a blueprint**, as `[[rules]]` tables without `format_version`. They are versioned and published with the blueprint:
-
-```toml
-[[rules]]
-code = "price-fresh"
-name = "Prices reviewed in the last 90 days"
-severity = "warning"
-triggers = [{ type = "schedule", cron = "0 0 3 * * 1", timezone = "UTC" }]
-predicate = { type = "stale", attribute_code = "price", max_age_seconds = 7776000 }
-```
-
-**As standalone rules** under **Manage → Data quality rules**, attached to one published blueprint revision and optionally to one context. Choose **New rule**, pick the blueprint, its published revision and a context, and write the TOML in the same editor as blueprints: it completes keys and the blueprint's attribute codes, offers ready-made triggers and predicates under **Insert**, and checks the rule against the blueprint revision as you type. **Save draft** stores the first revision; publish it from the rule's page. **New revision** on a revision's page starts the next one from it; revisions keep the blueprint revision and context.
+Rules are created under **Manage → Data quality rules**, separately from blueprints, and attached to one published blueprint revision and optionally to one context. Choose **New rule**, pick the blueprint, its published revision and a context, and write the TOML in the same editor as blueprints: it completes keys and the blueprint's attribute codes, offers ready-made triggers and predicates under **Insert**, and checks the rule against the blueprint revision as you type. **Save draft** stores the first revision; publish it from the rule's page. **New revision** on a revision's page starts the next one from it; revisions keep the blueprint revision and context.
 
 The CLI does the same:
 
@@ -154,7 +141,7 @@ acli rule publish <rule-id> 1
 acli rule enable <rule-id> 1
 ```
 
-Standalone rules have their own drafts and revisions. A rule revision must be published and then enabled before it runs, with the switch on the **Rules** tab or the CLI. Only one revision of a rule is enabled at a time; `acli rule disable` stops it.
+Rules have their own drafts and revisions. A rule revision must be published and then enabled before it runs, with the switch on the **Rules** tab or the CLI. Only one revision of a rule is enabled at a time; `acli rule disable` stops it.
 
 ## Run a rule
 
@@ -197,9 +184,14 @@ from = "review"
 to = "released"
 ```
 
-`on_save = true` rejects any write that leaves the record violating the rule. Each entry in `transitions` guards a change of a [status](/builders/validation/#statuses) attribute into `to`, optionally only from `from`. Guarded transitions are checked on the state the change produces, so a value saved in the same write counts. Inside a blueprint, write the table as `[rules.enforcement]` and `[[rules.enforcement.transitions]]` after the rule's `[[rules]]` header.
+`on_save = true` rejects any write that leaves the record violating the rule. Each entry in `transitions` guards a change of a [status](/builders/validation/#statuses) attribute into `to`, optionally only from `from`. Guarded transitions are checked on the state the change produces, so a value saved in the same write counts.
 
-Enforcement needs a severity of `error` or `critical` and a predicate that can be checked during a save. The [blueprint reference](/reference/blueprint/#rules) lists every key and requirement.
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enforcement.on_save` | boolean | `false` | Reject every write that leaves the record violating the rule. |
+| `enforcement.transitions` | array of tables | `[]` | Up to 16 guarded status changes, each with `attribute_code`, optional `from`, and `to`. Without `from`, every change into `to` is guarded. |
+
+An `enforcement` table needs `on_save = true` or at least one transition, a severity of `error` or `critical`, and a [predicate](/reference/blueprint/#predicates) without `stale`, `unique`, or `acyclic`, which cannot be checked during a save. Each transition's `attribute_code` must be a status attribute, and `from` and `to` must be codes of its `enum`.
 
 A rule attached to a context enforces in that context only. A rule without a context enforces in every context.
 

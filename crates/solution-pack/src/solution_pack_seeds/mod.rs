@@ -26,7 +26,7 @@ mod plan;
 
 pub(crate) use plan::{
     DependentPlanInput, physical_blueprint_code, plan_contexts, plan_dependents,
-    plan_prerequisites, visit_toml_predicate_blueprint_codes,
+    plan_prerequisites,
 };
 pub use plan::{
     ExistingContextSnapshot, ExistingPublicationChannel, PrerequisiteResolution,

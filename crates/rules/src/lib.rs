@@ -322,45 +322,6 @@ pub fn validate_against_attributes(
     }
     Ok(())
 }
-/// Compiles an inline `[[rules]]` blueprint table. Blueprint ownership supplies
-/// the format version, so embedding cannot relax the standalone rule contract.
-pub fn compile_embedded(value: toml::Value) -> Result<CompiledRule, RuleError> {
-    let mut table = value
-        .as_table()
-        .cloned()
-        .ok_or_else(|| RuleError::Invalid("embedded rule must be a TOML table".into()))?;
-    if table
-        .insert("format_version".into(), toml::Value::Integer(1))
-        .is_some()
-    {
-        return Err(RuleError::Invalid(
-            "embedded rule cannot set format_version".into(),
-        ));
-    }
-    compile(
-        &toml::to_string(&toml::Value::Table(table))
-            .map_err(|error| RuleError::Invalid(error.to_string()))?,
-    )
-}
-/// Schema for a blueprint's `rules` array: standalone rules without
-/// `format_version`, which the owning blueprint supplies.
-pub fn embedded_rules_schema(generator: &mut SchemaGenerator) -> Schema {
-    let mut rule = Raw::json_schema(generator);
-    rule.remove("title");
-    if let Some(properties) = rule
-        .get_mut("properties")
-        .and_then(|properties| properties.as_object_mut())
-    {
-        properties.remove("format_version");
-    }
-    if let Some(required) = rule
-        .get_mut("required")
-        .and_then(|required| required.as_array_mut())
-    {
-        required.retain(|field| field != "format_version");
-    }
-    json_schema!({ "type": "array", "items": rule })
-}
 pub fn compile(source: &str) -> Result<CompiledRule, RuleError> {
     let rule = parse(source)?;
     Ok(CompiledRule {

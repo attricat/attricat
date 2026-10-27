@@ -74,10 +74,12 @@ struct RawBlueprintDefinition {
     #[serde(default)]
     #[schemars(with = "HashMap<String, serde_json::Value>")]
     extensions: HashMap<String, toml::Value>,
-    /// Data-health rules evaluated for this blueprint's records.
+    /// Removed: rules are standalone resources created through `/rules`.
+    /// Stored revisions that still contain `[[rules]]` keep parsing, and
+    /// saving a definition that declares them is refused.
     #[serde(default)]
-    #[schemars(schema_with = "attricat_rules::embedded_rules_schema")]
-    rules: Vec<toml::Value>,
+    #[schemars(skip)]
+    rules: Option<toml::Value>,
     /// Business keys whose normalized values must be unique across the
     /// blueprint family. Record blueprints only.
     #[serde(default)]
@@ -642,38 +644,6 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         );
     }
 
-    let rules = raw
-        .rules
-        .into_iter()
-        .map(attricat_rules::compile_embedded)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| BlueprintError::InvalidRule(error.to_string()))?;
-    let mut rule_codes = HashSet::new();
-    for rule in &rules {
-        if !rule_codes.insert(rule.code.clone()) {
-            return Err(BlueprintError::InvalidRule(format!(
-                "duplicate rule code '{}'",
-                rule.code
-            )));
-        }
-        let types: HashMap<String, Option<ValueType>> = attributes
-            .iter()
-            .map(|attribute| match attribute {
-                AttributeDeclaration::Local(local) => (local.code.clone(), Some(local.value_type)),
-                AttributeDeclaration::Selection { code, .. } => (code.clone(), None),
-            })
-            .collect();
-        attricat_rules::validate_against_attributes(rule, &types).map_err(|error| match error {
-            attricat_rules::RuleError::UnknownAttribute(attribute) => {
-                BlueprintError::RuleUnknownAttribute {
-                    rule: rule.code.clone(),
-                    attribute,
-                }
-            }
-            error => BlueprintError::InvalidRule(format!("rule '{}': {error}", rule.code)),
-        })?;
-    }
-
     validate_unique_keys(&raw.unique_keys, &raw.kind, &codes)?;
 
     let definition = BlueprintDefinition {
@@ -687,7 +657,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         record_schema,
         publication: raw.publication,
         connector_jobs: raw.connector_jobs,
-        rules,
+        embedded_rules: raw.rules.is_some(),
         unique_keys: raw.unique_keys,
         attributes,
     };

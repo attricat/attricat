@@ -314,7 +314,6 @@ dependencies = [
  "attricat-domain",
  "attricat-events",
  "attricat-lexicon",
- "attricat-rules",
  "attricat-validation",
  "chrono",
  "chrono-tz",

@@ -4,7 +4,9 @@ import {
   createContext,
   createRecord,
   createRecordBlueprint,
+  createRule,
   defaultContext,
+  enableRule,
   request,
   scalar,
   suffix,
@@ -38,19 +40,7 @@ value_type = "string"
 
 [[attributes]]
 code = "summary"
-value_type = "string"
-
-[[rules]]
-code = "${ruleCode}"
-name = "Summary required ${code}"
-severity = "error"
-
-[[rules.triggers]]
-type = "manual"
-
-[rules.predicate]
-type = "required"
-attribute_code = "summary"`,
+value_type = "string"`,
   );
   const root = await defaultContext();
   const channel = await createContext(`export_${suffix()}`, root.id);
@@ -58,16 +48,21 @@ attribute_code = "summary"`,
     scalar('title', 'Exported record'),
   ]);
   // Channels may only require enabled rules.
-  const rules =
-    await request<Array<{ id: string; code: string; version: number }>>(
-      '/rules',
-    );
-  const rule = rules.find(({ code }) => code === ruleCode)!;
-  await request(`/rules/${rule.id}/versions/${rule.version}/enable`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: '{}',
-  });
+  await enableRule(
+    await createRule(
+      blueprint,
+      `code = "${ruleCode}"
+name = "Summary required ${code}"
+severity = "error"
+
+[[triggers]]
+type = "manual"
+
+[predicate]
+type = "required"
+attribute_code = "summary"`,
+    ),
+  );
 
   await openRecordInContext(page, record.id, channel.code);
   await expect(page.getByText('Not an export channel')).toBeVisible();

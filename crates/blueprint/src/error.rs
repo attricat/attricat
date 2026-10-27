@@ -16,10 +16,8 @@ pub enum BlueprintError {
     DuplicateIncludeAlias(String),
     #[error("attribute code '{0}' is duplicated")]
     DuplicateAttributeCode(String),
-    #[error("invalid embedded rule: {0}")]
-    InvalidRule(String),
-    #[error("rule '{rule}' references unknown attribute '{attribute}'")]
-    RuleUnknownAttribute { rule: String, attribute: String },
+    #[error("blueprints cannot declare [[rules]]; create rules separately with POST /rules")]
+    EmbeddedRules,
     #[error("invalid connector job: {0}")]
     InvalidConnectorJob(String),
     #[error("publication retain_on_edit_roles contains duplicate role '{0}'")]

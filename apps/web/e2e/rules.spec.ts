@@ -1,9 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   commitField,
-  request,
   createRecord,
   createRecordBlueprint,
+  createRule,
+  enableRule,
   scalar,
   suffix,
 } from './helpers';
@@ -52,17 +53,18 @@ value_type = "string"
 
 [[attributes]]
 code = "${attribute}"
-value_type = "string"
-
-[[rules]]
-code = "summary-required-${suffix()}"
+value_type = "string"`,
+  );
+  await createRule(
+    blueprint,
+    `code = "summary-required-${suffix()}"
 name = "${ruleName}"
 severity = "error"
 
-[[rules.triggers]]
+[[triggers]]
 type = "manual"
 
-[rules.predicate]
+[predicate]
 type = "required"
 attribute_code = "${attribute}"`,
   );
@@ -73,7 +75,7 @@ attribute_code = "${attribute}"`,
   const missing = await createRecord(blueprint, [
     scalar('title', 'Incomplete product'),
   ]);
-  // Blueprint rules publish disabled, so a normal run is refused.
+  // New rules start disabled, so a normal run is refused.
   await page.goto('/manage/rules');
   const ruleRow = page.getByRole('row').filter({ hasText: ruleName });
   await expect(ruleRow).toContainText('Disabled');
@@ -159,30 +161,23 @@ value_type = "string"
 
 [[attributes]]
 code = "summary"
-value_type = "string"
-
-[[rules]]
-code = "${ruleCode}"
+value_type = "string"`,
+    );
+    await enableRule(
+      await createRule(
+        blueprint,
+        `code = "${ruleCode}"
 name = "Summary required ${code}"
 severity = "error"
 
-[[rules.triggers]]
+[[triggers]]
 type = "manual"
 
-[rules.predicate]
+[predicate]
 type = "required"
 attribute_code = "summary"`,
+      ),
     );
-    const rules =
-      await request<Array<{ id: string; code: string; version: number }>>(
-        '/rules',
-      );
-    const rule = rules.find((candidate) => candidate.code === ruleCode)!;
-    await request(`/rules/${rule.id}/versions/${rule.version}/enable`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{}',
-    });
     // Saving a record checks it against every enabled rule of its revision.
     await createRecord(blueprint, [
       scalar('title', 'Complete product'),

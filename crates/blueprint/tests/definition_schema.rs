@@ -77,7 +77,9 @@ fn schema_accepts_every_parsed_repository_definition() {
     let schema = attricat_blueprint::definition_json_schema();
     let mut checked = 0;
     for definition in definitions {
-        if attricat_blueprint::parse(&definition).is_err() {
+        // Stored definitions may still declare the removed `[[rules]]`,
+        // which saving refuses and the schema does not describe.
+        if !attricat_blueprint::parse(&definition).is_ok_and(|parsed| !parsed.embedded_rules) {
             continue;
         }
         let value: toml::Value = toml::from_str(&definition).unwrap();

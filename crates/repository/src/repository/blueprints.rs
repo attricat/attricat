@@ -108,7 +108,7 @@ impl AttricatRepository {
         input: CreateBlueprint,
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
         let compiled =
-            compile_definition(transaction, self.workspace_id.0, &input.definition).await?;
+            compile_new_definition(transaction, self.workspace_id.0, &input.definition).await?;
         // Serialize all blueprint/context writers for one workspace code. The
         // shared logical namespace is required by solution-pack mappings and
         // also prevents ordinary creates from racing an applying plan.
@@ -207,7 +207,7 @@ impl AttricatRepository {
         .ok_or(RepositoryError::NotFound("blueprint"))?;
 
         let compiled =
-            compile_definition(transaction, self.workspace_id.0, &input.definition).await?;
+            compile_new_definition(transaction, self.workspace_id.0, &input.definition).await?;
         if latest.code.as_deref() != Some(compiled.code.as_str()) {
             return Err(RepositoryError::InvalidBlueprintDefinition(
                 "blueprint code cannot change across revisions".to_owned(),
@@ -327,35 +327,6 @@ impl AttricatRepository {
         .fetch_one(&mut **transaction)
         .await?
         .into_domain();
-
-        // Blueprint TOML owns rule definitions. A rule family is stable by
-        // blueprint/code; each blueprint revision contributes an immutable rule revision.
-        for rule in &compiled.rules {
-            // The code is workspace-unique: this blueprint may extend its own
-            // family but not take a code that another rule family owns.
-            let families = self.lock_rule_code(transaction, &rule.code).await?;
-            let existing = families
-                .iter()
-                .find(|(_, family_blueprint, _)| *family_blueprint == blueprint_id)
-                .map(|(id, _, version)| (*id, *version));
-            if existing.is_none() && !families.is_empty() {
-                return Err(RepositoryError::CodeTaken(CodedResource::Rule));
-            }
-            let (rule_id, rule_version) = existing
-                .map(|(id, version)| (id, version + 1))
-                .unwrap_or_else(|| (Uuid::new_v4(), 1));
-            let plan = serde_json::to_value(rule)
-                .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
-            sqlx::query("INSERT INTO rules(id,workspace_id,blueprint_id,blueprint_version,code,name,version,definition,definition_hash,compiled_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
-                .bind(rule_id).bind(self.workspace_id.0).bind(blueprint_id).bind(version).bind(&rule.code).bind(&rule.name).bind(rule_version).bind(toml::to_string(rule).map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?).bind(&rule.raw_definition_hash).bind(plan).execute(&mut **transaction).await?;
-            if existing.is_none() {
-                sqlx::query("INSERT INTO rule_lifecycles(rule_id,workspace_id) VALUES($1,$2)")
-                    .bind(rule_id)
-                    .bind(self.workspace_id.0)
-                    .execute(&mut **transaction)
-                    .await?;
-            }
-        }
 
         let mut attributes = Vec::with_capacity(compiled.attributes.len());
         for attribute in compiled.attributes {
@@ -663,8 +634,6 @@ impl AttricatRepository {
                 &blueprint.definition,
             )
             .await?;
-            sqlx::query("UPDATE rules SET status='published',published_at=COALESCE(published_at,now()) WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3")
-                .bind(self.workspace_id.0).bind(blueprint_id).bind(version).execute(&mut *transaction).await?;
             self.commit_mutation_with_event(
                 transaction,
                 blueprint_event(self, BLUEPRINT_PUBLISHED_V1, &blueprint),
@@ -1264,4 +1233,20 @@ fn describe_attributes(definition: &str, attributes: &mut [Attribute]) {
             .get(attribute.code.as_str())
             .map(|description| (*description).to_owned());
     }
+}
+
+/// Compiles a definition that is about to be saved. Stored revisions may still
+/// declare the removed `[[rules]]` tables; new ones may not.
+async fn compile_new_definition(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    definition: &str,
+) -> Result<attricat_blueprint::CompiledBlueprint, RepositoryError> {
+    let compiled = compile_definition(transaction, workspace_id, definition).await?;
+    if compiled.embedded_rules {
+        return Err(RepositoryError::invalid_blueprint_definition(
+            attricat_blueprint::BlueprintError::EmbeddedRules,
+        ));
+    }
+    Ok(compiled)
 }

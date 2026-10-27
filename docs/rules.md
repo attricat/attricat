@@ -4,23 +4,23 @@ Rules are Attricat-owned, versioned blueprint checks. They are deliberately sepa
 
 ## Definition contract
 
-Rules are declared as `[[rules]]` tables inside a strict blueprint TOML document. Blueprint ownership supplies rule format version 1; rules have a severity, one to eight triggers, and exactly one predicate. Unknown fields and arbitrary code/selectors are rejected.
+A rule is a standalone TOML document (`contracts/rule-definition-v1.schema.json`), created through `/rules` and attached to a blueprint. Blueprints do not contain rules: a blueprint definition with `[[rules]]` tables is rejected when saved, and revisions stored before that still parse, with their tables ignored. A rule has `format_version = 1`, a severity, one to eight triggers, and exactly one predicate. Unknown fields and arbitrary code/selectors are rejected.
 
 ```toml
-[[rules]]
+format_version = 1
 code = "product-title-required"
 name = "Published products have a title"
 severity = "error"
 
-[[rules.triggers]]
+[[triggers]]
 type = "schedule"
 cron = "0 0 * * * *"
 timezone = "UTC"
 
-[[rules.triggers]]
+[[triggers]]
 type = "manual"
 
-[rules.predicate]
+[predicate]
 type = "required"
 attribute_code = "title"
 ```
@@ -93,14 +93,14 @@ record check or enforcing rule blocks the dependent's next save.
 
 ## Enforcement
 
-By default a rule only reports findings. `[rules.enforcement]` also rejects
+By default a rule only reports findings. `[enforcement]` also rejects
 writes while the rule is violated:
 
 ```toml
-[rules.enforcement]
+[enforcement]
 on_save = true                       # reject any write that leaves the record violating the rule
 
-[[rules.enforcement.transitions]]    # and/or guard status transitions
+[[enforcement.transitions]]          # and/or guard status transitions
 attribute_code = "status"
 from = "review"                      # optional; omit to guard every change into `to`
 to = "released"
@@ -200,7 +200,6 @@ would, recording the lifecycle activation boundary and schedule cursors in the
 same transaction. Other rules stay published but disabled.
 
 The pack's rule code becomes `<prefix>_<code>`, so a plan reports an existing
-rule code as a conflict instead of creating a second family. Rules embedded in a
-seeded blueprint's `[[rules]]` behave as for any blueprint: they are published
-with it and start disabled. After installation, seeded rules are ordinary rules;
-a pack never updates, re-enables, or removes them.
+rule code as a conflict instead of creating a second family. A pack blueprint
+with `[[rules]]` tables is invalid. After installation, seeded rules are
+ordinary rules; a pack never updates, re-enables, or removes them.

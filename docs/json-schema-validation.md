@@ -185,7 +185,7 @@ transaction's final state:
    of the same shape as `x-attricat-checks`
    ([status attributes](status-control.md#transition-conditions)):
    `422 transition_conditions_unmet`.
-4. Enforcing rules: enabled rules with `[rules.enforcement]` (`on_save = true`
+4. Enforcing rules: enabled rules with `[enforcement]` (`on_save = true`
    and/or up to 16 guarded status `transitions`), severity `error` or
    `critical`, and a synchronous-safe predicate ([rules](rules.md#enforcement)):
    `422 rule_violation`.

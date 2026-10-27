@@ -443,22 +443,12 @@ cardinality = "one"
     server.abort();
 }
 
-fn blueprint_with_rule(code: &str) -> String {
+fn plain_blueprint(code: &str) -> String {
     format!(
         r#"format_version = 1
 code = "{code}"
 name = "{code}"
 kind = "record"
-
-[[rules]]
-code = "title-required"
-name = "Title required"
-severity = "error"
-[[rules.triggers]]
-type = "manual"
-[rules.predicate]
-type = "required"
-attribute_code = "title"
 
 [[attributes]]
 code = "title"
@@ -471,45 +461,71 @@ fields = ["title"]
     )
 }
 
+/// A blueprint with the `[[rules]]` tables that blueprints no longer accept.
+fn blueprint_with_rule(code: &str) -> String {
+    format!(
+        r#"{}
+[[rules]]
+code = "title-required"
+name = "Title required"
+severity = "error"
+[[rules.triggers]]
+type = "manual"
+[rules.predicate]
+type = "required"
+attribute_code = "title"
+"#,
+        plain_blueprint(code)
+    )
+}
+
 #[sqlx::test(migrator = "api::MIGRATOR")]
-async fn blueprint_rules_cannot_take_a_rule_code_owned_by_another_blueprint(pool: PgPool) {
+async fn blueprints_cannot_declare_rules_but_stored_ones_still_publish(pool: PgPool) {
     let repository = api::repository::AttricatRepository::new(
         pool.clone(),
         BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
+    let embedded = || api::model::CreateBlueprint {
+        definition: blueprint_with_rule("ruled"),
+    };
+    let refused = |result: Result<_, api::repository::RepositoryError>| {
+        matches!(
+            result,
+            Err(api::repository::RepositoryError::InvalidBlueprintDefinition(message))
+                if message.contains("POST /rules")
+        )
+    };
+    assert!(refused(repository.create_blueprint(embedded()).await));
+
     let first = repository
         .create_blueprint(api::model::CreateBlueprint {
-            definition: blueprint_with_rule("first_ruled"),
+            definition: plain_blueprint("ruled"),
         })
         .await
         .unwrap();
-    // The owning blueprint's next revision extends its own rule family.
-    repository
-        .create_blueprint_revision(
-            first.blueprint.id,
-            api::model::CreateBlueprint {
-                definition: blueprint_with_rule("first_ruled")
-                    .replace("Title required", "Title is required"),
-            },
-        )
+    assert!(refused(
+        repository
+            .create_blueprint_revision(first.blueprint.id, embedded())
+            .await
+    ));
+
+    // A draft saved before rules became standalone keeps its `[[rules]]`
+    // text; publishing it creates no rule.
+    sqlx::query("UPDATE blueprints SET definition = $1 WHERE id = $2")
+        .bind(blueprint_with_rule("ruled"))
+        .bind(first.blueprint.id)
+        .execute(&pool)
         .await
         .unwrap();
-    assert!(matches!(
-        repository
-            .create_blueprint(api::model::CreateBlueprint {
-                definition: blueprint_with_rule("second_ruled"),
-            })
-            .await,
-        Err(api::repository::RepositoryError::CodeTaken(
-            api::repository::CodedResource::Rule
-        ))
-    ));
-    let families: i64 =
-        sqlx::query_scalar("SELECT count(DISTINCT id) FROM rules WHERE code = 'title-required'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(families, 1);
+    repository
+        .publish_blueprint_revision(first.blueprint.id, 1)
+        .await
+        .unwrap();
+    let rules: i64 = sqlx::query_scalar("SELECT count(*) FROM rules")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rules, 0);
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
@@ -729,7 +745,7 @@ async fn a_revision_can_return_to_an_earlier_definition(pool: PgPool) {
         pool.clone(),
         BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
-    let original = blueprint_with_rule("reverted");
+    let original = plain_blueprint("reverted");
     let first = repository
         .create_blueprint(api::model::CreateBlueprint {
             definition: original.clone(),
@@ -737,7 +753,6 @@ async fn a_revision_can_return_to_an_earlier_definition(pool: PgPool) {
         .await
         .unwrap();
     let blueprint_id = first.blueprint.id;
-    // Adding a field keeps the embedded rule's definition as it was.
     repository
         .create_blueprint_revision(
             blueprint_id,

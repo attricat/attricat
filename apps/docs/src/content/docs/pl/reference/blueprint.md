@@ -554,31 +554,7 @@ Nie przyznaje to żadnych uprawnień. Zobacz [Publikowanie](/pl/guides/publishin
 
 ## Reguły
 
-Tabele `[[rules]]` używają składni reguł opisanej w [Reguły](/pl/builders/rules/), bez `format_version`. Kody reguł muszą być unikalne w obrębie schematu, a typy ich [predykatów](#predykaty) są sprawdzane względem atrybutów schematu.
-
-```toml
-[[rules]]
-code = "released-documents-approved"
-name = "Released documents have an approver"
-severity = "error"
-triggers = [{ type = "event", event_type = "record.updated.v1" }]
-predicate = { type = "required", attribute_code = "approved_by" }
-
-[rules.enforcement]
-on_save = false
-
-[[rules.enforcement.transitions]]
-attribute_code = "status"
-from = "review"
-to = "released"
-```
-
-| Klucz | Typ | Domyślnie | Opis |
-| --- | --- | --- | --- |
-| `enforcement.on_save` | wartość logiczna | `false` | Odrzuca każdy zapis, po którym rekord narusza regułę. |
-| `enforcement.transitions` | tablica tabel | `[]` | Do 16 chronionych zmian statusu, każda z `attribute_code`, opcjonalnym `from` oraz `to`. Bez `from` chroniona jest każda zmiana na `to`. |
-
-Tabela `enforcement` wymaga `on_save = true` lub co najmniej jednego przejścia, wagi (`severity`) `error` lub `critical` oraz predykatu bez `stale`, `unique` i `acyclic`. `attribute_code` każdego przejścia musi być atrybutem statusu, a `from` i `to` muszą być kodami z jego `enum`. Naruszenia zwracają `422 rule_violation`. Zobacz [Egzekwowanie reguły](/pl/builders/rules/#egzekwowanie-reguły).
+Schematy nie zawierają reguł jakości danych. Regułę tworzy się osobno i dotyczy ona rekordów Schematu; zobacz [Reguły](/pl/builders/rules/). Definicja z tabelami `[[rules]]` jest odrzucana.
 
 ## Predykaty
 
@@ -739,7 +715,7 @@ Kilka reguł kompilacji, które łatwo przeoczyć:
 - Schemat rekordu bez `views.dropdown_option` jest odrzucany.
 - `record_schema` w mixinie jest odrzucany.
 - `record_schema` może wskazywać tylko atrybuty, które schemat posiada, w swoich kluczach najwyższego poziomu `required`, `properties`, `dependentRequired` i `dependentSchemas`.
-- Predykaty w `x-attricat-checks`, warunkach przejść (`conditions`) i `[[rules]]` muszą wskazywać atrybuty, które schemat posiada, o typach pasujących do predykatu. Porównanie porządkujące na łańcuchu znaków albo porównanie daty z liczbą jest odrzucane.
+- Predykaty w `x-attricat-checks` i warunkach przejść (`conditions`) muszą wskazywać atrybuty, które schemat posiada, o typach pasujących do predykatu. Porównanie porządkujące na łańcuchu znaków albo porównanie daty z liczbą jest odrzucane.
 - `target_blueprint`, `target_blueprints`, `acyclic` i `tree` w atrybucie innym niż relacja są odrzucane.
 - `unique_keys` w mixinie, klucz wskazujący nieznany atrybut, atrybut `json`, plikowy lub relację z wieloma celami, a także klucz wymieniający atrybut dwa razy są odrzucane.
 - `from` musi mieć postać `alias.code`, gdzie `code` odpowiada kodowi samego atrybutu.

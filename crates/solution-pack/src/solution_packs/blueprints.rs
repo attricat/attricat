@@ -95,8 +95,8 @@ pub(super) fn validate_content(
 }
 
 /// Visits the blueprint codes named by predicates embedded in a blueprint
-/// definition: its `[[rules]]`, record checks (`x-attricat-checks`) and status
-/// transition conditions. Packs name these blueprints by pack-local code.
+/// definition: its record checks (`x-attricat-checks`) and status transition
+/// conditions. Packs name these blueprints by pack-local code.
 pub(super) fn visit_embedded_predicate_blueprint_codes(
     table: &mut toml::Table,
     visit: &mut dyn FnMut(&mut String) -> Result<(), SolutionPackError>,
@@ -118,13 +118,6 @@ pub(super) fn visit_embedded_predicate_blueprint_codes(
             *source = serde_json::to_string(&rewritten).expect("JSON value serializes");
         }
         Ok(())
-    }
-    if let Some(rules) = table.get_mut("rules").and_then(toml::Value::as_array_mut) {
-        for rule in rules {
-            if let Some(predicate) = rule.get_mut("predicate") {
-                crate::solution_pack_seeds::visit_toml_predicate_blueprint_codes(predicate, visit)?;
-            }
-        }
     }
     if let Some(schema) = table.get_mut("record_schema") {
         json_string(schema, visit)?;
@@ -164,6 +157,11 @@ fn prepare_blueprint(
     if table.contains_key("extensions") {
         return invalid(format!(
             "blueprint '{key}' cannot contain extension metadata in solution-pack v1"
+        ));
+    }
+    if table.contains_key("rules") {
+        return invalid(format!(
+            "blueprint '{key}' cannot declare [[rules]]; declare them as pack rules"
         ));
     }
 

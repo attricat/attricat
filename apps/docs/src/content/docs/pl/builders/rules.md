@@ -36,7 +36,7 @@ attribute_code = "title"
 
 | Klucz | Opis |
 | --- | --- |
-| `format_version` | `1`. Pomiń go, gdy reguła jest osadzona w Schemacie. |
+| `format_version` | `1`. |
 | `code` | Unikalny [kod](/pl/reference/blueprint/#kody). |
 | `name` | Nazwa wyświetlana. |
 | `severity` | `info`, `warning`, `error` lub `critical`. |
@@ -131,20 +131,7 @@ Zasady porównywania dla każdego typu oraz limity zagnieżdżania i powiązanyc
 
 ## Gdzie przechowywane są reguły
 
-Reguły można zapisać na dwa sposoby.
-
-**Wewnątrz Schematu**, jako tabele `[[rules]]` bez `format_version`. Są wersjonowane i publikowane razem ze Schematem:
-
-```toml
-[[rules]]
-code = "price-fresh"
-name = "Prices reviewed in the last 90 days"
-severity = "warning"
-triggers = [{ type = "schedule", cron = "0 0 3 * * 1", timezone = "UTC" }]
-predicate = { type = "stale", attribute_code = "price", max_age_seconds = 7776000 }
-```
-
-**Jako samodzielne reguły** w **Zarządzanie → Reguły jakości danych**, powiązane z jedną opublikowaną wersją Schematu i opcjonalnie z jednym kontekstem. Wybierz **Nowa reguła**, wskaż Schemat, jego opublikowaną rewizję i kontekst, a następnie napisz TOML w tym samym edytorze co Schematy: podpowiada klucze i kody atrybutów Schematu, oferuje gotowe wyzwalacze i warunki w menu **Wstaw** i na bieżąco sprawdza regułę względem rewizji Schematu. **Zapisz szkic** zapisuje pierwszą rewizję; opublikuj ją na stronie reguły. **Nowa rewizja** na stronie rewizji tworzy kolejną na jej podstawie; rewizje zachowują rewizję Schematu i kontekst.
+Reguły tworzy się w **Zarządzanie → Reguły jakości danych**, niezależnie od Schematów, i wiąże z jedną opublikowaną wersją Schematu i opcjonalnie z jednym kontekstem. Wybierz **Nowa reguła**, wskaż Schemat, jego opublikowaną rewizję i kontekst, a następnie napisz TOML w tym samym edytorze co Schematy: podpowiada klucze i kody atrybutów Schematu, oferuje gotowe wyzwalacze i warunki w menu **Wstaw** i na bieżąco sprawdza regułę względem rewizji Schematu. **Zapisz szkic** zapisuje pierwszą rewizję; opublikuj ją na stronie reguły. **Nowa rewizja** na stronie rewizji tworzy kolejną na jej podstawie; rewizje zachowują rewizję Schematu i kontekst.
 
 To samo można zrobić w CLI:
 
@@ -154,7 +141,7 @@ acli rule publish <rule-id> 1
 acli rule enable <rule-id> 1
 ```
 
-Samodzielne reguły mają własne szkice i wersje. Wersja reguły musi zostać opublikowana, a następnie włączona przełącznikiem na karcie **Reguły** lub w CLI, zanim zacznie działać. W danym momencie włączona jest tylko jedna wersja reguły; `acli rule disable` ją zatrzymuje.
+Reguły mają własne szkice i wersje. Wersja reguły musi zostać opublikowana, a następnie włączona przełącznikiem na karcie **Reguły** lub w CLI, zanim zacznie działać. W danym momencie włączona jest tylko jedna wersja reguły; `acli rule disable` ją zatrzymuje.
 
 ## Uruchom regułę
 
@@ -197,9 +184,14 @@ from = "review"
 to = "released"
 ```
 
-`on_save = true` odrzuca każdy zapis, po którym rekord narusza regułę. Każdy element `transitions` chroni zmianę atrybutu [statusu](/pl/builders/validation/#statusy) na `to`, opcjonalnie tylko z `from`. Chronione przejścia są sprawdzane na stanie, który powstaje po zmianie, więc wartość zapisana w tym samym zapisie się liczy. Wewnątrz Schematu zapisz tabelę jako `[rules.enforcement]` i `[[rules.enforcement.transitions]]` po nagłówku `[[rules]]` danej reguły.
+`on_save = true` odrzuca każdy zapis, po którym rekord narusza regułę. Każdy element `transitions` chroni zmianę atrybutu [statusu](/pl/builders/validation/#statusy) na `to`, opcjonalnie tylko z `from`. Chronione przejścia są sprawdzane na stanie, który powstaje po zmianie, więc wartość zapisana w tym samym zapisie się liczy.
 
-Egzekwowanie wymaga wagi `error` lub `critical` i predykatu, który da się sprawdzić podczas zapisu. Wszystkie klucze i wymagania wymienia [dokumentacja Schematu](/pl/reference/blueprint/#reguły).
+| Klucz | Typ | Domyślnie | Opis |
+| --- | --- | --- | --- |
+| `enforcement.on_save` | wartość logiczna | `false` | Odrzuca każdy zapis, po którym rekord narusza regułę. |
+| `enforcement.transitions` | tablica tabel | `[]` | Do 16 chronionych zmian statusu, każda z `attribute_code`, opcjonalnym `from` i `to`. Bez `from` chroniona jest każda zmiana na `to`. |
+
+Tabela `enforcement` wymaga `on_save = true` lub co najmniej jednego przejścia, wagi `error` lub `critical` oraz [predykatu](/pl/reference/blueprint/#predykaty) bez `stale`, `unique` i `acyclic`, których nie da się sprawdzić podczas zapisu. `attribute_code` każdego przejścia musi być atrybutem statusu, a `from` i `to` muszą być kodami z jego `enum`.
 
 Reguła powiązana z kontekstem jest egzekwowana tylko w tym kontekście. Reguła bez kontekstu jest egzekwowana w każdym kontekście.
 

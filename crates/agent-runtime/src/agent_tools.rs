@@ -3895,7 +3895,7 @@ mod tests {
             );
         }
         assert!(super::JSON_SCHEMA_GUIDE.contains("x-attricat-checks"));
-        assert!(super::BLUEPRINT_AUTHORING_GUIDE.contains("rules.enforcement"));
+        assert!(super::RULES_GUIDE.contains("[enforcement]"));
         assert!(super::STATUS_CONTROL_GUIDE.contains("x-attricat-status"));
     }
 

@@ -15,7 +15,9 @@ pub struct BlueprintDefinition {
     pub record_schema: Option<serde_json::Value>,
     pub publication: PublicationPolicy,
     pub connector_jobs: Vec<ConnectorJobDefinition>,
-    pub rules: Vec<attricat_rules::CompiledRule>,
+    /// The source still declares the removed `[[rules]]` tables, which a
+    /// stored revision may; saving such a definition is refused.
+    pub embedded_rules: bool,
     pub unique_keys: Vec<UniqueKeyDefinition>,
     pub attributes: Vec<AttributeDeclaration>,
 }
@@ -575,7 +577,9 @@ pub struct CompiledBlueprint {
     pub includes: Vec<IncludeRef>,
     pub views: HashMap<String, ViewDefinition>,
     pub record_schema: Option<serde_json::Value>,
-    pub rules: Vec<attricat_rules::CompiledRule>,
+    /// The source still declares the removed `[[rules]]` tables, which a
+    /// stored revision may; saving such a definition is refused.
+    pub embedded_rules: bool,
     pub unique_keys: Vec<UniqueKeyDefinition>,
     pub attributes: Vec<EffectiveAttribute>,
 }

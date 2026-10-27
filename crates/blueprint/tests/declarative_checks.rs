@@ -1,4 +1,4 @@
-use attricat_blueprint::{BlueprintError, parse};
+use attricat_blueprint::parse;
 
 const BLUEPRINT: &str = r#"
 format_version = 1
@@ -26,15 +26,15 @@ fields = ["title"]
 "#;
 
 #[test]
-fn parses_embedded_rule_and_rejects_unknown_attribute() {
-    let blueprint = parse(BLUEPRINT).expect("embedded rule parses");
-    assert_eq!(blueprint.rules.len(), 1);
-    assert_eq!(blueprint.rules[0].code, "title-required");
-    assert!(matches!(
-        parse(&BLUEPRINT.replace("attribute_code = \"title\"", "attribute_code = \"missing\"")),
-        Err(BlueprintError::RuleUnknownAttribute { rule, attribute })
-            if rule == "title-required" && attribute == "missing"
-    ));
+fn stored_definitions_with_removed_rules_still_parse() {
+    // Revisions saved before rules became standalone keep their `[[rules]]`
+    // tables; they parse, flagged, without being compiled.
+    let blueprint = parse(BLUEPRINT).expect("a stored definition parses");
+    assert!(blueprint.embedded_rules);
+    let rules = BLUEPRINT.find("[[rules]]").unwrap()..BLUEPRINT.find("[[attributes]]").unwrap();
+    let mut without = BLUEPRINT.to_owned();
+    without.replace_range(rules, "");
+    assert!(!parse(&without).expect("parses").embedded_rules);
 }
 
 const CHECKED: &str = r#"
@@ -45,20 +45,6 @@ kind = "record"
 record_schema = '''{"x-attricat-checks": [
   {"code": "range", "predicate": {"type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from"}}
 ]}'''
-
-[[rules]]
-code = "released-needs-owner"
-name = "Released contracts have an owner"
-severity = "error"
-[[rules.triggers]]
-type = "manual"
-[rules.predicate]
-type = "required"
-attribute_code = "owner"
-[rules.enforcement]
-[[rules.enforcement.transitions]]
-attribute_code = "status"
-to = "released"
 
 [[attributes]]
 code = "owner"
@@ -92,9 +78,8 @@ fn compile(
 }
 
 #[test]
-fn type_checks_record_checks_conditions_and_enforcement() {
-    let compiled = compile(CHECKED).expect("declarative checks compile");
-    assert!(compiled.rules[0].enforcement.is_some());
+fn type_checks_record_checks_and_conditions() {
+    compile(CHECKED).expect("declarative checks compile");
     for (from, to) in [
         // Ordering a string attribute.
         (
@@ -105,13 +90,6 @@ fn type_checks_record_checks_conditions_and_enforcement() {
         (
             r#""attribute_code":"valid_from"}}]"#,
             r#""attribute_code":"missing"}}]"#,
-        ),
-        // Enforcement on a status that does not exist.
-        ("to = \"released\"", "to = \"archived\""),
-        // Enforcement on a non-status attribute.
-        (
-            "attribute_code = \"status\"\nto",
-            "attribute_code = \"owner\"\nto",
         ),
     ] {
         assert!(compile(&CHECKED.replace(from, to)).is_err(), "{to}");
