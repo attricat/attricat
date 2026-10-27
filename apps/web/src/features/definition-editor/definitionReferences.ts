@@ -12,7 +12,7 @@ type ReferenceBlueprint = {
   version: number;
 };
 
-type ReferenceAttribute = {
+export type ReferenceAttribute = {
   code: string;
   targetBlueprint?: string;
   valueType: string;

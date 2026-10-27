@@ -12,7 +12,7 @@ import { useId, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Blueprint } from '../blueprints/api';
 import type { AttributeContext } from '../contexts/api';
-import { contextLabel } from '../contexts/contextLabel';
+import { contextLabel } from '../contexts/defaultContext';
 import { lexiconText } from '../lexicon/lexicon';
 import { ALL_CONTEXTS, RULE_SCOPE_SELECT_MIN_WIDTH } from './constants';
 
@@ -161,7 +161,7 @@ export const RuleScopeFields = ({
               value: ALL_CONTEXTS,
             },
             ...contexts.map((context) => ({
-              label: contextLabel(context, t('records.default')),
+              label: contextLabel(t, context.code),
               value: context.id,
             })),
           ]}
