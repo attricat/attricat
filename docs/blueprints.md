@@ -812,7 +812,10 @@ value_schema = '''{"type": "string", "enum": ["open", "closed"],
 Data quality rules use the same predicates but are not part of the blueprint:
 they are created separately through `/rules`, report findings, and can also
 enforce (`[enforcement]`). A blueprint definition with `[[rules]]` tables is
-rejected. See [Rules](rules.md).
+rejected. A rule checks every revision of its blueprint that it fits, so
+publishing a revision never waits for rules: the publish response lists the
+enabled rules the revision does not fit as `rule_warnings`, and those rules
+skip its records. See [Rules](rules.md#blueprint-revisions).
 
 Failures return `422 record_check_failed`, `transition_conditions_unmet` or
 `rule_violation` with `error.details.violations`. See

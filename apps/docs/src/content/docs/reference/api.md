@@ -67,11 +67,12 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `transition_conditions_unmet` | 422 | A status transition's conditions are not met. |
 | `rule_violation` | 422 | The write leaves the record violating an enforcing rule. |
 | `publication_checks_failed` | 422 | A channel's required checks fail. `details.context` is the channel code. |
-| `invalid_rule_definition` | 422 | The rule TOML is invalid or does not fit its blueprint revision. |
-| `rule_revision_unchanged` | 409 | A new rule revision is identical to the latest one, so nothing was saved. `details.version` is that revision. An earlier revision's definition can be saved again. |
-| `rule_not_enabled` | 422 | A normal manual run needs an enabled revision. Enable the rule first, or start a dry run. |
+| `invalid_rule_definition` | 422 | The rule TOML is invalid or does not fit the latest published revision of its blueprint. |
+| `blueprint_not_published` | 422 | The blueprint has no published revision yet, for example when creating a rule for it. |
+| `rule_revision_unchanged` | 409 | The saved definition is identical to the rule's current revision, so nothing was saved. `details.version` is that revision. An earlier revision's definition can be saved again. |
+| `rule_not_enabled` | 422 | A normal manual run needs an enabled rule. Enable the rule first, or start a dry run. |
 | `workflow_not_enabled` | 422 | A manual workflow run needs an enabled revision. Enable the workflow first. |
-| `rule_dry_run_required` | 409 | Enabling an enforcing rule needs a completed full dry run of that revision first. If the latest dry run stopped at its record limit, `details` is `{"truncated": true, "existing_violations": …}`. |
+| `rule_dry_run_required` | 409 | Enabling an enforcing rule, or saving an enforcing change to an enabled one, needs a completed full dry run of that definition first. If the latest dry run stopped at its record limit, `details` is `{"truncated": true, "existing_violations": …}`. |
 | `rule_has_existing_violations` | 409 | The dry run found violations. `details.existing_violations` is the count. |
 
 ### Error details
@@ -113,7 +114,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `POST` | `/blueprints/validate`, `/blueprints/{id}/versions/validate` | Run every check that creating the blueprint, or its next draft, would run, without storing it. Returns the resulting blueprint and attributes, or the same error the save would. |
 | `GET` | `/blueprints/{id}` | Current published revision. |
 | `GET` | `/blueprints/{id}/versions/{version}` | Exact revision, including drafts. |
-| `POST` | `/blueprints/{id}/versions/{version}/publish` | Publish a draft. |
+| `POST` | `/blueprints/{id}/versions/{version}/publish` | Publish a draft. Rules never block it. If enabled [rules](/builders/rules/#rules-and-blueprint-revisions) do not fit the new revision, the response has `rule_warnings`: `[{rule_id, code, name, reason, message}]`, where `reason` is `attribute_missing`, `attribute_type_changed`, or `status_changed`. |
 | `GET` | `/blueprints/by-code/{code}` and `/blueprints/by-code/{code}/versions/{version}` | Look up by code. |
 | `GET` | `/blueprints/{id}/migration-batches` | Background migration batches. |
 | `GET` | `/blueprints/{id}/sequences` | Counters of the blueprint's [generated attributes](/reference/blueprint/#counters), with `attribute_code`, `period`, `next_value`, and `updated_at`. |
@@ -230,7 +231,7 @@ POST /api/v1/records/search
 - `context_code` (default `default`) is the context in which filters, sorting, and `table_values` are resolved, inheriting from parent contexts per attribute. `query` matches values in every context.
 - `sort.field` must be a scalar column in the blueprint's table view, `blueprint_version`, `system_tag:<tag>`, or `publication_status` (with `sort.context_code` naming a channel). `system_tag:<tag>` sorts records that carry the tag apart from the rest, by record ID within each group.
 - `system_tags` (at most 20) keeps records that carry every listed tag, including [Core tags](#system-tags) such as `attricat.needs_attention`.
-- Responses contain `items`, `next_cursor`, `result_version_scope`, and, for each item, `system_tags`, `table_values` and `match_explanations`. For callers with `rules.read`, each item also has `data_quality`: `checked` (whether an enabled rule checks the record's blueprint revision) and `findings`, the unresolved findings counted by `state` and `severity`, most severe first. Pass `next_cursor` back as `page.cursor` with the same sort.
+- Responses contain `items`, `next_cursor`, `result_version_scope`, and, for each item, `system_tags`, `table_values` and `match_explanations`. For callers with `rules.read`, each item also has `data_quality`: `checked` (whether an enabled rule checks the record; a rule that skips the record's blueprint revision does not count) and `findings`, the unresolved findings counted by `state` and `severity`, most severe first. Pass `next_cursor` back as `page.cursor` with the same sort.
 - `include_total` returns a first-page total, capped at 500.
 - `include_blueprint: false` leaves `blueprint` out of the response, for later pages when you kept the first page's.
 - `include_previews: false` leaves out each item's `preview` and `related` records, unless a table column uses an extension renderer. `display` and `table_values` are always returned.
@@ -341,7 +342,7 @@ Every route acts on your own [inbox](/guides/inbox/) in the current workspace an
 | `PATCH` | `/notifications/{id}` | `{"read": true}` or `{"read": false}`. |
 | `POST` | `/notifications/read-all` | Mark every unread notification read; optional `{"up_to": "<RFC 3339>"}` keeps later ones unread. Returns `{"updated"}`. |
 
-Each notification has `id`, `kind` (for example `record.assigned`), a plain-text `title`, an optional `body`, the actor, an optional `subject` (`{"kind": "record" | "agent_conversation", "id"}`), kind-specific `data`, `read`, `read_at`, and `created_at`. New kinds can appear; show `title` for kinds you do not recognize.
+Each notification has `id`, `kind` (for example `record.assigned`), a plain-text `title`, an optional `body`, the actor, an optional `subject` (`{"kind": "record" | "agent_conversation" | "rule", "id"}`), kind-specific `data`, `read`, `read_at`, and `created_at`. New kinds can appear; show `title` for kinds you do not recognize.
 
 ### Translations
 
@@ -358,17 +359,23 @@ See [Translate labels](/builders/translations/).
 
 ### Rules and workflows
 
+`GET` rule, run, and finding routes need `rules.read`; the other rule routes need `rules.manage`.
+
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/rules/validate` | Validate rule TOML. |
-| `GET`, `POST` | `/rules` | List or create rules. |
-| `GET` | `/rules/{id}` | Read a rule. |
-| `POST` | `/rules/{id}/versions/{version}/publish`, `/enable`; `/rules/{id}/disable` | Lifecycle. `/enable` accepts an optional `{"accept_existing_violations": true}` for an enforcing rule whose dry run found violations. |
-| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. A dry run may add `"version": 2` to target a published revision that is not enabled; it defaults to the enabled revision, or the latest published one. |
-| `GET` | `/rule-runs`, `/rule-findings` | Runs and findings. A run's `truncated` is `true` when it stopped at its record limit before checking every record. Add `limit` and `offset` for pages; the `x-next-offset` header gives the next page's offset. `unresolved=true` leaves out resolved findings. Findings also narrow by `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) and `state` (`open`, `acknowledged`, `resolved`). |
+| `GET` | `/rules` | One item per rule, optionally narrowed by `blueprint_id`. Each item has the current revision's `id`, `blueprint_id`, `context_id`, `code`, `name`, `version`, `definition`, `definition_hash`, `compiled_plan`, `enabled`, `created_at` and `updated_at`, and `not_applicable`: `[{blueprint_version, reason, message}]`, the revisions the rule skips among the latest published revision and the revisions that have live records. |
+| `GET` | `/rules/{id}` | One rule, in the same shape. |
+| `POST` | `/rules` | `{"blueprint_id": "…", "context_id": null, "definition": "<toml>"}`. Creates a disabled rule at revision 1. The definition is checked against the blueprint's latest published revision. |
+| `POST` | `/rules/validate` | The same body; checks the rule without saving it. |
+| `PUT` | `/rules/{id}` | `{"definition": "<toml>", "accept_existing_violations": false}`. Saves a new current revision. |
+| `GET` | `/rules/{id}/revisions` | The changelog, newest first: `{rule_id, version, name, definition, definition_hash, created_by_user_id, created_at}`. |
+| `GET` | `/rules/{id}/revisions/{version}` | One revision. |
+| `POST` | `/rules/{id}/enable`, `/rules/{id}/disable` | Enable or disable the rule. `/enable` accepts an optional `{"accept_existing_violations": true}` for an enforcing rule whose dry run found violations. |
+| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. A normal run needs the rule enabled. A dry run may add `"definition": "<toml>"` to check a definition that is not saved yet; otherwise it checks the current revision. |
+| `GET` | `/rule-runs`, `/rule-findings` | Runs and findings. A run has the `definition_hash` it checked and `candidates_skipped`, the records it skipped because the rule does not fit their blueprint revision. Its `truncated` is `true` when it stopped at its record limit before checking every record. Add `limit` and `offset` for pages; the `x-next-offset` header gives the next page's offset. `unresolved=true` leaves out resolved findings. Findings also narrow by `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) and `state` (`open`, `acknowledged`, `resolved`). |
 | `GET` | `/rule-findings/count` | `{count}` of open and acknowledged findings; pass `record_id` to count one record's. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Replay a dead letter; acknowledge a finding. |
-| `POST` | `/rule-findings/recheck` | Re-check one record against every enabled rule of its revision. Body `{record_id, idempotency_key}`; returns `202 {run_ids}`. Pass `record_id` to `GET /rule-runs` or `/rule-findings` to follow one record. |
+| `POST` | `/rule-findings/recheck` | Re-check one record against every enabled rule of its blueprint. Body `{record_id, idempotency_key}`; returns `202 {run_ids}`. Pass `record_id` to `GET /rule-runs` or `/rule-findings` to follow one record. |
 | `POST` | `/workflows/validate` | Validate workflow TOML. |
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | List or create workflows and revisions. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Lifecycle. |

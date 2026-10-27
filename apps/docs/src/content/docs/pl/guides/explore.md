@@ -106,7 +106,7 @@ Jeśli masz uprawnienie `rules.read`, kolumna **Jakość danych** pokazuje niero
 - Kolorowa ikona ostrzeżenia oznacza, że rekord ma otwarte ustalenia. Jej kolor odpowiada najpoważniejszemu otwartemu ustaleniu.
 - Szara ikona ostrzeżenia oznacza, że wszystkie ustalenia zostały potwierdzone.
 - Znacznik wyboru oznacza, że włączona reguła sprawdza rekord i niczego nie znalazła.
-- Pusta komórka oznacza, że żadna włączona reguła nie sprawdza rewizji schematu rekordu.
+- Pusta komórka oznacza, że żadna włączona reguła nie sprawdza rekordu. Reguła, która pomija rewizję schematu rekordu, bo [do niej nie pasuje](/pl/builders/rules/#reguły-i-rewizje-schematu), się nie liczy.
 
 Posortuj według tej kolumny, aby rekordy wymagające uwagi znalazły się na początku (malejąco) albo na końcu (rosnąco). Rekord wymaga uwagi, gdy ma otwarte ustalenie; rekordy, których wszystkie ustalenia potwierdzono, są sortowane razem z rekordami bez problemów. Ustalenia aktualizują się po zakończeniu sprawdzania rekordu, więc właśnie zapisany rekord może przez chwilę pokazywać poprzedni stan.
 

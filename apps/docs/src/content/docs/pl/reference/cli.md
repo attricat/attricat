@@ -308,12 +308,13 @@ acli lexicon report [--language <znacznik>]...
 ```sh
 acli rule list [--blueprint-id <id>]
 acli rule get <rule-id>
-acli rule validate | create --blueprint-id <id> --blueprint-version <n> [--context-id <id>] --file rule.toml
-acli rule create-version <rule-id> --blueprint-id <id> --blueprint-version <n> --file rule.toml
-acli rule publish <rule-id> <version>
-acli rule enable <rule-id> <version> [--accept-existing-violations]
+acli rule revisions <rule-id>
+acli rule revision <rule-id> <version>
+acli rule validate | create --blueprint-id <id> [--context-id <id>] --file rule.toml
+acli rule update <rule-id> [--accept-existing-violations] --file rule.toml
+acli rule enable <rule-id> [--accept-existing-violations]
 acli rule disable <rule-id>
-acli rule run-now <rule-id> --idempotency-key <key> [--record-id <id>] [--dry-run]
+acli rule run-now <rule-id> --idempotency-key <key> [--record-id <id>] [--dry-run [--definition-file rule.toml]]
 acli rule run-list [--record-id <id>] [--limit <n>] [--offset <n>]
 acli rule run-replay <run-id>
 acli rule findings [--record-id <id>] [--rule-id <id>] [--blueprint-id <id>] [--context-id <id>] [--severity info|warning|error|critical] [--state open|acknowledged|resolved] [--unresolved] [--limit <n>] [--offset <n>]

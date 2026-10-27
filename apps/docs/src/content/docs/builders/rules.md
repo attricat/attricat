@@ -52,7 +52,7 @@ attribute_code = "title"
 | `event` | `event_type` | For the changed record, after one of: `record.created.v1`, `record.updated.v1`, `record.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
 | `post_import` | | Reserved for future import integration. |
 
-Triggers decide when a rule checks every record of its blueprint revision. Editing a record always re-checks that record against every enabled rule of its revision, whatever their triggers, so the record's findings match what was saved. An `event` trigger adds the re-runs for [dependent records](#changes-to-linked-records).
+Triggers decide when a rule checks every record of its blueprint. Editing a record always re-checks that record against every enabled rule of its blueprint, whatever their triggers, so the record's findings match what was saved. An `event` trigger adds the re-runs for [dependent records](#changes-to-linked-records).
 
 ### Predicates
 
@@ -131,17 +131,38 @@ The [blueprint reference](/reference/blueprint/#predicates) has the comparison r
 
 ## Where rules live
 
-Rules are created under **Manage → Data quality rules**, separately from blueprints, and attached to one published blueprint revision and optionally to one context. Choose **New rule**, pick the blueprint, its published revision and a context, and write the TOML in the same editor as blueprints: it completes keys and the blueprint's attribute codes, offers ready-made triggers and predicates under **Insert**, and checks the rule against the blueprint revision as you type. **Save draft** stores the first revision; publish it from the rule's page. **New revision** on a revision's page starts the next one from it; revisions keep the blueprint revision and context.
+Rules are created under **Manage → Data quality rules**, separately from blueprints. A rule belongs to one blueprint and optionally to one context, not to a blueprint revision. Choose **New rule**, pick the blueprint and, if needed, a context, and write the TOML in the same editor as blueprints: it completes keys and the blueprint's attribute codes, offers ready-made triggers and predicates under **Insert**, and checks the rule against the blueprint's latest published revision as you type. The blueprint needs a published revision. **Save** creates the rule, disabled.
+
+The list shows one row per rule with its blueprint, its current revision and when it changed, an **Enabled** switch, and **Dry run** and **Run now**. Each rule has its own page with a **Definition** tab, showing what it checks, its current revision, and the definition, and a **Changelog** tab. **Enable** and **Disable** are on the rule's page too.
 
 The CLI does the same:
 
 ```sh
-acli rule create --blueprint-id <uuid> --blueprint-version 3 --file title-required.toml
-acli rule publish <rule-id> 1
-acli rule enable <rule-id> 1
+acli rule create --blueprint-id <uuid> --file title-required.toml
+acli rule enable <rule-id>
 ```
 
-Rules have their own drafts and revisions. A rule revision must be published and then enabled before it runs, with the switch on the **Rules** tab or the CLI. Only one revision of a rule is enabled at a time; `acli rule disable` stops it.
+A new rule starts disabled and runs only once enabled, with the switch or the CLI. `acli rule disable` stops it.
+
+### Change a rule
+
+A rule has one current definition. **Edit** on the rule's page opens the editor. While you have unsaved changes, it shows them compared with the current revision and offers **Dry run this change**. Saving a changed definition adds a new revision that becomes current at once; there are no drafts and nothing to publish. The rule's code cannot change.
+
+```sh
+acli rule update <rule-id> --file title-required.toml
+```
+
+When a new revision is saved, the findings of earlier definitions are resolved. If the rule is enabled, its schedules move to the new revision and it re-checks every record of its blueprint straight away. Saving a definition identical to the current one fails with `409 rule_revision_unchanged`.
+
+The **Changelog** tab keeps every earlier revision, with who saved it and when. **Compare with previous** shows a revision next to the one before it, and **From** and **To** compare any two revisions side by side. The page address keeps the pair, for example `?from=2&to=3`, so you can share a comparison. `acli rule revisions <rule-id>` and `acli rule revision <rule-id> <version>` read the same history. Findings and runs name the rule revision that produced them, such as "Products have a title v3", and link to it in the changelog.
+
+### Rules and blueprint revisions
+
+A rule checks the records of every revision of its blueprint that it fits. It fits a revision when every attribute that its predicate and enforcement transitions name exists there with a suitable type and, for guarded transitions, the status attribute and its codes exist. For a revision it does not fit, the rule skips that revision's records: it records no findings for them and does not enforce anything, and an open finding of such a record is resolved. Runs count those records as skipped; the **Runs** tab shows, for example, "3 (1 skipped)".
+
+Saving or validating a rule checks it against the blueprint's latest published revision only. A warning icon in the list, and a warning on the rule's page, mark a rule that skips some revisions of its blueprint and say why.
+
+Rules never block publishing a blueprint revision. If enabled rules do not fit the revision you publish, the blueprint page lists them in a warning, and every other member with the `rules.manage` permission gets an [Inbox](/guides/inbox/) notification that links to the rule. Edit the rule to fit the new revision, or leave it if it should check only older records.
 
 ## Run a rule
 
@@ -153,7 +174,7 @@ acli rule run-now <rule-id> --idempotency-key check-one --record-id <uuid>
 acli rule run-now <rule-id> --idempotency-key preview --dry-run
 ```
 
-A dry run reports how many records would fail and saves no findings. Reusing an idempotency key returns the original run instead of starting a new one.
+A dry run reports how many records would fail and saves no findings. It works whether or not the rule is enabled; a normal run needs the rule enabled. Reusing an idempotency key returns the original run instead of starting a new one.
 
 Each run processes candidates in pages of 500 and stops after 10,000. A schedule never overlaps itself: if the previous run is still pending, the next occurrence is skipped.
 
@@ -199,26 +220,35 @@ A write that violates an enforcing rule is rejected with `422 rule_violation`, a
 
 ### Dry run before enabling
 
-Enforcing a rule on existing data can block people who did nothing wrong. So when the rule's blueprint revision already has records, Attricat needs a completed **full dry run** of the exact revision you are enabling. Otherwise enabling fails with `409 rule_dry_run_required`.
+Enforcing a rule on existing data can block people who did nothing wrong. So when the rule's blueprint already has records, Attricat needs a completed **full dry run** of the rule's current definition before you enable it. Otherwise enabling fails with `409 rule_dry_run_required`.
 
-1. Publish the revision.
-2. Run a dry run over all records, without `--record-id`, and wait for it to complete on the **Runs** tab. A dry run may target a published revision that is not enabled yet.
+1. Save the rule.
+2. Run a dry run over all records, without `--record-id`, and wait for it to complete on the **Runs** tab. A dry run works on a disabled rule.
 
    ```sh
    acli rule run-now <rule-id> --idempotency-key enforce-preview --dry-run
    ```
 
-   The CLI dry-runs the enabled revision, or the latest published one when none is enabled. To dry-run a specific revision while another is enabled, call `POST /rules/{id}/run-now` with `{"dry_run": true, "idempotency_key": "…", "version": 2}`.
-3. Enable the revision.
+3. Enable the rule.
 
-If the dry run found violations, enabling fails with `409 rule_has_existing_violations`, and `details.existing_violations` gives the count. Either fix those records and dry-run again, or accept them explicitly through the API:
+If the dry run found violations, enabling fails with `409 rule_has_existing_violations`, and `details.existing_violations` gives the count. Either fix those records and dry-run again, or accept them explicitly:
 
-```http
-POST /rules/{id}/versions/{version}/enable
-{"accept_existing_violations": true}
+```sh
+acli rule enable <rule-id> --accept-existing-violations
 ```
 
-A dry run stops after 10,000 records. When the blueprint revision has more, the dry run can't vouch for the rest, so enabling still fails with `409 rule_dry_run_required` unless you send `accept_existing_violations` as above. In that case the error message says the dry run stopped early, and `details` is `{"truncated": true, "existing_violations": …}` with the violations it found among the records it checked. Such a run has `"truncated": true` in `GET /rule-runs`.
+Through the API, send `POST /rules/{id}/enable` with `{"accept_existing_violations": true}`.
+
+A dry run stops after 10,000 records. When the blueprint has more, the dry run can't vouch for the rest, so enabling still fails with `409 rule_dry_run_required` unless you accept existing violations as above. In that case the error message says the dry run stopped early, and `details` is `{"truncated": true, "existing_violations": …}` with the violations it found among the records it checked. Such a run has `"truncated": true` in `GET /rule-runs`.
+
+Changing an enabled enforcing rule passes the same check for the new definition. A dry run can check a definition before it is saved: in the editor, choose **Dry run this change**, and if it finds violations, **Save anyway** accepts them. From the CLI, pass the file to the dry run and then accept the violations when you save:
+
+```sh
+acli rule run-now <rule-id> --idempotency-key change-preview --dry-run --definition-file rule.toml
+acli rule update <rule-id> --accept-existing-violations --file rule.toml
+```
+
+Through the API, `POST /rules/{id}/run-now` accepts `"definition"` with the TOML on a dry run only.
 
 A record that already violates an enforcing rule cannot be saved until a save fixes the violation.
 
@@ -228,7 +258,7 @@ A record that already violates an enforcing rule cannot be saved until a save fi
 
 **Acknowledge** a finding to record that someone has seen it. It stays until the record passes.
 
-A record's own page lists its open and acknowledged findings in its **Data quality** tab, 20 at a time with **Load more findings** for the rest; the data quality chip in the record's header opens the tab. After an edit, the list refreshes once the record's checks finish. **Re-run checks** checks the record against every enabled rule of its revision straight away, for example after a rule changed.
+A record's own page lists its open and acknowledged findings in its **Data quality** tab, 20 at a time with **Load more findings** for the rest; the data quality chip in the record's header opens the tab. After an edit, the list refreshes once the record's checks finish. **Re-run checks** checks the record against every enabled rule of its blueprint straight away, for example after a rule changed.
 
 In the [Explorer](/guides/explore/#sort-and-arrange-columns), the **Data quality** column and filter show which records have open or acknowledged findings, and sort the records that need attention first.
 
@@ -241,4 +271,4 @@ The **Runs** tab shows run history and failures. A run that fails five times bec
 
 ## Permissions
 
-`rules.read` lets someone see rules, runs, and findings. `rules.manage` lets them create, publish, enable, disable, and run rules, and acknowledge findings. Both are granted to the owner and admin roles by default.
+`rules.read` lets someone see rules, runs, and findings. `rules.manage` lets them create, change, enable, disable, and run rules, and acknowledge findings. Both are granted to the owner and admin roles by default.

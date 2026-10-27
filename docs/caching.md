@@ -58,7 +58,7 @@ keyed by the workspace outbox high-water mark and bounded by
 
 | Generation | Covers | Advanced by |
 | --- | --- | --- |
-| `attricat_generation` | Latest published revisions, enabled rules, Explore navigation | Publishing a blueprint revision, publishing, enabling or disabling a rule, writing Explore navigation |
+| `attricat_generation` | Latest published revisions, enabled rules, Explore navigation | Publishing a blueprint revision, saving a rule revision, enabling or disabling a rule, writing Explore navigation |
 | `contexts_generation` | The context tree | Creating, updating or deleting an attribute context |
 | `extensions_generation` | Client contributions and extension layout | Every installation, upgrade, enable, quarantine, removal, grant, revocation and configuration change (all commit through `commit_extension_mutation`), lifecycle state changes, layout writes and the workspace extensions mode |
 | `access_generation` | Each member's workspace-wide permissions | Membership onboarding, invitation acceptance and deactivation (through `revoke_user_access`), role grants and revocations, ownership transfer, workspace role edits and retirement, and the bootstrap owner and sample accounts |

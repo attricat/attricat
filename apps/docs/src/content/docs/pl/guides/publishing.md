@@ -44,7 +44,7 @@ PUT /publication-channels/{context_id}
 {"enabled": true, "required_rule_codes": ["has-sku", "certificate-valid"], "require_valid_record": true}
 ```
 
-- `required_rule_codes` zawiera do 32 kodów [reguł jakości danych](/pl/builders/rules/). Wymieniona reguła dotyczy rekordu, gdy reguła o tym kodzie jest włączona dla wersji schematu rekordu i nie jest powiązana z innym kontekstem. Reguły, które nie mają zastosowania, są pomijane. Działa każdy predykat, także `unique` i `stale`. Każdy kod musi wskazywać regułę istniejącą w obszarze roboczym, dlatego literówka kończy się błędem `422 invalid_input`, zamiast po cichu wyłączyć kontrolę.
+- `required_rule_codes` zawiera do 32 kodów [reguł jakości danych](/pl/builders/rules/). Wymieniona reguła dotyczy rekordu, gdy reguła o tym kodzie jest włączona dla schematu rekordu, [pasuje](/pl/builders/rules/#reguły-i-rewizje-schematu) do rewizji schematu rekordu i nie jest powiązana z innym kontekstem. Reguły, które nie mają zastosowania, są pomijane. Działa każdy predykat, także `unique` i `stale`. Każdy kod musi wskazywać regułę istniejącą w obszarze roboczym, dlatego literówka kończy się błędem `422 invalid_input`, zamiast po cichu wyłączyć kontrolę.
 - `require_valid_record` ponownie sprawdza schemat rekordu i jego [kontrole](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli) w kontekście kanału. Wychwytuje to problemy, które pojawiają się bez edycji, np. kontrolę `relative_date` daty wygaśnięcia.
 - Oba pola są opcjonalne. Pominięcie pola zachowuje jego bieżące ustawienie. `GET /publication-channels` je pokazuje.
 

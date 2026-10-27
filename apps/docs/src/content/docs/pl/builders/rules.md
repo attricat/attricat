@@ -52,7 +52,7 @@ attribute_code = "title"
 | `event` | `event_type` | Dla zmienionego rekordu, po jednym z: `record.created.v1`, `record.updated.v1`, `record.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
 | `post_import` | | Zarezerwowany dla przyszłej integracji z importem. |
 
-Wyzwalacze decydują, kiedy reguła sprawdza wszystkie rekordy swojej rewizji Schematu. Edycja rekordu zawsze ponownie sprawdza ten rekord względem każdej włączonej reguły jego rewizji, niezależnie od jej wyzwalaczy, więc ustalenia rekordu odpowiadają temu, co zapisano. Wyzwalacz `event` dodaje ponowne uruchomienia dla [zależnych rekordów](#zmiany-w-powiązanych-rekordach).
+Wyzwalacze decydują, kiedy reguła sprawdza wszystkie rekordy swojego Schematu. Edycja rekordu zawsze ponownie sprawdza ten rekord względem każdej włączonej reguły jego Schematu, niezależnie od jej wyzwalaczy, więc ustalenia rekordu odpowiadają temu, co zapisano. Wyzwalacz `event` dodaje ponowne uruchomienia dla [zależnych rekordów](#zmiany-w-powiązanych-rekordach).
 
 ### Predykaty
 
@@ -131,17 +131,38 @@ Zasady porównywania dla każdego typu oraz limity zagnieżdżania i powiązanyc
 
 ## Gdzie przechowywane są reguły
 
-Reguły tworzy się w **Zarządzanie → Reguły jakości danych**, niezależnie od Schematów, i wiąże z jedną opublikowaną wersją Schematu i opcjonalnie z jednym kontekstem. Wybierz **Nowa reguła**, wskaż Schemat, jego opublikowaną rewizję i kontekst, a następnie napisz TOML w tym samym edytorze co Schematy: podpowiada klucze i kody atrybutów Schematu, oferuje gotowe wyzwalacze i warunki w menu **Wstaw** i na bieżąco sprawdza regułę względem rewizji Schematu. **Zapisz szkic** zapisuje pierwszą rewizję; opublikuj ją na stronie reguły. **Nowa rewizja** na stronie rewizji tworzy kolejną na jej podstawie; rewizje zachowują rewizję Schematu i kontekst.
+Reguły tworzy się w **Zarządzanie → Reguły jakości danych**, niezależnie od Schematów. Reguła należy do jednego Schematu i opcjonalnie do jednego kontekstu, a nie do rewizji Schematu. Wybierz **Nowa reguła**, wskaż Schemat i w razie potrzeby kontekst, a następnie napisz TOML w tym samym edytorze co Schematy: podpowiada klucze i kody atrybutów Schematu, oferuje gotowe wyzwalacze i warunki w menu **Wstaw** i na bieżąco sprawdza regułę względem najnowszej opublikowanej rewizji Schematu. Schemat musi mieć opublikowaną rewizję. **Zapisz** tworzy regułę jako wyłączoną.
+
+Lista ma jeden wiersz na regułę z jej Schematem, bieżącą rewizją i czasem jej zmiany, przełącznikiem **Włączona** oraz przyciskami **Próbne wykonanie** i **Uruchom teraz**. Każda reguła ma własną stronę z kartą **Definicja**, która pokazuje, co reguła sprawdza, jej bieżącą rewizję i definicję, oraz kartą **Historia zmian**. Na stronie reguły są też przyciski **Włącz** i **Wyłącz**.
 
 To samo można zrobić w CLI:
 
 ```sh
-acli rule create --blueprint-id <uuid> --blueprint-version 3 --file title-required.toml
-acli rule publish <rule-id> 1
-acli rule enable <rule-id> 1
+acli rule create --blueprint-id <uuid> --file title-required.toml
+acli rule enable <rule-id>
 ```
 
-Reguły mają własne szkice i wersje. Wersja reguły musi zostać opublikowana, a następnie włączona przełącznikiem na karcie **Reguły** lub w CLI, zanim zacznie działać. W danym momencie włączona jest tylko jedna wersja reguły; `acli rule disable` ją zatrzymuje.
+Nowa reguła jest wyłączona i zaczyna działać dopiero po włączeniu przełącznikiem lub w CLI. `acli rule disable` ją zatrzymuje.
+
+### Zmień regułę
+
+Reguła ma jedną bieżącą definicję. **Edytuj** na stronie reguły otwiera edytor. Dopóki masz niezapisane zmiany, edytor pokazuje je w porównaniu z bieżącą rewizją i oferuje **Uruchom zmianę próbnie**. Zapisanie zmienionej definicji dodaje nową rewizję, która od razu staje się bieżąca; nie ma szkiców ani publikowania. Kodu reguły nie można zmienić.
+
+```sh
+acli rule update <rule-id> --file title-required.toml
+```
+
+Po zapisaniu nowej rewizji ustalenia wcześniejszych definicji zostają rozwiązane. Jeśli reguła jest włączona, jej harmonogramy przechodzą na nową rewizję, a reguła od razu ponownie sprawdza wszystkie rekordy swojego Schematu. Zapisanie definicji identycznej z bieżącą kończy się błędem `409 rule_revision_unchanged`.
+
+Karta **Historia zmian** przechowuje wszystkie wcześniejsze rewizje wraz z tym, kto i kiedy je zapisał. **Porównaj z poprzednią** pokazuje rewizję obok poprzedniej, a pola **Od** i **Do** pozwalają porównać obok siebie dowolne dwie rewizje. Adres strony zachowuje wybraną parę, na przykład `?from=2&to=3`, więc porównanie można udostępnić. `acli rule revisions <rule-id>` i `acli rule revision <rule-id> <version>` odczytują tę samą historię. Ustalenia i wykonania podają rewizję reguły, która je utworzyła, na przykład „Products have a title v3”, i prowadzą do niej w historii zmian.
+
+### Reguły i rewizje Schematu
+
+Reguła sprawdza rekordy każdej rewizji swojego Schematu, do której pasuje. Pasuje do rewizji, gdy każdy atrybut wskazany w jej predykacie i chronionych przejściach istnieje w tej rewizji z odpowiednim typem, a w przypadku chronionych przejść istnieją też atrybut statusu i jego kody. Rekordy rewizji, do której reguła nie pasuje, są pomijane: reguła nie zapisuje dla nich ustaleń i niczego nie egzekwuje, a otwarte ustalenie takiego rekordu zostaje rozwiązane. Wykonania liczą te rekordy jako pominięte; karta **Historia wykonań** pokazuje na przykład „3 (pominięto: 1)”.
+
+Zapisanie lub walidacja reguły sprawdza ją tylko względem najnowszej opublikowanej rewizji Schematu. Ikona ostrzeżenia na liście i ostrzeżenie na stronie reguły oznaczają regułę, która pomija niektóre rewizje swojego Schematu, i podają przyczynę.
+
+Reguły nigdy nie blokują publikacji rewizji Schematu. Jeśli włączone reguły nie pasują do publikowanej rewizji, strona Schematu wymienia je w ostrzeżeniu, a każdy inny członek z uprawnieniem `rules.manage` dostaje [powiadomienie](/pl/guides/inbox/) z odnośnikiem do reguły. Zmień regułę tak, aby pasowała do nowej rewizji, albo zostaw ją, jeśli ma sprawdzać tylko starsze rekordy.
 
 ## Uruchom regułę
 
@@ -153,7 +174,7 @@ acli rule run-now <rule-id> --idempotency-key check-one --record-id <uuid>
 acli rule run-now <rule-id> --idempotency-key preview --dry-run
 ```
 
-Próbne wykonanie (dry run) podaje, ile rekordów nie spełniłoby reguły, i nie zapisuje żadnych ustaleń. Ponowne użycie klucza idempotencji zwraca pierwotne wykonanie zamiast rozpoczynać nowe.
+Próbne wykonanie (dry run) podaje, ile rekordów nie spełniłoby reguły, i nie zapisuje żadnych ustaleń. Działa niezależnie od tego, czy reguła jest włączona; zwykłe wykonanie wymaga włączonej reguły. Ponowne użycie klucza idempotencji zwraca pierwotne wykonanie zamiast rozpoczynać nowe.
 
 Każde wykonanie przetwarza kandydatów stronami po 500 i zatrzymuje się po 10 000. Harmonogram nigdy nie nakłada się sam na siebie: jeśli poprzednie wykonanie wciąż oczekuje, kolejne wystąpienie jest pomijane.
 
@@ -199,26 +220,35 @@ Zapis naruszający egzekwowaną regułę zostaje odrzucony z `422 rule_violation
 
 ### Próbne wykonanie przed włączeniem
 
-Egzekwowanie reguły na istniejących danych może zablokować osoby, które nic złego nie zrobiły. Dlatego gdy wersja Schematu reguły ma już rekordy, Attricat wymaga ukończonego **pełnego próbnego wykonania** dokładnie tej wersji reguły, którą włączasz. W przeciwnym razie włączenie kończy się błędem `409 rule_dry_run_required`.
+Egzekwowanie reguły na istniejących danych może zablokować osoby, które nic złego nie zrobiły. Dlatego gdy Schemat reguły ma już rekordy, Attricat wymaga ukończonego **pełnego próbnego wykonania** bieżącej definicji reguły, zanim ją włączysz. W przeciwnym razie włączenie kończy się błędem `409 rule_dry_run_required`.
 
-1. Opublikuj wersję.
-2. Uruchom próbne wykonanie dla wszystkich rekordów, bez `--record-id`, i poczekaj, aż zakończy się na karcie **Historia wykonań**. Próbne wykonanie może dotyczyć opublikowanej wersji, która nie jest jeszcze włączona.
+1. Zapisz regułę.
+2. Uruchom próbne wykonanie dla wszystkich rekordów, bez `--record-id`, i poczekaj, aż zakończy się na karcie **Historia wykonań**. Próbne wykonanie działa także dla wyłączonej reguły.
 
    ```sh
    acli rule run-now <rule-id> --idempotency-key enforce-preview --dry-run
    ```
 
-   CLI uruchamia próbne wykonanie włączonej wersji albo najnowszej opublikowanej, jeśli żadna nie jest włączona. Aby sprawdzić konkretną wersję, gdy włączona jest inna, wywołaj `POST /rules/{id}/run-now` z `{"dry_run": true, "idempotency_key": "…", "version": 2}`.
-3. Włącz wersję.
+3. Włącz regułę.
 
-Jeśli próbne wykonanie znalazło naruszenia, włączenie kończy się błędem `409 rule_has_existing_violations`, a `details.existing_violations` podaje ich liczbę. Popraw te rekordy i powtórz próbne wykonanie albo zaakceptuj naruszenia jawnie przez API:
+Jeśli próbne wykonanie znalazło naruszenia, włączenie kończy się błędem `409 rule_has_existing_violations`, a `details.existing_violations` podaje ich liczbę. Popraw te rekordy i powtórz próbne wykonanie albo zaakceptuj naruszenia jawnie:
 
-```http
-POST /rules/{id}/versions/{version}/enable
-{"accept_existing_violations": true}
+```sh
+acli rule enable <rule-id> --accept-existing-violations
 ```
 
-Próbne wykonanie zatrzymuje się po 10 000 rekordów. Gdy wersja Schematu ma ich więcej, wykonanie nie obejmuje pozostałych, więc włączenie nadal kończy się błędem `409 rule_dry_run_required`, chyba że wyślesz `accept_existing_violations`, jak powyżej. W takim przypadku komunikat błędu informuje, że wykonanie zatrzymało się przed czasem, a `details` ma postać `{"truncated": true, "existing_violations": …}` i podaje liczbę naruszeń znalezionych wśród sprawdzonych rekordów. Takie wykonanie ma w `GET /rule-runs` pole `"truncated": true`.
+W API wyślij `POST /rules/{id}/enable` z `{"accept_existing_violations": true}`.
+
+Próbne wykonanie zatrzymuje się po 10 000 rekordów. Gdy Schemat ma ich więcej, wykonanie nie obejmuje pozostałych, więc włączenie nadal kończy się błędem `409 rule_dry_run_required`, chyba że zaakceptujesz istniejące naruszenia, jak powyżej. W takim przypadku komunikat błędu informuje, że wykonanie zatrzymało się przed czasem, a `details` ma postać `{"truncated": true, "existing_violations": …}` i podaje liczbę naruszeń znalezionych wśród sprawdzonych rekordów. Takie wykonanie ma w `GET /rule-runs` pole `"truncated": true`.
+
+Zmiana włączonej egzekwowanej reguły przechodzi tę samą kontrolę dla nowej definicji. Próbne wykonanie może sprawdzić definicję jeszcze przed zapisaniem: w edytorze wybierz **Uruchom zmianę próbnie**, a jeśli znajdzie naruszenia, **Zapisz mimo to** je akceptuje. W CLI przekaż plik do próbnego wykonania, a przy zapisie zaakceptuj naruszenia:
+
+```sh
+acli rule run-now <rule-id> --idempotency-key change-preview --dry-run --definition-file rule.toml
+acli rule update <rule-id> --accept-existing-violations --file rule.toml
+```
+
+W API `POST /rules/{id}/run-now` przyjmuje `"definition"` z kodem TOML tylko przy próbnym wykonaniu.
 
 Rekordu, który już narusza egzekwowaną regułę, nie można zapisać, dopóki zapis nie usunie naruszenia.
 
@@ -228,7 +258,7 @@ Rekordu, który już narusza egzekwowaną regułę, nie można zapisać, dopóki
 
 **Potwierdź** ustalenie, aby zapisać, że ktoś je widział. Pozostaje ono, dopóki rekord nie spełni reguły.
 
-Strona rekordu wyświetla jego otwarte i potwierdzone ustalenia na karcie **Jakość danych**, po 20 naraz, a pozostałe wczytuje **Wczytaj więcej ustaleń**; oznaczenie jakości danych w nagłówku rekordu otwiera tę kartę. Po edycji lista odświeża się, gdy sprawdzanie rekordu się zakończy. **Sprawdź ponownie** od razu sprawdza rekord względem każdej włączonej reguły jego rewizji, na przykład po zmianie reguły.
+Strona rekordu wyświetla jego otwarte i potwierdzone ustalenia na karcie **Jakość danych**, po 20 naraz, a pozostałe wczytuje **Wczytaj więcej ustaleń**; oznaczenie jakości danych w nagłówku rekordu otwiera tę kartę. Po edycji lista odświeża się, gdy sprawdzanie rekordu się zakończy. **Sprawdź ponownie** od razu sprawdza rekord względem każdej włączonej reguły jego Schematu, na przykład po zmianie reguły.
 
 W [Eksploratorze](/pl/guides/explore/#sortowanie-i-układ-kolumn) kolumna i filtr **Jakość danych** pokazują, które rekordy mają otwarte lub potwierdzone ustalenia, i stawiają na początku te, które wymagają uwagi.
 
@@ -241,4 +271,4 @@ Karta **Historia wykonań** pokazuje historię wykonań i błędy. Wykonanie, kt
 
 ## Uprawnienia
 
-`rules.read` pozwala wyświetlać reguły, wykonania i ustalenia. `rules.manage` pozwala tworzyć, publikować, włączać, wyłączać i uruchamiać reguły oraz potwierdzać ustalenia. Oba uprawnienia są domyślnie przyznane rolom właściciela i administratora.
+`rules.read` pozwala wyświetlać reguły, wykonania i ustalenia. `rules.manage` pozwala tworzyć, zmieniać, włączać, wyłączać i uruchamiać reguły oraz potwierdzać ustalenia. Oba uprawnienia są domyślnie przyznane rolom właściciela i administratora.

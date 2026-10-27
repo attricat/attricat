@@ -149,7 +149,7 @@ Every minute the API deletes old operational data in small batches: finished bac
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Earlier attribute values. Current values are never deleted. |
 | `TASK_RETENTION_DAYS` | `7` | Finished background task records. The latest failed attempt stays until its run is deleted, so it can be retried. |
 | `RULE_RUN_RECORD_RETENTION_DAYS` | `7` | Finished rule checks of a single record. |
-| `RULE_RUN_RETENTION_DAYS` | `90` | Finished full rule runs and failed rule runs. Each rule version keeps its latest run and its latest completed dry run, so enabling it again does not need a new dry run. |
+| `RULE_RUN_RETENTION_DAYS` | `90` | Finished full rule runs and failed rule runs. Each rule revision keeps its latest run, and each rule definition its latest completed full dry run, so enabling the rule again does not need a new dry run. |
 | `WORKFLOW_RUN_RETENTION_DAYS` | `90` | Finished workflow runs. |
 | `EXTENSION_OPERATION_RUN_RETENTION_DAYS` | `90` | Finished extension operations whose outputs have already expired. |
 | `AGENT_RUN_EVENT_RETENTION_DAYS` | `90` | The live progress stream of finished agent runs. Conversations, their messages and tool calls stay. |

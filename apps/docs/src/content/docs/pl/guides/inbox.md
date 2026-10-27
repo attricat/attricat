@@ -16,6 +16,7 @@ Twoja skrzynka zbiera powiadomienia o sprawach, które dotyczą Cię w bieżący
 | **Agent zakończył pracę** | Zaplanowane przez Ciebie uruchomienie agenta zostało zakończone. Wynik uruchomień rozpoczętych w rozmowie widać w samej rozmowie. |
 | **Dodanie do zespołu** | Ktoś dodaje Cię do zespołu. |
 | **Przyjęte zaproszenie** | Osoba zaproszona przez Ciebie dołącza do obszaru roboczego. |
+| **Reguła już nie pasuje** | Ktoś publikuje rewizję schematu, do której nie pasuje włączona [reguła jakości danych](/pl/builders/rules/#reguły-i-rewizje-schematu), więc reguła pomija jej rekordy. Trafia do członków z uprawnieniem `rules.manage`; otwiera regułę. |
 
 Nie dostajesz powiadomień o własnych działaniach. Powiadomienia o rekordzie trafiają do Ciebie tylko wtedy, gdy możesz ten rekord otworzyć.
 
@@ -25,7 +26,7 @@ Wybierz **Powiadomienia** na pasku bocznym. Liczba na ikonie pokazuje liczbę ni
 
 Powiadomienia są posortowane od najnowszych. Nieprzeczytane są pogrubione i oznaczone kropką. Karta **Nieprzeczytane** pokazuje tylko je.
 
-Wybierz powiadomienie o rekordzie lub rozmowie z agentem, aby je otworzyć. Otwarcie oznacza powiadomienie jako przeczytane. Powiadomienia takie jak *Dodanie do zespołu* są tylko wiadomościami i niczego nie otwierają.
+Wybierz powiadomienie o rekordzie, rozmowie z agentem lub regule, aby je otworzyć. Otwarcie oznacza powiadomienie jako przeczytane. Powiadomienia takie jak *Dodanie do zespołu* są tylko wiadomościami i niczego nie otwierają.
 
 ## Oznacz jako przeczytane lub nieprzeczytane
 

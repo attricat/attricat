@@ -90,13 +90,15 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `PUT` | `/workspace/extensions-mode` | Enable or disable extensions for the current workspace (`extensions.manage`). |
 | `GET`, `PUT` | `/workspace/extension-layout` | Read or replace the versioned, host-owned extension outlet layout (`extensions.manage`). Navigation layouts also contain a `promoted` stable-key list; built-ins cannot be referenced. |
 | `GET` | `/extensions/runtime` | Return enabled, client-safe extension contributions, their stable keys, host-computed display order, navigation group, and route target for host-owned navigation links (`records.read`). Pass a published record `blueprint_id` and `blueprint_version` together to overlay that revision's record-owned extension outlets while retaining global workspace rules. |
-| `GET`, `POST` | `/rules` | List or create versioned blueprint-owned declarative rules (`rules.read` / `rules.manage`). |
-| `POST` | `/rules/validate` | Run the save checks of `POST /rules` on a rule TOML definition, its published blueprint revision and optional context, without storing it (`rules.manage`). |
-| `POST` | `/rules/{rule_id}/run-now` | Enqueue an idempotent bounded manual or dry run (`rules.manage`). Optional `version` selects a published revision; only dry runs may target a revision that is not enabled. |
-| `POST` | `/rules/{rule_id}/versions/{version}/enable` | Enable a published revision (`rules.manage`). Optional body `{ "accept_existing_violations": true }`; enforcing revisions first need a completed full dry run. See [Rules](rules.md#dry-run-before-enabling). |
-| `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). Both accept `record_id` to list one record's runs or findings, and `limit`/`offset` pages with an `x-next-offset` header. `/rule-findings` also accepts `unresolved=true` and narrows by `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) and `state` (`open`, `acknowledged`, `resolved`). A run's `truncated` is `true` when it stopped at its candidate cap with candidates left. |
+| `GET`, `POST` | `/rules` | List rules, one item per rule with its current revision, `enabled` and the blueprint revisions it does not fit (`not_applicable`), or create a disabled rule for a blueprint and optional context (`rules.read` / `rules.manage`). See [Rules](rules.md#blueprint-revisions). |
+| `GET`, `PUT` | `/rules/{rule_id}` | Read one rule like the list, or save a changed definition as its new current revision; body `{definition, accept_existing_violations?}` (`rules.read` / `rules.manage`). |
+| `GET` | `/rules/{rule_id}/revisions`, `/rules/{rule_id}/revisions/{version}` | The rule's changelog, newest first, or one revision, with `created_by_user_id` (`rules.read`). |
+| `POST` | `/rules/validate` | Run the save checks of `POST /rules` on a rule TOML definition, the blueprint's latest published revision and optional context, without storing it (`rules.manage`). |
+| `POST` | `/rules/{rule_id}/run-now` | Enqueue an idempotent bounded manual or dry run of the current revision (`rules.manage`). A normal run needs the rule enabled; a dry run may send an unsaved `definition`. |
+| `POST` | `/rules/{rule_id}/enable`, `/rules/{rule_id}/disable` | Switch the rule (`rules.manage`). `/enable` takes an optional body `{ "accept_existing_violations": true }`; an enforcing rule first needs a completed full dry run of its definition. See [Rules](rules.md#dry-run-gate). |
+| `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). Both accept `record_id` to list one record's runs or findings, and `limit`/`offset` pages with an `x-next-offset` header. `/rule-findings` also accepts `unresolved=true` and narrows by `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) and `state` (`open`, `acknowledged`, `resolved`). A run's `truncated` is `true` when it stopped at its candidate cap with candidates left; `candidates_skipped` counts records on a blueprint revision the rule does not fit, and `definition_hash` names the definition it evaluated. |
 | `GET` | `/rule-findings/count` | `{count}` of open and acknowledged findings, optionally of one `record_id` (`rules.read`). |
-| `POST` | `/rule-findings/recheck` | Re-check one record against every enabled rule of its blueprint revision with idempotent record-scoped runs; body `{record_id, idempotency_key}`, returns `202 {run_ids}` (`rules.manage`). |
+| `POST` | `/rule-findings/recheck` | Re-check one record against every enabled rule of its blueprint with idempotent record-scoped runs; body `{record_id, idempotency_key}`, returns `202 {run_ids}` (`rules.manage`). |
 | `GET` | `/v1/records/{record_id}/export-status` | Every export extension's status of one record (`statuses`) and the enabled export destinations (`destinations`) (`records.read`). See [Export platform](extensions.md#per-record-export-status). |
 | `GET` | `/export-status` | Export status counts per extension, connection and status, with the enabled destinations (`data_health.read`). |
 | `GET` | `/extensions/{extension_id}/export-status` | One extension's status counts, a page of its mappings (`?connection=&status=&after=&limit=`, up to 100) and its recent rejected or exhausted handler deliveries (`extensions.read` and a workspace-wide `records.read` grant). |
@@ -240,10 +242,10 @@ requested relationship depth or item limit.
 A channel can require checks before a record is published to it:
 
 - `required_rule_codes` (at most 32 unique codes): enabled rules of the
-  record's blueprint revision with those codes, evaluated live in the channel
-  context. Rules scoped to another context do not apply; any predicate is
-  allowed. Every code must name a rule of the workspace (any revision or
-  lifecycle state); an unknown, invalid or repeated code returns
+  record's blueprint with those codes that fit its revision, evaluated live in
+  the channel context. Rules scoped to another context do not apply; any
+  predicate is allowed. Every code must name a rule of the workspace (enabled
+  or not); an unknown, invalid or repeated code returns
   `422 invalid_input`, so a typo cannot silently disable the gate.
 - `require_valid_record`: re-runs the record JSON schema (at most 10 errors,
   `source = "record_schema"`, `code = "record_schema"`) and `x-attricat-checks`
@@ -708,11 +710,11 @@ results report the same `code`, `message` and `details`.
 | `409` | `generated_sequence_not_raised` | `current` next value and the lower `requested` one; counters can only be raised |
 | `409` | `generated_reset_changed` | `attribute`, and the `previous` and `requested` `reset`; a blueprint revision cannot change the `reset` of an attribute an earlier revision generated |
 | `409` | `annotation_revision_conflict` | `expected`, `actual` revisions |
-| `409` | `rule_dry_run_required` | none when no completed full dry run exists; run `run-now` with `"dry_run": true` and the `version` first. When the latest one was truncated: `truncated: true` and `existing_violations` (found among the candidates it checked), with a distinct message; pass `accept_existing_violations` |
+| `409` | `rule_dry_run_required` | none when no completed full dry run of the definition exists; run `run-now` with `"dry_run": true` first, and the unsaved `definition` when saving a change. When the latest one was truncated: `truncated: true` and `existing_violations` (found among the candidates it checked), with a distinct message; pass `accept_existing_violations` |
 | `409` | `rule_has_existing_violations` | `existing_violations` (a count); fix the records or pass `accept_existing_violations` |
 | `409` | `code_taken` | `resource`: `blueprint`, `context`, `workflow`, `rule` or `connection`, whose code or name is already in use |
 | `409` | `blueprint_revision_unchanged` | `version`: the latest revision, which the definition is identical to; an earlier revision's definition can be saved again |
-| `409` | `rule_revision_unchanged` | `version`: the latest rule revision, which the definition is identical to; an earlier revision's definition can be saved again |
+| `409` | `rule_revision_unchanged` | `version`: the rule's current revision, which the definition is identical to; an earlier revision's definition can be saved again |
 | `422` | `invalid_comment` | `max` characters |
 | `422` | `password_too_short`, `password_too_long` | `min` characters or `max` bytes |
 | `422` | `invalid_display_name` | `min` and `max` characters |

@@ -52,7 +52,7 @@ Można zastosować tylko gotowe plany. Plan wygasa po 24 godzinach, jeśli jego 
 
 ### Reguły, przepływy pracy i zapisane wyszukiwania
 
-- **Reguły** są tworzone dla Schematów pakietu i publikowane. Podsumowanie planu pokazuje, które zostaną włączone; pozostałe są wyłączone, dopóki ich nie włączysz. Reguły wymagają opublikowanych Schematów, więc `--blueprint-publication draft` blokuje regułę dla nowo tworzonego Schematu.
+- **Reguły** są tworzone dla Schematów pakietu. Są wyłączone, chyba że pakiet je włącza; podsumowanie planu pokazuje, które zostaną włączone, a pozostałe są wyłączone, dopóki ich nie włączysz. Reguły wymagają opublikowanych Schematów, więc `--blueprint-publication draft` blokuje regułę dla nowo tworzonego Schematu.
 - Reguła, która **odrzuca nieprawidłowe zmiany**, nie jest włączana dla Schematu wskazanego przez Ciebie lub użytego ponownie, ponieważ ten Schemat może już mieć rekordy. Zostaje zainstalowana jako wyłączona, a podsumowanie planu pokazuje `enable_deferred_reason: enforcing_rule_requires_dry_run`. Uruchom regułę w trybie próbnym, przejrzyj wyniki i włącz ją tak jak każdą inną regułę.
 - **Przepływy pracy** są zawsze publikowane. Podsumowanie planu pokazuje, które zostaną włączone; pozostałe są wyłączone, dopóki ich nie włączysz.
 - **Zapisane wyszukiwania** są udostępniane całemu obszarowi roboczemu i pojawiają się na liście **Zapisane wyszukiwania** w Przeglądarce rekordów. Właścicielem wyszukiwań utworzonych przez stosowany plan jesteś Ty. Wyszukiwanie, które z kodami Twojego obszaru roboczego byłoby nieprawidłowe, na przykład większe niż 32 KiB po podstawieniu długiego kodu kontekstu, jest blokowane jako `saved_search_state_invalid`, a `invalid_state_reason` w podsumowaniu planu podaje przyczynę.

@@ -48,7 +48,7 @@ so a request never uses cached state older than what it read:
 
 | Column | Advanced by |
 | --- | --- |
-| `attricat_generation` | blueprint revision publication, rule publication, enabling and disabling a rule, and Explore navigation writes |
+| `attricat_generation` | blueprint revision publication, saving a rule revision, enabling and disabling a rule, and Explore navigation writes |
 | `contexts_generation` | creating, updating, and deleting an attribute context |
 | `extensions_generation` | extension installation, upgrade, lifecycle, grant, configuration, and layout changes, and the workspace extensions mode |
 | `access_generation` | membership onboarding, acceptance and deactivation, role grants, revocations and ownership transfer, workspace role edits and retirement, and bootstrap and sample accounts |

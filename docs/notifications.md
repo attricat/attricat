@@ -17,7 +17,7 @@ unread or delete them permanently.
 | `title` | A plain-text, self-contained summary of 1–300 characters, used by the API, the CLI and agents, and by the web app for kinds it does not know. |
 | `body` | Optional detail of up to 2,000 characters, for example a comment excerpt. |
 | `actor_user_id` | Who caused it, or `NULL` for automation and agent runs. |
-| `subject_kind`, `subject_id` | Optional link target: `record` or `agent_conversation`. Both are set or neither is; a notification without a subject is a plain message. |
+| `subject_kind`, `subject_id` | Optional link target: `record`, `agent_conversation` or `rule`. Both are set or neither is; a notification without a subject is a plain message. |
 | `data` | A JSON object of kind-specific values that the web app uses to render a translated message. |
 | `read_at` | `NULL` while unread. |
 
@@ -53,6 +53,7 @@ transaction for producers that have none. Both apply these rules:
 | `agent.run_completed` | The user who started the run | Agent conversation | Completion of scheduled and manual runs; interactive completions are visible in the conversation |
 | `team.member_added` | Users added to a team | None | Team creation and member changes |
 | `workspace.invitation_accepted` | The member who sent the invitation | None | Invitation acceptance and invited-user onboarding |
+| `rule.not_applicable` | Members who hold `rules.manage` for the workspace | Rule | Publishing a blueprint revision that an enabled rule does not fit; `data` holds `rule_name`, `blueprint_id`, `blueprint_name`, `blueprint_version` and the `reason`, and `body` the rule's message. See [Rules](rules.md#blueprint-revisions). |
 
 To add a producer:
 
@@ -91,4 +92,4 @@ own inbox. Notifications themselves are a consequence of audited changes.
   every 30 seconds and after each inbox change. `/inbox` lists notifications
   with **All** and **Unread** tabs, per-item read/unread and delete actions, and
   **Mark all as read**. Opening a notification with a subject marks it read and
-  goes to the record or conversation.
+  goes to the record, conversation or rule.

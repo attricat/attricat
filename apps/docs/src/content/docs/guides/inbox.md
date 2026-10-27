@@ -16,6 +16,7 @@ Your inbox collects notifications about things that concern you in the current w
 | **Agent run finished** | A scheduled agent run you set up has finished. Runs you start in a conversation show their result there instead. |
 | **Added to a team** | Someone adds you to a team. |
 | **Invitation accepted** | Someone you invited joins the workspace. |
+| **Rule no longer fits** | Someone publishes a blueprint revision that an enabled [data quality rule](/builders/rules/#rules-and-blueprint-revisions) does not fit, so the rule skips its records. Sent to members with the `rules.manage` permission; it opens the rule. |
 
 You are never notified about your own actions. Notifications about a record only reach you if you can open that record.
 
@@ -25,7 +26,7 @@ Choose **Inbox** in the sidebar. The badge on the icon shows how many notificati
 
 The inbox lists notifications newest first. Unread notifications are bold and marked with a dot. Use the **Unread** tab to see only those.
 
-Select a notification about a record or an agent conversation to open it. Opening a notification marks it as read. Notifications such as *Added to a team* are messages only and do not open anything.
+Select a notification about a record, an agent conversation, or a rule to open it. Opening a notification marks it as read. Notifications such as *Added to a team* are messages only and do not open anything.
 
 ## Mark as read or unread
 

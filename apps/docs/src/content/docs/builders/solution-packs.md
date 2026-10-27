@@ -52,7 +52,7 @@ Only ready plans can be applied. Plans expire after 24 hours if application has 
 
 ### Rules, workflows, and saved searches
 
-- **Rules** are created for the pack's blueprints and published. The plan summary shows whether each will be enabled; the others stay disabled until you enable them. Rules need published blueprints, so `--blueprint-publication draft` blocks a rule for a newly created blueprint.
+- **Rules** are created for the pack's blueprints. They start disabled unless the pack enables them; the plan summary shows whether each will be enabled, and the others stay disabled until you enable them. Rules need published blueprints, so `--blueprint-publication draft` blocks a rule for a newly created blueprint.
 - A rule that **rejects invalid changes** is not enabled on a blueprint you mapped or reused, because that blueprint may already have records. It is installed disabled, and the plan summary shows `enable_deferred_reason: enforcing_rule_requires_dry_run`. Run a dry run of the rule, review its findings, and enable it as you would any rule.
 - **Workflows** are always published. The plan summary shows whether each will be enabled; the others stay disabled until you enable them.
 - **Saved searches** are shared with the whole workspace and appear under **Saved searches** in Explore. You own the ones created by the plan you apply. A search that would be invalid with your workspace's codes, for example larger than 32 KiB after a long context code is substituted, is blocked as `saved_search_state_invalid`, and the plan summary's `invalid_state_reason` says why.

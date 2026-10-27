@@ -148,13 +148,14 @@ acli workflow run-replay <run-id>
 
 acli rule list [--blueprint-id <uuid>]
 acli rule get <rule-id>
-acli rule validate|create --blueprint-id <uuid> --blueprint-version <version> [--context-id <uuid>] --file rule.toml
-acli rule validate|create --blueprint-id <uuid> --blueprint-version <version> [--context-id <uuid>] --stdin
-acli rule create-version <rule-id> --blueprint-id <uuid> --blueprint-version <version> [--context-id <uuid>] --file rule-v2.toml
-acli rule publish <rule-id> <version>
-acli rule enable <rule-id> <version> [--accept-existing-violations]
+acli rule revisions <rule-id>
+acli rule revision <rule-id> <version>
+acli rule validate|create --blueprint-id <uuid> [--context-id <uuid>] --file rule.toml
+acli rule validate|create --blueprint-id <uuid> [--context-id <uuid>] --stdin
+acli rule update <rule-id> [--accept-existing-violations] --file rule-v2.toml
+acli rule enable <rule-id> [--accept-existing-violations]
 acli rule disable <rule-id>
-acli rule run-now <rule-id> --idempotency-key <key> [--record-id <uuid>] [--dry-run]
+acli rule run-now <rule-id> --idempotency-key <key> [--record-id <uuid>] [--dry-run [--definition-file rule-v2.toml]]
 acli rule run-list [--record-id <uuid>] [--limit <n>] [--offset <n>]
 acli rule run-replay <run-id>
 acli rule findings [--record-id <uuid>] [--rule-id <uuid>] [--blueprint-id <uuid>] [--context-id <uuid>] [--severity info|warning|error|critical] [--state open|acknowledged|resolved] [--unresolved] [--limit <n>] [--offset <n>]
@@ -391,15 +392,18 @@ Options named `--permissions`, `--entries`, `--filters`,
 non-array JSON locally. This keeps complex request bodies out of shell quoting.
 
 `workflow validate`, `workflow create`, `workflow revision`, and rule
-`validate`/`create`/`revision` use the same exclusive `--file`/`--stdin`
+`validate`/`create`/`update` use the same exclusive `--file`/`--stdin`
 source contract as blueprint commands: the source is sent unchanged as the
-API's TOML `definition`. Rule writes additionally require the blueprint ID
-and version; `--context-id` is optional.
+API's TOML `definition`. Rule validation and creation additionally require the
+blueprint ID; `--context-id` is optional. A rule applies to every revision of
+its blueprint that it fits, and `rule update` saves a new current revision.
 
-`rule enable` of an enforcing rule fails with `rule_has_existing_violations`
-when its latest dry run found violations. `--accept-existing-violations`
-enables it anyway; the violating records cannot be saved until they are
-fixed.
+`rule enable` of an enforcing rule, and `rule update` of an enabled one to an
+enforcing definition, fail with `rule_dry_run_required` until a full dry run of
+that definition completes (`rule run-now --dry-run --definition-file` checks an
+unsaved one), and with `rule_has_existing_violations` when that dry run found
+violations. `--accept-existing-violations` goes ahead anyway; the violating
+records cannot be saved until they are fixed.
 
 ## Browser authentication
 

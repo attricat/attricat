@@ -149,7 +149,7 @@ Co minutę API usuwa w małych partiach stare dane operacyjne: zakończoną prac
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Wcześniejsze wartości atrybutów. Bieżące wartości nigdy nie są usuwane. |
 | `TASK_RETENTION_DAYS` | `7` | Wpisy zakończonych zadań w tle. Ostatnia nieudana próba zostaje do usunięcia jej uruchomienia, aby można ją było ponowić. |
 | `RULE_RUN_RECORD_RETENTION_DAYS` | `7` | Zakończone sprawdzenia reguł dla pojedynczego rekordu. |
-| `RULE_RUN_RETENTION_DAYS` | `90` | Zakończone pełne uruchomienia reguł oraz nieudane uruchomienia. Każda wersja reguły zachowuje swoje ostatnie uruchomienie i ostatnie ukończone próbne wykonanie, więc ponowne włączenie nie wymaga nowego próbnego wykonania. |
+| `RULE_RUN_RETENTION_DAYS` | `90` | Zakończone pełne uruchomienia reguł oraz nieudane uruchomienia. Każda rewizja reguły zachowuje swoje ostatnie uruchomienie, a każda definicja reguły swoje ostatnie ukończone pełne próbne wykonanie, więc ponowne włączenie reguły nie wymaga nowego próbnego wykonania. |
 | `WORKFLOW_RUN_RETENTION_DAYS` | `90` | Zakończone uruchomienia przepływów pracy. |
 | `EXTENSION_OPERATION_RUN_RETENTION_DAYS` | `90` | Zakończone operacje rozszerzeń, których wyniki już wygasły. |
 | `AGENT_RUN_EVENT_RETENTION_DAYS` | `90` | Strumień postępu zakończonych uruchomień agentów. Rozmowy, ich wiadomości i wywołania narzędzi zostają. |

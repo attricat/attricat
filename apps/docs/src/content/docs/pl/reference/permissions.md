@@ -30,7 +30,7 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 | `data_health.read` | Stan danych, przetwarzanie w tle, metryki i listy martwych wiadomości zdarzeń; liczby stanów eksportu i filtr **Stan eksportu** w przeglądarce rekordów. | ✓ | ✓ | ✓ | ✓ |
 | `agents.run` | Rozmowy z agentami i zatwierdzenia. | ✓ | ✓ | | |
 | `rules.read` | Reguły, uruchomienia i ustalenia. | ✓ | ✓ | | |
-| `rules.manage` | Tworzenie, publikowanie, włączanie i uruchamianie reguł; potwierdzanie ustaleń. | ✓ | ✓ | | |
+| `rules.manage` | Tworzenie, zmienianie, włączanie i uruchamianie reguł; potwierdzanie ustaleń. | ✓ | ✓ | | |
 | `workflows.read` | Przepływy pracy i historia uruchomień. | ✓ | ✓ | | |
 | `workflows.manage` | Tworzenie, publikowanie, włączanie, uruchamianie i ponawianie przepływów pracy. | ✓ | ✓ | | |
 | `extensions.read` | Przeglądanie rejestrów rozszerzeń i zainstalowanych rozszerzeń wraz z ich stanem eksportu, połączeniami (bez sekretów) i limitami żądań. | ✓ | ✓ | | |

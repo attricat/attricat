@@ -106,7 +106,7 @@ If you have the `rules.read` permission, the **Data quality** column shows each 
 - A coloured warning icon means the record has open findings. The colour is that of the most severe open finding.
 - A grey warning icon means every finding has been acknowledged.
 - A check means an enabled rule checks the record and found nothing.
-- An empty cell means no enabled rule checks the record's blueprint revision.
+- An empty cell means no enabled rule checks the record. A rule that skips the record's blueprint revision because it does not [fit it](/builders/rules/#rules-and-blueprint-revisions) does not count.
 
 Sort by the column to bring the records that need attention to the top (descending) or to the bottom (ascending). A record needs attention when it has an open finding; records whose findings are all acknowledged sort with the clean ones. Findings update after a record's checks run, so a record you just saved may briefly show its earlier state.
 

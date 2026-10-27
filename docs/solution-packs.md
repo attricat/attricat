@@ -146,9 +146,9 @@ created or mapped workspace context.
 
 ## Rules, workflows, and saved searches
 
-- **Rules** are created against the plan's created or mapped blueprint, in the
-  mapped context if they declare one, and published. The pack declares whether
-  each rule is enabled; disabled rules are installed published but not enabled.
+- **Rules** are created for the plan's created or mapped blueprint, in the
+  mapped context if they declare one. The pack declares whether each rule is
+  enabled; the others are installed disabled.
   A rule needs a published blueprint, so with `--blueprint-publication draft` a
   rule for a newly created blueprint is `blueprint_not_published`. New rule
   codes are `<prefix>_<code>` and conflict with an existing rule code.

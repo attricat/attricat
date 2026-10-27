@@ -103,8 +103,11 @@ record_schema = '''
 
 A predicate *holds* when the data is acceptable. Predicates are tagged by
 `type`, unknown fields are rejected, and every predicate is type-checked
-against the blueprint revision's attributes when the blueprint or rule is
-saved (`422 invalid_blueprint_definition` or `invalid_rule_definition`).
+against the blueprint revision's attributes when the blueprint is saved, or a
+rule against its blueprint's latest published revision
+(`422 invalid_blueprint_definition` or `invalid_rule_definition`). A rule
+skips the records of other revisions it does not fit; see
+[Rules](rules.md#blueprint-revisions).
 
 | `type` | Fields | Holds when |
 | --- | --- | --- |

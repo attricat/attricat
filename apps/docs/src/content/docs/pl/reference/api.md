@@ -67,11 +67,12 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `transition_conditions_unmet` | 422 | Warunki przejścia statusu nie są spełnione. |
 | `rule_violation` | 422 | Po zapisie rekord naruszałby egzekwowaną regułę. |
 | `publication_checks_failed` | 422 | Kontrole wymagane przez kanał nie przechodzą. `details.context` to kod kanału. |
-| `invalid_rule_definition` | 422 | TOML reguły jest nieprawidłowy lub nie pasuje do wersji schematu. |
-| `rule_revision_unchanged` | 409 | Nowa wersja reguły jest identyczna z najnowszą, więc nic nie zapisano. `details.version` wskazuje tę wersję. Definicję wcześniejszej wersji można zapisać ponownie. |
-| `rule_not_enabled` | 422 | Zwykłe ręczne uruchomienie wymaga włączonej wersji. Najpierw włącz regułę albo uruchom próbne wykonanie. |
+| `invalid_rule_definition` | 422 | TOML reguły jest nieprawidłowy lub nie pasuje do najnowszej opublikowanej rewizji jej schematu. |
+| `blueprint_not_published` | 422 | Schemat nie ma jeszcze opublikowanej rewizji, na przykład przy tworzeniu dla niego reguły. |
+| `rule_revision_unchanged` | 409 | Zapisywana definicja jest identyczna z bieżącą rewizją reguły, więc nic nie zapisano. `details.version` wskazuje tę rewizję. Definicję wcześniejszej rewizji można zapisać ponownie. |
+| `rule_not_enabled` | 422 | Zwykłe ręczne uruchomienie wymaga włączonej reguły. Najpierw włącz regułę albo uruchom próbne wykonanie. |
 | `workflow_not_enabled` | 422 | Ręczne uruchomienie przepływu pracy wymaga włączonej wersji. Najpierw włącz przepływ pracy. |
-| `rule_dry_run_required` | 409 | Włączenie egzekwowanej reguły wymaga najpierw ukończonego pełnego próbnego wykonania tej wersji. Jeśli ostatnie próbne wykonanie zatrzymało się na limicie rekordów, `details` ma postać `{"truncated": true, "existing_violations": …}`. |
+| `rule_dry_run_required` | 409 | Włączenie egzekwowanej reguły albo zapisanie egzekwowanej zmiany we włączonej regule wymaga najpierw ukończonego pełnego próbnego wykonania tej definicji. Jeśli ostatnie próbne wykonanie zatrzymało się na limicie rekordów, `details` ma postać `{"truncated": true, "existing_violations": …}`. |
 | `rule_has_existing_violations` | 409 | Próbne wykonanie znalazło naruszenia. `details.existing_violations` podaje ich liczbę. |
 
 ### Szczegóły błędu
@@ -113,7 +114,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `POST` | `/blueprints/validate`, `/blueprints/{id}/versions/validate` | Uruchamia wszystkie kontrole, które wykonałoby utworzenie schematu lub jego kolejnego szkicu, niczego nie zapisując. Zwraca powstały schemat i atrybuty albo ten sam błąd, który zwróciłby zapis. |
 | `GET` | `/blueprints/{id}` | Bieżąca opublikowana wersja. |
 | `GET` | `/blueprints/{id}/versions/{version}` | Konkretna wersja, w tym szkice. |
-| `POST` | `/blueprints/{id}/versions/{version}/publish` | Publikuje szkic. |
+| `POST` | `/blueprints/{id}/versions/{version}/publish` | Publikuje szkic. Reguły nigdy tego nie blokują. Jeśli włączone [reguły](/pl/builders/rules/#reguły-i-rewizje-schematu) nie pasują do nowej rewizji, odpowiedź zawiera `rule_warnings`: `[{rule_id, code, name, reason, message}]`, gdzie `reason` to `attribute_missing`, `attribute_type_changed` lub `status_changed`. |
 | `GET` | `/blueprints/by-code/{code}` i `/blueprints/by-code/{code}/versions/{version}` | Wyszukiwanie po kodzie. |
 | `GET` | `/blueprints/{id}/migration-batches` | Partie migracji w tle. |
 | `GET` | `/blueprints/{id}/sequences` | Liczniki [atrybutów generowanych](/pl/reference/blueprint/#liczniki) schematu z `attribute_code`, `period`, `next_value` i `updated_at`. |
@@ -230,7 +231,7 @@ POST /api/v1/records/search
 - `context_code` (domyślnie `default`) to kontekst, w którym rozstrzygane są filtry, sortowanie i `table_values`, z dziedziczeniem z kontekstów nadrzędnych zależnie od atrybutu. `query` dopasowuje wartości we wszystkich kontekstach.
 - `sort.field` musi być kolumną skalarną w widoku tabeli schematu, `blueprint_version`, `system_tag:<tag>` lub `publication_status` (z `sort.context_code` wskazującym kanał). `system_tag:<tag>` oddziela rekordy z tym tagiem od pozostałych, w każdej grupie według ID rekordu.
 - `system_tags` (najwyżej 20) zostawia rekordy, które mają wszystkie podane tagi, także [tagi Core](#tagi-systemowe), takie jak `attricat.needs_attention`.
-- Odpowiedzi zawierają `items`, `next_cursor`, `result_version_scope`, a dla każdego elementu `system_tags`, `table_values` i `match_explanations`. Dla wywołujących z `rules.read` każdy element ma też `data_quality`: `checked` (czy włączona reguła sprawdza rewizję schematu rekordu) i `findings`, czyli nierozwiązane ustalenia policzone według `state` i `severity`, od najpoważniejszych. Przekaż `next_cursor` z powrotem jako `page.cursor` przy tym samym sortowaniu.
+- Odpowiedzi zawierają `items`, `next_cursor`, `result_version_scope`, a dla każdego elementu `system_tags`, `table_values` i `match_explanations`. Dla wywołujących z `rules.read` każdy element ma też `data_quality`: `checked` (czy rekord sprawdza jakaś włączona reguła; reguła, która pomija rewizję schematu rekordu, się nie liczy) i `findings`, czyli nierozwiązane ustalenia policzone według `state` i `severity`, od najpoważniejszych. Przekaż `next_cursor` z powrotem jako `page.cursor` przy tym samym sortowaniu.
 - `include_total` zwraca łączną liczbę wyników dla pierwszej strony, ograniczoną do 500.
 - `include_blueprint: false` pomija `blueprint` w odpowiedzi, na przykład na kolejnych stronach, gdy klient ma już blueprint z pierwszej strony.
 - `include_previews: false` pomija `preview` i rekordy `related` każdego elementu, chyba że kolumna tabeli używa renderera z rozszerzenia. `display` i `table_values` są zwracane zawsze.
@@ -341,7 +342,7 @@ Każda ścieżka działa na Twojej [skrzynce powiadomień](/pl/guides/inbox/) w 
 | `PATCH` | `/notifications/{id}` | `{"read": true}` lub `{"read": false}`. |
 | `POST` | `/notifications/read-all` | Oznacza wszystkie nieprzeczytane jako przeczytane; opcjonalne `{"up_to": "<RFC 3339>"}` pozostawia późniejsze nieprzeczytane. Zwraca `{"updated"}`. |
 
-Każde powiadomienie ma `id`, `kind` (np. `record.assigned`), tekstowy `title`, opcjonalne `body`, autora zmiany, opcjonalny `subject` (`{"kind": "record" | "agent_conversation", "id"}`), zależne od rodzaju `data`, `read`, `read_at` i `created_at`. Mogą pojawić się nowe rodzaje; dla nieznanych pokazuj `title`.
+Każde powiadomienie ma `id`, `kind` (np. `record.assigned`), tekstowy `title`, opcjonalne `body`, autora zmiany, opcjonalny `subject` (`{"kind": "record" | "agent_conversation" | "rule", "id"}`), zależne od rodzaju `data`, `read`, `read_at` i `created_at`. Mogą pojawić się nowe rodzaje; dla nieznanych pokazuj `title`.
 
 ### Tłumaczenia
 
@@ -358,17 +359,23 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 
 ### Reguły i przepływy pracy
 
+Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy reguł wymagają `rules.manage`.
+
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
-| `POST` | `/rules/validate` | Weryfikuje TOML reguły. |
-| `GET`, `POST` | `/rules` | Wyświetla lub tworzy reguły. |
-| `GET` | `/rules/{id}` | Odczytuje regułę. |
-| `POST` | `/rules/{id}/versions/{version}/publish`, `/enable`; `/rules/{id}/disable` | Cykl życia. `/enable` przyjmuje opcjonalne `{"accept_existing_violations": true}` dla egzekwowanej reguły, której próbne wykonanie znalazło naruszenia. |
-| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. Próbne wykonanie może dodać `"version": 2`, aby objąć opublikowaną wersję, która nie jest włączona; domyślnie dotyczy wersji włączonej albo najnowszej opublikowanej. |
-| `GET` | `/rule-runs`, `/rule-findings` | Uruchomienia i ustalenia. Pole `truncated` uruchomienia ma wartość `true`, gdy zatrzymało się ono na limicie rekordów, zanim sprawdziło wszystkie. Strony wybierasz przez `limit` i `offset`; nagłówek `x-next-offset` podaje przesunięcie następnej strony. `unresolved=true` pomija rozwiązane ustalenia. Ustalenia można też zawęzić przez `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) i `state` (`open`, `acknowledged`, `resolved`). |
+| `GET` | `/rules` | Jeden element na regułę; listę można zawęzić przez `blueprint_id`. Każdy element ma pola bieżącej rewizji: `id`, `blueprint_id`, `context_id`, `code`, `name`, `version`, `definition`, `definition_hash`, `compiled_plan`, `enabled`, `created_at` i `updated_at`, oraz `not_applicable`: `[{blueprint_version, reason, message}]`, czyli rewizje pomijane przez regułę spośród najnowszej opublikowanej rewizji i rewizji, które mają aktywne rekordy. |
+| `GET` | `/rules/{id}` | Jedna reguła w tym samym kształcie. |
+| `POST` | `/rules` | `{"blueprint_id": "…", "context_id": null, "definition": "<toml>"}`. Tworzy wyłączoną regułę w rewizji 1. Definicja jest sprawdzana względem najnowszej opublikowanej rewizji schematu. |
+| `POST` | `/rules/validate` | Ta sama treść; sprawdza regułę bez zapisywania. |
+| `PUT` | `/rules/{id}` | `{"definition": "<toml>", "accept_existing_violations": false}`. Zapisuje nową bieżącą rewizję. |
+| `GET` | `/rules/{id}/revisions` | Historia zmian, od najnowszej: `{rule_id, version, name, definition, definition_hash, created_by_user_id, created_at}`. |
+| `GET` | `/rules/{id}/revisions/{version}` | Jedna rewizja. |
+| `POST` | `/rules/{id}/enable`, `/rules/{id}/disable` | Włącza lub wyłącza regułę. `/enable` przyjmuje opcjonalne `{"accept_existing_violations": true}` dla egzekwowanej reguły, której próbne wykonanie znalazło naruszenia. |
+| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. Zwykłe uruchomienie wymaga włączonej reguły. Próbne wykonanie może dodać `"definition": "<toml>"`, aby sprawdzić jeszcze niezapisaną definicję; w przeciwnym razie sprawdza bieżącą rewizję. |
+| `GET` | `/rule-runs`, `/rule-findings` | Uruchomienia i ustalenia. Uruchomienie podaje sprawdzony `definition_hash` i `candidates_skipped`, czyli liczbę rekordów pominiętych, bo reguła nie pasuje do ich rewizji schematu. Jego pole `truncated` ma wartość `true`, gdy zatrzymało się ono na limicie rekordów, zanim sprawdziło wszystkie. Strony wybierasz przez `limit` i `offset`; nagłówek `x-next-offset` podaje przesunięcie następnej strony. `unresolved=true` pomija rozwiązane ustalenia. Ustalenia można też zawęzić przez `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) i `state` (`open`, `acknowledged`, `resolved`). |
 | `GET` | `/rule-findings/count` | `{count}` otwartych i potwierdzonych ustaleń; przekaż `record_id`, aby policzyć ustalenia jednego rekordu. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Ponawia martwą wiadomość; potwierdza ustalenie. |
-| `POST` | `/rule-findings/recheck` | Ponownie sprawdza jeden rekord względem każdej włączonej reguły jego rewizji. Treść `{record_id, idempotency_key}`; zwraca `202 {run_ids}`. Przekaż `record_id` do `GET /rule-runs` lub `/rule-findings`, aby śledzić jeden rekord. |
+| `POST` | `/rule-findings/recheck` | Ponownie sprawdza jeden rekord względem każdej włączonej reguły jego schematu. Treść `{record_id, idempotency_key}`; zwraca `202 {run_ids}`. Przekaż `record_id` do `GET /rule-runs` lub `/rule-findings`, aby śledzić jeden rekord. |
 | `POST` | `/workflows/validate` | Weryfikuje TOML przepływu pracy. |
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | Wyświetla lub tworzy przepływy pracy i ich wersje. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Cykl życia. |
