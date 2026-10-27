@@ -977,7 +977,6 @@
     "revisionHistory": "Historia wersji",
     "version": "Wersja",
     "definitionHash": "Skrót definicji",
-    "versionNumber": "v{{version}}",
     "versionOption": "v{{version}} ({{status}})",
     "diffTitle": "{{original}} → {{modified}}"
   },
@@ -1858,6 +1857,7 @@
     "unableToRenderRecordHeading": "Nie można wyświetlić nagłówka rekordu."
   },
   "common": {
+    "versionNumber": "v{{version}}",
     "opensInNewTab": "Otwiera się w nowej karcie",
     "close": "Zamknij",
     "actionCompleted": "Akcja zakończona.",

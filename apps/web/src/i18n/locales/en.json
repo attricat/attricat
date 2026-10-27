@@ -925,7 +925,6 @@
     "revisionHistory": "Revision history",
     "version": "Version",
     "definitionHash": "Definition hash",
-    "versionNumber": "v{{version}}",
     "versionOption": "v{{version}} ({{status}})",
     "diffTitle": "{{original}} → {{modified}}"
   },
@@ -1780,6 +1779,7 @@
     "unableToRenderRecordHeading": "Unable to render record heading."
   },
   "common": {
+    "versionNumber": "v{{version}}",
     "opensInNewTab": "Opens in a new tab",
     "close": "Close",
     "actionCompleted": "Action completed.",
