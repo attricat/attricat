@@ -28,6 +28,8 @@ export const ROOT_NODE_KEY = 'root';
 export const VIEW_COMPONENT_LOG_LABEL = 'view component';
 export const TABLE_IMAGE_SIZE = 48;
 export const VIEW_SECTION_PADDING = 2.5;
+/** A tab's height without an icon; a marked tab keeps it despite its icon. */
+export const VIEW_TAB_MIN_HEIGHT = 48;
 export const VIEW_LAYOUT_SPACING = 2;
 /** Rows of editable fields need room for their floating labels and help text. */
 export const VIEW_EDIT_LAYOUT_SPACING = 8;

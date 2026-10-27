@@ -2,9 +2,7 @@ import i18n from '../../../i18n';
 
 /** Only opaque six-digit sRGB hex is safe to use as a swatch fill. */
 export const parseColor = (value: unknown): string | undefined =>
-  typeof value === 'string' &&
-  value.length === 7 &&
-  /^#[0-9a-f]{6}$/i.test(value)
+  typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
     ? value.toLowerCase()
     : undefined;
 
@@ -15,6 +13,8 @@ export const COLOR_PICKER_SEED = '#000000';
 /** The colour field's swatch, sized like a dense control. */
 export const COLOR_SWATCH_SIZE = 40;
 export const COLOR_POPOVER_WIDTH = 280;
+/** The swatch beside a colour shown as a value. */
+export const COLOR_VALUE_SWATCH_SIZE = 20;
 
 export const validateColor = (value: string) =>
   value === '' || parseColor(value) ? undefined : i18n.t('views.colorInvalid');

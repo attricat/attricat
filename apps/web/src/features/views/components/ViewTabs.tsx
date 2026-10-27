@@ -8,7 +8,7 @@ import { nodesPlacedFields } from '../viewFieldComponents';
 import { useFieldDiagnostics } from '../../records/fieldDiagnostics';
 import { layoutMarker, layoutMarkerDescriptions } from '../layoutMarker';
 import { compactIconSize } from '../../../components/iconSizes';
-import { VIEW_TAB_PANEL_SPACING } from '../constants';
+import { VIEW_TAB_MIN_HEIGHT, VIEW_TAB_PANEL_SPACING } from '../constants';
 import { useFieldRevealRequest } from '../fieldReveal';
 
 export const ViewTabs = ({
@@ -87,7 +87,9 @@ export const ViewTabs = ({
                     borderBottomColor: 'transparent',
                   },
                 },
-                marker ? { color: marker.color, minHeight: 48 } : false,
+                marker
+                  ? { color: marker.color, minHeight: VIEW_TAB_MIN_HEIGHT }
+                  : false,
               ]}
             />
           );

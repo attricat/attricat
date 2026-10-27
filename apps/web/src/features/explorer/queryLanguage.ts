@@ -134,7 +134,10 @@ const resolveSelector = (schema: QuerySchema, parts: string[]): Resolution => {
   if (empty >= 0) {
     return {
       status: 'error',
-      error: { code: 'malformedTerm', term: parts.join('.') },
+      error: {
+        code: 'malformedTerm',
+        term: parts.join(relationshipPathSeparator),
+      },
       part: empty,
     };
   }
@@ -418,7 +421,9 @@ export const queryCursorContext = (
     replaceEnd:
       selectorRest < 0
         ? token.end
-        : cursor + selectorRest + (afterCursor[selectorRest] === ':' ? 1 : 0),
+        : cursor +
+          selectorRest +
+          (afterCursor[selectorRest] === querySelectorSeparator ? 1 : 0),
   };
 };
 
