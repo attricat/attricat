@@ -476,6 +476,71 @@ async fn revisions_cannot_change_the_reset_of_a_generated_attribute(pool: PgPool
     server.abort();
 }
 
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn batches_creating_on_several_blueprints_in_opposite_orders_do_not_deadlock(pool: PgPool) {
+    const ORDER: &str = r#"
+format_version = 1
+code = "gs_order"
+name = "Order"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "number"
+value_type = "integer"
+generated = { start = 1 }
+
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
+    const ROUNDS: usize = 12;
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(&client, &base_url, INVOICE).await;
+    create_blueprint(&client, &base_url, ORDER).await;
+    let create = |blueprint: &str| {
+        json!({
+            "op": "create",
+            "blueprint": { "code": blueprint },
+            "values": [scalar("title", json!("batched"))],
+        })
+    };
+
+    let mut work = tokio::task::JoinSet::new();
+    for round in 0..ROUNDS {
+        let operations = if round % 2 == 0 {
+            json!([create("gs_invoice"), create("gs_order")])
+        } else {
+            json!([create("gs_order"), create("gs_invoice")])
+        };
+        let client = client.clone();
+        let url = format!("{base_url}/v1/records/batch");
+        work.spawn(async move {
+            let response = client
+                .post(url)
+                .json(&json!({ "operations": operations }))
+                .send()
+                .await
+                .unwrap();
+            expect_status(response, StatusCode::OK).await;
+        });
+    }
+    tokio::time::timeout(std::time::Duration::from_secs(30), work.join_all())
+        .await
+        .expect("batches finish");
+    let after = invoice(&client, &base_url, "after").await;
+    assert_eq!(
+        value_of(&form(&client, &base_url, &after).await, "position"),
+        1000 + ROUNDS as i64
+    );
+
+    server.abort();
+}
+
 async fn get_json_post(client: &Client, url: String) -> Value {
     client
         .post(url)

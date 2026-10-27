@@ -5,10 +5,14 @@
 //! `attribute_sequences` row. The row stays locked until the transaction
 //! ends, so creates that number the same family attribute run one at a time,
 //! and a rollback returns the number. Writers lock counters after their
-//! record row and before the family's unique-key lock, in attribute code
-//! order; publication never touches counters.
+//! record rows and before the family's unique-key lock, ordered by
+//! blueprint, attribute code and period. A single create or migration takes
+//! one family's counters in code order; a record batch, which may create on
+//! several families, takes all of its counters in that order before its
+//! first operation ([`AttricatRepository::lock_generated_sequences_in`]).
+//! Publication never touches counters.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use attricat_blueprint::{GeneratedValue, MAX_GENERATED_NUMBER};
 use chrono::{DateTime, Utc};
@@ -62,8 +66,8 @@ impl AttricatRepository {
         if attributes.is_empty() {
             return Ok(Vec::new());
         }
-        // One order for every writer, whatever revision it creates on, so two
-        // creates never wait on each other's counters.
+        // Code order within the family, the order every writer uses; a batch
+        // already holds these rows.
         attributes.sort_by(|(left, _), (right, _)| left.code.cmp(&right.code));
         let default_context_id = write.default_context_id()?;
         let mut values = Vec::with_capacity(attributes.len());
@@ -90,6 +94,63 @@ impl AttricatRepository {
             });
         }
         Ok(values)
+    }
+
+    /// Locks the counter of every generated attribute of `revisions` for the
+    /// current period, ordered by blueprint, attribute code and period, so a
+    /// transaction that creates records on several blueprints holds them all
+    /// before it numbers any. A missing counter is created at its `start`,
+    /// which [`Self::generated_values_in`] then hands out; a rollback removes
+    /// it again.
+    pub(super) async fn lock_generated_sequences_in(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        revisions: &[(Uuid, i64)],
+    ) -> Result<(), RepositoryError> {
+        if revisions.is_empty() {
+            return Ok(());
+        }
+        let (blueprint_ids, versions): (Vec<_>, Vec<_>) = revisions.iter().copied().unzip();
+        let declared = sqlx::query_as::<_, (Uuid, String, sqlx::types::Json<GeneratedValue>)>(
+            r#"SELECT a.blueprint_id, a.code, a.generated FROM attributes a
+               JOIN UNNEST($2::uuid[], $3::bigint[]) AS r(blueprint_id, version)
+                 ON r.blueprint_id = a.blueprint_id AND r.version = a.blueprint_version
+               WHERE a.workspace_id = $1 AND a.generated IS NOT NULL AND a.deleted_at IS NULL"#,
+        )
+        .bind(self.workspace_id.0)
+        .bind(&blueprint_ids)
+        .bind(&versions)
+        .fetch_all(&mut **transaction)
+        .await?;
+        if declared.is_empty() {
+            return Ok(());
+        }
+        // Records created in this transaction take its start time.
+        let at = sqlx::query_scalar::<_, DateTime<Utc>>("SELECT now()")
+            .fetch_one(&mut **transaction)
+            .await?;
+        let counters: BTreeMap<_, _> = declared
+            .into_iter()
+            .map(|(blueprint_id, code, generated)| {
+                ((blueprint_id, code, generated.period(at)), generated.start)
+            })
+            .collect();
+        for ((blueprint_id, code, period), start) in counters {
+            sqlx::query(
+                r#"INSERT INTO attribute_sequences (workspace_id, blueprint_id, attribute_code, period, next_value)
+                   VALUES ($1, $2, $3, $4, $5)
+                   ON CONFLICT (workspace_id, blueprint_id, attribute_code, period)
+                   DO UPDATE SET next_value = attribute_sequences.next_value"#,
+            )
+            .bind(self.workspace_id.0)
+            .bind(blueprint_id)
+            .bind(&code)
+            .bind(&period)
+            .bind(start)
+            .execute(&mut **transaction)
+            .await?;
+        }
+        Ok(())
     }
 
     /// Codes of the generated attributes of one blueprint revision.

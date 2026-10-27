@@ -472,8 +472,12 @@ Repository code owns everything else, inside the write transaction:
   definition of the record.
 
 - Generated-value counters (`attribute_sequences`) are locked by record
-  writers after their record row and before the family key lock, in
-  attribute code order. Publication never touches them, so it cannot wait on
+  writers after their record rows and before the family key lock, ordered by
+  blueprint, attribute code and period. A single create or migration locks
+  one family's counters in code order; a record batch locks every counter its
+  creates will use, in that order, before its first operation, so batches
+  that create on several blueprints in different orders cannot deadlock.
+  Publication never touches them, so it cannot wait on
   a writer holding a counter.
 
 Declare new structural constraints as data (blueprint columns and index
