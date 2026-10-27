@@ -1,18 +1,13 @@
 import { Box, IconButton, Paper, Tab, Tabs, Typography } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
 import { XIcon } from 'lucide-react';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getApiHealth } from './api';
 import {
   apiHealthColor,
   apiHealthSummaryKeys,
   type ApiHealthState,
-  apiHealthStates,
 } from './apiHealth';
 import {
-  API_HEALTH_POLL_INTERVAL_MS,
-  API_RETRY_INTERVAL_MS,
   headerStatusDotSize,
   inspectorHeaderMinHeight,
   inspectorPaneIds,
@@ -25,7 +20,7 @@ import { InspectorLauncher } from './InspectorLauncher';
 import { InspectorPerformancePane } from './InspectorPerformancePane';
 import { InspectorServerPane } from './InspectorServerPane';
 import { InspectorSessionPane } from './InspectorSessionPane';
-import { inspectorQueryKeys } from './queryKeys';
+import { useApiHealth } from './useApiHealth';
 import { useInspectorState } from './useInspectorState';
 import { smallIconSize } from '../../components/iconSizes';
 
@@ -52,20 +47,7 @@ export const Inspector = () => {
   const { t } = useTranslation();
   const tabId = useId();
   const [{ activePane, expanded }, updateInspectorState] = useInspectorState();
-  const apiHealthQuery = useQuery({
-    queryKey: inspectorQueryKeys.apiHealth(),
-    queryFn: getApiHealth,
-    retry: false,
-    refetchInterval: (query) =>
-      query.state.status === 'error'
-        ? API_RETRY_INTERVAL_MS
-        : API_HEALTH_POLL_INTERVAL_MS,
-  });
-  const apiHealth: ApiHealthState = apiHealthQuery.isError
-    ? apiHealthStates.restarting
-    : apiHealthQuery.isPending
-      ? apiHealthStates.checking
-      : apiHealthStates.ready;
+  const apiHealth = useApiHealth();
   const apiStatus = t(apiHealthSummaryKeys[apiHealth]);
   const tabIds = (pane: InspectorPaneId) => ({
     panel: `${tabId}-${pane}-panel`,
