@@ -13,6 +13,7 @@ import {
 import { ExternalLinkIcon, PlusIcon } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
 import { agentRoutes } from './constants';
+import { contextLabel } from '../contexts/defaultContext';
 import { conversationSearchOptions } from './queryOptions';
 import { EmptyState } from '../../components/EmptyState';
 import { AgentIcon } from '../../components/systemIcons';
@@ -124,7 +125,7 @@ export const RecordConversationsPanel = ({
                         {contextCode && (
                           <Chip
                             component="span"
-                            label={contextCode}
+                            label={contextLabel(t, contextCode)}
                             size="small"
                             sx={{ ml: 1 }}
                             variant="outlined"

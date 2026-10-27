@@ -144,7 +144,7 @@ describe('FieldDiagnosticsButton', () => {
     );
 
     expect(
-      screen.getByText('Inherited from the default context.'),
+      screen.getByText('Inherited from the Default context.'),
     ).toBeTruthy();
     // Without access to rules there is no findings section.
     expect(screen.queryByText('Data quality')).toBeNull();

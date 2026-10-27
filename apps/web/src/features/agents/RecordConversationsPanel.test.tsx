@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
+import { defaultContextCode } from '../contexts/constants';
 import { searchConversations } from './api';
 import { RecordConversationsPanel } from './RecordConversationsPanel';
 
@@ -29,6 +30,7 @@ vi.mock('../../components/RouterLink', () => ({
 
 const recordId = '123e4567-e89b-12d3-a456-426614174000';
 const contextId = '123e4567-e89b-12d3-a456-426614174001';
+const defaultContextId = '123e4567-e89b-12d3-a456-426614174002';
 const userId = '123e4567-e89b-12d3-a456-426614174004';
 const conversation = (id: string, title: string, context: string | null) => ({
   id,
@@ -51,7 +53,12 @@ const renderPanel = (onOpen = vi.fn(), onStart = vi.fn()) => {
       }
     >
       <RecordConversationsPanel
-        contextCodes={new Map([[contextId, 'pl']])}
+        contextCodes={
+          new Map([
+            [contextId, 'pl'],
+            [defaultContextId, defaultContextCode],
+          ])
+        }
         onOpen={onOpen}
         onStart={onStart}
         recordId={recordId}
@@ -89,6 +96,17 @@ describe('RecordConversationsPanel', () => {
     ).toBe('/agents/two');
     await user.click(screen.getByText('Missing sizes'));
     expect(onOpen).toHaveBeenCalledWith('two');
+  });
+
+  it('names the default context instead of showing its code', async () => {
+    vi.mocked(searchConversations).mockResolvedValue({
+      items: [conversation('three', 'Default copy', defaultContextId)] as never,
+      next_cursor: null,
+    });
+    renderPanel();
+    expect(await screen.findByText('Default copy')).toBeTruthy();
+    expect(screen.getByText('Default')).toBeTruthy();
+    expect(screen.queryByText(defaultContextCode)).toBeNull();
   });
 
   it('starts the first conversation from its empty state', async () => {
