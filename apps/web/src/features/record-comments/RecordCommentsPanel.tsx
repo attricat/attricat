@@ -29,6 +29,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { CommentIcon } from '../../components/systemIcons';
 import { sessionOptions } from '../auth/queryOptions';
 import { userAvatarSizes } from '../../components/userAvatars';
+import { PencilIcon } from 'lucide-react';
 
 const CommentItem = ({
   recordId,
@@ -104,6 +105,7 @@ const CommentItem = ({
             ref={editButton}
             disabled={disabled}
             onClick={() => setEditing(comment)}
+            startIcon={<PencilIcon />}
           >
             {t('comments.edit')}
           </Button>

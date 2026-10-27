@@ -1636,7 +1636,11 @@
     "actionDialogRecord": "Applies to this record.",
     "actionDialogSelection_one": "Applies to {{count}} selected record.",
     "actionDialogSelection_other": "Applies to {{count}} selected records.",
-    "actionDialogSavedData": "Only saved data is used."
+    "actionDialogSavedData": "Only saved data is used.",
+    "noInstalled": "No extensions installed",
+    "noInstalledDescription": "Install one from the marketplace or upload an archive to add pages, actions and integrations.",
+    "noMarketplaceExtensions": "No extensions available",
+    "loadingExtensions": "Loading extensions..."
   },
   "workspace": {
     "memberSummary": "{{email}} · {{state}}",

@@ -21,7 +21,9 @@ export const PasswordResetRequestPage = () => {
   });
   return (
     <AuthFormShell onSubmit={() => form.handleSubmit()}>
-      <Typography variant="h5">{t('auth.resetPassword')}</Typography>
+      <Typography component="h1" variant="h5">
+        {t('auth.resetPassword')}
+      </Typography>
       {request.isSuccess ? (
         <Typography>{t('auth.resetPasswordSent')}</Typography>
       ) : (
@@ -75,7 +77,9 @@ export const PasswordResetConfirmationPage = ({
   });
   return (
     <AuthFormShell onSubmit={() => form.handleSubmit()}>
-      <Typography variant="h5">{t('auth.chooseNewPassword')}</Typography>
+      <Typography component="h1" variant="h5">
+        {t('auth.chooseNewPassword')}
+      </Typography>
       {confirm.isSuccess ? (
         <>
           <Typography>{t('auth.passwordResetSuccess')}</Typography>

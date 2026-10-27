@@ -8,6 +8,11 @@ import { PasswordLoginPage, WorkspaceLoginPage } from './LoginPage';
 import { authQueryKeys } from './queryKeys';
 
 vi.mock('@tanstack/react-router', () => ({
+  createLink:
+    (Component: React.ElementType) =>
+    ({ to, ...props }: { to: string } & Record<string, unknown>) => (
+      <Component href={to} {...props} />
+    ),
   Link: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),

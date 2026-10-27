@@ -62,11 +62,7 @@ export const CreateContextPage = () => {
       >
         {t('contexts.backToContexts')}
       </RouterButton>
-      <PageHeader
-        icon={ContextIcon}
-        title={t('contexts.createContext')}
-        titleVariant="h3"
-      />
+      <PageHeader icon={ContextIcon} title={t('contexts.createContext')} />
       <Paper
         ref={formRef}
         component="form"

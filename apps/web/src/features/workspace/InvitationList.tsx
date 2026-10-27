@@ -4,6 +4,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { Timestamp } from '../../time/Timestamp';
 import { revokeInvitation } from './api';
 import type { Invitation } from './schemas';
+import { Trash2Icon } from 'lucide-react';
 
 export const InvitationList = ({
   invitations,
@@ -35,6 +36,7 @@ export const InvitationList = ({
                   color="error"
                   disabled={revoke.isPending}
                   onClick={() => revoke.mutate(item.id)}
+                  startIcon={<Trash2Icon />}
                 >
                   {t('workspace.revokeInvitation')}
                 </Button>

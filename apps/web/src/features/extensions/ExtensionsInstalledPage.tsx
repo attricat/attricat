@@ -11,6 +11,9 @@ import { installedExtensions } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { EmptyState } from '../../components/EmptyState';
+import { LoadingState } from '../../components/LoadingState';
+import { ExtensionIcon } from '../../components/systemIcons';
 
 export const ExtensionsInstalledPage = () => {
   const { t } = useTranslation();
@@ -24,9 +27,21 @@ export const ExtensionsInstalledPage = () => {
   return (
     <>
       <ApiErrorAlert error={installed.error} sx={{ mb: 2 }} />
-      <Typography sx={{ mb: 1 }} variant="h5">
+      <Typography component="h2" sx={{ mb: 1 }} variant="h5">
         {t('extensions.installed')}
       </Typography>
+      {installed.isPending && canRead && (
+        <LoadingState>{t('extensions.loadingExtensions')}</LoadingState>
+      )}
+      {installed.data?.length === 0 && (
+        <Paper>
+          <EmptyState
+            description={t('extensions.noInstalledDescription')}
+            icon={ExtensionIcon}
+            title={t('extensions.noInstalled')}
+          />
+        </Paper>
+      )}
       <Stack spacing={2}>
         {(installed.data ?? []).map((extension) => (
           <Paper key={extension.id} sx={{ p: 2 }}>

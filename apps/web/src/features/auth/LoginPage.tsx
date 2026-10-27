@@ -98,7 +98,9 @@ const WorkspaceLoginForm = ({
   });
   return (
     <LoginShell onSubmit={() => form.handleSubmit()}>
-      <Typography variant="h5">{t('auth.signIn')}</Typography>
+      <Typography component="h1" variant="h5">
+        {t('auth.signIn')}
+      </Typography>
       <Typography>{t('auth.workspacePrompt')}</Typography>
       <form.Field name="loginIdentifier">
         {(field) => (
@@ -167,7 +169,9 @@ const PasswordLoginForm = ({
   });
   return (
     <LoginShell onSubmit={() => form.handleSubmit()}>
-      <Typography variant="h5">{t('auth.signInTo', { identifier })}</Typography>
+      <Typography component="h1" variant="h5">
+        {t('auth.signInTo', { identifier })}
+      </Typography>
       {samples?.demo ? (
         <Alert severity="info" sx={{ mb: 2 }}>
           {t('auth.demoNotice')}

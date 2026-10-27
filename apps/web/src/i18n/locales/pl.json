@@ -1710,7 +1710,11 @@
     "actionDialogSelection_few": "Dotyczy {{count}} zaznaczonych rekordów.",
     "actionDialogSelection_many": "Dotyczy {{count}} zaznaczonych rekordów.",
     "actionDialogSelection_other": "Dotyczy {{count}} zaznaczonych rekordów.",
-    "actionDialogSavedData": "Używane są wyłącznie zapisane dane."
+    "actionDialogSavedData": "Używane są wyłącznie zapisane dane.",
+    "noInstalled": "Brak zainstalowanych rozszerzeń",
+    "noInstalledDescription": "Zainstaluj rozszerzenie z rynku lub prześlij archiwum, aby dodać strony, akcje i integracje.",
+    "noMarketplaceExtensions": "Brak dostępnych rozszerzeń",
+    "loadingExtensions": "Wczytywanie rozszerzeń..."
   },
   "workspace": {
     "memberSummary": "{{email}} · {{state}}",

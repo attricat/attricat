@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PlusIcon } from 'lucide-react';
+import { PencilIcon, PlusIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { RouterButton } from '../../components/RouterLink';
 import { PageHeader } from '../../components/PageHeader';
@@ -153,6 +153,7 @@ export const BlueprintsPage = () => {
                     <TableCell align="right">
                       {editAccess.can(blueprint.id) && (
                         <RouterButton
+                          startIcon={<PencilIcon />}
                           params={{
                             blueprintId: blueprint.id,
                             version: String(blueprint.version),

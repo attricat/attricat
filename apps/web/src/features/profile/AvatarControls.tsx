@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Stack } from '@mui/material';
-import { ImageUpIcon, Trash2Icon } from 'lucide-react';
+import { Trash2Icon, UploadIcon } from 'lucide-react';
 import { type ChangeEvent, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { errorMessage } from '../../api/errors';
@@ -68,7 +68,7 @@ export const AvatarControls = ({
         <Button
           disabled={disabled || pending}
           onClick={() => inputRef.current?.click()}
-          startIcon={<ImageUpIcon />}
+          startIcon={<UploadIcon />}
           variant="outlined"
         >
           {hasAvatar ? t('profile.changeAvatar') : t('profile.uploadAvatar')}

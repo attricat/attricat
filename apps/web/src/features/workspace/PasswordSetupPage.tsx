@@ -51,7 +51,9 @@ export const PasswordSetupPage = ({
   });
   return (
     <AuthFormShell onSubmit={() => form.handleSubmit()}>
-      <Typography variant="h5">{t('workspace.setupTitle')}</Typography>
+      <Typography component="h1" variant="h5">
+        {t('workspace.setupTitle')}
+      </Typography>
       <form.Field name="invitationSecret">
         {(field) => (
           <TextField
