@@ -177,10 +177,12 @@ Attricat przechowuje przesłane pliki, wygenerowane warianty obrazów, artefakty
 | `S3_BUCKET` | Nazwa istniejącego zasobnika. W produkcji Attricat go nie tworzy. |
 | `S3_ACCESS_KEY_ID` | Identyfikator klucza dostępu. Jego klucz tajny to sekret `s3_secret_access_key`. |
 | `S3_FORCE_PATH_STYLE` | `true` lub `false`. Użyj `true` dla usług, które nie obsługują zasobników adresowanych przez host wirtualny, takich jak RustFS czy MinIO. |
-| `S3_UPLOAD_TIMEOUT_SECONDS` | Limit czasu przesyłania i usuwania. |
+| `S3_UPLOAD_TIMEOUT_SECONDS` | Limit czasu przesyłania i usuwania. Przesyłanie wieloczęściowe stosuje go do każdego żądania: rozpoczęcia, każdej części i zakończenia. |
 | `S3_DOWNLOAD_TIMEOUT_SECONDS` | Limit czasu pobierania i sprawdzania zasobnika przy starcie. |
 
 Przyznaj danym uwierzytelniającym tylko `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload` i `ListBucket` na tym zasobniku, utrzymuj zasobnik jako prywatny i używaj TLS. Klienci nigdy nie otrzymują kluczy obiektów ani podpisanych adresów URL; każde pobranie przechodzi przez API.
+
+Pliki o rozmiarze co najmniej 8 MiB są przesyłane wieloczęściowo. Takie przesyłanie jest przerywane, gdy dowolna część lub zakończenie się nie powiedzie albo przekroczy limit czasu, a także gdy przesyłanie zostanie anulowane. Klient S3 respektuje standardowe zmienne środowiskowe `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` i `NO_PROXY` (także zapisane małymi literami); ustaw `NO_PROXY` na host S3, gdy serwer proxy jest skonfigurowany dla innego ruchu, ale nie powinien obsługiwać żądań do magazynu obiektów.
 
 ## Przesyłanie i przetwarzanie plików
 

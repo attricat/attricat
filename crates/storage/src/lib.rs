@@ -16,10 +16,10 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt, TryStreamExt};
 use http::{HeaderValue, header};
-use s3::{Bucket, Region, creds::Credentials, error::S3Error};
+use s3::{Bucket, Region, creds::Credentials, error::S3Error, serde_types::Part};
 use secrecy::{ExposeSecret, SecretString};
 use thiserror::Error;
-use tokio::{sync::Mutex, time::timeout};
+use tokio::{io::AsyncReadExt, sync::Mutex, time::timeout};
 use url::Url;
 
 const UPLOAD_OPERATION: &str = "upload";
@@ -29,6 +29,10 @@ const READINESS_OPERATION: &str = "readiness";
 
 /// What S3 assumes for an object stored without a content type.
 const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
+
+/// Size of each multipart upload part. A file smaller than one part uploads in
+/// a single request. S3 requires every part but the last to be at least 5 MiB.
+const MULTIPART_PART_SIZE: usize = 8 * 1024 * 1024;
 
 /// Configuration required to connect to an S3-compatible object store.
 ///
@@ -236,6 +240,85 @@ impl S3ObjectStore {
         result
     }
 
+    /// Uploads `file` as a multipart upload starting with `first_part`. Any
+    /// failure after initiation aborts the upload, so no parts are left
+    /// behind; an [`AbortOnDrop`] guard covers a dropped future.
+    async fn put_multipart(
+        &self,
+        key: &str,
+        file: &mut tokio::fs::File,
+        first_part: Vec<u8>,
+        content_type: &str,
+    ) -> Result<(), ObjectStoreError> {
+        let initiated = self
+            .upload_step(self.bucket.initiate_multipart_upload(key, content_type))
+            .await?;
+        let mut guard = AbortOnDrop {
+            bucket: self.bucket.clone(),
+            key: key.to_owned(),
+            upload_id: initiated.upload_id,
+            timeout: self.upload_timeout,
+            armed: true,
+        };
+        let upload_id = guard.upload_id.clone();
+        let result = async {
+            let mut parts = Vec::new();
+            let mut chunk = first_part;
+            while !chunk.is_empty() {
+                let last = chunk.len() < MULTIPART_PART_SIZE;
+                let part_number = u32::try_from(parts.len() + 1)
+                    .map_err(|_| ObjectStoreError::Operation(UPLOAD_OPERATION))?;
+                let part = self
+                    .upload_step(self.bucket.put_multipart_chunk(
+                        chunk,
+                        key,
+                        part_number,
+                        &upload_id,
+                        content_type,
+                    ))
+                    .await?;
+                parts.push(Part {
+                    part_number,
+                    etag: part.etag,
+                });
+                chunk = if last {
+                    Vec::new()
+                } else {
+                    read_part(file).await?
+                };
+            }
+            self.upload_step(
+                self.bucket
+                    .complete_multipart_upload(key, &upload_id, parts),
+            )
+            .await
+            .map(|_| ())
+        }
+        .await;
+        guard.armed = false;
+        if result.is_err() {
+            // Best effort: a failed abort leaves the parts to the bucket's
+            // lifecycle rules, and the upload error is what the caller needs.
+            let _ = timeout(
+                self.upload_timeout,
+                self.bucket.abort_upload(key, &upload_id),
+            )
+            .await;
+        }
+        result
+    }
+
+    /// One request of a multipart upload, bounded by the upload timeout.
+    async fn upload_step<T>(
+        &self,
+        future: impl Future<Output = Result<T, S3Error>>,
+    ) -> Result<T, ObjectStoreError> {
+        timeout(self.upload_timeout, future)
+            .await
+            .map_err(|_| ObjectStoreError::TimedOut(UPLOAD_OPERATION))?
+            .map_err(|_| ObjectStoreError::Operation(UPLOAD_OPERATION))
+    }
+
     /// The bucket handle for one download, carrying the `Range` header when a
     /// range is requested. The header is signed with the request.
     fn download_bucket(&self, range: Option<&str>) -> Result<Cow<'_, Bucket>, ObjectStoreError> {
@@ -251,6 +334,50 @@ impl S3ObjectStore {
             .map(Cow::Owned)
             .map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION))
     }
+}
+
+/// Aborts a multipart upload whose future was dropped before it finished or
+/// aborted the upload itself.
+struct AbortOnDrop {
+    bucket: Box<Bucket>,
+    key: String,
+    upload_id: String,
+    timeout: Duration,
+    armed: bool,
+}
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let bucket = self.bucket.clone();
+        let key = std::mem::take(&mut self.key);
+        let upload_id = std::mem::take(&mut self.upload_id);
+        let deadline = self.timeout;
+        runtime.spawn(async move {
+            let _ = timeout(deadline, bucket.abort_upload(&key, &upload_id)).await;
+        });
+    }
+}
+
+/// Reads up to [`MULTIPART_PART_SIZE`] bytes; fewer only at the end of `file`.
+async fn read_part(file: &mut tokio::fs::File) -> Result<Vec<u8>, ObjectStoreError> {
+    let mut part = Vec::with_capacity(MULTIPART_PART_SIZE);
+    while part.len() < MULTIPART_PART_SIZE {
+        let read = file
+            .take((MULTIPART_PART_SIZE - part.len()) as u64)
+            .read_to_end(&mut part)
+            .await
+            .map_err(|_| ObjectStoreError::Operation(UPLOAD_OPERATION))?;
+        if read == 0 {
+            break;
+        }
+    }
+    Ok(part)
 }
 
 /// HTTP 404, which S3 answers for a missing key.
@@ -310,28 +437,46 @@ impl ObjectStore for S3ObjectStore {
         .map(|_| ())
     }
 
-    /// Objects above the library's 8 MiB part size upload as a multipart
-    /// upload, which is aborted when a part fails.
+    /// Files of at least [`MULTIPART_PART_SIZE`] upload as a multipart upload
+    /// whose initiation, parts and completion each get the upload timeout.
+    /// The upload is aborted when any of them fails or times out, and when
+    /// the caller drops the future.
     async fn put_file(
         &self,
         key: &str,
         path: &Path,
         content_type: Option<&str>,
     ) -> Result<(), ObjectStoreError> {
-        let mut file = match tokio::fs::File::open(path).await {
-            Ok(file) => file,
-            Err(_) => {
+        let content_type = content_type.unwrap_or(DEFAULT_CONTENT_TYPE);
+        let first_part = match tokio::fs::File::open(path).await {
+            Ok(mut file) => read_part(&mut file).await.map(|part| (file, part)),
+            Err(_) => Err(ObjectStoreError::Operation(UPLOAD_OPERATION)),
+        };
+        let (mut file, first_part) = match first_part {
+            Ok(opened) => opened,
+            Err(error) => {
                 record_operation(UPLOAD_OPERATION, "failure");
-                return Err(ObjectStoreError::Operation(UPLOAD_OPERATION));
+                return Err(error);
             }
         };
-        self.send_upload(self.bucket.put_object_stream_with_content_type(
-            &mut file,
-            key,
-            content_type.unwrap_or(DEFAULT_CONTENT_TYPE),
-        ))
-        .await
-        .map(|_| ())
+        if first_part.len() < MULTIPART_PART_SIZE {
+            return self
+                .send_upload(self.bucket.put_object_with_content_type(
+                    key,
+                    &first_part,
+                    content_type,
+                ))
+                .await
+                .map(|_| ());
+        }
+        let result = self
+            .put_multipart(key, &mut file, first_part, content_type)
+            .await;
+        record_operation(
+            UPLOAD_OPERATION,
+            if result.is_ok() { "success" } else { "failure" },
+        );
+        result
     }
 
     async fn get(&self, key: &str) -> Result<StoredObject, ObjectStoreError> {
@@ -626,6 +771,127 @@ mod tests {
 
     fn secret() -> SecretString {
         SecretString::from("attricat-dev-secret")
+    }
+
+    /// An S3 endpoint that starts multipart uploads, never answers a part
+    /// upload, and reports each abort request's query string.
+    async fn stalling_multipart_endpoint() -> (String, tokio::sync::mpsc::UnboundedReceiver<String>)
+    {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let (aborts, received) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            loop {
+                let (stream, _) = listener.accept().await.unwrap();
+                let aborts = aborts.clone();
+                tokio::spawn(async move {
+                    let mut stream = BufReader::new(stream);
+                    loop {
+                        let mut request_line = String::new();
+                        if stream.read_line(&mut request_line).await.unwrap_or(0) == 0 {
+                            return;
+                        }
+                        let mut content_length = 0;
+                        loop {
+                            let mut line = String::new();
+                            stream.read_line(&mut line).await.unwrap();
+                            if line == "\r\n" {
+                                break;
+                            }
+                            if let Some((name, value)) = line.split_once(':')
+                                && name.eq_ignore_ascii_case("content-length")
+                            {
+                                content_length = value.trim().parse().unwrap();
+                            }
+                        }
+                        let mut words = request_line.split_whitespace();
+                        let (method, target) = (words.next().unwrap(), words.next().unwrap());
+                        let body = match method {
+                            "PUT" => std::future::pending().await,
+                            "POST" => {
+                                "<InitiateMultipartUploadResult><Bucket>attricat-files</Bucket>\
+                                 <Key>key</Key><UploadId>upload-1</UploadId>\
+                                 </InitiateMultipartUploadResult>"
+                            }
+                            _ => {
+                                aborts
+                                    .send(target.split_once('?').unwrap().1.to_owned())
+                                    .unwrap();
+                                ""
+                            }
+                        };
+                        let mut discarded = vec![0; content_length];
+                        stream.read_exact(&mut discarded).await.unwrap();
+                        let status = if body.is_empty() {
+                            "204 No Content"
+                        } else {
+                            "200 OK"
+                        };
+                        let response = format!(
+                            "HTTP/1.1 {status}\r\ncontent-length: {}\r\n\r\n{body}",
+                            body.len()
+                        );
+                        stream.write_all(response.as_bytes()).await.unwrap();
+                    }
+                });
+            }
+        });
+        (endpoint, received)
+    }
+
+    #[tokio::test]
+    async fn timed_out_or_dropped_multipart_uploads_are_aborted() {
+        let (endpoint, mut aborts) = stalling_multipart_endpoint().await;
+        let mut store = S3ObjectStore::new(
+            StorageConfig::from_values(
+                |name| {
+                    if name == "S3_ENDPOINT" {
+                        Some(endpoint.clone())
+                    } else {
+                        values(name)
+                    }
+                },
+                Some(secret()),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        store.upload_timeout = Duration::from_millis(200);
+        let path =
+            std::env::temp_dir().join(format!("attricat-storage-multipart-{}", std::process::id()));
+        tokio::fs::write(&path, vec![0; MULTIPART_PART_SIZE + 1])
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            store.put_file("key", &path, None).await,
+            Err(ObjectStoreError::TimedOut(UPLOAD_OPERATION))
+        ));
+        assert_eq!(
+            timeout(Duration::from_secs(5), aborts.recv())
+                .await
+                .expect("the upload is aborted"),
+            Some("uploadId=upload-1".to_owned())
+        );
+
+        // A caller that gives up first still leaves no upload behind.
+        store.upload_timeout = Duration::from_secs(30);
+        assert!(
+            timeout(
+                Duration::from_millis(200),
+                store.put_file("key", &path, None)
+            )
+            .await
+            .is_err()
+        );
+        assert_eq!(
+            timeout(Duration::from_secs(5), aborts.recv())
+                .await
+                .expect("the upload is aborted"),
+            Some("uploadId=upload-1".to_owned())
+        );
+        tokio::fs::remove_file(&path).await.unwrap();
     }
 
     #[test]
