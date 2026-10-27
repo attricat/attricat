@@ -242,7 +242,7 @@ POST /api/v1/records/facets/system-tags
 - `prefix` keeps tags that start with it, ignoring case.
 - `limit` is 1 to 100 (default 50). `truncated` is `true` when more tags match.
 - `attricat.sample` is never listed; records show it as the sample badge.
-- The facet reads every record of the blueprint, so call it when someone opens a tag picker rather than with every search.
+- The facet reads every record of the blueprint, so call it when someone opens a tag picker rather than with every search. When `truncated` is `false` the answer holds every tag, so filter it yourself as the person types; the same goes for a complete answer to a shorter prefix.
 
 ### Files
 

@@ -735,6 +735,10 @@ tag case-insensitively, `limit` is 1 to 100 (default 50), and `truncated` says
 more tags match. `attricat.sample` is never listed, since search filters cannot
 name it. The query unnests every record's tag array, which the GIN index does
 not serve, so clients call it when a tag picker opens, not with every search.
+The Explorer's picker filters a complete (`truncated: false`) answer in the
+browser as the person types, and sends a `prefix` only when the first answer
+was truncated; a fresh, complete answer for a shorter prefix also covers the
+longer ones, so typing costs at most one server request per narrowing.
 The web app shows tags read-only on the record page (under the title and in
 its **Tags and metadata** tab) and in an optional Explorer column, and the
 Explorer's **Tag** filter stores the chosen tags as `systemTags` in the URL and

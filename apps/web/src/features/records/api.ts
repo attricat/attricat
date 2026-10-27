@@ -72,6 +72,7 @@ export type {
   RelationshipTreeFacetChildrenRequest,
   SystemTagCount,
   SystemTagFacetRequest,
+  SystemTagFacetResponse,
   ResolvedRecordPreview,
   RetentionHold,
   StatusTransitionAccess,

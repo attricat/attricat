@@ -242,7 +242,7 @@ POST /api/v1/records/facets/system-tags
 - `prefix` zostawia tagi, które się od niego zaczynają, bez rozróżniania wielkości liter.
 - `limit` wynosi od 1 do 100 (domyślnie 50). `truncated` ma wartość `true`, gdy pasuje więcej tagów.
 - `attricat.sample` nigdy nie jest wyświetlany; rekordy pokazują go jako plakietkę danych przykładowych.
-- Faseta odczytuje każdy rekord schematu, więc wywołuj ją, gdy ktoś otwiera wybór tagu, a nie przy każdym wyszukiwaniu.
+- Faseta odczytuje każdy rekord schematu, więc wywołuj ją, gdy ktoś otwiera wybór tagu, a nie przy każdym wyszukiwaniu. Gdy `truncated` ma wartość `false`, odpowiedź zawiera wszystkie tagi, więc filtruj ją samodzielnie podczas wpisywania; to samo dotyczy pełnej odpowiedzi dla krótszego prefiksu.
 
 ### Pliki
 

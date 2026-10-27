@@ -512,6 +512,9 @@ export type RecordPublicationReadiness = z.infer<
 export type RecordAuditChange = z.infer<typeof recordAuditChangeSchema>;
 export type RecordItem = z.infer<typeof recordItemSchema>;
 export type SystemTagFacetRequest = z.infer<typeof systemTagFacetRequestSchema>;
+export type SystemTagFacetResponse = z.infer<
+  typeof systemTagFacetResponseSchema
+>;
 export type SystemTagCount = z.infer<
   typeof systemTagFacetResponseSchema
 >['items'][number];

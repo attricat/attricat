@@ -7,7 +7,11 @@ import {
   Typography,
   type PopperProps,
 } from '@mui/material';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useRef, useState, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { errorMessage } from '../../api/errors';
@@ -15,7 +19,11 @@ import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedA
 import { smallIconSize } from '../../components/iconSizes';
 import { SystemTagIcon } from '../../components/systemIcons';
 import { useDebouncedValue } from '../../components/useDebouncedValue';
-import { getSystemTagFacet, type SystemTagCount } from '../records/api';
+import {
+  getSystemTagFacet,
+  type SystemTagCount,
+  type SystemTagFacetResponse,
+} from '../records/api';
 import { SYSTEM_TAG_FACET_LIMIT } from '../records/constants';
 import { recordQueryKeys } from '../records/queryKeys';
 import {
@@ -43,10 +51,17 @@ const InlinePopper = ({ children, id, role, style }: PopperProps) => (
   </div>
 );
 
+/** Whether `tag` starts with `prefix`, ignoring case as the server does. */
+const startsWithIgnoringCase = (tag: string, prefix: string) =>
+  tag.toLowerCase().startsWith(prefix.toLowerCase());
+
 /**
  * Adds a system tag filter: a button that opens a searchable list of the
  * tags the blueprint's records carry, most used first. The list is requested
- * only while the picker is open.
+ * only while the picker is open. Each request reads every record of the
+ * blueprint, so typing filters the first list in the browser when it holds
+ * every tag, and asks the server for a prefix only when it was truncated.
+ * A fresh, complete answer for a shorter prefix also covers longer ones.
  */
 export const SystemTagFilterPicker = ({
   blueprint,
@@ -56,34 +71,70 @@ export const SystemTagFilterPicker = ({
   onAdd,
 }: Props) => {
   const { t } = useTranslation();
+  const client = useQueryClient();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const prefix = useDebouncedValue(input.trim(), systemTagSearchDebounceMs);
-  const request = {
+  const typed = input.trim();
+  const debouncedPrefix = useDebouncedValue(typed, systemTagSearchDebounceMs);
+  const facetRequest = (prefix?: string) => ({
     blueprint: { code: blueprint },
     ...(prefix ? { prefix } : {}),
     limit: SYSTEM_TAG_FACET_LIMIT,
-  };
-  const facet = useQuery({
-    queryKey: recordQueryKeys.systemTagFacet(request),
-    queryFn: ({ signal }) => getSystemTagFacet(request, signal),
+  });
+  const allRequest = facetRequest();
+  const all = useQuery({
+    queryKey: recordQueryKeys.systemTagFacet(allRequest),
+    queryFn: ({ signal }) => getSystemTagFacet(allRequest, signal),
     enabled: anchor !== null,
+    staleTime: systemTagFacetStaleTimeMs,
+  });
+  // A prefix only reaches the server when the first list left tags out.
+  const searchesServer = all.data?.truncated === true && typed !== '';
+  // The shortest typed prefix whose fresh answer listed every match.
+  const completePrefix = searchesServer
+    ? Array.from({ length: typed.length }, (_, end) =>
+        typed.slice(0, end + 1),
+      ).find((prefix) => {
+        const cached = client.getQueryCache().find<SystemTagFacetResponse>({
+          exact: true,
+          queryKey: recordQueryKeys.systemTagFacet(facetRequest(prefix)),
+        });
+        return (
+          cached?.state.data?.truncated === false &&
+          !cached.isStaleByTime(systemTagFacetStaleTimeMs)
+        );
+      })
+    : undefined;
+  const prefixRequest = facetRequest(completePrefix ?? debouncedPrefix);
+  const matching = useQuery({
+    queryKey: recordQueryKeys.systemTagFacet(prefixRequest),
+    queryFn: ({ signal }) => getSystemTagFacet(prefixRequest, signal),
+    enabled:
+      anchor !== null && searchesServer && prefixRequest.prefix !== undefined,
     staleTime: systemTagFacetStaleTimeMs,
     placeholderData: keepPreviousData,
   });
-  const options = (facet.data?.items ?? []).filter(
-    (item) => !selected.includes(item.tag),
+  // Until the server answers, and for an answer to an earlier prefix, the
+  // typed prefix still narrows what is shown.
+  const options = (
+    (searchesServer ? matching.data?.items : undefined) ??
+    all.data?.items ??
+    []
+  ).filter(
+    (item) =>
+      startsWithIgnoringCase(item.tag, typed) && !selected.includes(item.tag),
   );
+  const error = all.error ?? (searchesServer ? matching.error : null);
   const close = () => {
     setAnchor(null);
     setInput('');
   };
-  const emptyText = facet.isError
-    ? errorMessage(facet.error)
-    : facet.isPending
+  const emptyText = error
+    ? errorMessage(error)
+    : all.isPending || (searchesServer && matching.isFetching)
       ? t('explorer.loadingSystemTags')
-      : prefix
+      : typed
         ? t('explorer.noMatchingSystemTags')
         : t('explorer.noSystemTags');
 
@@ -101,13 +152,16 @@ export const SystemTagFilterPicker = ({
       >
         {t('explorer.addSystemTagFilter')}
       </Button>
+      {/* The input takes focus as the popover starts opening, so nothing
+          typed right after the click is lost to the opening transition. */}
       <Popover
         anchorEl={anchor}
         anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
+        disableAutoFocus
         onClose={close}
         open={anchor !== null}
         slotProps={{
-          transition: { onEntered: () => inputRef.current?.focus() },
+          transition: { onEnter: () => inputRef.current?.focus() },
         }}
       >
         <Box sx={{ p: 1.5, width: systemTagPickerWidth }}>
@@ -117,7 +171,7 @@ export const SystemTagFilterPicker = ({
             getOptionLabel={(item) => item.tag}
             inputValue={input}
             isOptionEqualToValue={(item, value) => item.tag === value.tag}
-            loading={facet.isFetching}
+            loading={all.isFetching || (searchesServer && matching.isFetching)}
             noOptionsText={emptyText}
             onChange={(_, item) => {
               if (!item) return;
