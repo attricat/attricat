@@ -290,7 +290,9 @@ event without an id, the server's notice that the stream itself failed, ends
 the command with `request_failed`. When a stream ends without a `terminal`
 event, `acli` reads the run (`GET /agent/runs/{run_id}`) and stops with exit
 code 0 if it has finished, for example when its events were purged by
-retention or `--last-event-id` named its terminal event.
+retention or `--last-event-id` named its terminal event. If the reader of
+standard output goes away (for example `| head -1`), the command stops with
+exit code 0.
 
 
 ## Teams and assignments

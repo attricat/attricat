@@ -7,7 +7,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cli::{Cli, Command, PageArgs, SourceInput};
-use crate::commands::agent::follow_run;
+use crate::commands::agent::{Output, follow_run, write_line};
 use crate::commands::data_health::data_health_path;
 use crate::commands::extension::connector_job::{ConnectorJobCommand, connector_job_command};
 use crate::commands::extension::operation::{
@@ -2724,6 +2724,23 @@ async fn agent_run_events_print_a_failed_runs_error_event_and_continue_to_termin
     ));
     server.abort();
     server2.abort();
+}
+
+#[test]
+fn a_closed_stdout_ends_streamed_output_cleanly() {
+    struct ClosedPipe;
+    impl std::io::Write for ClosedPipe {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::ErrorKind::BrokenPipe.into())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    assert_eq!(write_line(&mut ClosedPipe, "{}").unwrap(), Output::Closed);
+    let mut open = Vec::new();
+    assert_eq!(write_line(&mut open, "{}").unwrap(), Output::Open);
+    assert_eq!(open, b"{}\n");
 }
 
 #[tokio::test]

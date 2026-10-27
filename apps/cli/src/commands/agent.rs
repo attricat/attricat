@@ -355,7 +355,9 @@ async fn message_command(api: &Api, command: MessageCommand) -> Result<String, C
                 .ok()
                 .and_then(|run| run["id"].as_str().and_then(|id| id.parse::<Uuid>().ok()))
                 .ok_or(CliError::InvalidResponse)?;
-            print_line(&run)?;
+            if print_line(&run)? == Output::Closed {
+                return Ok(String::new());
+            }
             follow_run(api, run_id, None).await
         }
     }
@@ -396,8 +398,9 @@ pub(crate) async fn follow_run(
                 if event.event.as_deref() == Some(ERROR_EVENT) && event.id.is_none() {
                     return Err(CliError::Transport(event.data));
                 }
-                print_line(&event.data)?;
-                if event.event.as_deref() == Some(TERMINAL_EVENT) {
+                if print_line(&event.data)? == Output::Closed
+                    || event.event.as_deref() == Some(TERMINAL_EVENT)
+                {
                     return Ok(String::new());
                 }
                 if event.id.is_some() {
@@ -408,11 +411,25 @@ pub(crate) async fn follow_run(
     }
 }
 
-fn print_line(line: &str) -> Result<(), CliError> {
-    let mut stdout = std::io::stdout().lock();
-    writeln!(stdout, "{line}")
-        .and_then(|()| stdout.flush())
-        .map_err(|error| CliError::Transport(error.to_string()))
+/// Whether standard output still has a reader.
+#[derive(Debug, PartialEq)]
+pub(crate) enum Output {
+    Open,
+    /// The reader went away, as `| head -1` does after one line; the
+    /// command has printed all anyone will read and ends successfully.
+    Closed,
+}
+
+fn print_line(line: &str) -> Result<Output, CliError> {
+    write_line(&mut std::io::stdout().lock(), line)
+}
+
+pub(crate) fn write_line(out: &mut impl Write, line: &str) -> Result<Output, CliError> {
+    match writeln!(out, "{line}").and_then(|()| out.flush()) {
+        Ok(()) => Ok(Output::Open),
+        Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => Ok(Output::Closed),
+        Err(error) => Err(CliError::Transport(error.to_string())),
+    }
 }
 
 fn conversation_path(conversation_id: Uuid, rest: &str) -> String {
