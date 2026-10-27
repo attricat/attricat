@@ -1,6 +1,7 @@
 //! Embeds the source branch and commit so a running API can report exactly
 //! what it was built from. Container builds have no `.git` directory, so the
-//! image build passes both values as environment variables instead.
+//! image build passes both values as environment variables instead. It also
+//! re-runs when a migration changes, so `MIGRATOR` embeds the current set.
 
 use std::process::Command;
 
@@ -11,6 +12,9 @@ const UNKNOWN: &str = "unknown";
 fn main() {
     println!("cargo:rerun-if-env-changed={BRANCH_ENV}");
     println!("cargo:rerun-if-env-changed={COMMIT_ENV}");
+    // `sqlx::migrate!` embeds this directory but does not track it, so a new
+    // migration would otherwise be missing until an unrelated rebuild.
+    println!("cargo:rerun-if-changed=migrations");
 
     let branch = env_value(BRANCH_ENV)
         .or_else(|| git(&["rev-parse", "--abbrev-ref", "HEAD"]))
