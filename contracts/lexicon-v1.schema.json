@@ -65,6 +65,8 @@
     },
     "language": {
       "description": "BCP 47 language tag of every entry, such as `pl` or `pt-BR`.",
+      "maxLength": 35,
+      "minLength": 1,
       "type": "string"
     }
   },

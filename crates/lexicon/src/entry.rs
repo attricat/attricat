@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    plural::{DEFAULT_PLURAL_CATEGORY, PLURAL_CATEGORIES, canonical_language, plural_categories},
+    plural::{
+        DEFAULT_PLURAL_CATEGORY, MAX_LANGUAGE_TAG_LENGTH, PLURAL_CATEGORIES, canonical_language,
+        plural_categories,
+    },
     reference::normalize,
 };
 
@@ -155,6 +158,7 @@ pub struct LexiconFile {
     #[schemars(extend("const" = 1))]
     pub format_version: u32,
     /// BCP 47 language tag of every entry, such as `pl` or `pt-BR`.
+    #[schemars(length(min = 1, max = MAX_LANGUAGE_TAG_LENGTH))]
     pub language: String,
     /// Translations for the language.
     #[schemars(length(max = MAX_FILE_ENTRIES))]

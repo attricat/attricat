@@ -13,7 +13,8 @@ pub use entry::{
     MAX_CONTEXT_CHARS, MAX_FILE_ENTRIES, MAX_KEY_CHARS, MAX_TEXT_CHARS, lexicon_file_json_schema,
 };
 pub use plural::{
-    DEFAULT_PLURAL_CATEGORY, PLURAL_CATEGORIES, canonical_language, plural_categories,
+    DEFAULT_PLURAL_CATEGORY, MAX_LANGUAGE_TAG_LENGTH, PLURAL_CATEGORIES, canonical_language,
+    plural_categories,
 };
 pub use reference::{Reference, ReferenceError, Segment, normalize, parse, references, resolve};
 pub use report::{

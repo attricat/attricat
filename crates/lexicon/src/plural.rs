@@ -57,9 +57,18 @@ const LANGUAGES: &[(&str, &[&str])] = &[
     ("zh", OTHER),
 ];
 
+/// Longest accepted language tag, in bytes. RFC 5646 section 4.4.1 asks
+/// implementations to support at least 35 characters, which covers every
+/// practical tag; the canonical tag is stored and repeated in agent prompts.
+pub const MAX_LANGUAGE_TAG_LENGTH: usize = 35;
+
 /// Canonicalizes a BCP 47 tag such as `pt-br` to `pt-BR`, or returns `None`
-/// for malformed tags and unsupported primary languages.
+/// for malformed tags, tags longer than [`MAX_LANGUAGE_TAG_LENGTH`] and
+/// unsupported primary languages.
 pub fn canonical_language(language: &str) -> Option<String> {
+    if language.len() > MAX_LANGUAGE_TAG_LENGTH {
+        return None;
+    }
     let mut subtags = language.split('-');
     let primary = subtags.next()?.to_ascii_lowercase();
     if !(2..=3).contains(&primary.len())
@@ -112,6 +121,14 @@ mod tests {
         assert_eq!(canonical_language("xx"), None);
         assert_eq!(canonical_language("en_US"), None);
         assert_eq!(canonical_language("en-"), None);
+        let longest = format!("en{}", "-abcdefgh".repeat(3)) + "-abcde";
+        assert_eq!(longest.len(), MAX_LANGUAGE_TAG_LENGTH);
+        assert_eq!(canonical_language(&longest), Some(longest.clone()));
+        assert_eq!(canonical_language(&format!("{longest}g")), None);
+        assert_eq!(
+            canonical_language(&format!("en{}", "-abcdefgh".repeat(1_000))),
+            None
+        );
         assert_eq!(plural_categories("pl-PL"), Some(ONE_FEW_MANY_OTHER));
     }
 
