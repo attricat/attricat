@@ -6,6 +6,7 @@ import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedA
 import type { Attribute, Blueprint } from '../records/api';
 import { isHiddenByDefault } from '../records/attributeVisibility';
 import { attributeLabel } from '../records/recordDisplay';
+import { systemTagLabel } from '../records/systemTags';
 import { AttributeFilterDialog } from './AttributeFilterDialog';
 import { principalConfiguration } from '../principals/principal';
 import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
@@ -304,7 +305,9 @@ export const ExplorerFilterBar = ({
       })}
       {systemTags.map((tag) => {
         const key = systemTagChipKey(tag);
-        const label = t('explorer.systemTagFilterChip', { tag });
+        const label = t('explorer.systemTagFilterChip', {
+          tag: systemTagLabel(tag),
+        });
         return (
           <ExplorerFilterChip
             chipRef={chipRef(key)}

@@ -50,6 +50,12 @@ A [status](/builders/validation/#statuses) or a [choice list](/builders/validati
 
 Choice labels in `x-attricat-enum-labels` work the same way. Status chips, the status or choice select on the record page and create form, the Explorer's filter value list and filter pills, and plain-text values all show the translated label, with the same fallback as other labels. Searches, filters, saved searches, the API, and exports keep using the code, so translating or rewording a label never changes stored data. A context such as `{{Draft|status}}` keeps a status called "Draft" apart from other uses of the word.
 
+### System tags
+
+[System tags](/builders/modeling/#system-tags-and-metadata) come from workflows, agents, extensions, and API clients rather than blueprints, so they rarely contain braces. Each tag is therefore looked up in the lexicon as a key itself: give the tag `needs-review` an entry with the key `needs-review`, and record pages, the Explorer's **System tags** column, the **Tag** filter list, and its filter pills show the translation, with the same fallback as other labels. A tag that contains `{{` is read as text with references instead, like a label. Typing in the **Tag** filter matches the stored tag or its translation. Filters, saved searches, the API, and exports keep the stored tag.
+
+The [report](#find-missing-and-unused-translations) does not read system tags: a tag without a translation is not listed as untranslated, and an entry used only by tags is listed as orphaned and marked **Unused**.
+
 ## Reference syntax
 
 | Write | Meaning |
