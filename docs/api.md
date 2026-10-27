@@ -706,6 +706,7 @@ results report the same `code`, `message` and `details`.
 | `409` | `record_id_taken` | `record_id` |
 | `422` | `generated_attribute_readonly` | `attribute`: a generated attribute, which no client can write |
 | `409` | `generated_sequence_not_raised` | `current` next value and the lower `requested` one; counters can only be raised |
+| `409` | `generated_reset_changed` | `attribute`, and the `previous` and `requested` `reset`; a blueprint revision cannot change the `reset` of an attribute an earlier revision generated |
 | `409` | `annotation_revision_conflict` | `expected`, `actual` revisions |
 | `409` | `rule_dry_run_required` | none when no completed full dry run exists; run `run-now` with `"dry_run": true` and the `version` first. When the latest one was truncated: `truncated: true` and `existing_violations` (found among the candidates it checked), with a distinct message; pass `accept_existing_violations` |
 | `409` | `rule_has_existing_violations` | `existing_violations` (a count); fix the records or pass `accept_existing_violations` |

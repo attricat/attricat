@@ -94,6 +94,7 @@
     "file_too_large": "The file is larger than the upload limit.",
     "forbidden": "You don't have permission to do this.",
     "generated_attribute_readonly": "{{attribute}} is numbered automatically when the record is created and can't be changed.",
+    "generated_reset_changed": "{{attribute}} resets {{previous}} in an earlier revision. A new revision can't change it to {{requested}}, or numbers would repeat.",
     "generated_sequence_not_raised": "The next number is already {{current}}. A counter can only be raised, not set to {{requested}}.",
     "global_relationship_search_budget_exceeded": "The search reached too many related records. Narrow it down.",
     "global_relationship_search_timed_out": "The search took too long. Narrow it down.",

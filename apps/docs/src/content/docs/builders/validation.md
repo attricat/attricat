@@ -371,6 +371,8 @@ attributes = ["invoice_number"]
 
 The server assigns the value before the record is validated, so `required` is met on every create. The counter never gives out the same number twice; the unique key makes the number a declared business identifier and has the database reject a duplicate, for example if a later `format` change makes new values look like old ones. Nobody can write a generated attribute, so a save that tries returns `422 generated_attribute_readonly`.
 
+Choose `reset` before you publish: later revisions of the blueprint cannot change it, because numbering would restart and repeat numbers already given out. Saving such a revision returns `409 generated_reset_changed`. You can still change `format`, `start`, and `time_zone`.
+
 ### Continue numbering after moving from another system
 
 Records you bring over from another system get new numbers like any other record. Keep their old numbers in a separate plain attribute, such as `legacy_number` above, and make it a unique key too if the old numbers must stay unique.

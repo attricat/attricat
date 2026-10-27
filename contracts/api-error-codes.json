@@ -32,6 +32,7 @@
     "file_too_large",
     "forbidden",
     "generated_attribute_readonly",
+    "generated_reset_changed",
     "generated_sequence_not_raised",
     "global_relationship_search_budget_exceeded",
     "global_relationship_search_timed_out",

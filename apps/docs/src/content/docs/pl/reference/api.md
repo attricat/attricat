@@ -50,6 +50,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `unique_key_duplicates` | 409 | Publikacja nowego klucza unikalnego lub przeniesienie kontekstu pod innego rodzica nie powiodły się, bo istniejące rekordy współdzieliłyby wartości. `details.duplicates` je wymienia. |
 | `relationship_hierarchy_violations` | 409 | Publikacja `acyclic` lub `tree` nie powiodła się, bo istniejące powiązania zawierają cykle lub nadmiarowych rodziców. `details` je wymienia. |
 | `generated_attribute_readonly` | 422 | Żądanie próbuje zapisać [atrybut generowany](/pl/reference/blueprint/#wartości-generowane), który przypisuje wyłącznie serwer. `details.attribute` go wskazuje. |
+| `generated_reset_changed` | 409 | Wersja schematu zmienia `reset` atrybutu generowanego we wcześniejszej wersji, co powtórzyłoby numery. `details` zawiera `attribute`, `previous` i `requested`. |
 | `generated_sequence_not_raised` | 409 | Podniesienie licznika podało `next_value` niższe od bieżącego. Liczniki można tylko podnosić. `details` zawiera `current` i `requested`. |
 | `stale_record` | 409 | `expected_updated_at` nie odpowiada już rekordowi. Wczytaj go ponownie i spróbuj jeszcze raz. |
 | `status_precondition_required` | 428 | Zapis atrybutu statusu nie zawiera `expected_updated_at`. Odczytaj rekord i wyślij jego `updated_at`. |

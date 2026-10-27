@@ -416,6 +416,66 @@ async fn records_are_numbered_when_they_migrate_onto_a_generating_revision(pool:
     server.abort();
 }
 
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn revisions_cannot_change_the_reset_of_a_generated_attribute(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url, INVOICE).await;
+    let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
+    let versions = format!("{base_url}/blueprints/{blueprint_id}/versions");
+    let save = |url: String, definition: String| {
+        client
+            .post(url)
+            .json(&json!({ "definition": definition }))
+            .send()
+    };
+    let yearly = INVOICE.replace(
+        "generated = { format = \"INV-{n:04}\" }",
+        "generated = { format = \"INV-{yyyy}-{n:04}\", reset = \"yearly\" }",
+    );
+    let expected = json!({"attribute": "number", "previous": "never", "requested": "yearly"});
+    for url in [versions.clone(), format!("{versions}/validate")] {
+        let refused = expect_error(
+            save(url, yearly.clone()).await.unwrap(),
+            StatusCode::CONFLICT,
+            "generated_reset_changed",
+        )
+        .await;
+        assert_eq!(refused["error"]["details"], expected);
+    }
+
+    // `start`, `format` and dropping `generated` stay allowed.
+    let restarted = INVOICE
+        .replace("{n:04}", "N{n:06}")
+        .replace("generated = { start = 1000 }", "generated = { start = 1 }");
+    expect_status(
+        save(versions.clone(), restarted).await.unwrap(),
+        StatusCode::CREATED,
+    )
+    .await;
+    let plain = INVOICE
+        .replace("generated = { format = \"INV-{n:04}\" }", "")
+        .replace(
+            r#"record_schema = '{"type":"object","required":["number","title"]}'"#,
+            "",
+        );
+    expect_status(
+        save(versions.clone(), plain).await.unwrap(),
+        StatusCode::CREATED,
+    )
+    .await;
+    // A later revision cannot bring it back with another reset either.
+    let refused = expect_error(
+        save(versions.clone(), yearly).await.unwrap(),
+        StatusCode::CONFLICT,
+        "generated_reset_changed",
+    )
+    .await;
+    assert_eq!(refused["error"]["details"], expected);
+
+    server.abort();
+}
+
 async fn get_json_post(client: &Client, url: String) -> Value {
     client
         .post(url)

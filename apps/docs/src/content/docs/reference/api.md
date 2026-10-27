@@ -50,6 +50,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `unique_key_duplicates` | 409 | Publishing a new unique key, or moving a context to another parent, failed because existing records would share values. `details.duplicates` lists them. |
 | `relationship_hierarchy_violations` | 409 | Publishing `acyclic` or `tree` failed because existing links contain cycles or extra parents. `details` lists them. |
 | `generated_attribute_readonly` | 422 | The request tries to write a [generated attribute](/reference/blueprint/#generated-values), which only the server assigns. `details.attribute` names it. |
+| `generated_reset_changed` | 409 | A blueprint revision changes the `reset` of an attribute that an earlier revision generated, which would repeat numbers. `details` has `attribute`, `previous`, and `requested`. |
 | `generated_sequence_not_raised` | 409 | A counter advance asked for a `next_value` lower than the current one. Counters can only be raised. `details` has `current` and `requested`. |
 | `stale_record` | 409 | `expected_updated_at` no longer matches the record. Reload it and try again. |
 | `status_precondition_required` | 428 | A write to a status attribute did not send `expected_updated_at`. Read the record and send its `updated_at`. |

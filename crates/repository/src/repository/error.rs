@@ -147,6 +147,16 @@ pub enum RepositoryError {
         "the sequence's next value is already {current}; it can only be raised, not set to {requested}"
     )]
     GeneratedSequenceNotRaised { current: i64, requested: i64 },
+    /// Counters are keyed by period, so a new `reset` would restart numbering
+    /// and hand out numbers that earlier revisions already issued.
+    #[error(
+        "generated attribute '{attribute}' resets {previous} in an earlier revision and cannot reset {requested}"
+    )]
+    GeneratedResetChanged {
+        attribute: String,
+        previous: attricat_domain::attribute_options::SequenceReset,
+        requested: attricat_domain::attribute_options::SequenceReset,
+    },
     #[error("invalid generated sequence request: {0}")]
     InvalidGeneratedSequence(String),
     #[error("file references changed; refresh and try again")]

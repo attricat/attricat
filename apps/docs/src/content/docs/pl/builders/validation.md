@@ -370,6 +370,8 @@ attributes = ["invoice_number"]
 
 Serwer przypisuje wartość, zanim rekord zostanie zwalidowany, więc `required` jest spełnione przy każdym utworzeniu. Licznik nigdy nie wydaje tego samego numeru dwa razy; klucz unikalny czyni z numeru zadeklarowany identyfikator biznesowy i sprawia, że baza danych odrzuca duplikat, np. gdy późniejsza zmiana `format` sprawi, że nowe wartości będą wyglądać jak stare. Nikt nie może zapisać atrybutu generowanego, więc zapis, który tego próbuje, zwraca `422 generated_attribute_readonly`.
 
+Wybierz `reset` przed publikacją: kolejne wersje schematu nie mogą go zmienić, ponieważ numeracja zaczęłaby się od nowa i powtórzyła wydane już numery. Zapisanie takiej wersji zwraca `409 generated_reset_changed`. Nadal możesz zmienić `format`, `start` i `time_zone`.
+
 ### Kontynuuj numerację po przejściu z innego systemu
 
 Rekordy przeniesione z innego systemu otrzymują nowe numery jak każdy inny rekord. Ich dawne numery przechowuj w osobnym zwykłym atrybucie, takim jak `legacy_number` powyżej, i jeśli dawne numery muszą pozostać unikalne, zadeklaruj dla niego również klucz unikalny.

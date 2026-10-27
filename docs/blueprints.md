@@ -145,8 +145,14 @@ per period with `reset`). Creates that number the same attribute run one at a
 time while the counter is locked, and a create that fails returns its number.
 Deleted records keep their numbers, which are never reused. New revisions
 continue the same counter: changing `format` affects only new values, and
-`start` only applies when a counter is first created. A unique key on the
-attribute is optional but recommended.
+`start` only applies when a counter is first created. A revision cannot change
+the `reset` of an attribute that an earlier revision of the family generated,
+because the new period would restart numbering and repeat numbers already
+issued; creating or validating such a revision fails with
+`409 generated_reset_changed` and `error.details = { attribute, previous,
+requested }`. Changing `start`, `format` or `time_zone`, or dropping
+`generated`, is allowed. A unique key on the attribute is optional but
+recommended.
 
 - Duplicating a record numbers the copy like any new record.
 - Records created before the attribute existed get a number when they

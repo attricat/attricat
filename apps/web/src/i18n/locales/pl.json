@@ -96,6 +96,7 @@
     "file_too_large": "Plik przekracza limit rozmiaru przesyłania.",
     "forbidden": "Nie masz uprawnień do wykonania tej czynności.",
     "generated_attribute_readonly": "Atrybut {{attribute}} jest numerowany automatycznie przy tworzeniu rekordu i nie można go zmienić.",
+    "generated_reset_changed": "Atrybut {{attribute}} ma we wcześniejszej wersji reset {{previous}}. Nowa wersja nie może zmienić go na {{requested}}, bo numery by się powtórzyły.",
     "generated_sequence_not_raised": "Następny numer to już {{current}}. Licznik można tylko zwiększyć, nie ustawić na {{requested}}.",
     "global_relationship_search_budget_exceeded": "Wyszukiwanie objęło zbyt wiele powiązanych rekordów. Zawęź je.",
     "global_relationship_search_timed_out": "Wyszukiwanie trwało zbyt długo. Zawęź je.",

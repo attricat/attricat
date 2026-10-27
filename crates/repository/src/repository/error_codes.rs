@@ -71,6 +71,7 @@ error_codes! {
     FileTooLarge = "file_too_large",
     Forbidden = "forbidden",
     GeneratedAttributeReadonly = "generated_attribute_readonly",
+    GeneratedResetChanged = "generated_reset_changed",
     GeneratedSequenceNotRaised = "generated_sequence_not_raised",
     GlobalRelationshipSearchBudgetExceeded = "global_relationship_search_budget_exceeded",
     GlobalRelationshipSearchTimedOut = "global_relationship_search_timed_out",
@@ -368,6 +369,15 @@ impl RepositoryError {
                 plain(Unprocessable, Code::GeneratedAttributeReadonly)
                     .with_details(json!({ "attribute": attribute }))
             }
+            Self::GeneratedResetChanged {
+                attribute,
+                previous,
+                requested,
+            } => plain(Conflict, Code::GeneratedResetChanged).with_details(json!({
+                "attribute": attribute,
+                "previous": previous.as_str(),
+                "requested": requested.as_str(),
+            })),
             Self::GeneratedSequenceNotRaised { current, requested } => {
                 plain(Conflict, Code::GeneratedSequenceNotRaised)
                     .with_details(json!({ "current": current, "requested": requested }))
