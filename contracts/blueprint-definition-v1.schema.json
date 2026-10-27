@@ -1019,6 +1019,7 @@
           "properties": {
             "cron": {
               "description": "Six-field cron expression, including seconds: `sec min hour day month weekday`.",
+              "pattern": "^\\s*\\S+(?:\\s+\\S+){5}\\s*$",
               "type": "string"
             },
             "timezone": {
@@ -2044,6 +2045,7 @@
           },
           "name": {
             "description": "Human-readable rule name.",
+            "pattern": "\\S",
             "type": "string"
           },
           "predicate": {

@@ -442,6 +442,7 @@
           "properties": {
             "cron": {
               "description": "Six-field cron expression, including seconds: `sec min hour day month weekday`.",
+              "pattern": "^\\s*\\S+(?:\\s+\\S+){5}\\s*$",
               "type": "string"
             },
             "timezone": {
@@ -569,12 +570,16 @@
     },
     "format_version": {
       "description": "Definition format version. Only `1` is supported.",
+      "enum": [
+        1
+      ],
       "format": "uint32",
       "minimum": 0,
       "type": "integer"
     },
     "name": {
       "description": "Human-readable rule name.",
+      "pattern": "\\S",
       "type": "string"
     },
     "predicate": {
@@ -601,6 +606,6 @@
     "triggers",
     "predicate"
   ],
-  "title": "Raw",
+  "title": "Attricat rule definition",
   "type": "object"
 }
