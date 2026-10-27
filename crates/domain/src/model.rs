@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -725,6 +725,42 @@ pub struct UpdateRecordFormRequest {
     /// Omitted fields retain their existing values; use [] or {} to clear.
     pub system_tags: Option<Vec<String>>,
     pub system_metadata: Option<Value>,
+}
+
+/// An incremental change to a record's system tags and metadata, applied to
+/// its current state: tag removals, then additions, then metadata sets and key
+/// removals. Agent tools, workflow actions and extension annotations all
+/// describe annotation edits with it. Setting a key replaces that key's whole
+/// JSON value; JSON `null` is a valid value, so removals are listed separately.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct SystemAnnotationPatch {
+    #[serde(default)]
+    pub add_tags: Vec<String>,
+    #[serde(default)]
+    pub remove_tags: Vec<String>,
+    #[serde(default)]
+    pub set_metadata: BTreeMap<String, Value>,
+    #[serde(default)]
+    pub remove_metadata: Vec<String>,
+}
+
+impl SystemAnnotationPatch {
+    pub fn changes_tags(&self) -> bool {
+        !self.add_tags.is_empty() || !self.remove_tags.is_empty()
+    }
+
+    pub fn changes_metadata(&self) -> bool {
+        !self.set_metadata.is_empty() || !self.remove_metadata.is_empty()
+    }
+
+    /// Add, remove, set and delete operations in the patch.
+    pub fn operations(&self) -> usize {
+        self.add_tags.len()
+            + self.remove_tags.len()
+            + self.set_metadata.len()
+            + self.remove_metadata.len()
+    }
 }
 
 /// Operations a record batch may hold.

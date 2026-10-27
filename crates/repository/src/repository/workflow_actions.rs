@@ -3,9 +3,9 @@
 //! [`AttricatRepository::apply_workflow_actions`], which uses the ordinary
 //! record update seam, so it is validated, audited and published exactly like
 //! any other record write.
-use super::system_annotations::{TagMetadataPatch, apply_tag_metadata_patch};
+use super::system_annotations::PatchedAnnotations;
 use super::*;
-use crate::model::UpdateRecordFormRequest;
+use crate::model::{SystemAnnotationPatch, UpdateRecordFormRequest};
 use attricat_domain::states::WorkflowTargetStatus;
 use sqlx::{Postgres, Transaction};
 use std::collections::HashSet;
@@ -32,13 +32,13 @@ fn bounded_error(message: &str) -> String {
 #[derive(Default)]
 struct WorkflowRecordChange {
     values: Vec<NewAttributeValue>,
-    system_tags: Option<Vec<String>>,
-    system_metadata: Option<Value>,
+    annotations: PatchedAnnotations,
 }
 
 impl WorkflowRecordChange {
     /// Derives desired tags/metadata from current state: event payloads
-    /// intentionally contain only immutable facts and are unordered.
+    /// intentionally contain only immutable facts and are unordered. Each
+    /// annotation action is its own patch, applied in definition order.
     fn stage(
         &mut self,
         record: &Record,
@@ -46,75 +46,42 @@ impl WorkflowRecordChange {
         event: &crate::domain_events::DomainEvent,
     ) -> Result<(), RepositoryError> {
         use attricat_workflow::Action;
-        match action {
-            Action::SystemTagsAdd { tags } => self.patch_tags(
-                record,
-                TagMetadataPatch {
-                    add_tags: tags.clone(),
-                    ..TagMetadataPatch::default()
-                },
-            ),
-            Action::SystemTagsRemove { tags } => self.patch_tags(
-                record,
-                TagMetadataPatch {
-                    remove_tags: tags.clone(),
-                    ..TagMetadataPatch::default()
-                },
-            ),
-            Action::SystemMetadataMerge { values } => self.patch_metadata(
-                record,
-                TagMetadataPatch {
-                    set_metadata: values.clone(),
-                    ..TagMetadataPatch::default()
-                },
-            )?,
-            Action::SystemMetadataDelete { keys } => self.patch_metadata(
-                record,
-                TagMetadataPatch {
-                    remove_metadata: keys.clone(),
-                    ..TagMetadataPatch::default()
-                },
-            )?,
+        let patch = match action {
+            Action::SystemTagsAdd { tags } => SystemAnnotationPatch {
+                add_tags: tags.clone(),
+                ..SystemAnnotationPatch::default()
+            },
+            Action::SystemTagsRemove { tags } => SystemAnnotationPatch {
+                remove_tags: tags.clone(),
+                ..SystemAnnotationPatch::default()
+            },
+            Action::SystemMetadataMerge { values } => SystemAnnotationPatch {
+                set_metadata: values.clone(),
+                ..SystemAnnotationPatch::default()
+            },
+            Action::SystemMetadataDelete { keys } => SystemAnnotationPatch {
+                remove_metadata: keys.clone(),
+                ..SystemAnnotationPatch::default()
+            },
             Action::AttributeWrite {
                 attribute_code,
                 value,
-            } => self.values.push(NewAttributeValue::Scalar {
-                attribute_id: None,
-                attribute_code: Some(attribute_code.clone()),
-                context_id: None,
-                value: scalar_source_value(value, event)?,
-            }),
+            } => {
+                self.values.push(NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some(attribute_code.clone()),
+                    context_id: None,
+                    value: scalar_source_value(value, event)?,
+                });
+                return Ok(());
+            }
             Action::ReferencingRecordsUpdate { .. } => {
                 return Err(RepositoryError::InvalidWorkflowDefinition(
                     "referencing_records_update is not a local record action".into(),
                 ));
             }
-        }
-        Ok(())
-    }
-
-    fn patch_tags(&mut self, record: &Record, patch: TagMetadataPatch) {
-        let tags = self
-            .system_tags
-            .get_or_insert_with(|| record.system_tags.clone());
-        apply_tag_metadata_patch(tags, &mut Map::new(), &patch);
-    }
-
-    fn patch_metadata(
-        &mut self,
-        record: &Record,
-        patch: TagMetadataPatch,
-    ) -> Result<(), RepositoryError> {
-        let mut metadata = self
-            .system_metadata
-            .as_ref()
-            .unwrap_or(&record.system_metadata)
-            .as_object()
-            .cloned()
-            .ok_or(RepositoryError::InvalidSystemMetadata)?;
-        apply_tag_metadata_patch(&mut Vec::new(), &mut metadata, &patch);
-        self.system_metadata = Some(Value::Object(metadata));
-        Ok(())
+        };
+        self.annotations.apply(record, &patch)
     }
 }
 
@@ -278,8 +245,11 @@ impl AttricatRepository {
         }
         let WorkflowRecordChange {
             values,
-            system_tags,
-            system_metadata,
+            annotations:
+                PatchedAnnotations {
+                    system_tags,
+                    system_metadata,
+                },
         } = change;
         // The caller holds the row lock, so the record cannot have changed.
         let (_, changes, event) = self

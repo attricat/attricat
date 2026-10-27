@@ -30,6 +30,8 @@ pub(crate) const MAX_OFFSET_DAYS: i64 = 36_500;
 pub(crate) const MAX_MESSAGE_LENGTH: usize = 500;
 /// Longest system tag, in bytes.
 pub const MAX_TAG_LENGTH: usize = 128;
+/// System tags one record may carry.
+pub const MAX_SYSTEM_TAGS: usize = 100;
 /// Longest check code, in bytes.
 pub(crate) const MAX_CHECK_CODE_LENGTH: usize = 128;
 /// Longest `stale` age: one year.
