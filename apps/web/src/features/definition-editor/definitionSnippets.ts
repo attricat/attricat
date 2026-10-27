@@ -7,7 +7,7 @@ const snippetPlacements = {
   /** A table or array-of-tables, appended to the end of the definition. */
   section: 'section',
 } as const;
-export type SnippetPlacement =
+type SnippetPlacement =
   (typeof snippetPlacements)[keyof typeof snippetPlacements];
 
 export type DefinitionSnippet = {

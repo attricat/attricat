@@ -12,6 +12,7 @@ import type { ExplorerData } from './useExplorerData';
 import { useExplorerSelection } from './useExplorerSelection';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { singleResultVersionScope } from '../records/schemas';
 
 type Props = {
   data: ExplorerData;
@@ -45,10 +46,7 @@ export const ExplorerResults = ({
   const resultPages = results.data?.pages ?? [];
   const firstPage = resultPages[0];
   const resultBlueprint = firstPage?.blueprint;
-  const singleVersionScope =
-    firstPage?.result_version_scope.kind === 'single'
-      ? firstPage.result_version_scope
-      : undefined;
+  const singleVersionScope = singleResultVersionScope(firstPage);
   const hiddenOutdatedCount = firstPage?.hidden_outdated_count ?? 0;
   const items = useMemo(
     () => (results.data?.pages ?? []).flatMap((page) => page.items),

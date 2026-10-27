@@ -12,6 +12,8 @@ import {
   attributeFilterOperators,
   attributeHierarchies,
   publicationStatuses,
+  resultVersionScopeKinds,
+  approvalEndReasons,
   SMART_FILL_MAX_ATTACHMENTS,
   SMART_FILL_MAX_CONTENT_LENGTH,
   statusTransitionDenialCodes,
@@ -108,7 +110,7 @@ const blueprintSelectorSchema = z.object({
   code: z.string().min(1),
   version: z.number().int().positive().optional(),
 });
-export const newAttributeValueSchema = z.discriminatedUnion('kind', [
+const newAttributeValueSchema = z.discriminatedUnion('kind', [
   attributeValueTargetSchema.extend({
     kind: z.literal(attributeValueKinds.scalar),
     value: scalarValueSchema,
@@ -118,14 +120,14 @@ export const newAttributeValueSchema = z.discriminatedUnion('kind', [
     target_record_id: uuidSchema,
   }),
 ]);
-export const formAttributeValueSchema = z.discriminatedUnion('kind', [
+const formAttributeValueSchema = z.discriminatedUnion('kind', [
   ...newAttributeValueSchema.options,
   attributeValueTargetSchema.extend({
     kind: z.literal(attributeValueKinds.file),
     files: z.array(fileMetadataSchema),
   }),
 ]);
-export const relationshipTargetsSchema = attributeValueTargetSchema.extend({
+const relationshipTargetsSchema = attributeValueTargetSchema.extend({
   target_record_ids: z.array(uuidSchema),
 });
 const attributeValueSelectorSchema = z.object({
@@ -225,17 +227,31 @@ const resolvedRecordPreviewSchema = z.object({
   reusable_values: z.record(z.string(), resolvedPreviewEntrySchema).default({}),
 });
 const resultVersionScopeSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('empty') }),
-  z.object({ kind: z.literal('single'), version: z.number().int().positive() }),
-  z.object({ kind: z.literal('multiple') }),
+  z.object({ kind: z.literal(resultVersionScopeKinds.empty) }),
+  z.object({
+    kind: z.literal(resultVersionScopeKinds.single),
+    version: z.number().int().positive(),
+  }),
+  z.object({ kind: z.literal(resultVersionScopeKinds.multiple) }),
 ]);
+type ResultVersionScope = z.infer<typeof resultVersionScopeSchema>;
+
+/** The blueprint version every result of a search shares, if there is one. */
+export const singleResultVersionScope = (
+  page: { result_version_scope: ResultVersionScope } | undefined,
+) =>
+  page?.result_version_scope.kind === resultVersionScopeKinds.single
+    ? page.result_version_scope
+    : undefined;
 const recordSearchResponseSchema = z.object({
   blueprint: blueprintWithAttributesSchema,
   items: z.array(recordItemSchema),
   next_cursor: z.string().nullable(),
   total_count: z.number().int().nonnegative().nullable().default(null),
   total_count_capped: z.boolean().default(false),
-  result_version_scope: resultVersionScopeSchema.default({ kind: 'empty' }),
+  result_version_scope: resultVersionScopeSchema.default({
+    kind: resultVersionScopeKinds.empty,
+  }),
   hidden_outdated_count: z
     .number()
     .int()
@@ -255,7 +271,7 @@ export const recordHierarchySchema = z.object({
   multiple_parents: z.boolean(),
   cycle_detected: z.boolean(),
 });
-export const recordAuditChangeSchema = z.object({
+const recordAuditChangeSchema = z.object({
   audit_event_id: uuidSchema,
   occurred_at: z.string(),
   actor_user_id: uuidSchema.nullable(),
@@ -411,7 +427,7 @@ const getBlueprintRevisionRequestSchema = z.object({
   id: uuidSchema,
   version: z.number().int().positive(),
 });
-export const newFileAttributeValueSchema = attributeValueTargetSchema.extend({
+const newFileAttributeValueSchema = attributeValueTargetSchema.extend({
   file_ids: z.array(uuidSchema).min(1),
 });
 export const createRecordRequestSchema = z.object({
@@ -530,7 +546,7 @@ export const recordApprovalSchema = z.object({
   approved_by: z.string().nullable(),
   approved_at: z.string(),
   ended_at: z.string().nullable(),
-  end_reason: z.enum(['content_changed', 'superseded']).nullable(),
+  end_reason: z.enum(approvalEndReasons).nullable(),
   void_status: z.string().nullable(),
 });
 export type RecordApproval = z.infer<typeof recordApprovalSchema>;

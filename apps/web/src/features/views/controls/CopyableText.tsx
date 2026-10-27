@@ -1,6 +1,7 @@
 import { ButtonBase, Tooltip, type SxProps, type Theme } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useCopyToClipboard } from '../../../components/useCopyToClipboard';
+import { focusRing } from '../../../app/theme';
 
 /**
  * A value shown as text that copies itself when clicked. It works in
@@ -34,10 +35,7 @@ export const CopyableText = ({
             textAlign: 'left',
             typography: 'body2',
             '&:hover': { bgcolor: 'action.hover' },
-            '&.Mui-focusVisible': {
-              outline: '2px solid',
-              outlineColor: 'primary.main',
-            },
+            '&.Mui-focusVisible': focusRing,
           },
           ...(Array.isArray(sx) ? sx : [sx]),
         ]}

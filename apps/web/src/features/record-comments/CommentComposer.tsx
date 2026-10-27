@@ -16,7 +16,7 @@ import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
 import { useEditorDraft } from '../drafts/useEditorDraft';
 import { createComment, updateComment } from './api';
 import { MarkdownContent } from '../markdown/MarkdownContent';
-import { maxCommentLength } from './constants';
+import { maxCommentLength, commentComposerMaxWidth } from './constants';
 import {
   commentDraftSchema,
   commentInputSchema,
@@ -51,11 +51,11 @@ export const CommentComposer = ({
   const inputId = useId();
   const [preview, setPreview] = useState(false);
   const mutation = useMutation({
+    meta: { toast: false },
     mutationFn: (body: string) =>
       comment
         ? updateComment(recordId, comment.id, comment.revision, body)
         : createComment(recordId, body),
-    retry: false,
     onSuccess: () => {
       draft.clear();
       onSaved();
@@ -93,7 +93,7 @@ export const CommentComposer = ({
         event.preventDefault();
         void form.handleSubmit();
       }}
-      sx={{ maxWidth: 720 }}
+      sx={{ maxWidth: commentComposerMaxWidth }}
     >
       <Stack spacing={2}>
         <form.Field name="body">

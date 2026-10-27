@@ -17,12 +17,12 @@ import type {
 import { publicationReadinessText } from '../records/checkViolations';
 import { useActionDialogStore } from '../extensions/actionDialogStore';
 import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
-import { selectionSources } from '../extensions/constants';
 import {
-  explorerExtensionContextVersion,
-  explorerExtensionOutlets,
-  publicationStatuses,
-} from './constants';
+  selectionSources,
+  extensionOutlets,
+  supportedOutletContextVersion,
+} from '../extensions/constants';
+import { publicationStatuses } from '../records/constants';
 
 type Props = {
   blueprintId: string;
@@ -159,13 +159,13 @@ export const RecordActionsMenu = ({
       )}
       <ExtensionPopoverOutlet
         context={{
-          context_version: explorerExtensionContextVersion,
+          context_version: supportedOutletContextVersion,
           blueprint_id: blueprintId,
           blueprint_version: record.blueprint_version,
           record_id: record.id,
         }}
         label={t('explorer.extensionActions')}
-        outlet={explorerExtensionOutlets.rowAction}
+        outlet={extensionOutlets.explorerRowAction}
         selection={{
           source: selectionSources.explorerRow,
           blueprintId,

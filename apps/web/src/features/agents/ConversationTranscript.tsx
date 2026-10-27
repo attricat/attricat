@@ -2,12 +2,17 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Box, CircularProgress, Stack, Typography } from '@mui/material';
 import { ApprovalCard } from './ApprovalCard';
-import type { BulkProgress } from './schemas';
+import type {
+  BulkProgress,
+  AgentRun,
+  AgentToolCall,
+  ConversationMessage,
+} from './schemas';
 import { BulkEditProgress } from './BulkEditProgress';
-import { loadingProgressSize, transcriptEndScrollMargin } from './constants';
-import type { AgentRun, AgentToolCall, ConversationMessage } from './schemas';
+import { transcriptEndScrollMargin } from './constants';
 import { ThinkingIndicator } from './ThinkingIndicator';
 import { TranscriptMessage } from './TranscriptMessage';
+import { progressSizes } from '../../components/iconSizes';
 
 type ConversationTranscriptProps = {
   approvals: AgentToolCall[] | undefined;
@@ -56,7 +61,7 @@ export const ConversationTranscript = ({
       ))}
       {isLoadingMessages && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-          <CircularProgress enableTrackSlot size={loadingProgressSize} />
+          <CircularProgress enableTrackSlot size={progressSizes.standard} />
           <Typography color="text.secondary">
             {t('agents.loadingConversation')}
           </Typography>

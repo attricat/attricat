@@ -49,11 +49,6 @@ export const THUMBNAIL_FADE_IN_TRANSITION = 'opacity 200ms ease-in';
 /** Thumbnail size for files listed in the attribute editor. */
 export const UPLOADED_FILE_THUMBNAIL_SIZE = 48;
 
-export const fileCardinalities = {
-  one: 'one',
-  many: 'many',
-} as const;
-
 export const IMAGE_MIME_PREFIX = 'image/';
 export const MIME_GROUP_WILDCARD_SUFFIX = '/*';
 

@@ -7,10 +7,10 @@ import { UploadIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { sideloadExtension } from './managementApi';
-import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
 import { extensionArchiveAccept } from './constants';
 import { ExtensionIcon } from '../../components/systemIcons';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const SideloadExtensionPage = () => {
   const { t } = useTranslation();
@@ -33,7 +33,7 @@ export const SideloadExtensionPage = () => {
         description={t('extensions.uploadDescription')}
         actions={<Link to="/manage/extensions">{t('extensions.back')}</Link>}
       />
-      <ErrorNotice error={sideload.error} />
+      <ApiErrorAlert error={sideload.error} sx={{ mb: 2 }} />
       {sideload.isSuccess && (
         <Alert severity="success" sx={{ mb: 2 }}>
           {t('extensions.installedSuccess')}

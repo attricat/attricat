@@ -7,6 +7,7 @@ import {
   parseInstant,
 } from './instantFormat';
 import { useInstantFormat } from './useInstantFormat';
+import { focusRing } from '../app/theme';
 
 type TimestampProps = {
   value: InstantValue | null | undefined;
@@ -46,11 +47,7 @@ export const Timestamp = ({
         // Focusable so keyboard users can reach the UTC tooltip.
         tabIndex={focusable ? 0 : undefined}
         sx={{
-          '&:focus-visible': {
-            outline: '2px solid',
-            outlineColor: 'primary.main',
-            outlineOffset: 2,
-          },
+          '&:focus-visible': focusRing,
         }}
       >
         {relative ? (

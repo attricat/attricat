@@ -14,7 +14,7 @@ import {
   blueprintRevisionListOptions,
   blueprintRevisionOptions,
 } from '../blueprints/queryOptions';
-import { contextLabel } from '../contexts/contextLabel';
+import { contextLabel } from '../contexts/defaultContext';
 import { contextListOptions } from '../contexts/queryOptions';
 import { definitionKinds } from '../definition-editor/constants';
 import {
@@ -236,7 +236,7 @@ export const RuleEditorPage = ({
               contextId === null
                 ? t('rules.recordFindings.allContexts')
                 : context
-                  ? contextLabel(context, t('records.default'))
+                  ? contextLabel(t, context.code)
                   : loadingName,
           })}
         </Typography>

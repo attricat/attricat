@@ -1,17 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  MenuItem,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { MenuItem, TextField, Typography } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
+import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { unlockRecordStatus } from '../api';
 import { invalidateRecord } from '../invalidateRecord';
 import { attributeLabel } from '../recordDisplay';
@@ -61,48 +52,35 @@ export const UnlockStatusDialog = ({
   const status = attributeLabel(attribute);
 
   return (
-    <Dialog
-      open
-      onClose={unlock.isPending ? undefined : onClose}
-      fullWidth
-      maxWidth="xs"
+    <ConfirmDialog
+      confirmDisabled={to === undefined}
+      confirmLabel={t('records.statusLock.unlock')}
+      error={unlock.error}
+      isPending={unlock.isPending}
+      onClose={onClose}
+      onConfirm={() => to && unlock.mutate(to)}
+      title={t('records.statusLock.unlockTitle')}
     >
-      <DialogTitle>{t('records.statusLock.unlockTitle')}</DialogTitle>
-      <DialogContent>
-        <Typography sx={{ mb: 3 }}>
-          {t('records.statusLock.unlockExplanation', {
-            attribute: status,
-            status: statusOptionLabel(option),
-          })}
-        </Typography>
-        <TextField
-          disabled={unlock.isPending}
-          fullWidth
-          label={t('records.statusLock.unlockTo', { attribute: status })}
-          onChange={(event) => setTo(event.target.value)}
-          select
-          value={to ?? ''}
-        >
-          {targets.map((item) => (
-            <MenuItem key={item.code} value={item.code}>
-              {statusOptionLabel(item)}
-            </MenuItem>
-          ))}
-        </TextField>
-        <ApiErrorAlert error={unlock.error} sx={{ mt: 2 }} />
-      </DialogContent>
-      <DialogActions>
-        <Button disabled={unlock.isPending} onClick={onClose}>
-          {t('common.cancel')}
-        </Button>
-        <Button
-          disabled={unlock.isPending || to === undefined}
-          onClick={() => to && unlock.mutate(to)}
-          variant="contained"
-        >
-          {t('records.statusLock.unlock')}
-        </Button>
-      </DialogActions>
-    </Dialog>
+      <Typography sx={{ mb: 3 }}>
+        {t('records.statusLock.unlockExplanation', {
+          attribute: status,
+          status: statusOptionLabel(option),
+        })}
+      </Typography>
+      <TextField
+        disabled={unlock.isPending}
+        fullWidth
+        label={t('records.statusLock.unlockTo', { attribute: status })}
+        onChange={(event) => setTo(event.target.value)}
+        select
+        value={to ?? ''}
+      >
+        {targets.map((item) => (
+          <MenuItem key={item.code} value={item.code}>
+            {statusOptionLabel(item)}
+          </MenuItem>
+        ))}
+      </TextField>
+    </ConfirmDialog>
   );
 };

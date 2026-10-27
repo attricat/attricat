@@ -26,6 +26,7 @@ export const PasswordSetupPage = ({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const setup = useMutation({
+    meta: { toast: false },
     mutationFn: async (value: PasswordSetupValues) => {
       if (value.password.length < minimumPasswordLength)
         throw new Error(t('workspace.passwordTooShort'));
@@ -50,7 +51,9 @@ export const PasswordSetupPage = ({
   });
   return (
     <AuthFormShell onSubmit={() => form.handleSubmit()}>
-      <Typography variant="h5">{t('workspace.setupTitle')}</Typography>
+      <Typography component="h1" variant="h5">
+        {t('workspace.setupTitle')}
+      </Typography>
       <form.Field name="invitationSecret">
         {(field) => (
           <TextField

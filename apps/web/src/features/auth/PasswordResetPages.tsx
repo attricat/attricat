@@ -1,16 +1,18 @@
 import { Button, TextField, Typography } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeftIcon } from 'lucide-react';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 import { AuthFormShell } from './AuthFormShell';
 import { confirmPasswordReset, requestPasswordReset } from './api';
+import { RouterButton } from '../../components/RouterLink';
 
 export const PasswordResetRequestPage = () => {
   const { t } = useTranslation();
   const request = useExclusiveMutation({
+    meta: { toast: false },
     mutationFn: (email: string) => requestPasswordReset(email),
   });
   const form = useForm({
@@ -19,7 +21,9 @@ export const PasswordResetRequestPage = () => {
   });
   return (
     <AuthFormShell onSubmit={() => form.handleSubmit()}>
-      <Typography variant="h5">{t('auth.resetPassword')}</Typography>
+      <Typography component="h1" variant="h5">
+        {t('auth.resetPassword')}
+      </Typography>
       {request.isSuccess ? (
         <Typography>{t('auth.resetPasswordSent')}</Typography>
       ) : (
@@ -46,14 +50,9 @@ export const PasswordResetRequestPage = () => {
           </Button>
         </>
       )}
-      <Button
-        component={Link}
-        startIcon={<ArrowLeftIcon />}
-        to="/login"
-        variant="text"
-      >
+      <RouterButton startIcon={<ArrowLeftIcon />} to="/login" variant="text">
         {t('auth.backToSignIn')}
-      </Button>
+      </RouterButton>
     </AuthFormShell>
   );
 };
@@ -66,6 +65,7 @@ export const PasswordResetConfirmationPage = ({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const confirm = useExclusiveMutation({
+    meta: { toast: false },
     mutationFn: (password: string) => {
       if (!token) throw new Error(t('auth.invalidResetLink'));
       return confirmPasswordReset(token, password);
@@ -77,7 +77,9 @@ export const PasswordResetConfirmationPage = ({
   });
   return (
     <AuthFormShell onSubmit={() => form.handleSubmit()}>
-      <Typography variant="h5">{t('auth.chooseNewPassword')}</Typography>
+      <Typography component="h1" variant="h5">
+        {t('auth.chooseNewPassword')}
+      </Typography>
       {confirm.isSuccess ? (
         <>
           <Typography>{t('auth.passwordResetSuccess')}</Typography>

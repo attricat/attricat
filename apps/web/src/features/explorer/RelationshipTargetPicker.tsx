@@ -1,7 +1,7 @@
 import { Box, Chip, List, Stack, TextField, Typography } from '@mui/material';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LoadMoreButton } from '../../components/LoadMoreButton';
+import { NextPageButton } from '../../components/LoadMoreButton';
 import { useRelationshipSelectionLabels } from '../records/components/useRelationshipSelectionLabels';
 import {
   scrollRelationshipPickerToTop,
@@ -83,12 +83,7 @@ export const RelationshipTargetPicker = ({
           />
         ))}
       </List>
-      {targets.hasNextPage && (
-        <LoadMoreButton
-          isLoading={targets.isFetchingNextPage}
-          onLoadMore={() => void targets.fetchNextPage()}
-        />
-      )}
+      <NextPageButton query={targets} />
       {targets.isPending && (
         <Typography variant="body2">{t('records.loadingOptions')}</Typography>
       )}

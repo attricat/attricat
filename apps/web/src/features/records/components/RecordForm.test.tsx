@@ -830,7 +830,9 @@ describe('RecordForm', () => {
         'Valid until must not be before valid from (contexts: default)',
       ),
     ).toBeTruthy();
-    expect(screen.getByText('Record checks failed')).toBeTruthy();
+    expect(
+      screen.getByText("The record doesn't pass its checks."),
+    ).toBeTruthy();
     expect(
       screen.getByText(
         'Facility must belong to the supplier (contexts: default)',

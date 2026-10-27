@@ -13,6 +13,7 @@ import {
   recordSchemaChecksKeyword,
   relationshipPredicateTypes,
 } from './constants';
+import { emptyValuePlaceholder } from '../../components/placeholders';
 
 /** How a blueprint ties an attribute to others. */
 export const attributeConnectionKinds = {
@@ -26,7 +27,7 @@ export const attributeConnectionKinds = {
   dropdownLabel: 'dropdown_label',
   include: 'include',
 } as const;
-export type AttributeConnectionKind =
+type AttributeConnectionKind =
   (typeof attributeConnectionKinds)[keyof typeof attributeConnectionKinds];
 
 export type AttributeConnection = {
@@ -230,7 +231,7 @@ const statusConnections = (
           attributeCodes: [status.code, ...codes],
           sources: [status.code],
           name,
-          detail: `${from ?? '—'} → ${to ?? '—'}`,
+          detail: `${from ?? emptyValuePlaceholder} → ${to ?? emptyValuePlaceholder}`,
         },
       ];
     });

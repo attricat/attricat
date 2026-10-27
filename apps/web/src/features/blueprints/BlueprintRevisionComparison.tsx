@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import type { Blueprint } from './schemas';
 import type { BlueprintRevisionComparison as Comparison } from './useBlueprintRevisionComparison';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { LoadingState } from '../../components/LoadingState';
 
 const TomlDiffEditor = lazy(() =>
   import('./TomlDiffEditor').then(({ TomlDiffEditor }) => ({
@@ -90,7 +91,9 @@ export const BlueprintRevisionComparison = ({
       <ApiErrorAlert error={left.error ?? right.error} sx={{ mt: 2 }} />
       <Box sx={{ mt: 3 }}>
         <Suspense
-          fallback={<Typography>{t('blueprints.loadingEditor')}</Typography>}
+          fallback={
+            <LoadingState>{t('blueprints.loadingEditor')}</LoadingState>
+          }
         >
           {left.data && right.data && (
             <TomlDiffEditor

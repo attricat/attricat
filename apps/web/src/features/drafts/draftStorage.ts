@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import {
+  readStored,
+  storageAreas,
+  writeStored,
+} from '../../components/browserStorage';
+import {
   draftFormatVersion,
   draftStorageKeyPrefix,
   maxDraftLength,
@@ -43,7 +48,8 @@ export const draftStorageKey = ({
     ),
   ].join(draftKeySeparator);
 
-// Accessing `sessionStorage` itself throws when storage is disabled.
+// Accessing `sessionStorage` itself throws when storage is disabled. Writes
+// prune older drafts when the quota is full, so they use it directly.
 const storage = () => {
   try {
     return window.sessionStorage;
@@ -52,24 +58,15 @@ const storage = () => {
   }
 };
 
-export const removeDraft = (key: string) => {
-  try {
-    storage()?.removeItem(key);
-  } catch {
-    // Storage failures must never interrupt editing.
-  }
-};
+// Storage failures must never interrupt editing.
+export const removeDraft = (key: string) =>
+  writeStored(storageAreas.session, key, null);
 
 export const readDraft = <T>(
   key: string,
   valueSchema: z.ZodType<T>,
 ): StoredDraft<T> | undefined => {
-  let serialized: string | null | undefined;
-  try {
-    serialized = storage()?.getItem(key);
-  } catch {
-    return undefined;
-  }
+  const serialized = readStored(storageAreas.session, key);
   if (!serialized) return undefined;
   if (serialized.length > maxDraftLength) {
     removeDraft(key);

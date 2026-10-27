@@ -4,7 +4,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Box,
   Button,
-  Chip,
   Paper,
   Table,
   TableBody,
@@ -14,17 +13,13 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { replayWorkflowRun } from './api';
-import { runTableEmptyColSpan, workflowRunStatus } from './constants';
+import { runTableEmptyColSpan } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import { workflowQueryKeys } from './queryKeys';
 import type { WorkflowRun } from './schemas';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
-
-const runStatusColor = (status: WorkflowRun['status']) => {
-  if (status === workflowRunStatus.deadLetter) return 'error';
-  if (status === workflowRunStatus.completed) return 'success';
-  return 'default';
-};
+import { runStatuses } from '../../api/runStatus';
+import { RunStatusChip } from '../../components/RunStatusChip';
 
 export const WorkflowRunTable = ({
   canManage,
@@ -58,11 +53,7 @@ export const WorkflowRunTable = ({
             {runs.map((run) => (
               <TableRow key={run.id}>
                 <TableCell>
-                  <Chip
-                    color={runStatusColor(run.status)}
-                    label={t(`workflows.statuses.${run.status}`)}
-                    size="small"
-                  />
+                  <RunStatusChip status={run.status} />
                 </TableCell>
                 <TableCell>{t(`workflows.runSources.${run.source}`)}</TableCell>
                 <TableCell>{run.attempts}</TableCell>
@@ -74,12 +65,12 @@ export const WorkflowRunTable = ({
                 </TableCell>
                 <TableCell>
                   {run.last_error ??
-                    (run.status === workflowRunStatus.completed
+                    (run.status === runStatuses.completed
                       ? t('workflows.completedEvidence')
                       : t('workflows.noOutcomeEvidence'))}
                 </TableCell>
                 <TableCell>
-                  {canManage && run.status === workflowRunStatus.deadLetter && (
+                  {canManage && run.status === runStatuses.deadLetter && (
                     <Button
                       aria-label={t('workflows.replayRun', { id: run.id })}
                       disabled={replay.isPending}

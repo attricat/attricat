@@ -2,7 +2,6 @@ import { latestRevisions } from '../../api/revisionStatus';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
-  Alert,
   Box,
   Chip,
   Paper,
@@ -20,16 +19,19 @@ import { PlusIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
-import { listWorkflowRuns } from './api';
-import { workflowRoutes, workflowRunStatus } from './constants';
+import { workflowRoutes } from './constants';
 import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
 import { EmptyState } from '../../components/EmptyState';
 import { WorkflowIcon } from '../../components/systemIcons';
-import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { workflowListOptions, workflowRunListOptions } from './queryOptions';
+import { runStatuses } from '../../api/runStatus';
+import { RunStatusChip } from '../../components/RunStatusChip';
+import { RunsUnavailableAlert } from './RunsUnavailableAlert';
+import { LoadingState } from '../../components/LoadingState';
+import type { WorkflowRun } from './schemas';
 
 export const WorkflowsPage = () => {
   const { t } = useTranslation();
@@ -44,7 +46,7 @@ export const WorkflowsPage = () => {
     string,
     {
       deadLetters: number;
-      latest: Awaited<ReturnType<typeof listWorkflowRuns>>[number];
+      latest: WorkflowRun;
     }
   >();
   for (const run of runs.data ?? []) {
@@ -52,7 +54,7 @@ export const WorkflowsPage = () => {
       deadLetters: 0,
       latest: run,
     };
-    if (run.status === workflowRunStatus.deadLetter) summary.deadLetters += 1;
+    if (run.status === runStatuses.deadLetter) summary.deadLetters += 1;
     if (run.created_at > summary.latest.created_at) summary.latest = run;
     runSummaries.set(run.workflow_id, summary);
   }
@@ -76,15 +78,9 @@ export const WorkflowsPage = () => {
         title={t('workflows.title')}
       />
       <ApiErrorAlert error={workflows.error} sx={{ mt: 3 }} />
-      {runs.isError && (
-        <Alert severity="warning" sx={{ mt: 3 }}>
-          {t('workflows.runsUnavailable', {
-            message: errorMessage(runs.error),
-          })}
-        </Alert>
-      )}
+      <RunsUnavailableAlert error={runs.error} sx={{ mt: 3 }} />
       {workflows.isPending && (
-        <Typography sx={{ mt: 3 }}>{t('workflows.loading')}</Typography>
+        <LoadingState sx={{ mt: 3 }}>{t('workflows.loading')}</LoadingState>
       )}
       {workflows.data && (
         <Paper component="section" sx={{ mt: 3 }}>
@@ -153,12 +149,7 @@ export const WorkflowsPage = () => {
                           />
                         ) : summary ? (
                           <Stack spacing={0.25}>
-                            <Chip
-                              label={t(
-                                `workflows.statuses.${summary.latest.status}`,
-                              )}
-                              size="small"
-                            />
+                            <RunStatusChip status={summary.latest.status} />
                             <Typography
                               color="text.secondary"
                               variant="caption"

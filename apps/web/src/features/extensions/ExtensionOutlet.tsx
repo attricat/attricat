@@ -5,7 +5,6 @@ import {
   type ActionSelection,
 } from './actionSelection';
 import type { ExtensionRuntimeScope } from './api';
-import { extensionLoadingIndicatorSize } from './constants';
 import { ExtensionActionBarOutlet } from './ExtensionActionBarOutlet';
 import { ExtensionAppsList } from './ExtensionAppsList';
 import { ExtensionCardOutlet } from './ExtensionCardOutlet';
@@ -18,6 +17,7 @@ import {
   type OutletName,
 } from './outletContributions';
 import { useExtensionRuntime } from './useExtensionRuntime';
+import { progressSizes } from '../../components/iconSizes';
 
 // Existing callers import every outlet surface from this module.
 export { ExtensionPopoverOutlet } from './ExtensionPopoverOutlet';
@@ -65,7 +65,7 @@ export const ExtensionOutlet = ({
         <CircularProgress
           aria-label={t('extensions.loadingContent')}
           enableTrackSlot
-          size={extensionLoadingIndicatorSize}
+          size={progressSizes.standard}
         />
       </Box>
     );

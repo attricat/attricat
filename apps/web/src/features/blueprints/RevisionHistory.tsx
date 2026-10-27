@@ -16,6 +16,7 @@ import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
 import { useCanOn } from '../auth/useCan';
 import { capabilities, accessTargetKinds } from '../auth/capabilities';
+import { monoFontFamily } from '../../app/theme';
 
 export const RevisionHistory = ({
   blueprintId,
@@ -70,7 +71,7 @@ export const RevisionHistory = ({
                     value={revision.published_at}
                   />
                 </TableCell>
-                <TableCell sx={{ fontFamily: 'monospace' }}>
+                <TableCell sx={{ fontFamily: monoFontFamily }}>
                   {revision.definition_hash}
                 </TableCell>
                 <TableCell align="right">

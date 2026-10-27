@@ -1,12 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-  Alert,
-  Box,
-  Card,
-  LinearProgress,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Box, Card, LinearProgress, Stack, Typography } from '@mui/material';
 import { GitBranchIcon } from 'lucide-react';
 import { Fragment, useId } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -16,9 +9,8 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { SystemHealthIcon } from '../../components/systemIcons';
-import { useCan } from '../auth/useCan';
+import { RequireCapability } from '../auth/RequireCapability';
 import type { SystemHealth } from './schemas';
-import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
 import { systemHealthOptions } from './queryOptions';
 
@@ -76,14 +68,9 @@ const BuildDetails = ({ build }: { build: SystemHealth['build'] }) => {
   );
 };
 
-export const SystemHealthPage = () => {
+const SystemHealthDetails = () => {
   const { t } = useTranslation();
-  const session = useQuery(sessionOptions());
-  const canRead = useCan(capabilities.dataHealthRead);
-  const health = useQuery({
-    ...systemHealthOptions(),
-    enabled: canRead,
-  });
+  const health = useQuery(systemHealthOptions());
 
   return (
     <PageContainer>
@@ -93,21 +80,28 @@ export const SystemHealthPage = () => {
           title={t('systemHealth.title')}
           description={t('systemHealth.description')}
         />
-        {(session.isPending || (canRead && health.isPending)) && (
+        {health.isPending && (
           <LinearProgress aria-label={t('systemHealth.loading')} />
         )}
         <QueryErrorNotice
-          error={session.error ?? health.error}
-          isRetrying={session.isFetching || health.isFetching}
-          onRetry={() =>
-            void (session.isError ? session.refetch() : health.refetch())
-          }
+          error={health.error}
+          isRetrying={health.isFetching}
+          onRetry={() => void health.refetch()}
         />
-        {session.isSuccess && !canRead && (
-          <Alert severity="warning">{t('systemHealth.forbidden')}</Alert>
-        )}
-        {canRead && health.data && <BuildDetails build={health.data.build} />}
+        {health.data && <BuildDetails build={health.data.build} />}
       </Stack>
     </PageContainer>
+  );
+};
+
+export const SystemHealthPage = () => {
+  const { t } = useTranslation();
+  return (
+    <RequireCapability
+      capability={capabilities.dataHealthRead}
+      deniedMessage={t('systemHealth.forbidden')}
+    >
+      <SystemHealthDetails />
+    </RequireCapability>
   );
 };

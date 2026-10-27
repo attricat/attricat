@@ -4,7 +4,6 @@ import { CurrentUserAvatar } from '../../components/CurrentUserAvatar';
 import { AgentIcon } from '../../components/systemIcons';
 import { fileDownloadUrl } from '../files/api';
 import {
-  avatarSize,
   messageBubbleRadius,
   messageRoles,
   userMessageMaxWidth,
@@ -14,6 +13,7 @@ import { DraftProposal } from './DraftProposal';
 import { parseDraftProposal } from './parseDraftProposal';
 import type { ConversationMessage } from './schemas';
 import { smallIconSize } from '../../components/iconSizes';
+import { userAvatarSizes } from '../../components/userAvatars';
 
 export const TranscriptMessage = ({
   getDraftValues,
@@ -49,21 +49,21 @@ export const TranscriptMessage = ({
               <Avatar
                 sx={{
                   bgcolor: 'text.primary',
-                  height: avatarSize,
-                  width: avatarSize,
+                  height: userAvatarSizes.message,
+                  width: userAvatarSizes.message,
                 }}
               >
                 {t('agents.you').slice(0, 1)}
               </Avatar>
             }
-            size={avatarSize}
+            size={userAvatarSizes.message}
           />
         ) : (
           <Avatar
             sx={{
               bgcolor: 'primary.main',
-              height: avatarSize,
-              width: avatarSize,
+              height: userAvatarSizes.message,
+              width: userAvatarSizes.message,
             }}
           >
             <AgentIcon size={smallIconSize} />

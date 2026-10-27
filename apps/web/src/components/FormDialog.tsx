@@ -4,10 +4,11 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
   DialogTitle,
   type DialogProps,
 } from '@mui/material';
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from './ApiErrorAlert';
 
@@ -17,6 +18,8 @@ import { ApiErrorAlert } from './ApiErrorAlert';
  */
 export const FormDialog = ({
   children,
+  description,
+  destructive = false,
   error,
   isPending,
   onClose,
@@ -27,6 +30,10 @@ export const FormDialog = ({
   title,
 }: {
   children: ReactNode;
+  /** Explains the form above its fields; the dialog is described by it. */
+  description?: ReactNode;
+  /** Colours the submit button as a destructive action. */
+  destructive?: boolean;
   error?: Error | null;
   isPending: boolean;
   onClose: () => void;
@@ -37,8 +44,10 @@ export const FormDialog = ({
   title: ReactNode;
 }) => {
   const { t } = useTranslation();
+  const descriptionId = useId();
   return (
     <Dialog
+      aria-describedby={description ? descriptionId : undefined}
       fullWidth
       maxWidth="sm"
       onClose={isPending ? undefined : onClose}
@@ -54,6 +63,11 @@ export const FormDialog = ({
       >
         <DialogTitle>{title}</DialogTitle>
         <DialogContent>
+          {description && (
+            <DialogContentText id={descriptionId}>
+              {description}
+            </DialogContentText>
+          )}
           {children}
           <ApiErrorAlert error={error} sx={{ mt: 2 }} />
         </DialogContent>
@@ -62,6 +76,7 @@ export const FormDialog = ({
             {t('common.cancel')}
           </Button>
           <Button
+            color={destructive ? 'error' : 'primary'}
             disabled={isPending || submitDisabled}
             type="submit"
             variant="contained"

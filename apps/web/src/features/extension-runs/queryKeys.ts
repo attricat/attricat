@@ -1,7 +1,6 @@
 export const extensionRunQueryKeys = {
   all: () => ['extension-runs'] as const,
-  list: (extensionId?: string) =>
-    [...extensionRunQueryKeys.all(), 'list', extensionId ?? null] as const,
+  list: () => [...extensionRunQueryKeys.all(), 'list'] as const,
   detail: (runId: string) =>
     [...extensionRunQueryKeys.all(), 'detail', runId] as const,
 } as const;

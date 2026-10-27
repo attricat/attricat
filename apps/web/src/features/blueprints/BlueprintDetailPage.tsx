@@ -4,7 +4,7 @@ import {
 } from './queryOptions';
 import { revisionStatuses } from '../../api/revisionStatus';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Box, Tab, Tabs, Typography } from '@mui/material';
+import { Alert, Box, Tab, Tabs } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -24,7 +24,6 @@ import { BlueprintVersionMetadata } from './BlueprintVersionMetadata';
 import {
   archiveRemovalDisposition,
   blueprintDetailTabs,
-  blueprintExtensionContextVersion,
   type BlueprintDetailTab,
 } from './constants';
 import { MigrationBatchStatus } from './MigrationBatchStatus';
@@ -37,6 +36,11 @@ import { useBlueprintRevisionComparison } from './useBlueprintRevisionComparison
 import { useSafeBlueprintMigration } from './useSafeBlueprintMigration';
 import { lexiconText } from '../lexicon/lexicon';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import {
+  extensionOutlets,
+  supportedOutletContextVersion,
+} from '../extensions/constants';
+import { LoadingState } from '../../components/LoadingState';
 
 type BlueprintDetailDialog = 'publish' | 'publishRecords' | 'safeMigration';
 
@@ -94,7 +98,7 @@ export const BlueprintDetailPage = ({
   return (
     <PageContainer>
       {revisions.isPending && (
-        <Typography>{t('blueprints.loadingBlueprint')}</Typography>
+        <LoadingState>{t('blueprints.loadingBlueprint')}</LoadingState>
       )}
       <ApiErrorAlert error={revisions.error} />
       {blueprint && (
@@ -116,11 +120,11 @@ export const BlueprintDetailPage = ({
           <Box component="aside" sx={{ mt: 3 }}>
             <ExtensionOutlet
               context={{
-                context_version: blueprintExtensionContextVersion,
+                context_version: supportedOutletContextVersion,
                 blueprint_id: blueprint.id,
                 blueprint_version: blueprint.version,
               }}
-              outlet="blueprint_panel"
+              outlet={extensionOutlets.blueprintPanel}
             />
           </Box>
           <Tabs
@@ -157,7 +161,7 @@ export const BlueprintDetailPage = ({
           {pageTab === blueprintDetailTabs.metadata && (
             <Box {...tabId.panel(blueprintDetailTabs.metadata)}>
               {metadata.isPending && (
-                <Typography>{t('blueprints.loadingBlueprint')}</Typography>
+                <LoadingState>{t('blueprints.loadingBlueprint')}</LoadingState>
               )}
               <ApiErrorAlert error={metadata.error} />
               {metadataRevision && (
@@ -166,11 +170,11 @@ export const BlueprintDetailPage = ({
                   <Box component="aside" sx={{ mt: 3 }}>
                     <ExtensionOutlet
                       context={{
-                        context_version: blueprintExtensionContextVersion,
+                        context_version: supportedOutletContextVersion,
                         blueprint_id: metadataRevision.blueprint.id,
                         blueprint_version: metadataRevision.blueprint.version,
                       }}
-                      outlet="blueprint_detail_panel"
+                      outlet={extensionOutlets.blueprintDetailPanel}
                     />
                   </Box>
                 </>

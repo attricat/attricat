@@ -12,6 +12,11 @@ import { profileQueryKeys } from './queryKeys';
 import { CreatePersonalTokenPage } from './CreatePersonalTokenPage';
 
 vi.mock('@tanstack/react-router', () => ({
+  createLink:
+    (Component: React.ElementType) =>
+    ({ to, ...props }: { to: string } & Record<string, unknown>) => (
+      <Component href={to} {...props} />
+    ),
   Link: ({ children }: { children: ReactNode }) => <a href="/">{children}</a>,
   useNavigate: () => vi.fn(),
 }));

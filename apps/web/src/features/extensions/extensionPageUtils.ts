@@ -61,14 +61,8 @@ export const lifecycleStateLabel = (
     ? translate(installationStateLabelKey(state))
     : state;
 
-export const invalidateExtensions = (
-  client: QueryClient,
-  extensionId?: string,
-) => {
+/** Refreshes every installation, layout and contribution query. */
+export const invalidateExtensions = (client: QueryClient) => {
   void client.invalidateQueries({ queryKey: extensionManagementQueryKeys.all });
   void client.invalidateQueries({ queryKey: extensionQueryKeys.runtimeRoot() });
-  if (extensionId)
-    void client.invalidateQueries({
-      queryKey: extensionManagementQueryKeys.detail(extensionId),
-    });
 };

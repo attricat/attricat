@@ -17,13 +17,13 @@ export type PrincipalConfiguration = z.infer<
 >;
 export type PrincipalKind = PrincipalConfiguration['kinds'][number];
 
-export const directoryUserSchema = z.object({
+const directoryUserSchema = z.object({
   id: uuid,
   display_name: z.string().nullable(),
   email: z.string(),
   active: z.boolean(),
 });
-export const directoryTeamSchema = z.object({
+const directoryTeamSchema = z.object({
   id: uuid,
   code: z.string(),
   name: z.string(),

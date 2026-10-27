@@ -4,6 +4,7 @@ import { toast } from '../../components/toast';
 import {
   type BrowserAuthorizationOutcome,
   browserAuthorizationOutcomes,
+  maximumConnectionCodeLength,
 } from './constants';
 
 /** The query the public OAuth callback appends when it returns the browser. */
@@ -12,7 +13,11 @@ export const browserAuthorizationSearchSchema = z.object({
     .enum(browserAuthorizationOutcomes)
     .optional()
     .catch(undefined),
-  connection: z.string().max(128).optional().catch(undefined),
+  connection: z
+    .string()
+    .max(maximumConnectionCodeLength)
+    .optional()
+    .catch(undefined),
 });
 
 const severities = {

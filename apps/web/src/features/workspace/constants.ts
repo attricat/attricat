@@ -6,6 +6,8 @@ export const scopeTypes = {
   contextSubtree: 'context_subtree',
 } as const;
 export const ownerRoleCode = 'owner';
+/** A custom role code: lowercase, starting with a letter. */
+export const roleCodePattern = /^[a-z][a-z0-9_-]*$/;
 export const activeMemberState = 'active';
 export const navigationSelectMinWidth = 250;
 /** How the agent's bulk value edits are approved; see the API's settings. */

@@ -4,7 +4,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { JsonInline } from '../../../components/JsonValue';
 import { UserLabel } from '../../../components/UserLabel';
 import type { RecordAuditChange } from '../api';
-import { AGENT_EXECUTOR_TYPE } from '../constants';
+import { executorTypes } from '../../audit/constants';
 import { Timestamp } from '../../../time/Timestamp';
 
 type Props = {
@@ -23,7 +23,7 @@ export const RecordChangeEvent = ({ changes }: Props) => {
       name={actorName}
       userId={event.actor_user_id}
     />
-  ) : event.executor_type === AGENT_EXECUTOR_TYPE ? (
+  ) : event.executor_type === executorTypes.agent ? (
     t('records.agent')
   ) : (
     t('records.unknownActor')

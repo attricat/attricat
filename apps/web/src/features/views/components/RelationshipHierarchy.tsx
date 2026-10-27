@@ -11,6 +11,7 @@ import {
 } from '../constants';
 import { errorMessage } from '../../../api/errors';
 import { recordHierarchyOptions } from '../../records/queryOptions';
+import { LoadingState } from '../../../components/LoadingState';
 
 export const RelationshipHierarchy = ({
   attribute,
@@ -51,7 +52,7 @@ export const RelationshipHierarchy = ({
       <Typography color="text.secondary">{t('views.noHierarchy')}</Typography>
     );
   if (hierarchies.some((hierarchy) => hierarchy.isPending))
-    return <Typography>{t('views.loadingHierarchy')}</Typography>;
+    return <LoadingState>{t('views.loadingHierarchy')}</LoadingState>;
   const failedHierarchy = hierarchies.find((hierarchy) => hierarchy.isError);
   if (failedHierarchy)
     return (

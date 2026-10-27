@@ -16,7 +16,7 @@ import {
   recordRetentionHoldsOptions,
 } from '../queryOptions';
 import { statusLabel } from '../status';
-import { retentionHoldSources } from '../constants';
+import { retentionHoldSources, approvalEndReasons } from '../constants';
 
 /** Display labels for attribute and status codes the panel reports. */
 const controlLabels = (attributes: readonly Attribute[]) => {
@@ -73,9 +73,9 @@ const ApprovalItem = ({
 }) => {
   const { t } = useTranslation();
   const state =
-    approval.end_reason === 'content_changed'
+    approval.end_reason === approvalEndReasons.contentChanged
       ? t('records.recordControls.approvalVoided')
-      : approval.end_reason === 'superseded'
+      : approval.end_reason === approvalEndReasons.superseded
         ? t('records.recordControls.approvalSuperseded')
         : t('records.recordControls.approvalActive');
   return (
@@ -104,19 +104,20 @@ const ApprovalItem = ({
         />{' '}
         <Timestamp value={approval.approved_at} />
       </Typography>
-      {approval.end_reason === 'content_changed' && approval.ended_at && (
-        <Typography variant="body2" color="text.secondary">
-          {t('records.recordControls.voidedOn')}{' '}
-          <Timestamp value={approval.ended_at} />
-          {approval.void_status &&
-            ` · ${t('records.recordControls.returnedTo', {
-              status: labels.status(
-                approval.attribute_code,
-                approval.void_status,
-              ),
-            })}`}
-        </Typography>
-      )}
+      {approval.end_reason === approvalEndReasons.contentChanged &&
+        approval.ended_at && (
+          <Typography variant="body2" color="text.secondary">
+            {t('records.recordControls.voidedOn')}{' '}
+            <Timestamp value={approval.ended_at} />
+            {approval.void_status &&
+              ` · ${t('records.recordControls.returnedTo', {
+                status: labels.status(
+                  approval.attribute_code,
+                  approval.void_status,
+                ),
+              })}`}
+          </Typography>
+        )}
       <Typography
         variant="caption"
         color="text.secondary"

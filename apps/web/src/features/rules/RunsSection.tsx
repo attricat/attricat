@@ -12,8 +12,10 @@ import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { Timestamp } from '../../time/Timestamp';
 import type { RuleRun } from './api';
-import { RecordIdLink, RuleRevisionCell } from './RuleCells';
+import { RecordIdLink } from '../../components/RecordIdLink';
+import { RuleRevisionCell } from './RuleCells';
 import type { RuleRevisions } from './ruleRevisions';
+import { RunStatusChip } from '../../components/RunStatusChip';
 
 /** When a run finished, or when it was queued while it has not. */
 const runTime = (run: RuleRun) => run.completed_at ?? run.created_at;
@@ -110,9 +112,7 @@ export const RunsSection = ({
                     : t(`rules.runSources.${item.source}`)}
                 </TableCell>
                 <TableCell>
-                  {t(`rules.runStatuses.${item.status}`, {
-                    defaultValue: item.status,
-                  })}
+                  <RunStatusChip status={item.status} />
                 </TableCell>
                 <TableCell>{item.candidates_evaluated}</TableCell>
                 <TableCell>{item.findings_created}</TableCell>

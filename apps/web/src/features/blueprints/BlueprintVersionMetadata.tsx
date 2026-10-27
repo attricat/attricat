@@ -18,12 +18,12 @@ import type { BlueprintWithAttributes } from './api';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import {
   blueprintVersionMetadataTabs as tabs,
-  emptyValuePlaceholder,
   type BlueprintVersionMetadataTab,
 } from './constants';
 import { JsonMetadata } from './BlueprintMetadata';
 import { isHiddenByDefault } from '../records/attributeVisibility';
 import { ValueTypeLabel } from '../records/components/ValueTypeLabel';
+import { emptyValuePlaceholder } from '../../components/placeholders';
 
 export const BlueprintVersionMetadata = ({
   blueprint,

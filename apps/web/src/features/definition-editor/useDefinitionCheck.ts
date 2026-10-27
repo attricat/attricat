@@ -11,7 +11,7 @@ export const checkStatuses = {
   invalid: 'invalid',
   valid: 'valid',
 } as const;
-export type CheckStatus = (typeof checkStatuses)[keyof typeof checkStatuses];
+type CheckStatus = (typeof checkStatuses)[keyof typeof checkStatuses];
 
 export type DefinitionCheck<T> = {
   status: CheckStatus;

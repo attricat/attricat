@@ -28,10 +28,12 @@ vi.mock('../../components/RouterLink', () => ({
   RouterButton: ({
     children,
     params,
+    to,
   }: {
     children: React.ReactNode;
-    params: { recordId: string };
-  }) => <a href={`/records/${params.recordId}`}>{children}</a>,
+    params?: { recordId: string };
+    to: string;
+  }) => <a href={params ? `/records/${params.recordId}` : to}>{children}</a>,
   RouterListItemButton: ({
     children,
     sx,

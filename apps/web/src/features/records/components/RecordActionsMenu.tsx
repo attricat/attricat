@@ -2,9 +2,7 @@ import {
   ChevronDownIcon,
   CircleArrowUpIcon,
   CopyIcon,
-  HashIcon,
   PlusIcon,
-  RotateCcwClockIcon,
   Trash2Icon,
   type LucideIcon,
 } from 'lucide-react';
@@ -22,6 +20,7 @@ import { RouterMenuItem } from '../../../components/RouterLink';
 import { useCopyToClipboard } from '../../../components/useCopyToClipboard';
 import { compactIconSize } from '../../../components/iconSizes';
 import { lexiconText } from '../../lexicon/lexicon';
+import { RecordIdIcon, AuditLogIcon } from '../../../components/systemIcons';
 
 /** A button that opens one of the record's side panels. */
 export type PanelAction = {
@@ -93,13 +92,13 @@ export const RecordActionsMenu = ({
           to="/records/$recordId/changes"
         >
           <ListItemIcon>
-            <RotateCcwClockIcon size={compactIconSize} />
+            <AuditLogIcon size={compactIconSize} />
           </ListItemIcon>
           <ListItemText>{t('records.changes')}</ListItemText>
         </RouterMenuItem>
         <MenuItem onClick={choose(() => void copyText(recordId))}>
           <ListItemIcon>
-            <HashIcon size={compactIconSize} />
+            <RecordIdIcon size={compactIconSize} />
           </ListItemIcon>
           <ListItemText>{t('records.copyRecordId')}</ListItemText>
         </MenuItem>

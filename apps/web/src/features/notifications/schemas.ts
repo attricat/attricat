@@ -6,7 +6,7 @@ const notificationSubjectSchema = z.object({
   id: z.uuid(),
 });
 
-export const notificationSchema = z.object({
+const notificationSchema = z.object({
   id: z.uuid(),
   kind: z.string(),
   title: z.string(),

@@ -23,10 +23,11 @@ import { LoadMoreButton } from '../../components/LoadMoreButton';
 import type { Blueprint } from '../blueprints/api';
 import type { AttributeContext } from '../contexts/api';
 import { blueprintKinds } from '../blueprints/constants';
-import { contextLabel } from '../contexts/contextLabel';
+import { contextLabel } from '../contexts/defaultContext';
 import { lexiconText } from '../lexicon/lexicon';
 import type { Finding, FindingsSearch, Rule } from './api';
-import { RecordIdLink, RuleRevisionCell } from './RuleCells';
+import { RecordIdLink } from '../../components/RecordIdLink';
+import { RuleRevisionCell } from './RuleCells';
 import type { RuleRevisions } from './ruleRevisions';
 import {
   ANY_FINDING_FILTER,
@@ -34,6 +35,7 @@ import {
   findingStates,
   findingSeverities,
   findingStateFilters,
+  findingsTableColumnCount,
 } from './constants';
 
 type FilterOption = { value: string; label: string };
@@ -198,7 +200,7 @@ export const FindingsSection = ({
             onChange={setFilter('context')}
             options={contexts.map((context) => ({
               value: context.id,
-              label: contextLabel(context, t('records.default')),
+              label: contextLabel(t, context.code),
             }))}
             value={filters.context}
           />
@@ -217,7 +219,10 @@ export const FindingsSection = ({
           <TableBody>
             {findings?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} sx={{ color: 'text.secondary' }}>
+                <TableCell
+                  colSpan={findingsTableColumnCount}
+                  sx={{ color: 'text.secondary' }}
+                >
                   {t('rules.filters.noMatches')}
                 </TableCell>
               </TableRow>

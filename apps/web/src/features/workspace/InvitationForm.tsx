@@ -10,6 +10,8 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
+import { futureZonedInstant } from '../../time/instantFormat';
+import { useTimeZone } from '../../time/useInstantFormat';
 import {
   createInvitation,
   createWorkspaceUser,
@@ -19,7 +21,6 @@ import {
 } from './api';
 import { scopeTypes } from './constants';
 import { ExpiryField, RoleSelectField } from './InvitationFormFields';
-import { parseFutureExpiry } from './invitationExpiry';
 import { workspaceQueryKeys } from './queryKeys';
 import { ScopeFields } from './ScopeFields';
 
@@ -52,9 +53,11 @@ export const InvitationForm = ({
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
+  const timeZone = useTimeZone();
   const invite = useExclusiveMutation({
     mutationFn: async (value: InvitationValues) => {
-      const expiresAt = parseFutureExpiry(value.expires_at);
+      const expiresAt = futureZonedInstant(value.expires_at, timeZone);
+      if (!expiresAt) throw new Error(t('workspace.invitationExpiry'));
       const input = {
         email: value.email,
         ...ensureActiveScopeTarget(
@@ -112,7 +115,9 @@ export const InvitationForm = ({
       sx={{ p: 2 }}
     >
       <Stack spacing={2}>
-        <Typography variant="h6">{title}</Typography>
+        <Typography component="h2" variant="h6">
+          {title}
+        </Typography>
         {createUser && (
           <Alert severity="info">{t('workspace.inviteEmailInfo')}</Alert>
         )}
@@ -164,6 +169,7 @@ export const InvitationForm = ({
           {(field) => (
             <ExpiryField
               onChange={field.handleChange}
+              timeZone={timeZone}
               value={field.state.value}
             />
           )}

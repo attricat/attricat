@@ -3,7 +3,7 @@ import { attributeValueTypes } from '../records/valueTypes';
 
 export type RelationshipFilterAttribute = Attribute & {
   target_blueprint_code: string;
-  value_type: 'relationship';
+  value_type: typeof attributeValueTypes.relationship;
 };
 
 export const isRelationshipFilterAttribute = (

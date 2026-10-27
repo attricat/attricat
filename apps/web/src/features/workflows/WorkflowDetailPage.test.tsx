@@ -199,8 +199,9 @@ describe('WorkflowDetailPage', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Publish' }));
     expect(publishWorkflowRevision).toHaveBeenCalledWith(workflow.id, 1);
+    // The root key covers the workflow's revisions and runs.
     expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: workflowQueryKeys.revisions(workflow.id),
+      queryKey: workflowQueryKeys.all(),
     });
 
     await user.click(screen.getByRole('tab', { name: 'Run diagnostics' }));
@@ -210,8 +211,9 @@ describe('WorkflowDetailPage', () => {
     ).toBeTruthy();
     await user.click(replay);
     expect(replayWorkflowRun).toHaveBeenCalledWith(run.id);
+    // The root key covers the workflow's revisions and runs.
     expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: workflowQueryKeys.runs(),
+      queryKey: workflowQueryKeys.all(),
     });
   });
 });

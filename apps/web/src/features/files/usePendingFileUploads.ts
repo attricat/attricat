@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../records/api';
 import { invalidateRecord } from '../records/invalidateRecord';
 import { uploadFiles, updateFileReferences } from './api';
-import { fileCardinalities } from './constants';
+import { attributeCardinalities } from '../records/constants';
 import { acceptsFile, pendingFileId } from './fileAcceptance';
 import { useQueuedFileUploadsContext } from './queuedFileUploads';
 import type { FileMetadata } from './schemas';
@@ -64,7 +64,7 @@ export const usePendingFileUploads = (options: Options) => {
   // A refetch is authoritative, including files removed by another editor.
   const uploaded = saved?.source === files ? saved.value : files;
   const singleFile =
-    attribute.file_policy?.cardinality === fileCardinalities.one;
+    attribute.file_policy?.cardinality === attributeCardinalities.one;
   const canQueueFile =
     !singleFile || (uploaded.length === 0 && pending.length === 0);
   const canUpload = !disabled && Boolean(recordId) && !busy;

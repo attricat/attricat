@@ -105,7 +105,21 @@ export const publicationStatuses = {
   published: 'published',
 } as const;
 
-export const AGENT_EXECUTOR_TYPE = 'agent';
+/** Whether a search's results share one blueprint version. */
+export const resultVersionScopeKinds = {
+  empty: 'empty',
+  single: 'single',
+  multiple: 'multiple',
+} as const;
+
+/** Why an approval stopped applying. */
+export const approvalEndReasons = {
+  contentChanged: 'content_changed',
+  superseded: 'superseded',
+} as const;
+
+/** Status coverage that locks or approves every other attribute. */
+export const statusCoverageAll = 'all';
 
 /** Separates a reusable attribute namespace from its code. */
 export const REUSABLE_ATTRIBUTE_NAMESPACE_SEPARATOR = ':';
@@ -138,10 +152,6 @@ export const CONTEXT_MENU_WIDTH = 180;
 
 export const RELATIONSHIP_PICKER_ACTION_MIN_WIDTH = 300;
 
-/** Number of record ID characters included in a new conversation title. */
-
-/** Version of the extension context passed to record header actions. */
-export const RECORD_HEADER_CONTEXT_VERSION = 1;
 /** Blueprint version assumed by the extension drawer before data loads. */
 export const FALLBACK_BLUEPRINT_VERSION = 1;
 

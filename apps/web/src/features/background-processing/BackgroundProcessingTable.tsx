@@ -10,11 +10,11 @@ import {
 import { useTranslation } from 'react-i18next';
 import {
   backgroundProcessingColumnKeys,
-  noDueTaskPlaceholder,
   otherTaskKindTranslationKey,
   taskKindTranslationKeys,
 } from './constants';
 import type { BackgroundProcessingStatus } from './schemas';
+import { emptyValuePlaceholder } from '../../components/placeholders';
 
 export const BackgroundProcessingTable = ({
   rows,
@@ -56,7 +56,7 @@ export const BackgroundProcessingTable = ({
               </TableCell>
               <TableCell align="right">
                 {row.oldest_due_seconds === null
-                  ? noDueTaskPlaceholder
+                  ? emptyValuePlaceholder
                   : t('backgroundProcessing.seconds', {
                       value: number.format(row.oldest_due_seconds),
                     })}

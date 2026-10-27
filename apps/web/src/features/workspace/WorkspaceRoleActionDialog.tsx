@@ -1,32 +1,22 @@
 import { useForm } from '@tanstack/react-form';
 import { useMutation } from '@tanstack/react-query';
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  TextField,
-} from '@mui/material';
+import { TextField } from '@mui/material';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
+import { roleCodePattern } from './constants';
 import {
   duplicateRole,
   retireRole,
   updateRole,
   type WorkspaceRole,
 } from './api';
-import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { FormDialog } from '../../components/FormDialog';
 
 export type RoleDialogAction =
   | { role: WorkspaceRole; type: 'rename' }
   | { role: WorkspaceRole; type: 'duplicate' }
   | { role: WorkspaceRole; type: 'retire' };
-
-const roleCodePattern = /^[a-z][a-z0-9_-]*$/;
 
 export const WorkspaceRoleActionDialog = ({
   action,
@@ -78,104 +68,77 @@ export const WorkspaceRoleActionDialog = ({
         : t('workspace.retireRole');
 
   return (
-    <Dialog
-      aria-describedby="role-action-dialog-description"
-      fullWidth
-      maxWidth="sm"
-      onClose={(_, reason) => {
-        if (!mutation.isPending && reason !== 'backdropClick') onClose();
-      }}
-      open
+    <FormDialog
+      description={
+        isRetiring
+          ? t('workspace.retireRoleDescription', { role: action.role.code })
+          : t('workspace.roleActionDescription', { role: action.role.code })
+      }
+      destructive={isRetiring}
+      error={mutation.error}
+      isPending={mutation.isPending}
+      onClose={onClose}
+      onSubmit={() => void form.handleSubmit()}
       slotProps={{
         transition: {
           onEntered: () => initialFocusRef.current?.focus(),
         },
       }}
+      submitLabel={mutation.isPending ? t('workspace.saving') : title}
+      title={title}
     >
-      <Box
-        component="form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          form.handleSubmit();
-        }}
-      >
-        <DialogTitle>{title}</DialogTitle>
-        <DialogContent>
-          <DialogContentText id="role-action-dialog-description">
-            {isRetiring
-              ? t('workspace.retireRoleDescription', { role: action.role.code })
-              : t('workspace.roleActionDescription', {
-                  role: action.role.code,
-                })}
-          </DialogContentText>
-          {isRetiring ? (
-            <form.Field
-              name="replacementRoleId"
-              validators={{
-                onChange: ({ value }) => replacementRoleError(value),
-                onSubmit: ({ value }) => replacementRoleError(value),
-              }}
-            >
-              {(field) => (
-                <TextField
-                  error={field.state.meta.errors.length > 0}
-                  fullWidth
-                  helperText={
-                    field.state.meta.errors[0] ?? t('workspace.replacementRole')
-                  }
-                  inputRef={initialFocusRef}
-                  label={t('workspace.replacementRoleLabel')}
-                  margin="dense"
-                  onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  value={field.state.value}
-                />
-              )}
-            </form.Field>
-          ) : (
-            <form.Field
-              name="code"
-              validators={{
-                onChange: ({ value }) => codeError(value),
-                onSubmit: ({ value }) => codeError(value),
-              }}
-            >
-              {(field) => (
-                <TextField
-                  error={field.state.meta.errors.length > 0}
-                  fullWidth
-                  helperText={field.state.meta.errors[0]}
-                  inputRef={initialFocusRef}
-                  required
-                  label={t(
-                    action.type === 'rename'
-                      ? 'workspace.roleCode'
-                      : 'workspace.newRoleCode',
-                  )}
-                  margin="dense"
-                  onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  value={field.state.value}
-                />
-              )}
-            </form.Field>
+      {isRetiring ? (
+        <form.Field
+          name="replacementRoleId"
+          validators={{
+            onChange: ({ value }) => replacementRoleError(value),
+            onSubmit: ({ value }) => replacementRoleError(value),
+          }}
+        >
+          {(field) => (
+            <TextField
+              error={field.state.meta.errors.length > 0}
+              fullWidth
+              helperText={
+                field.state.meta.errors[0] ?? t('workspace.replacementRole')
+              }
+              inputRef={initialFocusRef}
+              label={t('workspace.replacementRoleLabel')}
+              margin="dense"
+              onBlur={field.handleBlur}
+              onChange={(event) => field.handleChange(event.target.value)}
+              value={field.state.value}
+            />
           )}
-          <ApiErrorAlert error={mutation.error} sx={{ mt: 2 }} />
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={mutation.isPending} onClick={onClose}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            color={isRetiring ? 'error' : 'primary'}
-            disabled={mutation.isPending}
-            type="submit"
-            variant="contained"
-          >
-            {mutation.isPending ? t('workspace.saving') : title}
-          </Button>
-        </DialogActions>
-      </Box>
-    </Dialog>
+        </form.Field>
+      ) : (
+        <form.Field
+          name="code"
+          validators={{
+            onChange: ({ value }) => codeError(value),
+            onSubmit: ({ value }) => codeError(value),
+          }}
+        >
+          {(field) => (
+            <TextField
+              error={field.state.meta.errors.length > 0}
+              fullWidth
+              helperText={field.state.meta.errors[0]}
+              inputRef={initialFocusRef}
+              required
+              label={t(
+                action.type === 'rename'
+                  ? 'workspace.roleCode'
+                  : 'workspace.newRoleCode',
+              )}
+              margin="dense"
+              onBlur={field.handleBlur}
+              onChange={(event) => field.handleChange(event.target.value)}
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+      )}
+    </FormDialog>
   );
 };

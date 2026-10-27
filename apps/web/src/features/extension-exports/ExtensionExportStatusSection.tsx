@@ -1,6 +1,5 @@
 import { extensionConnectionsOptions } from './queryOptions';
 import {
-  Alert,
   Box,
   Button,
   CircularProgress,
@@ -12,38 +11,37 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { RotateCcwIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
-import { LoadMoreButton } from '../../components/LoadMoreButton';
+import { NextPageButton } from '../../components/LoadMoreButton';
 import { ExportIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
-import { extensionExportStatus, retryExports } from './api';
+import { extensionExportStatus } from './api';
 import {
-  exportMappingExtensionOutlet,
   exportStatuses,
   initialExportStatusFilter,
   retryableExportStatuses,
   type ExportStatus,
+  exportFilterMinWidth,
 } from './constants';
 import { extensionExportQueryKeys } from './queryKeys';
 import type { ManifestExports } from './schemas';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
-import { randomUuid } from '../../components/randomUuid';
 import { allConnections, countsByConnection } from './exportCounts';
 import { ExportCountsTable } from './ExportCountsTable';
 import { ExportMappingsTable } from './ExportMappingsTable';
 import { HandlerFailuresTable } from './HandlerFailuresTable';
-import { supportedOutletContextVersion } from '../extensions/constants';
+import {
+  supportedOutletContextVersion,
+  extensionOutlets,
+} from '../extensions/constants';
+import { useRetryExports } from './useRetryExports';
+import { RetryResultAlerts } from './RetryResultAlerts';
 
 /**
  * An export extension's destinations: per-connection status counts, the
@@ -60,7 +58,6 @@ export const ExtensionExportStatusSection = ({
   manifest: ManifestExports;
 }) => {
   const { t } = useTranslation();
-  const client = useQueryClient();
   // The status lists records across the workspace, so it needs
   // workspace-wide read access.
   const canReadRecords = useCan(capabilities.recordsRead);
@@ -102,27 +99,12 @@ export const ExtensionExportStatusSection = ({
     getNextPageParam: (last) => last.next,
     enabled: exports.length > 0 && overview.isSuccess,
   });
-  const retry = useMutation({
-    mutationFn: ({
-      recordIds,
-      key,
-    }: {
-      recordIds: string[] | undefined;
-      key: string;
-    }) =>
-      retryExports(
-        extensionId,
-        recordIds
-          ? { connection, recordIds, idempotencyKey: key }
-          : { connection, status, idempotencyKey: key },
-      ),
-    onSuccess: () => {
-      setSelected([]);
-      return client.invalidateQueries({
-        queryKey: extensionExportQueryKeys.all,
-      });
-    },
-  });
+  const retry = useRetryExports(() => setSelected([]));
+  const retryRecords = (recordIds?: string[]) =>
+    retry.mutate({
+      extensionId,
+      selection: recordIds ? { connection, recordIds } : { connection, status },
+    });
   if (!exports.length) return null;
   const rows = countsByConnection(overview.data?.counts ?? []);
   const mappings = page.data?.pages.flatMap((item) => item.mappings) ?? [];
@@ -139,16 +121,7 @@ export const ExtensionExportStatusSection = ({
       <ApiErrorAlert error={overview.error} />
       <ApiErrorAlert error={connections.error} />
       <ApiErrorAlert error={page.error} />
-      <ApiErrorAlert error={retry.error} />
-      {!!retry.data?.job_errors.length && (
-        <Alert severity="warning">
-          {t('extensionExports.retryJobErrors', {
-            messages: retry.data.job_errors
-              .map((error) => error.message)
-              .join('; '),
-          })}
-        </Alert>
-      )}
+      <RetryResultAlerts retry={retry} />
       {overview.isPending && (
         <CircularProgress aria-label={t('extensionExports.loading')} />
       )}
@@ -167,7 +140,7 @@ export const ExtensionExportStatusSection = ({
         spacing={2}
         sx={{ mt: 3, mb: 1 }}
       >
-        <FormControl size="small" sx={{ minWidth: 200 }}>
+        <FormControl size="small" sx={{ minWidth: exportFilterMinWidth }}>
           <InputLabel id={`${extensionId}-export-connection`} shrink>
             {t('extensionExports.connection')}
           </InputLabel>
@@ -198,7 +171,7 @@ export const ExtensionExportStatusSection = ({
             ))}
           </Select>
         </FormControl>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
+        <FormControl size="small" sx={{ minWidth: exportFilterMinWidth }}>
           <InputLabel id={`${extensionId}-export-status`}>
             {t('extensionExports.statusColumn')}
           </InputLabel>
@@ -223,18 +196,14 @@ export const ExtensionExportStatusSection = ({
             <Button
               disabled={!selected.length || retry.isPending}
               startIcon={<RotateCcwIcon />}
-              onClick={() =>
-                retry.mutate({ recordIds: selected, key: randomUuid() })
-              }
+              onClick={() => retryRecords(selected)}
             >
               {t('extensionExports.retrySelected', { count: selected.length })}
             </Button>
             <Button
               disabled={!mappings.length || retry.isPending}
               startIcon={<RotateCcwIcon />}
-              onClick={() =>
-                retry.mutate({ recordIds: undefined, key: randomUuid() })
-              }
+              onClick={() => retryRecords()}
             >
               {t('extensionExports.retryAll', {
                 status: t(`extensionExports.status.${status}`),
@@ -258,14 +227,7 @@ export const ExtensionExportStatusSection = ({
             selected={canManage && retryable ? selected : undefined}
           />
         ))}
-      {page.hasNextPage && (
-        <Box sx={{ mt: 2 }}>
-          <LoadMoreButton
-            isLoading={page.isFetchingNextPage}
-            onLoadMore={() => void page.fetchNextPage()}
-          />
-        </Box>
-      )}
+      <NextPageButton query={page} sx={{ mt: 2 }} />
       {handlerFailures.length > 0 && (
         <HandlerFailuresTable failures={handlerFailures} />
       )}
@@ -277,7 +239,7 @@ export const ExtensionExportStatusSection = ({
               export_id: destination.id,
             }}
             extensionId={extensionId}
-            outlet={exportMappingExtensionOutlet}
+            outlet={extensionOutlets.exportMapping}
           />
         </Box>
       ))}

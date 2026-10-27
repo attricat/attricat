@@ -1,4 +1,4 @@
-export const attributeVisibilityTags = {
+const attributeVisibilityTags = {
   hidden: 'hidden',
   form: 'hidden:form',
   detail: 'hidden:detail',

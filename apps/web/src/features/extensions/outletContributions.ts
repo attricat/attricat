@@ -7,9 +7,9 @@ import {
 } from './actionSelection';
 import type { ExtensionContribution } from './api';
 import {
-  navigationOutlet,
   outletCapacities,
   contributionKinds,
+  extensionOutlets,
 } from './constants';
 import { outletContextSchemas } from './outletContextSchemas';
 import { extensionOutletSchema } from './schemas';
@@ -18,7 +18,8 @@ import { extensionOutletSchema } from './schemas';
 // host-controlled mount paths.
 export type OutletName = Exclude<
   z.infer<typeof extensionOutletSchema>,
-  'explorer_table_cell' | 'action_dialog'
+  | typeof extensionOutlets.explorerTableCell
+  | typeof extensionOutlets.actionDialog
 >;
 
 export type OutletContext = Record<string, unknown>;
@@ -72,27 +73,27 @@ export const outletPolicies = {
 } as const satisfies Record<OutletName, { kind: string }>;
 
 const embeddedOutlets = new Set<OutletName>([
-  'navigation',
-  'record_preview_panel',
-  'blueprint_attribute_configuration',
-  'record_attribute_decoration',
-  'record_action',
+  extensionOutlets.navigation,
+  extensionOutlets.recordPreviewPanel,
+  extensionOutlets.blueprintAttributeConfiguration,
+  extensionOutlets.recordAttributeDecoration,
+  extensionOutlets.recordAction,
 ]);
 const actionOutlets = new Set<OutletName>([
-  'record_header_action',
-  'explorer_row_action',
-  'explorer_action',
-  'explorer_bulk_action',
+  extensionOutlets.recordHeaderAction,
+  extensionOutlets.explorerRowAction,
+  extensionOutlets.explorerAction,
+  extensionOutlets.explorerBulkAction,
 ]);
 const panelOutlets = new Set<OutletName>([
-  'blueprint_detail_panel',
-  'blueprint_panel',
-  'audit_event_panel',
-  'data_health_card',
-  'blueprint_publish_check',
-  'record_attribute_panel',
-  'file_panel',
-  'export_mapping',
+  extensionOutlets.blueprintDetailPanel,
+  extensionOutlets.blueprintPanel,
+  extensionOutlets.auditEventPanel,
+  extensionOutlets.dataHealthCard,
+  extensionOutlets.blueprintPublishCheck,
+  extensionOutlets.recordAttributePanel,
+  extensionOutlets.filePanel,
+  extensionOutlets.exportMapping,
 ]);
 
 const supportsOutlet = (
@@ -106,7 +107,7 @@ const supportsOutlet = (
       actionOutlets.has(outlet)) ||
     (contribution.kind === contributionKinds.panel &&
       panelOutlets.has(outlet)) ||
-    (outlet === navigationOutlet &&
+    (outlet === extensionOutlets.navigation &&
       contribution.kind === contributionKinds.navigation &&
       contribution.route !== null));
 

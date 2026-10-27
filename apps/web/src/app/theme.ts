@@ -33,6 +33,8 @@ declare module '@mui/material/styles' {
     navigationHover: string;
     /** Marks a field changed before an explicit Save. */
     changed: string;
+    /** Outlines the element that has keyboard focus. */
+    focusRing: string;
   }
   interface PaletteColor {
     /** A faint background in the color, behind content that keeps its own. */
@@ -44,6 +46,13 @@ declare module '@mui/material/styles' {
 }
 
 export const monoFontFamily = typography.families.mono;
+
+/** Keyboard focus outline for custom focusable surfaces, as on IconButton. */
+export const focusRing = {
+  outline: '2px solid',
+  outlineColor: 'action.focusRing',
+  outlineOffset: 2,
+} as const;
 
 /** The design system's fully rounded radius, for pill-shaped controls. */
 export const pillRadius = radius.pill;
@@ -109,6 +118,7 @@ export const makeTheme = (mode: DesignMode) => {
         selected: c.action.selected,
         disabledBackground: c.action.disabled,
         focus: c.action.hover,
+        focusRing: c.action.focus,
       },
     },
     typography: {

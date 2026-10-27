@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import {
   Box,
@@ -11,11 +11,10 @@ import {
   Paper,
   Switch,
   TextField,
-  Typography,
 } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { LoadMoreButton } from '../../components/LoadMoreButton';
+import { NextPageButton } from '../../components/LoadMoreButton';
 import {
   RouterButton,
   RouterListItemButton,
@@ -32,6 +31,7 @@ import { conversationSearchOptions } from './queryOptions';
 import { EmptyState } from '../../components/EmptyState';
 import { AgentIcon } from '../../components/systemIcons';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { LoadingState } from '../../components/LoadingState';
 
 export const ConversationsPage = ({
   search,
@@ -56,14 +56,13 @@ export const ConversationsPage = ({
     <PageContainer>
       <PageHeader
         actions={
-          <Button
-            component={Link}
+          <RouterButton
             startIcon={<PlusIcon />}
             to={agentRoutes.create}
             variant="contained"
           >
             {t('agents.newConversation')}
-          </Button>
+          </RouterButton>
         }
         description={t('agents.conversationDescription')}
         icon={AgentIcon}
@@ -157,7 +156,7 @@ export const ConversationsPage = ({
           ))}
           {conversations.isPending && (
             <ListItem>
-              <Typography>{t('agents.loadingConversations')}</Typography>
+              <LoadingState>{t('agents.loadingConversations')}</LoadingState>
             </ListItem>
           )}
           {!conversations.isPending &&
@@ -182,14 +181,7 @@ export const ConversationsPage = ({
             )}
         </List>
       </Paper>
-      {conversations.hasNextPage && (
-        <Box sx={{ mt: 2 }}>
-          <LoadMoreButton
-            isLoading={conversations.isFetchingNextPage}
-            onLoadMore={() => void conversations.fetchNextPage()}
-          />
-        </Box>
-      )}
+      <NextPageButton query={conversations} sx={{ mt: 2 }} />
     </PageContainer>
   );
 };

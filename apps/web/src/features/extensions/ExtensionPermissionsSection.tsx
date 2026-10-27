@@ -1,7 +1,6 @@
 import { Button, Chip, Paper, Stack, Typography } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { ErrorNotice } from './ExtensionErrorNotice';
 import {
   grantKey,
   pendingGrants,
@@ -10,6 +9,7 @@ import {
 } from './extensionGrants';
 import { grantKindLabelKey } from './extensionPageUtils';
 import { grantExtension, revokeExtensionGrant } from './managementApi';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type ExtensionPermissionsSectionProps = {
   enabled: boolean;
@@ -42,7 +42,7 @@ export const ExtensionPermissionsSection = ({
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6">{t('extensions.permissions')}</Typography>
       <Stack spacing={1} sx={{ mt: 1 }}>
-        <ErrorNotice error={grant.error ?? revoke.error} />
+        <ApiErrorAlert error={grant.error ?? revoke.error} sx={{ mb: 2 }} />
         {grants.map((item) => (
           <Stack
             direction="row"

@@ -31,6 +31,7 @@ import { capabilities, accessTargetKinds } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { contextListOptions } from '../contexts/queryOptions';
 import { publicationChannelsOptions } from './queryOptions';
+import { LoadingState } from '../../components/LoadingState';
 
 export const ExportsPage = () => {
   const { t } = useTranslation();
@@ -88,7 +89,7 @@ export const ExportsPage = () => {
         sx={{ mt: 3 }}
       />
       {(contexts.isPending || channels.isPending) && (
-        <Typography sx={{ mt: 3 }}>{t('exports.loading')}</Typography>
+        <LoadingState sx={{ mt: 3 }}>{t('exports.loading')}</LoadingState>
       )}
       {contexts.data && channels.data && (
         <Paper sx={{ mt: 3 }}>

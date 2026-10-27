@@ -1,18 +1,9 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import {
-  Box,
-  Button,
-  List,
-  ListItem,
-  Paper,
-  Tab,
-  Tabs,
-  Typography,
-} from '@mui/material';
+import { Box, Button, List, ListItem, Paper, Tab, Tabs } from '@mui/material';
 import { CheckCheckIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { LoadMoreButton } from '../../components/LoadMoreButton';
+import { NextPageButton } from '../../components/LoadMoreButton';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
@@ -35,6 +26,7 @@ import {
 } from '../../api/keysetCursor';
 import { useInboxActions } from './useInboxActions';
 import { useInboxIdentity } from './useInboxIdentity';
+import { LoadingState } from '../../components/LoadingState';
 
 const tabId = (filter: InboxFilter) => `inbox-tab-${filter}`;
 const panelId = 'inbox-panel';
@@ -158,7 +150,7 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
             ))}
             {notifications.isPending && !error && (
               <ListItem>
-                <Typography>{t('inbox.loading')}</Typography>
+                <LoadingState>{t('inbox.loading')}</LoadingState>
               </ListItem>
             )}
             {notifications.isSuccess && items.length === 0 && (
@@ -176,14 +168,7 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
             )}
           </List>
         </Paper>
-        {notifications.hasNextPage && (
-          <Box sx={{ mt: 2 }}>
-            <LoadMoreButton
-              isLoading={notifications.isFetchingNextPage}
-              onLoadMore={() => void notifications.fetchNextPage()}
-            />
-          </Box>
-        )}
+        <NextPageButton query={notifications} sx={{ mt: 2 }} />
       </Box>
     </PageContainer>
   );

@@ -30,15 +30,19 @@ export const RoleSelectField = ({
 
 export const ExpiryField = ({
   onChange,
+  timeZone,
   value,
 }: {
   onChange: (value: string) => void;
+  /** The zone the entered wall-clock time is read in. */
+  timeZone: string;
   value: string;
 }) => {
   const { t } = useTranslation();
   return (
     <TextField
       required
+      helperText={t('workspace.expiresAtHelp', { zone: timeZone })}
       label={t('workspace.expiresAt')}
       onChange={(event) => onChange(event.target.value)}
       slotProps={{ inputLabel: { shrink: true } }}

@@ -7,12 +7,12 @@ import type { AuditEvent } from './api';
 import { Timestamp } from '../../time/Timestamp';
 import { UserLabel } from '../../components/UserLabel';
 import { AuditActor } from './AuditActor';
+import { auditDrawerWidth, auditEventTitleId } from './constants';
 import {
-  auditDrawerWidth,
-  auditEventPanelOutlet,
-  auditEventTitleId,
-  auditExtensionContextVersion,
-} from './constants';
+  extensionOutlets,
+  supportedOutletContextVersion,
+} from '../extensions/constants';
+import { personName } from '../../components/personName';
 
 const Detail = ({ label, value }: { label: string; value: unknown }) => (
   <Box>
@@ -114,11 +114,11 @@ export const AuditEventDrawer = ({
                       approver: event.approved_by_user_id ? (
                         <UserLabel
                           avatarFileId={event.approved_by_avatar_file_id}
-                          name={
-                            event.approved_by_display_name ??
+                          name={personName(
+                            event.approved_by_display_name,
                             event.approved_by_email ??
-                            event.approved_by_user_id
-                          }
+                              event.approved_by_user_id,
+                          )}
                           userId={event.approved_by_user_id}
                         />
                       ) : (
@@ -140,10 +140,10 @@ export const AuditEventDrawer = ({
             )}
             <ExtensionOutlet
               context={{
-                context_version: auditExtensionContextVersion,
+                context_version: supportedOutletContextVersion,
                 event_id: event.id,
               }}
-              outlet={auditEventPanelOutlet}
+              outlet={extensionOutlets.auditEventPanel}
             />
           </Box>
         )}

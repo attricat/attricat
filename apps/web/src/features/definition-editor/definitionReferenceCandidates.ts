@@ -7,7 +7,6 @@ import {
   fromKey,
   includesKey,
   maxAttributePathHops,
-  relationshipValueType,
   requiredSortPrefix,
   targetBlueprintKey,
   valueTypeKey,
@@ -17,6 +16,7 @@ import type { DefinitionReferences } from './definitionReferences';
 import type { DefinitionReferenceKind } from './definitionSchema';
 import type { TomlOutline, TomlPath } from './tomlOutline';
 import { viewComponentPlacement, viewComponents } from './viewComponents';
+import { attributeValueTypes } from '../records/valueTypes';
 
 export type Candidate = {
   continues?: boolean;
@@ -149,7 +149,7 @@ export const referenceCandidates = async (
         .filter(
           (attribute) =>
             reference === 'attribute' ||
-            attribute.valueType === relationshipValueType,
+            attribute.valueType === attributeValueTypes.relationship,
         )
         .map((attribute) => ({
           detail: attributeDetail(attribute),
@@ -177,11 +177,13 @@ export const referenceCandidates = async (
       return attributes
         .filter(
           (attribute) =>
-            !relationshipsOnly || attribute.valueType === relationshipValueType,
+            !relationshipsOnly ||
+            attribute.valueType === attributeValueTypes.relationship,
         )
         .map((attribute) => {
           const continues =
-            attribute.valueType === relationshipValueType && hops < maxHops;
+            attribute.valueType === attributeValueTypes.relationship &&
+            hops < maxHops;
           return {
             continues,
             detail: attributeDetail(attribute),

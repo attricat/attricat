@@ -12,7 +12,7 @@ import { RefreshCwIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { Timestamp } from '../../time/Timestamp';
-import { useCan } from '../auth/useCan';
+import { RequireCapability } from '../auth/RequireCapability';
 import { getBackgroundProcessingStatus } from './api';
 import { BackgroundProcessingTable } from './BackgroundProcessingTable';
 import {
@@ -25,17 +25,15 @@ import { BackgroundProcessingIcon } from '../../components/systemIcons';
 import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
 
-export const BackgroundProcessingPage = () => {
+const BackgroundProcessingStatus = () => {
   const { t } = useTranslation();
   const session = useQuery(sessionOptions());
-  const canRead = useCan(capabilities.dataHealthRead);
   const status = useQuery({
     queryKey: backgroundProcessingQueryKeys.status(session.data?.workspace_id),
     queryFn: getBackgroundProcessingStatus,
-    enabled: canRead,
     refetchInterval: backgroundProcessingRefreshInterval,
   });
-  const rows = canRead ? status.data : undefined;
+  const rows = status.data;
   const hasFailures = rows?.some((row) => row.failed > 0);
   const hasExpiredLeases = rows?.some((row) => row.expired_leases > 0);
 
@@ -47,98 +45,78 @@ export const BackgroundProcessingPage = () => {
           title={t('backgroundProcessing.title')}
           description={t('backgroundProcessing.description')}
           actions={
-            canRead && (
-              <Button
-                disabled={status.isFetching}
-                onClick={() => void status.refetch()}
-                startIcon={<RefreshCwIcon />}
-              >
-                {t(
-                  status.isFetching
-                    ? 'backgroundProcessing.refreshing'
-                    : 'backgroundProcessing.refresh',
-                )}
-              </Button>
-            )
+            <Button
+              disabled={status.isFetching}
+              onClick={() => void status.refetch()}
+              startIcon={<RefreshCwIcon />}
+            >
+              {t(
+                status.isFetching
+                  ? 'backgroundProcessing.refreshing'
+                  : 'backgroundProcessing.refresh',
+              )}
+            </Button>
           }
         />
-        {session.isPending && (
+        {status.isPending && (
           <LinearProgress aria-label={t('backgroundProcessing.loading')} />
         )}
-        {session.isError && (
-          <Alert
-            severity="error"
-            action={
-              <Button
-                color="inherit"
-                onClick={() => void session.refetch()}
-                startIcon={<RefreshCwIcon />}
-              >
-                {t('backgroundProcessing.refresh')}
-              </Button>
-            }
-          >
-            {t('backgroundProcessing.loadError')}
+        {status.isError && (
+          <Alert severity="error">
+            {t(
+              rows
+                ? 'backgroundProcessing.refreshError'
+                : 'backgroundProcessing.loadError',
+            )}
           </Alert>
         )}
-        {session.isSuccess && !canRead && (
+        {rows && (
+          <Typography variant="body2" color="text.secondary">
+            <Trans
+              components={{
+                timestamp: (
+                  <Timestamp style="time" value={status.dataUpdatedAt} />
+                ),
+              }}
+              i18nKey="backgroundProcessing.updated"
+              t={t}
+              values={{ seconds: backgroundProcessingRefreshSeconds }}
+            />
+          </Typography>
+        )}
+        {hasFailures && (
+          <Alert severity="error">{t('backgroundProcessing.failures')}</Alert>
+        )}
+        {hasExpiredLeases && (
           <Alert severity="warning">
-            {t('backgroundProcessing.forbidden')}
+            {t('backgroundProcessing.expiredWarning')}
           </Alert>
         )}
-        {canRead && (
-          <>
-            {status.isPending && (
-              <LinearProgress aria-label={t('backgroundProcessing.loading')} />
-            )}
-            {status.isError && (
-              <Alert severity="error">
-                {t(
-                  rows
-                    ? 'backgroundProcessing.refreshError'
-                    : 'backgroundProcessing.loadError',
-                )}
-              </Alert>
-            )}
-            {rows && (
-              <Typography variant="body2" color="text.secondary">
-                <Trans
-                  components={{
-                    timestamp: (
-                      <Timestamp style="time" value={status.dataUpdatedAt} />
-                    ),
-                  }}
-                  i18nKey="backgroundProcessing.updated"
-                  t={t}
-                  values={{ seconds: backgroundProcessingRefreshSeconds }}
-                />
-              </Typography>
-            )}
-            {hasFailures && (
-              <Alert severity="error">
-                {t('backgroundProcessing.failures')}
-              </Alert>
-            )}
-            {hasExpiredLeases && (
-              <Alert severity="warning">
-                {t('backgroundProcessing.expiredWarning')}
-              </Alert>
-            )}
-            {rows?.length === 0 && (
-              <Paper>
-                <EmptyState
-                  icon={BackgroundProcessingIcon}
-                  title={t('backgroundProcessing.empty')}
-                />
-              </Paper>
-            )}
-            {!!rows?.length && <BackgroundProcessingTable rows={rows} />}
-            <Typography variant="body2" color="text.secondary">
-              {t('backgroundProcessing.explanation')}
-            </Typography>
-          </>
+        {rows?.length === 0 && (
+          <Paper>
+            <EmptyState
+              icon={BackgroundProcessingIcon}
+              title={t('backgroundProcessing.empty')}
+            />
+          </Paper>
         )}
+        {!!rows?.length && <BackgroundProcessingTable rows={rows} />}
+        <Typography variant="body2" color="text.secondary">
+          {t('backgroundProcessing.explanation')}
+        </Typography>
       </Stack>
     </PageContainer>
+  );
+};
+
+export const BackgroundProcessingPage = () => {
+  const { t } = useTranslation();
+  return (
+    <RequireCapability
+      capability={capabilities.dataHealthRead}
+      deniedMessage={t('backgroundProcessing.forbidden')}
+    >
+      <BackgroundProcessingStatus />
+    </RequireCapability>
   );
 };

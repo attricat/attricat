@@ -1,5 +1,5 @@
 import { personName } from '../../components/personName';
-import { LoadMoreButton } from '../../components/LoadMoreButton';
+import { NextPageButton } from '../../components/LoadMoreButton';
 import {
   useInfiniteQuery,
   useQuery,
@@ -28,6 +28,8 @@ import type { RecordComment } from './schemas';
 import { EmptyState } from '../../components/EmptyState';
 import { CommentIcon } from '../../components/systemIcons';
 import { sessionOptions } from '../auth/queryOptions';
+import { userAvatarSizes } from '../../components/userAvatars';
+import { PencilIcon } from 'lucide-react';
 
 const CommentItem = ({
   recordId,
@@ -71,7 +73,7 @@ const CommentItem = ({
         ) : (
           <UserAvatar
             name={personName(comment.author_display_name, comment.author_email)}
-            size={32}
+            size={userAvatarSizes.message}
           />
         )}
         <Typography variant="subtitle2">
@@ -103,6 +105,7 @@ const CommentItem = ({
             ref={editButton}
             disabled={disabled}
             onClick={() => setEditing(comment)}
+            startIcon={<PencilIcon />}
           >
             {t('comments.edit')}
           </Button>
@@ -198,14 +201,7 @@ export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
           />
         ))}
       </Box>
-      {comments.hasNextPage && (
-        <LoadMoreButton
-          compact
-          isLoading={comments.isFetchingNextPage}
-          label={t('comments.loadMore')}
-          onLoadMore={() => void comments.fetchNextPage()}
-        />
-      )}
+      <NextPageButton compact label={t('comments.loadMore')} query={comments} />
     </Box>
   );
 };

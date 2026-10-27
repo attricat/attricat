@@ -18,14 +18,14 @@ import {
   type OpenActionDialog,
 } from './actionDialogStore';
 import {
-  actionDialogOutlet,
-  extensionLoadingIndicatorSize,
   selectionSources,
   contributionKinds,
+  extensionOutlets,
 } from './constants';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { ExtensionFrame } from './ExtensionFrame';
 import { useExtensionRuntime } from './useExtensionRuntime';
+import { progressSizes } from '../../components/iconSizes';
 
 /**
  * Host-managed dialog for an extension's selection actions. It is mounted once
@@ -80,7 +80,7 @@ const ActionDialog = ({
     (item) =>
       item.extension_id === extensionId &&
       item.kind === contributionKinds.dialog &&
-      item.outlet === actionDialogOutlet,
+      item.outlet === extensionOutlets.actionDialog,
   );
   const count = context.record_ids.length;
   const title = contribution?.title ?? t('extensions.actionDialogTitle');
@@ -105,7 +105,7 @@ const ActionDialog = ({
               <CircularProgress
                 aria-label={t('extensions.loadingContent')}
                 enableTrackSlot
-                size={extensionLoadingIndicatorSize}
+                size={progressSizes.standard}
               />
             </Box>
           ) : contribution ? (

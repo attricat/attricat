@@ -11,7 +11,6 @@ export const SAVED_VIEW_NAME_MAX_LENGTH = 120;
 export const SAVED_VIEW_DESCRIPTION_MAX_LENGTH = 500;
 export const SAVED_VIEW_SEARCH_MAX_LENGTH = 120;
 export const SAVED_VIEW_SEARCH_DEBOUNCE_MS = 250;
-export const SAVE_SEARCH_FORM_ID = 'save-search-form';
 
 export const SOURCE_VIEW_PARAM = 'sourceView';
 export const SAVED_VIEW_PARAM = 'savedView';

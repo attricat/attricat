@@ -7,6 +7,8 @@ import type {
   RelationshipFilterAttribute,
 } from './relationshipFilterTypes';
 import type { ExplorerSearch, ExplorerSort } from './search';
+import { attributeCardinalities } from '../records/constants';
+import { attributeValueTypes } from '../records/valueTypes';
 
 export type RelationshipFilter = {
   field: string;
@@ -45,10 +47,10 @@ export const relationshipFacetSources = (
       !relationshipFields.some((field) => field.code === facet.field)
         ? [
             {
-              cardinality: 'many',
+              cardinality: attributeCardinalities.many,
               code: facet.field,
               target_blueprint_code: facet.targetBlueprint,
-              value_type: 'relationship',
+              value_type: attributeValueTypes.relationship,
             },
           ]
         : [],

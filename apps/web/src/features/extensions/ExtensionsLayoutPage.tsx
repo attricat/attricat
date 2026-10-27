@@ -4,7 +4,6 @@ import { Alert, Button, Paper, TextField, Typography } from '@mui/material';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCan } from '../auth/useCan';
-import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
 import {
   updateWorkspaceExtensionLayout,
@@ -14,6 +13,7 @@ import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { workspaceExtensionLayoutSchema } from './schemas';
 import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 export const ExtensionsLayoutPage = () => {
   const { t } = useTranslation();
@@ -27,12 +27,7 @@ export const ExtensionsLayoutPage = () => {
   });
   const saveLayout = useMutation({
     mutationFn: updateWorkspaceExtensionLayout,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: extensionManagementQueryKeys.layout(),
-      });
-      invalidateExtensions(queryClient);
-    },
+    onSuccess: () => invalidateExtensions(queryClient),
   });
   const parseLayout = (draft: string) => {
     try {
@@ -71,14 +66,14 @@ export const ExtensionsLayoutPage = () => {
   if (session.data && !canManage) {
     return (
       <Alert severity="error">
-        {t('auth.notAuthorized.extensions_manage')}
+        {t(`auth.notAuthorized.${capabilities.extensionsManage}`)}
       </Alert>
     );
   }
 
   return (
     <>
-      <ErrorNotice error={layout.error ?? saveLayout.error} />
+      <ApiErrorAlert error={layout.error ?? saveLayout.error} sx={{ mb: 2 }} />
       <Paper
         component="form"
         onSubmit={(event) => {

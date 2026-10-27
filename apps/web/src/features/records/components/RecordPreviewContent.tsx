@@ -10,6 +10,7 @@ import {
   selectionSources,
   supportedOutletContextVersion,
   contributionKinds,
+  extensionOutlets,
 } from '../../extensions/constants';
 import { useExtensionRuntime } from '../../extensions/useExtensionRuntime';
 import { RecordView } from '../../views/components/RecordView';
@@ -105,7 +106,7 @@ export const RecordPreviewContent = ({
       label={t('records.viewExtensionContent', {
         attribute: attributeLabel(attribute),
       })}
-      outlet="record_attribute_decoration"
+      outlet={extensionOutlets.recordAttributeDecoration}
       runtimeScope={runtimeScope}
     />
   );
@@ -120,7 +121,7 @@ export const RecordPreviewContent = ({
             blueprint_version: blueprint.blueprint.version,
             context_id: contextId ?? null,
           }}
-          outlet="record_attribute_panel"
+          outlet={extensionOutlets.recordAttributePanel}
           runtimeScope={runtimeScope}
         />
       )
@@ -136,7 +137,7 @@ export const RecordPreviewContent = ({
             blueprint_id: blueprint.blueprint.id,
             blueprint_version: blueprint.blueprint.version,
           }}
-          outlet="file_panel"
+          outlet={extensionOutlets.filePanel}
           runtimeScope={runtimeScope}
         />
       )
@@ -216,7 +217,7 @@ export const RecordPreviewContent = ({
       </Paper>
       <ExtensionOutlet
         context={{ record_id: recordId, context_id: contextId }}
-        outlet="record_action"
+        outlet={extensionOutlets.recordAction}
         runtimeScope={runtimeScope}
         selection={{
           source: selectionSources.recordPreview,

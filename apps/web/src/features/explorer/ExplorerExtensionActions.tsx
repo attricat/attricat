@@ -1,10 +1,10 @@
 import type { BlueprintWithAttributes, RecordItem } from '../records/api';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
-import { selectionSources } from '../extensions/constants';
 import {
-  explorerExtensionContextVersion,
-  explorerExtensionOutlets,
-} from './constants';
+  selectionSources,
+  extensionOutlets,
+  supportedOutletContextVersion,
+} from '../extensions/constants';
 
 type Props = {
   blueprint: BlueprintWithAttributes['blueprint'];
@@ -27,7 +27,7 @@ export const ExplorerExtensionActions = ({
     blueprintVersion: blueprint.version,
   };
   const revisionContext = {
-    context_version: explorerExtensionContextVersion,
+    context_version: supportedOutletContextVersion,
     blueprint_id: blueprint.id,
     blueprint_version: blueprint.version,
   };
@@ -42,7 +42,7 @@ export const ExplorerExtensionActions = ({
     <>
       <ExtensionOutlet
         context={revisionContext}
-        outlet={explorerExtensionOutlets.action}
+        outlet={extensionOutlets.explorerAction}
         runtimeScope={runtimeScope}
       />
       {bulkSelection && (
@@ -51,7 +51,7 @@ export const ExplorerExtensionActions = ({
             ...revisionContext,
             record_ids: bulkSelection.map((item) => item.id),
           }}
-          outlet={explorerExtensionOutlets.bulkAction}
+          outlet={extensionOutlets.explorerBulkAction}
           runtimeScope={runtimeScope}
           selection={{
             source: selectionSources.explorerSelection,

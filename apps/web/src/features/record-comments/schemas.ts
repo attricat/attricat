@@ -12,7 +12,7 @@ export const commentInputSchema = z.object({
         !body.includes('\0'),
     ),
 });
-export const commentSchema = z.object({
+const commentSchema = z.object({
   id: z.uuid(),
   author_user_id: z.uuid(),
   author_display_name: z.string().nullable(),

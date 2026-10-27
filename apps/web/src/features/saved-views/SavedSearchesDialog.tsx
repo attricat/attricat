@@ -15,7 +15,6 @@ import {
   ListItemText,
   TextField,
   Tooltip,
-  Typography,
 } from '@mui/material';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { SearchIcon, Trash2Icon } from 'lucide-react';
@@ -33,6 +32,8 @@ import type { SavedSearchActions } from './useSavedSearchActions';
 import { useDebouncedValue } from '../../components/useDebouncedValue';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { SavedSearchIcon } from '../../components/systemIcons';
+import { EmptyState } from '../../components/EmptyState';
 
 export const SavedSearchesDialog = ({
   actions,
@@ -90,11 +91,14 @@ export const SavedSearchesDialog = ({
         )}
         <ApiErrorAlert error={list.error} />
         {list.isSuccess && views.length === 0 && (
-          <Typography color="text.secondary" variant="body2">
-            {searchText
-              ? t('explorer.noMatchingSavedSearches')
-              : t('explorer.noSavedSearches')}
-          </Typography>
+          <EmptyState
+            icon={SavedSearchIcon}
+            title={
+              searchText
+                ? t('explorer.noMatchingSavedSearches')
+                : t('explorer.noSavedSearches')
+            }
+          />
         )}
         {views.length > 0 && (
           <List disablePadding>

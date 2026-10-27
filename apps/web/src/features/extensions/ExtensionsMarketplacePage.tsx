@@ -3,11 +3,14 @@ import { Link } from '@tanstack/react-router';
 import { Box, Paper, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useCan } from '../auth/useCan';
-import { ErrorNotice } from './ExtensionErrorNotice';
 import { repositoryParts } from './extensionPageUtils';
 import { discoverExtensions } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { capabilities } from '../auth/capabilities';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { EmptyState } from '../../components/EmptyState';
+import { LoadingState } from '../../components/LoadingState';
+import { ExtensionIcon } from '../../components/systemIcons';
 
 export const ExtensionsMarketplacePage = () => {
   const { t } = useTranslation();
@@ -20,10 +23,21 @@ export const ExtensionsMarketplacePage = () => {
 
   return (
     <>
-      <ErrorNotice error={marketplace.error} />
-      <Typography sx={{ mb: 1 }} variant="h5">
+      <ApiErrorAlert error={marketplace.error} sx={{ mb: 2 }} />
+      <Typography component="h2" sx={{ mb: 1 }} variant="h5">
         {t('extensions.marketplace')}
       </Typography>
+      {marketplace.isPending && canRead && (
+        <LoadingState>{t('extensions.loadingExtensions')}</LoadingState>
+      )}
+      {marketplace.data?.length === 0 && (
+        <Paper>
+          <EmptyState
+            icon={ExtensionIcon}
+            title={t('extensions.noMarketplaceExtensions')}
+          />
+        </Paper>
+      )}
       <Stack spacing={2}>
         {(marketplace.data ?? []).map((extension) => {
           const [owner, repository] = repositoryParts(extension.repository);

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { z } from 'zod';
+import { versionParamSchema } from '../../../../../../api/pathSegments';
 import { RuleRevisionPage } from '../../../../../../features/rules/RuleRevisionPage';
 import { RequireCapability } from '../../../../../../features/auth/RequireCapability';
 import { capabilities } from '../../../../../../features/auth/capabilities';
@@ -17,7 +17,7 @@ function RuleRevisionRoute() {
       <RuleRevisionPage
         ruleId={ruleId}
         // A malformed version shows the page's not-found state.
-        version={z.coerce.number().int().positive().safeParse(version).data}
+        version={versionParamSchema.safeParse(version).data}
       />
     </RequireCapability>
   );

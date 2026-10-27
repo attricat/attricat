@@ -7,7 +7,7 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RefreshCwIcon } from 'lucide-react';
 import {
@@ -16,7 +16,6 @@ import {
   maximumStaleAfterDays,
   minimumStaleAfterDays,
   staleAfterDayOptions,
-  staleAfterLabelId,
   staleAfterSelectMinWidth,
 } from './constants';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -41,6 +40,7 @@ const DataHealthControlsForm = ({
   onRefresh,
 }: Props) => {
   const { t } = useTranslation();
+  const staleAfterLabelId = useId();
   const [customThreshold, setCustomThreshold] = useState(
     !staleAfterDayOptions.includes(
       staleAfterDays as (typeof staleAfterDayOptions)[number],

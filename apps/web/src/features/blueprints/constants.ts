@@ -23,7 +23,6 @@ export type RemovalDisposition = typeof archiveRemovalDisposition;
 export const allPublicationChannels = 'all';
 
 /** Version of the context payload handed to blueprint extension outlets. */
-export const blueprintExtensionContextVersion = 1;
 
 export const blueprintDetailTabs = {
   metadata: 0,
@@ -47,9 +46,6 @@ export type BlueprintVersionMetadataTab =
 
 /** Sandbox tab that edits sample values through the detail layout. */
 export const sandboxEditTab = 'sandbox';
-
-/** Displayed for values that are absent, such as an empty removal policy. */
-export const emptyValuePlaceholder = '—';
 
 export const blueprintFilterWidth = 420;
 export const tomlDiffEditorHeight = 560;

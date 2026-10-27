@@ -1,14 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import {
-  Button,
-  List,
-  ListItem,
-  ListItemText,
-  Paper,
-  Typography,
-} from '@mui/material';
+import { List, ListItem, ListItemText, Paper } from '@mui/material';
 import { PlusIcon } from 'lucide-react';
 import { JsonInline } from '../../components/JsonValue';
 import { PageContainer } from '../../components/PageContainer';
@@ -19,6 +11,8 @@ import { useCan } from '../auth/useCan';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { contextListOptions } from './queryOptions';
+import { RouterButton } from '../../components/RouterLink';
+import { LoadingState } from '../../components/LoadingState';
 
 export const ContextsPage = () => {
   const { t } = useTranslation();
@@ -32,21 +26,22 @@ export const ContextsPage = () => {
       <PageHeader
         actions={
           canCreate && (
-            <Button
-              component={Link}
+            <RouterButton
               startIcon={<PlusIcon />}
               to="/manage/contexts/new"
               variant="contained"
             >
               {t('contexts.createContext')}
-            </Button>
+            </RouterButton>
           )
         }
         icon={ContextIcon}
         title={t('contexts.contexts')}
       />
       {contexts.isPending && (
-        <Typography sx={{ mt: 3 }}>{t('contexts.loadingContexts')}</Typography>
+        <LoadingState sx={{ mt: 3 }}>
+          {t('contexts.loadingContexts')}
+        </LoadingState>
       )}
       <ApiErrorAlert error={contexts.error} sx={{ mt: 3 }} />
       {contexts.data && (

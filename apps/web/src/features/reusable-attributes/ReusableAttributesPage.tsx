@@ -20,6 +20,7 @@ import {
   reusableAttributeListOptions,
   reusableAttributeGroupListOptions,
 } from './queryOptions';
+import { LoadingState } from '../../components/LoadingState';
 
 export const ReusableAttributesPage = () => {
   const { t } = useTranslation();
@@ -74,9 +75,9 @@ export const ReusableAttributesPage = () => {
         sx={{ mt: 3 }}
       />
       {attributes.isPending ? (
-        <Typography sx={{ mt: 3 }}>
+        <LoadingState sx={{ mt: 3 }}>
           {t('reusableAttributes.loading')}
-        </Typography>
+        </LoadingState>
       ) : (
         <ReusableAttributesTable
           attributes={displayedAttributes}
@@ -85,13 +86,13 @@ export const ReusableAttributesPage = () => {
           publishing={publish.isPending}
         />
       )}
-      <Typography sx={{ mt: 4 }} variant="h5">
+      <Typography component="h2" sx={{ mt: 4 }} variant="h5">
         {t('reusableAttributes.groupsHeading')}
       </Typography>
       {groups.isPending ? (
-        <Typography sx={{ mt: 2 }}>
+        <LoadingState sx={{ mt: 2 }}>
           {t('reusableAttributes.loadingGroups')}
-        </Typography>
+        </LoadingState>
       ) : (
         <ReusableAttributeGroupsTable groups={groups.data ?? []} />
       )}

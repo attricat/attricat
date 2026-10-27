@@ -3,7 +3,6 @@ import { request, requestNoContent, jsonRequest } from '../../api/request';
 import {
   exportStatusPath,
   exportStatusPageSize,
-  extensionPath,
   recordExportStatusPath,
   type ConnectionGrantType,
   type ExportStatus,
@@ -18,6 +17,7 @@ import {
   retryResponseSchema,
   workspaceExportStatusSchema,
 } from './schemas';
+import { extensionPath } from '../extensions/apiPaths';
 
 export const recordExportStatus = (recordId: string) =>
   request(recordExportStatusPath(recordId), recordExportStatusSchema);

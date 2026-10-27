@@ -7,6 +7,7 @@ import {
 } from './extensionPageUtils';
 import type { ExtensionDetail } from './managementApi';
 import { Timestamp } from '../../time/Timestamp';
+import { personName } from '../../components/personName';
 
 type LifecycleRecord = ExtensionDetail['lifecycle'][number];
 
@@ -40,10 +41,10 @@ const ExtensionLifecycleRecord = ({ record }: { record: LifecycleRecord }) => {
               i18nKey="extensions.lifecycleActor"
               t={t}
               values={{
-                actor:
-                  record.actor_display_name ||
-                  record.actor_email ||
-                  record.actor_user_id,
+                actor: personName(
+                  record.actor_display_name,
+                  record.actor_email || record.actor_user_id,
+                ),
               }}
             />
           </>

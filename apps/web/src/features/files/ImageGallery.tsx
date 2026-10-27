@@ -5,6 +5,7 @@ import { GALLERY_CARD_MIN_WIDTH, GALLERY_PAGE_SIZE } from './constants';
 import { FileCard } from './FileCard';
 import { FileThumbnail } from './FileThumbnail';
 import { ImagePreviewDialog } from './ImagePreviewDialog';
+import { focusRing } from '../../app/theme';
 
 export type GalleryFile = { id: string; filename: string };
 
@@ -75,11 +76,7 @@ export const ImageGallery = ({
                       borderRadius: 1,
                       display: 'block',
                       width: '100%',
-                      '&.Mui-focusVisible': {
-                        outline: '2px solid',
-                        outlineColor: 'primary.main',
-                        outlineOffset: 2,
-                      },
+                      '&.Mui-focusVisible': focusRing,
                     }}
                   >
                     <FileThumbnail file={file} />

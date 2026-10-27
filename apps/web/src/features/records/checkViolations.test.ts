@@ -35,7 +35,7 @@ describe('check violations', () => {
           },
         ),
       ),
-    ).toEqual({ message: 'Record checks failed', violations });
+    ).toEqual({ violations });
     expect(
       checkViolationError(
         new ApiRequestError(
@@ -45,7 +45,7 @@ describe('check violations', () => {
           { violations, context: 'storefront' },
         ),
       ),
-    ).toMatchObject({ context: 'storefront' });
+    ).toEqual({ violations });
   });
 
   it('ignores other errors and malformed details', () => {

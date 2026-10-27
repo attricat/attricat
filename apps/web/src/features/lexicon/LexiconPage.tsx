@@ -43,6 +43,7 @@ import type { StoredLexiconEntry } from './schemas';
 import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { LoadingState } from '../../components/LoadingState';
 
 type DialogState =
   | { kind: 'add'; draft: LexiconEntryDraft }
@@ -184,7 +185,7 @@ export const LexiconPage = ({
         />
       )}
       {entries.isPending && (
-        <Typography sx={{ mt: 3 }}>{t('lexicon.loading')}</Typography>
+        <LoadingState sx={{ mt: 3 }}>{t('lexicon.loading')}</LoadingState>
       )}
       <ApiErrorAlert error={entries.error} sx={{ mt: 3 }} />
       {entries.data && (

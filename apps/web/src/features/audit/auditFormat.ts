@@ -1,10 +1,11 @@
 import type { AuditEvent } from './api';
+import { personName } from '../../components/personName';
 
 export const auditActor = (event: AuditEvent, systemLabel: string) =>
-  event.actor_display_name ??
-  event.actor_email ??
-  event.actor_user_id ??
-  systemLabel;
+  personName(
+    event.actor_display_name,
+    event.actor_email ?? event.actor_user_id ?? systemLabel,
+  );
 
 export const auditTarget = (event: AuditEvent, workspaceLabel: string) =>
   Object.entries(event.target)
@@ -15,8 +16,10 @@ export const auditTarget = (event: AuditEvent, workspaceLabel: string) =>
 export const auditActorPerson = (event: AuditEvent) =>
   event.actor_user_id
     ? {
-        name:
-          event.actor_display_name ?? event.actor_email ?? event.actor_user_id,
+        name: personName(
+          event.actor_display_name,
+          event.actor_email ?? event.actor_user_id,
+        ),
         avatarFileId: event.actor_avatar_file_id,
         userId: event.actor_user_id,
       }

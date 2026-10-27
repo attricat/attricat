@@ -7,6 +7,7 @@ import {
   runtimeSchema,
 } from './schemas';
 import { utf8ByteLength } from './utf8';
+import { extensionsApiPath, contributionPath } from './apiPaths';
 
 export {
   extensionCommandRequestSchema,
@@ -23,16 +24,13 @@ export const getExtensionRuntime = (scope?: ExtensionRuntimeScope) => {
   const query = scope
     ? `?blueprint_id=${encodeURIComponent(scope.blueprintId)}&blueprint_version=${scope.blueprintVersion}`
     : '';
-  return request(`/api/extensions/runtime${query}`, runtimeSchema);
+  return request(`${extensionsApiPath}/runtime${query}`, runtimeSchema);
 };
 
 export const getExtensionArtifact = async (
   extensionId: string,
   contributionId: string,
-) =>
-  requestText(
-    `/api/extensions/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}/artifact`,
-  );
+) => requestText(`${contributionPath(extensionId, contributionId)}/artifact`);
 
 const parseExtensionResponse = (
   text: string,
@@ -55,7 +53,7 @@ export const extensionCommand = async (
   input: z.infer<typeof extensionCommandRequestSchema>,
 ) => {
   const response = await requestText(
-    `/api/extensions/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}/command`,
+    `${contributionPath(extensionId, contributionId)}/command`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -72,7 +70,7 @@ export const extensionStorage = async (
   input: ExtensionStorageRequest,
 ) => {
   const response = await requestText(
-    `/api/extensions/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}/storage/${encodeURIComponent(releaseId)}`,
+    `${contributionPath(extensionId, contributionId)}/storage/${encodeURIComponent(releaseId)}`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

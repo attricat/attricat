@@ -1,15 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  publishRecord,
-  publishRecordAllChannels,
-  unpublishRecord,
-} from '../api';
+import { publishRecordAllChannels } from '../api';
 import {
   recordPublicationOptions,
   recordPublicationReadinessOptions,
 } from '../queryOptions';
 import { invalidateRecordPublications } from '../invalidateRecord';
 import { readinessForContext } from '../checkViolations';
+import { usePublicationMutations } from '../usePublicationMutations';
 
 /**
  * Loads a record's channel publications and exposes publishing actions.
@@ -26,21 +23,10 @@ export const useRecordPublications = (
     ...recordPublicationReadinessOptions(recordId),
     enabled: checkReadiness,
   });
-  const invalidatePublications = () =>
-    invalidateRecordPublications(client, recordId);
-  const publish = useMutation({
-    mutationFn: (targetContextId: string) =>
-      publishRecord(recordId, targetContextId),
-    onSuccess: invalidatePublications,
-  });
+  const { publish, unpublish } = usePublicationMutations();
   const publishAll = useMutation({
     mutationFn: () => publishRecordAllChannels(recordId),
-    onSuccess: invalidatePublications,
-  });
-  const unpublish = useMutation({
-    mutationFn: (targetContextId: string) =>
-      unpublishRecord(recordId, targetContextId),
-    onSuccess: invalidatePublications,
+    onSuccess: () => invalidateRecordPublications(client, recordId),
   });
   return {
     error: publish.error ?? publishAll.error ?? unpublish.error,
@@ -52,11 +38,11 @@ export const useRecordPublications = (
     readiness: readinessForContext(readiness.data, contextId),
     notReadyChannels: (readiness.data ?? []).filter((item) => !item.ready),
     publish: () => {
-      if (contextId) publish.mutate(contextId);
+      if (contextId) publish.mutate({ recordId, contextId });
     },
     publishAll: () => publishAll.mutate(),
     unpublish: () => {
-      if (contextId) unpublish.mutate(contextId);
+      if (contextId) unpublish.mutate({ recordId, contextId });
     },
   };
 };

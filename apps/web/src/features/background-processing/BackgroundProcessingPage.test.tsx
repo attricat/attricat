@@ -13,7 +13,10 @@ import { currentSession } from '../auth/api';
 import { getBackgroundProcessingStatus } from './api';
 import { BackgroundProcessingPage } from './BackgroundProcessingPage';
 
-vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
+vi.mock('../auth/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../auth/api')>()),
+  currentSession: vi.fn(),
+}));
 vi.mock('./api', () => ({ getBackgroundProcessingStatus: vi.fn() }));
 
 const session = (canRead: boolean) =>

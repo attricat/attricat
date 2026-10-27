@@ -2,7 +2,6 @@ import { Button, Paper, Stack, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { CircleArrowUpIcon } from 'lucide-react';
-import { ErrorNotice } from './ExtensionErrorNotice';
 import {
   repositoryParts,
   sourceReleaseTag,
@@ -14,6 +13,7 @@ import {
   type ExtensionReleaseReference,
 } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type ExtensionUpgradeSectionProps = {
   busy: boolean;
@@ -44,7 +44,7 @@ export const ExtensionUpgradeSection = ({
   return (
     <Paper sx={{ p: 2 }}>
       <Typography variant="h6">{t('extensions.upgrade')}</Typography>
-      <ErrorNotice error={upgrades.error} />
+      <ApiErrorAlert error={upgrades.error} sx={{ mb: 2 }} />
       {releases.map((release) => (
         <Stack
           direction="row"

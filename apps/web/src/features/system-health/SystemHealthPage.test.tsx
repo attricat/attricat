@@ -7,7 +7,10 @@ import { currentSession } from '../auth/api';
 import { getSystemHealth } from './api';
 import { SystemHealthPage } from './SystemHealthPage';
 
-vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
+vi.mock('../auth/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../auth/api')>()),
+  currentSession: vi.fn(),
+}));
 vi.mock('./api', () => ({ getSystemHealth: vi.fn() }));
 
 const session = (canRead: boolean) =>

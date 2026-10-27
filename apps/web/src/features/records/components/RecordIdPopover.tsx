@@ -1,10 +1,11 @@
 import { IconButton, Popover, Stack, Tooltip, Typography } from '@mui/material';
-import { CopyIcon, HashIcon } from 'lucide-react';
+import { CopyIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { monoFontFamily } from '../../../app/theme';
 import { useCopyToClipboard } from '../../../components/useCopyToClipboard';
 import { compactIconSize } from '../../../components/iconSizes';
+import { RecordIdIcon } from '../../../components/systemIcons';
 
 export const RecordIdPopover = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
@@ -20,7 +21,7 @@ export const RecordIdPopover = ({ recordId }: { recordId: string }) => {
           onClick={(event) => setAnchor(event.currentTarget)}
           size="small"
         >
-          <HashIcon size={compactIconSize} />
+          <RecordIdIcon size={compactIconSize} />
         </IconButton>
       </Tooltip>
       <Popover

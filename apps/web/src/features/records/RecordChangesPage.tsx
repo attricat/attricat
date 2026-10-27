@@ -3,11 +3,11 @@ import { EmptyState } from '../../components/EmptyState';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ArrowLeftIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Box, Typography } from '@mui/material';
+import { Box } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { RouterButton } from '../../components/RouterLink';
 import { PageHeader } from '../../components/PageHeader';
-import { LoadMoreButton } from '../../components/LoadMoreButton';
+import { NextPageButton } from '../../components/LoadMoreButton';
 import { RecordSchemaSubheader } from './components/RecordSchemaSubheader';
 import { RecordChangeEvent } from './components/RecordChangeEvent';
 import { RecordToolbar } from './components/RecordToolbar';
@@ -17,6 +17,7 @@ import type { RecordAuditChange } from './api';
 import { recordQueryKeys } from './queryKeys';
 import { BlueprintLink } from '../blueprints/BlueprintLink';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { LoadingState } from '../../components/LoadingState';
 
 type EventChanges = [RecordAuditChange, ...RecordAuditChange[]];
 
@@ -63,7 +64,9 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
         }
       />
       {changes.isPending && (
-        <Typography sx={{ py: 3 }}>{t('records.loadingChanges')}</Typography>
+        <LoadingState sx={{ py: 3 }}>
+          {t('records.loadingChanges')}
+        </LoadingState>
       )}
       <ApiErrorAlert error={changes.error} sx={{ mt: 3 }} />
       {changes.data && (
@@ -80,12 +83,7 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
           {changes.isFetchNextPageError && (
             <ApiErrorAlert error={changes.error} sx={{ mb: 2 }} />
           )}
-          {changes.hasNextPage && (
-            <LoadMoreButton
-              isLoading={changes.isFetchingNextPage}
-              onLoadMore={() => void changes.fetchNextPage()}
-            />
-          )}
+          <NextPageButton query={changes} />
         </Box>
       )}
     </PageContainer>

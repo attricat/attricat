@@ -2,12 +2,12 @@ import { Avatar, Box, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { AgentIcon } from '../../components/systemIcons';
 import {
-  avatarSize,
   thinkingAnimationDuration,
   thinkingAnimationName,
   thinkingDotDelaysSeconds,
 } from './constants';
 import { smallIconSize } from '../../components/iconSizes';
+import { userAvatarSizes } from '../../components/userAvatars';
 
 const dotStyles = Object.fromEntries(
   thinkingDotDelaysSeconds.map((delay, index) => [
@@ -27,7 +27,11 @@ export const ThinkingIndicator = () => {
       sx={{ alignItems: 'center' }}
     >
       <Avatar
-        sx={{ bgcolor: 'primary.main', height: avatarSize, width: avatarSize }}
+        sx={{
+          bgcolor: 'primary.main',
+          height: userAvatarSizes.message,
+          width: userAvatarSizes.message,
+        }}
       >
         <AgentIcon size={smallIconSize} />
       </Avatar>

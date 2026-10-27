@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { z } from 'zod';
+import { versionParamSchema } from '../../../../../../api/pathSegments';
 import { WorkflowEditorPage } from '../../../../../../features/workflows/WorkflowEditorPage';
 import { RequireCapability } from '../../../../../../features/auth/RequireCapability';
 import { capabilities } from '../../../../../../features/auth/capabilities';
@@ -15,7 +15,7 @@ function WorkflowRevisionEditorRoute() {
   return (
     <RequireCapability capability={capabilities.workflowsManage}>
       <WorkflowEditorPage
-        sourceVersion={z.coerce.number().int().positive().parse(version)}
+        sourceVersion={versionParamSchema.parse(version)}
         workflowId={workflowId}
       />
     </RequireCapability>

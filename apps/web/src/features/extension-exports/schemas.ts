@@ -5,7 +5,7 @@ import {
   exportStatuses,
 } from './constants';
 
-export const exportMappingSchema = z.object({
+const exportMappingSchema = z.object({
   extension_id: z.string(),
   connection: z.string().nullable(),
   record_id: z.uuid(),
@@ -27,7 +27,7 @@ export const exportMappingSchema = z.object({
 });
 export type ExportMapping = z.infer<typeof exportMappingSchema>;
 
-export const exportDestinationSchema = z.object({
+const exportDestinationSchema = z.object({
   extension_id: z.string(),
   extension_name: z.string(),
   export_id: z.string(),
@@ -39,7 +39,7 @@ export const exportDestinationSchema = z.object({
 });
 export type ExportDestination = z.infer<typeof exportDestinationSchema>;
 
-export const connectionLabelSchema = z.object({
+const connectionLabelSchema = z.object({
   extension_id: z.string(),
   connection: z.string(),
   kind: z.string(),
@@ -53,7 +53,7 @@ export const recordExportStatusSchema = z.object({
   connections: z.array(connectionLabelSchema).default([]),
 });
 
-export const exportStatusCountSchema = z.object({
+const exportStatusCountSchema = z.object({
   extension_id: z.string(),
   connection: z.string().nullable(),
   status: z.enum(exportStatuses),

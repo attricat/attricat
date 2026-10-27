@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { LEXICON_FILE_FORMAT_VERSION, PLURAL_CATEGORIES } from './constants';
 
-export const lexiconEntrySchema = z.object({
+const lexiconEntrySchema = z.object({
   key: z.string(),
   context: z.string().nullable(),
   language: z.string(),

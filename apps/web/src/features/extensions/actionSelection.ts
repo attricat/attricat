@@ -10,8 +10,7 @@ import {
 } from './constants';
 import { uniqueRecordIdsSchema } from './outletContextSchemas';
 
-export type SelectionSource =
-  (typeof selectionSources)[keyof typeof selectionSources];
+type SelectionSource = (typeof selectionSources)[keyof typeof selectionSources];
 
 /**
  * Saved records an action applies to, in display order. One blueprint

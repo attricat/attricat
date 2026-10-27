@@ -5,7 +5,7 @@ import type {
   FormAttributeValue,
   StatusTransitionAccess,
 } from './api';
-import { attributeContextFallbacks } from './constants';
+import { attributeContextFallbacks, statusCoverageAll } from './constants';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 
 export const STATUS_SCHEMA_KEY = 'x-attricat-status';
@@ -15,12 +15,12 @@ const codeSchema = z
   .max(128)
   .regex(/^[A-Za-z0-9_-]+$/);
 const coverageSchema = z.union([
-  z.literal('all'),
+  z.literal(statusCoverageAll),
   z.array(z.string().min(1).max(257)).min(1).max(500),
 ]);
 /** Attributes locked by a status or covered by its approval. */
 export type StatusCoverage = z.infer<typeof coverageSchema>;
-export const statusConfigurationSchema = z
+const statusConfigurationSchema = z
   .object({
     version: z.literal(1),
     options: z
@@ -247,7 +247,7 @@ export const statusCovers = (
   attributeCode: string,
   statusCode: string,
 ) =>
-  coverage === 'all'
+  coverage === statusCoverageAll
     ? attributeCode !== statusCode
     : coverage.includes(attributeCode);
 

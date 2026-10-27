@@ -1,6 +1,8 @@
-export const workflowRunStatus = {
-  completed: 'completed',
-  deadLetter: 'dead_letter',
+/** What started a workflow run. */
+export const workflowRunSources = {
+  event: 'event',
+  manual: 'manual',
+  schedule: 'schedule',
 } as const;
 
 export const workflowDetailTab = {
@@ -19,6 +21,9 @@ export const workflowRoutes = {
   detail: '/manage/workflows/$workflowId',
   newRevision: '/manage/workflows/$workflowId/revisions/$version/new',
 } as const;
+
+/** Longest idempotency key the run-now endpoint accepts. */
+export const maximumRunIdempotencyKeyLength = 128;
 
 export const compareSelectMinWidth = 220;
 export const runTableEmptyColSpan = 6;

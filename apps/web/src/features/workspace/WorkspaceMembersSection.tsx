@@ -35,6 +35,7 @@ import { ScopeFields } from './ScopeFields';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 import { assignableRolesOptions } from './queryOptions';
+import { Trash2Icon, ArrowRightLeftIcon } from 'lucide-react';
 
 export const WorkspaceMembersSection = ({
   canManage,
@@ -173,6 +174,7 @@ export const WorkspaceMembersSection = ({
                     onClick={() =>
                       revoke.mutate({ memberId: member.id, grantId: grant.id })
                     }
+                    startIcon={<Trash2Icon />}
                   >
                     {t('workspace.revoke', { role: grant.role_code })}
                   </Button>
@@ -182,6 +184,7 @@ export const WorkspaceMembersSection = ({
                   <Button
                     disabled={transfer.isPending}
                     onClick={() => transfer.mutate(member.id)}
+                    startIcon={<ArrowRightLeftIcon />}
                   >
                     {t('workspace.transferOwnership')}
                   </Button>
@@ -201,7 +204,9 @@ export const WorkspaceMembersSection = ({
           sx={{ p: 2 }}
         >
           <Stack spacing={2}>
-            <Typography variant="h6">{t('workspace.addRoleGrant')}</Typography>
+            <Typography component="h2" variant="h6">
+              {t('workspace.addRoleGrant')}
+            </Typography>
             <form.Field name="member_id">
               {(field) => (
                 <TextField

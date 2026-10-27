@@ -2,6 +2,7 @@ import { Box, MenuItem, Tab, Tabs, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
 import { defaultContextCode } from '../../contexts/constants';
+import { contextLabel } from '../../contexts/defaultContext';
 import {
   CONTEXT_MENU_WIDTH,
   CONTEXT_TAB_LIMIT,
@@ -68,11 +69,7 @@ export const RecordContextPicker = ({
           <Tab
             disabled={disabled}
             key={context.id}
-            label={
-              context.code === defaultContextCode
-                ? t('records.default')
-                : context.code
-            }
+            label={contextLabel(t, context.code)}
             sx={{
               minHeight: CONTEXT_TAB_MIN_HEIGHT,
               minWidth: 0,
@@ -95,9 +92,7 @@ export const RecordContextPicker = ({
         >
           {remainingContexts.map((context) => (
             <MenuItem key={context.id} value={context.id}>
-              {context.code === defaultContextCode
-                ? t('records.default')
-                : context.code}
+              {contextLabel(t, context.code)}
             </MenuItem>
           ))}
         </TextField>

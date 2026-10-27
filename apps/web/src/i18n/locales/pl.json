@@ -355,8 +355,7 @@
       "notRunRecords_one": "Pokaż pominięty rekord",
       "notRunRecords_few": "Pokaż pominięte rekordy ({{count}})",
       "notRunRecords_many": "Pokaż pominięte rekordy ({{count}})",
-      "notRunRecords_other": "Pokaż pominięte rekordy ({{count}})",
-      "recordWithoutLabel": "Rekord {{id}}"
+      "notRunRecords_other": "Pokaż pominięte rekordy ({{count}})"
     },
     "showRecordConversations": "Pokaż rozmowy o rekordach",
     "openRecord": "Otwórz rekord"
@@ -409,7 +408,8 @@
     "metadata": "Metadane",
     "invalidMetadataJson": "Metadane muszą być poprawnym JSON-em.",
     "metadataMustBeObject": "Metadane muszą być obiektem JSON.",
-    "invalidCode": "Używaj tylko liter, cyfr, łączników i podkreśleń"
+    "invalidCode": "Używaj tylko liter, cyfr, łączników i podkreśleń",
+    "defaultContext": "Domyślny"
   },
   "dataHealth": {
     "title": "Stan danych",
@@ -637,7 +637,6 @@
       "findings": "Jakość danych",
       "noFindings": "Brak otwartych problemów w tym kontekście."
     },
-    "default": "Domyślny",
     "loadingContexts": "Wczytywanie kontekstów...",
     "resolvingValues": "Rozwiązywanie wartości...",
     "viewExtensionContent": "Wyświetl zawartość rozszerzenia dla {{attribute}}",
@@ -693,8 +692,7 @@
       "channelsNotReady": "Niegotowe dla: {{channels}}"
     },
     "checks": {
-      "violationInContexts": "{{message}} (konteksty: {{contexts}})",
-      "publicationBlocked": "Publikację w kanale {{context}} blokują niespełnione kontrole."
+      "violationInContexts": "{{message}} (konteksty: {{contexts}})"
     },
     "statusConditionsUnmet": "Zablokowane: {{conditions}}",
     "valueTypes": {
@@ -1027,7 +1025,6 @@
       "title": "Niezapisane zmiany",
       "replaceQuestion": "Zastąpić niezapisane zmiany?",
       "discardQuestion": "Odrzucić niezapisane zmiany?",
-      "keepEditing": "Kontynuuj edycję",
       "replace": "Zastąp zmiany",
       "discard": "Odrzuć zmiany"
     },
@@ -1281,7 +1278,6 @@
     },
     "recordActionsFor": "Akcje rekordu {{recordId}}",
     "viewRecordIdWithId": "Wyświetl identyfikator rekordu {{recordId}}",
-    "default": "Domyślny",
     "collapse": "Zwiń {{item}}",
     "expand": "Rozwiń {{item}}",
     "searchInfo": "Informacje o wyszukiwaniu",
@@ -1341,7 +1337,6 @@
     "attributeFilterPill": "{{field}} {{operator}} {{value}}",
     "schemaVersionStatus": "v{{version}} · {{status}}",
     "unsortableColumnLabel": "{{column}}. {{reason}}",
-    "publicationContextUnavailable": "Kontekst publikacji jest niedostępny",
     "selectedCountForBlueprint_one": "Wybrano {{count}} rekord · {{blueprint}}",
     "selectedCountForBlueprint_few": "Wybrano {{count}} rekordy · {{blueprint}}",
     "selectedCountForBlueprint_many": "Wybrano {{count}} rekordów · {{blueprint}}",
@@ -1452,13 +1447,6 @@
     "compareRevision": "Wersja do porównania",
     "runDiagnostics": "Diagnostyka uruchomień",
     "status": "Stan",
-    "statuses": {
-      "pending": "Oczekujący",
-      "leased": "Przydzielony",
-      "completed": "Ukończony",
-      "dead_letter": "Martwy list",
-      "cancelled": "Anulowany"
-    },
     "created": "Utworzono",
     "published": "Opublikowano",
     "definitionHash": "Skrót definicji",
@@ -1722,7 +1710,11 @@
     "actionDialogSelection_few": "Dotyczy {{count}} zaznaczonych rekordów.",
     "actionDialogSelection_many": "Dotyczy {{count}} zaznaczonych rekordów.",
     "actionDialogSelection_other": "Dotyczy {{count}} zaznaczonych rekordów.",
-    "actionDialogSavedData": "Używane są wyłącznie zapisane dane."
+    "actionDialogSavedData": "Używane są wyłącznie zapisane dane.",
+    "noInstalled": "Brak zainstalowanych rozszerzeń",
+    "noInstalledDescription": "Zainstaluj rozszerzenie z rynku lub prześlij archiwum, aby dodać strony, akcje i integracje.",
+    "noMarketplaceExtensions": "Brak dostępnych rozszerzeń",
+    "loadingExtensions": "Wczytywanie rozszerzeń..."
   },
   "workspace": {
     "memberSummary": "{{email}} · {{state}}",
@@ -1781,6 +1773,7 @@
     "fixed": "(stała)",
     "createCustomRole": "Utwórz własną rolę",
     "createRole": "Utwórz rolę",
+    "expiresAtHelp": "Strefa czasowa: {{zone}}.",
     "invitationExpiry": "Data wygaśnięcia zaproszenia musi przypadać w przyszłości.",
     "notAuthorizedInvitations": "Nie masz uprawnień do zarządzania zaproszeniami.",
     "expires": "wygasa <timestamp/>",
@@ -1842,7 +1835,8 @@
     "bulkEditLimitHelp": "Agent musi zawęzić propozycję, która obejmuje więcej rekordów.",
     "bulkEditLimitInvalid": "Wpisz liczbę całkowitą od 1 do {{max}}.",
     "saveAgentSettings": "Zapisz ustawienia agenta",
-    "agentSettingsSaved": "Zapisano ustawienia agenta."
+    "agentSettingsSaved": "Zapisano ustawienia agenta.",
+    "notAuthorizedTeams": "Nie masz uprawnień do zarządzania zespołami."
   },
   "views": {
     "tabHasErrors": "Zawiera pola wymagające uwagi",
@@ -1898,6 +1892,14 @@
     "revisionStatuses": {
       "draft": "Szkic",
       "published": "Opublikowany"
+    },
+    "recordWithoutLabel": "Rekord {{id}}",
+    "runStatuses": {
+      "pending": "Oczekujący",
+      "leased": "Przydzielony",
+      "completed": "Ukończony",
+      "dead_letter": "Martwy list",
+      "cancelled": "Anulowany"
     }
   },
   "inspector": {
@@ -2033,16 +2035,9 @@
       "acknowledged": "Potwierdzone",
       "resolved": "Rozwiązane"
     },
-    "runStatuses": {
-      "pending": "Oczekuje",
-      "running": "W toku",
-      "completed": "Zakończony",
-      "failed": "Niepowodzenie"
-    },
     "ruleRevision": "{{name}} v{{version}}",
     "unknownRule": "Reguła {{id}} v{{version}}",
     "allRecords": "Wszystkie rekordy",
-    "recordWithoutLabel": "Rekord {{id}}",
     "recordFindings": {
       "aboutField": "(pole: <field/>)",
       "title": "Jakość danych",

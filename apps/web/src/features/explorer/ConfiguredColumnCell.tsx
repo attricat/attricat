@@ -6,10 +6,7 @@ import type { ExtensionContribution } from '../extensions/api';
 import { resolveValueRenderer } from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import { NotSetValue } from '../views/components/values/NotSetValue';
-import {
-  explorerExtensionContextVersion,
-  relationshipPathSeparator,
-} from './constants';
+import { relationshipPathSeparator } from './constants';
 import {
   isRelationshipPath,
   usesExtensionRenderer,
@@ -17,6 +14,7 @@ import {
 } from './explorerTableColumns';
 import { ExtensionTableCell } from './ExtensionTableCell';
 import { explorerTableCellContextSchema } from './schemas';
+import { supportedOutletContextVersion } from '../extensions/constants';
 
 /**
  * Search projections contain the related target's scalar but not its
@@ -70,7 +68,7 @@ export const ConfiguredColumnCell = ({
     });
   if (!renderer || !usesExtensionRenderer(column)) return fallback;
   const context = explorerTableCellContextSchema.parse({
-    context_version: explorerExtensionContextVersion,
+    context_version: supportedOutletContextVersion,
     column: {
       field: column.field,
       label: column.label ?? null,

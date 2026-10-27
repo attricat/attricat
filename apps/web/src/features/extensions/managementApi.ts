@@ -9,6 +9,7 @@ import {
   workspaceExtensionLayoutSchema,
   type WorkspaceExtensionLayout,
 } from './schemas';
+import { extensionsApiPath, extensionPath } from './apiPaths';
 
 export type { ExtensionDetail, ExtensionInstallation } from './schemas';
 
@@ -20,7 +21,7 @@ export const registryDetails = (owner: string, repository: string) =>
     registryDetailsSchema,
   );
 export const installedExtensions = () =>
-  request('/api/extensions', z.array(installationSchema));
+  request(extensionsApiPath, z.array(installationSchema));
 export const workspaceExtensionLayout = () =>
   request('/api/workspace/extension-layout', workspaceExtensionLayoutSchema);
 export const updateWorkspaceExtensionLayout = (
@@ -31,11 +32,11 @@ export const updateWorkspaceExtensionLayout = (
     jsonRequest('PUT', layout),
   );
 export const extensionDetail = (id: string) =>
-  request(`/api/extensions/${encodeURIComponent(id)}`, detailSchema);
+  request(extensionPath(id), detailSchema);
 export const installExtension = (input: ExtensionReleaseReference) =>
-  request('/api/extensions', installationSchema, jsonRequest('POST', input));
+  request(extensionsApiPath, installationSchema, jsonRequest('POST', input));
 export const sideloadExtension = (archive: File) =>
-  request('/api/extensions/sideload', installationSchema, {
+  request(`${extensionsApiPath}/sideload`, installationSchema, {
     method: 'POST',
     headers: { 'Content-Type': 'application/zstd' },
     body: archive,
@@ -53,13 +54,13 @@ export const upgradeExtension = (
   input: ExtensionReleaseReference,
 ) =>
   request(
-    `/api/extensions/${encodeURIComponent(id)}/upgrade`,
+    `${extensionPath(id)}/upgrade`,
     installationSchema,
     jsonRequest('POST', input),
   );
 export const configureExtension = (id: string, configuration: unknown) =>
   request(
-    `/api/extensions/${encodeURIComponent(id)}/configure`,
+    `${extensionPath(id)}/configure`,
     installationSchema,
     jsonRequest('PUT', { configuration }),
   );
@@ -69,7 +70,7 @@ export const grantExtension = (
   grant_id: string,
 ) =>
   requestNoContent(
-    `/api/extensions/${encodeURIComponent(id)}/grants`,
+    `${extensionPath(id)}/grants`,
     jsonRequest('POST', { grant_kind, grant_id }),
   );
 export const revokeExtensionGrant = (
@@ -78,7 +79,7 @@ export const revokeExtensionGrant = (
   grant: string,
 ) =>
   requestNoContent(
-    `/api/extensions/${encodeURIComponent(id)}/grants/${encodeURIComponent(kind)}/${encodeURIComponent(grant)}`,
+    `${extensionPath(id)}/grants/${encodeURIComponent(kind)}/${encodeURIComponent(grant)}`,
     { method: 'DELETE' },
   );
 export const lifecycleExtension = (
@@ -86,13 +87,13 @@ export const lifecycleExtension = (
   action: ExtensionLifecycleAction,
 ) =>
   request(
-    `/api/extensions/${encodeURIComponent(id)}/${action}`,
+    `${extensionPath(id)}/${action}`,
     installationSchema,
     action === 'quarantine'
       ? jsonRequest('POST', { diagnostic_code: manualQuarantineDiagnosticCode })
       : { method: 'POST' },
   );
 export const removeExtension = (id: string) =>
-  requestNoContent(`/api/extensions/${encodeURIComponent(id)}`, {
+  requestNoContent(extensionPath(id), {
     method: 'DELETE',
   });

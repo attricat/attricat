@@ -1,7 +1,7 @@
 import { Box, Link, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { personalApiTokensHref } from './constants';
+import { tokensPath } from '../profile/constants';
 import { sessionOptions } from '../auth/queryOptions';
 
 export const InspectorSessionPane = () => {
@@ -29,9 +29,7 @@ export const InspectorSessionPane = () => {
           <Typography color="text.secondary" variant="caption">
             {t('inspector.tokenHelp')}
           </Typography>
-          <Link href={personalApiTokensHref}>
-            {t('inspector.manageTokens')}
-          </Link>
+          <Link href={tokensPath}>{t('inspector.manageTokens')}</Link>
         </>
       ) : (
         <Typography variant="body2">{t('inspector.notSignedIn')}</Typography>

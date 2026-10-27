@@ -23,8 +23,13 @@ export const PLURAL_CATEGORIES = [
   'many',
   'other',
 ] as const;
-export const LEXICON_IMPORT_MODES = ['merge', 'replace'] as const;
-export type LexiconImportMode = (typeof LEXICON_IMPORT_MODES)[number];
+/** Whether an import adds to the workspace lexicon or replaces it. */
+export const lexiconImportModes = {
+  merge: 'merge',
+  replace: 'replace',
+} as const;
+export type LexiconImportMode =
+  (typeof lexiconImportModes)[keyof typeof lexiconImportModes];
 export const LEXICON_SOURCES = {
   workspace: 'workspace',
   solutionPack: 'solution_pack',

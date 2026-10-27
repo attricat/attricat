@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, Navigate, useNavigate } from '@tanstack/react-router';
+import { Navigate, useNavigate } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -23,6 +23,7 @@ import {
 } from './api';
 import { authQueryKeys } from './queryKeys';
 import { takeReturnLocation } from './returnLocation';
+import { RouterButton } from '../../components/RouterLink';
 
 const devLoginDefaults = import.meta.env.DEV
   ? {
@@ -79,6 +80,7 @@ const WorkspaceLoginForm = ({
   // Navigating is part of the submission, so the form stays disabled until
   // the next step opens.
   const discover = useExclusiveMutation({
+    meta: { toast: false },
     mutationFn: async (loginIdentifier: string) => {
       const workspace = await discoverWorkspace(loginIdentifier);
       await navigate({
@@ -96,7 +98,9 @@ const WorkspaceLoginForm = ({
   });
   return (
     <LoginShell onSubmit={() => form.handleSubmit()}>
-      <Typography variant="h5">{t('auth.signIn')}</Typography>
+      <Typography component="h1" variant="h5">
+        {t('auth.signIn')}
+      </Typography>
       <Typography>{t('auth.workspacePrompt')}</Typography>
       <form.Field name="loginIdentifier">
         {(field) => (
@@ -139,6 +143,7 @@ const PasswordLoginForm = ({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const signIn = useExclusiveMutation({
+    meta: { toast: false },
     mutationFn: async ({
       email,
       password,
@@ -164,15 +169,17 @@ const PasswordLoginForm = ({
   });
   return (
     <LoginShell onSubmit={() => form.handleSubmit()}>
-      <Typography variant="h5">{t('auth.signInTo', { identifier })}</Typography>
+      <Typography component="h1" variant="h5">
+        {t('auth.signInTo', { identifier })}
+      </Typography>
       {samples?.demo ? (
         <Alert severity="info" sx={{ mb: 2 }}>
           {t('auth.demoNotice')}
         </Alert>
       ) : (
-        <Button component={Link} to="/login" variant="text">
+        <RouterButton to="/login" variant="text">
           {t('auth.changeWorkspace')}
-        </Button>
+        </RouterButton>
       )}
       {samples && (
         <form.Subscribe selector={(state) => state.values.email}>
@@ -228,9 +235,9 @@ const PasswordLoginForm = ({
       </form.Field>
       <ApiErrorAlert error={signIn.error} />
       {!samples?.demo && (
-        <Button component={Link} to="/password-reset" variant="text">
+        <RouterButton to="/password-reset" variant="text">
           {t('auth.forgotPassword')}
-        </Button>
+        </RouterButton>
       )}
       <Button disabled={submitting} type="submit" variant="contained">
         {t('auth.signIn')}

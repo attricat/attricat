@@ -11,6 +11,7 @@ import { BlueprintIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
 import { useCanOn } from '../auth/useCan';
 import { capabilities, accessTargetKinds } from '../auth/capabilities';
+import { monoFontFamily } from '../../app/theme';
 
 export const BlueprintDetailHeader = ({
   blueprint,
@@ -111,7 +112,7 @@ export const BlueprintDetailHeader = ({
       </Stack>
       <Typography color="text.secondary" sx={{ mt: 1.5 }}>
         {t('blueprints.id')}:{' '}
-        <Box component="span" sx={{ fontFamily: 'monospace' }}>
+        <Box component="span" sx={{ fontFamily: monoFontFamily }}>
           {blueprint.id}
         </Box>
         {' · '}

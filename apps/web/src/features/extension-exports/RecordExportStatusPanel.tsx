@@ -1,6 +1,5 @@
 import { recordExportStatusOptions } from './queryOptions';
 import {
-  Alert,
   Box,
   Button,
   CircularProgress,
@@ -12,7 +11,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { EyeIcon, RotateCcwIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -20,11 +19,9 @@ import { EmptyState } from '../../components/EmptyState';
 import { ExportIcon } from '../../components/systemIcons';
 import { Timestamp } from '../../time/Timestamp';
 import { useCan } from '../auth/useCan';
-import { retryExports } from './api';
 import { retryableExportStatuses } from './constants';
 import { ExportPreviewDialog } from './ExportPreviewDialog';
 import { ExportStatusChip } from './ExportStatusChip';
-import { extensionExportQueryKeys } from './queryKeys';
 import type {
   ConnectionLabel,
   ExportDestination,
@@ -32,8 +29,10 @@ import type {
 } from './schemas';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
-import { randomUuid } from '../../components/randomUuid';
 import { formatPushError } from './pushErrors';
+import { emptyValuePlaceholder } from '../../components/placeholders';
+import { useRetryExports } from './useRetryExports';
+import { RetryResultAlerts } from './RetryResultAlerts';
 
 type Row = {
   key: string;
@@ -108,7 +107,6 @@ const exportRows = (
  */
 export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
-  const client = useQueryClient();
   const canManage = useCan(capabilities.extensionsManage);
   // A preview runs an extension command with the extension's catalog
   // access, so it needs workspace-wide read access and command access.
@@ -125,16 +123,7 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
   const status = useQuery({
     ...recordExportStatusOptions(recordId),
   });
-  const retry = useMutation({
-    mutationFn: ({ mapping, key }: { mapping: ExportMapping; key: string }) =>
-      retryExports(mapping.extension_id, {
-        connection: mapping.connection,
-        recordIds: [recordId],
-        idempotencyKey: key,
-      }),
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: extensionExportQueryKeys.all }),
-  });
+  const retry = useRetryExports();
   if (status.isPending) {
     return <CircularProgress aria-label={t('extensionExports.loading')} />;
   }
@@ -157,16 +146,7 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
   }
   return (
     <Box>
-      <ApiErrorAlert error={retry.error} sx={{ mb: 2 }} />
-      {!!retry.data?.job_errors.length && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          {t('extensionExports.retryJobErrors', {
-            messages: retry.data.job_errors
-              .map((error) => error.message)
-              .join('; '),
-          })}
-        </Alert>
-      )}
+      <RetryResultAlerts retry={retry} sx={{ mb: 2 }} />
       <Table size="small">
         <TableHead>
           <TableRow>
@@ -208,13 +188,13 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
                   </Stack>
                 </TableCell>
                 <TableCell sx={{ overflowWrap: 'anywhere' }}>
-                  {mapping?.external_id ?? '—'}
+                  {mapping?.external_id ?? emptyValuePlaceholder}
                 </TableCell>
                 <TableCell>
                   {mapping?.synced_at ? (
                     <Timestamp value={mapping.synced_at} />
                   ) : (
-                    '—'
+                    emptyValuePlaceholder
                   )}
                 </TableCell>
                 <TableCell align="right">
@@ -250,7 +230,13 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
                           size="small"
                           startIcon={<RotateCcwIcon />}
                           onClick={() =>
-                            retry.mutate({ mapping, key: randomUuid() })
+                            retry.mutate({
+                              extensionId: mapping.extension_id,
+                              selection: {
+                                connection: mapping.connection,
+                                recordIds: [recordId],
+                              },
+                            })
                           }
                         >
                           {t('extensionExports.retry')}

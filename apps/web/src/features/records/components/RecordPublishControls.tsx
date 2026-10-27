@@ -18,6 +18,7 @@ import {
 } from '@mui/material';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { emptyValuePlaceholder } from '../../../components/placeholders';
 import { publicationStatuses } from '../constants';
 import { publicationReadinessText } from '../checkViolations';
 import { compactIconSize } from '../../../components/iconSizes';
@@ -70,7 +71,8 @@ export const RecordPublishControls = ({
             publication.published_at
               ? t('records.publication.publishedDetails', {
                   publishedAt: formatWithUtc(publication.published_at),
-                  publishedBy: publication.published_by_user_id ?? '—',
+                  publishedBy:
+                    publication.published_by_user_id ?? emptyValuePlaceholder,
                 })
               : ''
           }

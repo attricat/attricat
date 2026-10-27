@@ -50,7 +50,9 @@ export const ManagementDashboardPage = () => {
                 {createElement(item.icon, {
                   color: theme.palette.primary.main,
                 })}
-                <Typography variant="h6">{t(item.labelKey)}</Typography>
+                <Typography component="h2" variant="h6">
+                  {t(item.labelKey)}
+                </Typography>
                 <Typography color="text.secondary">
                   {t(item.descriptionKey)}
                 </Typography>

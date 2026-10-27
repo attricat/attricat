@@ -3,10 +3,6 @@ import { z } from 'zod';
 import { requestText } from '../../api/request';
 import { toast } from '../../components/toast';
 import {
-  maximumNotificationMessageLength,
-  notificationSeverities,
-} from '../web-components/constants';
-import {
   cancelExtensionRun,
   extensionRunArtifactUrl,
   getExtensionRun,
@@ -27,7 +23,6 @@ import {
   type ExtensionContribution,
 } from './api';
 import {
-  actionDialogOutlet,
   blueprintRevisionPathPattern,
   attricatReadPathPattern,
   controlCharacterRanges,
@@ -40,13 +35,15 @@ import {
   maximumExtensionRequestBytes,
   maximumExtensionResponseBytes,
   maximumExtensionCommandIdLength,
+  maximumNotificationMessageLength,
+  notificationSeverities,
   maximumExtensionStorageKeyBytes,
   maximumOperationIdempotencyKeyLength,
   operationIdempotencyKeyPattern,
   operationMethodPrefix,
   contributionKinds,
+  extensionOutlets,
 } from './constants';
-import { exportMappingExtensionOutlet } from '../extension-exports/constants';
 import { refreshCurrentRecord } from './refreshRecord';
 import { jsonByteLength, utf8ByteLength } from './utf8';
 
@@ -197,7 +194,7 @@ const frameSelection = ({
 }: BrokerDependencies) => {
   if (
     !isSelectionContribution(contribution) &&
-    contribution.outlet !== actionDialogOutlet
+    contribution.outlet !== extensionOutlets.actionDialog
   )
     throw new Error(extensionProtocolErrors.selectionUnavailable);
   const selection = parseSelectionContext(currentContext());
@@ -336,7 +333,7 @@ export const handleBrokerRequest = async (
     method === extensionBrokerMethods.command &&
     // Panels are read-only, except the operator-only export mapping editor.
     (contribution.kind !== contributionKinds.panel ||
-      contribution.outlet === exportMappingExtensionOutlet) &&
+      contribution.outlet === extensionOutlets.exportMapping) &&
     can(extensionCapabilities.commands)
   )
     return handleCommand(payload, dependencies);
@@ -360,7 +357,7 @@ export const handleBrokerRequest = async (
   }
   if (
     method === extensionBrokerMethods.dialogClose &&
-    contribution.outlet === actionDialogOutlet
+    contribution.outlet === extensionOutlets.actionDialog
   ) {
     dependencies.closeActionDialog();
     return null;

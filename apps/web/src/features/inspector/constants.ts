@@ -21,8 +21,6 @@ export const inspectorPaneOrder: readonly InspectorPaneId[] = [
   inspectorPaneIds.session,
 ];
 
-export const personalApiTokensHref = '/profile/personal-access-tokens';
-
 /** Shown in place of a query count the API did not report. */
 export const unknownQueryCount = '?';
 export const timingDurationFractionDigits = 2;

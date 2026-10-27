@@ -7,16 +7,16 @@
 
 export type TomlPath = (string | number)[];
 export type TextRange = { start: number; end: number };
-export type TomlScalar = string | number | boolean;
+type TomlScalar = string | number | boolean;
 
-export type TomlEntry = {
+type TomlEntry = {
   path: TomlPath;
   /** The key, or the element itself for array items. */
   range: TextRange;
   value?: TomlScalar;
 };
 
-export type TomlHeader = {
+type TomlHeader = {
   array: boolean;
   path: TomlPath;
   range: TextRange;

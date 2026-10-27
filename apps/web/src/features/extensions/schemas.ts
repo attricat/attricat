@@ -2,7 +2,6 @@ import { z } from 'zod';
 import {
   contributionKinds,
   contributionKeyPattern,
-  extensionOutletNames,
   grantKinds,
   installationStates,
   layoutValidationMessages,
@@ -11,11 +10,11 @@ import {
   maximumExtensionStorageListLimit,
   minimumContributionKeyLength,
   navigationGroups,
-  navigationOutlet,
   supportedWorkspaceLayoutVersion,
+  extensionOutlets,
 } from './constants';
 
-export const extensionOutletSchema = z.enum(extensionOutletNames);
+export const extensionOutletSchema = z.enum(extensionOutlets);
 
 const contributionKeySchema = z
   .string()
@@ -108,7 +107,7 @@ export const workspaceExtensionLayoutSchema = z
         > = {};
         for (const [outlet, value] of Object.entries(outlets)) {
           const result =
-            outlet === navigationOutlet
+            outlet === extensionOutlets.navigation
               ? navigationLayoutSchema.safeParse(value)
               : baseOutletLayoutSchema.safeParse(value);
           if (!result.success) {

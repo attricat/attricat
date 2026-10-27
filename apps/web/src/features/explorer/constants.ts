@@ -45,11 +45,6 @@ export const explorerSortFields = {
   publicationStatus: 'publication_status',
 } as const;
 
-export const publicationStatuses = {
-  notPublished: 'not_published',
-  published: 'published',
-} as const;
-
 export const relationshipPathSortErrorCode =
   'relationship_path_sort_requires_single_result_version' satisfies ApiErrorCode;
 
@@ -70,15 +65,7 @@ export const builtInConfigurableColumnIds: string[] = [
 ];
 
 // Extension integration literals.
-export const explorerExtensionContextVersion = 1;
-export const explorerExtensionOutlets = {
-  action: 'explorer_action',
-  bulkAction: 'explorer_bulk_action',
-  rowAction: 'explorer_row_action',
-  tableCell: 'explorer_table_cell',
-} as const;
 export const explorerTableCellCapability = 'client.explorer_table_cell';
-export const embeddedExtensionKind = 'embedded';
 export const attricatRendererPrefix = 'attricat.';
 export const extensionCellStartTimeout = 1_500;
 // `flexRender` is only called for virtual rows. This bounded allocator keeps a
@@ -124,7 +111,6 @@ export const selectedRecordListMaxHeight = 360;
 export const selectedRecordListWidth = 360;
 export const agentInstructionsRows = 3;
 export const pendingVersionPlaceholder = '…';
-export const emptyValuePlaceholder = '—';
 export const loadMoreRowKey = 'load-more';
 // Sticky header cells must stay above sticky body cells while scrolling.
 export const stickyHeaderLayer = 3;

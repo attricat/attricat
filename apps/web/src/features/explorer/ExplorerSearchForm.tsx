@@ -29,6 +29,7 @@ import { smallIconSize } from '../../components/iconSizes';
 import { SearchScopeIcon } from '../../components/systemIcons';
 import type { AttributeContext } from '../contexts/api';
 import { defaultContextCode } from '../contexts/constants';
+import { contextLabel } from '../contexts/defaultContext';
 import type { Blueprint, BlueprintWithAttributes } from '../records/api';
 import {
   blueprintSelectWidth,
@@ -158,8 +159,6 @@ export const ExplorerSearchForm = ({
   const historicalRevisions = revisions
     .filter((revision) => revision.version !== currentVersion)
     .sort((left, right) => right.version - left.version);
-  const contextLabel = (code: string) =>
-    code === defaultContextCode ? t('explorer.default') : code;
   const contextChoice = onContextChange && contexts.length > 1;
   const versionScope = searchFormValues(search, currentVersion).versionScope;
   const versionLabel =
@@ -173,7 +172,7 @@ export const ExplorerSearchForm = ({
   const scopeLabel = t('explorer.searchScopeSummary', {
     scope: contextChoice
       ? t('explorer.searchScopeParts', {
-          context: contextLabel(contextCode),
+          context: contextLabel(t, contextCode),
           version: versionLabel,
         })
       : versionLabel,
@@ -368,7 +367,7 @@ export const ExplorerSearchForm = ({
             >
               {contexts.map((context) => (
                 <MenuItem key={context.id} value={context.code}>
-                  {contextLabel(context.code)}
+                  {contextLabel(t, context.code)}
                 </MenuItem>
               ))}
             </TextField>
