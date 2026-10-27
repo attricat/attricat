@@ -180,7 +180,9 @@ pub(crate) enum ApprovalCommand {
 const CONVERSATIONS_PATH: &str = "/agent/conversations";
 /// The event that ends a run's stream.
 const TERMINAL_EVENT: &str = "terminal";
-/// The event the server sends when it stops a stream abnormally.
+/// The event name of both a failed run's stored error, which has an id, and
+/// the server's own notice that it stopped the stream abnormally, which has
+/// none.
 const ERROR_EVENT: &str = "error";
 /// Pause before resuming a stream the server closed before the run ended.
 const STREAM_RECONNECT_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
@@ -351,7 +353,7 @@ pub(crate) async fn follow_run(
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|error| CliError::Transport(error.to_string()))?;
             for event in parser.push(&chunk) {
-                if event.event.as_deref() == Some(ERROR_EVENT) {
+                if event.event.as_deref() == Some(ERROR_EVENT) && event.id.is_none() {
                     return Err(CliError::Transport(event.data));
                 }
                 print_line(&event.data)?;

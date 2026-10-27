@@ -284,7 +284,10 @@ lists are newest first: pass the last item's `created_at` and `id` as
 
 `agent run events` and `agent message send --follow` print one JSON line per
 server-sent run event until the run's `terminal` event, reconnecting with
-`Last-Event-ID` if the server ends the stream first.
+`Last-Event-ID` if the server ends the stream first. A failed run's stored
+`error` event (it has an event id) is printed like any other; only an `error`
+event without an id, the server's notice that the stream itself failed, ends
+the command with `request_failed`.
 
 
 ## Teams and assignments

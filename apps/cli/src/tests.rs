@@ -2645,6 +2645,54 @@ async fn agent_run_events_resume_after_the_last_event_until_terminal() {
     server.abort();
 }
 
+/// Serves fixed SSE bodies for one run's events, one per connection, and
+/// returns the API pointed at it.
+async fn sse_server(bodies: Vec<&'static str>) -> (Api, tokio::task::JoinHandle<()>) {
+    use std::sync::{Arc, Mutex};
+
+    let bodies = Arc::new(Mutex::new(bodies.into_iter()));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = axum::Router::new().route(
+        "/agent/runs/{run_id}/events",
+        axum::routing::get(move || {
+            let body = bodies.lock().unwrap().next().expect("no further stream");
+            async move {
+                (
+                    [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                    body,
+                )
+            }
+        }),
+    );
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let api = Api::new(
+        Client::new(),
+        Url::parse(&format!("http://{address}")).unwrap(),
+    );
+    (api, server)
+}
+
+#[tokio::test]
+async fn agent_run_events_print_a_failed_runs_error_event_and_continue_to_terminal() {
+    let (api, server) = sse_server(vec![
+        "id: 7\nevent: error\ndata: {\"type\":\"error\"}\n\nid: 8\nevent: terminal\ndata: {\"status\":\"failed\"}\n\n",
+    ])
+    .await;
+    assert_eq!(
+        follow_run(&api, Uuid::from_u128(1), None).await.unwrap(),
+        ""
+    );
+    let (api2, server2) =
+        sse_server(vec!["event: error\ndata: agent run event stream failed\n\n"]).await;
+    assert!(matches!(
+        follow_run(&api2, Uuid::from_u128(1), None).await,
+        Err(CliError::Transport(message)) if message == "agent run event stream failed"
+    ));
+    server.abort();
+    server2.abort();
+}
+
 #[tokio::test]
 async fn agent_commands_build_requests() {
     let id = "00000000-0000-4000-8000-000000000001";
