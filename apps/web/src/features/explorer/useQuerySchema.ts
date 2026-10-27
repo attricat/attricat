@@ -82,5 +82,7 @@ export const useQuerySchema = (
     [blueprints, lexiconRevision],
   );
   const targetsLoading = results.some((result) => result.isFetching);
-  return { schema, blueprintNames, targetsLoading };
+  // A target that never loaded leaves paths through it unresolved.
+  const targetsError = results.find((result) => !result.data)?.error;
+  return { schema, blueprintNames, targetsError, targetsLoading };
 };
