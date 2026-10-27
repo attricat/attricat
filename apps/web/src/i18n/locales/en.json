@@ -804,6 +804,9 @@
       "empty": "No conversations yet",
       "emptyDescription": "Ask the agent about this record to start one. Everyone who can read the record sees its conversations.",
       "openPage": "Open on the Agents page"
+    },
+    "coreSystemTags": {
+      "needsAttention": "Needs attention"
     }
   },
   "exports": {

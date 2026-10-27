@@ -856,6 +856,9 @@
       "empty": "Brak rozmów",
       "emptyDescription": "Zapytaj agenta o ten rekord, aby rozpocząć rozmowę. Rozmowy o rekordzie widzi każdy, kto może go odczytać.",
       "openPage": "Otwórz na stronie Agenci"
+    },
+    "coreSystemTags": {
+      "needsAttention": "Wymaga uwagi"
     }
   },
   "exports": {

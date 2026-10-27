@@ -54,6 +54,8 @@ Etykiety list wyboru w `x-attricat-enum-labels` działają tak samo. Przetłumac
 
 [Tagi systemowe](/pl/builders/modeling/#tagi-systemowe-i-metadane) pochodzą z przepływów pracy, agentów, rozszerzeń i klientów API, a nie ze schematów, więc rzadko zawierają nawiasy klamrowe. Dlatego każdy tag jest wyszukiwany w leksykonie jako klucz: utwórz dla tagu `needs-review` wpis z kluczem `needs-review`, a strony rekordów, kolumna **Znaczniki systemowe** i lista filtra **Znacznik** w Przeglądarce oraz jego etykiety filtrów pokażą tłumaczenie, z takim samym zastępowaniem brakujących tłumaczeń jak w innych etykietach. Tag zawierający `{{` jest odczytywany jak etykieta, czyli jako tekst z odwołaniami. Wpisywany w filtrze **Znacznik** tekst jest dopasowywany do zapisanego tagu lub jego tłumaczenia. Filtry, zapisane wyszukiwania, API i eksporty nadal używają zapisanego tagu.
 
+Tagi ustawiane przez sam Attricat, takie jak `attricat.needs_attention`, są przetłumaczone na każdy język interfejsu („Wymaga uwagi”). Wpis w leksykonie z tagiem jako kluczem zastępuje to brzmienie w Twoim obszarze roboczym.
+
 [Raport](#brakujące-i-nieużywane-tłumaczenia) nie odczytuje tagów systemowych: tag bez tłumaczenia nie pojawia się jako nieprzetłumaczony, a wpis używany tylko przez tagi jest wymieniony jako osierocony i oznaczony jako **Nieużywane**.
 
 ## Składnia odwołań

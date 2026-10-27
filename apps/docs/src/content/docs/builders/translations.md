@@ -54,6 +54,8 @@ Choice labels in `x-attricat-enum-labels` work the same way. Status chips, the s
 
 [System tags](/builders/modeling/#system-tags-and-metadata) come from workflows, agents, extensions, and API clients rather than blueprints, so they rarely contain braces. Each tag is therefore looked up in the lexicon as a key itself: give the tag `needs-review` an entry with the key `needs-review`, and record pages, the Explorer's **System tags** column, the **Tag** filter list, and its filter pills show the translation, with the same fallback as other labels. A tag that contains `{{` is read as text with references instead, like a label. Typing in the **Tag** filter matches the stored tag or its translation. Filters, saved searches, the API, and exports keep the stored tag.
 
+Tags that Attricat sets itself, such as `attricat.needs_attention`, come translated into every interface language ("Needs attention"). A lexicon entry with the tag as its key replaces that wording in your workspace.
+
 The [report](#find-missing-and-unused-translations) does not read system tags: a tag without a translation is not listed as untranslated, and an entry used only by tags is listed as orphaned and marked **Unused**.
 
 ## Reference syntax
