@@ -7,6 +7,7 @@ import { attributeLabel } from '../recordDisplay';
 import { statusCodeLabel, statusOptionLabel, type StatusLock } from '../status';
 import { UnlockStatusDialog } from './UnlockStatusDialog';
 import { capabilities, accessTargetKinds } from '../../auth/capabilities';
+import { statusCoverageAll } from '../constants';
 
 type StatusLockNoticeProps = {
   locks: readonly StatusLock[];
@@ -61,7 +62,7 @@ export const StatusLockNotice = ({
           const status = attributeLabel(attribute);
           const value = statusOptionLabel(option);
           const locked =
-            option.lock === 'all'
+            option.lock === statusCoverageAll
               ? t('records.statusLock.all', {
                   attribute: status,
                   status: value,

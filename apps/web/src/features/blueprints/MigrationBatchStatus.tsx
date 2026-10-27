@@ -17,13 +17,14 @@ import { RefreshCwIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   completePercentage,
-  emptyValuePlaceholder,
   migrationBatchStatuses,
   migrationProgressMinWidth,
 } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import type { BlueprintMigrationBatchStatus as MigrationBatch } from './schemas';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { emptyValuePlaceholder } from '../../components/placeholders';
+import { monoFontFamily } from '../../app/theme';
 
 const statusColor = (status: MigrationBatch['status']) => {
   if (status === migrationBatchStatuses.completed) return 'success';
@@ -163,7 +164,7 @@ export const MigrationBatchStatus = ({
                       value={batch.completed_at}
                     />
                   </TableCell>
-                  <TableCell sx={{ fontFamily: 'monospace' }}>
+                  <TableCell sx={{ fontFamily: monoFontFamily }}>
                     {batch.id}
                   </TableCell>
                 </TableRow>

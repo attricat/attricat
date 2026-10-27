@@ -21,7 +21,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
 import { listWorkflowRuns } from './api';
-import { workflowRoutes, workflowRunStatus } from './constants';
+import { workflowRoutes } from './constants';
 import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
 import { EmptyState } from '../../components/EmptyState';
@@ -30,6 +30,8 @@ import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { workflowListOptions, workflowRunListOptions } from './queryOptions';
+import { runStatuses } from '../../api/runStatus';
+import { RunStatusChip } from '../../components/RunStatusChip';
 
 export const WorkflowsPage = () => {
   const { t } = useTranslation();
@@ -52,7 +54,7 @@ export const WorkflowsPage = () => {
       deadLetters: 0,
       latest: run,
     };
-    if (run.status === workflowRunStatus.deadLetter) summary.deadLetters += 1;
+    if (run.status === runStatuses.deadLetter) summary.deadLetters += 1;
     if (run.created_at > summary.latest.created_at) summary.latest = run;
     runSummaries.set(run.workflow_id, summary);
   }
@@ -153,12 +155,7 @@ export const WorkflowsPage = () => {
                           />
                         ) : summary ? (
                           <Stack spacing={0.25}>
-                            <Chip
-                              label={t(
-                                `workflows.statuses.${summary.latest.status}`,
-                              )}
-                              size="small"
-                            />
+                            <RunStatusChip status={summary.latest.status} />
                             <Typography
                               color="text.secondary"
                               variant="caption"

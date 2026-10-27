@@ -29,11 +29,7 @@ import { FieldRevealLink } from '../views/components/FieldRevealLink';
 import { useRevealField } from '../views/fieldReveal';
 import { useCan } from '../auth/useCan';
 import { recheckRecord, type Finding, type RuleRun } from './api';
-import {
-  ACTIVE_RULE_RUN_STATUSES,
-  findingStates,
-  RECORD_RULE_RUN_POLL_MS,
-} from './constants';
+import { findingStates, RECORD_RULE_RUN_POLL_MS } from './constants';
 import { ruleQueryKeys } from './queryKeys';
 import {
   recordFindingsOptions,
@@ -50,11 +46,12 @@ import {
 import { findingEvidenceSchema } from './schemas';
 import { capabilities } from '../auth/capabilities';
 import { findingMessage, type FindingAttribute } from './findingMessage';
+import { activeRunStatuses } from '../../api/runStatus';
+import { progressSizes } from '../../components/iconSizes';
 
 /** Lines up the messages beside severity chips of different lengths. */
 const severityChipMinWidth = 72;
-const isActive = (run: RuleRun) =>
-  ACTIVE_RULE_RUN_STATUSES.includes(run.status);
+const isActive = (run: RuleRun) => activeRunStatuses.includes(run.status);
 
 /** The latest finish among the runs, which changes whenever a run finishes. */
 const latestCompletion = (runs: readonly RuleRun[] | undefined) =>
@@ -302,7 +299,11 @@ export const RecordFindingsPanel = ({
         >
           {checking && (
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <CircularProgress aria-hidden enableTrackSlot size={16} />
+              <CircularProgress
+                aria-hidden
+                enableTrackSlot
+                size={progressSizes.compact}
+              />
               <Typography variant="body2" color="text.secondary" role="status">
                 {t('rules.recordFindings.checking')}
               </Typography>

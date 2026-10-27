@@ -13,7 +13,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useId, useRef, useState, type ChangeEvent } from 'react';
-import { monoFontFamily } from '../../../app/theme';
+import { focusRing, monoFontFamily } from '../../../app/theme';
 import { useTranslation } from 'react-i18next';
 import { attributeLabel } from '../../records/recordDisplay';
 import {
@@ -89,11 +89,7 @@ export const ColorEditor = ({
             height: COLOR_SWATCH_SIZE,
             position: 'relative',
             width: COLOR_SWATCH_SIZE,
-            '&:focus-within': {
-              outline: '2px solid',
-              outlineColor: 'primary.main',
-              outlineOffset: 2,
-            },
+            '&:focus-within': focusRing,
           }}
         >
           {/* The native picker sits invisibly over the swatch it sets. */}

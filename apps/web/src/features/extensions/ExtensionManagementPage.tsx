@@ -1,5 +1,5 @@
 import { Link, type ToOptions } from '@tanstack/react-router';
-import { Box, Button, Tab, Tabs } from '@mui/material';
+import { Box, Tab, Tabs } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -13,10 +13,11 @@ import { compactIconSize } from '../../components/iconSizes';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
-import { extensionManagementTabIds } from './constants';
+import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { ExtensionIcon } from '../../components/systemIcons';
 import { capabilities } from '../auth/capabilities';
 import { RequireCapability } from '../auth/RequireCapability';
+import { RouterButton } from '../../components/RouterLink';
 
 const extensionTabs = [
   {
@@ -51,6 +52,7 @@ export const ExtensionManagementPage = ({
 }: ExtensionManagementPageProps) => {
   const { t } = useTranslation();
   const canManage = useCan(capabilities.extensionsManage);
+  const tabId = useTabAccessibility();
 
   return (
     <RequireCapability capability={capabilities.extensionsRead}>
@@ -61,23 +63,21 @@ export const ExtensionManagementPage = ({
           description={t('extensions.description')}
           actions={
             canManage ? (
-              <Button
-                component={Link}
+              <RouterButton
                 startIcon={<UploadIcon />}
                 to="/manage/extensions/sideload"
               >
                 {t('extensions.uploadArchive')}
-              </Button>
+              </RouterButton>
             ) : undefined
           }
         />
         <Tabs aria-label={t('extensions.title')} sx={{ mb: 3 }} value={tab}>
           {extensionTabs.map((item, index) => (
             <Tab
-              aria-controls={extensionManagementTabIds.panel(index)}
+              {...tabId.tab(index)}
               component={Link}
               icon={<item.icon aria-hidden size={compactIconSize} />}
-              id={extensionManagementTabIds.tab(index)}
               key={item.to}
               label={t(item.label)}
               to={item.to}
@@ -85,13 +85,7 @@ export const ExtensionManagementPage = ({
             />
           ))}
         </Tabs>
-        <Box
-          aria-labelledby={extensionManagementTabIds.tab(tab)}
-          id={extensionManagementTabIds.panel(tab)}
-          role="tabpanel"
-        >
-          {children}
-        </Box>
+        <Box {...tabId.panel(tab)}>{children}</Box>
       </PageContainer>
     </RequireCapability>
   );

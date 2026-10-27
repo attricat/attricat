@@ -28,11 +28,11 @@ import { useCan } from '../auth/useCan';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { extensionExportStatus, retryExports } from './api';
 import {
-  exportMappingExtensionOutlet,
   exportStatuses,
   initialExportStatusFilter,
   retryableExportStatuses,
   type ExportStatus,
+  exportFilterMinWidth,
 } from './constants';
 import { extensionExportQueryKeys } from './queryKeys';
 import type { ManifestExports } from './schemas';
@@ -43,7 +43,10 @@ import { allConnections, countsByConnection } from './exportCounts';
 import { ExportCountsTable } from './ExportCountsTable';
 import { ExportMappingsTable } from './ExportMappingsTable';
 import { HandlerFailuresTable } from './HandlerFailuresTable';
-import { supportedOutletContextVersion } from '../extensions/constants';
+import {
+  supportedOutletContextVersion,
+  extensionOutlets,
+} from '../extensions/constants';
 
 /**
  * An export extension's destinations: per-connection status counts, the
@@ -167,7 +170,7 @@ export const ExtensionExportStatusSection = ({
         spacing={2}
         sx={{ mt: 3, mb: 1 }}
       >
-        <FormControl size="small" sx={{ minWidth: 200 }}>
+        <FormControl size="small" sx={{ minWidth: exportFilterMinWidth }}>
           <InputLabel id={`${extensionId}-export-connection`} shrink>
             {t('extensionExports.connection')}
           </InputLabel>
@@ -198,7 +201,7 @@ export const ExtensionExportStatusSection = ({
             ))}
           </Select>
         </FormControl>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
+        <FormControl size="small" sx={{ minWidth: exportFilterMinWidth }}>
           <InputLabel id={`${extensionId}-export-status`}>
             {t('extensionExports.statusColumn')}
           </InputLabel>
@@ -277,7 +280,7 @@ export const ExtensionExportStatusSection = ({
               export_id: destination.id,
             }}
             extensionId={extensionId}
-            outlet={exportMappingExtensionOutlet}
+            outlet={extensionOutlets.exportMapping}
           />
         </Box>
       ))}

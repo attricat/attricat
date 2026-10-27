@@ -27,6 +27,7 @@ import {
   DefinitionSaveHint,
   DefinitionTemplatesButton,
 } from '../definition-editor/DefinitionEditorControls';
+import { extensionOutlets } from '../extensions/constants';
 
 export const BlueprintEditorPage = ({
   blueprintId,
@@ -146,7 +147,7 @@ export const BlueprintEditorPage = ({
             blueprint_version: sourceRevision.blueprint.version,
           }}
           key={attribute.id}
-          outlet="blueprint_attribute_configuration"
+          outlet={extensionOutlets.blueprintAttributeConfiguration}
         />
       ))}
       {source.isError && (

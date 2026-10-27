@@ -1,20 +1,11 @@
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-} from '@mui/material';
+import { MenuItem, Stack, TextField } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createConnection, type NewConnection } from './api';
 import { connectionGrantTypes, type ConnectionGrantType } from './constants';
 import type { ManifestExports } from './schemas';
-import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { FormDialog } from '../../components/FormDialog';
 
 type ConnectionKind = NonNullable<
   ManifestExports['server']
@@ -106,147 +97,128 @@ export const ConnectionDialog = ({
     });
   };
   return (
-    <Dialog fullWidth maxWidth="sm" open onClose={onClose}>
-      <DialogTitle>{t('extensionExports.addConnection')}</DialogTitle>
-      <DialogContent>
-        <Stack
-          component="form"
-          id="extension-connection-form"
-          spacing={2}
-          sx={{ mt: 1 }}
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit();
+    <FormDialog
+      error={create.error}
+      isPending={create.isPending}
+      onClose={onClose}
+      onSubmit={submit}
+      submitLabel={t('extensionExports.create')}
+      title={t('extensionExports.addConnection')}
+    >
+      <Stack spacing={2} sx={{ mt: 1 }}>
+        <TextField
+          label={t('extensionExports.connectionKind')}
+          select
+          value={kind}
+          onChange={(event) => {
+            setKind(event.target.value);
+            const next = kinds.find((item) => item.id === event.target.value);
+            setGrantType(
+              next?.grant_types[0] ?? connectionGrantTypes.clientCredentials,
+            );
           }}
         >
-          <ApiErrorAlert error={create.error} />
+          {kinds.map((item) => (
+            <MenuItem key={item.id} value={item.id}>
+              {item.title}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          helperText={t('extensionExports.connectionNameHelp')}
+          label={t('extensionExports.connectionName')}
+          required
+          value={fields.connection}
+          onChange={set('connection')}
+        />
+        <TextField
+          label={t('extensionExports.displayName')}
+          value={fields.display_name}
+          onChange={set('display_name')}
+        />
+        <TextField
+          label={t('extensionExports.grantType')}
+          select
+          value={grantType}
+          onChange={(event) =>
+            setGrantType(event.target.value as ConnectionGrantType)
+          }
+        >
+          {grantTypes.map((item) => (
+            <MenuItem key={item} value={item}>
+              {t(`extensionExports.grantTypes.${item}`)}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          label={t('extensionExports.tokenUrl')}
+          required
+          type="url"
+          value={fields.token_url}
+          onChange={set('token_url')}
+        />
+        {grantType === connectionGrantTypes.deviceCode && (
           <TextField
-            label={t('extensionExports.connectionKind')}
-            select
-            value={kind}
-            onChange={(event) => {
-              setKind(event.target.value);
-              const next = kinds.find((item) => item.id === event.target.value);
-              setGrantType(
-                next?.grant_types[0] ?? connectionGrantTypes.clientCredentials,
-              );
-            }}
-          >
-            {kinds.map((item) => (
-              <MenuItem key={item.id} value={item.id}>
-                {item.title}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            helperText={t('extensionExports.connectionNameHelp')}
-            label={t('extensionExports.connectionName')}
-            required
-            value={fields.connection}
-            onChange={set('connection')}
-          />
-          <TextField
-            label={t('extensionExports.displayName')}
-            value={fields.display_name}
-            onChange={set('display_name')}
-          />
-          <TextField
-            label={t('extensionExports.grantType')}
-            select
-            value={grantType}
-            onChange={(event) =>
-              setGrantType(event.target.value as ConnectionGrantType)
-            }
-          >
-            {grantTypes.map((item) => (
-              <MenuItem key={item} value={item}>
-                {t(`extensionExports.grantTypes.${item}`)}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            label={t('extensionExports.tokenUrl')}
+            label={t('extensionExports.deviceAuthorizationUrl')}
             required
             type="url"
-            value={fields.token_url}
-            onChange={set('token_url')}
+            value={fields.device_authorization_url}
+            onChange={set('device_authorization_url')}
           />
-          {grantType === connectionGrantTypes.deviceCode && (
-            <TextField
-              label={t('extensionExports.deviceAuthorizationUrl')}
-              required
-              type="url"
-              value={fields.device_authorization_url}
-              onChange={set('device_authorization_url')}
-            />
-          )}
-          {grantType === connectionGrantTypes.authorizationCode && (
-            <TextField
-              helperText={t('extensionExports.authorizationUrlHelp')}
-              label={t('extensionExports.authorizationUrl')}
-              type="url"
-              value={fields.authorization_url}
-              onChange={set('authorization_url')}
-            />
-          )}
+        )}
+        {grantType === connectionGrantTypes.authorizationCode && (
           <TextField
-            label={t('extensionExports.clientId')}
-            required
-            value={fields.client_id}
-            onChange={set('client_id')}
+            helperText={t('extensionExports.authorizationUrlHelp')}
+            label={t('extensionExports.authorizationUrl')}
+            type="url"
+            value={fields.authorization_url}
+            onChange={set('authorization_url')}
           />
+        )}
+        <TextField
+          label={t('extensionExports.clientId')}
+          required
+          value={fields.client_id}
+          onChange={set('client_id')}
+        />
+        <TextField
+          autoComplete="new-password"
+          helperText={t('extensionExports.writeOnly')}
+          label={t('extensionExports.clientSecret')}
+          required={grantType === connectionGrantTypes.clientCredentials}
+          type="password"
+          value={fields.client_secret}
+          onChange={set('client_secret')}
+        />
+        {grantType === connectionGrantTypes.refreshToken && (
           <TextField
             autoComplete="new-password"
             helperText={t('extensionExports.writeOnly')}
-            label={t('extensionExports.clientSecret')}
-            required={grantType === connectionGrantTypes.clientCredentials}
+            label={t('extensionExports.refreshToken')}
             type="password"
-            value={fields.client_secret}
-            onChange={set('client_secret')}
+            value={fields.refresh_token}
+            onChange={set('refresh_token')}
           />
-          {grantType === connectionGrantTypes.refreshToken && (
-            <TextField
-              autoComplete="new-password"
-              helperText={t('extensionExports.writeOnly')}
-              label={t('extensionExports.refreshToken')}
-              type="password"
-              value={fields.refresh_token}
-              onChange={set('refresh_token')}
-            />
-          )}
-          <TextField
-            label={t('extensionExports.scope')}
-            value={fields.scope}
-            onChange={set('scope')}
-          />
-          <TextField
-            error={parametersError}
-            helperText={
-              parametersError
-                ? t('extensionExports.parametersInvalid')
-                : t('extensionExports.parametersHelp')
-            }
-            label={t('extensionExports.parameters')}
-            minRows={2}
-            multiline
-            value={fields.parameters}
-            onChange={set('parameters')}
-          />
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button disabled={create.isPending} onClick={onClose}>
-          {t('common.cancel')}
-        </Button>
-        <Button
-          disabled={create.isPending}
-          form="extension-connection-form"
-          type="submit"
-          variant="contained"
-        >
-          {t('extensionExports.create')}
-        </Button>
-      </DialogActions>
-    </Dialog>
+        )}
+        <TextField
+          label={t('extensionExports.scope')}
+          value={fields.scope}
+          onChange={set('scope')}
+        />
+        <TextField
+          error={parametersError}
+          helperText={
+            parametersError
+              ? t('extensionExports.parametersInvalid')
+              : t('extensionExports.parametersHelp')
+          }
+          label={t('extensionExports.parameters')}
+          minRows={2}
+          multiline
+          value={fields.parameters}
+          onChange={set('parameters')}
+        />
+      </Stack>
+    </FormDialog>
   );
 };

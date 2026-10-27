@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
   Box,
-  Button,
   Chip,
   Paper,
   Stack,
@@ -57,14 +56,13 @@ export const BlueprintsPage = () => {
       <PageHeader
         actions={
           canEdit && (
-            <Button
-              component={Link}
+            <RouterButton
               startIcon={<PlusIcon />}
               to="/manage/blueprints/new"
               variant="contained"
             >
               {t('blueprints.newBlueprintAction')}
-            </Button>
+            </RouterButton>
           )
         }
         description={t('blueprints.blueprintsDescription')}

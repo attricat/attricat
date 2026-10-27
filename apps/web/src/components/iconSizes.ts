@@ -4,3 +4,8 @@ export const compactIconSize = 18;
 export const smallIconSize = 20;
 // Leads caption-sized text, such as a field's helper text.
 export const captionIconSize = 14;
+/** Spinners that sit beside text or take an icon's place in a control. */
+export const progressSizes = {
+  compact: 16,
+  standard: 20,
+} as const;

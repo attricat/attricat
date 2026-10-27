@@ -5,11 +5,7 @@ import {
   extensionOutletSchema,
   workspaceExtensionLayoutSchema,
 } from './schemas';
-import { auditEventPanelOutlet } from '../audit/constants';
-import { dataHealthExtensionOutlet } from '../data-health/constants';
-import { explorerExtensionOutlets } from '../explorer/constants';
-import { exportMappingExtensionOutlet } from '../extension-exports/constants';
-import { actionDialogOutlet } from './constants';
+import { extensionOutlets } from './constants';
 
 const validLayout = {
   version: 1 as const,
@@ -61,19 +57,17 @@ describe('extension outlet coverage', () => {
       }
     };
     visit(sourceRoot);
-    // Some surfaces mount through named feature constants rather than literals.
-    const mounted = new Set<string>([
-      ...sources.flatMap((source) =>
-        [...source.matchAll(/\boutlet(?:=|\s*===\s*)['"]([a-z_]+)['"]/g)].map(
-          ([, outlet]) => outlet,
+    const mounted = new Set<string>(
+      sources.flatMap((source) =>
+        [
+          ...source.matchAll(
+            /\boutlet(?:=\{|\s*===\s*)extensionOutlets\.(\w+)\b/g,
+          ),
+        ].map(
+          ([, name]) => extensionOutlets[name as keyof typeof extensionOutlets],
         ),
       ),
-      ...Object.values(explorerExtensionOutlets),
-      actionDialogOutlet,
-      auditEventPanelOutlet,
-      dataHealthExtensionOutlet,
-      exportMappingExtensionOutlet,
-    ]);
+    );
     expect(
       [...extensionOutletSchema.options].filter(
         (outlet) => !mounted.has(outlet),

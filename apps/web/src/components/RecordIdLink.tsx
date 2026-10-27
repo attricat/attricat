@@ -1,11 +1,11 @@
 import { Box } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
+import { monoFontFamily } from '../app/theme';
+import { shortId } from './shortId';
 
-const shortRecordIdLength = 8;
-
-/** Links a record of a bulk edit by its label, or by a short ID. */
-export const BulkEditRecordLink = ({
+/** Links a record by its display label, or by a short ID when it has none. */
+export const RecordIdLink = ({
   recordId,
   label,
 }: {
@@ -17,13 +17,11 @@ export const BulkEditRecordLink = ({
     <Link params={{ recordId }} title={recordId} to="/records/$recordId">
       {label || (
         <Box
-          aria-label={t('agents.bulkEdit.recordWithoutLabel', {
-            id: recordId,
-          })}
+          aria-label={t('common.recordWithoutLabel', { id: recordId })}
           component="span"
-          sx={{ fontFamily: 'monospace' }}
+          sx={{ fontFamily: monoFontFamily }}
         >
-          {recordId.slice(0, shortRecordIdLength)}
+          {shortId(recordId)}
         </Box>
       )}
     </Link>

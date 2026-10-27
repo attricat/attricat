@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { apiErrorText } from '../../api/errors';
 import { useRecordLabels } from '../records/useRecordLabels';
 import type { BulkEditResult as BulkEditOutcome } from './schemas';
-import { BulkEditRecordLink } from './BulkEditRecordLink';
+import { RecordIdLink } from '../../components/RecordIdLink';
 
 const RecordList = ({
   ids,
@@ -29,7 +29,7 @@ const RecordList = ({
         <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
           {ids.map((id) => (
             <li key={id}>
-              <BulkEditRecordLink label={labels.get(id)} recordId={id} />
+              <RecordIdLink label={labels.get(id)} recordId={id} />
             </li>
           ))}
         </Box>
@@ -76,7 +76,7 @@ export const BulkEditResult = ({ result }: { result: BulkEditOutcome }) => {
         <Box key={failure.record_id}>
           <Typography variant="body2">
             {t('agents.bulkEdit.stoppedAt')}{' '}
-            <BulkEditRecordLink
+            <RecordIdLink
               label={labels.get(failure.record_id)}
               recordId={failure.record_id}
             />

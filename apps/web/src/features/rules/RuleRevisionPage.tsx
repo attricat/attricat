@@ -18,12 +18,9 @@ import { definitionKinds } from '../definition-editor/constants';
 import { DefinitionEditor } from '../definition-editor/DefinitionEditor';
 import { lexiconText } from '../lexicon/lexicon';
 import { publishRuleRevision } from './api';
-import {
-  RULE_DEFINITION_VIEWER_HEIGHT,
-  ruleRoutes,
-  SHORT_RECORD_ID_LENGTH,
-} from './constants';
+import { RULE_DEFINITION_VIEWER_HEIGHT, ruleRoutes } from './constants';
 import { ruleQueryKeys } from './queryKeys';
+import { shortId } from '../../components/shortId';
 import { ruleDefinitionsOptions } from './queryOptions';
 import { RuleLifecycleChip } from './RuleCells';
 
@@ -56,14 +53,13 @@ export const RuleRevisionPage = ({
   });
 
   const back = (
-    <Button
-      component={Link}
+    <RouterButton
       to="/manage/rules"
       startIcon={<ArrowLeftIcon />}
       sx={{ mb: 2 }}
     >
       {t('rules.revisionPage.backToRules')}
-    </Button>
+    </RouterButton>
   );
 
   if (rules.isPending) {
@@ -141,7 +137,7 @@ export const RuleRevisionPage = ({
             {t('rules.revisionPage.blueprintRevision', {
               name: blueprint.data
                 ? lexiconText(blueprint.data.blueprint.name)
-                : rule.blueprint_id.slice(0, SHORT_RECORD_ID_LENGTH),
+                : shortId(rule.blueprint_id),
               version: rule.blueprint_version,
             })}
           </Link>

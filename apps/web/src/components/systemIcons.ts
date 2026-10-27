@@ -21,6 +21,8 @@ export { RocketIcon as OnboardingIcon } from 'lucide-react';
 export { UserIcon as ProfileIcon } from 'lucide-react';
 export { BellIcon as InboxIcon } from 'lucide-react';
 export { ShieldCheckIcon as RuleIcon } from 'lucide-react';
+export { ShieldAlertIcon as RuleFindingIcon } from 'lucide-react';
+export { HistoryIcon as RuleRunIcon } from 'lucide-react';
 export { NetworkIcon as RelationshipIcon } from 'lucide-react';
 export { ListChecksIcon as RelationshipPickerIcon } from 'lucide-react';
 export { BlocksIcon as ReusableAttributeIcon } from 'lucide-react';

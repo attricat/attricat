@@ -339,8 +339,7 @@
       "appliedRecords_one": "Show the changed record",
       "appliedRecords_other": "Show the {{count}} changed records",
       "notRunRecords_one": "Show the record that was not changed",
-      "notRunRecords_other": "Show the {{count}} records that were not changed",
-      "recordWithoutLabel": "Record {{id}}"
+      "notRunRecords_other": "Show the {{count}} records that were not changed"
     },
     "showRecordConversations": "Show record conversations",
     "openRecord": "Open record"
@@ -665,8 +664,7 @@
       "channelsNotReady": "Not ready for: {{channels}}"
     },
     "checks": {
-      "violationInContexts": "{{message}} (contexts: {{contexts}})",
-      "publicationBlocked": "Publication to {{context}} is blocked by failing checks."
+      "violationInContexts": "{{message}} (contexts: {{contexts}})"
     },
     "statusConditionsUnmet": "Blocked: {{conditions}}",
     "valueTypes": {
@@ -975,7 +973,6 @@
       "title": "Unsaved changes",
       "replaceQuestion": "Replace your unsaved changes?",
       "discardQuestion": "Discard your unsaved changes?",
-      "keepEditing": "Keep editing",
       "replace": "Replace changes",
       "discard": "Discard changes"
     },
@@ -1388,13 +1385,6 @@
     "compareRevision": "Revision to compare",
     "runDiagnostics": "Run diagnostics",
     "status": "Status",
-    "statuses": {
-      "pending": "Pending",
-      "leased": "Leased",
-      "completed": "Completed",
-      "dead_letter": "Dead letter",
-      "cancelled": "Cancelled"
-    },
     "created": "Created",
     "published": "Published",
     "definitionHash": "Definition hash",
@@ -1707,6 +1697,7 @@
     "fixed": "(fixed)",
     "createCustomRole": "Create custom role",
     "createRole": "Create role",
+    "expiresAtHelp": "Interpreted in {{zone}}.",
     "invitationExpiry": "Invitation expiry must be in the future.",
     "notAuthorizedInvitations": "You are not authorized to manage invitations.",
     "expires": "expires <timestamp/>",
@@ -1818,6 +1809,14 @@
     "revisionStatuses": {
       "draft": "Draft",
       "published": "Published"
+    },
+    "recordWithoutLabel": "Record {{id}}",
+    "runStatuses": {
+      "pending": "Pending",
+      "leased": "Leased",
+      "completed": "Completed",
+      "dead_letter": "Dead letter",
+      "cancelled": "Cancelled"
     }
   },
   "inspector": {
@@ -1953,16 +1952,9 @@
       "acknowledged": "Acknowledged",
       "resolved": "Resolved"
     },
-    "runStatuses": {
-      "pending": "Pending",
-      "running": "Running",
-      "completed": "Completed",
-      "failed": "Failed"
-    },
     "ruleRevision": "{{name}} v{{version}}",
     "unknownRule": "Rule {{id}} v{{version}}",
     "allRecords": "All records",
-    "recordWithoutLabel": "Record {{id}}",
     "recordFindings": {
       "aboutField": "(field: <field/>)",
       "title": "Data quality",

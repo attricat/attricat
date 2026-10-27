@@ -24,7 +24,6 @@ export const fromKey = 'from';
 export const targetBlueprintKey = 'target_blueprint';
 export const aliasKey = 'alias';
 export const versionKey = 'version';
-export const relationshipValueType = 'relationship';
 
 export const attributePathSeparator = '.';
 /** Completion sort prefixes: required keys and exact matches come first. */

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { z } from 'zod';
+import { versionParamSchema } from '../../../../../../api/pathSegments';
 import { BlueprintEditorPage } from '../../../../../../features/blueprints/BlueprintEditorPage';
 import { RequireCapability } from '../../../../../../features/auth/RequireCapability';
 import {
@@ -16,7 +16,7 @@ const RevisionEditorRoute = () => {
     >
       <BlueprintEditorPage
         blueprintId={blueprintId}
-        sourceVersion={z.coerce.number().int().positive().parse(version)}
+        sourceVersion={versionParamSchema.parse(version)}
       />
     </RequireCapability>
   );

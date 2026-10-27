@@ -10,6 +10,15 @@ export const minimumContributionKeyLength = 3;
 export const maximumContributionKeyLength = 256;
 export const contributionKeyPattern = /^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$/;
 export const maximumExtensionCommandIdLength = 128;
+/** Severities an extension may give the notifications it shows. */
+export const notificationSeverities = [
+  'success',
+  'info',
+  'warning',
+  'error',
+] as const;
+/** Upper bound for extension-supplied notification text. */
+export const maximumNotificationMessageLength = 512;
 export const maximumExtensionStorageListLimit = 100;
 export const supportedWorkspaceLayoutVersion = 1;
 export const supportedOutletContextVersion = 1;
@@ -20,35 +29,32 @@ export const selectionContextVersion = 2;
 export const maximumActionSelection = 50;
 
 /** Host-owned insertion points an extension contribution may target. */
-export const extensionOutletNames = [
-  'navigation',
-  'record_preview_panel',
-  'blueprint_attribute_configuration',
-  'record_attribute_decoration',
-  'record_action',
-  'explorer_row_action',
-  'explorer_table_cell',
-  'blueprint_detail_panel',
-  'explorer_action',
-  'explorer_bulk_action',
-  'record_header_action',
-  'record_attribute_panel',
-  'blueprint_panel',
-  'blueprint_publish_check',
-  'file_panel',
-  'audit_event_panel',
-  'data_health_card',
-  'action_dialog',
-  'export_mapping',
-] as const;
-export const navigationOutlet = 'navigation';
-/** The host-managed dialog opened by an extension's selection actions. */
-export const actionDialogOutlet = 'action_dialog';
+export const extensionOutlets = {
+  navigation: 'navigation',
+  recordPreviewPanel: 'record_preview_panel',
+  blueprintAttributeConfiguration: 'blueprint_attribute_configuration',
+  recordAttributeDecoration: 'record_attribute_decoration',
+  recordAction: 'record_action',
+  explorerRowAction: 'explorer_row_action',
+  explorerTableCell: 'explorer_table_cell',
+  blueprintDetailPanel: 'blueprint_detail_panel',
+  explorerAction: 'explorer_action',
+  explorerBulkAction: 'explorer_bulk_action',
+  recordHeaderAction: 'record_header_action',
+  recordAttributePanel: 'record_attribute_panel',
+  blueprintPanel: 'blueprint_panel',
+  blueprintPublishCheck: 'blueprint_publish_check',
+  filePanel: 'file_panel',
+  auditEventPanel: 'audit_event_panel',
+  dataHealthCard: 'data_health_card',
+  actionDialog: 'action_dialog',
+  exportMapping: 'export_mapping',
+} as const;
 /** Outlets whose version 2 contributions receive a normalized selection. */
 export const selectionActionOutlets = [
-  'record_action',
-  'explorer_row_action',
-  'explorer_bulk_action',
+  extensionOutlets.recordAction,
+  extensionOutlets.explorerRowAction,
+  extensionOutlets.explorerBulkAction,
 ] as const;
 export const selectionSources = {
   recordPreview: 'record_preview',
@@ -207,16 +213,11 @@ export const controlCharacterRanges = {
 
 export const extensionCardMinWidth = 190;
 export const extensionPopoverWidth = 480;
-export const extensionLoadingIndicatorSize = 20;
 export const extensionFrameSkeletonLines = [
   { height: 20, width: '45%' },
   { height: 16, width: '75%' },
 ] as const;
 
-export const extensionManagementTabIds = {
-  tab: (index: number) => `extension-management-tab-${index}`,
-  panel: (index: number) => `extension-management-tabpanel-${index}`,
-};
 export const extensionManagementTabIndex = {
   marketplace: 0,
   installed: 1,

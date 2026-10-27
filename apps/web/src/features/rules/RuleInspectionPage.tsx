@@ -29,8 +29,6 @@ import {
   RULE_SECTION_RULES,
   RULE_SECTION_RUNS,
   RULE_SECTIONS,
-  RULE_TAB_ID_PREFIX,
-  RULE_TABPANEL_ID_PREFIX,
   ruleRoutes,
   type RuleInspectionSection,
 } from './constants';
@@ -41,13 +39,25 @@ import { ruleRevisionsByKey } from './ruleRevisions';
 import { useRecordLabels } from '../records/useRecordLabels';
 import { RulesSection } from './RulesSection';
 import { RunsSection } from './RunsSection';
-import { RuleIcon } from '../../components/systemIcons';
+import {
+  RuleFindingIcon,
+  RuleIcon,
+  RuleRunIcon,
+} from '../../components/systemIcons';
+import { compactIconSize } from '../../components/iconSizes';
+import { useTabAccessibility } from '../../components/useTabAccessibility';
+import type { LucideIcon } from 'lucide-react';
 import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
 import { blueprintCatalogueOptions } from '../blueprints/queryOptions';
 import { contextListOptions } from '../contexts/queryOptions';
 
 const RouterTab = createLink(Tab);
+const sectionIcons = {
+  [RULE_SECTION_RULES]: RuleIcon,
+  [RULE_SECTION_FINDINGS]: RuleFindingIcon,
+  [RULE_SECTION_RUNS]: RuleRunIcon,
+} satisfies Record<RuleInspectionSection, LucideIcon>;
 
 const noFindingsSearch: FindingsSearch = {};
 
@@ -129,6 +139,7 @@ export const RuleInspectionPage = ({
       ? toggle.variables
       : undefined;
 
+  const tabId = useTabAccessibility();
   const activeSectionIndex = RULE_SECTIONS.findIndex(
     (item) => item.key === section,
   );
@@ -156,22 +167,21 @@ export const RuleInspectionPage = ({
         sx={{ mt: 3 }}
         value={activeSectionIndex}
       >
-        {RULE_SECTIONS.map((item, index) => (
-          <RouterTab
-            aria-controls={`${RULE_TABPANEL_ID_PREFIX}-${index}`}
-            id={`${RULE_TAB_ID_PREFIX}-${index}`}
-            key={item.to}
-            label={t(`rules.sections.${item.key}`)}
-            to={item.to}
-            value={index}
-          />
-        ))}
+        {RULE_SECTIONS.map((item, index) => {
+          const Icon = sectionIcons[item.key];
+          return (
+            <RouterTab
+              {...tabId.tab(index)}
+              icon={<Icon aria-hidden size={compactIconSize} />}
+              key={item.to}
+              label={t(`rules.sections.${item.key}`)}
+              to={item.to}
+              value={index}
+            />
+          );
+        })}
       </Tabs>
-      <Box
-        aria-labelledby={`${RULE_TAB_ID_PREFIX}-${activeSectionIndex}`}
-        id={`${RULE_TABPANEL_ID_PREFIX}-${activeSectionIndex}`}
-        role="tabpanel"
-      >
+      <Box {...tabId.panel(activeSectionIndex)}>
         {section === RULE_SECTION_RULES && run.error && (
           <ApiErrorAlert error={run.error} sx={{ mt: 3 }} />
         )}

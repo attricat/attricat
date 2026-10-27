@@ -28,6 +28,7 @@ import {
 } from './useMobileNavigationSection';
 import { InboxNavigationItem } from './InboxNavigationItem';
 import { useSideNavigation } from './useSideNavigation';
+import { extensionOutlets } from '../features/extensions/constants';
 
 const navigationSx = {
   ...navigationItemHoverSx,
@@ -174,7 +175,7 @@ export const CompactSideNavigation = ({
             canBrowseExtensions={canBrowseExtensions}
             onBrowseExtensions={() => panels.openOnly('manage')}
             navigationDisplay="all"
-            outlet="navigation"
+            outlet={extensionOutlets.navigation}
           />
         </NavigationFlyout>
       )}
@@ -334,7 +335,7 @@ export const MobileSideNavigation = ({
             canBrowseExtensions={canBrowseExtensions}
             navigationDisplay="all"
             onNavigate={onNavigate}
-            outlet="navigation"
+            outlet={extensionOutlets.navigation}
           />
         )}
         {section === 'manage' && (

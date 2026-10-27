@@ -53,7 +53,8 @@ export const ApiErrorAlert = ({
   action?: ReactNode;
   sx?: SxProps<Theme>;
 }) => {
-  const { t } = useTranslation();
+  // errorMessage translates through i18next; subscribe to language changes.
+  useTranslation();
   if (!error) return null;
   const checks = checkViolationError(error);
   if (!checks)
@@ -65,11 +66,7 @@ export const ApiErrorAlert = ({
   return (
     <CheckViolationsAlert
       sx={sx}
-      title={
-        checks.context
-          ? t('records.checks.publicationBlocked', { context: checks.context })
-          : checks.message
-      }
+      title={errorMessage(error)}
       violations={violations ?? checks.violations}
     />
   );

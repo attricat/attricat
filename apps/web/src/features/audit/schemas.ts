@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { executorTypes } from './constants';
 
 const auditEventSchema = z.object({
   id: z.uuid(),
@@ -14,7 +15,7 @@ const auditEventSchema = z.object({
   target: z.record(z.string(), z.unknown()),
   outcome: z.string(),
   metadata: z.record(z.string(), z.unknown()),
-  executor_type: z.enum(['human', 'agent']),
+  executor_type: z.enum(executorTypes),
   agent_run_id: z.uuid().nullable(),
   agent_conversation_id: z.uuid().nullable(),
   agent_tool_call_id: z.uuid().nullable(),

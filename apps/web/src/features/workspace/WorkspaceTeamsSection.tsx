@@ -4,10 +4,6 @@ import {
   Alert,
   Autocomplete,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   LinearProgress,
   List,
   ListItem,
@@ -35,6 +31,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { TeamIcon } from '../../components/systemIcons';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { FormDialog } from '../../components/FormDialog';
 
 type Editing = { team: Team | null } | null;
 /** The team keeps its name in the dialog while it fades out after closing. */
@@ -76,73 +73,57 @@ const TeamDialog = ({
   const selectable = (selected: readonly string[]) =>
     users.filter((user) => user.active || selected.includes(user.id));
   return (
-    <Dialog fullWidth maxWidth="sm" onClose={onClose} open>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void form.handleSubmit();
-        }}
-      >
-        <DialogTitle>
-          {t(team ? 'workspace.editTeamTitle' : 'workspace.createTeam')}
-        </DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <ApiErrorAlert error={save.error} />
-            <form.Field name="name">
-              {(field) => (
-                <TextField
-                  label={t('workspace.teamName')}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  required
-                  value={field.state.value}
-                />
+    <FormDialog
+      error={save.error}
+      isPending={save.isPending}
+      onClose={onClose}
+      onSubmit={() => void form.handleSubmit()}
+      submitLabel={t('workspace.saveTeam')}
+      title={t(team ? 'workspace.editTeamTitle' : 'workspace.createTeam')}
+    >
+      <Stack spacing={2} sx={{ pt: 1 }}>
+        <form.Field name="name">
+          {(field) => (
+            <TextField
+              label={t('workspace.teamName')}
+              onChange={(event) => field.handleChange(event.target.value)}
+              required
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <form.Field name="code">
+          {(field) => (
+            <TextField
+              disabled={Boolean(team)}
+              helperText={t('workspace.teamCodeHelp')}
+              label={t('workspace.teamCode')}
+              onChange={(event) => field.handleChange(event.target.value)}
+              required
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <form.Field name="member_user_ids">
+          {(field) => (
+            <Autocomplete
+              getOptionLabel={(user) => userLabel(user)}
+              multiple
+              onChange={(_, selected) =>
+                field.handleChange(selected.map((user) => user.id))
+              }
+              options={selectable(field.state.value)}
+              renderInput={(params) => (
+                <TextField {...params} label={t('workspace.teamMembers')} />
               )}
-            </form.Field>
-            <form.Field name="code">
-              {(field) => (
-                <TextField
-                  disabled={Boolean(team)}
-                  helperText={t('workspace.teamCodeHelp')}
-                  label={t('workspace.teamCode')}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  required
-                  value={field.state.value}
-                />
+              value={users.filter((user) =>
+                field.state.value.includes(user.id),
               )}
-            </form.Field>
-            <form.Field name="member_user_ids">
-              {(field) => (
-                <Autocomplete
-                  getOptionLabel={(user) => userLabel(user)}
-                  multiple
-                  onChange={(_, selected) =>
-                    field.handleChange(selected.map((user) => user.id))
-                  }
-                  options={selectable(field.state.value)}
-                  renderInput={(params) => (
-                    <TextField {...params} label={t('workspace.teamMembers')} />
-                  )}
-                  value={users.filter((user) =>
-                    field.state.value.includes(user.id),
-                  )}
-                />
-              )}
-            </form.Field>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose}>{t('common.cancel')}</Button>
-          <form.Subscribe selector={(state) => state.isSubmitting}>
-            {(submitting) => (
-              <Button disabled={submitting} type="submit" variant="contained">
-                {t('workspace.saveTeam')}
-              </Button>
-            )}
-          </form.Subscribe>
-        </DialogActions>
-      </form>
-    </Dialog>
+            />
+          )}
+        </form.Field>
+      </Stack>
+    </FormDialog>
   );
 };
 

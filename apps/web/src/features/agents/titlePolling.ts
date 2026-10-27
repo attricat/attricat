@@ -1,5 +1,5 @@
 import {
-  pendingTitleSource,
+  titleSources,
   titlePendingTimeoutMs,
   titlePollIntervalMs,
 } from './constants';
@@ -8,7 +8,7 @@ import type { Conversation } from './schemas';
 // Avoid polling indefinitely for a conversation whose provider is unavailable
 // or which was created but never received a message.
 const isTitlePending = (conversation: Conversation) =>
-  conversation.title_source === pendingTitleSource &&
+  conversation.title_source === titleSources.pending &&
   Date.now() - new Date(conversation.updated_at).getTime() <
     titlePendingTimeoutMs;
 

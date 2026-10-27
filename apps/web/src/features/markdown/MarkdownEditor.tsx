@@ -1,8 +1,9 @@
 import { Box, Tab, Tabs, TextField } from '@mui/material';
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MarkdownContent } from './MarkdownContent';
 import { FieldHint } from '../../components/FieldHint';
+import { useTabAccessibility } from '../../components/useTabAccessibility';
 
 export const MarkdownEditor = ({
   label,
@@ -22,7 +23,7 @@ export const MarkdownEditor = ({
   helperText?: string;
 }) => {
   const { t } = useTranslation();
-  const id = useId();
+  const tabId = useTabAccessibility();
   const [tab, setTab] = useState(0);
   return (
     <Box sx={{ minWidth: 0 }}>
@@ -32,21 +33,10 @@ export const MarkdownEditor = ({
         aria-label={label}
       >
         {[t('markdown.write'), t('markdown.preview')].map((title, index) => (
-          <Tab
-            key={index}
-            label={title}
-            id={`${id}-tab-${index}`}
-            aria-controls={`${id}-panel-${index}`}
-          />
+          <Tab key={index} label={title} {...tabId.tab(index)} />
         ))}
       </Tabs>
-      <Box
-        hidden={tab !== 0}
-        role="tabpanel"
-        id={`${id}-panel-0`}
-        aria-labelledby={`${id}-tab-0`}
-        sx={{ pt: 2 }}
-      >
+      <Box hidden={tab !== 0} {...tabId.panel(0)} sx={{ pt: 2 }}>
         <TextField
           fullWidth
           multiline
@@ -64,13 +54,7 @@ export const MarkdownEditor = ({
           }}
         />
       </Box>
-      <Box
-        hidden={tab !== 1}
-        role="tabpanel"
-        id={`${id}-panel-1`}
-        aria-labelledby={`${id}-tab-1`}
-        sx={{ pt: 2 }}
-      >
+      <Box hidden={tab !== 1} {...tabId.panel(1)} sx={{ pt: 2 }}>
         {tab === 1 && <MarkdownContent value={value || t('records.notSet')} />}
       </Box>
     </Box>

@@ -9,6 +9,7 @@ import {
   type WorkflowRun,
 } from './schemas';
 import { uuidSegment, versionSegment } from '../../api/pathSegments';
+import { maximumRunIdempotencyKeyLength } from './constants';
 
 export type { Workflow } from './schemas';
 
@@ -85,7 +86,11 @@ export const runWorkflowNow = (
     z.object({ id: z.uuid() }),
     jsonRequest('POST', {
       record_id: z.uuid().parse(recordId),
-      idempotency_key: z.string().min(1).max(128).parse(idempotencyKey),
+      idempotency_key: z
+        .string()
+        .min(1)
+        .max(maximumRunIdempotencyKeyLength)
+        .parse(idempotencyKey),
     }),
   );
 

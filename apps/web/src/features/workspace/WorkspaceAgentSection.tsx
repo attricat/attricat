@@ -34,6 +34,7 @@ const AgentSettingsForm = ({ settings }: { settings: AgentSettings }) => {
   const queryClient = useQueryClient();
   const [notice, setNotice] = useState('');
   const save = useMutation({
+    meta: { toast: false },
     mutationFn: updateAgentSettings,
     onSuccess: (saved) => {
       queryClient.setQueryData(workspaceQueryKeys.agentSettings(), saved);

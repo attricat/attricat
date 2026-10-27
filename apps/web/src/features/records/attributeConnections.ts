@@ -13,6 +13,7 @@ import {
   recordSchemaChecksKeyword,
   relationshipPredicateTypes,
 } from './constants';
+import { emptyValuePlaceholder } from '../../components/placeholders';
 
 /** How a blueprint ties an attribute to others. */
 export const attributeConnectionKinds = {
@@ -230,7 +231,7 @@ const statusConnections = (
           attributeCodes: [status.code, ...codes],
           sources: [status.code],
           name,
-          detail: `${from ?? '—'} → ${to ?? '—'}`,
+          detail: `${from ?? emptyValuePlaceholder} → ${to ?? emptyValuePlaceholder}`,
         },
       ];
     });

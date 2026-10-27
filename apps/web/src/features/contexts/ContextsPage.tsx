@@ -1,14 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import {
-  Button,
-  List,
-  ListItem,
-  ListItemText,
-  Paper,
-  Typography,
-} from '@mui/material';
+import { List, ListItem, ListItemText, Paper, Typography } from '@mui/material';
 import { PlusIcon } from 'lucide-react';
 import { JsonInline } from '../../components/JsonValue';
 import { PageContainer } from '../../components/PageContainer';
@@ -19,6 +11,7 @@ import { useCan } from '../auth/useCan';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { contextListOptions } from './queryOptions';
+import { RouterButton } from '../../components/RouterLink';
 
 export const ContextsPage = () => {
   const { t } = useTranslation();
@@ -32,14 +25,13 @@ export const ContextsPage = () => {
       <PageHeader
         actions={
           canCreate && (
-            <Button
-              component={Link}
+            <RouterButton
               startIcon={<PlusIcon />}
               to="/manage/contexts/new"
               variant="contained"
             >
               {t('contexts.createContext')}
-            </Button>
+            </RouterButton>
           )
         }
         icon={ContextIcon}

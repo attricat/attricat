@@ -7,3 +7,6 @@ export const uuidSegment = (id: string) =>
 /** A revision number for a request path; it must be a positive integer. */
 export const versionSegment = (version: number) =>
   z.number().int().positive().parse(version);
+
+/** A revision number read from a route's `$version` path segment. */
+export const versionParamSchema = z.coerce.number().int().positive();

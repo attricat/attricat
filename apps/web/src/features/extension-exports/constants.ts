@@ -65,11 +65,10 @@ export type BrowserAuthorizationOutcome =
 export const exportStatusPath = '/api/export-status';
 export const recordExportStatusPath = (recordId: string) =>
   `/api/v1/records/${encodeURIComponent(recordId)}/export-status`;
-export const extensionPath = (extensionId: string) =>
-  `/api/extensions/${encodeURIComponent(extensionId)}`;
+
+/** Longest connection code a returning OAuth callback may name. */
+export const maximumConnectionCodeLength = 128;
+export const exportFilterMinWidth = 200;
 
 /** Rows of one problem list page on the extension page. */
 export const exportStatusPageSize = 25;
-
-/** The host outlet where an export extension edits its destination mappings. */
-export const exportMappingExtensionOutlet = 'export_mapping';

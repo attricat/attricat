@@ -16,10 +16,13 @@ import { accessTargetKinds, type AccessTargetKind } from './capabilities';
 export const RequireCapability = ({
   capability,
   children,
+  deniedMessage,
   target,
 }: {
   capability: Capability;
   children: ReactNode;
+  /** Names what is refused, when the capability's own message is too broad. */
+  deniedMessage?: string;
   target?: { kind: AccessTargetKind; id: string };
 }) => {
   const { t } = useTranslation();
@@ -36,7 +39,9 @@ export const RequireCapability = ({
   if (session.data && !allowed)
     return (
       <PageContainer>
-        <Alert severity="error">{t(`auth.notAuthorized.${capability}`)}</Alert>
+        <Alert severity="error">
+          {deniedMessage ?? t(`auth.notAuthorized.${capability}`)}
+        </Alert>
       </PageContainer>
     );
   return children;

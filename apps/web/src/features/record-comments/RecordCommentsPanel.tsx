@@ -28,6 +28,7 @@ import type { RecordComment } from './schemas';
 import { EmptyState } from '../../components/EmptyState';
 import { CommentIcon } from '../../components/systemIcons';
 import { sessionOptions } from '../auth/queryOptions';
+import { userAvatarSizes } from '../../components/userAvatars';
 
 const CommentItem = ({
   recordId,
@@ -71,7 +72,7 @@ const CommentItem = ({
         ) : (
           <UserAvatar
             name={personName(comment.author_display_name, comment.author_email)}
-            size={32}
+            size={userAvatarSizes.message}
           />
         )}
         <Typography variant="subtitle2">

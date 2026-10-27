@@ -21,7 +21,6 @@ export const checkViolationSchema = z.object({
 });
 const checkViolationDetailsSchema = z.object({
   violations: z.array(checkViolationSchema),
-  context: z.string().optional(),
 });
 export type CheckViolation = z.infer<typeof checkViolationSchema>;
 
@@ -36,10 +35,7 @@ export const checkViolationErrorCodes = {
 const violationCodes = new Set<string>(Object.values(checkViolationErrorCodes));
 
 type CheckViolationError = {
-  message: string;
   violations: CheckViolation[];
-  /** Publication channel code for `publication_checks_failed`. */
-  context?: string;
 };
 
 /** Reads structured check violations from an API error, if it carries them. */
@@ -54,9 +50,5 @@ export const checkViolationError = (
     return undefined;
   const details = checkViolationDetailsSchema.safeParse(error.details);
   if (!details.success) return undefined;
-  return {
-    message: error.message,
-    violations: details.data.violations,
-    ...(details.data.context ? { context: details.data.context } : {}),
-  };
+  return { violations: details.data.violations };
 };

@@ -3,7 +3,7 @@ import { Paper, Stack, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import { exportProblemStatuses } from './constants';
+import { exportProblemStatuses, type ExportStatus } from './constants';
 import { ExportStatusChip } from './ExportStatusChip';
 
 /**
@@ -36,7 +36,7 @@ export const ExportHealthCard = () => {
           const counts = (overview.data?.counts ?? []).filter(
             (count) => count.extension_id === extensionId,
           );
-          const total = (status: string) =>
+          const total = (status: ExportStatus) =>
             counts
               .filter((count) => count.status === status)
               .reduce((sum, count) => sum + count.count, 0);

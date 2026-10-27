@@ -17,7 +17,7 @@ import { ImageGalleryEditor } from './ImageGalleryEditor';
 import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../records/api';
 import { attributeLabel } from '../records/recordDisplay';
-import { fileCardinalities } from './constants';
+import { attributeCardinalities } from '../records/constants';
 import { acceptedFileTypes } from './fileAcceptance';
 import { fileAttributeIcon } from './fileAttributeIcon';
 import { PendingFileRow, PendingImageTile } from './PendingFileRow';
@@ -127,7 +127,7 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
             accept={acceptedFileTypes(policy)}
             disabled={queueDisabled}
             hidden
-            multiple={policy.cardinality === fileCardinalities.many}
+            multiple={policy.cardinality === attributeCardinalities.many}
             onChange={(event) => {
               if (event.target.files) uploads.add(event.target.files);
               event.target.value = '';

@@ -1,5 +1,6 @@
 import { request } from '../../api/request';
 import { auditEventPageSchema } from './schemas';
+import type { ExecutorType } from './constants';
 export type { AuditEvent } from './schemas';
 
 export type AuditEventFilters = {
@@ -8,7 +9,7 @@ export type AuditEventFilters = {
   actor_user_id?: string;
   action_category?: string;
   target_type?: string;
-  executor_type?: 'human' | 'agent';
+  executor_type?: ExecutorType;
   agent_run_id?: string;
   agent_tool_call_id?: string;
   limit?: number;

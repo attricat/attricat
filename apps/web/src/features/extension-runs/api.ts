@@ -7,6 +7,7 @@ import {
   startedExtensionRunSchema,
 } from './schemas';
 import { uuidSegment } from '../../api/pathSegments';
+import { contributionPath } from '../extensions/apiPaths';
 
 type StartExtensionRunInput = {
   release_id: string;
@@ -40,7 +41,7 @@ export const startExtensionRun = (
   input: StartExtensionRunInput,
 ) =>
   request(
-    `/api/extensions/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}/operations`,
+    `${contributionPath(extensionId, contributionId)}/operations`,
     startedExtensionRunSchema,
     jsonRequest('POST', input),
   );

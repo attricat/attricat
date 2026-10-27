@@ -23,6 +23,3 @@ export const backgroundProcessingColumnKeys = [
   'backgroundProcessing.expired',
   'backgroundProcessing.oldestDue',
 ] as const;
-
-/** Displayed when no queued task is due yet. */
-export const noDueTaskPlaceholder = '—';

@@ -22,6 +22,7 @@ export const ConfirmDialog = ({
   destructive = false,
   error,
   isPending,
+  maxWidth = 'xs',
   onClose,
   onConfirm,
   open = true,
@@ -36,6 +37,8 @@ export const ConfirmDialog = ({
   destructive?: boolean;
   error: Error | null | undefined;
   isPending: boolean;
+  /** Widen it for content beyond a question, such as fields or a list. */
+  maxWidth?: DialogProps['maxWidth'];
   onClose: () => void;
   onConfirm: () => void;
   open?: boolean;
@@ -46,7 +49,7 @@ export const ConfirmDialog = ({
   return (
     <Dialog
       fullWidth
-      maxWidth="xs"
+      maxWidth={maxWidth}
       onClose={isPending ? undefined : onClose}
       open={open}
       slotProps={slotProps}

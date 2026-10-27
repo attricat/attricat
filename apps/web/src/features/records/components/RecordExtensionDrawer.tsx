@@ -3,6 +3,7 @@ import { XIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
 import { RECORD_DRAWER_WIDTH, RECORD_EXTENSION_DRAWER_ID } from '../constants';
+import { extensionOutlets } from '../../extensions/constants';
 
 export const RecordExtensionDrawer = ({
   blueprintId,
@@ -52,7 +53,7 @@ export const RecordExtensionDrawer = ({
           <Box sx={{ mt: 2 }}>
             <ExtensionOutlet
               context={{ record_id: recordId, context_id: contextId }}
-              outlet="record_preview_panel"
+              outlet={extensionOutlets.recordPreviewPanel}
               runtimeScope={{ blueprintId, blueprintVersion }}
             />
           </Box>

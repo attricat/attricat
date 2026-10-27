@@ -355,8 +355,7 @@
       "notRunRecords_one": "Pokaż pominięty rekord",
       "notRunRecords_few": "Pokaż pominięte rekordy ({{count}})",
       "notRunRecords_many": "Pokaż pominięte rekordy ({{count}})",
-      "notRunRecords_other": "Pokaż pominięte rekordy ({{count}})",
-      "recordWithoutLabel": "Rekord {{id}}"
+      "notRunRecords_other": "Pokaż pominięte rekordy ({{count}})"
     },
     "showRecordConversations": "Pokaż rozmowy o rekordach",
     "openRecord": "Otwórz rekord"
@@ -693,8 +692,7 @@
       "channelsNotReady": "Niegotowe dla: {{channels}}"
     },
     "checks": {
-      "violationInContexts": "{{message}} (konteksty: {{contexts}})",
-      "publicationBlocked": "Publikację w kanale {{context}} blokują niespełnione kontrole."
+      "violationInContexts": "{{message}} (konteksty: {{contexts}})"
     },
     "statusConditionsUnmet": "Zablokowane: {{conditions}}",
     "valueTypes": {
@@ -1027,7 +1025,6 @@
       "title": "Niezapisane zmiany",
       "replaceQuestion": "Zastąpić niezapisane zmiany?",
       "discardQuestion": "Odrzucić niezapisane zmiany?",
-      "keepEditing": "Kontynuuj edycję",
       "replace": "Zastąp zmiany",
       "discard": "Odrzuć zmiany"
     },
@@ -1452,13 +1449,6 @@
     "compareRevision": "Wersja do porównania",
     "runDiagnostics": "Diagnostyka uruchomień",
     "status": "Stan",
-    "statuses": {
-      "pending": "Oczekujący",
-      "leased": "Przydzielony",
-      "completed": "Ukończony",
-      "dead_letter": "Martwy list",
-      "cancelled": "Anulowany"
-    },
     "created": "Utworzono",
     "published": "Opublikowano",
     "definitionHash": "Skrót definicji",
@@ -1781,6 +1771,7 @@
     "fixed": "(stała)",
     "createCustomRole": "Utwórz własną rolę",
     "createRole": "Utwórz rolę",
+    "expiresAtHelp": "Strefa czasowa: {{zone}}.",
     "invitationExpiry": "Data wygaśnięcia zaproszenia musi przypadać w przyszłości.",
     "notAuthorizedInvitations": "Nie masz uprawnień do zarządzania zaproszeniami.",
     "expires": "wygasa <timestamp/>",
@@ -1898,6 +1889,14 @@
     "revisionStatuses": {
       "draft": "Szkic",
       "published": "Opublikowany"
+    },
+    "recordWithoutLabel": "Rekord {{id}}",
+    "runStatuses": {
+      "pending": "Oczekujący",
+      "leased": "Przydzielony",
+      "completed": "Ukończony",
+      "dead_letter": "Martwy list",
+      "cancelled": "Anulowany"
     }
   },
   "inspector": {
@@ -2033,16 +2032,9 @@
       "acknowledged": "Potwierdzone",
       "resolved": "Rozwiązane"
     },
-    "runStatuses": {
-      "pending": "Oczekuje",
-      "running": "W toku",
-      "completed": "Zakończony",
-      "failed": "Niepowodzenie"
-    },
     "ruleRevision": "{{name}} v{{version}}",
     "unknownRule": "Reguła {{id}} v{{version}}",
     "allRecords": "Wszystkie rekordy",
-    "recordWithoutLabel": "Rekord {{id}}",
     "recordFindings": {
       "aboutField": "(pole: <field/>)",
       "title": "Jakość danych",

@@ -10,11 +10,8 @@ import {
 import { ArrowUpIcon, PaperclipIcon } from 'lucide-react';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  composerBorderRadius,
-  composerMaxRows,
-  progressSize,
-} from './constants';
+import { composerBorderRadius, composerMaxRows } from './constants';
+import { progressSizes } from '../../components/iconSizes';
 
 type MessageInputBoxProps = {
   content: string;
@@ -124,7 +121,10 @@ export const MessageInputBox = ({
               type="submit"
             >
               {isPending ? (
-                <CircularProgress enableTrackSlot size={progressSize} />
+                <CircularProgress
+                  enableTrackSlot
+                  size={progressSizes.standard}
+                />
               ) : (
                 <ArrowUpIcon />
               )}

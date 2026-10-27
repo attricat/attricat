@@ -16,14 +16,13 @@ import { BlueprintLink } from '../../blueprints/BlueprintLink';
 import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
 import { useCan, useCanOn } from '../../auth/useCan';
 import { type AttricatRecord, type Attribute } from '../api';
-import { attributeCardinalities } from '../constants';
-import { attributeValueTypes } from '../valueTypes';
 import {
-  RECORD_HEADER_CONTEXT_VERSION,
+  attributeCardinalities,
   FALLBACK_BLUEPRINT_VERSION,
   recordPreviewTabs,
   type RecordPreviewTabKey,
 } from '../constants';
+import { attributeValueTypes } from '../valueTypes';
 import { commentsSectionId } from '../../record-comments/constants';
 import { RelatedRecordPreviewContext } from '../linkedRecord';
 import { pageTitleLabel } from '../pageTitle';
@@ -60,6 +59,10 @@ import { RelationshipPickerActionBar } from './RelationshipPickerActionBar';
 import { useRecordPublications } from './useRecordPublications';
 import { capabilities, accessTargetKinds } from '../../auth/capabilities';
 import { currentBlueprintOptions } from '../queryOptions';
+import {
+  extensionOutlets,
+  supportedOutletContextVersion,
+} from '../../extensions/constants';
 
 const loadRecordCommentsPanel = () =>
   import('../../record-comments/RecordCommentsPanel');
@@ -284,12 +287,12 @@ export const RecordPreview = ({
               {blueprint.data && resolved.data && (
                 <ExtensionOutlet
                   context={{
-                    context_version: RECORD_HEADER_CONTEXT_VERSION,
+                    context_version: supportedOutletContextVersion,
                     record_id: recordId,
                     blueprint_id: blueprint.data.blueprint.id,
                     blueprint_version: blueprint.data.blueprint.version,
                   }}
-                  outlet="record_header_action"
+                  outlet={extensionOutlets.recordHeaderAction}
                   runtimeScope={{
                     blueprintId: blueprint.data.blueprint.id,
                     blueprintVersion: blueprint.data.blueprint.version,

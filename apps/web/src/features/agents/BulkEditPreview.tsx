@@ -17,7 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
 import { bulkEditPreviewRows, formatBulkValue } from './bulkEdits';
 import { type BulkEditProposal } from './schemas';
-import { BulkEditRecordLink } from './BulkEditRecordLink';
+import { RecordIdLink } from '../../components/RecordIdLink';
 
 const BulkValue = ({ value }: { value: unknown }) => {
   const { t } = useTranslation();
@@ -72,7 +72,7 @@ export const BulkEditPreview = ({
                       rowSpan={record.values.length}
                       sx={{ verticalAlign: 'top' }}
                     >
-                      <BulkEditRecordLink
+                      <RecordIdLink
                         label={record.label}
                         recordId={record.record_id}
                       />

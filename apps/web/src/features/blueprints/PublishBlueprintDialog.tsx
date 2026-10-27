@@ -1,18 +1,13 @@
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-} from '@mui/material';
+import { Box } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
-import { blueprintExtensionContextVersion } from './constants';
 import type { Blueprint } from './schemas';
 import { lexiconText } from '../lexicon/lexicon';
+import {
+  extensionOutlets,
+  supportedOutletContextVersion,
+} from '../extensions/constants';
 
 export const PublishBlueprintDialog = ({
   blueprint,
@@ -31,41 +26,38 @@ export const PublishBlueprintDialog = ({
 }) => {
   const { t } = useTranslation();
   return (
-    <Dialog onClose={() => !isPending && onClose()} open={open}>
-      <DialogTitle>{t('blueprints.publishBlueprintTitle')}</DialogTitle>
-      <DialogContent>
-        <DialogContentText>
-          {t('blueprints.publishBlueprintDescription', {
-            name: lexiconText(blueprint.name),
-            version: blueprint.version,
-          })}
-        </DialogContentText>
-        {open && (
-          <Box sx={{ mt: 2 }}>
-            <ExtensionOutlet
-              context={{
-                context_version: blueprintExtensionContextVersion,
-                blueprint_id: blueprint.id,
-                blueprint_version: blueprint.version,
-              }}
-              outlet="blueprint_publish_check"
-              runtimeScope={{
-                blueprintId: blueprint.id,
-                blueprintVersion: blueprint.version,
-              }}
-            />
-          </Box>
-        )}
-        {error && <ApiErrorAlert error={error} sx={{ mt: 2 }} />}
-      </DialogContent>
-      <DialogActions>
-        <Button disabled={isPending} onClick={onClose}>
-          {t('common.cancel')}
-        </Button>
-        <Button disabled={isPending} onClick={onConfirm} variant="contained">
-          {isPending ? t('blueprints.publishing') : t('blueprints.publish')}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    <ConfirmDialog
+      confirmLabel={
+        isPending ? t('blueprints.publishing') : t('blueprints.publish')
+      }
+      error={error}
+      isPending={isPending}
+      maxWidth="sm"
+      onClose={onClose}
+      onConfirm={onConfirm}
+      open={open}
+      title={t('blueprints.publishBlueprintTitle')}
+    >
+      {t('blueprints.publishBlueprintDescription', {
+        name: lexiconText(blueprint.name),
+        version: blueprint.version,
+      })}
+      {open && (
+        <Box sx={{ mt: 2 }}>
+          <ExtensionOutlet
+            context={{
+              context_version: supportedOutletContextVersion,
+              blueprint_id: blueprint.id,
+              blueprint_version: blueprint.version,
+            }}
+            outlet={extensionOutlets.blueprintPublishCheck}
+            runtimeScope={{
+              blueprintId: blueprint.id,
+              blueprintVersion: blueprint.version,
+            }}
+          />
+        </Box>
+      )}
+    </ConfirmDialog>
   );
 };

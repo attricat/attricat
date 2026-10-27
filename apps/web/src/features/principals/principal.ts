@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { personName } from '../../components/personName';
 import type { Attribute } from '../records/api';
 import { principalKinds, PRINCIPAL_SCHEMA_KEY } from './constants';
@@ -11,8 +12,12 @@ import {
 } from './schemas';
 import { attributeValueTypes } from '../records/valueTypes';
 
-const referencePattern =
-  /^(user|team):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+/** Separates a principal reference's kind from its id (`user:<uuid>`). */
+const referenceSeparator = ':';
+const referenceSchema = z
+  .string()
+  .transform((value) => value.split(referenceSeparator))
+  .pipe(z.tuple([z.enum(principalKinds), z.uuid()]));
 
 // Every string cell of a table asks for its column's configuration, so each
 // attribute's configuration is parsed once.
@@ -47,15 +52,14 @@ type PrincipalReference = { kind: PrincipalKind; id: string };
 export const parsePrincipalReference = (
   value: unknown,
 ): PrincipalReference | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const [, kind, id] = referencePattern.exec(value) ?? [];
-  return (kind === principalKinds.user || kind === principalKinds.team) && id
-    ? { kind, id }
-    : undefined;
+  const reference = referenceSchema.safeParse(value);
+  if (!reference.success) return undefined;
+  const [kind, id] = reference.data;
+  return { kind, id };
 };
 
 export const principalReference = (kind: PrincipalKind, id: string) =>
-  `${kind}:${id}`;
+  `${kind}${referenceSeparator}${id}`;
 
 export const userLabel = (user: DirectoryUser) =>
   personName(user.display_name, user.email);

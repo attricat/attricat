@@ -2,6 +2,8 @@
 export const userAvatarSizes = {
   /** Beside a name inside running text or a table cell. */
   inline: 24,
+  /** Leading a comment or a conversation message. */
+  message: 32,
   /** Leading a list row, matching MUI's `ListItemAvatar`. */
   list: 40,
 } as const;

@@ -6,12 +6,10 @@ import { useQuery } from '@tanstack/react-query';
 import type { RecordItem } from '../records/api';
 import { recordPublicationOptions } from '../records/queryOptions';
 import { contextDisplayLabel } from '../records/recordDisplay';
-import {
-  emptyValuePlaceholder,
-  recordPanelOpenerAttribute,
-  publicationStatuses,
-} from './constants';
+import { recordPanelOpenerAttribute } from './constants';
 import { compactIconSize } from '../../components/iconSizes';
+import { emptyValuePlaceholder } from '../../components/placeholders';
+import { publicationStatuses } from '../records/constants';
 
 export type ActionMenuPosition = { left: number; top: number };
 

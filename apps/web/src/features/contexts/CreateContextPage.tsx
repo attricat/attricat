@@ -1,6 +1,6 @@
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { Button, Paper, Stack, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeftIcon } from 'lucide-react';
@@ -15,6 +15,7 @@ import { ContextIcon } from '../../components/systemIcons';
 import { useInitialFocus } from '../../components/initialFocus';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { contextListOptions } from './queryOptions';
+import { RouterButton } from '../../components/RouterLink';
 
 export const CreateContextPage = () => {
   const { t } = useTranslation();
@@ -54,14 +55,13 @@ export const CreateContextPage = () => {
   });
   return (
     <PageContainer>
-      <Button
-        component={Link}
+      <RouterButton
         to="/manage/contexts"
         sx={{ mb: 4 }}
         startIcon={<ArrowLeftIcon />}
       >
         {t('contexts.backToContexts')}
-      </Button>
+      </RouterButton>
       <PageHeader
         icon={ContextIcon}
         title={t('contexts.createContext')}

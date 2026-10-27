@@ -20,6 +20,7 @@ import {
 } from './relationshipFilterTypes';
 import { browseBySchema, type BrowseBy } from './search';
 import { attributeValueTypes } from '../records/valueTypes';
+import { attributeCardinalities } from '../records/constants';
 
 /** A relationship field or path the browse rail can list targets of. */
 export type BrowseByField = {
@@ -75,7 +76,7 @@ const isPathHop = (
 ): attribute is RelationshipFilterAttribute =>
   isRelationshipFilterAttribute(attribute) &&
   singleTarget(attribute) &&
-  attribute.cardinality === 'one' &&
+  attribute.cardinality === attributeCardinalities.one &&
   !isHiddenByDefault(attribute, explorerVisibilityScope);
 
 /**
@@ -148,9 +149,9 @@ export const browsePathFields = (
             name: hops
               .map((hop) => attributeLabel(hop))
               .join(relationshipPathLabelSeparator),
-            cardinality: 'one',
+            cardinality: attributeCardinalities.one,
             target_blueprint_code: last.target_blueprint_code,
-            value_type: 'relationship',
+            value_type: attributeValueTypes.relationship,
           },
           hierarchyField: hierarchyFieldOf(target),
           hops,

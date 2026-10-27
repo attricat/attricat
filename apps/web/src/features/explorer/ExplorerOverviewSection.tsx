@@ -15,6 +15,7 @@ import type { OpenRecordPanel } from './ExplorerTableCells';
 import type { ExplorerSort } from './search';
 import { useExplorerSelection } from './useExplorerSelection';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { singleResultVersionScope } from '../records/schemas';
 
 type Props = {
   blueprint: Blueprint;
@@ -53,10 +54,7 @@ export const ExplorerOverviewSection = ({
   const [savedSearchSelection, setSavedSearchSelection] = useState<
     RecordItem[] | null
   >(null);
-  const singleVersionScope =
-    page?.result_version_scope.kind === 'single'
-      ? page.result_version_scope
-      : undefined;
+  const singleVersionScope = singleResultVersionScope(page);
 
   return (
     <Box aria-labelledby={headingId} component="section" sx={{ mt: 3 }}>

@@ -1,17 +1,8 @@
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  MenuItem,
-  TextField,
-} from '@mui/material';
+import { MenuItem, TextField } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { allPublicationChannels } from './constants';
 import type { Blueprint } from './schemas';
 import { lexiconText } from '../lexicon/lexicon';
@@ -39,48 +30,40 @@ export const PublishBlueprintRecordsDialog = ({
   const publicationChannels = useQuery(publicationChannelsOptions());
 
   return (
-    <Dialog onClose={() => !isPending && onClose()} open={open}>
-      <DialogTitle>{t('blueprints.publishRecords')}</DialogTitle>
-      <DialogContent>
-        <DialogContentText>
-          {t('blueprints.publishRecordsDescription', {
-            name: lexiconText(blueprint.name),
-            version: blueprint.version,
-          })}
-        </DialogContentText>
-        <TextField
-          fullWidth
-          label={t('blueprints.publicationChannel')}
-          onChange={(event) => setPublicationChannel(event.target.value)}
-          select
-          sx={{ mt: 2 }}
-          value={publicationChannel}
-        >
-          <MenuItem value={allPublicationChannels}>
-            {t('blueprints.allEnabledChannels')}
-          </MenuItem>
-          {publicationChannels.data
-            ?.filter((channel) => channel.enabled)
-            .map((channel) => (
-              <MenuItem key={channel.context_id} value={channel.context_id}>
-                {channel.context_code}
-              </MenuItem>
-            ))}
-        </TextField>
-        {error && <ApiErrorAlert error={error} sx={{ mt: 2 }} />}
-      </DialogContent>
-      <DialogActions>
-        <Button disabled={isPending} onClick={onClose}>
-          {t('common.cancel')}
-        </Button>
-        <Button
-          disabled={isPending}
-          onClick={() => onConfirm(publicationChannel)}
-          variant="contained"
-        >
-          {isPending ? t('blueprints.publishing') : t('blueprints.publish')}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    <ConfirmDialog
+      confirmLabel={
+        isPending ? t('blueprints.publishing') : t('blueprints.publish')
+      }
+      error={error}
+      isPending={isPending}
+      onClose={onClose}
+      onConfirm={() => onConfirm(publicationChannel)}
+      open={open}
+      title={t('blueprints.publishRecords')}
+    >
+      {t('blueprints.publishRecordsDescription', {
+        name: lexiconText(blueprint.name),
+        version: blueprint.version,
+      })}
+      <TextField
+        fullWidth
+        label={t('blueprints.publicationChannel')}
+        onChange={(event) => setPublicationChannel(event.target.value)}
+        select
+        sx={{ mt: 2 }}
+        value={publicationChannel}
+      >
+        <MenuItem value={allPublicationChannels}>
+          {t('blueprints.allEnabledChannels')}
+        </MenuItem>
+        {publicationChannels.data
+          ?.filter((channel) => channel.enabled)
+          .map((channel) => (
+            <MenuItem key={channel.context_id} value={channel.context_id}>
+              {channel.context_code}
+            </MenuItem>
+          ))}
+      </TextField>
+    </ConfirmDialog>
   );
 };

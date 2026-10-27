@@ -33,6 +33,8 @@ import { FieldConnectionList } from './FieldConnectionList';
 import { ValueTypeLabel } from './ValueTypeLabel';
 import type { ResolvedValue } from '../../views/components/ValueField';
 
+const diagnosticsPopoverMaxWidth = 360;
+
 const isEmptyValue = (value: unknown) =>
   value === undefined ||
   value === null ||
@@ -124,7 +126,9 @@ export const FieldDiagnosticsButton = ({
         disableRestoreFocus={revealing}
         onClose={() => setAnchor(null)}
         open={Boolean(anchor)}
-        slotProps={{ paper: { sx: { maxWidth: 360, p: 2 } } }}
+        slotProps={{
+          paper: { sx: { maxWidth: diagnosticsPopoverMaxWidth, p: 2 } },
+        }}
       >
         <Stack spacing={2}>
           <Typography component="h2" sx={{ fontWeight: 700 }} variant="body2">

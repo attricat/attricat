@@ -1,5 +1,5 @@
 import { useForm } from '@tanstack/react-form';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Stack, TextField, Typography } from '@mui/material';
 import { ArrowLeftIcon } from 'lucide-react';
@@ -11,7 +11,7 @@ import {
   PermissionIcon,
   PersonalTokenIcon,
 } from '../../components/systemIcons';
-import { zonedDateTimeToIso } from '../../time/instantFormat';
+import { futureZonedInstant } from '../../time/instantFormat';
 import { useTimeZone } from '../../time/useInstantFormat';
 import { useToast } from '../../components/useToast';
 import { useCan } from '../auth/useCan';
@@ -26,18 +26,18 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 import { PermissionChecklist } from './PermissionChecklist';
 import { TokenPresetCards } from './TokenPresetCards';
+import { RouterButton } from '../../components/RouterLink';
 
 const BackToTokens = () => {
   const { t } = useTranslation();
   return (
-    <Button
-      component={Link}
+    <RouterButton
       startIcon={<ArrowLeftIcon />}
       sx={{ alignSelf: 'flex-start', ml: -3.5 }}
       to={tokensPath}
     >
       {t('profile.tokenList')}
-    </Button>
+    </RouterButton>
   );
 };
 
@@ -56,20 +56,17 @@ export const CreatePersonalTokenPage = () => {
   const [secret, setSecret] = useState<string>();
   const timeZone = useTimeZone();
   const create = useExclusiveMutation({
+    meta: { toast: false },
     mutationFn: async (value: {
       label: string;
       permissions: string[];
       expires_at: string;
     }) => {
       const expiresAt = value.expires_at
-        ? new Date(zonedDateTimeToIso(value.expires_at, timeZone))
+        ? futureZonedInstant(value.expires_at, timeZone)
         : undefined;
-      if (
-        expiresAt &&
-        (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date())
-      ) {
+      if (value.expires_at && !expiresAt)
         throw new Error(t('profile.tokenExpiry'));
-      }
       return createToken({
         label: value.label.trim(),
         permissions: value.permissions,
@@ -220,9 +217,9 @@ export const CreatePersonalTokenPage = () => {
           }}
         </form.Field>
         <Stack direction="row" spacing={3} sx={{ justifyContent: 'flex-end' }}>
-          <Button component={Link} to={tokensPath} variant="outlined">
+          <RouterButton to={tokensPath} variant="outlined">
             {t('common.cancel')}
-          </Button>
+          </RouterButton>
           <Button disabled={create.isPending} type="submit" variant="contained">
             {t('profile.create')}
           </Button>

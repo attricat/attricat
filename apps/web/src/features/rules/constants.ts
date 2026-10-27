@@ -12,9 +12,6 @@ export const RULE_SECTIONS = [
 
 export type RuleInspectionSection = (typeof RULE_SECTIONS)[number]['key'];
 
-export const RULE_TAB_ID_PREFIX = 'rule-inspection-tab';
-export const RULE_TABPANEL_ID_PREFIX = 'rule-inspection-tabpanel';
-
 export const findingStates = {
   open: 'open',
   acknowledged: 'acknowledged',
@@ -59,19 +56,6 @@ export const RULE_SCOPE_SELECT_MIN_WIDTH = 220;
 export const ALL_CONTEXTS = '';
 /** Height of the read-only definition on a rule revision page. */
 export const RULE_DEFINITION_VIEWER_HEIGHT = '420px';
-export const ruleRunStatuses = {
-  pending: 'pending',
-  leased: 'leased',
-  completed: 'completed',
-  deadLetter: 'dead_letter',
-  cancelled: 'cancelled',
-} as const;
-type RuleRunStatus = (typeof ruleRunStatuses)[keyof typeof ruleRunStatuses];
-/** Run statuses that have not finished evaluating. */
-export const ACTIVE_RULE_RUN_STATUSES: readonly RuleRunStatus[] = [
-  ruleRunStatuses.pending,
-  ruleRunStatuses.leased,
-];
 /** Recent runs of one record that the record page inspects. */
 export const RECORD_RULE_RUNS_LIMIT = 20;
 /** How often the record page checks on its rule runs while they are active. */
@@ -83,7 +67,7 @@ export const RECORD_RULE_RUN_POLL_MS = 1000;
 export const RECORD_RULE_CHECK_WATCH_MS = 15_000;
 export const RULE_HAS_EXISTING_VIOLATIONS =
   'rule_has_existing_violations' satisfies ApiErrorCode;
-/** Characters of a record ID shown where no display label is loaded. */
-export const SHORT_RECORD_ID_LENGTH = 8;
+/** Columns of the findings table, for its no-matches row. */
+export const findingsTableColumnCount = 6;
 /** Unresolved findings the record page lists at a time. */
 export const RECORD_FINDINGS_PAGE_SIZE = 20;

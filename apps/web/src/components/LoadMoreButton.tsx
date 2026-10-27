@@ -6,9 +6,7 @@ import {
 } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-
-const loadingIndicatorSize = 20;
-const compactLoadingIndicatorSize = 16;
+import { progressSizes } from './iconSizes';
 
 /**
  * Loads the next page of a list. A compact button sits inside a panel or
@@ -45,7 +43,7 @@ export const LoadMoreButton = ({
       {isLoading ? (
         <CircularProgress
           enableTrackSlot
-          size={compact ? compactLoadingIndicatorSize : loadingIndicatorSize}
+          size={compact ? progressSizes.compact : progressSizes.standard}
         />
       ) : (
         (label ?? t('common.loadMore'))

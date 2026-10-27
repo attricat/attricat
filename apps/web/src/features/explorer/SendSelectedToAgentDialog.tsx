@@ -1,19 +1,9 @@
-import { useForm } from '@tanstack/react-form';
+import { useForm, useStore } from '@tanstack/react-form';
 import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Box, Stack, TextField, Typography } from '@mui/material';
 import { createConversation, sendMessage } from '../agents/api';
 import { agentQueryKeys } from '../agents/queryKeys';
 import type { RecordItem } from '../records/api';
@@ -25,7 +15,7 @@ import {
   maximumAgentConversationBlueprintNameLength,
   maximumAgentInstructionsLength,
 } from './constants';
-import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { FormDialog } from '../../components/FormDialog';
 
 export const SendSelectedToAgentDialog = ({
   blueprintName,
@@ -81,79 +71,67 @@ export const SendSelectedToAgentDialog = ({
     },
   });
 
+  const instructions = useStore(
+    form.store,
+    (state) => state.values.instructions,
+  );
+
   return (
-    <Dialog
-      fullWidth
-      maxWidth="sm"
-      onClose={start.isPending ? undefined : onClose}
-      open
+    <FormDialog
+      error={start.error}
+      isPending={start.isPending}
+      onClose={onClose}
+      onSubmit={() => void form.handleSubmit()}
+      submitDisabled={!instructions.trim()}
+      submitLabel={t('explorer.sendToAgentConversation')}
+      title={t('explorer.sendToAgentConversation')}
     >
-      <DialogTitle>{t('explorer.sendToAgentConversation')}</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 1 }}>
-          <Typography>
-            {t('explorer.selectedCountForBlueprint', {
-              blueprint: blueprintName,
-              count: records.length,
-            })}
-          </Typography>
-          <Box
-            component="ul"
-            sx={{
-              maxHeight: agentRecordListMaxHeight,
-              my: 0,
-              overflowY: 'auto',
-              pl: 3,
-            }}
-          >
-            {records.map((record) => (
-              <li key={record.id}>
-                <Typography variant="body2">
-                  {t('explorer.agentRecordListItem', {
-                    recordId: record.id,
-                    label: displayLabel(record.display, record.id),
-                  })}
-                </Typography>
-              </li>
-            ))}
-          </Box>
-          <form.Field name="instructions">
-            {(field) => (
-              <TextField
-                required
-                disabled={start.isPending}
-                fullWidth
-                label={t('explorer.agentInstructions')}
-                multiline
-                slotProps={{
-                  htmlInput: { maxLength: maximumAgentInstructionsLength },
-                }}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                rows={agentInstructionsRows}
-                value={field.state.value}
-              />
-            )}
-          </form.Field>
-          <ApiErrorAlert error={start.error} />
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button disabled={start.isPending} onClick={onClose}>
-          {t('common.cancel')}
-        </Button>
-        <form.Subscribe selector={(state) => state.values.instructions}>
-          {(instructions) => (
-            <Button
-              disabled={start.isPending || !instructions.trim()}
-              onClick={() => void form.handleSubmit()}
-              variant="contained"
-            >
-              {t('explorer.sendToAgentConversation')}
-            </Button>
+      <Stack spacing={2} sx={{ pt: 1 }}>
+        <Typography>
+          {t('explorer.selectedCountForBlueprint', {
+            blueprint: blueprintName,
+            count: records.length,
+          })}
+        </Typography>
+        <Box
+          component="ul"
+          sx={{
+            maxHeight: agentRecordListMaxHeight,
+            my: 0,
+            overflowY: 'auto',
+            pl: 3,
+          }}
+        >
+          {records.map((record) => (
+            <li key={record.id}>
+              <Typography variant="body2">
+                {t('explorer.agentRecordListItem', {
+                  recordId: record.id,
+                  label: displayLabel(record.display, record.id),
+                })}
+              </Typography>
+            </li>
+          ))}
+        </Box>
+        <form.Field name="instructions">
+          {(field) => (
+            <TextField
+              required
+              disabled={start.isPending}
+              fullWidth
+              label={t('explorer.agentInstructions')}
+              multiline
+              slotProps={{
+                htmlInput: { maxLength: maximumAgentInstructionsLength },
+              }}
+              onBlur={field.handleBlur}
+              onChange={(event) => field.handleChange(event.target.value)}
+              rows={agentInstructionsRows}
+              value={field.state.value}
+            />
           )}
-        </form.Subscribe>
-      </DialogActions>
-    </Dialog>
+        </form.Field>
+      </Stack>
+    </FormDialog>
   );
 };

@@ -57,7 +57,12 @@ export const runUpdateEvents = [
   'terminal',
 ] as const;
 
-export const pendingTitleSource = 'pending';
+/** Who titled a conversation; a pending title is still being generated. */
+export const titleSources = {
+  manual: 'manual',
+  pending: 'pending',
+  generated: 'generated',
+} as const;
 
 export const titlePollIntervalMs = 3_000;
 export const titlePendingTimeoutMs = 5 * 60_000;
@@ -74,9 +79,6 @@ export const composerMaxRows = 8;
 export const composerMinRows = 1;
 export const newConversationMinRows = 3;
 export const newConversationMaxWidth = 760;
-export const avatarSize = 30;
-export const progressSize = 20;
-export const loadingProgressSize = 18;
 export const composerBorderRadius = 3;
 export const messageBubbleRadius = 3;
 export const userMessageMaxWidth = { xs: '100%', sm: '80%' } as const;

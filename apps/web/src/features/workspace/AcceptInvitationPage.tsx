@@ -17,6 +17,7 @@ export const AcceptInvitationPage = ({
   const { t } = useTranslation();
   const formRef = useInitialFocus<HTMLFormElement>();
   const accept = useMutation({
+    meta: { toast: false },
     mutationFn: acceptInvitation,
     onSuccess: () => form.reset({ secret: '' }),
   });

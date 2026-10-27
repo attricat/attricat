@@ -260,11 +260,10 @@ limit delays dead-letter visibility.
 
 ## Client boundary
 
-The [web-component event bridge](web-component-events.md) is deliberately a
-separate, client-safe DOM protocol. It contains coarse IDs and change hints
-only, validates strict detail schemas at the host boundary, and is not derived
-from or connected to the outbox. It conveys neither authorization nor internal
-event facts.
+The outbox never reaches the browser. Extension frames talk to the host only
+through the client broker (see [Client API](extensions.md#client-api)), which
+carries record IDs and bounded requests, never domain-event envelopes,
+payloads, or authorization decisions.
 
 ## Workflow consumer
 

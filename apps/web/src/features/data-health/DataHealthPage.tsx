@@ -18,12 +18,7 @@ import {
 import { dataHealthQueryKeys } from './queryKeys';
 import { DataHealthControls } from './DataHealthControls';
 import { DataHealthSummaryCards } from './DataHealthSummaryCards';
-import {
-  dataHealthExtensionContextVersion,
-  dataHealthExtensionOutlet,
-  dataHealthStaleTime,
-  defaultStaleAfterDays,
-} from './constants';
+import { dataHealthStaleTime, defaultStaleAfterDays } from './constants';
 import {
   BlueprintHealthSection,
   CompletenessSection,
@@ -37,6 +32,10 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { DataHealthIcon } from '../../components/systemIcons';
 import { ExportHealthCard } from '../extension-exports/ExportHealthCard';
+import {
+  extensionOutlets,
+  supportedOutletContextVersion,
+} from '../extensions/constants';
 
 export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   const { t } = useTranslation();
@@ -118,8 +117,8 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
           <ExportHealthCard />
           <Box component="section" sx={{ mt: 2 }}>
             <ExtensionOutlet
-              context={{ context_version: dataHealthExtensionContextVersion }}
-              outlet={dataHealthExtensionOutlet}
+              context={{ context_version: supportedOutletContextVersion }}
+              outlet={extensionOutlets.dataHealthCard}
             />
           </Box>
         </>

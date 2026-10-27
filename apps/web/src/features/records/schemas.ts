@@ -12,6 +12,8 @@ import {
   attributeFilterOperators,
   attributeHierarchies,
   publicationStatuses,
+  resultVersionScopeKinds,
+  approvalEndReasons,
   SMART_FILL_MAX_ATTACHMENTS,
   SMART_FILL_MAX_CONTENT_LENGTH,
   statusTransitionDenialCodes,
@@ -225,17 +227,31 @@ const resolvedRecordPreviewSchema = z.object({
   reusable_values: z.record(z.string(), resolvedPreviewEntrySchema).default({}),
 });
 const resultVersionScopeSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('empty') }),
-  z.object({ kind: z.literal('single'), version: z.number().int().positive() }),
-  z.object({ kind: z.literal('multiple') }),
+  z.object({ kind: z.literal(resultVersionScopeKinds.empty) }),
+  z.object({
+    kind: z.literal(resultVersionScopeKinds.single),
+    version: z.number().int().positive(),
+  }),
+  z.object({ kind: z.literal(resultVersionScopeKinds.multiple) }),
 ]);
+type ResultVersionScope = z.infer<typeof resultVersionScopeSchema>;
+
+/** The blueprint version every result of a search shares, if there is one. */
+export const singleResultVersionScope = (
+  page: { result_version_scope: ResultVersionScope } | undefined,
+) =>
+  page?.result_version_scope.kind === resultVersionScopeKinds.single
+    ? page.result_version_scope
+    : undefined;
 const recordSearchResponseSchema = z.object({
   blueprint: blueprintWithAttributesSchema,
   items: z.array(recordItemSchema),
   next_cursor: z.string().nullable(),
   total_count: z.number().int().nonnegative().nullable().default(null),
   total_count_capped: z.boolean().default(false),
-  result_version_scope: resultVersionScopeSchema.default({ kind: 'empty' }),
+  result_version_scope: resultVersionScopeSchema.default({
+    kind: resultVersionScopeKinds.empty,
+  }),
   hidden_outdated_count: z
     .number()
     .int()
@@ -530,7 +546,7 @@ export const recordApprovalSchema = z.object({
   approved_by: z.string().nullable(),
   approved_at: z.string(),
   ended_at: z.string().nullable(),
-  end_reason: z.enum(['content_changed', 'superseded']).nullable(),
+  end_reason: z.enum(approvalEndReasons).nullable(),
   void_status: z.string().nullable(),
 });
 export type RecordApproval = z.infer<typeof recordApprovalSchema>;

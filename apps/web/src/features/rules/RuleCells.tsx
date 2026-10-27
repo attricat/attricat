@@ -1,8 +1,8 @@
-import { Box, Chip } from '@mui/material';
+import { Chip } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import type { Rule } from './api';
-import { SHORT_RECORD_ID_LENGTH } from './constants';
+import { shortId } from '../../components/shortId';
 import { revisionStatuses } from '../../api/revisionStatus';
 import { ruleRevisionKey, type RuleRevisions } from './ruleRevisions';
 
@@ -27,7 +27,7 @@ export const RuleRevisionCell = ({
     </Link>
   ) : (
     t('rules.unknownRule', {
-      id: ruleId.slice(0, SHORT_RECORD_ID_LENGTH),
+      id: shortId(ruleId),
       version,
     })
   );
@@ -50,29 +50,5 @@ export const RuleLifecycleChip = ({ rule }: { rule: Rule }) => {
       }
       size="small"
     />
-  );
-};
-
-/** Links a record by its display label, or by a short ID until one loads. */
-export const RecordIdLink = ({
-  recordId,
-  label,
-}: {
-  recordId: string;
-  label: string | undefined;
-}) => {
-  const { t } = useTranslation();
-  return (
-    <Link params={{ recordId }} title={recordId} to="/records/$recordId">
-      {label ?? (
-        <Box
-          aria-label={t('rules.recordWithoutLabel', { id: recordId })}
-          component="span"
-          sx={{ fontFamily: 'monospace' }}
-        >
-          {recordId.slice(0, SHORT_RECORD_ID_LENGTH)}
-        </Box>
-      )}
-    </Link>
   );
 };

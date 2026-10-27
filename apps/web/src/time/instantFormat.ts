@@ -252,6 +252,16 @@ export const zonedDateTimeToIso = (value: string, timeZone: string) => {
   return new Date(epoch).toISOString();
 };
 
+/**
+ * The instant a `datetime-local` value names in `timeZone`, or `undefined`
+ * when it is not a valid time after now, as an expiry must be.
+ */
+export const futureZonedInstant = (value: string, timeZone: string) => {
+  const iso = zonedDateTimeToIso(value, timeZone);
+  const instant = iso ? new Date(iso) : undefined;
+  return instant && instant.getTime() > Date.now() ? instant : undefined;
+};
+
 /** The `datetime-local` input value showing `value` in `timeZone`. */
 export const isoToZonedDateTime = (value: InstantValue, timeZone: string) => {
   const date = parseInstant(value);

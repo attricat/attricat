@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { agentRunStatuses, bulkProgressStates } from './constants';
+import {
+  agentRunStatuses,
+  bulkProgressStates,
+  titleSources,
+} from './constants';
 
 const dateTime = z.string().datetime({ offset: true });
 const id = z.string().uuid();
@@ -9,7 +13,7 @@ export const conversationSchema = z.object({
   workspace_id: id,
   created_by_user_id: id.nullable(),
   title: z.string(),
-  title_source: z.enum(['manual', 'pending', 'generated']),
+  title_source: z.enum(titleSources),
   record_id: id.nullable(),
   context_id: id.nullable(),
   created_at: dateTime,

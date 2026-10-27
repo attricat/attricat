@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { revisionStatusSchema } from '../../api/revisionStatus';
+import { runStatusSchema } from '../../api/runStatus';
+import { workflowRunSources } from './constants';
 
 export const workflowSchema = z.object({
   id: z.uuid(),
@@ -22,14 +24,8 @@ export const workflowRunSchema = z.object({
   workflow_version: z.number().int().positive(),
   trigger_event_id: z.uuid().nullable(),
   trigger_sequence: z.number().int().nullable(),
-  source: z.enum(['event', 'manual', 'schedule']).default('event'),
-  status: z.enum([
-    'pending',
-    'leased',
-    'completed',
-    'dead_letter',
-    'cancelled',
-  ]),
+  source: z.enum(workflowRunSources).default(workflowRunSources.event),
+  status: runStatusSchema,
   attempts: z.number().int().nonnegative(),
   failed_at: z.string().nullable(),
   completed_at: z.string().nullable(),

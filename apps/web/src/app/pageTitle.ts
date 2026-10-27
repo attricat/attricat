@@ -1,10 +1,9 @@
 import type { TFunction } from 'i18next';
+import { shortId } from '../components/shortId';
 
 const titleSeparator = ' · ';
-const shortIdLength = 8;
 
 const joinTitle = (...parts: string[]) => parts.join(titleSeparator);
-const shortId = (id: string) => id.slice(0, shortIdLength);
 
 type Segments = (string | undefined)[];
 

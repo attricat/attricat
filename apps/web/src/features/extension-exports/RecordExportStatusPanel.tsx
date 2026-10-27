@@ -34,6 +34,7 @@ import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { randomUuid } from '../../components/randomUuid';
 import { formatPushError } from './pushErrors';
+import { emptyValuePlaceholder } from '../../components/placeholders';
 
 type Row = {
   key: string;
@@ -208,13 +209,13 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
                   </Stack>
                 </TableCell>
                 <TableCell sx={{ overflowWrap: 'anywhere' }}>
-                  {mapping?.external_id ?? '—'}
+                  {mapping?.external_id ?? emptyValuePlaceholder}
                 </TableCell>
                 <TableCell>
                   {mapping?.synced_at ? (
                     <Timestamp value={mapping.synced_at} />
                   ) : (
-                    '—'
+                    emptyValuePlaceholder
                   )}
                 </TableCell>
                 <TableCell align="right">

@@ -26,6 +26,7 @@ export const PasswordSetupPage = ({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const setup = useMutation({
+    meta: { toast: false },
     mutationFn: async (value: PasswordSetupValues) => {
       if (value.password.length < minimumPasswordLength)
         throw new Error(t('workspace.passwordTooShort'));

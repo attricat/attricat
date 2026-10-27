@@ -1,13 +1,5 @@
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-} from '@mui/material';
-import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
+import { DiscardChangesDialog } from '../drafts/DiscardChangesDialog';
 
 type UnsavedChangesAction = 'replace' | 'discard';
 
@@ -22,32 +14,23 @@ export const UnsavedDefinitionChangesDialog = ({
   onConfirm: () => void;
 }) => {
   const { t } = useTranslation();
-  const descriptionId = useId();
   const replacing = action === 'replace';
   return (
-    <Dialog
-      aria-describedby={descriptionId}
-      onClose={onCancel}
+    <DiscardChangesDialog
+      description={
+        replacing
+          ? t('definitionEditor.unsaved.replaceQuestion')
+          : t('definitionEditor.unsaved.discardQuestion')
+      }
+      discardLabel={
+        replacing
+          ? t('definitionEditor.unsaved.replace')
+          : t('definitionEditor.unsaved.discard')
+      }
+      onDiscard={onConfirm}
+      onKeep={onCancel}
       open={action !== undefined}
-    >
-      <DialogTitle>{t('definitionEditor.unsaved.title')}</DialogTitle>
-      <DialogContent>
-        <DialogContentText id={descriptionId}>
-          {replacing
-            ? t('definitionEditor.unsaved.replaceQuestion')
-            : t('definitionEditor.unsaved.discardQuestion')}
-        </DialogContentText>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onCancel}>
-          {t('definitionEditor.unsaved.keepEditing')}
-        </Button>
-        <Button color="error" onClick={onConfirm} variant="contained">
-          {replacing
-            ? t('definitionEditor.unsaved.replace')
-            : t('definitionEditor.unsaved.discard')}
-        </Button>
-      </DialogActions>
-    </Dialog>
+      title={t('definitionEditor.unsaved.title')}
+    />
   );
 };

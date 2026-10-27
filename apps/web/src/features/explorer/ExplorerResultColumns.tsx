@@ -6,6 +6,7 @@ import type { TFunction } from 'i18next';
 import type { BlueprintWithAttributes, RecordItem } from '../records/api';
 import { RecordIdPopover } from '../records/components/RecordIdPopover';
 import type { getExtensionRuntime } from '../extensions/api';
+import { contributionKinds, extensionOutlets } from '../extensions/constants';
 import { FilterableCell } from './CellFilterButton';
 import type { AttributeFilterDraft } from './attributeFilterValues';
 import {
@@ -16,9 +17,7 @@ import {
 import { ConfiguredColumnCell } from './ConfiguredColumnCell';
 import {
   attricatRendererPrefix,
-  embeddedExtensionKind,
   explorerColumnIds,
-  explorerExtensionOutlets,
   explorerSortFields,
   explorerTableCellCapability,
   relationshipPathSeparator,
@@ -74,8 +73,8 @@ const findTableCellExtension = (
     ? undefined
     : runtime?.find(
         (item) =>
-          item.outlet === explorerExtensionOutlets.tableCell &&
-          item.kind === embeddedExtensionKind &&
+          item.outlet === extensionOutlets.explorerTableCell &&
+          item.kind === contributionKinds.embedded &&
           item.id === renderer.id &&
           item.version === renderer.version &&
           item.capabilities.includes(explorerTableCellCapability),

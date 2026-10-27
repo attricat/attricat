@@ -4,9 +4,9 @@ import {
   findingSeverities,
   findingStateFilters,
   findingStates,
-  ruleRunStatuses,
   ruleTriggerTypes,
 } from './constants';
+import { runStatusSchema } from '../../api/runStatus';
 
 export const ruleSchema = z.object({
   id: z.uuid(),
@@ -67,10 +67,10 @@ export const ruleRunSchema = z.object({
   id: z.uuid(),
   rule_id: z.uuid(),
   rule_version: z.number().int().positive(),
-  source: z.enum(['manual', 'schedule', 'event', 'post_import']),
+  source: z.enum(ruleTriggerTypes),
   dry_run: z.boolean(),
   scope_record_id: z.uuid().nullable(),
-  status: z.enum(ruleRunStatuses),
+  status: runStatusSchema,
   candidate_cursor: z.uuid().nullable(),
   candidates_evaluated: z.number().int().nonnegative(),
   findings_created: z.number().int().nonnegative(),

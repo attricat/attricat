@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import {
   Box,
@@ -56,14 +56,13 @@ export const ConversationsPage = ({
     <PageContainer>
       <PageHeader
         actions={
-          <Button
-            component={Link}
+          <RouterButton
             startIcon={<PlusIcon />}
             to={agentRoutes.create}
             variant="contained"
           >
             {t('agents.newConversation')}
-          </Button>
+          </RouterButton>
         }
         description={t('agents.conversationDescription')}
         icon={AgentIcon}

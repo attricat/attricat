@@ -26,6 +26,7 @@ import {
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 import { roleListOptions } from './queryOptions';
+import { roleCodePattern } from './constants';
 
 export const WorkspaceRolesSection = ({
   canManage,
@@ -131,9 +132,19 @@ export const WorkspaceRolesSection = ({
           <Typography variant="h6">
             {t('workspace.createCustomRole')}
           </Typography>
-          <form.Field name="code">
+          <form.Field
+            name="code"
+            validators={{
+              onSubmit: ({ value }) =>
+                roleCodePattern.test(value)
+                  ? undefined
+                  : t('workspace.roleCodeInvalid'),
+            }}
+          >
             {(field) => (
               <TextField
+                error={field.state.meta.errors.length > 0}
+                helperText={field.state.meta.errors[0]}
                 required
                 label={t('workspace.roleCode')}
                 onChange={(event) => field.handleChange(event.target.value)}

@@ -1,5 +1,4 @@
-import { Box, Button, Stack, Typography } from '@mui/material';
-import { Link } from '@tanstack/react-router';
+import { Box, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { ExtensionContribution } from './api';
 import { OutletContribution } from './OutletContribution';
@@ -8,6 +7,7 @@ import {
   navigationByExtension,
   type OutletContext,
 } from './outletContributions';
+import { RouterButton } from '../../components/RouterLink';
 
 type ExtensionAppsListProps = {
   canBrowseExtensions: boolean;
@@ -34,8 +34,7 @@ export const ExtensionAppsList = ({
           {t('extensions.noApps')}
         </Typography>
         {canBrowseExtensions && (
-          <Button
-            component={Link}
+          <RouterButton
             onClick={() => {
               onBrowseExtensions?.();
               onNavigate?.();
@@ -45,7 +44,7 @@ export const ExtensionAppsList = ({
             to="/manage/extensions"
           >
             {t('extensions.browseExtensions')}
-          </Button>
+          </RouterButton>
         )}
       </Box>
     );

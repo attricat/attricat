@@ -35,7 +35,6 @@ export const SaveSelectionAsSearchDialog = ({
           values,
         })
       }
-      open
       title={t('explorer.saveSelectionAsSearch')}
     />
   );
