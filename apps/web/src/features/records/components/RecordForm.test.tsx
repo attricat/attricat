@@ -300,6 +300,22 @@ describe('RecordForm', () => {
     );
   });
 
+  it('marks untouched required fields only once a save is attempted', async () => {
+    renderForm({
+      blueprint: blueprint([attribute('title'), attribute('sku')]),
+      requiredAttributes: ['title', 'sku'],
+    });
+    const [title, sku] = screen.getAllByRole('textbox');
+    fireEvent.change(title, { target: { value: 'Chair' } });
+    expect(sku.getAttribute('aria-invalid')).toBe('false');
+
+    fireEvent.change(title, { target: { value: '' } });
+    expect(title.getAttribute('aria-invalid')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sku.getAttribute('aria-invalid')).toBe('true'));
+  });
+
   it('opens the tab holding the first field with an error', async () => {
     const result = blueprint([attribute('title'), attribute('price')]);
     result.blueprint.views.detail = {

@@ -230,6 +230,17 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       expectedUpdatedAt === undefined ? initialValues : baseline.fields;
     const savedValues = baseline.values;
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+    // Fields the user has changed; others show their errors only once a save
+    // is attempted, as the action bar does.
+    const [touchedCodes, setTouchedCodes] = useState<ReadonlySet<string>>(
+      () => new Set(),
+    );
+    const markTouched = (codes: readonly string[]) =>
+      setTouchedCodes((current) =>
+        codes.every((code) => current.has(code))
+          ? current
+          : new Set([...current, ...codes]),
+      );
     const [formError, setFormError] = useState<string>();
     // Records are entered with the detail layout; each display component
     // edits with its paired edit component.
@@ -444,10 +455,12 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     const restoreDraft = () => {
       const restored = draft.restore();
       if (!restored) return;
-      const nextFields = {
-        ...form.state.values.fields,
-        ...pickDraftFields(restored, draftCodes.split(draftFieldSeparator)),
-      };
+      const restoredFields = pickDraftFields(
+        restored,
+        draftCodes.split(draftFieldSeparator),
+      );
+      const nextFields = { ...form.state.values.fields, ...restoredFields };
+      markTouched(Object.keys(restoredFields));
       validateFields(nextFields);
       form.setFieldValue('fields', nextFields);
     };
@@ -460,8 +473,13 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       requiredCodes,
       fileCounts,
     );
+    const shownFieldErrors = Object.fromEntries(
+      Object.entries(fieldErrors).filter(
+        ([code]) => submitAttempted || touchedCodes.has(code),
+      ),
+    );
     const allFieldErrors = Object.fromEntries(
-      Object.entries({ ...serverFieldErrors, ...fieldErrors }).filter(
+      Object.entries({ ...serverFieldErrors, ...shownFieldErrors }).filter(
         // Queuing a file fills a required file field without a field change.
         ([code]) => !((fileCounts?.[code] ?? 0) > 0),
       ),
@@ -735,6 +753,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                           [attribute.code]: nextValue,
                         };
                         markEdited(attribute.code);
+                        markTouched([attribute.code]);
                         validateFields(nextFields);
                         field.handleChange(nextFields);
                       }}
