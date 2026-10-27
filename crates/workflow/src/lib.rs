@@ -4,10 +4,12 @@ use attricat_validation::{
     predicate::{MAX_SYSTEM_TAGS, MAX_TAG_LENGTH},
 };
 use cron::Schedule;
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, HashSet},
     str::FromStr,
 };
@@ -106,13 +108,29 @@ pub struct CompiledWorkflow {
     pub raw_definition_hash: String,
 }
 
-#[derive(Deserialize)]
+/// An automation that applies fixed record actions when one of its triggers fires.
+#[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[schemars(
+    title = "Attricat workflow definition",
+    transform = definition_cross_field_rules
+)]
 struct Raw {
+    /// Definition format version. `1` accepts only record event triggers;
+    /// `2` also accepts `manual`, `schedule` and `extension_event` triggers.
+    #[schemars(extend("enum" = FORMAT_VERSIONS))]
     format_version: u32,
+    /// Stable workflow identifier, unique within its owner.
+    #[schemars(regex(pattern = attricat_validation::CODE_PATTERN))]
     code: String,
+    /// Human-readable workflow name.
+    #[schemars(regex(pattern = NON_BLANK_PATTERN))]
     name: String,
+    /// What starts the workflow. At least one.
+    #[schemars(length(min = 1))]
     triggers: Vec<RawTrigger>,
+    /// Record actions applied in order when a trigger fires. At least one.
+    #[schemars(length(min = 1))]
     actions: Vec<RawAction>,
 }
 #[derive(Deserialize)]
@@ -130,41 +148,324 @@ enum RawTrigger {
         contract_version: Option<u32>,
     },
 }
-#[derive(Deserialize)]
+/// Runs when a record event occurs. Event triggers have no `type` key.
+#[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[schemars(rename = "EventTrigger", transform = event_trigger_rules)]
 struct RawEventTrigger {
+    /// Record event that starts the workflow.
+    #[schemars(extend("enum" = RECORD_TRIGGER_EVENTS))]
     event_type: String,
+    /// Scalar values the event envelope must match: `event_type`,
+    /// `aggregate_kind`, `source_kind`, `source_name` or `metadata.<path>`.
     #[serde(default)]
+    #[schemars(schema_with = "envelope_schema")]
     envelope: BTreeMap<String, Value>,
+    /// Scalar values the event facts must match, keyed `facts.<index>.<field>`.
     #[serde(default)]
+    #[schemars(schema_with = "facts_schema")]
     facts: BTreeMap<String, Value>,
+    /// Match only events whose changed facts name one of these attribute
+    /// codes. Not allowed with `record.migrated.v1`.
+    // `default` only keeps a custom-schema `Option` optional in the schema.
+    #[serde(default)]
+    #[schemars(schema_with = "trigger_attributes_schema")]
     attributes: Option<Vec<String>>,
 }
-#[derive(Deserialize)]
+/// Schema of the typed (`format_version = 2`) triggers. [`RawTrigger::V2`]
+/// reads them loosely and [`trigger`] applies these rules.
+#[derive(JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[expect(
+    dead_code,
+    reason = "describes RawTrigger::V2 for the JSON Schema only"
+)]
+enum TypedTriggerSchema {
+    /// Runs when started on demand for one record. Requires `format_version = 2`.
+    Manual,
+    /// Runs on a UTC cron schedule for one fixed record. Requires `format_version = 2`.
+    Schedule {
+        /// Six-field cron expression, including seconds: `sec min hour day month weekday`.
+        #[schemars(regex(pattern = SIX_FIELD_CRON_PATTERN))]
+        cron: String,
+        /// Schedule time zone. Only `UTC` is supported.
+        #[schemars(extend("enum" = [SCHEDULE_TIMEZONE]))]
+        timezone: String,
+        /// UUID of the record the scheduled run acts on.
+        #[schemars(regex(pattern = UUID_PATTERN))]
+        target_record_id: String,
+    },
+    /// Reserved: runs when an extension emits a versioned event. Delivery is
+    /// not enabled yet. Requires `format_version = 2`.
+    ExtensionEvent {
+        /// Extension that emits the event.
+        #[schemars(
+            length(max = MAX_EXTENSION_PROVIDER_BYTES),
+            regex(pattern = EXTENSION_PROVIDER_PATTERN)
+        )]
+        provider: String,
+        /// Versioned extension event, such as `plugin.example.changed.v1`.
+        #[schemars(regex(pattern = EXTENSION_EVENT_TYPE_PATTERN))]
+        event_type: String,
+        /// Version of the event payload contract.
+        #[schemars(range(min = 1))]
+        contract_version: u32,
+    },
+}
+/// What starts the workflow.
+impl JsonSchema for RawTrigger {
+    fn schema_name() -> Cow<'static, str> {
+        "Trigger".into()
+    }
+    fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+        let mut variants = vec![generator.subschema_for::<RawEventTrigger>().to_value()];
+        if let Some(Value::Array(typed)) =
+            TypedTriggerSchema::json_schema(generator).remove("oneOf")
+        {
+            variants.extend(typed);
+        }
+        json_schema!({ "description": "What starts the workflow.", "oneOf": variants })
+    }
+}
+/// A record change the workflow makes.
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[schemars(rename = "Action")]
 enum RawAction {
+    /// Adds system tags to the record.
     SystemTagsAdd {
+        /// Tags to add, each at most 128 bytes, without duplicates.
+        #[schemars(schema_with = "system_tags_schema")]
         tags: Vec<String>,
     },
+    /// Removes system tags from the record.
     SystemTagsRemove {
+        /// Tags to remove, without duplicates.
+        #[schemars(schema_with = "system_tags_schema")]
         tags: Vec<String>,
     },
+    /// Merges scalar values into the record's system metadata.
     SystemMetadataMerge {
+        /// Scalar values keyed by dotted metadata path, such as `review.state`.
+        #[schemars(schema_with = "metadata_values_schema")]
         values: BTreeMap<String, Value>,
     },
+    /// Deletes keys from the record's system metadata.
     SystemMetadataDelete {
+        /// Metadata keys to delete, without duplicates.
+        #[schemars(schema_with = "metadata_keys_schema")]
         keys: Vec<String>,
     },
+    /// Writes one attribute value. Set exactly one of `fixed` and `event_field`.
+    #[schemars(transform = exactly_one_value_source)]
     AttributeWrite {
+        /// Attribute to write.
+        #[schemars(
+            regex(pattern = attricat_validation::CODE_PATTERN),
+            extend("x-attricat-reference" = "attribute")
+        )]
         attribute_code: String,
+        /// Scalar value to write.
+        // `default` only keeps a custom-schema `Option` optional in the schema.
+        #[serde(default)]
+        #[schemars(schema_with = "scalar_field_schema")]
         fixed: Option<Value>,
+        /// Event fact to copy, as `facts.<index>.<field>`. Record event
+        /// triggers only.
+        #[schemars(regex(pattern = EVENT_FIELD_PATTERN))]
         event_field: Option<String>,
     },
+    /// Applies fixed actions to every live record whose relationship
+    /// attribute targets the trigger record.
     ReferencingRecordsUpdate {
+        /// Relationship attribute of the referencing records.
+        #[schemars(
+            regex(pattern = attricat_validation::CODE_PATTERN),
+            extend("x-attricat-reference" = "relationship_attribute")
+        )]
         relationship_attribute: String,
+        /// Most referencing records to update; more fails the action before
+        /// any record changes.
+        #[schemars(
+            range(min = 1, max = MAX_REFERENCING_TARGETS),
+            extend("default" = DEFAULT_REFERENCING_TARGETS)
+        )]
         max_targets: Option<u32>,
+        /// Actions applied to each referencing record. Attribute writes need
+        /// `fixed` values and updates cannot nest.
+        #[schemars(schema_with = "nested_actions_schema")]
         actions: Vec<RawAction>,
     },
+}
+
+const FORMAT_VERSIONS: [u32; 2] = [1, 2];
+const MANUAL_TRIGGER: &str = "manual";
+const SCHEDULE_TRIGGER: &str = "schedule";
+const EXTENSION_EVENT_TRIGGER: &str = "extension_event";
+const SCHEDULE_TIMEZONE: &str = "UTC";
+const REFERENCING_RECORDS_UPDATE_ACTION: &str = "referencing_records_update";
+/// Matches text with at least one non-whitespace character.
+const NON_BLANK_PATTERN: &str = r"\S";
+const SIX_FIELD_CRON_PATTERN: &str = r"^\s*\S+(?:\s+\S+){5}\s*$";
+/// The textual forms [`uuid::Uuid::parse_str`] accepts.
+const UUID_PATTERN: &str = "^(?:[0-9A-Fa-f]{32}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}|\\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\\}|urn:uuid:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$";
+const EXTENSION_PROVIDER_PATTERN: &str = r"^[A-Za-z0-9._-]+$";
+const EXTENSION_EVENT_PREFIX: &str = "plugin.";
+const EXTENSION_EVENT_SUFFIX: &str = ".v1";
+const EXTENSION_EVENT_TYPE_PATTERN: &str = r"^plugin\.(?:[\s\S]*\.)?v1$";
+/// A dotted path of codes, such as a metadata key.
+const CODE_PATH_PATTERN: &str = r"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$";
+/// `facts.<index>.<field>`, where the index is a `usize`.
+const EVENT_FIELD_PATTERN: &str = r"^facts\.\+?[0-9]+(?:\.[A-Za-z0-9_-]+)+$";
+const ENVELOPE_METADATA_PATTERN: &str = r"^metadata\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$";
+
+/// TOML values a trigger filter or written value may hold.
+fn scalar_schema() -> Value {
+    json!({ "type": ["string", "number", "boolean"] })
+}
+fn scalar_field_schema(_: &mut SchemaGenerator) -> Schema {
+    Schema::try_from(scalar_schema()).expect("scalar schema is an object")
+}
+fn envelope_schema(_: &mut SchemaGenerator) -> Schema {
+    json_schema!({
+        "type": "object",
+        "default": {},
+        "propertyNames": {
+            "anyOf": [{ "enum": ENVELOPE_FIELDS }, { "pattern": ENVELOPE_METADATA_PATTERN }]
+        },
+        "additionalProperties": scalar_schema(),
+        "x-attricat-key-suggestions": ENVELOPE_FIELDS,
+    })
+}
+fn facts_schema(_: &mut SchemaGenerator) -> Schema {
+    json_schema!({
+        "type": "object",
+        "default": {},
+        "propertyNames": { "pattern": EVENT_FIELD_PATTERN },
+        "additionalProperties": scalar_schema(),
+    })
+}
+fn trigger_attributes_schema(_: &mut SchemaGenerator) -> Schema {
+    json_schema!({
+        "type": "array",
+        "minItems": 1,
+        "maxItems": MAX_TRIGGER_ATTRIBUTES,
+        "uniqueItems": true,
+        "items": {
+            "type": "string",
+            "pattern": attricat_validation::CODE_PATTERN,
+            "x-attricat-reference": "attribute",
+        },
+    })
+}
+fn system_tags_schema(_: &mut SchemaGenerator) -> Schema {
+    json_schema!({
+        "type": "array",
+        "minItems": 1,
+        "maxItems": MAX_SYSTEM_TAGS,
+        "uniqueItems": true,
+        "items": {
+            "type": "string",
+            "maxLength": MAX_TAG_LENGTH,
+            "pattern": NON_BLANK_PATTERN,
+        },
+    })
+}
+fn metadata_values_schema(_: &mut SchemaGenerator) -> Schema {
+    json_schema!({
+        "type": "object",
+        "minProperties": 1,
+        "propertyNames": { "pattern": CODE_PATH_PATTERN },
+        "additionalProperties": scalar_schema(),
+    })
+}
+fn metadata_keys_schema(_: &mut SchemaGenerator) -> Schema {
+    json_schema!({
+        "type": "array",
+        "minItems": 1,
+        "maxItems": MAX_METADATA_KEYS_PER_ACTION,
+        "uniqueItems": true,
+        "items": { "type": "string", "pattern": NON_BLANK_PATTERN },
+    })
+}
+fn nested_actions_schema(generator: &mut SchemaGenerator) -> Schema {
+    let action = generator.subschema_for::<RawAction>();
+    json_schema!({
+        "type": "array",
+        "minItems": 1,
+        "maxItems": MAX_NESTED_ACTIONS,
+        "items": {
+            "$ref": action.get("$ref"),
+            "not": {
+                "anyOf": [
+                    {
+                        "properties": { "type": { "const": REFERENCING_RECORDS_UPDATE_ACTION } },
+                        "required": ["type"],
+                    },
+                    { "required": ["event_field"] },
+                ]
+            },
+        },
+    })
+}
+fn exactly_one_value_source(schema: &mut Schema) {
+    schema.insert("if".into(), json!({ "required": ["fixed"] }));
+    schema.insert(
+        "then".into(),
+        json!({ "not": { "required": ["event_field"] } }),
+    );
+    schema.insert("else".into(), json!({ "required": ["event_field"] }));
+}
+fn event_trigger_rules(schema: &mut Schema) {
+    schema.insert(
+        "if".into(),
+        json!({
+            "properties": { "event_type": { "const": attricat_events::RECORD_MIGRATED_V1 } },
+            "required": ["event_type"],
+        }),
+    );
+    schema.insert(
+        "then".into(),
+        json!({ "not": { "required": ["attributes"] } }),
+    );
+}
+fn definition_cross_field_rules(schema: &mut Schema) {
+    schema.insert(
+        "allOf".into(),
+        json!([
+            {
+                "description": "Format version 1 accepts only record event triggers.",
+                "if": {
+                    "properties": { "format_version": { "const": 1 } },
+                    "required": ["format_version"],
+                },
+                "then": {
+                    "properties": { "triggers": { "items": { "not": { "required": ["type"] } } } }
+                },
+            },
+            {
+                "description": "Manual and schedule triggers carry no event facts, so attribute writes need fixed values.",
+                "if": {
+                    "properties": {
+                        "triggers": {
+                            "contains": {
+                                "properties": {
+                                    "type": { "enum": [MANUAL_TRIGGER, SCHEDULE_TRIGGER] }
+                                },
+                                "required": ["type"],
+                            }
+                        }
+                    },
+                    "required": ["triggers"],
+                },
+                "then": {
+                    "properties": {
+                        "actions": { "items": { "not": { "required": ["event_field"] } } }
+                    }
+                },
+            },
+        ]),
+    );
 }
 
 /// Default and hard upper bound for `referencing_records_update` targets.
@@ -250,7 +551,7 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
             let attributes = match attributes {
                 None => Vec::new(),
                 Some(codes) => {
-                    if event_type == "record.migrated.v1" {
+                    if event_type == attricat_events::RECORD_MIGRATED_V1 {
                         return Err(WorkflowError::Invalid(
                             "record.migrated.v1 carries no attribute facts, so it cannot filter on attributes".into(),
                         ));
@@ -285,7 +586,7 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
                 ));
             }
             match kind.as_str() {
-                "manual" => {
+                MANUAL_TRIGGER => {
                     if cron.is_none()
                         && timezone.is_none()
                         && target_record_id.is_none()
@@ -300,11 +601,11 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
                         ))
                     }
                 }
-                "schedule" => {
+                SCHEDULE_TRIGGER => {
                     let cron = required(cron, "schedule cron")?;
                     let timezone = required(timezone, "schedule timezone")?;
                     let target_record_id = required(target_record_id, "schedule target_record_id")?;
-                    if timezone != "UTC" {
+                    if timezone != SCHEDULE_TIMEZONE {
                         return Err(WorkflowError::Invalid(
                             "schedule timezone must be UTC".into(),
                         ));
@@ -326,7 +627,7 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
                         target_record_id,
                     })
                 }
-                "extension_event" => {
+                EXTENSION_EVENT_TRIGGER => {
                     let provider = required(provider, "extension provider")?;
                     if provider.len() > MAX_EXTENSION_PROVIDER_BYTES
                         || !provider
@@ -336,7 +637,9 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
                         return Err(WorkflowError::Invalid("invalid extension provider".into()));
                     }
                     let event_type = required(event_type, "extension event_type")?;
-                    if !event_type.starts_with("plugin.") || !event_type.ends_with(".v1") {
+                    if !event_type.starts_with(EXTENSION_EVENT_PREFIX)
+                        || !event_type.ends_with(EXTENSION_EVENT_SUFFIX)
+                    {
                         return Err(WorkflowError::Invalid(
                             "extension event_type must be a versioned plugin event".into(),
                         ));
@@ -725,5 +1028,119 @@ mod tests {
         let round_trip: CompiledWorkflow =
             serde_json::from_value(serde_json::to_value(&compiled).unwrap()).unwrap();
         assert_eq!(round_trip, compiled);
+    }
+
+    /// The JSON Schema for workflow definition TOML, published as
+    /// `contracts/workflow-definition-v1.schema.json` for the web editor.
+    fn definition_json_schema() -> serde_json::Value {
+        schemars::generate::SchemaSettings::draft2020_12()
+            .into_generator()
+            .into_root_schema_for::<Raw>()
+            .to_value()
+    }
+
+    const CONTRACT: &str = "contracts/workflow-definition-v1.schema.json";
+    const UPDATE_CONTRACTS: &str = "UPDATE_CONTRACTS";
+
+    #[test]
+    fn definition_schema_contract_is_current() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .unwrap()
+            .join(CONTRACT);
+        let mut rendered = serde_json::to_string_pretty(&definition_json_schema()).unwrap();
+        rendered.push('\n');
+        if std::env::var_os(UPDATE_CONTRACTS).is_some() {
+            std::fs::write(&path, rendered).unwrap();
+            return;
+        }
+        assert!(
+            std::fs::read_to_string(&path).unwrap_or_default() == rendered,
+            "{CONTRACT} is stale; run `just contracts`"
+        );
+    }
+
+    const EVENT_WORKFLOW: &str = "format_version=2\ncode='review-license'\nname='Review license'\n[[triggers]]\nevent_type='attribute_value.changed.v1'\nattributes=['license']\n[triggers.envelope]\nsource_kind='api'\n[triggers.facts]\n'facts.0.attribute_code'='license'\n[[actions]]\ntype='attribute_write'\nattribute_code='status'\nevent_field='facts.0.after_value'\n[[actions]]\ntype='referencing_records_update'\nrelationship_attribute='license'\nmax_targets=25\n[[actions.actions]]\ntype='attribute_write'\nattribute_code='status'\nfixed='in_review'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['needs-review']\n[[actions]]\ntype='system_metadata_merge'\nvalues={'review.state'='open'}";
+    const SCHEDULE_WORKFLOW: &str = "format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='0 */5 * * * *'\ntimezone='UTC'\ntarget_record_id='00000000-0000-0000-0000-000000000001'\n[[triggers]]\ntype='extension_event'\nprovider='example'\nevent_type='plugin.example.changed.v1'\ncontract_version=1\n[[actions]]\ntype='system_tags_add'\ntags=['x']\n[[actions]]\ntype='system_metadata_delete'\nkeys=['review.state']";
+
+    #[test]
+    fn schema_matches_parser_for_representative_definitions() {
+        let schema = definition_json_schema();
+        let fixed_write = "type='attribute_write'\nattribute_code='status'\nfixed='done'";
+        for (definition, accepted) in [
+            (EVENT_WORKFLOW.to_owned(), true),
+            (SCHEDULE_WORKFLOW.to_owned(), true),
+            (EVENT_WORKFLOW.replace("format_version=2", "format_version=1"), true),
+            (EVENT_WORKFLOW.replace("format_version=2", "format_version=3"), false),
+            (EVENT_WORKFLOW.replace("name='Review license'\n", ""), false),
+            (EVENT_WORKFLOW.replace("name='Review license'", "name=' '"), false),
+            (format!("{EVENT_WORKFLOW}\nlabel='Review'"), false),
+            (
+                EVENT_WORKFLOW.replace("attribute_value.changed.v1", "record.migrated.v1"),
+                false,
+            ),
+            (
+                EVENT_WORKFLOW.replace("attribute_value.changed.v1", "record.deleted.v1"),
+                false,
+            ),
+            (EVENT_WORKFLOW.replace("attributes=['license']\n", ""), true),
+            (
+                EVENT_WORKFLOW
+                    .replace("attributes=['license']\n", "")
+                    .replace("attribute_value.changed.v1", "record.migrated.v1"),
+                true,
+            ),
+            (EVENT_WORKFLOW.replace("source_kind=", "origin="), false),
+            (EVENT_WORKFLOW.replace("'facts.0.attribute_code'", "'facts.x.attribute_code'"), false),
+            (EVENT_WORKFLOW.replace("max_targets=25", "max_targets=501"), false),
+            (
+                EVENT_WORKFLOW.replace("fixed='in_review'", "event_field='facts.0.after_value'"),
+                false,
+            ),
+            (
+                EVENT_WORKFLOW.replace("event_field='facts.0.after_value'", "fixed='x'\nevent_field='facts.0.after_value'"),
+                false,
+            ),
+            (EVENT_WORKFLOW.replace("type='system_tags_add'", "type='system_tags_set'"), false),
+            (EVENT_WORKFLOW.replace("tags=['needs-review']", "tags=['a','a']"), false),
+            (EVENT_WORKFLOW.replace("{'review.state'='open'}", "{}"), false),
+            (SCHEDULE_WORKFLOW.replace("format_version=2", "format_version=1"), false),
+            (SCHEDULE_WORKFLOW.replace("timezone='UTC'", "timezone='Europe/Warsaw'"), false),
+            (SCHEDULE_WORKFLOW.replace("cron='0 */5 * * * *'", "cron='*/5 * * * *'"), false),
+            (SCHEDULE_WORKFLOW.replace("00000000-0000-0000-0000-000000000001", "record-1"), false),
+            (SCHEDULE_WORKFLOW.replace("plugin.example.changed.v1", "record.updated.v1"), false),
+            (SCHEDULE_WORKFLOW.replace("contract_version=1", "contract_version=0"), false),
+            (SCHEDULE_WORKFLOW.replace("keys=['review.state']", "keys=[]"), false),
+            (
+                SCHEDULE_WORKFLOW.replace("type='system_tags_add'\ntags=['x']", fixed_write),
+                true,
+            ),
+            (
+                SCHEDULE_WORKFLOW.replace(
+                    "type='system_tags_add'\ntags=['x']",
+                    "type='attribute_write'\nattribute_code='status'\nevent_field='facts.0.after_value'",
+                ),
+                false,
+            ),
+            (
+                SCHEDULE_WORKFLOW.replace("type='schedule'\ncron='0 */5 * * * *'\ntimezone='UTC'\ntarget_record_id='00000000-0000-0000-0000-000000000001'", "type='manual'"),
+                true,
+            ),
+            (
+                SCHEDULE_WORKFLOW.replace("type='schedule'\ncron='0 */5 * * * *'\ntimezone='UTC'\ntarget_record_id='00000000-0000-0000-0000-000000000001'", "type='manual'\nattributes=['a']"),
+                false,
+            ),
+        ] {
+            assert_eq!(parse(&definition).is_ok(), accepted, "{definition}");
+            let instance =
+                serde_json::to_value(toml::from_str::<toml::Value>(&definition).unwrap()).unwrap();
+            let violations = attricat_validation::validate_json_schema(&schema, &instance).unwrap();
+            assert_eq!(
+                violations.is_empty(),
+                accepted,
+                "{definition}: {violations:?}"
+            );
+        }
     }
 }

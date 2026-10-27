@@ -672,6 +672,7 @@ dependencies = [
  "attricat-events",
  "attricat-validation",
  "cron",
+ "schemars",
  "serde",
  "serde_json",
  "sha2",
