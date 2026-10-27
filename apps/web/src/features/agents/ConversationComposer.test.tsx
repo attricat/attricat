@@ -231,4 +231,28 @@ describe('ConversationComposer', () => {
     expect(createConversation).toHaveBeenCalledWith('Hi');
     expect(sendMessage).toHaveBeenLastCalledWith(conversationId, 'Hi', []);
   });
+
+  it('lists a created conversation even when its first message fails', async () => {
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationComposer
+          conversationId={null}
+          createConversation={vi.fn().mockResolvedValue(conversationId)}
+        />
+      </QueryClientProvider>,
+    );
+    vi.mocked(sendMessage).mockRejectedValueOnce(new Error('offline'));
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Hi');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: agentQueryKeys.conversations(),
+    });
+  });
 });

@@ -72,6 +72,10 @@ export const ConversationComposer = ({
         }
         id = await createConversation(content);
         setCreatedId(id);
+        // Listed now, even if sending the first message fails.
+        void client.invalidateQueries({
+          queryKey: agentQueryKeys.conversations(),
+        });
       }
       let attachmentIds = previousAttachmentIds;
       if (files.length > 0 && attachmentIds.length === 0) {
@@ -88,10 +92,6 @@ export const ConversationComposer = ({
     onSuccess: (id) => {
       form.reset();
       attachments.reset();
-      if (!conversationId)
-        void client.invalidateQueries({
-          queryKey: agentQueryKeys.conversations(),
-        });
       void invalidateConversation(client, id);
     },
     onSettled: () => onSendingChange?.(false),
