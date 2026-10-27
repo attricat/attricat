@@ -11,10 +11,23 @@ export const monacoThemeNames: Record<DesignMode, string> = {
 /** Monaco's built-in themes that supply syntax colors for each mode. */
 export const monacoBaseThemes = { light: 'vs', dark: 'vs-dark' } as const;
 
+/** Nesting levels Monaco colors brackets by. */
+const bracketLevels = 6;
+
 /** Editor chrome colors from the design tokens, keyed by Monaco color id. */
 export const monacoThemeColors = (mode: DesignMode) => {
   const c = colors[mode];
+  // Bracket pairs stay one color instead of Monaco's rainbow palette.
+  const brackets = Object.fromEntries(
+    Array.from({ length: bracketLevels }, (_, index) => [
+      `editorBracketHighlight.foreground${index + 1}`,
+      c.text.secondary,
+    ]),
+  );
   return {
+    ...brackets,
+    'editorBracketHighlight.unexpectedBracket.foreground':
+      c.semantic.error.main,
     'editor.background': c.background.surface,
     'editor.foreground': c.text.primary,
     'editor.lineHighlightBackground': c.action.hover,

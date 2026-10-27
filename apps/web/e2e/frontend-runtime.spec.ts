@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const session = {
   user_id: '123e4567-e89b-12d3-a456-426614174000',
@@ -7,20 +7,23 @@ const session = {
   email: 'frontend@example.test',
   time_zone: null,
   login_identifier: 'frontend.local',
+  capabilities: {
+    audit_read: false,
+    blueprints_write: true,
+    extensions_manage: false,
+    extensions_read: false,
+    members_manage: false,
+    roles_manage: false,
+    tokens_manage: false,
+    workspace_navigation_manage: false,
+  },
 };
 
-test('loads Monaco and its worker without external network access', async ({
-  page,
-  baseURL,
-}) => {
-  const externalScripts: string[] = [];
-  const errors: string[] = [];
-  const workers: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  page.on('worker', (worker) => workers.push(worker.url()));
-  await page.route('**/*', (route) => {
+/** Serves an empty signed-in workspace and blocks every external request. */
+const mockApi = (page: Page, baseURL: string, externalScripts: string[] = []) =>
+  page.route('**/*', (route) => {
     const url = new URL(route.request().url());
-    if (url.origin !== new URL(baseURL!).origin) {
+    if (url.origin !== new URL(baseURL).origin) {
       if (route.request().resourceType() === 'script')
         externalScripts.push(url.href);
       // Also block optional external resources such as the app's web fonts.
@@ -37,6 +40,17 @@ test('loads Monaco and its worker without external network access', async ({
     }
     return route.continue();
   });
+
+test('loads Monaco and its worker without external network access', async ({
+  page,
+  baseURL,
+}) => {
+  const externalScripts: string[] = [];
+  const errors: string[] = [];
+  const workers: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('worker', (worker) => workers.push(worker.url()));
+  await mockApi(page, baseURL!, externalScripts);
   await page.goto('/manage/blueprints/new');
   await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -85,4 +99,58 @@ test('loads Polish translations only after they are selected', async ({
   await page.getByRole('option', { name: 'Polish' }).click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'pl');
   expect(localeRequests.some((url) => /\/pl-/.test(url))).toBe(true);
+});
+
+test('follows the dark theme and edits TOML with language features', async ({
+  page,
+  baseURL,
+}) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await mockApi(page, baseURL!);
+  await page.goto('/manage/blueprints/new');
+  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  const editor = page.locator('.monaco-editor').first();
+  await expect(editor).toBeVisible();
+  // The dark design token for surfaces.
+  await expect(editor.locator('.monaco-editor-background')).toHaveCSS(
+    'background-color',
+    'rgb(19, 29, 49)',
+  );
+
+  const input = editor.getByRole('textbox', { name: 'Editor content' });
+  await input.focus();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.insertText(
+    'format_version = 1\ncode = "offline"\nnme = "Offline"\nkind = "record" # inline note\ntags = ["a"]\n',
+  );
+  // Inline comments are highlighted, and arrays hold strings rather than
+  // reading as table headers.
+  const tokenClass = (text: RegExp) =>
+    editor
+      .locator('.view-line span span')
+      .filter({ hasText: text })
+      .first()
+      .getAttribute('class');
+  await expect.poll(() => tokenClass(/^#.inline.note$/)).not.toBe('mtk1');
+  await expect
+    .poll(() => tokenClass(/^"a"$/))
+    .toBe(await tokenClass(/^"record"$/));
+
+  // Ctrl+/ toggles a # line comment.
+  await page.keyboard.press('ControlOrMeta+Home');
+  await page.keyboard.press('ControlOrMeta+/');
+  await expect(editor.locator('.view-line').first()).toContainText(
+    '# format_version',
+  );
+  await page.keyboard.press('ControlOrMeta+/');
+
+  // The misspelled key offers its fix.
+  await expect(editor.locator('.squiggly-error').first()).toBeVisible();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Control+.');
+  await expect(page.getByText('Change to “name”')).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(editor).toContainText('name = "Offline"');
+  await expect(editor).not.toContainText('nme');
 });

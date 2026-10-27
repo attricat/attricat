@@ -2,6 +2,7 @@ export const definitionKinds = {
   blueprint: 'blueprint',
   reusableAttribute: 'reusableAttribute',
   rule: 'rule',
+  workflow: 'workflow',
 } as const;
 export type DefinitionKind =
   (typeof definitionKinds)[keyof typeof definitionKinds];
@@ -35,8 +36,20 @@ export const maxAttributePathHops = 3;
 export const diagnosticsOwner = 'attricat-definition';
 export const diagnosticsDelayMs = 250;
 export const serverDiagnosticsOwner = 'attricat-definition-server';
+/** Warnings for references to things the workspace does not have. */
+export const referenceDiagnosticsOwner = 'attricat-definition-references';
 /** Server checks wait for a longer pause than local diagnostics. */
 export const checkDelayMs = 600;
 export const definitionEditorHeight = 'calc(100vh - 280px)';
 /** Completion lookups reuse cached workspace data for this long. */
 export const referenceStaleTimeMs = 60_000;
+
+/**
+ * Pages that reference values open with Ctrl+click, in a new tab so the
+ * editor keeps its unsaved changes.
+ */
+export const referencePages = {
+  blueprint: (id: string) => `/manage/blueprints/${encodeURIComponent(id)}`,
+  contexts: '/manage/contexts',
+  roles: '/manage/workspace/roles',
+} as const;

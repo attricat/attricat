@@ -3,6 +3,7 @@ import '../../i18n';
 import { blueprintTemplates } from '../blueprints/blueprintEditorUtils';
 import { reusableAttributeTemplates } from '../reusable-attributes/templates';
 import { ruleTemplates } from '../rules/templates';
+import { starterWorkflowDefinition } from '../workflows/constants';
 import { definitionKinds } from './constants';
 import { definitionDiagnostics } from './definitionDiagnostics';
 
@@ -15,6 +16,30 @@ const attribute = `
 [[attributes]]
 code = "name"
 value_type = "string"
+`;
+
+/** Applies a diagnostic's quick fix to the text it was reported for. */
+const applyFix = (text: string, message = /./) => {
+  const fix = definitionDiagnostics(definitionKinds.blueprint, text).find(
+    (diagnostic) => diagnostic.fix && message.test(diagnostic.message),
+  )?.fix;
+  if (!fix) return undefined;
+  return [...fix.edits]
+    .sort((left, right) => right.range.start - left.range.start)
+    .reduce(
+      (result, { range, text: replacement }) =>
+        result.slice(0, range.start) + replacement + result.slice(range.end),
+      text,
+    );
+};
+
+const workflowHead = `format_version = 2
+code = "tagging"
+name = "Tagging"
+
+[[actions]]
+type = "system_tags_add"
+tags = ["new"]
 `;
 
 const diagnose = (text: string) =>
@@ -108,5 +133,78 @@ describe('definitionDiagnostics', () => {
         source: '[[attributes]]',
       },
     ]);
+  });
+
+  it('fixes unknown keys with their closest match', () => {
+    expect(applyFix(`${header}unrelated = 1\n`)).toBeUndefined();
+    expect(applyFix(header.replace('name =', 'nme ='), /^Unknown key/)).toBe(
+      header,
+    );
+  });
+
+  it('fixes values with the closest allowed one', () => {
+    expect(applyFix(header.replace('"record"', '"recrd"'))).toBe(header);
+  });
+
+  it('fixes missing keys by adding them to their table', () => {
+    expect(applyFix(`${header}\n[[attributes]]\nvalue_type = "string"\n`)).toBe(
+      `${header}\n[[attributes]]\ncode = ""\nvalue_type = "string"\n`,
+    );
+  });
+
+  describe('workflows', () => {
+    const diagnoseWorkflow = (text: string) =>
+      definitionDiagnostics(definitionKinds.workflow, text).map(
+        ({ message, range }) => ({
+          message,
+          source: text.slice(range.start, range.end),
+        }),
+      );
+
+    it('accepts the starter workflow', () => {
+      expect(diagnoseWorkflow(starterWorkflowDefinition)).toEqual([]);
+    });
+
+    it('validates untyped event triggers against their own branch', () => {
+      expect(
+        diagnoseWorkflow(
+          `${workflowHead}\n[[triggers]]\nevent_type = "record.created.v1"\nbogus = 1\n`,
+        ),
+      ).toEqual([{ message: 'Unknown key “bogus”.', source: 'bogus' }]);
+    });
+
+    it('validates typed triggers against the tagged branch', () => {
+      expect(
+        diagnoseWorkflow(
+          `${workflowHead}\n[[triggers]]\ntype = "schedule"\ncron = "0 0 3 * * *"\ntimezone = "UTC"\n`,
+        ),
+      ).toEqual([
+        {
+          message: 'Missing required key “target_record_id”.',
+          source: '[[triggers]]',
+        },
+      ]);
+    });
+
+    it('explains cross-field rules on the key they forbid', () => {
+      expect(
+        diagnoseWorkflow(
+          `${workflowHead.replace('format_version = 2', 'format_version = 1')}\n[[triggers]]\ntype = "manual"\n`,
+        ),
+      ).toEqual([
+        {
+          message:
+            '“type” is not allowed here. Format version 1 accepts only record event triggers.',
+          source: 'type',
+        },
+      ]);
+    });
+
+    it('describes format errors with the field description', () => {
+      const [diagnostic] = diagnoseWorkflow(
+        `${workflowHead}\n[[triggers]]\ntype = "schedule"\ncron = "daily"\ntimezone = "UTC"\ntarget_record_id = "00000000-0000-0000-0000-000000000000"\n`,
+      );
+      expect(diagnostic?.message).toMatch(/^Invalid format\. Six-field cron/);
+    });
   });
 });

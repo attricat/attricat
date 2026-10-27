@@ -17,7 +17,7 @@ import {
   snippetIsPresent,
   type DefinitionSnippet,
 } from './definitionSnippets';
-import { scanToml } from './tomlOutline';
+import { scanToml } from '../../components/tomlOutline';
 
 const insertMenuMaxHeight = 480;
 const insertMenuWidth = 340;

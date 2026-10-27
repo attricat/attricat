@@ -3,7 +3,7 @@ import { DiffEditor } from '@monaco-editor/react';
 import { Box, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useMonacoTheme } from '../../components/monacoTheme';
-import { configureToml, tomlLanguageId } from './blueprintEditorUtils';
+import { configureToml, tomlLanguageId } from '../../components/tomlLanguage';
 import { tomlDiffEditorHeight } from './constants';
 
 const diffEditorOptions = {

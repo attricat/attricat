@@ -1,4 +1,3 @@
-import type { Monaco } from '@monaco-editor/react';
 import basicDefinition from './templates/basic.toml?raw';
 import productDefinition from './templates/product.toml?raw';
 import seoDefinition from './templates/seo.toml?raw';
@@ -22,27 +21,3 @@ export const blueprintTemplates = [
 ] as const;
 
 export const minimumTomlEditorHeight = 480;
-
-export const tomlLanguageId = 'toml';
-
-export const configureToml = (monaco: Monaco) => {
-  if (
-    monaco.languages
-      .getLanguages()
-      .some((language: { id: string }) => language.id === tomlLanguageId)
-  )
-    return;
-  monaco.languages.register({ id: tomlLanguageId });
-  monaco.languages.setMonarchTokensProvider(tomlLanguageId, {
-    tokenizer: {
-      root: [
-        [/^\s*#.*$/, 'comment'],
-        [/\[[^\]]+\]/, 'keyword'],
-        [/[A-Za-z0-9_-]+(?=\s*=)/, 'type.identifier'],
-        [/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/, 'string'],
-        [/\b(true|false)\b/, 'keyword'],
-        [/-?\d+(\.\d+)?/, 'number'],
-      ],
-    },
-  });
-};

@@ -25,8 +25,14 @@ const references: DefinitionReferences = {
         : [],
   ),
   blueprints: vi.fn(async () => [
-    { code: 'category', kind: 'record', name: 'Category', version: 3 },
-    { code: 'seo', kind: 'mixin', name: 'SEO', version: 2 },
+    {
+      code: 'category',
+      id: 'category-id',
+      kind: 'record',
+      name: 'Category',
+      version: 3,
+    },
+    { code: 'seo', id: 'seo-id', kind: 'mixin', name: 'SEO', version: 2 },
   ]),
   contexts: vi.fn(async () => ['default', 'pl']),
   roles: vi.fn(async () => ['attricat_manager']),
@@ -353,5 +359,37 @@ type = "manual"
         { detail: 'Relationship to brand', label: 'brand' },
       ],
     );
+  });
+
+  describe('workflows', () => {
+    const workflow = (source: string) =>
+      complete(
+        `format_version = 2\ncode = "w"\nname = "W"\n\n${source}`,
+        definitionKinds.workflow,
+      );
+
+    it('offers event trigger keys and the typed trigger variants', async () => {
+      const { labels } = await workflow('[[triggers]]\n|');
+      expect(labels).toEqual([
+        'attributes',
+        'envelope',
+        'event_type',
+        'facts',
+        'type = "manual"',
+        'type = "schedule"',
+        'type = "extension_event"',
+      ]);
+    });
+
+    it('completes event types of untyped triggers', async () => {
+      const { labels } = await workflow('[[triggers]]\nevent_type = "|"');
+      expect(labels).toContain('record.created.v1');
+      expect(labels).not.toContain('plugin.example.v1');
+    });
+
+    it('completes the keys of a typed trigger', async () => {
+      const { labels } = await workflow('[[triggers]]\ntype = "schedule"\n|');
+      expect(labels).toEqual(['cron', 'target_record_id', 'timezone']);
+    });
   });
 });

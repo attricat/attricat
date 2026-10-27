@@ -7,6 +7,7 @@ import { roleListOptions } from '../workspace/queryOptions';
 
 type ReferenceBlueprint = {
   code: string;
+  id: string;
   kind: string;
   name: string;
   version: number;

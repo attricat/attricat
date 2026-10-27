@@ -6,17 +6,36 @@ import { parse, TomlError } from 'smol-toml';
 import i18n from '../../i18n';
 import { discriminatorKey, type DefinitionKind } from './constants';
 import {
+  choicesOf,
+  defaultedVariants,
   definitionSchemas,
+  primaryType,
   taggedVariants,
+  unwrapSchema,
   variantTag,
   type SchemaNode,
 } from './definitionSchema';
-import { scanToml, type TextRange, type TomlPath } from './tomlOutline';
+import {
+  scanToml,
+  type TextRange,
+  type TomlOutline,
+  type TomlPath,
+} from '../../components/tomlOutline';
 
-type DefinitionDiagnostic = {
+/** A text change that resolves a diagnostic, offered as a quick fix. */
+export type DefinitionFix = {
+  edits: { range: TextRange; text: string }[];
+  title: string;
+};
+
+export type DefinitionDiagnostic = {
+  fix?: DefinitionFix;
   message: string;
   range: TextRange;
 };
+
+/** The contracts' pattern for codes, which has its own message. */
+const codePattern = '^[A-Za-z0-9_-]+$';
 
 /** Keys this far apart or closer are offered as likely typos. */
 const maxSuggestionDistance = 2;
@@ -35,9 +54,22 @@ const withDiscriminators = (root: SchemaNode, node: unknown): unknown => {
       withDiscriminators(root, value),
     ]),
   );
-  return taggedVariants(root, node as SchemaNode)
-    ? { ...copy, discriminator: { propertyName: discriminatorKey } }
-    : copy;
+  if (taggedVariants(root, node as SchemaNode))
+    return { ...copy, discriminator: { propertyName: discriminatorKey } };
+  const defaulted = defaultedVariants(root, node as SchemaNode);
+  if (!defaulted) return copy;
+  // Without a `type`, only the default branch applies; with one, the tag
+  // picks the branch, so errors come from that branch alone.
+  const { oneOf, ...rest } = copy as { oneOf: unknown[] };
+  return {
+    ...rest,
+    if: { required: [discriminatorKey] },
+    then: {
+      discriminator: { propertyName: discriminatorKey },
+      oneOf: oneOf.filter((_, index) => index !== defaulted.fallbackIndex),
+    },
+    else: oneOf[defaulted.fallbackIndex],
+  };
 };
 
 const validators = new Map<DefinitionKind, ValidateFunction>();
@@ -113,16 +145,62 @@ const closestKey = (key: string, candidates: string[]) => {
 const listValues = (values: unknown[]) =>
   values.map((value) => JSON.stringify(value)).join(', ');
 
-type Located = { message: string; path: TomlPath };
+/** What would resolve an error, located in the text once it is known. */
+type FixIntent =
+  | { kind: 'renameKey'; to: string }
+  | { kind: 'insertKey'; key: string; node: SchemaNode }
+  | { kind: 'replaceValue'; choices: unknown[] };
+
+type Located = { fix?: FixIntent; message: string; path: TomlPath };
+
+/**
+ * The description of the conditional rule (a schema with `if` and no
+ * properties of its own) that an error's schema path passes through.
+ */
+const ruleDescription = (schema: unknown, schemaPath: string) => {
+  let node = schema;
+  let description: string | undefined;
+  for (const segment of schemaPath.replace(/^#\//, '').split('/')) {
+    node = (node as Record<string, unknown> | undefined)?.[
+      unescapePointer(segment)
+    ];
+    if (
+      node &&
+      typeof node === 'object' &&
+      'if' in node &&
+      !('properties' in node) &&
+      'description' in node &&
+      typeof node.description === 'string'
+    )
+      description = node.description;
+  }
+  return description;
+};
 
 const describeError = (
   error: ErrorObject,
   path: TomlPath,
+  schema: unknown,
 ): Located | undefined => {
   const t = i18n.t.bind(i18n);
   const params = error.params as Record<string, unknown>;
   const parentSchema = error.parentSchema as SchemaNode | undefined;
   switch (error.keyword) {
+    // The failing branch reports its own errors.
+    case 'if':
+      return undefined;
+    case 'not': {
+      const forbidden = (parentSchema as { not?: SchemaNode } | undefined)?.not;
+      const [key] = forbidden?.required ?? [];
+      const rule = ruleDescription(schema, error.schemaPath);
+      const message = key
+        ? t('definitionEditor.diagnostics.keyNotAllowed', { key })
+        : t('definitionEditor.diagnostics.notAllowed');
+      return {
+        message: rule ? `${message} ${rule}` : message,
+        path: key ? [...path, key] : path,
+      };
+    }
     case 'additionalProperties': {
       const key = String(params.additionalProperty);
       const suggestion = closestKey(
@@ -137,15 +215,18 @@ const describeError = (
             })
           : t('definitionEditor.diagnostics.unknownKey', { key }),
         path: [...path, key],
+        fix: suggestion ? { kind: 'renameKey', to: suggestion } : undefined,
       };
     }
-    case 'required':
+    case 'required': {
+      const key = String(params.missingProperty);
+      const node = parentSchema?.properties?.[key];
       return {
-        message: t('definitionEditor.diagnostics.missingKey', {
-          key: params.missingProperty,
-        }),
+        message: t('definitionEditor.diagnostics.missingKey', { key }),
         path,
+        fix: node ? { kind: 'insertKey', key, node } : undefined,
       };
+    }
     case 'discriminator': {
       const variants = parentSchema?.oneOf ?? [];
       return {
@@ -158,6 +239,10 @@ const describeError = (
                 values: listValues(variants.map(variantTag)),
               }),
         path: params.error === 'tag' ? path : [...path, discriminatorKey],
+        fix:
+          params.error === 'tag'
+            ? undefined
+            : { kind: 'replaceValue', choices: variants.map(variantTag) },
       };
     }
     case 'oneOf': {
@@ -169,6 +254,10 @@ const describeError = (
           values: listValues(options.map((option) => option.const)),
         }),
         path,
+        fix: {
+          kind: 'replaceValue',
+          choices: options.map((option) => option.const),
+        },
       };
     }
     case 'enum':
@@ -177,6 +266,10 @@ const describeError = (
           values: listValues(params.allowedValues as unknown[]),
         }),
         path,
+        fix: {
+          kind: 'replaceValue',
+          choices: params.allowedValues as unknown[],
+        },
       };
     case 'const':
       return {
@@ -184,6 +277,7 @@ const describeError = (
           value: JSON.stringify(params.allowedValue),
         }),
         path,
+        fix: { kind: 'replaceValue', choices: [params.allowedValue] },
       };
     case 'type':
       return {
@@ -192,11 +286,17 @@ const describeError = (
         }),
         path,
       };
-    case 'pattern':
+    case 'pattern': {
+      if (params.pattern === codePattern)
+        return { message: t('definitionEditor.diagnostics.invalidCode'), path };
+      const message = t('definitionEditor.diagnostics.invalidFormat');
       return {
-        message: t('definitionEditor.diagnostics.invalidCode'),
+        message: parentSchema?.description
+          ? `${message} ${parentSchema.description}`
+          : message,
         path,
       };
+    }
     case 'minItems':
     case 'minLength':
       return params.limit === 1
@@ -231,6 +331,128 @@ const describeError = (
       };
     default:
       return error.message ? { message: error.message, path } : undefined;
+  }
+};
+
+/** A plain starting value for an inserted key, or none for tables. */
+const startingValue = (root: SchemaNode, property: SchemaNode) => {
+  const node = unwrapSchema(root, property);
+  if (node.const !== undefined) return node.const;
+  if (node.default !== undefined && node.default !== null) return node.default;
+  const choices = choicesOf(node);
+  if (choices) return primaryType(node) === 'boolean' ? false : choices[0];
+  switch (primaryType(node)) {
+    case 'string':
+      return '';
+    case 'boolean':
+      return false;
+    case 'integer':
+    case 'number':
+      return 0;
+    case 'array': {
+      const items = node.items && unwrapSchema(root, node.items);
+      return items && primaryType(items) === 'object' ? undefined : [];
+    }
+    default:
+      return undefined;
+  }
+};
+
+const bareKey = /^[A-Za-z0-9_-]+$/;
+const tomlKey = (key: string) =>
+  bareKey.test(key) ? key : JSON.stringify(key);
+const tomlValue = (value: unknown): string =>
+  Array.isArray(value)
+    ? `[${value.map(tomlValue).join(', ')}]`
+    : JSON.stringify(value);
+
+const samePath = (left: TomlPath, right: TomlPath) =>
+  left.length === right.length &&
+  left.every((segment, index) => segment === right[index]);
+
+const lineStart = (text: string, offset: number) =>
+  text.lastIndexOf('\n', offset - 1) + 1;
+
+/**
+ * Where a new key of `table` goes: after its `[header]` line, or before the
+ * first root key or header for the root table. Inline and dotted tables get
+ * no insertion point.
+ */
+const keyInsertion = (outline: TomlOutline, text: string, table: TomlPath) => {
+  if (!table.length) {
+    const first = [
+      ...outline.entries.filter(({ path }) => path.length === 1),
+      ...outline.headers,
+    ].sort((left, right) => left.range.start - right.range.start)[0];
+    const offset = first ? lineStart(text, first.range.start) : text.length;
+    return { offset, line: (body: string) => `${body}\n` };
+  }
+  const header = outline.headers.find(({ path }) => samePath(path, table));
+  if (!header) return undefined;
+  const lineEnd = text.indexOf('\n', header.range.end);
+  const offset = lineEnd < 0 ? text.length : lineEnd;
+  return { offset, line: (body: string) => `\n${body}` };
+};
+
+const resolveFix = (
+  root: SchemaNode,
+  outline: TomlOutline,
+  text: string,
+  { fix, path }: Located,
+  range: TextRange,
+): DefinitionFix | undefined => {
+  const t = i18n.t.bind(i18n);
+  switch (fix?.kind) {
+    case 'renameKey': {
+      const located =
+        outline.entryAt(path) ??
+        outline.headers.find((header) => samePath(header.path, path));
+      if (!located) return undefined;
+      // A quoted key's range covers only its content.
+      const quoted = /["']/.test(text[range.start - 1] ?? '');
+      return {
+        edits: [{ range, text: quoted ? fix.to : tomlKey(fix.to) }],
+        title: t('definitionEditor.fixes.renameKey', { key: fix.to }),
+      };
+    }
+    case 'insertKey': {
+      const value = startingValue(root, fix.node);
+      const insertion = keyInsertion(outline, text, path);
+      if (value === undefined || !insertion) return undefined;
+      const body = `${tomlKey(fix.key)} = ${tomlValue(value)}`;
+      return {
+        edits: [
+          {
+            range: { end: insertion.offset, start: insertion.offset },
+            text: insertion.line(body),
+          },
+        ],
+        title: t('definitionEditor.fixes.insertKey', { key: fix.key }),
+      };
+    }
+    case 'replaceValue': {
+      const entry = outline.entryAt(path);
+      if (!entry?.valueRange || entry.value === undefined) return undefined;
+      const choices = fix.choices.filter(
+        (choice) => typeof choice !== 'object' && choice !== entry.value,
+      );
+      const choice =
+        choices.length === 1
+          ? choices[0]
+          : closestKey(String(entry.value), choices.map(String));
+      if (choice === undefined) return undefined;
+      const value =
+        choices.find((candidate) => String(candidate) === String(choice)) ??
+        choice;
+      return {
+        edits: [{ range: entry.valueRange, text: tomlValue(value) }],
+        title: t('definitionEditor.fixes.replaceValue', {
+          value: tomlValue(value),
+        }),
+      };
+    }
+    default:
+      return undefined;
   }
 };
 
@@ -287,13 +509,19 @@ export const definitionDiagnostics = (
   if (validate(data)) return [];
   const errors = validate.errors ?? [];
   const outline = scanToml(text);
+  const root = definitionSchemas[kind];
   const diagnostics = new Map<string, DefinitionDiagnostic>();
   for (const error of errors) {
     if (isNestedInConstantChoice(error, errors)) continue;
-    const located = describeError(error, pointerPath(error.instancePath, data));
+    const located = describeError(
+      error,
+      pointerPath(error.instancePath, data),
+      validate.schema,
+    );
     if (!located) continue;
     const range = outline.rangeOf(located.path) ?? { end: 0, start: 0 };
     diagnostics.set(`${range.start}:${range.end}:${located.message}`, {
+      fix: resolveFix(root, outline, text, located, range),
       message: located.message,
       range,
     });

@@ -6,7 +6,7 @@ import {
   schemaAtPath,
   typeLabel,
 } from './definitionSchema';
-import { scanToml, type TextRange } from './tomlOutline';
+import { scanToml, type TextRange } from '../../components/tomlOutline';
 
 type DefinitionHover = { contents: string[]; range: TextRange };
 

@@ -3,7 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { TomlEditor } from '../../components/TomlEditor';
+import { definitionKinds } from '../definition-editor/constants';
+import { DefinitionEditor } from '../definition-editor/DefinitionEditor';
 import { draftEditors } from '../drafts/constants';
 import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
 import { definitionDraftSchema } from '../drafts/schemas';
@@ -102,9 +103,10 @@ export const WorkflowDefinitionForm = ({
         </Typography>
         <form.Field name="definition">
           {(field) => (
-            <TomlEditor
+            <DefinitionEditor
               ariaLabel={t('workflows.tomlDefinition')}
               height={editorHeight}
+              kind={definitionKinds.workflow}
               onChange={(value) => {
                 if (save.isPending) return;
                 validate.reset();

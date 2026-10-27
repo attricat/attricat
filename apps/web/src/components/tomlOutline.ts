@@ -9,14 +9,16 @@ export type TomlPath = (string | number)[];
 export type TextRange = { start: number; end: number };
 type TomlScalar = string | number | boolean;
 
-type TomlEntry = {
+export type TomlEntry = {
   path: TomlPath;
   /** The key, or the element itself for array items. */
   range: TextRange;
   value?: TomlScalar;
+  /** The scalar value as written, including any quotes. */
+  valueRange?: TextRange;
 };
 
-type TomlHeader = {
+export type TomlHeader = {
   array: boolean;
   path: TomlPath;
   range: TextRange;
@@ -34,11 +36,15 @@ export type TomlCursor =
   | { kind: 'header'; array: boolean; range: TextRange; table: TomlPath };
 
 export type TomlOutline = {
+  /** Arrays and inline tables, from their opening to closing bracket. */
+  collections: TextRange[];
   cursor?: TomlCursor;
   entries: TomlEntry[];
   headers: TomlHeader[];
   /** Direct child keys already present in a table. */
   keysIn: (table: TomlPath) => Set<string>;
+  /** The entry at exactly this path. */
+  entryAt: (path: TomlPath) => TomlEntry | undefined;
   /** Source range for a path, falling back to its nearest ancestor. */
   rangeOf: (path: TomlPath) => TextRange | undefined;
   valueAt: (path: TomlPath) => TomlScalar | undefined;
@@ -62,6 +68,7 @@ const numberLiteral = /^[+-]?(\d[\d_]*)(\.\d[\d_]*)?([eE][+-]?\d+)?$/;
 type KeySegment = { name: string; range: TextRange };
 
 class Scanner {
+  readonly collections: TextRange[] = [];
   cursorContext?: TomlCursor;
   readonly entries: TomlEntry[] = [];
   readonly headers: TomlHeader[] = [];
@@ -263,6 +270,7 @@ class Scanner {
         path,
         range: keyRange ?? { end: this.position, start },
         value: content,
+        valueRange: { end: this.position, start },
       });
       if (
         this.cursor !== undefined &&
@@ -282,11 +290,13 @@ class Scanner {
     if (character === '[') {
       this.entries.push({ path, range: keyRange ?? { end: start + 1, start } });
       this.array(path);
+      this.collections.push({ end: this.position, start });
       return;
     }
     if (character === '{') {
       this.entries.push({ path, range: keyRange ?? { end: start + 1, start } });
       this.inlineTable(path);
+      this.collections.push({ end: this.position, start });
       return;
     }
     while (
@@ -302,6 +312,7 @@ class Scanner {
       path,
       range: keyRange ?? { end: this.position, start },
       value: scalar(raw),
+      valueRange: { end: this.position, start },
     });
     if (
       this.cursor !== undefined &&
@@ -499,17 +510,21 @@ const startsWith = (path: TomlPath, prefix: TomlPath) =>
 export const scanToml = (text: string, cursor?: number): TomlOutline => {
   const scanner = new Scanner(text, cursor);
   scanner.scan();
-  const { entries, headers } = scanner;
+  const { collections, entries, headers } = scanner;
   const values = new Map<string, TomlScalar>();
   const ranges = new Map<string, TextRange>();
+  const entriesByPath = new Map<string, TomlEntry>();
   for (const header of headers) ranges.set(pathKey(header.path), header.range);
   for (const entry of entries) {
     if (entry.value !== undefined) values.set(pathKey(entry.path), entry.value);
     ranges.set(pathKey(entry.path), entry.range);
+    entriesByPath.set(pathKey(entry.path), entry);
   }
   return {
+    collections,
     cursor: scanner.cursorContext,
     entries,
+    entryAt: (path) => entriesByPath.get(pathKey(path)),
     headers,
     keysIn: (table) => {
       const keys = new Set<string>();
