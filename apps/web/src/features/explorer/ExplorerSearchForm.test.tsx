@@ -232,6 +232,27 @@ describe('ExplorerSearchForm version scope', () => {
     });
   });
 
+  it('selects the current scope when the URL names the current version', async () => {
+    const user = userEvent.setup();
+    render(
+      <ExplorerSearchForm
+        blueprints={revisions}
+        currentVersion={3}
+        lockedBlueprint
+        onSubmit={vi.fn()}
+        revisions={revisions}
+        search={{ blueprint: 'product', version: 3 }}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'Search scope: Current — v3' }),
+    );
+    expect(
+      screen.getByRole('combobox', { name: 'Version scope' }).textContent,
+    ).toContain('Current — v3');
+  });
+
   it('opens search syntax from the query field help button', async () => {
     const user = userEvent.setup();
     render(
