@@ -120,7 +120,7 @@ describe('ExplorerSearchForm version scope', () => {
     );
     await user.click(
       screen.getByRole('button', {
-        name: 'Search scope: Current — v3, Default context',
+        name: 'Search scope: Current — v3, default context',
       }),
     );
     await user.click(screen.getByRole('combobox', { name: 'Context' }));

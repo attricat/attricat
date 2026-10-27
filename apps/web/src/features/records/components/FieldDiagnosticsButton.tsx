@@ -28,7 +28,7 @@ import {
   worstSeverity,
 } from '../fieldDiagnostics';
 import { errorMessage } from '../../../api/errors';
-import { contextLabel } from '../../contexts/defaultContext';
+import { defaultContextCode } from '../../contexts/constants';
 import { attributeLabel } from '../recordDisplay';
 import { attributeValueTypes } from '../valueTypes';
 import { useRevealField } from '../../views/fieldReveal';
@@ -178,12 +178,18 @@ export const FieldDiagnosticsButton = ({
                   : !sourceContext
                     ? t('records.fieldDiagnostics.set')
                     : sourceContext.code === contextCode
-                      ? t('records.fieldDiagnostics.setInContext', {
-                          context: contextLabel(t, sourceContext.code),
-                        })
-                      : t('records.fieldDiagnostics.inheritedFromContext', {
-                          context: contextLabel(t, sourceContext.code),
-                        })}
+                      ? sourceContext.code === defaultContextCode
+                        ? t('records.fieldDiagnostics.setInDefaultContext')
+                        : t('records.fieldDiagnostics.setInContext', {
+                            context: sourceContext.code,
+                          })
+                      : sourceContext.code === defaultContextCode
+                        ? t(
+                            'records.fieldDiagnostics.inheritedFromDefaultContext',
+                          )
+                        : t('records.fieldDiagnostics.inheritedFromContext', {
+                            context: sourceContext.code,
+                          })}
               </Typography>
             )}
             <Typography color="text.secondary" variant="body2">

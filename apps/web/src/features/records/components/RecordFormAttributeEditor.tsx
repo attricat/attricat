@@ -13,6 +13,7 @@ import {
   hasLocalFormValue,
   isDefaultContextOnly,
 } from '../recordFormAttributes';
+import { defaultContextCode } from '../../contexts/constants';
 import type { ResolvedValue } from '../../views/components/ValueField';
 import { attributeValueTypes } from '../valueTypes';
 import { attributeContextFallbacks } from '../constants';
@@ -121,17 +122,22 @@ export const RecordFormAttributeEditor = ({
   const inheritedHelperText = () => {
     if (!inherited) return undefined;
     const context = sourceContext.code;
-    return attribute.value_type === attributeValueTypes.relationship ||
+    const fromDefault = context === defaultContextCode;
+    if (
+      attribute.value_type === attributeValueTypes.relationship ||
       attribute.value_type === attributeValueTypes.file
-      ? t('records.inheritedFromContext', { context })
-      : t('records.inheritedValue', {
-          context,
-          value:
-            attribute.value_type === attributeValueTypes.datetime &&
-            typeof resolvedValue.value === 'string'
-              ? formatInstant(resolvedValue.value)
-              : formatAttributeValue(attribute, resolvedValue.value),
-        });
+    )
+      return fromDefault
+        ? t('records.inheritedFromDefaultContext')
+        : t('records.inheritedFromContext', { context });
+    const value =
+      attribute.value_type === attributeValueTypes.datetime &&
+      typeof resolvedValue.value === 'string'
+        ? formatInstant(resolvedValue.value)
+        : formatAttributeValue(attribute, resolvedValue.value);
+    return fromDefault
+      ? t('records.inheritedValueFromDefaultContext', { value })
+      : t('records.inheritedValue', { context, value });
   };
   // Why the field cannot be changed here, or where its value comes from,
   // then what it holds and accepts.

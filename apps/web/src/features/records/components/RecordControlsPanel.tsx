@@ -1,3 +1,4 @@
+import { defaultContextCode } from '../../contexts/constants';
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Box, Chip, CircularProgress, Stack, Typography } from '@mui/material';
@@ -80,10 +81,16 @@ const ApprovalItem = ({
         : t('records.recordControls.approvalActive');
   return (
     <ControlItem
-      title={t('records.recordControls.approvedAs', {
-        status: labels.status(approval.attribute_code, approval.status),
-        context: approval.context_code,
-      })}
+      title={
+        approval.context_code === defaultContextCode
+          ? t('records.recordControls.approvedAsInDefaultContext', {
+              status: labels.status(approval.attribute_code, approval.status),
+            })
+          : t('records.recordControls.approvedAs', {
+              status: labels.status(approval.attribute_code, approval.status),
+              context: approval.context_code,
+            })
+      }
       state={{
         label: state,
         color: approval.end_reason === null ? 'success' : 'default',
