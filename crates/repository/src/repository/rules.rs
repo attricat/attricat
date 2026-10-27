@@ -787,7 +787,7 @@ impl AttricatRepository {
             .bind(RuleFindingState::Resolved.as_str())
             .bind(filter.rule_id)
             .bind(filter.context_id)
-            .bind(filter.severity.as_ref().map(severity_code))
+            .bind(filter.severity.map(RuleFindingSeverity::as_str))
             .bind(filter.state.map(RuleFindingState::as_str))
             .bind(filter.blueprint_id)
             .bind(limit + 1)
@@ -1161,7 +1161,7 @@ impl AttricatRepository {
         let prefetch =
             super::checks::prefetch_related(&mut conn, &scope, &records, &contexts, &requirements)
                 .await?;
-        let severity = severity_code(&rule.severity);
+        let severity = rule.severity.as_str();
         let mut results = Vec::with_capacity(candidates.len());
         for record_id in candidates {
             let Some(subject) = records.remove(record_id) else {
@@ -1270,20 +1270,10 @@ pub struct RuleFindingFilter {
     pub blueprint_id: Option<Uuid>,
     /// Findings for this context; record-wide findings have none.
     pub context_id: Option<Uuid>,
-    pub severity: Option<attricat_rules::Severity>,
+    pub severity: Option<RuleFindingSeverity>,
     pub state: Option<RuleFindingState>,
     /// Leaves out resolved findings.
     pub unresolved: bool,
-}
-
-/// The `rule_findings.severity` code, spelled as in rule definitions.
-fn severity_code(severity: &attricat_rules::Severity) -> &'static str {
-    match severity {
-        attricat_rules::Severity::Info => RuleFindingSeverity::Info.as_str(),
-        attricat_rules::Severity::Warning => RuleFindingSeverity::Warning.as_str(),
-        attricat_rules::Severity::Error => RuleFindingSeverity::Error.as_str(),
-        attricat_rules::Severity::Critical => RuleFindingSeverity::Critical.as_str(),
-    }
 }
 
 impl<S: super::RepositoryScope> AttricatRepository<S> {

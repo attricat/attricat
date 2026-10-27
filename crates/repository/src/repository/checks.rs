@@ -727,7 +727,7 @@ impl<'a> Job<'a> {
             // explanation stays in the violation's evidence.
             message: Some(&rule.compiled.name),
             predicate: &rule.compiled.predicate,
-            severity: Some(rule.compiled.severity.clone()),
+            severity: Some(rule.compiled.severity),
             transition,
         }
     }
@@ -872,7 +872,7 @@ fn record_violation(
         message: job.message.map(str::to_owned).unwrap_or(failure.message),
         contexts: vec![context],
         attributes: failure.attributes,
-        severity: job.severity.clone(),
+        severity: job.severity,
         transition: job.transition.clone(),
         evidence: failure.evidence,
     });

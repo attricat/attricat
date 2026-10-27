@@ -5,8 +5,7 @@ use super::{
 };
 use crate::model::{CreateManualRuleRun, CreateRule, EnableRule, Rule, RuleFinding};
 use crate::repository::RuleFindingFilter;
-use attricat_domain::states::RuleFindingState;
-use attricat_rules::Severity;
+use attricat_domain::states::{RuleFindingSeverity, RuleFindingState};
 use axum::{Json, http::StatusCode, response::Response};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -113,7 +112,7 @@ pub struct FindingsQuery {
     rule_id: Option<Uuid>,
     blueprint_id: Option<Uuid>,
     context_id: Option<Uuid>,
-    severity: Option<Severity>,
+    severity: Option<RuleFindingSeverity>,
     state: Option<RuleFindingState>,
     /// Leaves out resolved findings.
     #[serde(default)]

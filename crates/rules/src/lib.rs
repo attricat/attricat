@@ -55,14 +55,25 @@ pub struct RuleDefinition {
     pub enforcement: Option<Enforcement>,
 }
 
-/// How prominently findings from this rule are reported.
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum Severity {
-    Info,
-    Warning,
-    Error,
-    Critical,
+/// How prominently findings from this rule are reported: the same codes
+/// that rule findings store.
+pub use attricat_domain::states::RuleFindingSeverity as Severity;
+
+/// The JSON Schema of [`Severity`], which `attricat-domain` cannot derive.
+struct SeveritySchema;
+
+impl JsonSchema for SeveritySchema {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Severity".into()
+    }
+
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "description": "How prominently findings from this rule are reported.",
+            "enum": Severity::codes(),
+            "type": "string",
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -169,6 +180,7 @@ struct Raw {
     /// Human-readable rule name.
     #[schemars(regex(pattern = NON_BLANK_PATTERN))]
     name: String,
+    #[schemars(with = "SeveritySchema")]
     severity: Severity,
     /// One to eight events that evaluate the rule.
     #[schemars(length(min = 1, max = MAX_TRIGGERS))]
@@ -403,6 +415,17 @@ mod tests {
     #[test]
     fn parses_bounded_host_owned_rule() {
         assert!(parse(REQUIRED).is_ok());
+    }
+    #[test]
+    fn definitions_spell_severity_as_findings_store_it() {
+        for &severity in Severity::ALL {
+            let source = REQUIRED.replace(
+                "severity='error'",
+                &format!("severity='{}'", severity.as_str()),
+            );
+            assert_eq!(parse(&source).unwrap().severity, severity);
+        }
+        assert!(parse(&REQUIRED.replace("severity='error'", "severity='fatal'")).is_err());
     }
     #[test]
     fn rejects_unbounded_or_invalid_contracts() {
